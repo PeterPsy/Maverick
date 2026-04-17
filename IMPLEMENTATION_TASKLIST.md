@@ -118,38 +118,38 @@ without carrying forward legacy structure or backward-compatibility constraints 
 
 ## Phase 4: App Hosting and Installation System
 
-- [ ] Implement app installation records in the core:
-  - [ ] installation-level app source record for external bundles or known platform app artifacts
-  - [ ] workspace-local app project record for code living under `workspaces/<id>/apps/`
-  - [ ] workspace app binding or enablement record
-- [ ] Implement distinction between:
-  - external installed app
-  - workspace-local app project
-  - app enabled state
-- [ ] Define canonical app lifecycle states and transitions:
-  - [ ] `installed`
-  - [ ] `enabled`
-  - [ ] `disabled`
-  - [ ] `failed`
-  - [ ] `updating`
-  - [ ] `rolled_back`
-  - [ ] enforce that an app cannot be enabled before it is installed
-- [ ] Implement install flow for external app bundles
-- [ ] Implement install flow for workspace-local apps under `workspaces/<id>/apps/`
-- [ ] Implement deterministic creation of `workspaces/<id>/data/<app_id>/` during install
-- [ ] Implement uninstall flow:
-  - [ ] remove active capability from the workspace
-  - [ ] preserve app-owned data by default
-- [ ] Implement purge-data flow
-- [ ] Implement reinstall flow:
-  - [ ] reattach to existing `data/<app_id>/` when present
-  - [ ] support validation, repair, or migration before reactivation when needed
-- [ ] Implement compatibility checks:
-  - minimum core version
-  - contract version
-  - supported workspace modes if declared
-- [ ] Keep app business data out of the core control-plane database
-- [ ] Keep app source or project material separate from installation state and workspace enablement state
+- [x] Implement app installation records in the core:
+  - [x] installation-level app source record for external bundles or known platform app artifacts
+  - [x] workspace-local app project record for code living under `workspaces/<id>/apps/`
+  - [x] workspace app binding or enablement record
+- [x] Implement distinction between:
+  - [x] external installed app
+  - [x] workspace-local app project
+  - [x] app enabled state
+- [x] Define canonical app lifecycle states and transitions:
+  - [x] `installed`
+  - [x] `enabled`
+  - [x] `disabled`
+  - [x] `failed`
+  - [x] `updating`
+  - [x] `rolled_back`
+  - [x] enforce that an app cannot be enabled before it is installed
+- [x] Implement install flow for external app bundles
+- [x] Implement install flow for workspace-local apps under `workspaces/<id>/apps/`
+- [x] Implement deterministic creation of `workspaces/<id>/data/<app_id>/` during install
+- [x] Implement uninstall flow:
+  - [x] remove active capability from the workspace
+  - [x] preserve app-owned data by default
+- [x] Implement purge-data flow
+- [x] Implement reinstall flow:
+  - [x] reattach to existing `data/<app_id>/` when present
+  - [x] support validation, repair, or migration before reactivation when needed
+- [x] Implement compatibility checks:
+  - [x] minimum core version
+  - [x] contract version
+  - [x] supported workspace modes if declared
+- [x] Keep app business data out of the core control-plane database
+- [x] Keep app source or project material separate from installation state and workspace enablement state
 
 ## Phase 5: App Contract Execution Layer
 

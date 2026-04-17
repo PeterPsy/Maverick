@@ -23,6 +23,10 @@ class AppCompatibilityError(AppHostingError):
     """Raised when an app source is not compatible with the requested install target."""
 
 
+class AppContractValidationError(AppHostingError):
+    """Raised when one app contract file is missing or invalid."""
+
+
 class AppLifecycleError(AppHostingError):
     """Raised when an app lifecycle transition is invalid."""
 

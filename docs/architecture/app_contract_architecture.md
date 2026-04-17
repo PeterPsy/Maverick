@@ -51,6 +51,30 @@ The contract describes what the app is and how it behaves.
 
 The core installation system decides where that app is known, installed, enabled, disabled, upgraded, uninstalled, or reattached.
 
+## Canonical Contract File
+
+The platform should treat the app contract file as the source of truth for executable app metadata.
+
+The recommended canonical file is:
+
+```text
+<app_root>/app_contract.json
+```
+
+Examples:
+
+```text
+/apps/checklists/app_contract.json
+/apps/_bundles/vendor-reporting/app_contract.json
+/workspaces/acme/apps/notes/app_contract.json
+```
+
+The core may persist a normalized snapshot of this contract in control-plane records for listing, auditing, or operator inspection.
+
+That snapshot is not the authoritative source for executable contract behavior.
+
+Install, reinstall, upgrade, validate, repair, export, import, and health decisions should resolve from the contract file in the app source root so the platform does not drift away from the app artifact it is actually operating.
+
 ## Required App Identity
 
 Every app must declare at least:
@@ -280,9 +304,12 @@ The core should not guess hook names or infer hook behavior from arbitrary files
 The contract should allow explicit timeout declarations for operations such as:
 
 - install
+- upgrade
 - migrate
 - export
 - import
+- validate after import
+- repair after import
 - health check
 
 This prevents non-deterministic hangs during platform lifecycle operations.

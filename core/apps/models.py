@@ -1,4 +1,4 @@
-"""App-hosting models for Phase 4."""
+"""App-hosting and app-contract models."""
 
 from __future__ import annotations
 
@@ -14,6 +14,8 @@ HealthMode = Literal["none", "hook"]
 InstallFailureMode = Literal["block_activation", "mark_failed"]
 MigrateFailureMode = Literal["preserve_data_mark_unhealthy", "block_activation"]
 ImportFailureMode = Literal["preserve_payload_mark_failed", "block_activation"]
+StorageKind = Literal["sqlite", "duckdb", "json", "jsonl", "mixed"]
+StorageIndexKind = Literal["embedded", "file_based"]
 
 
 @dataclass(frozen=True)
@@ -23,6 +25,51 @@ class AppCompatibilityDescriptor:
     contract_version: str
     minimum_core_version: str
     supported_workspace_modes: list[ExecutionMode] | None
+
+
+@dataclass(frozen=True)
+class AppStorageIndices:
+    """Describe how one app stores secondary indices when it uses them."""
+
+    kind: StorageIndexKind
+
+
+@dataclass(frozen=True)
+class AppStorageDeclaration:
+    """Describe the app-owned storage model declared by the contract."""
+
+    storage_kind: StorageKind
+    primary_paths: list[str]
+    indices: AppStorageIndices | None
+    supports_export: bool
+    supports_import: bool
+    supports_migrations: bool
+
+
+@dataclass(frozen=True)
+class AppCapabilities:
+    """Describe the official capability surfaces exposed by one app."""
+
+    mcp_tools: list[str]
+    cli_commands: list[str]
+    skills: list[str]
+    views: list[str]
+
+
+@dataclass(frozen=True)
+class AppLifecycleDeclaration:
+    """Describe which lifecycle operations the app claims to support."""
+
+    install: bool
+    upgrade: bool
+    uninstall: bool
+    migrate: bool
+    export: bool
+    import_data: bool
+    validate_after_import: bool
+    repair_after_import: bool
+    rebuild: bool
+    health_check: bool
 
 
 @dataclass(frozen=True)
@@ -40,10 +87,13 @@ class AppHookTimeouts:
     """Timeout values for lifecycle and health operations."""
 
     install_seconds: int
+    upgrade_seconds: int
     migrate_seconds: int
-    health_check_seconds: int
     export_seconds: int
     import_seconds: int
+    validate_after_import_seconds: int
+    repair_after_import_seconds: int
+    health_check_seconds: int
 
 
 @dataclass(frozen=True)
@@ -77,6 +127,9 @@ class AppContractDescriptor:
     """Executable app contract metadata used by the core."""
 
     compatibility: AppCompatibilityDescriptor
+    storage: AppStorageDeclaration
+    capabilities: AppCapabilities
+    lifecycle: AppLifecycleDeclaration
     entrypoints: AppEntrypoints
     hook_timeouts: AppHookTimeouts
     failure_semantics: AppFailureSemantics
@@ -143,3 +196,15 @@ class WorkspaceAppReinstallResult:
     validation_requested: bool
     repair_requested: bool
     migration_requested: bool
+
+
+@dataclass(frozen=True)
+class ParsedAppContract:
+    """Normalized app contract parsed from one app source root."""
+
+    app_id: str
+    name: str
+    version: str
+    description: str
+    publisher: str
+    contract: AppContractDescriptor

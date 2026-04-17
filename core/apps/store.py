@@ -11,14 +11,18 @@ from core.apps.errors import (
     WorkspaceLocalAppProjectNotFoundError,
 )
 from core.apps.models import (
+    AppCapabilities,
     AppContractDescriptor,
     AppEntrypoints,
     AppFailureSemantics,
     AppHealthContract,
     AppHookTimeouts,
+    AppLifecycleDeclaration,
     AppCompatibilityDescriptor,
     AppRollbackSupport,
     AppSourceRecord,
+    AppStorageDeclaration,
+    AppStorageIndices,
     WorkspaceAppBindingRecord,
     WorkspaceLocalAppProjectRecord,
 )
@@ -92,6 +96,18 @@ class MongoAppStore:
     def _app_contract(self, payload: dict[str, Any]) -> AppContractDescriptor:
         return AppContractDescriptor(
             compatibility=AppCompatibilityDescriptor(**payload["compatibility"]),
+            storage=AppStorageDeclaration(
+                **{
+                    **payload["storage"],
+                    "indices": (
+                        AppStorageIndices(**payload["storage"]["indices"])
+                        if payload["storage"].get("indices") is not None
+                        else None
+                    ),
+                }
+            ),
+            capabilities=AppCapabilities(**payload["capabilities"]),
+            lifecycle=AppLifecycleDeclaration(**payload["lifecycle"]),
             entrypoints=AppEntrypoints(**payload["entrypoints"]),
             hook_timeouts=AppHookTimeouts(**payload["hook_timeouts"]),
             failure_semantics=AppFailureSemantics(**payload["failure_semantics"]),

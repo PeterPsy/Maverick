@@ -1,4 +1,4 @@
-"""Tests for Phase 4 app-hosting control-plane behavior."""
+"""Tests for app-hosting control-plane behavior."""
 
 from __future__ import annotations
 
@@ -7,6 +7,20 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
+from core.apps.contracts import (
+    build_app_capabilities,
+    build_app_compatibility,
+    build_app_contract,
+    build_app_entrypoints,
+    build_app_failure_semantics,
+    build_app_health_contract,
+    build_app_hook_timeouts,
+    build_app_lifecycle,
+    build_app_rollback_support,
+    build_app_storage,
+    build_parsed_app_contract,
+    write_app_contract_file,
+)
 from core.apps.errors import (
     AppCompatibilityError,
     AppLifecycleError,
@@ -14,20 +28,11 @@ from core.apps.errors import (
     WorkspaceLocalAppProjectNotFoundError,
 )
 from core.apps.service import (
-    build_app_compatibility,
-    build_app_contract,
-    build_app_entrypoints,
-    build_app_failure_semantics,
-    build_app_health_contract,
-    build_app_hook_timeouts,
-    build_app_rollback_support,
-    build_app_source_record,
-    build_workspace_local_app_project_record,
     install_external_app,
     install_workspace_local_app,
     purge_workspace_app_data,
-    register_app_source,
-    register_workspace_local_app_project,
+    register_app_source_from_contract,
+    register_workspace_local_app_project_from_contract,
     reinstall_workspace_app,
     transition_workspace_app_status,
     uninstall_workspace_app,
@@ -67,7 +72,7 @@ class FakeCollection:
 
 
 class Phase4AppHostingTestCase(unittest.TestCase):
-    """Verify app-hosting control-plane behavior for Phase 4."""
+    """Verify app-hosting control-plane behavior for installed and local apps."""
 
     def make_store(self) -> MongoAppStore:
         return MongoAppStore(
@@ -90,37 +95,39 @@ class Phase4AppHostingTestCase(unittest.TestCase):
             (root / name).mkdir(parents=True, exist_ok=True)
         return root
 
+    def write_contract(
+        self,
+        app_root: Path,
+        *,
+        app_id: str,
+        name: str | None = None,
+        version: str = "1.0.0",
+        publisher: str = "maverick",
+        contract=None,
+    ) -> None:
+        parsed = build_parsed_app_contract(
+            app_id=app_id,
+            name=name or app_id.title(),
+            version=version,
+            description=f"{app_id} app",
+            publisher=publisher,
+            contract=contract or build_app_contract(),
+        )
+        write_app_contract_file(app_root, parsed)
+
     def test_external_app_install_creates_workspace_binding_and_data_root(self) -> None:
         store = self.make_store()
         now = datetime.now(tz=UTC)
-        source = build_app_source_record(
-            app_id="checklists",
-            name="Checklists",
-            version="1.0.0",
-            description="Checklist app",
-            publisher="maverick",
-            source_kind="platform",
-            source_path=str(Path("/tmp") / "unused"),
-            contract=build_app_contract(),
-            now=now,
-        )
-
         with TemporaryDirectory() as temp_dir:
             repo_root = self.make_repo_root(temp_dir)
             app_root = repo_root / "apps" / "checklists"
-            app_root.mkdir(parents=True, exist_ok=True)
-            source = build_app_source_record(
-                app_id="checklists",
-                name="Checklists",
-                version="1.0.0",
-                description="Checklist app",
-                publisher="maverick",
+            self.write_contract(app_root, app_id="checklists", name="Checklists")
+            source = register_app_source_from_contract(
+                store,
                 source_kind="platform",
                 source_path=str(app_root),
-                contract=build_app_contract(),
                 now=now,
             )
-            register_app_source(store, source)
 
             binding = install_external_app(
                 store,
@@ -139,22 +146,17 @@ class Phase4AppHostingTestCase(unittest.TestCase):
         with TemporaryDirectory() as temp_dir:
             repo_root = self.make_repo_root(temp_dir)
             project_root = repo_root / "workspaces" / "acme" / "apps" / "notes"
-            project_root.mkdir(parents=True, exist_ok=True)
-            record = build_workspace_local_app_project_record(
+            self.write_contract(project_root, app_id="notes", name="Notes", publisher="workspace-user")
+            record = register_workspace_local_app_project_from_contract(
+                store,
                 workspace_id="acme",
-                app_id="notes",
-                name="Notes",
-                version="1.0.0",
-                description="Notes app",
-                publisher="workspace-user",
                 project_root=str(project_root),
-                contract=build_app_contract(),
                 now=now,
             )
-            register_workspace_local_app_project(store, record)
 
             binding = install_workspace_local_app(store, workspace_id="acme", app_id="notes", start_path=repo_root, now=now)
             self.assertEqual(binding.source_kind, "workspace_local_project")
+            self.assertEqual(record.workspace_id, "acme")
 
             with self.assertRaises(WorkspaceLocalAppProjectNotFoundError):
                 install_workspace_local_app(store, workspace_id="other", app_id="notes", start_path=repo_root, now=now)
@@ -162,34 +164,16 @@ class Phase4AppHostingTestCase(unittest.TestCase):
     def test_uninstall_preserves_data_and_removes_binding(self) -> None:
         store = self.make_store()
         now = datetime.now(tz=UTC)
-        source = build_app_source_record(
-            app_id="crm",
-            name="CRM",
-            version="1.0.0",
-            description="CRM app",
-            publisher="maverick",
-            source_kind="platform",
-            source_path=str(Path("/tmp") / "unused"),
-            contract=build_app_contract(),
-            now=now,
-        )
-
         with TemporaryDirectory() as temp_dir:
             repo_root = self.make_repo_root(temp_dir)
             app_root = repo_root / "apps" / "crm"
-            app_root.mkdir(parents=True, exist_ok=True)
-            source = build_app_source_record(
-                app_id="crm",
-                name="CRM",
-                version="1.0.0",
-                description="CRM app",
-                publisher="maverick",
+            self.write_contract(app_root, app_id="crm", name="CRM")
+            source = register_app_source_from_contract(
+                store,
                 source_kind="platform",
                 source_path=str(app_root),
-                contract=build_app_contract(),
                 now=now,
             )
-            register_app_source(store, source)
             data_root = repo_root / "workspaces" / "default" / "data" / "crm"
             install_external_app(store, source_id=source.source_id, workspace_id="default", start_path=repo_root, now=now)
             (data_root / "records.json").write_text("{}", encoding="utf-8")
@@ -215,34 +199,16 @@ class Phase4AppHostingTestCase(unittest.TestCase):
     def test_reinstall_reattaches_to_existing_data(self) -> None:
         store = self.make_store()
         now = datetime.now(tz=UTC)
-        source = build_app_source_record(
-            app_id="memory",
-            name="Memory",
-            version="1.0.0",
-            description="Memory app",
-            publisher="maverick",
-            source_kind="platform",
-            source_path=str(Path("/tmp") / "unused"),
-            contract=build_app_contract(),
-            now=now,
-        )
-
         with TemporaryDirectory() as temp_dir:
             repo_root = self.make_repo_root(temp_dir)
             app_root = repo_root / "apps" / "memory"
-            app_root.mkdir(parents=True, exist_ok=True)
-            source = build_app_source_record(
-                app_id="memory",
-                name="Memory",
-                version="1.0.0",
-                description="Memory app",
-                publisher="maverick",
+            self.write_contract(app_root, app_id="memory", name="Memory")
+            register_app_source_from_contract(
+                store,
                 source_kind="platform",
                 source_path=str(app_root),
-                contract=build_app_contract(),
                 now=now,
             )
-            register_app_source(store, source)
             data_root = repo_root / "workspaces" / "default" / "data" / "memory"
             data_root.mkdir(parents=True, exist_ok=True)
             (data_root / "existing.json").write_text("{}", encoding="utf-8")
@@ -256,67 +222,40 @@ class Phase4AppHostingTestCase(unittest.TestCase):
     def test_compatibility_checks_reject_invalid_contract_and_workspace_mode(self) -> None:
         store = self.make_store()
         now = datetime.now(tz=UTC)
-        bad_contract = build_app_source_record(
-            app_id="unsafe",
-            name="Unsafe",
-            version="1.0.0",
-            description="Unsafe app",
-            publisher="vendor",
-            source_kind="external_bundle",
-            source_path=str(Path("/tmp") / "unsafe"),
-            contract=build_app_contract(
-                compatibility=build_app_compatibility(contract_version="2.0"),
-            ),
-            now=now,
-        )
-        full_access_only = build_app_source_record(
-            app_id="operator-tools",
-            name="Operator Tools",
-            version="1.0.0",
-            description="Operator tools",
-            publisher="vendor",
-            source_kind="external_bundle",
-            source_path=str(Path("/tmp") / "operator-tools"),
-            contract=build_app_contract(
-                compatibility=build_app_compatibility(supported_workspace_modes=["full-access"]),
-            ),
-            now=now,
-        )
-
         with TemporaryDirectory() as temp_dir:
             repo_root = self.make_repo_root(temp_dir)
             bad_root = repo_root / "apps" / "_bundles" / "unsafe" / "1.0.0"
             good_root = repo_root / "apps" / "_bundles" / "operator-tools" / "1.0.0"
-            bad_root.mkdir(parents=True, exist_ok=True)
-            good_root.mkdir(parents=True, exist_ok=True)
-            bad_contract = build_app_source_record(
+            self.write_contract(
+                bad_root,
                 app_id="unsafe",
                 name="Unsafe",
-                version="1.0.0",
-                description="Unsafe app",
                 publisher="vendor",
-                source_kind="external_bundle",
-                source_path=str(bad_root),
                 contract=build_app_contract(
                     compatibility=build_app_compatibility(contract_version="2.0"),
                 ),
-                now=now,
             )
-            full_access_only = build_app_source_record(
+            self.write_contract(
+                good_root,
                 app_id="operator-tools",
                 name="Operator Tools",
-                version="1.0.0",
-                description="Operator tools",
                 publisher="vendor",
-                source_kind="external_bundle",
-                source_path=str(good_root),
                 contract=build_app_contract(
                     compatibility=build_app_compatibility(supported_workspace_modes=["full-access"]),
                 ),
+            )
+            bad_contract = register_app_source_from_contract(
+                store,
+                source_kind="external_bundle",
+                source_path=str(bad_root),
                 now=now,
             )
-            register_app_source(store, bad_contract)
-            register_app_source(store, full_access_only)
+            full_access_only = register_app_source_from_contract(
+                store,
+                source_kind="external_bundle",
+                source_path=str(good_root),
+                now=now,
+            )
             with self.assertRaises(AppCompatibilityError):
                 install_external_app(store, source_id=bad_contract.source_id, workspace_id="default", start_path=repo_root, now=now)
             with self.assertRaises(AppCompatibilityError):
@@ -328,33 +267,16 @@ class Phase4AppHostingTestCase(unittest.TestCase):
             transition_workspace_app_status(store, workspace_id="default", app_id="mail", target_status="enabled")
 
         now = datetime.now(tz=UTC)
-        source = build_app_source_record(
-            app_id="mail",
-            name="Mail",
-            version="1.0.0",
-            description="Mail app",
-            publisher="maverick",
-            source_kind="platform",
-            source_path=str(Path("/tmp") / "unused"),
-            contract=build_app_contract(),
-            now=now,
-        )
         with TemporaryDirectory() as temp_dir:
             repo_root = self.make_repo_root(temp_dir)
             app_root = repo_root / "apps" / "mail"
-            app_root.mkdir(parents=True, exist_ok=True)
-            source = build_app_source_record(
-                app_id="mail",
-                name="Mail",
-                version="1.0.0",
-                description="Mail app",
-                publisher="maverick",
+            self.write_contract(app_root, app_id="mail", name="Mail")
+            source = register_app_source_from_contract(
+                store,
                 source_kind="platform",
                 source_path=str(app_root),
-                contract=build_app_contract(),
                 now=now,
             )
-            register_app_source(store, source)
             install_external_app(
                 store,
                 source_id=source.source_id,
@@ -376,33 +298,16 @@ class Phase4AppHostingTestCase(unittest.TestCase):
     def test_invalid_transition_raises_lifecycle_error(self) -> None:
         store = self.make_store()
         now = datetime.now(tz=UTC)
-        source = build_app_source_record(
-            app_id="widgets",
-            name="Widgets",
-            version="1.0.0",
-            description="Widgets app",
-            publisher="maverick",
-            source_kind="platform",
-            source_path=str(Path("/tmp") / "unused"),
-            contract=build_app_contract(),
-            now=now,
-        )
         with TemporaryDirectory() as temp_dir:
             repo_root = self.make_repo_root(temp_dir)
             app_root = repo_root / "apps" / "widgets"
-            app_root.mkdir(parents=True, exist_ok=True)
-            source = build_app_source_record(
-                app_id="widgets",
-                name="Widgets",
-                version="1.0.0",
-                description="Widgets app",
-                publisher="maverick",
+            self.write_contract(app_root, app_id="widgets", name="Widgets")
+            source = register_app_source_from_contract(
+                store,
                 source_kind="platform",
                 source_path=str(app_root),
-                contract=build_app_contract(),
                 now=now,
             )
-            register_app_source(store, source)
             install_external_app(store, source_id=source.source_id, workspace_id="default", start_path=repo_root, now=now)
             with self.assertRaises(AppLifecycleError):
                 transition_workspace_app_status(
@@ -419,19 +324,13 @@ class Phase4AppHostingTestCase(unittest.TestCase):
         with TemporaryDirectory() as temp_dir:
             repo_root = self.make_repo_root(temp_dir)
             rogue_bundle = repo_root / "workspaces" / "default" / "apps" / "rogue"
-            rogue_bundle.mkdir(parents=True, exist_ok=True)
-            source = build_app_source_record(
-                app_id="rogue",
-                name="Rogue",
-                version="1.0.0",
-                description="Rogue bundle",
-                publisher="vendor",
+            self.write_contract(rogue_bundle, app_id="rogue", name="Rogue", publisher="vendor")
+            source = register_app_source_from_contract(
+                store,
                 source_kind="external_bundle",
                 source_path=str(rogue_bundle),
-                contract=build_app_contract(),
                 now=now,
             )
-            register_app_source(store, source)
 
             with self.assertRaises(AppLifecycleError):
                 install_external_app(store, source_id=source.source_id, workspace_id="default", start_path=repo_root, now=now)
@@ -456,21 +355,17 @@ class Phase4AppHostingTestCase(unittest.TestCase):
                         "health_check": "backend/lifecycle/health.py",
                     }
                 ),
+                lifecycle=build_app_lifecycle(health_check=True),
                 health_contract=build_app_health_contract(mode="hook", degraded_on_failure=True),
                 failure_semantics=build_app_failure_semantics(install_failure="block_activation"),
             )
-            source = build_app_source_record(
-                app_id="hooks-app",
-                name="Hooks App",
-                version="1.0.0",
-                description="Hooks app",
-                publisher="maverick",
+            self.write_contract(app_root, app_id="hooks-app", name="Hooks App", contract=contract)
+            source = register_app_source_from_contract(
+                store,
                 source_kind="platform",
                 source_path=str(app_root),
-                contract=contract,
                 now=now,
             )
-            register_app_source(store, source)
 
             binding = install_external_app(store, source_id=source.source_id, workspace_id="default", start_path=repo_root, now=now)
 
@@ -485,26 +380,18 @@ class Phase4AppHostingTestCase(unittest.TestCase):
             app_root = repo_root / "apps" / "timeout-app"
             lifecycle_root = app_root / "backend" / "lifecycle"
             lifecycle_root.mkdir(parents=True, exist_ok=True)
-            (lifecycle_root / "install.py").write_text(
-                "import time\ntime.sleep(2)\n",
-                encoding="utf-8",
-            )
+            (lifecycle_root / "install.py").write_text("import time\ntime.sleep(2)\n", encoding="utf-8")
             contract = build_app_contract(
                 entrypoints=build_app_entrypoints(hooks={"install": "backend/lifecycle/install.py"}),
                 hook_timeouts=build_app_hook_timeouts(install_seconds=1),
             )
-            source = build_app_source_record(
-                app_id="timeout-app",
-                name="Timeout App",
-                version="1.0.0",
-                description="Timeout app",
-                publisher="maverick",
+            self.write_contract(app_root, app_id="timeout-app", name="Timeout App", contract=contract)
+            source = register_app_source_from_contract(
+                store,
                 source_kind="platform",
                 source_path=str(app_root),
-                contract=contract,
                 now=now,
             )
-            register_app_source(store, source)
 
             with self.assertRaises(AppLifecycleError):
                 install_external_app(store, source_id=source.source_id, workspace_id="default", start_path=repo_root, now=now)

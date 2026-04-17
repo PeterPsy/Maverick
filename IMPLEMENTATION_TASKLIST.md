@@ -153,26 +153,38 @@ without carrying forward legacy structure or backward-compatibility constraints 
 
 ## Phase 5: App Contract Execution Layer
 
-- [ ] Implement parser/validator for app contract files
-- [ ] Implement support for:
+- [x] Make the app contract file the source of truth for executable app metadata
+- [x] Implement parser/validator for canonical app contract files
+- [x] Implement support for:
   - [x] `contract_version`
   - [x] `minimum_core_version`
   - [x] `entrypoints`
-  - `storage`
-  - `capabilities`
-  - `lifecycle`
+  - [x] `storage`
+  - [x] `capabilities`
+  - [x] `lifecycle`
   - [x] `compatibility`
   - [x] `hook_timeouts`
   - [x] `failure_semantics`
   - [x] `health_contract`
   - [x] `rollback_support`
-- [ ] Implement deterministic resolution of:
+- [x] Implement lifecycle import-recovery support declarations:
+  - [x] `validate_after_import`
+  - [x] `repair_after_import`
+- [x] Implement deterministic resolution of:
   - [x] MCP entrypoint
   - [x] CLI entrypoint
   - [x] skills root
   - [x] lifecycle hooks
 - [x] Implement health contract execution
-- [ ] Implement install/upgrade timeout enforcement
+- [x] Implement lifecycle timeout enforcement for:
+  - [x] install
+  - [x] upgrade
+  - [x] migrate
+  - [x] export
+  - [x] import
+  - [x] validate_after_import
+  - [x] repair_after_import
+  - [x] health_check
 
 ## Phase 6: Workspace Runtime Model
 
@@ -184,8 +196,8 @@ without carrying forward legacy structure or backward-compatibility constraints 
 - [ ] Implement workspace-aware runtime routing
 - [ ] Implement `sandbox` execution mode
 - [ ] Implement `full-access` execution mode
-- [x] Ensure non-default workspace runtime cannot escape workspace root
-- [x] Ensure `default` runtime can operate beyond workspace root only when explicitly configured
+- [ ] Ensure non-default workspace runtime cannot escape workspace root
+- [ ] Ensure `default` runtime can operate beyond workspace root only when explicitly configured
 
 ## Phase 7: AI Provider Abstraction
 

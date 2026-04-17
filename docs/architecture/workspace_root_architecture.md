@@ -1191,6 +1191,20 @@ Ephemeral runtime state can live here if needed, but it is still part of the wor
 
 This directory exists for implementation convenience, not as a separate conceptual filesystem.
 
+Typical examples of valid content here are:
+
+- runtime session state
+- active turn state
+- watchdog or recovery markers
+- local runtime process artifacts that are not app-owned data
+
+This directory is not the canonical home for:
+
+- uploaded files
+- generated artifacts
+- app-owned structured business data
+- persistent chat-thread history
+
 ## Runtime Model
 
 ### Sandbox rule
@@ -1214,6 +1228,13 @@ The target model is simpler:
 - the sandbox perimeter matches the workspace perimeter
 - the agent can organize files directly inside the workspace
 
+For the first local runtime implementation, this should also mean:
+
+- the runtime resolves `workspace_id` from trusted runtime ownership, not from arbitrary client-provided path selection
+- child runtime sessions inherit the same workspace root unless a trusted control-plane action explicitly changes scope
+- runtime-local ephemeral state stays under `workspaces/<workspace_id>/runtime/`
+- `storage/` and `data/` remain separate from runtime process state
+
 ### Default workspace exception
 
 The installation-level `default` workspace is a special operational workspace.
@@ -1236,6 +1257,10 @@ Examples:
 - interacting with system services such as nginx
 
 This makes the `default` workspace the privileged operator workspace of the installation.
+
+The first implementation of this mode does not need distributed runtime nodes or remote execution infrastructure.
+
+It only needs a clear local full-access mode that is explicitly policy-gated and correctly bounded.
 
 ### Non-default workspace rule
 

@@ -505,6 +505,86 @@ Owns:
 
 This package should be provider-agnostic.
 
+### Runtime model decomposition
+
+The runtime domain should separate at least these concepts:
+
+- runtime session
+- runtime turn
+- runtime event
+- runtime process
+- runtime state
+
+Those are related, but they are not the same thing.
+
+The first v3 implementation should keep those boundaries explicit instead of collapsing them into one generic session manager.
+
+#### Runtime session
+
+A runtime session is the lifecycle container for one running agent runtime.
+
+It should carry:
+
+- authoritative runtime ownership such as `workspace_id` and agent or instance identity
+- effective execution mode
+- lifecycle timestamps
+- current session status
+
+#### Runtime turn
+
+A runtime turn is one unit of execution inside a runtime session.
+
+It is not the same thing as chat-thread persistence.
+
+The runtime turn model should support at least:
+
+- queued
+- active
+- completed
+- failed
+- cancelled
+- timed out
+
+#### Runtime event
+
+A runtime event is a structured state or progress signal emitted by the runtime domain.
+
+Examples:
+
+- turn started
+- tool invocation started
+- tool invocation completed
+- runtime stalled
+- process exited
+
+Runtime events should be modeled independently from websocket framing or any other transport protocol.
+
+The transport may carry runtime events, but it must not define the domain model.
+
+#### Runtime process
+
+A runtime process is the execution handle that a runtime session currently controls.
+
+For the first implementation, the runtime process model should support local process execution cleanly.
+
+The model should not assume that every runtime must always be a local subprocess forever.
+
+That said, remote-node or distributed-runtime orchestration is not required to complete the first local Phase 6 implementation.
+
+#### Runtime state
+
+Runtime state is the mutable execution snapshot of one runtime session.
+
+Examples:
+
+- current turn pointer
+- last known progress
+- watchdog state
+- forced stop reason
+- last runtime error detail
+
+This state belongs to the runtime domain, not to chat persistence and not to app-owned storage.
+
 ### `inter_agent/`
 
 Owns:

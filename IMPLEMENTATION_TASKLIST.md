@@ -189,15 +189,35 @@ without carrying forward legacy structure or backward-compatibility constraints 
 ## Phase 6: Workspace Runtime Model
 
 - [ ] Implement runtime session abstraction
+  - [ ] define canonical runtime session statuses
+  - [ ] store authoritative `workspace_id`, `agent_id` or equivalent runtime owner, and execution mode
+  - [ ] track `started_at`, `updated_at`, `ended_at`, and last progress timestamp
 - [ ] Implement turn abstraction
+  - [ ] define canonical turn statuses
+  - [ ] model queued, active, completed, failed, cancelled, and timed-out turns explicitly
+  - [ ] keep turn runtime state separate from chat-thread persistence
 - [ ] Implement runtime event abstraction
+  - [ ] define structured event types instead of raw transport messages
+  - [ ] attribute runtime events to `workspace_id`, runtime session, turn, and process when present
+  - [ ] distinguish runtime-domain events from websocket or transport framing
 - [ ] Implement runtime process abstraction
+  - [ ] define a local process handle model
+  - [ ] track stdin or stdout lifecycle, exit code, and crash or timeout outcomes
+  - [ ] keep room for future non-local execution targets without making remote runtime a Phase 6 requirement
 - [ ] Implement runtime state model
+  - [ ] track current turn pointer, current runtime status, last known progress, and watchdog or error detail
+  - [ ] keep runtime state under workspace-scoped runtime state, not in chat persistence
 - [ ] Implement workspace-aware runtime routing
+  - [ ] resolve workspace authority from runtime ownership, not from untrusted client input alone
+  - [ ] ensure child runtime sessions inherit the same workspace boundary unless a trusted control-plane action says otherwise
 - [ ] Implement `sandbox` execution mode
+  - [ ] make the workspace root the writable runtime perimeter
+  - [ ] keep `runtime/` ephemeral and separate from `storage/` and `data/`
 - [ ] Implement `full-access` execution mode
-- [ ] Ensure non-default workspace runtime cannot escape workspace root
-- [ ] Ensure `default` runtime can operate beyond workspace root only when explicitly configured
+  - [ ] keep it operator-only and policy-gated
+  - [ ] do not require remote-node or distributed-runtime support for the first local implementation
+- [x] Ensure non-default workspace runtime cannot escape workspace root
+- [x] Ensure `default` runtime can operate beyond workspace root only when explicitly configured
 
 ## Phase 7: AI Provider Abstraction
 

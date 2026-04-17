@@ -60,6 +60,8 @@ Every app installed in a workspace owns its data under:
 
 This path is the owned data namespace for the app inside that workspace.
 
+The core should expose a canonical path helper for this namespace so apps and platform code resolve the same app-owned data root deterministically.
+
 The app may choose its own internal storage shape within that root.
 
 Examples:

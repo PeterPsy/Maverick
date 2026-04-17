@@ -60,6 +60,22 @@ In addition, the core may ship instructional assets under:
 
 It is a procedural layer that explains how to use the core's executable surfaces.
 
+## Initial Repository Conventions
+
+The initial repository conventions for v3 should stay minimal and explicit:
+
+- Python `3.12`
+- the package root is the repository `core/` directory
+- tests live under `/maverick-v3/tests/`
+- early verification should rely on standard-library-friendly commands first
+
+At this stage the repository should prefer:
+
+- `python3 -m unittest discover -s tests -p 'test_*.py'`
+- `python3 -m compileall core tests`
+
+before introducing heavier toolchain assumptions.
+
 ## Core Responsibilities
 
 The core is responsible for the following domains.

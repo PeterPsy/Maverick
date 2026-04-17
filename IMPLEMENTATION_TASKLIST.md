@@ -41,19 +41,19 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] `workspaces/`
   - [x] `scripts/`
   - [x] `docs/`
-- [x] Copy or move the approved architecture documents into `maverick-v3/docs/`
-- [ ] Initialize git in `maverick-v3` or connect it to the intended remote strategy
+- [x] Copy or move the approved architecture documents into `maverick-v3/docs/architecture/`
+- [x] Initialize git in `maverick-v3` or connect it to the intended remote strategy
 - [x] Create a root `.gitignore` for:
   - [x] runtime state
   - [x] app-local DB files
   - [x] logs
   - [x] tmp
   - [x] generated build output
-- [ ] Define repository conventions:
-  - Python version
-  - package layout
-  - lint/test commands
-  - environment bootstrap
+- [x] Define repository conventions:
+  - [x] Python version
+  - [x] package layout
+  - [x] lint/test commands
+  - [x] environment bootstrap
 
 ## Phase 1: Define the v3 Filesystem Contract
 
@@ -61,17 +61,17 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] `/maverick-v3/core/`
   - [x] `/maverick-v3/apps/`
   - [x] `/maverick-v3/workspaces/`
-- [ ] Define canonical workspace path helpers
-- [ ] Define canonical app path helpers
-- [ ] Define canonical storage path helpers
-- [ ] Define canonical logs path helpers
-- [ ] Define canonical runtime path helpers
-- [ ] Define canonical file identity rules:
-  - `file_id`
-  - relative path
-  - hash
-  - timestamps
-- [ ] Define canonical export manifest structure
+- [x] Define canonical workspace path helpers
+- [x] Define canonical app path helpers
+- [x] Define canonical storage path helpers
+- [x] Define canonical logs path helpers
+- [x] Define canonical runtime path helpers
+- [x] Define canonical file identity rules:
+  - [x] `file_id`
+  - [x] relative path
+  - [x] hash
+  - [x] timestamps
+- [x] Define canonical export manifest structure
 
 ## Phase 2: Scaffold the New Core Tree
 

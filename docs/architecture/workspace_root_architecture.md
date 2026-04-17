@@ -162,6 +162,8 @@ Notes:
 - A sandboxed agent assigned to a non-default workspace may not write outside `/workspaces/<workspace_id>/`.
 - `core/` is itself the package root of the platform core and should not contain wrapper layers such as `backend/`, `runtime_backend/`, or `app/`.
 
+The initial implementation should expose canonical path helpers and workspace bootstrap services for this layout before building higher-level runtime behavior on top of it.
+
 ## Workspace Contents
 
 Each workspace root is the canonical home for everything that belongs to that tenant's operating environment.
@@ -217,6 +219,17 @@ The exact subdirectories can evolve, but the ownership rule must remain stable:
 
 - the app is a global capability
 - the saved content belongs to the workspace
+
+The initial canonical workspace bootstrap should materialize at least:
+
+- `apps/`
+- `data/`
+- `logs/`
+- `runtime/`
+- `storage/uploaded/`
+- `storage/generated/`
+- `tests/`
+- `tmp/`
 
 Apps in a workspace may expose more than one official executable capability surface:
 

@@ -4,7 +4,7 @@ This tree is the package root of the Maverick v3 core.
 
 The target architecture is defined in:
 
-- `/home/ubuntu/maverick-v3/docs/core_architecture.md`
+- `/home/ubuntu/maverick-v3/docs/architecture/core_architecture.md`
 
 The core is organized by domain, not by legacy buckets.
 

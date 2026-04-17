@@ -63,6 +63,7 @@ def resolve_workspace_runtime_boundary(
     *,
     governance: WorkspaceGovernanceRecord | None = None,
     platform_allows_full_access: bool = False,
+    start_path: Path | None = None,
 ) -> WorkspaceRuntimeBoundary:
     """Resolve the runtime filesystem boundary for one workspace."""
     profile = resolve_workspace_execution_profile(
@@ -71,7 +72,7 @@ def resolve_workspace_runtime_boundary(
         governance=governance,
         platform_allows_full_access=platform_allows_full_access,
     )
-    root = workspace_root(workspace_id=workspace_id, start_path=Path(__file__))
+    root = workspace_root(workspace_id=workspace_id, start_path=start_path or Path(__file__))
     if profile.effective_mode == "full-access":
         writable_roots = ["/"]
         allows_outside_workspace_root = True

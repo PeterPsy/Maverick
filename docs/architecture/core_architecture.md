@@ -530,6 +530,14 @@ It should carry:
 - lifecycle timestamps
 - current session status
 
+The first local implementation should use explicit canonical statuses such as:
+
+- `created`
+- `running`
+- `stopping`
+- `stopped`
+- `failed`
+
 #### Runtime turn
 
 A runtime turn is one unit of execution inside a runtime session.
@@ -544,6 +552,8 @@ The runtime turn model should support at least:
 - failed
 - cancelled
 - timed out
+
+The first local implementation may represent `timed out` as an explicit terminal turn status rather than as an inferred transport-side error.
 
 #### Runtime event
 
@@ -570,6 +580,15 @@ For the first implementation, the runtime process model should support local pro
 The model should not assume that every runtime must always be a local subprocess forever.
 
 That said, remote-node or distributed-runtime orchestration is not required to complete the first local Phase 6 implementation.
+
+The first local implementation should still model process lifecycle states explicitly, for example:
+
+- `created`
+- `running`
+- `exited`
+- `failed`
+- `terminated`
+- `timed-out`
 
 #### Runtime state
 

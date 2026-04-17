@@ -7,6 +7,9 @@ def route_descriptions() -> dict[str, str]:
     """Describe the API surface this domain is expected to expose."""
     return {
         "sessions": "manage runtime sessions",
+        "turns": "manage runtime turns",
         "events": "read runtime events",
         "processes": "inspect runtime process state",
+        "state": "inspect runtime session state",
+        "routing": "resolve workspace-aware runtime routing",
     }

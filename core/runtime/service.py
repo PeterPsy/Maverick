@@ -1,13 +1,30 @@
-"""Runtime-domain service entrypoints for the initial v3 scaffold."""
+"""Runtime-domain service facade."""
 
 from __future__ import annotations
 
-from pathlib import Path
+from core.runtime.lifecycle import (
+    create_child_runtime_session,
+    create_runtime_process,
+    create_runtime_session,
+    queue_runtime_turn,
+    record_runtime_event,
+    transition_runtime_process,
+    transition_runtime_session,
+    transition_runtime_turn,
+    utcnow,
+)
+from core.runtime.routing import build_runtime_routing, resolve_runtime
 
-from core.runtime.models import RuntimeLocation
-from core.runtime.store import runtime_location
-
-
-def resolve_runtime(workspace_id: str, start_path: Path | None = None) -> RuntimeLocation:
-    """Resolve the runtime root for one workspace through the runtime service layer."""
-    return runtime_location(workspace_id=workspace_id, start_path=start_path)
+__all__ = [
+    "build_runtime_routing",
+    "create_child_runtime_session",
+    "create_runtime_process",
+    "create_runtime_session",
+    "queue_runtime_turn",
+    "record_runtime_event",
+    "resolve_runtime",
+    "transition_runtime_process",
+    "transition_runtime_session",
+    "transition_runtime_turn",
+    "utcnow",
+]

@@ -76,6 +76,18 @@ At this stage the repository should prefer:
 
 before introducing heavier toolchain assumptions.
 
+The initial scaffold should also establish a small per-domain file pattern in the domains that become active first.
+
+Preferred starter files are:
+
+- `routes.py`
+- `service.py`
+- `models.py`
+- `store.py`
+- `errors.py` when a domain already owns explicit failure modes
+
+This pattern is meant to keep ownership obvious early, not to justify large empty scaffolding trees.
+
 ## Core Responsibilities
 
 The core is responsible for the following domains.
@@ -92,6 +104,8 @@ The core owns:
 
 This includes who can enter the system and which workspaces they can access.
 
+The initial control-plane persistence for these records should target MongoDB, while keeping the domain records and service layer independent from HTTP or framework-specific exceptions.
+
 ### 2. Workspace registry and governance
 
 The core owns:
@@ -103,6 +117,15 @@ The core owns:
 - workspace policy enforcement
 
 The core does not own the internal business data of a workspace.
+
+The initial v3 model should keep these records distinct:
+
+- workspace registry record
+- workspace membership record
+- workspace governance record
+- workspace quota record
+
+The execution-policy domain may read these records, but it should still compute the effective runtime policy separately.
 
 ### 3. App installation and hosting
 
@@ -171,6 +194,8 @@ The core owns:
 - full-access policy
 - runtime execution mode enforcement
 - workspace execution boundary enforcement
+
+The workspace domain may declare metadata and governance state, but the effective runtime mode must still be resolved by `execution_policy/`.
 
 ### 8. Secret management
 

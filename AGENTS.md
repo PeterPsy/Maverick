@@ -40,6 +40,20 @@ Do not leave the repository in a state where the implementation has moved but th
 - do not leave commented-out code, dead code, placeholder compatibility branches, or unused scaffolding behind
 - when replacing a structure or abstraction, remove the obsolete version in the same change unless there is a documented reason not to
 
+## Planning And Clarification
+
+- before implementing a non-trivial change, propose a short step-by-step plan
+- if the user's request is not clear enough to implement safely, ask clarifying questions before coding
+- do not guess through ambiguous product behavior, data model expectations, or destructive changes
+- when requirements are clear enough to proceed, keep momentum and execute the plan end-to-end
+
+## Test-Driven Development Bias
+
+- prefer a test-driven approach for stable logic and contract work
+- when practical, write or update the test that captures the intended behavior before or together with the implementation
+- path contracts, filesystem rules, policy checks, and serialization logic should default to test-first work
+- if test-first is not practical for a specific change, explain the reason briefly and still add the smallest useful test coverage
+
 ## Preferred Core File Patterns
 
 When a domain becomes real implementation code, prefer small explicit files such as:
@@ -72,7 +86,8 @@ Rules:
 - repository workflow and engineering discipline belong in `AGENTS.md`
 - implementation progress belongs in `IMPLEMENTATION_TASKLIST.md`
 - if a task changes the intended target architecture, update the relevant architecture doc before or together with the code
-- if a task completes a real implementation step, mark the corresponding checklist items in `IMPLEMENTATION_TASKLIST.md`
+- if a task completes a real implementation step, mark the corresponding checklist items in `IMPLEMENTATION_TASKLIST.md` immediately
+- do not postpone checklist updates until the end of the session when the task has already been closed
 - do not leave TODO notes as a substitute for updating documentation
 
 ## Local Skills
@@ -88,6 +103,8 @@ Rules:
 - run the smallest relevant verification for every change
 - if a check cannot be run, state that clearly in the work summary
 - do not claim a feature is complete if only the scaffold exists
+- do not stop with failing tests when the failure is within the current scope to fix
+- aim to leave the branch with all relevant tests passing before closing the task
 
 ## Filesystem And Workspace Discipline
 
@@ -107,6 +124,14 @@ That means:
 - remove obsolete files when replacing them
 - update paths after moving documents or modules
 - keep the branch free of accidental generated artifacts
+- remove temporary debug code, scratch files, and experimental leftovers before finishing
+
+## Review Pass
+
+- always perform a final review pass after writing code
+- review the diff for readability, unnecessary complexity, dead code, and documentation drift
+- verify naming, file boundaries, and ownership still make sense after the implementation settled
+- make the cleanup edits in the same change instead of leaving follow-up debt by default
 
 ## Commit And Push Discipline
 

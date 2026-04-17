@@ -1,6 +1,6 @@
 ---
 name: maverick3-code-skill
-description: "Use when working on the Maverick v3 codebase or when asked to implement, refactor, document, or review code in /home/ubuntu/maverick-v3. Enforces clean-slate v3 development: read AGENTS.md and docs/architecture first, avoid legacy/backward-compatibility shims, keep files small and maintainable, update architecture docs and IMPLEMENTATION_TASKLIST in the same change, and use frequent checkpoint commits/pushes during implementation."
+description: "Use when working on the Maverick v3 codebase or when asked to implement, refactor, document, or review code in /home/ubuntu/maverick-v3. Enforces clean-slate v3 development: read AGENTS.md and docs/architecture first, ask clarifying questions when requirements are not clear enough, propose a step plan before implementation, prefer test-driven work, keep files small and maintainable, update architecture docs and IMPLEMENTATION_TASKLIST in the same change, perform a final review pass, and use frequent checkpoint commits and pushes during implementation."
 ---
 
 # Maverick v3 Code Skill
@@ -33,13 +33,17 @@ Minimum architecture set:
 ## Coding Workflow
 
 1. Read the local repo guidance files first.
-2. Check the existing tree before proposing structure changes.
-3. Align the change with the relevant architecture docs.
-4. Implement with small files and explicit names.
-5. Update docs in the same change if architecture, layout, policy, or contracts moved.
-6. Update `IMPLEMENTATION_TASKLIST.md` when a real implementation step is actually completed.
-7. Run the smallest relevant validation.
-8. Make frequent checkpoint commits and push meaningful progress regularly when working on the branch.
+2. If the request is not clear enough to implement safely, ask clarifying questions before coding.
+3. Propose a short step-by-step plan before implementation for non-trivial work.
+4. Check the existing tree before proposing structure changes.
+5. Align the change with the relevant architecture docs.
+6. Prefer test-driven implementation for stable logic and contract work.
+7. Implement with small files and explicit names.
+8. Update docs in the same change if architecture, layout, policy, or contracts moved.
+9. Update `IMPLEMENTATION_TASKLIST.md` immediately when a real implementation step is actually completed.
+10. Run the smallest relevant validation and aim to leave all relevant tests passing.
+11. Do a final review pass over the diff and remove temporary or dirty leftovers.
+12. Make frequent checkpoint commits and push meaningful progress regularly when working on the branch.
 
 ## File Design Heuristics
 
@@ -47,6 +51,7 @@ Minimum architecture set:
 - if a file is getting large, split it before it becomes hard to review
 - prefer names like `service.py`, `models.py`, `store.py`, `routes.py`, `errors.py` when those responsibilities are real
 - avoid speculative abstractions and premature extension points
+- remove temporary debugging code and experimental leftovers before finishing
 
 ## Documentation Discipline
 
@@ -65,6 +70,15 @@ Documentation ownership:
 - `docs/architecture/` for architecture and contracts
 - `AGENTS.md` for repository working rules
 - `IMPLEMENTATION_TASKLIST.md` for implementation progress
+
+## Final Review Standard
+
+Before closing the task:
+
+- review the diff for readability and maintainability
+- remove dead code, stale references, and unnecessary complexity
+- make sure the tests relevant to the change pass
+- do not leave the branch in a half-cleaned state
 
 ## Preferred Next-Step Bias
 

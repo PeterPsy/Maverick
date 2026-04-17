@@ -94,6 +94,8 @@ This plane answers questions such as:
 
 The governance plane does not define the internal content of an app.
 
+The initial control-plane persistence for workspace registry, membership, governance, quota, and active workspace selection should target MongoDB, but the domain model should remain cleanly separated from the database driver.
+
 ### Workspace data plane
 
 The workspace data plane contains the actual operational content owned by the workspace and by the apps installed inside it.

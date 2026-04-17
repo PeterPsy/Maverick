@@ -94,27 +94,27 @@ without carrying forward legacy structure or backward-compatibility constraints 
 - [x] Add empty but real modules with clean names instead of generic placeholders
 - [x] Add a minimal `main.py`
 - [x] Add a minimal application bootstrap in `api/application.py`
-- [ ] Add a small per-domain file pattern:
-  - `routes.py`
-  - `service.py`
-  - `models.py`
-  - `store.py`
-  - `errors.py` when needed
+- [x] Add a small per-domain file pattern:
+  - [x] `routes.py`
+  - [x] `service.py`
+  - [x] `models.py`
+  - [x] `store.py`
+  - [x] `errors.py` when needed
 - [x] Ensure the core tree lives directly under `/maverick-v3/core/` with no wrapper layers such as `backend/`, `runtime_backend/`, or `app/`
 
 ## Phase 3: Identity and Workspace Governance
 
-- [ ] Implement users model
-- [ ] Implement auth/session model
-- [ ] Implement workspace registry model
-- [ ] Implement workspace membership model
-- [ ] Implement workspace governance model
-- [ ] Implement workspace quota/limit model
-- [ ] Implement workspace creation flow
-- [ ] Implement automatic creation of `default` workspace
-- [ ] Implement workspace execution profile:
-  - `default` can allow `full-access`
-  - non-default workspaces are sandbox-only
+- [x] Implement users model
+- [x] Implement auth/session model
+- [x] Implement workspace registry model
+- [x] Implement workspace membership model
+- [x] Implement workspace governance model
+- [x] Implement workspace quota/limit model
+- [x] Implement workspace creation flow
+- [x] Implement automatic creation of `default` workspace
+- [x] Implement workspace execution profile:
+  - [x] `default` can allow `full-access`
+  - [x] non-default workspaces are sandbox-only
 
 ## Phase 4: App Hosting and Installation System
 

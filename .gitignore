@@ -21,6 +21,10 @@ tmp/
 runtime/
 *.log
 
+# Keep the core runtime package in the repository
+!core/runtime/
+!core/runtime/.gitkeep
+
 # Workspace generated content
 workspaces/*/storage/generated/
 workspaces/*/storage/uploaded/

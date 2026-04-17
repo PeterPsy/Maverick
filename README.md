@@ -30,6 +30,8 @@ It is not a backward-compatible continuation of the v2 codebase.
 - Python version: `3.12`
 - Package root: `core/` is imported directly as the Maverick core package root
 - Tests live under `tests/`
+- Current default control-plane persistence backend: MongoDB
+- Domain models and service-layer contracts must remain persistence-agnostic above the store adapter boundary
 - Preferred verification commands:
   - `python3 -m unittest discover -s tests -p 'test_*.py'`
   - `python3 -m compileall core tests`
@@ -72,3 +74,5 @@ When a skill should be auto-discovered by Codex, install it in `~/.codex/skills`
 ## Build Principle
 
 v3 starts from a clean structure and only reintroduces concepts that still fit the new architecture.
+
+MongoDB is the initial persistence adapter for control-plane records, not the architectural definition of the core.

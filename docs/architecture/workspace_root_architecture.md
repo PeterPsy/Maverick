@@ -94,7 +94,13 @@ This plane answers questions such as:
 
 The governance plane does not define the internal content of an app.
 
-The initial control-plane persistence for workspace registry, membership, governance, quota, and active workspace selection should target MongoDB, but the domain model should remain cleanly separated from the database driver.
+The initial control-plane persistence for workspace registry, membership, governance, quota, and active workspace selection may target MongoDB, but their semantics must not depend on Mongo documents or driver APIs.
+
+Rules:
+
+- workspace records keep domain meaning regardless of persistence backend
+- service-layer contracts should depend on store interfaces or equivalent abstractions
+- Mongo-specific queries and update operators stay inside store adapters only
 
 ### Workspace data plane
 

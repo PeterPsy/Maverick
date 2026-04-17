@@ -17,7 +17,7 @@ from core.workspaces.models import (
     WorkspaceRecord,
 )
 from core.workspaces.paths import workspace_paths
-from core.workspaces.store import MongoWorkspaceStore
+from core.workspaces.store import WorkspaceStore
 
 
 def ensure_workspace_layout(workspace_id: str, start_path: Path | None = None) -> WorkspacePaths:
@@ -129,7 +129,7 @@ def default_workspace_quota(workspace_id: str, now: datetime | None = None) -> W
     )
 
 
-def ensure_default_workspace_record(store: MongoWorkspaceStore, now: datetime | None = None) -> WorkspaceRecord:
+def ensure_default_workspace_record(store: WorkspaceStore, now: datetime | None = None) -> WorkspaceRecord:
     """Ensure the default workspace registry record exists."""
     timestamp = now or utcnow()
     record = build_workspace_record(
@@ -147,7 +147,7 @@ def ensure_default_workspace_record(store: MongoWorkspaceStore, now: datetime | 
 
 
 def create_workspace(
-    store: MongoWorkspaceStore,
+    store: WorkspaceStore,
     *,
     name: str,
     description: str | None = None,
@@ -194,7 +194,7 @@ def create_workspace(
 
 
 def ensure_workspace_membership(
-    store: MongoWorkspaceStore,
+    store: WorkspaceStore,
     *,
     membership_id: str,
     workspace_id: str,
@@ -214,7 +214,7 @@ def ensure_workspace_membership(
 
 
 def set_active_workspace_for_user(
-    store: MongoWorkspaceStore,
+    store: WorkspaceStore,
     *,
     user_id: str,
     workspace_id: str,
@@ -229,7 +229,7 @@ def set_active_workspace_for_user(
     return store.set_active_workspace(selection)
 
 
-def get_active_workspace_for_user(store: MongoWorkspaceStore, *, user_id: str) -> ActiveWorkspaceSelection | None:
+def get_active_workspace_for_user(store: WorkspaceStore, *, user_id: str) -> ActiveWorkspaceSelection | None:
     """Return the active workspace selection for one user, if it exists."""
     return store.get_active_workspace(user_id)
 

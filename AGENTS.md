@@ -39,6 +39,8 @@ Do not leave the repository in a state where the implementation has moved but th
 - avoid copy-paste duplication; extract shared logic once the shared behavior is real
 - do not leave commented-out code, dead code, placeholder compatibility branches, or unused scaffolding behind
 - when replacing a structure or abstraction, remove the obsolete version in the same change unless there is a documented reason not to
+- keep persistence technology details confined to store adapters and bootstrap wiring
+- do not leak Mongo-specific shapes, raw driver payloads, or database-only types into domain models or service interfaces
 
 ## Planning And Clarification
 

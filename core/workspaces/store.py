@@ -30,6 +30,46 @@ class MongoCollection(Protocol):
         ...
 
 
+class WorkspaceStore(Protocol):
+    """Persistence contract for workspace-domain records."""
+
+    def save_workspace(self, record: WorkspaceRecord) -> WorkspaceRecord:
+        ...
+
+    def get_workspace(self, workspace_id: str) -> WorkspaceRecord:
+        ...
+
+    def list_workspaces(self) -> list[WorkspaceRecord]:
+        ...
+
+    def save_membership(self, record: WorkspaceMembershipRecord) -> WorkspaceMembershipRecord:
+        ...
+
+    def get_membership(self, *, user_id: str, workspace_id: str) -> WorkspaceMembershipRecord:
+        ...
+
+    def list_memberships_for_user(self, user_id: str) -> list[WorkspaceMembershipRecord]:
+        ...
+
+    def save_governance(self, record: WorkspaceGovernanceRecord) -> WorkspaceGovernanceRecord:
+        ...
+
+    def get_governance(self, workspace_id: str) -> WorkspaceGovernanceRecord:
+        ...
+
+    def save_quota(self, record: WorkspaceQuotaRecord) -> WorkspaceQuotaRecord:
+        ...
+
+    def get_quota(self, workspace_id: str) -> WorkspaceQuotaRecord:
+        ...
+
+    def set_active_workspace(self, selection: ActiveWorkspaceSelection) -> ActiveWorkspaceSelection:
+        ...
+
+    def get_active_workspace(self, user_id: str) -> ActiveWorkspaceSelection | None:
+        ...
+
+
 @dataclass(frozen=True)
 class WorkspaceCollections:
     """Mongo collection bundle for workspace persistence."""

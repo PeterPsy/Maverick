@@ -19,6 +19,31 @@ class MongoCollection(Protocol):
         ...
 
 
+class IdentityStore(Protocol):
+    """Persistence contract for identity-domain records."""
+
+    def save_user(self, record: UserRecord) -> UserRecord:
+        ...
+
+    def get_user(self, user_id: str) -> UserRecord:
+        ...
+
+    def get_user_by_username(self, username: str) -> UserRecord:
+        ...
+
+    def save_password_credential(self, record: PasswordCredentialRecord) -> PasswordCredentialRecord:
+        ...
+
+    def get_password_credential(self, user_id: str) -> PasswordCredentialRecord:
+        ...
+
+    def save_auth_session(self, record: AuthSessionRecord) -> AuthSessionRecord:
+        ...
+
+    def get_auth_session(self, session_id: str) -> AuthSessionRecord:
+        ...
+
+
 @dataclass(frozen=True)
 class IdentityCollections:
     """Mongo collection bundle for identity persistence."""

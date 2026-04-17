@@ -11,7 +11,7 @@ from core.identity.models import (
     PlatformRole,
     UserRecord,
 )
-from core.identity.store import MongoIdentityStore
+from core.identity.store import IdentityStore
 
 
 def utcnow() -> datetime:
@@ -75,7 +75,7 @@ def build_auth_session(
     )
 
 
-def register_user(store: MongoIdentityStore, record: UserRecord, credential: PasswordCredentialRecord) -> UserRecord:
+def register_user(store: IdentityStore, record: UserRecord, credential: PasswordCredentialRecord) -> UserRecord:
     """Persist a new user and its password credential."""
     store.save_user(record)
     store.save_password_credential(credential)

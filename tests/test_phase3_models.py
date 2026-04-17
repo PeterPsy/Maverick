@@ -6,7 +6,8 @@ from datetime import UTC, datetime, timedelta
 import unittest
 
 from core.execution_policy.service import resolve_workspace_execution_profile
-from core.identity.service import build_auth_session, build_password_credential, build_user_record
+from core.identity.service import build_auth_session, build_password_credential, build_user_record, register_user
+from core.identity.store import MongoIdentityStore, IdentityCollections
 from core.workspaces.models import WorkspaceRecord
 from core.workspaces.service import (
     build_workspace_record,
@@ -42,6 +43,40 @@ class FakeCollection:
             self.documents.append({**query, **payload})
 
 
+class FakeIdentityStore:
+    """Small in-memory identity store used to prove service-layer agnosticism."""
+
+    def __init__(self) -> None:
+        self.users: dict[str, object] = {}
+        self.credentials: dict[str, object] = {}
+
+    def save_user(self, record):
+        self.users[record.user_id] = record
+        return record
+
+    def get_user(self, user_id: str):
+        return self.users[user_id]
+
+    def get_user_by_username(self, username: str):
+        for record in self.users.values():
+            if record.username == username:
+                return record
+        raise KeyError(username)
+
+    def save_password_credential(self, record):
+        self.credentials[record.user_id] = record
+        return record
+
+    def get_password_credential(self, user_id: str):
+        return self.credentials[user_id]
+
+    def save_auth_session(self, record):
+        return record
+
+    def get_auth_session(self, session_id: str):
+        raise KeyError(session_id)
+
+
 class Phase3ModelTestCase(unittest.TestCase):
     """Verify the initial Phase 3 control-plane records and services."""
 
@@ -56,6 +91,15 @@ class Phase3ModelTestCase(unittest.TestCase):
             )
         )
 
+    def make_identity_store(self) -> MongoIdentityStore:
+        return MongoIdentityStore(
+            IdentityCollections(
+                users=FakeCollection(),
+                credentials=FakeCollection(),
+                auth_sessions=FakeCollection(),
+            )
+        )
+
     def test_identity_models_build_expected_records(self) -> None:
         now = datetime.now(tz=UTC)
         user = build_user_record(user_id="u1", username="piero", now=now, platform_role="admin")
@@ -65,6 +109,17 @@ class Phase3ModelTestCase(unittest.TestCase):
         self.assertEqual(user.platform_role, "admin")
         self.assertEqual(credential.algorithm, "pbkdf2_sha256")
         self.assertEqual(session.status, "active")
+
+    def test_identity_service_accepts_non_mongo_store_contract(self) -> None:
+        now = datetime.now(tz=UTC)
+        user = build_user_record(user_id="u1", username="piero", now=now)
+        credential = build_password_credential(user_id="u1", password_hash="hash", algorithm="pbkdf2_sha256", now=now)
+        store = FakeIdentityStore()
+
+        register_user(store, user, credential)
+
+        self.assertEqual(store.get_user("u1").username, "piero")
+        self.assertEqual(store.get_password_credential("u1").algorithm, "pbkdf2_sha256")
 
     def test_default_workspace_record_is_bootstrapped_immediately(self) -> None:
         store = self.make_workspace_store()

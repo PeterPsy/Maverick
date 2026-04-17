@@ -88,6 +88,27 @@ Preferred starter files are:
 
 This pattern is meant to keep ownership obvious early, not to justify large empty scaffolding trees.
 
+## Persistence Boundary
+
+The Maverick v3 domain model is storage-agnostic.
+
+This applies in particular to:
+
+- `models.py`
+- `service.py`
+- domain-level errors and contracts
+
+The first control-plane persistence adapter may target MongoDB, but MongoDB is an implementation choice, not the architectural identity of the core.
+
+Rules:
+
+- domain records must not depend on Mongo driver types
+- services should depend on store protocols or equivalent persistence contracts, not concrete Mongo adapters
+- Mongo-specific query shapes and update semantics must stay inside store adapters
+- bootstrap wiring may choose MongoDB as the initial persistence backend
+
+This keeps the core open to future adapters such as PostgreSQL, SQLite, or another control-plane store without reshaping the domain model.
+
 ## Core Responsibilities
 
 The core is responsible for the following domains.
@@ -104,7 +125,7 @@ The core owns:
 
 This includes who can enter the system and which workspaces they can access.
 
-The initial control-plane persistence for these records should target MongoDB, while keeping the domain records and service layer independent from HTTP or framework-specific exceptions.
+The initial control-plane persistence for these records may target MongoDB, while keeping the domain records and service layer independent from HTTP, framework-specific exceptions, and database-driver-specific types.
 
 ### 2. Workspace registry and governance
 

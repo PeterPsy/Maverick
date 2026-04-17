@@ -280,7 +280,7 @@ That means the platform should support this principle:
 
 The standard contract for Maverick apps is defined in:
 
-- [app_contract_architecture.md](/home/ubuntu/maverick-v3/docs/new-architecture/app_contract_architecture.md)
+- [app_contract_architecture.md](/home/ubuntu/maverick-v3/docs/architecture/app_contract_architecture.md)
 
 Examples of valid app-local storage choices:
 
@@ -296,6 +296,73 @@ Each app may also ship its own operational surfaces alongside its data model:
 - `mcp/` for structured tool access
 - `cli/` for command-oriented local operations
 - `skills/` for procedural guidance on how to use the app correctly
+
+### App lifecycle in workspaces
+
+The platform must distinguish clearly between:
+
+- app bundle, package, or executable capability source
+- app installation state in a workspace
+- app enabled or disabled state in a workspace
+- app-owned data in `data/<app_id>/`
+
+These are related, but they are not the same thing.
+
+#### Install
+
+When an app is installed in a workspace, Maverick should:
+
+1. register the app as installed for that workspace
+2. create `data/<app_id>/` if it does not already exist
+3. make the declared app capability available to that workspace
+4. execute the app install hook if one exists
+5. initialize app-local storage only as needed
+
+Bundle source may differ:
+
+- external app bundles remain outside the workspace and are enabled for the workspace through core-managed installation state
+- workspace-local app projects under `workspaces/<workspace_id>/apps/` may be installed only into that same workspace unless later promoted through a platform-level distribution channel
+
+Install should create the minimum required structure, not arbitrary seeded content unless the app explicitly defines it.
+
+#### Uninstall
+
+Uninstall should remove the app as an active capability from the workspace, but should not automatically delete the app's persisted data.
+
+That means:
+
+- the app is no longer active in the workspace
+- the app may be hidden or disabled in operator-facing surfaces
+- the app's data root may remain on disk
+
+This keeps uninstall safe and reversible.
+
+#### Purge app data
+
+Purging app data is a separate operation from uninstall.
+
+Purging should:
+
+- explicitly delete `data/<app_id>/`
+- explicitly remove app-owned persisted local state
+- require clear operator intent
+
+This avoids conflating:
+
+- removing access to an app
+- destroying the app's data
+
+#### Reinstall
+
+If an app is reinstalled in a workspace and `data/<app_id>/` still exists, Maverick should allow the app to reattach to that existing data.
+
+This may require:
+
+- validation
+- repair
+- migration
+
+but it should not require a fresh data root by default.
 
 ### App-owned indices
 

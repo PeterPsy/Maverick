@@ -30,6 +30,27 @@ The platform must not force all apps into the same internal schema.
 
 The platform must require every app to describe how it behaves.
 
+## Contract Versus Installation State
+
+The app contract is not the same thing as app installation state.
+
+Maverick v3 should distinguish clearly between:
+
+- app source or project material
+- app contract metadata
+- app installation state in the core
+- app enablement state inside one workspace
+
+Examples:
+
+- an external app bundle may carry valid contract metadata before it is installed anywhere
+- a workspace-local app project may exist under `workspaces/<workspace_id>/apps/` before it becomes an active capability
+- an app may be installed but not enabled in a given workspace
+
+The contract describes what the app is and how it behaves.
+
+The core installation system decides where that app is known, installed, enabled, disabled, upgraded, uninstalled, or reattached.
+
 ## Required App Identity
 
 Every app must declare at least:

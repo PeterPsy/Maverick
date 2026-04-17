@@ -160,6 +160,22 @@ The core owns:
 
 The core does not own app business data.
 
+For v3, the app-hosting domain should keep at least these concepts distinct:
+
+- app source or project material
+- app installation record
+- workspace app enablement or binding state
+
+These concepts are related, but they are not interchangeable.
+
+Examples:
+
+- an external app bundle may be known to the installation without being enabled in every workspace
+- a workspace-local app project may exist under `workspaces/<workspace_id>/apps/` without being installed yet
+- an installed app may be disabled in one workspace while remaining enabled in another
+
+This separation is required to keep lifecycle orchestration, compatibility checks, and uninstall or reinstall behavior deterministic.
+
 ### 4. Runtime orchestration
 
 The core owns the generic runtime model for agent execution.

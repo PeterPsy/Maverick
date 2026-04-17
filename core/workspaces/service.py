@@ -111,6 +111,7 @@ def default_workspace_governance(workspace_id: str, now: datetime | None = None)
         allow_agent_creation=True,
         allow_agent_management=True,
         allow_custom_apps=True,
+        allow_full_access_runtime=workspace_id == "default",
         created_at=timestamp,
         updated_at=timestamp,
     )

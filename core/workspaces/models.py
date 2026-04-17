@@ -7,10 +7,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
+from core.apps.models import AppSourceKind
+
 
 WorkspaceStatus = Literal["active", "archived"]
 MembershipRole = Literal["admin", "member"]
 MembershipStatus = Literal["active", "inactive"]
+FileRole = Literal["uploaded", "generated", "app_data", "other"]
 
 
 @dataclass(frozen=True)
@@ -66,6 +69,7 @@ class WorkspaceGovernanceRecord:
     allow_agent_creation: bool
     allow_agent_management: bool
     allow_custom_apps: bool
+    allow_full_access_runtime: bool
     created_at: datetime
     updated_at: datetime
 
@@ -98,8 +102,20 @@ class FileIdentity:
     file_id: str
     relative_path: str
     content_hash: str
+    file_role: FileRole
     created_at: str
     updated_at: str
+
+
+@dataclass(frozen=True)
+class ExportedAppReference:
+    """Minimal app reference metadata required for deterministic restore."""
+
+    app_id: str
+    version: str
+    status: str
+    source_kind: AppSourceKind
+    source_record_id: str
 
 
 @dataclass(frozen=True)
@@ -109,4 +125,6 @@ class ExportManifest:
     manifest_version: str
     workspace_id: str
     exported_at: str
+    schema_versions: dict[str, str]
+    known_apps: list[ExportedAppReference]
     files: list[FileIdentity]

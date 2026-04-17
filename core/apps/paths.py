@@ -18,6 +18,11 @@ def installed_app_root(app_id: str, start_path: Path | None = None) -> Path:
     return installed_apps_root(start_path=start_path) / app_id
 
 
+def external_app_bundles_root(start_path: Path | None = None) -> Path:
+    """Return the trusted installation-managed root for external app bundles."""
+    return installed_apps_root(start_path=start_path) / "_bundles"
+
+
 def workspace_apps_root(workspace_id: str, start_path: Path | None = None) -> Path:
     """Return the workspace-local app development root."""
     return workspace_paths(workspace_id=workspace_id, start_path=start_path).apps
@@ -26,4 +31,3 @@ def workspace_apps_root(workspace_id: str, start_path: Path | None = None) -> Pa
 def workspace_app_data_root(workspace_id: str, app_id: str, start_path: Path | None = None) -> Path:
     """Return the app-owned data root inside one workspace."""
     return workspace_paths(workspace_id=workspace_id, start_path=start_path).data / app_id
-

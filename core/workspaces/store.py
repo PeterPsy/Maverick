@@ -166,6 +166,19 @@ class MongoWorkspaceStore:
         return ActiveWorkspaceSelection(**document)
 
 
-def export_manifest_for_files(workspace_id: str, workspace_root: Any, files: list[Any]) -> ExportManifest:
+def export_manifest_for_files(
+    workspace_id: str,
+    workspace_root: Any,
+    files: list[Any],
+    *,
+    app_bindings: list[Any] | None = None,
+    schema_versions: dict[str, str] | None = None,
+) -> ExportManifest:
     """Build the export manifest for a selected workspace file set."""
-    return build_export_manifest(workspace_id=workspace_id, workspace_root=workspace_root, files=files)
+    return build_export_manifest(
+        workspace_id=workspace_id,
+        workspace_root=workspace_root,
+        files=files,
+        app_bindings=app_bindings,
+        schema_versions=schema_versions,
+    )

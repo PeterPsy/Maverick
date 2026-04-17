@@ -11,7 +11,13 @@ from core.apps.errors import (
     WorkspaceLocalAppProjectNotFoundError,
 )
 from core.apps.models import (
+    AppContractDescriptor,
+    AppEntrypoints,
+    AppFailureSemantics,
+    AppHealthContract,
+    AppHookTimeouts,
     AppCompatibilityDescriptor,
+    AppRollbackSupport,
     AppSourceRecord,
     WorkspaceAppBindingRecord,
     WorkspaceLocalAppProjectRecord,
@@ -83,14 +89,24 @@ class MongoAppStore:
     def __init__(self, collections: AppCollections) -> None:
         self.collections = collections
 
+    def _app_contract(self, payload: dict[str, Any]) -> AppContractDescriptor:
+        return AppContractDescriptor(
+            compatibility=AppCompatibilityDescriptor(**payload["compatibility"]),
+            entrypoints=AppEntrypoints(**payload["entrypoints"]),
+            hook_timeouts=AppHookTimeouts(**payload["hook_timeouts"]),
+            failure_semantics=AppFailureSemantics(**payload["failure_semantics"]),
+            health_contract=AppHealthContract(**payload["health_contract"]),
+            rollback_support=AppRollbackSupport(**payload["rollback_support"]),
+        )
+
     def _app_source_record(self, document: dict[str, Any]) -> AppSourceRecord:
         payload = dict(document)
-        payload["compatibility"] = AppCompatibilityDescriptor(**payload["compatibility"])
+        payload["contract"] = self._app_contract(payload["contract"])
         return AppSourceRecord(**payload)
 
     def _workspace_local_project_record(self, document: dict[str, Any]) -> WorkspaceLocalAppProjectRecord:
         payload = dict(document)
-        payload["compatibility"] = AppCompatibilityDescriptor(**payload["compatibility"])
+        payload["contract"] = self._app_contract(payload["contract"])
         return WorkspaceLocalAppProjectRecord(**payload)
 
     def save_app_source(self, record: AppSourceRecord) -> AppSourceRecord:

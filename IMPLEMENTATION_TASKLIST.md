@@ -155,23 +155,23 @@ without carrying forward legacy structure or backward-compatibility constraints 
 
 - [ ] Implement parser/validator for app contract files
 - [ ] Implement support for:
-  - `contract_version`
-  - `minimum_core_version`
-  - `entrypoints`
+  - [x] `contract_version`
+  - [x] `minimum_core_version`
+  - [x] `entrypoints`
   - `storage`
   - `capabilities`
   - `lifecycle`
-  - `compatibility`
-  - `hook_timeouts`
-  - `failure_semantics`
-  - `health_contract`
-  - `rollback_support`
+  - [x] `compatibility`
+  - [x] `hook_timeouts`
+  - [x] `failure_semantics`
+  - [x] `health_contract`
+  - [x] `rollback_support`
 - [ ] Implement deterministic resolution of:
-  - MCP entrypoint
-  - CLI entrypoint
-  - skills root
-  - lifecycle hooks
-- [ ] Implement health contract execution
+  - [x] MCP entrypoint
+  - [x] CLI entrypoint
+  - [x] skills root
+  - [x] lifecycle hooks
+- [x] Implement health contract execution
 - [ ] Implement install/upgrade timeout enforcement
 
 ## Phase 6: Workspace Runtime Model
@@ -184,8 +184,8 @@ without carrying forward legacy structure or backward-compatibility constraints 
 - [ ] Implement workspace-aware runtime routing
 - [ ] Implement `sandbox` execution mode
 - [ ] Implement `full-access` execution mode
-- [ ] Ensure non-default workspace runtime cannot escape workspace root
-- [ ] Ensure `default` runtime can operate beyond workspace root only when explicitly configured
+- [x] Ensure non-default workspace runtime cannot escape workspace root
+- [x] Ensure `default` runtime can operate beyond workspace root only when explicitly configured
 
 ## Phase 7: AI Provider Abstraction
 

@@ -17,6 +17,8 @@ class WorkspaceExecutionProfile:
     requested_mode: ExecutionMode | None
     effective_mode: ExecutionMode
     default_can_use_full_access: bool
+    governance_allows_full_access: bool
+    platform_allows_full_access: bool
     sandbox_only: bool
     reason: str
 

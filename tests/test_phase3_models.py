@@ -5,13 +5,14 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 import unittest
 
-from core.execution_policy.service import resolve_workspace_execution_profile
+from core.execution_policy.service import resolve_workspace_execution_profile, resolve_workspace_runtime_boundary
 from core.identity.service import build_auth_session, build_password_credential, build_user_record, register_user
 from core.identity.store import MongoIdentityStore, IdentityCollections
 from core.workspaces.models import WorkspaceRecord
 from core.workspaces.service import (
     build_workspace_record,
     create_workspace,
+    default_workspace_governance,
     ensure_default_workspace_record,
     ensure_workspace_membership,
 )
@@ -163,11 +164,31 @@ class Phase3ModelTestCase(unittest.TestCase):
         self.assertEqual(store.get_membership(user_id="u1", workspace_id="default").membership_id, "m1")
 
     def test_execution_policy_enforces_default_vs_non_default(self) -> None:
-        default_profile = resolve_workspace_execution_profile("default", requested_mode="full-access")
+        default_governance = default_workspace_governance("default")
+        default_profile = resolve_workspace_execution_profile(
+            "default",
+            requested_mode="full-access",
+            governance=default_governance,
+            platform_allows_full_access=True,
+        )
         isolated_profile = resolve_workspace_execution_profile("acme", requested_mode="full-access")
+        denied_default_profile = resolve_workspace_execution_profile(
+            "default",
+            requested_mode="full-access",
+            governance=default_governance,
+            platform_allows_full_access=False,
+        )
+        full_access_boundary = resolve_workspace_runtime_boundary(
+            "default",
+            requested_mode="full-access",
+            governance=default_governance,
+            platform_allows_full_access=True,
+        )
 
         self.assertEqual(default_profile.effective_mode, "full-access")
         self.assertEqual(isolated_profile.effective_mode, "sandbox")
+        self.assertEqual(denied_default_profile.effective_mode, "sandbox")
+        self.assertEqual(full_access_boundary.writable_roots, ["/"])
 
 
 if __name__ == "__main__":

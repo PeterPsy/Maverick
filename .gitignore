@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Local databases and app-owned storage
+*.db
+*.sqlite
+*.sqlite3
+*.duckdb
+
+# Logs and runtime state
+logs/
+tmp/
+runtime/
+*.log
+
+# Workspace generated content
+workspaces/*/storage/generated/
+workspaces/*/storage/uploaded/
+workspaces/*/logs/
+workspaces/*/tmp/
+workspaces/*/runtime/
+workspaces/*/data/*/indices/
+
+# Node / frontend
+node_modules/
+dist/
+build/
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/

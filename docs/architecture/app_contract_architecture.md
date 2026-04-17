@@ -95,6 +95,16 @@ This identity is required for:
 - compatibility checks
 - workspace governance
 
+The canonical public format for `app_id` is lowercase kebab-case.
+
+Examples:
+
+- `restaurant-manager`
+- `table-ops`
+- `memory`
+
+Do not use underscores or mixed-case forms in the public contract file.
+
 ## Workspace Data Ownership
 
 Every app installed in a workspace owns its data under:
@@ -360,7 +370,7 @@ The following example shows the kind of app contract Maverick should expect at p
 
 ```json
 {
-  "app_id": "restaurant_manager",
+  "app_id": "restaurant-manager",
   "contract_version": "1.0",
   "name": "Restaurant Manager",
   "version": "1.2.0",
@@ -401,7 +411,7 @@ The following example shows the kind of app contract Maverick should expect at p
   "storage": {
     "storage_kind": "sqlite",
     "primary_paths": [
-      "data/restaurant_manager/app.db"
+      "data/restaurant-manager/app.db"
     ],
     "indices": {
       "kind": "embedded"

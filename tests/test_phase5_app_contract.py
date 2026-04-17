@@ -126,6 +126,24 @@ class Phase5AppContractTestCase(unittest.TestCase):
             with self.assertRaises(AppContractValidationError):
                 parse_app_contract_file(app_root)
 
+    def test_parse_contract_rejects_non_canonical_app_id(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            app_root = Path(temp_dir) / "apps" / "bad-app"
+            parsed = build_parsed_app_contract(
+                app_id="bad-app",
+                name="Bad App",
+                version="1.0.0",
+                description="Bad app.",
+                publisher="vendor",
+            )
+            write_app_contract_file(app_root, parsed)
+            contract_file = app_contract_path(app_root)
+            payload = contract_file.read_text(encoding="utf-8").replace('"bad-app"', '"bad_app"', 1)
+            contract_file.write_text(payload, encoding="utf-8")
+
+            with self.assertRaises(AppContractValidationError):
+                parse_app_contract_file(app_root)
+
     def test_run_lifecycle_hook_uses_configured_timeout_mapping(self) -> None:
         with TemporaryDirectory() as temp_dir:
             app_root = Path(temp_dir) / "apps" / "validator"

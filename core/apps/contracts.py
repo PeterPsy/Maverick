@@ -31,6 +31,7 @@ from core.shared.version import current_core_version
 
 CURRENT_APP_CONTRACT_VERSION = "1.0"
 APP_CONTRACT_FILENAME = "app_contract.json"
+APP_ID_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 
 def utcnow() -> datetime:
@@ -63,6 +64,15 @@ def _expect_string(payload: dict[str, Any], key: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise AppContractValidationError(f"`{key}` must be a non-empty string.")
     return value.strip()
+
+
+def _expect_app_id(payload: dict[str, Any], key: str = "app_id") -> str:
+    value = _expect_string(payload, key)
+    if not APP_ID_PATTERN.fullmatch(value):
+        raise AppContractValidationError(
+            f"`{key}` must use lowercase kebab-case such as `restaurant-manager`, got `{value}`."
+        )
+    return value
 
 
 def _expect_bool(payload: dict[str, Any], key: str, *, default: bool | None = None) -> bool:
@@ -432,7 +442,7 @@ def parse_app_contract_file(source_root: Path) -> ParsedAppContract:
     except json.JSONDecodeError as error:
         raise AppContractValidationError(f"App contract file `{contract_file}` is not valid JSON.") from error
     root = _expect_mapping(payload, label="app_contract")
-    app_id = _normalize_slug(_expect_string(root, "app_id"), fallback="app")
+    app_id = _expect_app_id(root, "app_id")
     name = _expect_string(root, "name")
     version = _expect_string(root, "version")
     description = _expect_string(root, "description")

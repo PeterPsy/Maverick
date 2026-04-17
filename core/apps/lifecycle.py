@@ -161,6 +161,30 @@ def run_lifecycle_hook(source_root: Path, contract: AppContractDescriptor, *, ho
     _run_hook(source_root, hook_path, timeout_seconds=timeout_seconds)
 
 
+def run_reactivation_hooks(
+    source_root: Path,
+    contract: AppContractDescriptor,
+    *,
+    validate_existing_data: bool,
+    repair_existing_data: bool,
+    migration_required: bool,
+) -> None:
+    """Run requested pre-reactivation hooks against existing app-owned data."""
+    if migration_required:
+        if not contract.lifecycle.migrate:
+            raise AppLifecycleError("Reinstall requested migration but the app contract does not support `migrate`.")
+        run_lifecycle_hook(source_root, contract, hook_name="migrate")
+    if validate_existing_data:
+        if contract.lifecycle.validate_after_import:
+            run_lifecycle_hook(source_root, contract, hook_name="validate_after_import")
+    if repair_existing_data:
+        if not contract.lifecycle.repair_after_import:
+            raise AppLifecycleError(
+                "Reinstall requested repair but the app contract does not support `repair_after_import`."
+            )
+        run_lifecycle_hook(source_root, contract, hook_name="repair_after_import")
+
+
 def run_health_check(source_root: Path, contract: AppContractDescriptor) -> bool:
     """Execute one health contract and return whether the app is healthy."""
     if contract.health_contract.mode == "none":

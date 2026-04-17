@@ -44,6 +44,7 @@ from core.apps.lifecycle import (
     finalize_install_status,
     load_contract_from_source_record,
     load_contract_from_workspace_project,
+    run_reactivation_hooks,
 )
 
 
@@ -138,6 +139,35 @@ def _ensure_workspace_app_data_root(*, workspace_id: str, app_id: str, start_pat
     if not data_root.is_dir():
         raise AppDataRootError(f"App data root `{data_root}` could not be prepared.")
     return data_root
+
+
+def _parse_version_tuple(version: str) -> tuple[int, ...]:
+    try:
+        return tuple(int(part) for part in version.split("."))
+    except ValueError as error:
+        raise AppLifecycleError(f"Unsupported app version `{version}` in reinstall flow.") from error
+
+
+def _resolve_reinstall_target(store: AppStore, *, workspace_id: str, app_id: str, start_path: Path | None = None):
+    try:
+        project = store.get_workspace_local_app_project(workspace_id=workspace_id, app_id=app_id)
+    except WorkspaceLocalAppProjectNotFoundError:
+        project = None
+    if project is not None:
+        source_root, parsed = load_contract_from_workspace_project(project, start_path=start_path)
+        source_record_id = project.project_id
+        source_kind: AppSourceKind = "workspace_local_project"
+        persisted_app_id = project.app_id
+    else:
+        sources = [source for source in store.list_app_sources() if source.app_id == app_id]
+        if not sources:
+            raise AppLifecycleError(f"No app source is available to reinstall `{app_id}`.")
+        latest = sorted(sources, key=lambda item: _parse_version_tuple(item.version))[-1]
+        source_root, parsed = load_contract_from_source_record(latest, start_path=start_path)
+        source_record_id = latest.source_id
+        source_kind = latest.source_kind
+        persisted_app_id = latest.app_id
+    return source_root, parsed, source_record_id, source_kind, persisted_app_id
 
 
 def install_external_app(
@@ -261,57 +291,38 @@ def reinstall_workspace_app(
     """Reinstall one workspace app and reattach to existing app-owned data when available."""
     data_root = workspace_app_data_root(workspace_id=workspace_id, app_id=app_id, start_path=start_path)
     reused_existing_data_root = data_root.exists()
+    source_root, parsed, source_record_id, source_kind, persisted_app_id = _resolve_reinstall_target(
+        store,
+        workspace_id=workspace_id,
+        app_id=app_id,
+        start_path=start_path,
+    )
+    ensure_app_compatible(compatibility=parsed.contract.compatibility, workspace_id=workspace_id)
+    prepared_data_root = _ensure_workspace_app_data_root(
+        workspace_id=workspace_id,
+        app_id=persisted_app_id,
+        start_path=start_path,
+    )
     if reused_existing_data_root:
-        project = None
-        try:
-            project = store.get_workspace_local_app_project(workspace_id=workspace_id, app_id=app_id)
-        except WorkspaceLocalAppProjectNotFoundError:
-            project = None
-        if project is not None:
-            binding = install_workspace_local_app(
-                store,
-                workspace_id=workspace_id,
-                app_id=app_id,
-                enabled=True,
-                now=now,
-                start_path=start_path,
-            )
-        else:
-            sources = [source for source in store.list_app_sources() if source.app_id == app_id]
-            if not sources:
-                raise AppLifecycleError(f"No app source is available to reinstall `{app_id}`.")
-            latest = sorted(sources, key=lambda item: tuple(int(part) for part in item.version.split(".")))[-1]
-            binding = install_external_app(
-                store,
-                source_id=latest.source_id,
-                workspace_id=workspace_id,
-                enabled=True,
-                now=now,
-                start_path=start_path,
-            )
-    else:
-        try:
-            binding = install_workspace_local_app(
-                store,
-                workspace_id=workspace_id,
-                app_id=app_id,
-                enabled=True,
-                now=now,
-                start_path=start_path,
-            )
-        except WorkspaceLocalAppProjectNotFoundError:
-            sources = [source for source in store.list_app_sources() if source.app_id == app_id]
-            if not sources:
-                raise AppLifecycleError(f"No app source is available to reinstall `{app_id}`.")
-            latest = sorted(sources, key=lambda item: tuple(int(part) for part in item.version.split(".")))[-1]
-            binding = install_external_app(
-                store,
-                source_id=latest.source_id,
-                workspace_id=workspace_id,
-                enabled=True,
-                now=now,
-                start_path=start_path,
-            )
+        run_reactivation_hooks(
+            source_root,
+            parsed.contract,
+            validate_existing_data=validate_existing_data,
+            repair_existing_data=repair_existing_data,
+            migration_required=migration_required,
+        )
+    status = finalize_install_status(source_root=source_root, contract=parsed.contract, enabled=True)
+    binding = build_workspace_app_binding_record(
+        workspace_id=workspace_id,
+        app_id=persisted_app_id,
+        source_record_id=source_record_id,
+        source_kind=source_kind,
+        status=status,
+        active_version=parsed.version,
+        data_root=str(prepared_data_root),
+        now=now,
+    )
+    binding = store.save_workspace_app_binding(binding)
     return WorkspaceAppReinstallResult(
         binding=binding,
         reused_existing_data_root=reused_existing_data_root,

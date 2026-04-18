@@ -197,11 +197,20 @@ def build_app_entrypoints(
     *,
     mcp: str | None = None,
     cli: str | None = None,
+    backend: str | None = None,
+    frontend: str | None = None,
     skills_root: str | None = None,
     hooks: dict[str, str] | None = None,
 ) -> AppEntrypoints:
     """Build app executable entrypoints."""
-    return AppEntrypoints(mcp=mcp, cli=cli, skills_root=skills_root, hooks=hooks or {})
+    return AppEntrypoints(
+        mcp=mcp,
+        cli=cli,
+        backend=backend,
+        frontend=frontend,
+        skills_root=skills_root,
+        hooks=hooks or {},
+    )
 
 
 def build_app_hook_timeouts(
@@ -369,6 +378,8 @@ def app_contract_payload(parsed: ParsedAppContract) -> dict[str, Any]:
         "entrypoints": {
             "mcp": parsed.contract.entrypoints.mcp,
             "cli": parsed.contract.entrypoints.cli,
+            "backend": parsed.contract.entrypoints.backend,
+            "frontend": parsed.contract.entrypoints.frontend,
             "skills_root": parsed.contract.entrypoints.skills_root,
             "hooks": parsed.contract.entrypoints.hooks,
         },
@@ -515,6 +526,8 @@ def parse_app_contract_file(source_root: Path) -> ParsedAppContract:
 
     mcp_entrypoint = entrypoints_payload.get("mcp")
     cli_entrypoint = entrypoints_payload.get("cli")
+    backend_entrypoint = entrypoints_payload.get("backend")
+    frontend_entrypoint = entrypoints_payload.get("frontend")
     skills_root = entrypoints_payload.get("skills_root")
     hooks_payload = _expect_mapping(entrypoints_payload.get("hooks", {}), label="entrypoints.hooks")
     hooks = {
@@ -530,6 +543,21 @@ def parse_app_contract_file(source_root: Path) -> ParsedAppContract:
         cli=(
             _expect_relative_contract_path(source_root, cli_entrypoint, label="entrypoints.cli")
             if cli_entrypoint is not None
+            else None
+        ),
+        backend=(
+            _expect_relative_contract_path(source_root, backend_entrypoint, label="entrypoints.backend")
+            if backend_entrypoint is not None
+            else None
+        ),
+        frontend=(
+            _expect_relative_contract_path(
+                source_root,
+                frontend_entrypoint,
+                label="entrypoints.frontend",
+                allow_directory=True,
+            )
+            if frontend_entrypoint is not None
             else None
         ),
         skills_root=(

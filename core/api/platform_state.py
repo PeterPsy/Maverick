@@ -1,0 +1,115 @@
+"""Runtime bootstrap state for the minimal hosted Maverick v3 platform."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+
+from core.api.application import create_application
+from core.apps.store import AppCollections, MongoAppStore
+from core.observability.store import MongoObservabilityStore, ObservabilityCollections
+from core.providers.service import configure_workspace_provider
+from core.providers.store import MongoProviderStore, ProviderCollections
+from core.recovery.store import MongoRecoveryStore, RecoveryCollections
+from core.runtime.store import MongoRuntimeStore, RuntimeCollections
+from core.secrets.store import MongoSecretStore, SecretCollections
+from core.shared.in_memory_collection import InMemoryCollection
+from core.shared.repository import discover_repository_root
+from core.workspaces.store import MongoWorkspaceStore, WorkspaceCollections
+
+
+@dataclass(frozen=True)
+class PlatformState:
+    """Group the control-plane stores used by the local hosted platform."""
+
+    repository_root: Path
+    workspace_store: MongoWorkspaceStore
+    app_store: MongoAppStore
+    provider_store: MongoProviderStore
+    runtime_store: MongoRuntimeStore
+    secret_store: MongoSecretStore
+    recovery_store: MongoRecoveryStore
+    observability_store: MongoObservabilityStore
+
+
+def bootstrap_platform_state(*, start_path: Path | None = None, now: datetime | None = None) -> PlatformState:
+    """Build in-memory platform state and install first-boot built-in apps."""
+    repository_root = discover_repository_root(start_path=start_path)
+    workspace_store = MongoWorkspaceStore(
+        WorkspaceCollections(
+            workspaces=InMemoryCollection(),
+            memberships=InMemoryCollection(),
+            governance=InMemoryCollection(),
+            quotas=InMemoryCollection(),
+            active_workspace_selections=InMemoryCollection(),
+        )
+    )
+    app_store = MongoAppStore(
+        AppCollections(
+            app_sources=InMemoryCollection(),
+            workspace_local_app_projects=InMemoryCollection(),
+            workspace_app_bindings=InMemoryCollection(),
+        )
+    )
+    provider_store = MongoProviderStore(
+        ProviderCollections(
+            definitions=InMemoryCollection(),
+            bindings=InMemoryCollection(),
+            selections=InMemoryCollection(),
+        )
+    )
+    runtime_store = MongoRuntimeStore(
+        RuntimeCollections(
+            sessions=InMemoryCollection(),
+            turns=InMemoryCollection(),
+            events=InMemoryCollection(),
+            processes=InMemoryCollection(),
+            states=InMemoryCollection(),
+        )
+    )
+    secret_store = MongoSecretStore(
+        SecretCollections(
+            secrets=InMemoryCollection(),
+            values=InMemoryCollection(),
+            bindings=InMemoryCollection(),
+        )
+    )
+    recovery_store = MongoRecoveryStore(
+        RecoveryCollections(
+            failures=InMemoryCollection(),
+            intents=InMemoryCollection(),
+            health_results=InMemoryCollection(),
+        )
+    )
+    observability_store = MongoObservabilityStore(
+        ObservabilityCollections(
+            events=InMemoryCollection(),
+            audit=InMemoryCollection(),
+            metrics=InMemoryCollection(),
+        )
+    )
+    create_application(
+        start_path=repository_root,
+        workspace_store=workspace_store,
+        app_store=app_store,
+        provider_store=provider_store,
+        now=now,
+    )
+    configure_workspace_provider(
+        provider_store,
+        workspace_id="default",
+        provider_id="codex",
+        observability_store=observability_store,
+        now=now,
+    )
+    return PlatformState(
+        repository_root=repository_root,
+        workspace_store=workspace_store,
+        app_store=app_store,
+        provider_store=provider_store,
+        runtime_store=runtime_store,
+        secret_store=secret_store,
+        recovery_store=recovery_store,
+        observability_store=observability_store,
+    )

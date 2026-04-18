@@ -1,0 +1,88 @@
+{
+  "app_id": "chat",
+  "contract_version": "1.0",
+  "name": "Chat",
+  "version": "0.1.0",
+  "description": "Minimal chat smoke app for validating Maverick v3 platform mounting and runtime basics.",
+  "publisher": "versy",
+  "minimum_core_version": "0.1.0",
+  "capabilities": {
+    "mcp_tools": [
+      "threads.list",
+      "message.send"
+    ],
+    "cli_commands": [
+      "chat"
+    ],
+    "skills": [
+      "chat-ops"
+    ],
+    "views": [
+      "chat"
+    ]
+  },
+  "entrypoints": {
+    "mcp": "mcp/server.py",
+    "cli": "cli/app_cli.py",
+    "backend": "backend/app_backend.py",
+    "frontend": "frontend",
+    "skills_root": "skills",
+    "hooks": {
+      "install": "hooks/install.py",
+      "health_check": "hooks/health_check.py"
+    }
+  },
+  "storage": {
+    "storage_kind": "json",
+    "data_schema_version": "1",
+    "primary_paths": [
+      "data/chat/conversations.json"
+    ],
+    "indices": null,
+    "supports_export": true,
+    "supports_import": true,
+    "supports_migrations": false
+  },
+  "compatibility": {
+    "workspace_modes": [
+      "sandbox",
+      "full-access"
+    ]
+  },
+  "hook_timeouts": {
+    "install_seconds": 60,
+    "upgrade_seconds": 120,
+    "migrate_seconds": 300,
+    "export_seconds": 120,
+    "import_seconds": 120,
+    "validate_after_import_seconds": 60,
+    "repair_after_import_seconds": 180,
+    "health_check_seconds": 30
+  },
+  "lifecycle": {
+    "install": true,
+    "upgrade": true,
+    "uninstall": true,
+    "migrate": false,
+    "export": false,
+    "import": false,
+    "validate_after_import": false,
+    "repair_after_import": false,
+    "rebuild": false,
+    "health_check": true
+  },
+  "health_contract": {
+    "mode": "hook",
+    "degraded_on_failure": true
+  },
+  "failure_semantics": {
+    "install_failure": "block_activation",
+    "migrate_failure": "preserve_data_mark_unhealthy",
+    "import_failure": "preserve_payload_mark_failed"
+  },
+  "rollback_support": {
+    "bundle": false,
+    "data": false,
+    "repair_only": false
+  }
+}

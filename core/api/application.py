@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
+from core.apps.builtin_apps import register_and_install_builtin_apps
+from core.apps.store import AppStore
 from core.providers.service import register_builtin_providers
 from core.providers.store import ProviderStore
 from core.shared.repository import installation_paths
@@ -17,6 +19,7 @@ def create_application(
     *,
     start_path: Path | None = None,
     workspace_store: WorkspaceStore | None = None,
+    app_store: AppStore | None = None,
     provider_store: ProviderStore | None = None,
     now: datetime | None = None,
 ) -> dict[str, str]:
@@ -30,6 +33,16 @@ def create_application(
     ensure_default_workspace(start_path=paths.repository_root)
     if workspace_store is not None:
         ensure_default_workspace_record(workspace_store, now=now)
+    builtin_app_count = 0
+    if workspace_store is not None and app_store is not None:
+        builtin_app_count = len(
+            register_and_install_builtin_apps(
+                app_store,
+                workspace_store,
+                start_path=paths.repository_root,
+                now=now,
+            )
+        )
     if provider_store is not None:
         register_builtin_providers(provider_store)
     core_skill_count = len(list_available_core_skills(start_path=paths.repository_root))
@@ -39,4 +52,5 @@ def create_application(
         "repository_root": str(paths.repository_root),
         "default_workspace_id": "default",
         "core_skill_count": str(core_skill_count),
+        "builtin_app_count": str(builtin_app_count),
     }

@@ -337,6 +337,103 @@ So:
 - runtime interaction = core
 - chat domain = app
 
+## Core As Platform Host
+
+The public Maverick host should run the core, not one particular app.
+
+In deployment terms, the intended model is:
+
+- `maverick3.versy.ai` reaches the core platform host
+- the core mounts enabled app surfaces
+- the core enforces auth, workspace context, and policy before dispatching to app surfaces
+
+This means the core is the host and orchestrator for apps, not the owner of the app domains themselves.
+
+The core should be able to mount:
+
+- app frontends
+- app backends
+- app MCP surfaces
+- app CLI surfaces
+- app skills
+
+The platform should not force every app into the same UI or runtime style, but it should remain the owner of:
+
+- routing
+- policy
+- mounting
+- installation and enablement checks
+- workspace-aware dispatch
+
+## Everything Above The Core Is An App
+
+The Maverick product shell should also be modeled as an app.
+
+That means the system may include apps such as:
+
+- `base-shell`
+- `chat`
+- `agents`
+- `memory`
+
+The `base-shell` app may host the frontend of other apps, but it is still only an app mounted by the core.
+
+This keeps the product shell replaceable and prevents product UI concerns from leaking into the core.
+
+The rule is:
+
+- the core is the platform host
+- every product extension above the core is an app
+
+## Human And Agent Interfaces
+
+Apps in Maverick v3 are not only visual applications.
+
+An app may need to serve:
+
+- a human user through `frontend/`
+- app-specific backend logic through `backend/`
+- agents through `mcp/`
+- operators or agents through `cli/`
+- agent guidance through `skills/`
+
+This is the intended target model.
+
+The real value of an app is not only that it renders a screen.
+
+The real value is that it extends the platform for both:
+
+- humans
+- agents
+
+under one mounted app contract.
+
+## Deployment Surfaces
+
+For the first real hosted deployment, the intended shape is:
+
+- `nginx` as the public ingress
+- one main core service behind `maverick3.versy.ai`
+- one independent rescue service that does not depend on the main backend staying alive
+
+The default assumption should not be one `systemd` service per app.
+
+At least in the first implementation wave, apps should be mounted by the core rather than deployed as independent public services by default.
+
+This keeps the architecture aligned with the platform-host model.
+
+The rescue path is different.
+
+It should remain independently deployable so the user can still reach recovery tooling even if the main platform service is unhealthy.
+
+For the first hosted v3 wave, this means:
+
+- one main core host mounted at `maverick3.versy.ai`
+- one separate rescue host
+- a minimal app set mounted by the core:
+  - `base-shell`
+  - `chat`
+
 ## Target Core Tree
 
 The target core tree should look like this:

@@ -417,16 +417,27 @@ without carrying forward legacy structure or backward-compatibility constraints 
 
 ## Phase 13: First Built-In Apps for v3
 
-- [ ] Decide the minimal built-in app set for first boot
-- [ ] Implement `chat` as an app on top of core runtime interfaces
+- [x] Decide the minimal built-in app set for first boot
+  - [x] `base-shell`
+  - [x] `chat`
+- [x] Define the mounted app model for first hosted deployment:
+  - [x] core runs behind `maverick3.versy.ai` as the platform host
+  - [x] apps are mounted by the core, not deployed by default as separate public services
+  - [x] each app may expose `frontend/`, `backend/`, `mcp/`, `cli/`, and `skills/`
+  - [x] the product shell is also an app, not part of the core
+- [x] Implement `chat` as an app on top of core runtime interfaces
+- [x] Implement `base-shell` as the minimal mounted frontend shell app
 - [ ] Implement `agents` as an app on top of core runtime/provider system
-- [ ] Decide whether `memory` is in the first wave or the second wave
-- [ ] For each built-in app, enforce:
-  - `mcp/`
-  - `cli/`
-  - `skills/`
-  - app contract
-  - storage under `data/<app_id>/`
+- [x] Decide whether `memory` is in the first wave or the second wave
+  - [x] second wave
+- [x] For each built-in app, enforce:
+  - [x] explicit app contract
+  - [x] explicit declared surfaces chosen from `frontend/`, `backend/`, `mcp/`, `cli/`, and `skills/`
+  - [x] storage under `data/<app_id>/` when the app is stateful
+- [x] Define first-wave deployment wiring for hosted v3:
+  - [x] main core `systemd` service
+  - [x] independent `rescue` `systemd` service
+  - [x] `nginx` routing for mounted app frontend/backend paths
 
 ## Phase 14: Acceptance Criteria for First Usable v3
 
@@ -439,7 +450,9 @@ without carrying forward legacy structure or backward-compatibility constraints 
 - [ ] Core can route runtime turns
 - [ ] Core can delegate between agents
 - [ ] Core can switch runtime backend via provider abstraction
-- [ ] Chat app works on top of core runtime interfaces
+- [x] Chat app works on top of core runtime interfaces
+- [x] Hosted v3 is reachable at `maverick3.versy.ai`
+- [x] Base shell app mounts chat frontend through the core host
 - [ ] Export/import works for one workspace without legacy assumptions
 
 ## Phase 8: Inter-Agent Communication

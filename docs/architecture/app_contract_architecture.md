@@ -230,6 +230,137 @@ Important distinction:
 - `skills/` is an instructional asset layer
 - `skills/` is not a runtime interface, security boundary, or governance surface by itself
 
+## Mounted App Model
+
+In Maverick v3, everything above the core should be treated as an app.
+
+This includes:
+
+- end-user apps such as `chat`
+- operator-facing apps
+- agent-facing capability apps
+- shell apps that host or frame other app frontends
+
+The core does not become the UI product itself.
+
+The core is the platform host that mounts app surfaces.
+
+Each app may expose one or more of these surface families:
+
+- `frontend/`
+- `backend/`
+- `mcp/`
+- `cli/`
+- `skills/`
+
+The app contract should describe which of these surfaces exist and how the core should mount them.
+
+This means an app is not limited to being:
+
+- only a visual frontend
+- only an API backend
+- only an agent tool surface
+
+One app may expose all of them at the same time.
+
+It is not required that every app expose all of them.
+
+The rule is:
+
+- every app must declare its real surfaces explicitly
+- the core mounts only the surfaces actually declared by that app
+
+Examples:
+
+- `chat` may expose a frontend for the user, a backend for app-specific server logic, MCP tools for agents, CLI commands for operators or agents, and skills for procedural guidance
+- `base-shell` may expose a frontend shell that hosts the frontend of other apps while still being itself only another app mounted by the core
+
+The core remains responsible for:
+
+- installation
+- enablement
+- mounting
+- auth and session context
+- workspace context
+- policy enforcement
+- lifecycle orchestration
+
+The app remains responsible for:
+
+- its own domain model
+- its own frontend behavior
+- its own backend logic
+- its own CLI and MCP behavior
+- its own workspace-owned data under `data/<app_id>/`
+
+## Frontend And Backend Surfaces
+
+An app may ship a standalone frontend and a standalone backend while still being mounted by the core.
+
+The intended model is:
+
+- the core is the public platform host
+- the core exposes mounted app routes
+- the frontend of the app is served to the user through the platform host
+- the backend of the app is routed through the platform host
+
+The app backend is not the core.
+
+The app frontend is not the core.
+
+But both live under the governance and routing model of the core.
+
+For the first v3 deployment model, the simplest canonical shape is:
+
+- `/` for the platform host or shell entrypoint
+- `/apps/<app_id>/...` for mounted app frontend routes
+- `/api/apps/<app_id>/...` for mounted app backend routes
+- `MCP` and `CLI` surfaces mounted by the core from the same app contract
+
+The exact production routing layer may be implemented behind `nginx`, but the mount model should remain canonical at the platform level.
+
+## Human Surface Versus Agent Surface
+
+The same app may need to serve both humans and agents.
+
+The intended split is:
+
+- `frontend/` for human-facing visual interaction
+- `backend/` for app-specific server logic
+- `mcp/` and `cli/` for agent and operator execution surfaces
+- `skills/` for agent guidance
+
+This is a core design principle.
+
+Apps in Maverick v3 are not just mini-sites.
+
+They are platform extensions that can be:
+
+- visual
+- executable
+- agent-usable
+- operator-usable
+
+at the same time.
+
+## Frontend Hosting Apps
+
+Some apps may primarily act as host shells for other app frontends.
+
+This is still an app concern, not a core concern.
+
+For example, a `base-shell` app may:
+
+- expose the main frontend shell
+- provide layout, app navigation, and visual composition
+- mount or frame the frontend routes of other enabled apps
+
+That does not make `base-shell` part of the core.
+
+It remains an app mounted by the core like every other app.
+
+This rule matters because the Maverick product shell should still be replaceable, versionable, and governable as an app.
+
 ## Secret references
 
 If an app depends on external credentials or provider secrets, the app may declare secret references as part of its configuration model.
@@ -296,6 +427,8 @@ Examples:
 
 - MCP server entrypoint
 - CLI entrypoint
+- backend entrypoint
+- frontend entrypoint or frontend asset root
 - lifecycle hook entrypoints
 - health check entrypoint
 
@@ -311,6 +444,85 @@ For the first local v3 implementation, executable app entrypoints use a determin
 - the entrypoint returns a JSON object on standard output
 
 This convention applies to app-owned MCP and CLI entrypoints in the initial implementation.
+
+For mounted frontend and backend surfaces, the same principle applies:
+
+- the contract must declare what the surface root or entrypoint is
+- the core must mount it explicitly
+- the app must not rely on implicit repo conventions unknown to the platform
+
+For the first v3 implementation, it is acceptable for the frontend declaration to identify either:
+
+- a frontend asset root
+- a frontend build output root
+- a frontend dev or preview entrypoint
+
+and for the backend declaration to identify either:
+
+- a callable entrypoint script
+- or a backend surface root that the core knows how to host
+
+The important rule is not the packaging style.
+
+The important rule is that the mount contract is explicit and comes from the app contract.
+
+## Real Example: Base Shell And Chat
+
+The following is a concrete example of the intended model.
+
+```text
+/apps/
+  base-shell/
+    app_contract.json
+    frontend/
+    backend/
+    mcp/
+    cli/
+    skills/
+  chat/
+    app_contract.json
+    frontend/
+    backend/
+    mcp/
+    cli/
+    skills/
+```
+
+In this example:
+
+- `base-shell` is the mounted shell app
+- `chat` is another mounted app
+- both are apps
+- neither is the core
+
+The user may reach:
+
+- `/apps/base-shell/` to load the shell frontend
+- `/apps/chat/` to load the chat frontend directly
+- `/api/apps/chat/...` for chat backend operations
+
+Agents may use:
+
+- chat MCP tools
+- chat CLI commands
+- chat skills
+
+The core decides whether those surfaces are available in the current workspace.
+
+The `base-shell` app may visually host the `chat` frontend.
+
+That does not change ownership:
+
+- shell composition belongs to `base-shell`
+- chat functionality belongs to `chat`
+- installation, policy, and mounting belong to the core
+
+For the first hosted v3 wave, the minimal built-in set is:
+
+- `base-shell` as the mounted frontend shell app
+- `chat` as the first full app with frontend, backend, MCP, CLI, and skills
+
+`memory` and `agents` remain later-wave apps even though the architecture is already shaped to host them the same way.
 
 ### Hook versioning
 

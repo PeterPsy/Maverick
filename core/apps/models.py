@@ -79,6 +79,8 @@ class AppEntrypoints:
 
     mcp: str | None
     cli: str | None
+    backend: str | None
+    frontend: str | None
     skills_root: str | None
     hooks: dict[str, str]
 

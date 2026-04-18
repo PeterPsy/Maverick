@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Maverick v3</title>
+    <style>
+      :root {
+        --bg: #f5f1e8;
+        --ink: #1c1b19;
+        --muted: #6f675c;
+        --panel: #fffaf1;
+        --line: #d8ccba;
+        --accent: #1f5f5b;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: Georgia, "Times New Roman", serif;
+        background:
+          radial-gradient(circle at top left, rgba(31,95,91,0.08), transparent 30%),
+          linear-gradient(180deg, #f8f3ea, var(--bg));
+        color: var(--ink);
+      }
+      .shell {
+        display: grid;
+        grid-template-columns: 280px 1fr;
+        min-height: 100vh;
+      }
+      .sidebar {
+        border-right: 1px solid var(--line);
+        background: rgba(255,250,241,0.8);
+        padding: 24px 20px;
+      }
+      .brand {
+        font-size: 24px;
+        margin: 0 0 6px;
+      }
+      .subtitle {
+        color: var(--muted);
+        margin: 0 0 24px;
+        line-height: 1.4;
+      }
+      .apps {
+        display: grid;
+        gap: 10px;
+      }
+      .app-link {
+        border: 1px solid var(--line);
+        background: var(--panel);
+        color: var(--ink);
+        text-decoration: none;
+        padding: 12px 14px;
+        border-radius: 12px;
+        display: block;
+      }
+      .app-link.active {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 1px rgba(31,95,91,0.15);
+      }
+      .content {
+        padding: 18px;
+      }
+      iframe {
+        width: 100%;
+        min-height: calc(100vh - 36px);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: white;
+      }
+      @media (max-width: 900px) {
+        .shell { grid-template-columns: 1fr; }
+        .sidebar { border-right: 0; border-bottom: 1px solid var(--line); }
+        iframe { min-height: 72vh; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <h1 class="brand">Maverick v3</h1>
+        <p class="subtitle">Base shell app mounted by the core. It hosts the frontend of enabled apps.</p>
+        <div id="apps" class="apps"></div>
+      </aside>
+      <main class="content">
+        <iframe id="viewport" title="Mounted app viewport" src="/apps/chat/"></iframe>
+      </main>
+    </div>
+    <script>
+      const appsRoot = document.getElementById("apps");
+      const viewport = document.getElementById("viewport");
+
+      async function loadApps() {
+        const response = await fetch("/api/apps");
+        const payload = await response.json();
+        const apps = payload.items.filter((item) => item.app_id !== "base-shell");
+        appsRoot.innerHTML = "";
+        for (const app of apps) {
+          const link = document.createElement("a");
+          link.href = `/apps/${app.app_id}/`;
+          link.className = "app-link";
+          link.textContent = app.name;
+          link.addEventListener("click", (event) => {
+            event.preventDefault();
+            viewport.src = link.href;
+            for (const item of appsRoot.querySelectorAll(".app-link")) item.classList.remove("active");
+            link.classList.add("active");
+          });
+          if (app.app_id === "chat") link.classList.add("active");
+          appsRoot.appendChild(link);
+        }
+      }
+
+      loadApps().catch((error) => {
+        appsRoot.innerHTML = `<div class="app-link">Failed to load apps: ${error}</div>`;
+      });
+    </script>
+  </body>
+</html>

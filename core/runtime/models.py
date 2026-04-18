@@ -29,6 +29,7 @@ class RuntimeRoutingDecision:
     agent_id: str
     requested_mode: ExecutionMode | None
     effective_mode: ExecutionMode
+    workspace_root: str
     workdir: str
     runtime_root: str
     writable_roots: list[str]

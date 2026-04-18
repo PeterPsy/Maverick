@@ -254,10 +254,13 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] separate core tool registry from HTTP, stdio, or other transport wiring
   - [x] expose a deterministic tool discovery manifest or index
   - [x] keep MCP host bootstrap out of monolithic application entrypoints
+  - [x] execute app-owned MCP entrypoints through a platform-managed host
 - [x] Implement core CLI surface
   - [x] separate command registration from invocation policy and transport concerns
   - [x] define operator-facing commands separately from agent-safe commands
   - [x] support scriptable and batch-safe platform operations
+  - [x] execute app-owned CLI entrypoints through a platform-managed host
+  - [x] return operational core data when the relevant control-plane stores are available
 - [x] Implement core skills loading model
   - [x] load and index core-owned skills as instructional assets
   - [x] allow controlled runtime materialization or synchronization of skill content when needed
@@ -278,6 +281,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
 - [x] Ensure the core host framework can expose:
   - [x] core-owned MCP, CLI, and skills surfaces
   - [x] app-contributed MCP, CLI, and skills surfaces for enabled workspace apps
+  - [x] unmount app-contributed surfaces when an app is disabled
 
 ## Phase 10: Secrets and Recovery
 

@@ -14,7 +14,7 @@ from core.apps.contracts import (
     build_parsed_app_contract,
     write_app_contract_file,
 )
-from core.apps.service import install_external_app, register_app_source_from_contract
+from core.apps.service import install_external_app, register_app_source_from_contract, transition_workspace_app_status
 from core.apps.store import AppCollections, MongoAppStore
 from core.cli.errors import CliInvocationNotAllowedError
 from core.cli.models import CliInvocationContext
@@ -25,6 +25,8 @@ from core.providers.store import MongoProviderStore, ProviderCollections
 from core.runtime.service import create_runtime_session
 from core.runtime.store import MongoRuntimeStore, RuntimeCollections
 from core.skills.service import list_visible_platform_skills
+from core.workspaces.store import MongoWorkspaceStore, WorkspaceCollections
+from core.workspaces.service import ensure_default_workspace_record
 
 
 class FakeCollection:
@@ -90,6 +92,17 @@ class Phase9SurfacesTestCase(unittest.TestCase):
             )
         )
 
+    def make_workspace_store(self) -> MongoWorkspaceStore:
+        return MongoWorkspaceStore(
+            WorkspaceCollections(
+                workspaces=FakeCollection(),
+                memberships=FakeCollection(),
+                governance=FakeCollection(),
+                quotas=FakeCollection(),
+                active_workspace_selections=FakeCollection(),
+            )
+        )
+
     def make_repo_root(self) -> Path:
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
@@ -107,8 +120,18 @@ class Phase9SurfacesTestCase(unittest.TestCase):
         (app_root / "backend" / "mcp").mkdir(parents=True, exist_ok=True)
         (app_root / "backend" / "cli").mkdir(parents=True, exist_ok=True)
         (app_root / "backend" / "skills" / "task-helper").mkdir(parents=True, exist_ok=True)
-        (app_root / "backend" / "mcp" / "server.py").write_text("print('mcp')\n", encoding="utf-8")
-        (app_root / "backend" / "cli" / "app_cli.py").write_text("print('cli')\n", encoding="utf-8")
+        (app_root / "backend" / "mcp" / "server.py").write_text(
+            "import json, sys\n"
+            "payload = json.loads(sys.stdin.read() or '{}')\n"
+            "print(json.dumps({'surface': payload.get('surface'), 'tool_name': payload.get('tool_name'), 'workspace_id': payload.get('workspace_id'), 'arguments': payload.get('arguments')}))\n",
+            encoding="utf-8",
+        )
+        (app_root / "backend" / "cli" / "app_cli.py").write_text(
+            "import json, sys\n"
+            "payload = json.loads(sys.stdin.read() or '{}')\n"
+            "print(json.dumps({'surface': payload.get('surface'), 'command_id': payload.get('command_id'), 'workspace_id': payload.get('workspace_id'), 'arguments': payload.get('arguments')}))\n",
+            encoding="utf-8",
+        )
         (app_root / "backend" / "skills" / "task-helper" / "SKILL.md").write_text("# Task Helper\n", encoding="utf-8")
         parsed = build_parsed_app_contract(
             app_id="checklists",
@@ -134,6 +157,10 @@ class Phase9SurfacesTestCase(unittest.TestCase):
 
     def test_workspace_mcp_surface_merges_core_and_enabled_app_tools(self) -> None:
         store = self.make_app_store()
+        workspace_store = self.make_workspace_store()
+        ensure_default_workspace_record(workspace_store)
+        provider_store = self.make_provider_store()
+        register_builtin_providers(provider_store)
         now = datetime.now(tz=UTC)
         repo_root = self.make_repo_root()
         app_root = repo_root / "apps" / "checklists"
@@ -147,12 +174,24 @@ class Phase9SurfacesTestCase(unittest.TestCase):
         install_external_app(store, source_id=source.source_id, workspace_id="default", start_path=repo_root, now=now)
 
         tools = list_mcp_tools(app_store=store, workspace_id="default", start_path=repo_root)
-        surface = build_workspace_mcp_surface(app_store=store, workspace_id="default", start_path=repo_root, transport="http")
+        surface = build_workspace_mcp_surface(
+            app_store=store,
+            workspace_store=workspace_store,
+            provider_store=provider_store,
+            workspace_id="default",
+            start_path=repo_root,
+            transport="http",
+        )
 
         self.assertIn("core.runtime.status", [tool.tool_name for tool in tools])
         self.assertIn("checklists.list", [tool.tool_name for tool in tools])
         self.assertEqual(surface.transport, "http")
         self.assertEqual(surface.manifest.tool_count, len(tools))
+        app_result = surface.call_tool("checklists.list", {"limit": 5})
+        core_result = surface.call_tool("core.workspaces.list")
+        self.assertEqual(app_result["surface"], "mcp")
+        self.assertEqual(app_result["tool_name"], "checklists.list")
+        self.assertEqual(core_result["items"][0]["workspace_id"], "default")
 
     def test_cli_policy_blocks_operator_only_commands_for_sandboxed_agents(self) -> None:
         context = CliInvocationContext(
@@ -167,6 +206,8 @@ class Phase9SurfacesTestCase(unittest.TestCase):
 
     def test_cli_registry_exposes_enabled_app_commands_with_workspace_safe_policy(self) -> None:
         store = self.make_app_store()
+        workspace_store = self.make_workspace_store()
+        ensure_default_workspace_record(workspace_store)
         now = datetime.now(tz=UTC)
         repo_root = self.make_repo_root()
         app_root = repo_root / "apps" / "checklists"
@@ -190,6 +231,7 @@ class Phase9SurfacesTestCase(unittest.TestCase):
             command_id="app.checklists.checklists",
             context=context,
             app_store=store,
+            workspace_store=workspace_store,
             workspace_id="default",
             start_path=repo_root,
             arguments={"limit": 5},
@@ -197,7 +239,53 @@ class Phase9SurfacesTestCase(unittest.TestCase):
 
         self.assertIn("app.checklists.checklists", [command.command_id for command in commands])
         self.assertEqual(result["workspace_id"], "default")
-        self.assertTrue(result["entrypoint_path"].endswith("backend/cli/app_cli.py"))
+        self.assertEqual(result["surface"], "cli")
+        self.assertEqual(result["command_id"], "app.checklists.checklists")
+
+    def test_core_cli_commands_return_operational_data_when_stores_are_available(self) -> None:
+        workspace_store = self.make_workspace_store()
+        provider_store = self.make_provider_store()
+        runtime_store = self.make_runtime_store()
+        ensure_default_workspace_record(workspace_store)
+        register_builtin_providers(provider_store)
+        repo_root = self.make_repo_root()
+        now = datetime.now(tz=UTC)
+        create_runtime_session(
+            runtime_store,
+            session_id="sess-1",
+            workspace_id="default",
+            agent_id="agent-1",
+            now=now,
+            start_path=repo_root,
+        )
+        operator_context = CliInvocationContext(
+            caller_kind="operator",
+            workspace_id="default",
+            agent_id=None,
+            effective_mode="full-access",
+        )
+
+        workspace_result = run_core_cli_command(
+            command_id="core.workspaces.current",
+            context=operator_context,
+            workspace_store=workspace_store,
+            workspace_id="default",
+        )
+        runtime_result = run_core_cli_command(
+            command_id="core.runtime.status",
+            context=operator_context,
+            runtime_store=runtime_store,
+            workspace_id="default",
+        )
+        provider_result = run_core_cli_command(
+            command_id="core.providers.list",
+            context=operator_context,
+            provider_store=provider_store,
+        )
+
+        self.assertEqual(workspace_result["workspace"]["workspace_id"], "default")
+        self.assertEqual(runtime_result["sessions"][0]["session_id"], "sess-1")
+        self.assertEqual(provider_result["providers"][0]["provider_id"], "codex")
 
     def test_visible_skills_merge_core_and_enabled_app_skills(self) -> None:
         store = self.make_app_store()
@@ -254,6 +342,29 @@ class Phase9SurfacesTestCase(unittest.TestCase):
             self.assertTrue(path.is_symlink())
             self.assertEqual(path.parent.name, "skills")
             self.assertEqual(path.parent.parent.name, "codex-home")
+
+    def test_disabled_app_surfaces_are_removed_from_platform_hosts(self) -> None:
+        store = self.make_app_store()
+        now = datetime.now(tz=UTC)
+        repo_root = self.make_repo_root()
+        app_root = repo_root / "apps" / "checklists"
+        self.write_app_contract(app_root)
+        source = register_app_source_from_contract(
+            store,
+            source_kind="platform",
+            source_path=str(app_root),
+            now=now,
+        )
+        install_external_app(store, source_id=source.source_id, workspace_id="default", start_path=repo_root, now=now)
+        transition_workspace_app_status(store, workspace_id="default", app_id="checklists", target_status="disabled", now=now)
+
+        tools = list_mcp_tools(app_store=store, workspace_id="default", start_path=repo_root)
+        commands = list_core_cli_commands(app_store=store, workspace_id="default", start_path=repo_root)
+        skills = list_visible_platform_skills(app_store=store, workspace_id="default", start_path=repo_root)
+
+        self.assertNotIn("checklists.list", [tool.tool_name for tool in tools])
+        self.assertNotIn("app.checklists.checklists", [command.command_id for command in commands])
+        self.assertNotIn("task-helper", [skill.skill_id for skill in skills if skill.owner_kind == "app"])
 
 
 if __name__ == "__main__":

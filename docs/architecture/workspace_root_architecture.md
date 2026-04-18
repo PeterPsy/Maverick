@@ -162,6 +162,21 @@ At installation level, Maverick should have:
       runtime/
 ```
 
+The workspace root remains the writable tenant boundary for sandboxed agents.
+
+Within that boundary, the runtime may still choose a more specific process working directory such as:
+
+```text
+/workspaces/<workspace_id>/runtime/working/
+```
+
+This working directory is an operational convenience, not a reduction of the writable workspace perimeter.
+
+So the distinction is:
+
+- `workspace_root` = the writable sandbox boundary for the workspace
+- `runtime/working/` = the initial process working directory for runtime execution
+
 Notes:
 
 - `default/` is the installation-level workspace created automatically by Maverick.

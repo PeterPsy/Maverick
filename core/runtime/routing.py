@@ -35,13 +35,16 @@ def build_runtime_routing(
     )
     runtime_root = resolve_runtime(workspace_id=workspace_id, start_path=start_path).path
     runtime_root.mkdir(parents=True, exist_ok=True)
-    workdir = str(workspace_root(workspace_id=workspace_id, start_path=start_path))
+    resolved_workspace_root = workspace_root(workspace_id=workspace_id, start_path=start_path)
+    workdir = runtime_root / "working"
+    workdir.mkdir(parents=True, exist_ok=True)
     return RuntimeRoutingDecision(
         workspace_id=workspace_id,
         agent_id=agent_id,
         requested_mode=requested_mode if requested_mode in {"sandbox", "full-access"} else None,
         effective_mode="full-access" if boundary.allows_outside_workspace_root else "sandbox",
-        workdir=workdir,
+        workspace_root=str(resolved_workspace_root),
+        workdir=str(workdir),
         runtime_root=str(runtime_root),
         writable_roots=boundary.writable_roots,
         allows_outside_workspace_root=boundary.allows_outside_workspace_root,

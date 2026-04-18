@@ -755,6 +755,14 @@ The core MCP layer is a platform-managed host for both:
 
 The app contract may declare MCP capability surfaces, but the core still owns whether and how those surfaces are mounted.
 
+In the first local v3 implementation, app-owned MCP entrypoints are invoked by the platform through a deterministic subprocess contract:
+
+- the core resolves the declared entrypoint path
+- the core passes a JSON payload on standard input
+- the entrypoint returns a JSON object on standard output
+
+This keeps mounting and policy centralized in the core while still allowing app-owned MCP logic to execute for enabled apps.
+
 ### `cli/`
 
 Owns:
@@ -784,6 +792,12 @@ The same CLI framework should be able to host both:
 - app-contributed commands for enabled workspace apps
 
 The core remains responsible for command registration, workspace authority checks, and exposure policy.
+
+In the first local v3 implementation, app-owned CLI entrypoints follow the same deterministic subprocess contract:
+
+- the core resolves the declared CLI entrypoint path
+- the core passes trusted invocation context and arguments as JSON on standard input
+- the command returns a JSON object on standard output
 
 ### `skills/`
 

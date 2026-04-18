@@ -56,6 +56,7 @@ def create_runtime_session(
         status="created",
         requested_mode=routing.requested_mode,
         effective_mode=routing.effective_mode,
+        workspace_root=routing.workspace_root,
         workdir=routing.workdir,
         runtime_root=routing.runtime_root,
         started_at=None,
@@ -87,7 +88,7 @@ def create_child_runtime_session(
     child_agent_id: str,
     now: datetime | None = None,
 ) -> RuntimeSessionRecord:
-    """Create one child runtime session inheriting the parent's workspace boundary."""
+    """Create one runtime child session that reuses the parent's resolved boundary only."""
     parent = store.get_session(parent_session_id)
     timestamp = now or utcnow()
     session = RuntimeSessionRecord(
@@ -97,6 +98,7 @@ def create_child_runtime_session(
         status="created",
         requested_mode=parent.requested_mode,
         effective_mode=parent.effective_mode,
+        workspace_root=parent.workspace_root,
         workdir=parent.workdir,
         runtime_root=parent.runtime_root,
         started_at=None,

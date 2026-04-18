@@ -303,6 +303,15 @@ Examples:
 
 It should instead declare where its instructional assets live.
 
+For the first local v3 implementation, executable app entrypoints use a deterministic subprocess convention:
+
+- the core resolves the declared entrypoint path inside the app root
+- the core invokes that entrypoint as a local executable script
+- the core passes a JSON payload on standard input
+- the entrypoint returns a JSON object on standard output
+
+This convention applies to app-owned MCP and CLI entrypoints in the initial implementation.
+
 ### Hook versioning
 
 Lifecycle hooks should be versioned by the app contract and resolved explicitly by the core.

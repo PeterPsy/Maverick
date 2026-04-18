@@ -20,6 +20,11 @@ class McpHostSurface:
     transport: McpTransportKind
     mount_path: str
     manifest: McpDiscoveryManifest
+    registry: McpToolRegistry
+
+    def call_tool(self, tool_name: str, arguments: dict | None = None) -> dict:
+        """Invoke one visible MCP tool through the platform-managed host surface."""
+        return self.registry.call_tool(tool_name, arguments or {})
 
 
 def build_mcp_host_surface(
@@ -35,4 +40,5 @@ def build_mcp_host_surface(
         transport=transport,
         mount_path=mount_path,
         manifest=registry.discovery_manifest(server_name=server_name),
+        registry=registry,
     )

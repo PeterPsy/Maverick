@@ -52,8 +52,16 @@ def build_codex_definition(now: datetime | None = None) -> ProviderDefinition:
 class CodexProviderAdapter:
     """Construct launch specs for the local Codex runtime backend."""
 
-    def __init__(self, *, codex_command: str = "codex") -> None:
+    def __init__(
+        self,
+        *,
+        codex_command: str = "codex",
+        sandbox_enable_flag: str = "use_legacy_landlock",
+        server_args: list[str] | None = None,
+    ) -> None:
         self.codex_command = str(codex_command or "").strip() or "codex"
+        self.sandbox_enable_flag = str(sandbox_enable_flag or "").strip() or "use_legacy_landlock"
+        self.server_args = list(server_args or ["app-server", "--listen", "stdio://"])
 
     def provider_definition(self) -> ProviderDefinition:
         """Return the canonical definition exposed by this adapter."""
@@ -74,16 +82,28 @@ class CodexProviderAdapter:
         """Build one runtime launch spec for the local Codex backend."""
         self.validate_backend()
         workdir = Path(session.workdir)
+        workspace_root = Path(session.workspace_root)
+        runtime_root = Path(session.runtime_root)
         runtime_home = self._runtime_home(session)
         runtime_home.mkdir(parents=True, exist_ok=True)
-        env = self._build_subprocess_env(workdir=workdir, runtime_home=runtime_home, execution_mode=session.effective_mode)
+        env = self._build_subprocess_env(
+            workdir=workdir,
+            workspace_root=workspace_root,
+            runtime_root=runtime_root,
+            runtime_home=runtime_home,
+            execution_mode=session.effective_mode,
+        )
         return RuntimeBackendLaunchSpec(
             provider_id="codex",
             command=self._build_command(execution_mode=session.effective_mode),
             env_overrides=env,
             working_directory=str(workdir),
             execution_mode=session.effective_mode,
-            writable_roots=self._writable_roots(workdir=workdir, execution_mode=session.effective_mode),
+            writable_roots=self._writable_roots(
+                workspace_root=workspace_root,
+                runtime_root=runtime_root,
+                execution_mode=session.effective_mode,
+            ),
         )
 
     def prepare_runtime_skills(
@@ -121,14 +141,16 @@ class CodexProviderAdapter:
     def _build_command(self, *, execution_mode: str) -> list[str]:
         command = [self.codex_command]
         if execution_mode == "sandbox":
-            command.extend(["--enable", "use_legacy_landlock"])
-        command.extend(["app-server", "--listen", "stdio://"])
+            command.extend(["--enable", self.sandbox_enable_flag])
+        command.extend(self.server_args)
         return command
 
     def _build_subprocess_env(
         self,
         *,
         workdir: Path,
+        workspace_root: Path,
+        runtime_root: Path,
         runtime_home: Path,
         execution_mode: str,
         base_env: dict[str, str] | None = None,
@@ -161,8 +183,10 @@ class CodexProviderAdapter:
             env["PATH"] = os.pathsep.join(merged_path)
 
         env["CODEX_HOME"] = str(runtime_home)
+        env["MAVERICK_WORKSPACE_ROOT"] = str(workspace_root)
+        env["MAVERICK_RUNTIME_ROOT"] = str(runtime_root)
         if execution_mode == "sandbox":
-            sandbox_tmpdir = workdir / ".tmp" / "codex-sandbox"
+            sandbox_tmpdir = runtime_root / ".tmp" / "codex-sandbox"
             sandbox_tmpdir.mkdir(parents=True, exist_ok=True)
             env["TMPDIR"] = str(sandbox_tmpdir)
             env["TMP"] = str(sandbox_tmpdir)
@@ -172,8 +196,8 @@ class CodexProviderAdapter:
     def _runtime_home(self, session: RuntimeSessionRecord) -> Path:
         return Path(session.runtime_root) / "codex-home"
 
-    def _writable_roots(self, *, workdir: Path, execution_mode: str) -> list[str]:
+    def _writable_roots(self, *, workspace_root: Path, runtime_root: Path, execution_mode: str) -> list[str]:
         if execution_mode == "full-access":
             return ["/"]
-        sandbox_tmpdir = workdir / ".tmp" / "codex-sandbox"
-        return [str(workdir), str(sandbox_tmpdir)]
+        sandbox_tmpdir = runtime_root / ".tmp" / "codex-sandbox"
+        return [str(workspace_root), str(sandbox_tmpdir)]

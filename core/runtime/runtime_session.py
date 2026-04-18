@@ -22,6 +22,7 @@ class RuntimeSessionRecord:
     status: RuntimeSessionStatus
     requested_mode: ExecutionMode | None
     effective_mode: ExecutionMode
+    workspace_root: str
     workdir: str
     runtime_root: str
     started_at: datetime | None

@@ -92,7 +92,8 @@ class Phase6RuntimeTestCase(unittest.TestCase):
         self.assertEqual(session.workspace_id, "acme")
         self.assertEqual(session.agent_id, "agent-1")
         self.assertEqual(session.effective_mode, "sandbox")
-        self.assertEqual(Path(session.workdir), repo_root / "workspaces" / "acme")
+        self.assertEqual(Path(session.workspace_root), repo_root / "workspaces" / "acme")
+        self.assertEqual(Path(session.workdir), repo_root / "workspaces" / "acme" / "runtime" / "working")
         self.assertEqual(Path(session.runtime_root), repo_root / "workspaces" / "acme" / "runtime")
         self.assertEqual(store.get_state("sess-1").session_status, "created")
 
@@ -249,6 +250,7 @@ class Phase6RuntimeTestCase(unittest.TestCase):
         )
 
         self.assertEqual(child.workspace_id, parent.workspace_id)
+        self.assertEqual(child.workspace_root, parent.workspace_root)
         self.assertEqual(child.workdir, parent.workdir)
         self.assertEqual(child.runtime_root, parent.runtime_root)
         self.assertEqual(child.effective_mode, parent.effective_mode)

@@ -789,6 +789,12 @@ So the recovery layer should coordinate:
 - health-driven recovery decisions
 - operator-facing repair and recovery workflows exposed through controlled CLI or MCP surfaces
 
+The recovery surface should be designed so that operators can still reach it even when the main backend surface is unhealthy or unavailable.
+
+In practice, this means the recovery domain should stay separable from the primary application host lifecycle.
+
+The first v3 implementation does not need a fully separate deployment, but it should preserve a clean boundary so that a dedicated recovery service or recovery-only host can be introduced without redesigning the domain.
+
 #### Recommended first file layout
 
 ```text

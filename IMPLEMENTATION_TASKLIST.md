@@ -288,56 +288,56 @@ without carrying forward legacy structure or backward-compatibility constraints 
 
 ## Phase 10: Secrets and Recovery
 
-- [ ] Implement platform secret store
-  - [ ] create `core/secrets/models.py`
-  - [ ] create `core/secrets/store.py`
-  - [ ] create `core/secrets/secret_store.py`
-  - [ ] define secret metadata model separate from raw secret values
-  - [ ] define canonical secret ids, aliases, and provider-independent labels
-  - [ ] keep persistence and encryption details confined to secret-store adapters
-- [ ] Implement workspace/app secret references
-  - [ ] create `core/secrets/secret_bindings.py`
-  - [ ] model app-owned secret references separately from platform-owned secret values
-  - [ ] support workspace-scoped secret bindings without making secrets app-owned data
-  - [ ] support provider credential bindings through the same secret-reference model where appropriate
-- [ ] Implement secret resolution at runtime
-  - [ ] create `core/secrets/secret_resolution.py`
-  - [ ] resolve secret references through a controlled platform path
-  - [ ] deliver secrets to runtime only under explicit policy and only for the current session scope
-  - [ ] avoid persisting resolved secret values in runtime state snapshots, app data roots, or workspace files
-- [ ] Implement secrets orchestration surface
-  - [ ] create `core/secrets/service.py`
-  - [ ] create `core/secrets/errors.py`
+- [x] Implement platform secret store
+  - [x] create `core/secrets/models.py`
+  - [x] create `core/secrets/store.py`
+  - [x] create `core/secrets/secret_store.py`
+  - [x] define secret metadata model separate from raw secret values
+  - [x] define canonical secret ids, aliases, and provider-independent labels
+  - [x] keep persistence and encryption details confined to secret-store adapters
+- [x] Implement workspace/app secret references
+  - [x] create `core/secrets/secret_bindings.py`
+  - [x] model app-owned secret references separately from platform-owned secret values
+  - [x] support workspace-scoped secret bindings without making secrets app-owned data
+  - [x] support provider credential bindings through the same secret-reference model where appropriate
+- [x] Implement secret resolution at runtime
+  - [x] create `core/secrets/secret_resolution.py`
+  - [x] resolve secret references through a controlled platform path
+  - [x] deliver secrets to runtime only under explicit policy and only for the current session scope
+  - [x] avoid persisting resolved secret values in runtime state snapshots, app data roots, or workspace files
+- [x] Implement secrets orchestration surface
+  - [x] create `core/secrets/service.py`
+  - [x] create `core/secrets/errors.py`
 - [ ] Ensure secret values never land in app-owned data
   - [ ] keep secret values out of `data/<app_id>/`
   - [ ] keep secret values out of workspace export artifacts
   - [ ] keep secret values out of app-owned embedded databases and cleartext config files
 - [ ] Implement secret management surfaces
-  - [ ] create `core/secrets/routes.py`
+  - [x] create `core/secrets/routes.py`
   - [ ] operator-oriented CLI hooks for create, rotate, inspect metadata, disable, and revoke
   - [ ] MCP hooks only where the operation is intentionally safe and policy-gated
   - [ ] ensure secret inspection surfaces never return raw secret values
-- [ ] Implement runtime recovery primitives
-  - [ ] create `core/recovery/models.py`
-  - [ ] create `core/recovery/store.py`
-  - [ ] create `core/recovery/runtime_recovery.py`
-  - [ ] model recoverable vs non-recoverable runtime failures explicitly
-  - [ ] define restart intents and recovery markers separately from normal runtime state
-  - [ ] keep recovery orchestration in `recovery/`, not inside runtime session models
-- [ ] Implement failed-start recovery
-  - [ ] create `core/recovery/failed_start_recovery.py`
-  - [ ] classify failed start causes such as missing secret, invalid provider setup, contract failure, and process crash
-  - [ ] support repair-first recovery paths before restart where the architecture allows them
-  - [ ] persist operator-meaningful recovery status without leaking sensitive values
-- [ ] Implement health-check framework
-  - [ ] create `core/recovery/health_checks.py`
-  - [ ] distinguish runtime health, provider health, and app health
-  - [ ] support scheduled or on-demand health probes without coupling them to transport routes
-  - [ ] make health results available to recovery decisions and operator inspection surfaces
+- [x] Implement runtime recovery primitives
+  - [x] create `core/recovery/models.py`
+  - [x] create `core/recovery/store.py`
+  - [x] create `core/recovery/runtime_recovery.py`
+  - [x] model recoverable vs non-recoverable runtime failures explicitly
+  - [x] define restart intents and recovery markers separately from normal runtime state
+  - [x] keep recovery orchestration in `recovery/`, not inside runtime session models
+- [x] Implement failed-start recovery
+  - [x] create `core/recovery/failed_start_recovery.py`
+  - [x] classify failed start causes such as missing secret, invalid provider setup, contract failure, and process crash
+  - [x] support repair-first recovery paths before restart where the architecture allows them
+  - [x] persist operator-meaningful recovery status without leaking sensitive values
+- [x] Implement health-check framework
+  - [x] create `core/recovery/health_checks.py`
+  - [x] distinguish runtime health, provider health, and app health
+  - [x] support scheduled or on-demand health probes without coupling them to transport routes
+  - [x] make health results available to recovery decisions and operator inspection surfaces
 - [ ] Implement recovery-oriented CLI and MCP hooks
-  - [ ] create `core/recovery/service.py`
-  - [ ] create `core/recovery/errors.py`
-  - [ ] create `core/recovery/routes.py`
+  - [x] create `core/recovery/service.py`
+  - [x] create `core/recovery/errors.py`
+  - [x] create `core/recovery/routes.py`
   - [ ] restart runtime
   - [ ] inspect recovery state
   - [ ] trigger repair or recovery workflows where allowed

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
 import subprocess
 import sys
 
@@ -122,13 +123,24 @@ def load_contract_from_workspace_project(
 
 
 def _run_hook(source_root: Path, hook_relative_path: str, *, timeout_seconds: int) -> None:
+    _run_hook_with_payload(source_root, hook_relative_path, timeout_seconds=timeout_seconds, payload={})
+
+
+def _run_hook_with_payload(
+    source_root: Path,
+    hook_relative_path: str,
+    *,
+    timeout_seconds: int,
+    payload: dict[str, object],
+) -> None:
     hook_path = (source_root / hook_relative_path).resolve()
     try:
         result = subprocess.run(
             [sys.executable, str(hook_path)],
+            input=json.dumps(payload, ensure_ascii=True),
             cwd=source_root,
-            capture_output=True,
             text=True,
+            capture_output=True,
             timeout=timeout_seconds,
             check=False,
         )
@@ -140,7 +152,13 @@ def _run_hook(source_root: Path, hook_relative_path: str, *, timeout_seconds: in
         )
 
 
-def run_lifecycle_hook(source_root: Path, contract: AppContractDescriptor, *, hook_name: str) -> None:
+def run_lifecycle_hook(
+    source_root: Path,
+    contract: AppContractDescriptor,
+    *,
+    hook_name: str,
+    payload: dict[str, object] | None = None,
+) -> None:
     """Run one declared lifecycle hook with its configured timeout."""
     hook_path = contract.entrypoints.hooks.get(hook_name)
     if not hook_path:
@@ -158,7 +176,7 @@ def run_lifecycle_hook(source_root: Path, contract: AppContractDescriptor, *, ho
     timeout_seconds = timeout_by_hook.get(hook_name)
     if timeout_seconds is None:
         raise AppLifecycleError(f"No timeout is configured for lifecycle hook `{hook_name}`.")
-    _run_hook(source_root, hook_path, timeout_seconds=timeout_seconds)
+    _run_hook_with_payload(source_root, hook_path, timeout_seconds=timeout_seconds, payload=payload or {})
 
 
 def run_reactivation_hooks(
@@ -168,24 +186,30 @@ def run_reactivation_hooks(
     validate_existing_data: bool,
     repair_existing_data: bool,
     migration_required: bool,
+    payload: dict[str, object] | None = None,
 ) -> None:
     """Run requested pre-reactivation hooks against existing app-owned data."""
     if migration_required:
         if not contract.lifecycle.migrate:
             raise AppLifecycleError("Reinstall requested migration but the app contract does not support `migrate`.")
-        run_lifecycle_hook(source_root, contract, hook_name="migrate")
+        run_lifecycle_hook(source_root, contract, hook_name="migrate", payload=payload)
     if validate_existing_data:
         if contract.lifecycle.validate_after_import:
-            run_lifecycle_hook(source_root, contract, hook_name="validate_after_import")
+            run_lifecycle_hook(source_root, contract, hook_name="validate_after_import", payload=payload)
     if repair_existing_data:
         if not contract.lifecycle.repair_after_import:
             raise AppLifecycleError(
                 "Reinstall requested repair but the app contract does not support `repair_after_import`."
             )
-        run_lifecycle_hook(source_root, contract, hook_name="repair_after_import")
+        run_lifecycle_hook(source_root, contract, hook_name="repair_after_import", payload=payload)
 
 
-def run_health_check(source_root: Path, contract: AppContractDescriptor) -> bool:
+def run_health_check(
+    source_root: Path,
+    contract: AppContractDescriptor,
+    *,
+    payload: dict[str, object] | None = None,
+) -> bool:
     """Execute one health contract and return whether the app is healthy."""
     if contract.health_contract.mode == "none":
         return True
@@ -194,7 +218,7 @@ def run_health_check(source_root: Path, contract: AppContractDescriptor) -> bool
         if not hook:
             raise AppLifecycleError("Health contract requires a `health_check` hook entrypoint.")
         try:
-            run_lifecycle_hook(source_root, contract, hook_name="health_check")
+            run_lifecycle_hook(source_root, contract, hook_name="health_check", payload=payload)
             return True
         except AppLifecycleError:
             return False
@@ -206,15 +230,16 @@ def finalize_install_status(
     source_root: Path,
     contract: AppContractDescriptor,
     enabled: bool,
+    payload: dict[str, object] | None = None,
 ) -> WorkspaceAppStatus:
     """Run the install + health sequence and return the resulting binding status."""
     try:
-        run_lifecycle_hook(source_root, contract, hook_name="install")
+        run_lifecycle_hook(source_root, contract, hook_name="install", payload=payload)
     except AppLifecycleError:
         if contract.failure_semantics.install_failure == "mark_failed":
             return "failed"
         raise
-    healthy = run_health_check(source_root, contract)
+    healthy = run_health_check(source_root, contract, payload=payload)
     if healthy:
         return "enabled" if enabled else "installed"
     if contract.health_contract.degraded_on_failure:

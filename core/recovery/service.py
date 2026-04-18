@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+from core.apps.store import AppStore
 from core.observability.service import record_platform_audit, record_platform_event
 from core.providers.provider_registry import ProviderRegistry
 from core.recovery.failed_start_recovery import classify_failed_start, plan_failed_start_recovery
@@ -189,15 +192,21 @@ def record_provider_health(
 def record_app_health(
     store: RecoveryStore,
     *,
+    app_store: AppStore,
     workspace_id: str,
     app_id: str,
-    is_healthy: bool,
-    detail: str | None = None,
+    start_path: Path | None = None,
     observability_store=None,
     now=None,
 ) -> HealthCheckResult:
     """Persist one app health result."""
-    result = run_app_health_check(workspace_id=workspace_id, app_id=app_id, is_healthy=is_healthy, detail=detail, now=now)
+    result = run_app_health_check(
+        app_store=app_store,
+        workspace_id=workspace_id,
+        app_id=app_id,
+        start_path=start_path,
+        now=now,
+    )
     saved = store.save_health_result(result)
     if observability_store is not None:
         record_platform_event(

@@ -805,6 +805,8 @@ The first v3 implementation should also expose recovery through controlled CLI a
 - run on-demand runtime, provider, and app health probes
 - plan restart or repair-first recovery intents
 
+App health probes should execute through the installed app's declared health contract or health hook when one exists. They should not depend on caller-supplied booleans as the source of truth for app health.
+
 without relying on app-owned surfaces or on direct access to the primary backend runtime internals.
 
 #### Recommended first file layout

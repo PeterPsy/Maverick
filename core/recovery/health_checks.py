@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import uuid4
 
+from core.apps.service import probe_workspace_app_health
+from core.apps.store import AppStore
 from core.providers.provider_registry import ProviderRegistry
 from core.recovery.models import HealthCheckResult
 from core.runtime.runtime_session import RuntimeSessionRecord
@@ -67,13 +69,19 @@ def run_provider_health_check(
 
 def run_app_health_check(
     *,
+    app_store: AppStore,
     workspace_id: str,
     app_id: str,
-    is_healthy: bool,
-    detail: str | None = None,
+    start_path=None,
     now: datetime | None = None,
 ) -> HealthCheckResult:
-    """Record one app health result from the current platform evaluation."""
+    """Run one real app health probe through the app contract."""
+    is_healthy, detail = probe_workspace_app_health(
+        app_store,
+        workspace_id=workspace_id,
+        app_id=app_id,
+        start_path=start_path,
+    )
     return HealthCheckResult(
         check_id=str(uuid4()),
         workspace_id=workspace_id,

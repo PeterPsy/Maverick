@@ -144,6 +144,11 @@ without carrying forward legacy structure or backward-compatibility constraints 
 - [x] Implement reinstall flow:
   - [x] reattach to existing `data/<app_id>/` when present
   - [x] support validation, repair, or migration before reactivation when needed
+- [x] Implement upgrade flow
+  - [x] stage the target app version through an explicit updating state
+  - [x] run upgrade and migrate hooks where declared
+  - [x] persist app-owned data schema metadata under `data/<app_id>/`
+  - [x] support bundle rollback when declared by the app contract
 - [x] Implement compatibility checks:
   - [x] minimum core version
   - [x] contract version
@@ -400,7 +405,10 @@ without carrying forward legacy structure or backward-compatibility constraints 
 - [x] Implement coordinated workspace export for the Phase 13 unblocker slice
   - [x] plan app participation during export
   - [x] run declared app export hooks before manifest generation
+  - [x] pass workspace and app data-plane context into export hooks
+  - [x] include per-app data schema metadata in the manifest
   - [x] exclude runtime, tmp, logs, and inventory metadata from default workspace export snapshots
+  - [x] exclude caches from default workspace export snapshots
 - [ ] Implement import flow with dormant app data support
 - [ ] Implement restore flow
 - [ ] Expand snapshot consistency strategy beyond the minimal export-hook-first slice:

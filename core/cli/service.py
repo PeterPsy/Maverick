@@ -31,11 +31,13 @@ from core.secrets.service import (
 )
 from core.secrets.store import SecretStore
 from core.shared.entrypoints import run_json_entrypoint
+from core.workspaces.paths import workspace_paths
 from core.workspaces.store import WorkspaceStore
 
 
 def _core_command_specs(
     *,
+    app_store: AppStore | None = None,
     workspace_store: WorkspaceStore | None = None,
     provider_store: ProviderStore | None = None,
     runtime_store: RuntimeStore | None = None,
@@ -43,6 +45,7 @@ def _core_command_specs(
     recovery_store: RecoveryStore | None = None,
     provider_registry: ProviderRegistry | None = None,
     observability_store=None,
+    start_path: Path | None = None,
 ) -> list[tuple[CliCommandDefinition, Any]]:
     def _audit(
         action: str,
@@ -300,12 +303,14 @@ def _core_command_specs(
                 observability_store=observability_store,
             )
         else:
+            if app_store is None:
+                return {"health": None}
             result = record_app_health(
                 recovery_store,
+                app_store=app_store,
                 workspace_id=str(arguments.get("workspace_id") or context.workspace_id),
                 app_id=str(arguments["app_id"]),
-                is_healthy=bool(arguments["is_healthy"]),
-                detail=None if arguments.get("detail") is None else str(arguments["detail"]),
+                start_path=start_path,
                 observability_store=observability_store,
             )
         return {
@@ -543,6 +548,7 @@ def _workspace_app_command_specs(
                 f"App `{parsed.app_id}` declares CLI commands but no CLI entrypoint in its contract."
             )
         entrypoint_path = str((source_root / parsed.contract.entrypoints.cli).resolve())
+        paths = workspace_paths(workspace_id=workspace_id, start_path=start_path)
         for command_name in parsed.contract.capabilities.cli_commands:
             command_id = f"app.{parsed.app_id}.{command_name}"
 
@@ -554,6 +560,10 @@ def _workspace_app_command_specs(
                 _app_id: str = parsed.app_id,
                 _entrypoint_path: str = entrypoint_path,
                 _source_root: Path = source_root,
+                _data_root: str = binding.data_root,
+                _workspace_root: str = str(paths.root),
+                _uploaded_storage_root: str = str(paths.uploaded_storage),
+                _generated_storage_root: str = str(paths.generated_storage),
             ) -> dict[str, Any]:
                 return run_json_entrypoint(
                     _entrypoint_path,
@@ -564,6 +574,10 @@ def _workspace_app_command_specs(
                         "agent_id": context.agent_id,
                         "effective_mode": context.effective_mode,
                         "app_id": _app_id,
+                        "workspace_root": _workspace_root,
+                        "data_root": _data_root,
+                        "uploaded_storage_root": _uploaded_storage_root,
+                        "generated_storage_root": _generated_storage_root,
                         "arguments": arguments,
                     },
                     cwd=_source_root,
@@ -610,6 +624,7 @@ def build_core_cli_registry(
     """Build the platform-managed CLI registry for core and enabled app commands."""
     registry = CliCommandRegistry()
     for definition, handler in _core_command_specs(
+        app_store=app_store,
         workspace_store=workspace_store,
         provider_store=provider_store,
         runtime_store=runtime_store,
@@ -617,6 +632,7 @@ def build_core_cli_registry(
         recovery_store=recovery_store,
         provider_registry=provider_registry,
         observability_store=observability_store,
+        start_path=start_path,
     ):
         registry.register_command(definition, handler)
     if app_store is not None and workspace_id is not None:

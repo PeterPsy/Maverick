@@ -27,11 +27,13 @@ from core.runtime.store import RuntimeStore
 from core.secrets.service import create_platform_secret, disable_platform_secret, revoke_platform_secret, rotate_platform_secret
 from core.secrets.store import SecretStore
 from core.shared.entrypoints import run_json_entrypoint
+from core.workspaces.paths import workspace_paths
 from core.workspaces.store import WorkspaceStore
 
 
 def _core_tool_specs(
     *,
+    app_store: AppStore | None = None,
     workspace_store: WorkspaceStore | None = None,
     provider_store: ProviderStore | None = None,
     runtime_store: RuntimeStore | None = None,
@@ -39,6 +41,7 @@ def _core_tool_specs(
     recovery_store: RecoveryStore | None = None,
     provider_registry: ProviderRegistry | None = None,
     observability_store=None,
+    start_path: Path | None = None,
 ) -> list[tuple[McpToolDefinition, Any]]:
     def _audit(event_type: str, payload: dict[str, Any], *, workspace_id: str | None = None, provider_id: str | None = None, runtime_session_id: str | None = None) -> None:
         if observability_store is None:
@@ -221,12 +224,14 @@ def _core_tool_specs(
                 observability_store=observability_store,
             )
         else:
+            if app_store is None:
+                return {"health": None}
             result = record_app_health(
                 recovery_store,
+                app_store=app_store,
                 workspace_id=str(arguments.get("workspace_id") or context.workspace_id),
                 app_id=str(arguments["app_id"]),
-                is_healthy=bool(arguments["is_healthy"]),
-                detail=None if arguments.get("detail") is None else str(arguments["detail"]),
+                start_path=start_path,
                 observability_store=observability_store,
             )
         return {"health": {"target_kind": result.target_kind, "target_id": result.target_id, "status": result.status, "detail": result.detail}}
@@ -431,6 +436,7 @@ def _workspace_app_tool_definitions(
                 f"App `{parsed.app_id}` declares MCP tools but no MCP entrypoint in its contract."
             )
         entrypoint_path = str((source_root / parsed.contract.entrypoints.mcp).resolve())
+        paths = workspace_paths(workspace_id=workspace_id, start_path=start_path)
         for tool_name in parsed.contract.capabilities.mcp_tools:
             hosted_tool_name = f"app.{parsed.app_id}.{tool_name}"
             def _handler(
@@ -442,6 +448,10 @@ def _workspace_app_tool_definitions(
                 _workspace_id: str = workspace_id,
                 _source_root: Path = source_root,
                 _app_id: str = parsed.app_id,
+                _data_root: str = binding.data_root,
+                _workspace_root: str = str(paths.root),
+                _uploaded_storage_root: str = str(paths.uploaded_storage),
+                _generated_storage_root: str = str(paths.generated_storage),
             ) -> dict[str, Any]:
                 return run_json_entrypoint(
                     _entrypoint_path,
@@ -450,6 +460,10 @@ def _workspace_app_tool_definitions(
                         "tool_name": _tool_name,
                         "workspace_id": _workspace_id,
                         "app_id": _app_id,
+                        "workspace_root": _workspace_root,
+                        "data_root": _data_root,
+                        "uploaded_storage_root": _uploaded_storage_root,
+                        "generated_storage_root": _generated_storage_root,
                         "arguments": arguments,
                     },
                     cwd=_source_root,
@@ -496,6 +510,7 @@ def build_core_mcp_registry(
     """Build the platform-managed MCP registry for core and enabled app tools."""
     registry = McpToolRegistry()
     for definition, handler in _core_tool_specs(
+        app_store=app_store,
         workspace_store=workspace_store,
         provider_store=provider_store,
         runtime_store=runtime_store,
@@ -503,6 +518,7 @@ def build_core_mcp_registry(
         recovery_store=recovery_store,
         provider_registry=provider_registry,
         observability_store=observability_store,
+        start_path=start_path,
     ):
         registry.register_tool(definition, handler)
     if app_store is not None and workspace_id is not None:

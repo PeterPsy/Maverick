@@ -756,6 +756,8 @@ The important rule is that the app must be able to determine:
 - which data schema version currently exists
 - which schema version the current app version expects
 
+In the first v3 implementation, a small app-owned metadata file under `data/<app_id>/` is an acceptable default place to persist the current data schema version and installed app version.
+
 #### Upgrade migration flow
 
 When an app is upgraded in a workspace:
@@ -848,6 +850,13 @@ Workspace export should not include by default:
 
 These are not part of the persistent workspace data plane.
 
+For the default export implementation, cache exclusion should apply at least to paths named:
+
+- `cache/`
+- `caches/`
+- `.cache/`
+- `__pycache__/`
+
 #### Workspace manifest
 
 Every workspace export should include a minimal manifest describing the exported workspace.
@@ -858,6 +867,7 @@ The manifest should include at least:
 - export timestamp
 - installed or known app references
 - app version metadata
+- app-level data schema version metadata
 - schema version metadata
 - inventory or checksum information as needed
 
@@ -893,6 +903,16 @@ the platform should either:
 
 - quiesce the relevant app before export, or
 - invoke the app's export hook to produce a consistent snapshot
+
+When the platform invokes an app export hook, it should pass a structured context that includes at least:
+
+- `workspace_id`
+- `workspace_root`
+- `export_root`
+- `app_id`
+- `data_root`
+- uploaded and generated storage roots
+- source record metadata sufficient to identify the installed app bundle or project
 
 The export process must not assume that copying live files blindly is always sufficient.
 

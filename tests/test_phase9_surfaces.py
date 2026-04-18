@@ -126,13 +126,13 @@ class Phase9SurfacesTestCase(unittest.TestCase):
         (app_root / "backend" / "mcp" / "server.py").write_text(
             "import json, sys\n"
             "payload = json.loads(sys.stdin.read() or '{}')\n"
-            "print(json.dumps({'surface': payload.get('surface'), 'tool_name': payload.get('tool_name'), 'workspace_id': payload.get('workspace_id'), 'arguments': payload.get('arguments'), 'python': sys.executable}))\n",
+            "print(json.dumps({'surface': payload.get('surface'), 'tool_name': payload.get('tool_name'), 'workspace_id': payload.get('workspace_id'), 'workspace_root': payload.get('workspace_root'), 'data_root': payload.get('data_root'), 'uploaded_storage_root': payload.get('uploaded_storage_root'), 'generated_storage_root': payload.get('generated_storage_root'), 'arguments': payload.get('arguments'), 'python': sys.executable}))\n",
             encoding="utf-8",
         )
         (app_root / "backend" / "cli" / "app_cli.py").write_text(
             "import json, sys\n"
             "payload = json.loads(sys.stdin.read() or '{}')\n"
-            "print(json.dumps({'surface': payload.get('surface'), 'command_id': payload.get('command_id'), 'workspace_id': payload.get('workspace_id'), 'arguments': payload.get('arguments'), 'python': sys.executable}))\n",
+            "print(json.dumps({'surface': payload.get('surface'), 'command_id': payload.get('command_id'), 'workspace_id': payload.get('workspace_id'), 'workspace_root': payload.get('workspace_root'), 'data_root': payload.get('data_root'), 'uploaded_storage_root': payload.get('uploaded_storage_root'), 'generated_storage_root': payload.get('generated_storage_root'), 'arguments': payload.get('arguments'), 'python': sys.executable}))\n",
             encoding="utf-8",
         )
         (app_root / "backend" / "skills" / skill_id / "SKILL.md").write_text("# Task Helper\n", encoding="utf-8")
@@ -200,6 +200,8 @@ class Phase9SurfacesTestCase(unittest.TestCase):
         core_result = surface.call_tool("core.workspaces.list", context=operator_context)
         self.assertEqual(app_result["surface"], "mcp")
         self.assertEqual(app_result["tool_name"], "checklists.list")
+        self.assertTrue(app_result["workspace_root"].endswith("/workspaces/default"))
+        self.assertTrue(app_result["data_root"].endswith("/workspaces/default/data/checklists"))
         self.assertEqual(core_result["items"][0]["workspace_id"], "default")
 
     def test_mcp_policy_blocks_operator_only_tools_for_sandboxed_agents(self) -> None:
@@ -272,6 +274,8 @@ class Phase9SurfacesTestCase(unittest.TestCase):
         self.assertEqual(result["workspace_id"], "default")
         self.assertEqual(result["surface"], "cli")
         self.assertEqual(result["command_id"], "app.checklists.checklists")
+        self.assertTrue(result["workspace_root"].endswith("/workspaces/default"))
+        self.assertTrue(result["data_root"].endswith("/workspaces/default/data/checklists"))
         self.assertEqual(result["python"], sys.executable)
 
     def test_core_cli_commands_return_operational_data_when_stores_are_available(self) -> None:

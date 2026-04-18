@@ -11,12 +11,14 @@ from core.apps.contracts import (
     build_app_contract,
     build_app_entrypoints,
     build_app_lifecycle,
+    build_app_storage,
     build_parsed_app_contract,
     write_app_contract_file,
 )
 from core.apps.service import install_external_app, register_app_source_from_contract
 from core.apps.store import AppCollections, MongoAppStore
 from core.workspaces.files import (
+    build_file_identity,
     discover_workspace_export_files,
     discover_workspace_storage_files,
     export_workspace_bundle,
@@ -109,6 +111,20 @@ class Phase12WorkspaceExportTestCase(unittest.TestCase):
                 ],
             )
 
+    def test_stable_file_identity_does_not_collapse_duplicate_content_files(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            workspace_root = Path(temp_dir) / "workspaces" / "default"
+            first = workspace_root / "storage" / "generated" / "first.txt"
+            second = workspace_root / "storage" / "generated" / "second.txt"
+            first.parent.mkdir(parents=True, exist_ok=True)
+            first.write_text("same-bytes", encoding="utf-8")
+            second.write_text("same-bytes", encoding="utf-8")
+
+            first_identity = build_file_identity(first, workspace_root)
+            second_identity = build_file_identity(second, workspace_root)
+
+            self.assertNotEqual(first_identity.file_id, second_identity.file_id)
+
     def test_export_bundle_excludes_runtime_logs_tmp_and_keeps_data_and_storage(self) -> None:
         with TemporaryDirectory() as temp_dir:
             workspace_root = Path(temp_dir) / "workspaces" / "default"
@@ -116,6 +132,7 @@ class Phase12WorkspaceExportTestCase(unittest.TestCase):
                 workspace_root / "storage" / "uploaded" / "brief.txt": "brief",
                 workspace_root / "storage" / "generated" / "report.md": "# report",
                 workspace_root / "data" / "chat" / "thread.json": "{}",
+                workspace_root / "data" / "chat" / "cache" / "index.json": "{}",
             }
             excluded_paths = {
                 workspace_root / "runtime" / "state.json": "{}",
@@ -142,8 +159,8 @@ class Phase12WorkspaceExportTestCase(unittest.TestCase):
                 [identity.relative_path for identity in bundle.manifest.files],
                 [
                     "data/chat/thread.json",
-                    "storage/generated/report.md",
-                    "storage/uploaded/brief.txt",
+                "storage/generated/report.md",
+                "storage/uploaded/brief.txt",
                 ],
             )
 
@@ -157,10 +174,15 @@ class Phase12WorkspaceExportTestCase(unittest.TestCase):
             lifecycle_root = app_root / "backend" / "lifecycle"
             lifecycle_root.mkdir(parents=True, exist_ok=True)
             (lifecycle_root / "export.py").write_text(
-                "from pathlib import Path\nPath('export-ran.txt').write_text('ok', encoding='utf-8')\n",
+                "import json, sys\n"
+                "from pathlib import Path\n"
+                "payload = json.loads(sys.stdin.read() or '{}')\n"
+                "Path('export-ran.txt').write_text(payload['data_root'], encoding='utf-8')\n"
+                "Path('export-hook-name.txt').write_text(payload['hook_name'], encoding='utf-8')\n",
                 encoding="utf-8",
             )
             contract = build_app_contract(
+                storage=build_app_storage(data_schema_version="7"),
                 lifecycle=build_app_lifecycle(export=True),
                 entrypoints=build_app_entrypoints(hooks={"export": "backend/lifecycle/export.py"}),
             )
@@ -186,8 +208,11 @@ class Phase12WorkspaceExportTestCase(unittest.TestCase):
 
             self.assertEqual(len(bundle.participants), 1)
             self.assertEqual(bundle.participants[0].strategy, "export_hook")
-            self.assertTrue((app_root / "export-ran.txt").is_file())
+            self.assertEqual(bundle.participants[0].data_schema_version, "7")
+            self.assertEqual((app_root / "export-ran.txt").read_text(encoding="utf-8"), str(repo_root / "workspaces" / "default" / "data" / "reports"))
+            self.assertEqual((app_root / "export-hook-name.txt").read_text(encoding="utf-8"), "workspace_export")
             self.assertEqual(bundle.manifest.known_apps[0].app_id, "reports")
+            self.assertEqual(bundle.manifest.known_apps[0].data_schema_version, "7")
 
 
 if __name__ == "__main__":

@@ -64,13 +64,26 @@ def discover_workspace_storage_files(workspace_root: Path) -> list[Path]:
     return sorted(path.resolve() for path in discovered)
 
 
-def _find_stable_file_id(inventory: dict, *, relative_path: str, content_hash: str, file_role: FileRole) -> tuple[str, str]:
+def _find_stable_file_id(
+    inventory: dict,
+    *,
+    workspace_root: Path,
+    relative_path: str,
+    content_hash: str,
+    file_role: FileRole,
+) -> tuple[str, str]:
     entries: list[dict] = inventory["entries"]
     for entry in entries:
         if entry["relative_path"] == relative_path:
             return entry["file_id"], entry["created_at"]
 
-    candidates = [entry for entry in entries if entry["content_hash"] == content_hash and entry["file_role"] == file_role]
+    candidates = [
+        entry
+        for entry in entries
+        if entry["content_hash"] == content_hash
+        and entry["file_role"] == file_role
+        and not (workspace_root / entry["relative_path"]).exists()
+    ]
     if len(candidates) == 1:
         return candidates[0]["file_id"], candidates[0]["created_at"]
 
@@ -114,6 +127,7 @@ def build_file_identity(file_path: Path, workspace_root: Path) -> FileIdentity:
     updated_at = datetime.fromtimestamp(stat_result.st_mtime, tz=UTC).isoformat()
     file_id, created_at = _find_stable_file_id(
         inventory,
+        workspace_root=resolved_workspace_root,
         relative_path=relative_path,
         content_hash=content_hash,
         file_role=file_role,

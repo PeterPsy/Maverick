@@ -129,6 +129,7 @@ def build_app_compatibility(
 def build_app_storage(
     *,
     storage_kind: str = "json",
+    data_schema_version: str = "1",
     primary_paths: list[str] | None = None,
     indices_kind: str | None = None,
     supports_export: bool = True,
@@ -139,6 +140,7 @@ def build_app_storage(
     indices = AppStorageIndices(kind=indices_kind) if indices_kind else None
     return AppStorageDeclaration(
         storage_kind=storage_kind,
+        data_schema_version=data_schema_version,
         primary_paths=primary_paths or [],
         indices=indices,
         supports_export=supports_export,
@@ -372,6 +374,7 @@ def app_contract_payload(parsed: ParsedAppContract) -> dict[str, Any]:
         },
         "storage": {
             "storage_kind": parsed.contract.storage.storage_kind,
+            "data_schema_version": parsed.contract.storage.data_schema_version,
             "primary_paths": parsed.contract.storage.primary_paths,
             "indices": (
                 {"kind": parsed.contract.storage.indices.kind}
@@ -482,6 +485,7 @@ def parse_app_contract_file(source_root: Path) -> ParsedAppContract:
         indices = AppStorageIndices(kind=_expect_string(indices_mapping, "kind"))
     storage = AppStorageDeclaration(
         storage_kind=_expect_string(storage_payload, "storage_kind"),
+        data_schema_version=_expect_string(storage_payload, "data_schema_version"),
         primary_paths=primary_paths,
         indices=indices,
         supports_export=_expect_bool(storage_payload, "supports_export", default=False),

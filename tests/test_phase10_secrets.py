@@ -7,6 +7,9 @@ from pathlib import Path
 import tempfile
 import unittest
 
+from core.apps.contracts import build_app_contract, build_app_entrypoints, build_app_health_contract, build_app_lifecycle, build_parsed_app_contract, write_app_contract_file
+from core.apps.service import install_external_app, register_app_source_from_contract
+from core.apps.store import AppCollections, MongoAppStore
 from core.providers.models import ProviderCapabilitySet, ProviderDefinition, RuntimeBackendLaunchSpec
 from core.providers.provider_registry import ProviderRegistry
 from core.recovery.health_checks import run_provider_health_check
@@ -116,6 +119,15 @@ class Phase10SecretsAndRecoveryTestCase(unittest.TestCase):
                 failures=FakeCollection(),
                 intents=FakeCollection(),
                 health_results=FakeCollection(),
+            )
+        )
+
+    def make_app_store(self) -> MongoAppStore:
+        return MongoAppStore(
+            AppCollections(
+                app_sources=FakeCollection(),
+                workspace_local_app_projects=FakeCollection(),
+                workspace_app_bindings=FakeCollection(),
             )
         )
 
@@ -243,6 +255,7 @@ class Phase10SecretsAndRecoveryTestCase(unittest.TestCase):
     def test_recovery_health_checks_and_status_snapshot(self) -> None:
         recovery_store = self.make_recovery_store()
         runtime_store = self.make_runtime_store()
+        app_store = self.make_app_store()
         repo_root = self.make_repo_root()
         session = create_runtime_session(
             runtime_store,
@@ -258,14 +271,36 @@ class Phase10SecretsAndRecoveryTestCase(unittest.TestCase):
         restart_intent = plan_session_restart(recovery_store, session=session, reason="operator restart")
         self.assertEqual(restart_intent.action, "restart_runtime")
 
+        app_root = repo_root / "apps" / "chat"
+        lifecycle_root = app_root / "backend" / "lifecycle"
+        lifecycle_root.mkdir(parents=True, exist_ok=True)
+        (lifecycle_root / "health.py").write_text("print('ok')\n", encoding="utf-8")
+        write_app_contract_file(
+            app_root,
+            build_parsed_app_contract(
+                app_id="chat",
+                name="Chat",
+                version="1.0.0",
+                description="Chat app",
+                publisher="maverick",
+                contract=build_app_contract(
+                    lifecycle=build_app_lifecycle(health_check=True),
+                    entrypoints=build_app_entrypoints(hooks={"health_check": "backend/lifecycle/health.py"}),
+                    health_contract=build_app_health_contract(mode="hook"),
+                ),
+            ),
+        )
+        source = register_app_source_from_contract(app_store, source_kind="platform", source_path=str(app_root))
+        install_external_app(app_store, source_id=source.source_id, workspace_id="acme", start_path=repo_root)
+
         app_health = record_app_health(
             recovery_store,
+            app_store=app_store,
             workspace_id="acme",
             app_id="chat",
-            is_healthy=False,
-            detail="health contract failed",
+            start_path=repo_root,
         )
-        self.assertEqual(app_health.status, "unhealthy")
+        self.assertEqual(app_health.status, "healthy")
 
         snapshot = recovery_status(recovery_store, workspace_id="acme")
         self.assertEqual(snapshot["intent_count"], 1)

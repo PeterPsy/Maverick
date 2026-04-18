@@ -6,11 +6,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from core.apps.contracts import CURRENT_APP_CONTRACT_VERSION
+from core.apps.data_state import read_app_data_state
 from core.apps.lifecycle import (
     load_contract_from_source_record,
     load_contract_from_workspace_project,
     run_lifecycle_hook,
 )
+from core.apps.service import build_app_export_hook_payload
 from core.apps.models import AppContractDescriptor, WorkspaceAppBindingRecord
 from core.apps.store import AppStore
 from core.apps.errors import AppLifecycleError
@@ -26,6 +28,7 @@ from core.workspaces.models import (
 
 WORKSPACE_EXPORT_SCHEMA_VERSION = "2"
 DEFAULT_EXPORT_EXCLUDED_PREFIXES = ("logs/", "runtime/", "tmp/", ".maverick/")
+DEFAULT_EXPORT_EXCLUDED_SEGMENTS = {"cache", "caches", ".cache", "__pycache__"}
 
 
 def _timestamp() -> str:
@@ -35,7 +38,9 @@ def _timestamp() -> str:
 def include_in_workspace_export(*, file_path: Path, workspace_root: Path) -> bool:
     """Return whether one file should be included in a workspace export snapshot."""
     relative_path = file_path.resolve().relative_to(workspace_root.resolve()).as_posix()
-    return not relative_path.startswith(DEFAULT_EXPORT_EXCLUDED_PREFIXES)
+    if relative_path.startswith(DEFAULT_EXPORT_EXCLUDED_PREFIXES):
+        return False
+    return not any(segment in DEFAULT_EXPORT_EXCLUDED_SEGMENTS for segment in relative_path.split("/"))
 
 
 def discover_workspace_export_files(workspace_root: Path) -> list[Path]:
@@ -54,6 +59,7 @@ def build_export_manifest(
     files: list[Path],
     *,
     app_bindings: list[WorkspaceAppBindingRecord] | None = None,
+    participants: list[WorkspaceExportParticipant] | None = None,
     schema_versions: dict[str, str] | None = None,
 ) -> ExportManifest:
     """Build a canonical workspace export manifest."""
@@ -62,15 +68,31 @@ def build_export_manifest(
         for file_path in sorted(files)
         if include_in_workspace_export(file_path=file_path, workspace_root=workspace_root)
     ]
+    manifest_participants = participants
+    if manifest_participants is None:
+        manifest_participants = [
+            WorkspaceExportParticipant(
+                app_id=binding.app_id,
+                status=binding.status,
+                version=binding.active_version,
+                data_schema_version="unknown",
+                strategy="filesystem_snapshot",
+                source_kind=binding.source_kind,
+                source_record_id=binding.source_record_id,
+                export_hook_path=None,
+            )
+            for binding in sorted(app_bindings or [], key=lambda item: item.app_id)
+        ]
     known_apps = [
         ExportedAppReference(
-            app_id=binding.app_id,
-            version=binding.active_version,
-            status=binding.status,
-            source_kind=binding.source_kind,
-            source_record_id=binding.source_record_id,
+            app_id=participant.app_id,
+            version=participant.version,
+            data_schema_version=participant.data_schema_version,
+            status=participant.status,
+            source_kind=participant.source_kind,
+            source_record_id=participant.source_record_id,
         )
-        for binding in sorted(app_bindings or [], key=lambda item: item.app_id)
+        for participant in sorted(manifest_participants, key=lambda item: item.app_id)
     ]
     return ExportManifest(
         manifest_version=WORKSPACE_EXPORT_SCHEMA_VERSION,
@@ -102,10 +124,16 @@ def _participant_for_binding(
 
     export_hook_path = parsed.contract.entrypoints.hooks.get("export")
     use_export_hook = parsed.contract.lifecycle.export and export_hook_path is not None
+    data_state = read_app_data_state(Path(binding.data_root))
     participant = WorkspaceExportParticipant(
         app_id=binding.app_id,
         status=binding.status,
         version=binding.active_version,
+        data_schema_version=(
+            parsed.contract.storage.data_schema_version
+            if data_state is None
+            else data_state.data_schema_version
+        ),
         strategy="export_hook" if use_export_hook else "filesystem_snapshot",
         source_kind=binding.source_kind,
         source_record_id=binding.source_record_id,
@@ -146,7 +174,17 @@ def export_workspace_bundle(
             participants.append(participant)
             if participant.strategy == "export_hook":
                 try:
-                    run_lifecycle_hook(source_root, contract, hook_name="export")
+                    run_lifecycle_hook(
+                        source_root,
+                        contract,
+                        hook_name="export",
+                        payload=build_app_export_hook_payload(
+                            app_store,
+                            workspace_id=workspace_id,
+                            app_id=binding.app_id,
+                            start_path=start_path,
+                        ),
+                    )
                 except AppLifecycleError as error:
                     raise WorkspaceExportError(
                         f"Workspace export failed while running export hook for app `{binding.app_id}`."
@@ -157,5 +195,6 @@ def export_workspace_bundle(
         workspace_root,
         files,
         app_bindings=bindings,
+        participants=participants,
     )
     return WorkspaceExportBundle(manifest=manifest, participants=participants)

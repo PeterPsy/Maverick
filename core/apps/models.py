@@ -39,6 +39,7 @@ class AppStorageDeclaration:
     """Describe the app-owned storage model declared by the contract."""
 
     storage_kind: StorageKind
+    data_schema_version: str
     primary_paths: list[str]
     indices: AppStorageIndices | None
     supports_export: bool
@@ -188,6 +189,16 @@ class WorkspaceAppBindingRecord:
 
 
 @dataclass(frozen=True)
+class AppDataStateRecord:
+    """Persisted app-owned metadata about the current data plane in one workspace."""
+
+    app_id: str
+    app_version: str
+    data_schema_version: str
+    updated_at: str
+
+
+@dataclass(frozen=True)
 class WorkspaceAppReinstallResult:
     """Describe one reinstall outcome and any recovery actions requested."""
 
@@ -196,6 +207,33 @@ class WorkspaceAppReinstallResult:
     validation_requested: bool
     repair_requested: bool
     migration_requested: bool
+
+
+@dataclass(frozen=True)
+class WorkspaceAppUpgradeResult:
+    """Describe one app upgrade attempt and whether rollback was required."""
+
+    binding: WorkspaceAppBindingRecord
+    previous_version: str
+    target_version: str
+    migration_ran: bool
+    rolled_back: bool
+
+
+@dataclass(frozen=True)
+class AppHookContext:
+    """Structured context passed to app lifecycle and health hooks."""
+
+    workspace_id: str
+    workspace_root: str
+    export_root: str
+    app_id: str
+    data_root: str
+    uploaded_storage_root: str
+    generated_storage_root: str
+    source_kind: AppSourceKind
+    source_record_id: str
+    hook_name: str
 
 
 @dataclass(frozen=True)

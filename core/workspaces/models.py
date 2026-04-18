@@ -114,6 +114,7 @@ class ExportedAppReference:
 
     app_id: str
     version: str
+    data_schema_version: str
     status: str
     source_kind: AppSourceKind
     source_record_id: str
@@ -126,6 +127,7 @@ class WorkspaceExportParticipant:
     app_id: str
     status: str
     version: str
+    data_schema_version: str
     strategy: WorkspaceExportParticipationStrategy
     source_kind: AppSourceKind
     source_record_id: str

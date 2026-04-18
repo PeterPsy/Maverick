@@ -252,6 +252,10 @@ An app may also ship:
 
 It is an instructional layer that helps an agent or operator use the app correctly.
 
+If skill content is synchronized into a runtime home or other runtime-adjacent location, that synchronization does not make `skills/` an executable boundary.
+
+The executable surfaces remain MCP, CLI, and backend-controlled service interfaces.
+
 Each app should own its own namespace under:
 
 ```text
@@ -1394,6 +1398,12 @@ It must not do so by directly editing platform code or reaching into global stor
 Sandboxed agents never access the database directly.
 
 Workspace-scoped records such as app records, operating records, and other structured platform state must be created and updated only through MCP tools, controlled CLI entrypoints, or backend interfaces that enforce workspace isolation.
+
+For sandboxed workspace agents, controlled CLI entrypoints must be explicitly allowed by platform policy.
+
+The platform must not treat arbitrary CLI argument passing as sufficient proof of workspace authority.
+
+Workspace authority has to be derived from trusted runtime ownership and policy resolution, then enforced by the command surface.
 
 The same rule applies to persisted content produced through global app capabilities:
 

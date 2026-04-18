@@ -740,6 +740,12 @@ Owns:
 - platform MCP wiring
 - app-facing runtime MCP boundaries
 
+The core MCP layer should keep tool registration separate from transport bootstrap.
+
+The registry of available tools, their schemas, and their discovery metadata should not be entangled with HTTP mounting, stdio startup, or application entrypoint wiring.
+
+This avoids rebuilding the v2 pattern where too much MCP bootstrap logic accumulated inside the main application startup path.
+
 ### `cli/`
 
 Owns:
@@ -753,6 +759,16 @@ The core CLI is primarily an operator and runtime surface.
 
 It may also expose controlled workspace-safe commands to sandboxed agents when the platform explicitly allows that invocation path.
 
+That means the CLI layer must distinguish clearly between:
+
+- operator-only commands
+- workspace-safe commands
+- commands that may be surfaced through both CLI and MCP
+
+CLI command registration should stay separate from invocation policy.
+
+Whether a sandboxed agent may invoke a command is a core policy decision, not something inferred only from raw command-line arguments.
+
 ### `skills/`
 
 Owns:
@@ -764,6 +780,12 @@ Owns:
 This does not refer to the separate app named `Skills`.
 
 It refers to instruction assets owned by the core itself.
+
+Core skills may be loaded, indexed, or synchronized into runtime-adjacent locations when necessary, but they remain instructional assets.
+
+They do not become executable capability surfaces merely because they are materialized for runtime use.
+
+Runtime authority and policy enforcement must continue to live in MCP, CLI, provider, runtime, and backend service layers rather than in `skills/`.
 
 ## Naming Conventions
 

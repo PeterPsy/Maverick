@@ -248,29 +248,32 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] local OSS runtime
   - [x] API-key based hosted models
 
-## Phase 8: Inter-Agent Communication
-
-- [ ] Implement inter-agent message model
-- [ ] Implement delegation model
-- [ ] Implement queueing model
-- [ ] Implement delivery retry model
-- [ ] Implement reconciliation model
-- [ ] Implement status propagation model
-- [ ] Implement cross-agent orchestration rules scoped to one workspace
-- [ ] Implement observability for inter-agent delivery lifecycle
-- [ ] Make inter-agent communication a first-class core capability, not an incidental runtime helper
-
 ## Phase 9: MCP, CLI, and Skills Surfaces
 
 - [ ] Implement core MCP host surface
+  - [ ] separate core tool registry from HTTP, stdio, or other transport wiring
+  - [ ] expose a deterministic tool discovery manifest or index
+  - [ ] keep MCP host bootstrap out of monolithic application entrypoints
 - [ ] Implement core CLI surface
+  - [ ] separate command registration from invocation policy and transport concerns
+  - [ ] define operator-facing commands separately from agent-safe commands
+  - [ ] support scriptable and batch-safe platform operations
 - [ ] Implement core skills loading model
+  - [ ] load and index core-owned skills as instructional assets
+  - [ ] allow controlled runtime materialization or synchronization of skill content when needed
+  - [ ] keep skill loading separate from runtime session lifecycle
 - [ ] Define which core operations are exposed:
-  - MCP only
-  - CLI only
-  - both
+  - [ ] MCP only
+  - [ ] CLI only
+  - [ ] both
+  - [ ] document why each operation belongs to that surface
 - [ ] Clarify CLI invocation policy for sandboxed workspace agents
+  - [ ] define a controlled allowlist or policy gate for sandbox-safe commands
+  - [ ] ensure sandboxed agents cannot invoke operator-only CLI paths
+  - [ ] keep workspace authority enforcement outside raw CLI argument trust
 - [ ] Ensure `skills/` is treated as instructional, not as executable runtime boundary
+  - [ ] keep runtime and policy enforcement anchored in MCP, CLI, and backend services
+  - [ ] ensure synchronized skill artifacts do not become an implicit capability surface
 
 ## Phase 10: Secrets and Recovery
 
@@ -338,6 +341,18 @@ without carrying forward legacy structure or backward-compatibility constraints 
 - [ ] Chat app works on top of core runtime interfaces
 - [ ] Export/import works for one workspace without legacy assumptions
 
+## Phase 8: Inter-Agent Communication
+
+- [ ] Implement inter-agent message model
+- [ ] Implement delegation model
+- [ ] Implement queueing model
+- [ ] Implement delivery retry model
+- [ ] Implement reconciliation model
+- [ ] Implement status propagation model
+- [ ] Implement cross-agent orchestration rules scoped to one workspace
+- [ ] Implement observability for inter-agent delivery lifecycle
+- [ ] Make inter-agent communication a first-class core capability, not an incidental runtime helper
+
 ## Recommended Build Order
 
 1. Phase 0
@@ -348,13 +363,13 @@ without carrying forward legacy structure or backward-compatibility constraints 
 6. Phase 5
 7. Phase 6
 8. Phase 7
-9. Phase 8
-10. Phase 9
-11. Phase 10
-12. Phase 11
-13. Phase 12
-14. Phase 13
-15. Phase 14
+9. Phase 9
+10. Phase 10
+11. Phase 11
+12. Phase 12
+13. Phase 13
+14. Phase 14
+15. Phase 8
 
 ## Immediate Next Step
 

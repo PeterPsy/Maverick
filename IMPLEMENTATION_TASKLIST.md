@@ -394,15 +394,18 @@ without carrying forward legacy structure or backward-compatibility constraints 
 
 ## Phase 12: File Inventory, Export, Import, Restore
 
-- [ ] Implement file inventory layer with stable `file_id`
-- [ ] Implement uploaded/generated file discovery from filesystem
-- [ ] Implement export manifest generation
-- [ ] Implement coordinated workspace export
+- [x] Implement file inventory layer with stable `file_id`
+- [x] Implement uploaded/generated file discovery from filesystem
+- [x] Implement export manifest generation
+- [x] Implement coordinated workspace export for the Phase 13 unblocker slice
+  - [x] plan app participation during export
+  - [x] run declared app export hooks before manifest generation
+  - [x] exclude runtime, tmp, logs, and inventory metadata from default workspace export snapshots
 - [ ] Implement import flow with dormant app data support
 - [ ] Implement restore flow
-- [ ] Implement snapshot consistency strategy:
-  - app quiesce, or
-  - app export hook
+- [ ] Expand snapshot consistency strategy beyond the minimal export-hook-first slice:
+  - [ ] app quiesce
+  - [ ] richer coordinated export for dormant app data restore
 
 ## Phase 13: First Built-In Apps for v3
 

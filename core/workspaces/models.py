@@ -14,6 +14,7 @@ WorkspaceStatus = Literal["active", "archived"]
 MembershipRole = Literal["admin", "member"]
 MembershipStatus = Literal["active", "inactive"]
 FileRole = Literal["uploaded", "generated", "app_data", "other"]
+WorkspaceExportParticipationStrategy = Literal["filesystem_snapshot", "export_hook"]
 
 
 @dataclass(frozen=True)
@@ -119,6 +120,19 @@ class ExportedAppReference:
 
 
 @dataclass(frozen=True)
+class WorkspaceExportParticipant:
+    """Describe how one installed workspace app participates in export."""
+
+    app_id: str
+    status: str
+    version: str
+    strategy: WorkspaceExportParticipationStrategy
+    source_kind: AppSourceKind
+    source_record_id: str
+    export_hook_path: str | None
+
+
+@dataclass(frozen=True)
 class ExportManifest:
     """Canonical export manifest envelope for one workspace snapshot."""
 
@@ -128,3 +142,11 @@ class ExportManifest:
     schema_versions: dict[str, str]
     known_apps: list[ExportedAppReference]
     files: list[FileIdentity]
+
+
+@dataclass(frozen=True)
+class WorkspaceExportBundle:
+    """Carry the export manifest together with participation metadata."""
+
+    manifest: ExportManifest
+    participants: list[WorkspaceExportParticipant]

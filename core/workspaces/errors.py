@@ -23,3 +23,7 @@ class WorkspaceGovernanceError(WorkspaceError):
 
 class WorkspaceQuotaExceededError(WorkspaceError):
     """Raised when a workspace exceeds an operational limit."""
+
+
+class WorkspaceExportError(WorkspaceError):
+    """Raised when workspace export coordination fails."""

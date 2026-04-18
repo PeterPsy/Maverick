@@ -457,6 +457,16 @@ That means:
 - the app `agents` owns workspace-specific agent definitions
 - those definitions may include a shared base prompt plus a role-specific prompt
 
+The first provider implementation should not blur these concerns:
+
+- runtime session and turn lifecycle remain in the runtime domain
+- backend env-building and provider-specific launch configuration belong in the provider adapter
+- workspace agent definitions remain app-owned configuration, not provider records
+
+Provider credentials are also not app-owned workspace data.
+
+They remain under platform control even when one workspace selects which provider binding it wants to use.
+
 Examples of app-owned agent definition content:
 
 - common system prompt fragments

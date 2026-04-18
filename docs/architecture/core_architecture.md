@@ -637,6 +637,59 @@ This package should make it possible to support:
 
 without changing workspace or app architecture.
 
+### Provider boundary rules
+
+The provider domain should stay separate from:
+
+- runtime session lifecycle
+- workspace filesystem routing
+- HTTP settings routes
+- UI-specific forms or settings payloads
+
+Provider modules should answer questions such as:
+
+- what provider definitions exist
+- what capabilities each provider offers
+- what secret bindings or credential references are required
+- how one runtime backend is constructed or selected
+
+They should not become a generic dumping ground for runtime control logic.
+
+### Provider definitions versus credentials
+
+Maverick v3 should distinguish clearly between:
+
+- provider definition
+- provider capability metadata
+- provider credential binding
+- runtime backend selection
+
+Those are related, but they are not the same record.
+
+The definition says what the provider is.
+
+The capability metadata says what it can do.
+
+The credential binding says which secret or operator-managed credential is attached.
+
+The runtime backend selection flow decides which backend the runtime should use for one execution context.
+
+Raw secret values must not appear in domain models or ordinary runtime records.
+
+### Provider kinds
+
+The provider abstraction should support at least two architectural kinds:
+
+1. runtime-style backends
+2. hosted API-style providers
+
+Examples:
+
+- `Codex`, `Claude Code`, `Kimi`, and local OSS runtimes behave like runtime-style backends
+- hosted model APIs behave like API-style providers
+
+The first implementation may ship only one real backend, but the core model should not collapse those categories into a single provider shape.
+
 ### `execution_policy/`
 
 Owns:

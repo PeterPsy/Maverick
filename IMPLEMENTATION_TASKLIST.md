@@ -222,19 +222,31 @@ without carrying forward legacy structure or backward-compatibility constraints 
 ## Phase 7: AI Provider Abstraction
 
 - [ ] Implement provider registry
+  - [ ] separate provider definition records from runtime session records
+  - [ ] make provider registry independent from HTTP settings routes or UI forms
 - [ ] Implement provider model and capability metadata
+  - [ ] define canonical provider ids, labels, and descriptions
+  - [ ] define capability metadata separately from secret material
+  - [ ] distinguish runtime-style backends from API-key-based hosted providers
 - [ ] Implement provider credential store and binding logic
+  - [ ] keep raw secret values out of domain models
+  - [ ] model secret references or bindings separately from provider definitions
+  - [ ] support workspace-scoped provider selection without making secrets app-owned data
 - [ ] Implement runtime backend selection flow
+  - [ ] make backend selection a core decision based on provider capability metadata and policy
+  - [ ] do not hardcode `Codex` as the only architectural runtime
 - [ ] Define the provider/runtime distinction clearly in code:
-  - runtime abstraction
-  - provider/backend adapter
+  - [ ] runtime abstraction
+  - [ ] provider/backend adapter
+  - [ ] keep runtime session lifecycle out of provider modules
 - [ ] Implement first provider backend:
-  - `Codex`
+  - [ ] `Codex`
+    - [ ] isolate Codex subprocess env building in the provider adapter, not in the runtime domain
 - [ ] Define extension points for future backends:
-  - Claude Code
-  - Kimi
-  - local OSS runtime
-  - API-key based hosted models
+  - [ ] Claude Code
+  - [ ] Kimi
+  - [ ] local OSS runtime
+  - [ ] API-key based hosted models
 
 ## Phase 8: Inter-Agent Communication
 

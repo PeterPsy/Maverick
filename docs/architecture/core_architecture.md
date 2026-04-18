@@ -732,6 +732,7 @@ The first v3 implementation should therefore support:
 - workspace-scoped or provider-scoped secret bindings
 - controlled resolution for runtime use
 - operator inspection of metadata without exposing raw values
+- operator-facing CLI and policy-gated MCP hooks for inspection, rotation, disable, and revoke operations without ever returning raw secret values
 
 #### Recommended first file layout
 
@@ -795,6 +796,14 @@ In practice, this means the recovery domain should stay separable from the prima
 
 The first v3 implementation does not need a fully separate deployment, but it should preserve a clean boundary so that a dedicated recovery service or recovery-only host can be introduced without redesigning the domain.
 
+The first v3 implementation should also expose recovery through controlled CLI and MCP hooks so operators can:
+
+- inspect recovery state
+- record failed-start diagnoses
+- plan restart or repair-first recovery intents
+
+without relying on app-owned surfaces or on direct access to the primary backend runtime internals.
+
 #### Recommended first file layout
 
 ```text
@@ -857,6 +866,14 @@ Observability must also enforce redaction rules so that logs, audit trails, and 
 - raw secret values
 - raw provider credentials
 - sensitive runtime environment payloads unless explicitly allowed by operator policy
+
+The first v3 implementation should create and manage:
+
+- installation-level log roots under `logs/platform/` and `logs/runtime/`
+- workspace log roots under `workspaces/<workspace_id>/logs/workspace/`
+- app-local log roots under `workspaces/<workspace_id>/logs/apps/<app_id>/`
+
+It should also exclude workspace logs from default workspace export manifests.
 
 #### Recommended first file layout
 

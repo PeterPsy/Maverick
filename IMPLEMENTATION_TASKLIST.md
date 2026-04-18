@@ -308,15 +308,15 @@ without carrying forward legacy structure or backward-compatibility constraints 
 - [x] Implement secrets orchestration surface
   - [x] create `core/secrets/service.py`
   - [x] create `core/secrets/errors.py`
-- [ ] Ensure secret values never land in app-owned data
-  - [ ] keep secret values out of `data/<app_id>/`
-  - [ ] keep secret values out of workspace export artifacts
-  - [ ] keep secret values out of app-owned embedded databases and cleartext config files
-- [ ] Implement secret management surfaces
+- [x] Ensure secret values never land in app-owned data
+  - [x] keep secret values out of `data/<app_id>/`
+  - [x] keep secret values out of workspace export artifacts
+  - [x] keep secret values out of app-owned embedded databases and cleartext config files
+- [x] Implement secret management surfaces
   - [x] create `core/secrets/routes.py`
-  - [ ] operator-oriented CLI hooks for create, rotate, inspect metadata, disable, and revoke
-  - [ ] MCP hooks only where the operation is intentionally safe and policy-gated
-  - [ ] ensure secret inspection surfaces never return raw secret values
+  - [x] operator-oriented CLI hooks for create, rotate, inspect metadata, disable, and revoke
+  - [x] MCP hooks only where the operation is intentionally safe and policy-gated
+  - [x] ensure secret inspection surfaces never return raw secret values
 - [x] Implement runtime recovery primitives
   - [x] create `core/recovery/models.py`
   - [x] create `core/recovery/store.py`
@@ -334,59 +334,59 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] distinguish runtime health, provider health, and app health
   - [x] support scheduled or on-demand health probes without coupling them to transport routes
   - [x] make health results available to recovery decisions and operator inspection surfaces
-- [ ] Implement recovery-oriented CLI and MCP hooks
+- [x] Implement recovery-oriented CLI and MCP hooks
   - [x] create `core/recovery/service.py`
   - [x] create `core/recovery/errors.py`
   - [x] create `core/recovery/routes.py`
-  - [ ] restart runtime
-  - [ ] inspect recovery state
-  - [ ] trigger repair or recovery workflows where allowed
-  - [ ] expose recovery status without exposing secret values
+  - [x] restart runtime
+  - [x] inspect recovery state
+  - [x] trigger repair or recovery workflows where allowed
+  - [x] expose recovery status without exposing secret values
 
 ## Phase 11: Observability and Logs
 
-- [ ] Implement installation-level log roots:
+- [x] Implement installation-level log roots:
   - `logs/platform/`
   - `logs/runtime/`
-- [ ] Implement workspace log roots:
+- [x] Implement workspace log roots:
   - `logs/workspace/`
   - `logs/apps/<app_id>/`
-- [ ] Implement observability model and store contracts
-  - [ ] create `core/observability/models.py`
-  - [ ] create `core/observability/store.py`
-  - [ ] create `core/observability/errors.py`
-- [ ] Implement platform audit surface separate from raw logs
-  - [ ] create `core/observability/audit_log.py`
-  - [ ] record control-plane operations such as workspace governance changes, app installation, provider binding, and secret resolution attempts
-  - [ ] keep audit records structured and queryable
-  - [ ] ensure audit entries never include raw secret values
-- [ ] Implement structured event attribution:
-  - [ ] create `core/observability/event_log.py`
-  - `workspace_id`
-  - `app_id`
-  - `run_id` or equivalent
-  - event plane
-- [ ] Implement correlation and source attribution fields:
-  - `runtime_session_id`
-  - `turn_id`
-  - `provider_id` when relevant
-  - source component or domain
-- [ ] Implement metrics surface
-  - [ ] create `core/observability/metrics.py`
-  - [ ] runtime metrics
-  - [ ] recovery and health metrics
-  - [ ] app lifecycle and platform operation counters where meaningful
-- [ ] Implement runtime log handling
-  - [ ] create `core/observability/runtime_log.py`
-- [ ] Implement observability orchestration surface
-  - [ ] create `core/observability/service.py`
-  - [ ] create `core/observability/routes.py`
-- [ ] Implement retention and rotation policy
-- [ ] Implement redaction rules for observability payloads
-  - [ ] avoid raw secrets in logs
-  - [ ] avoid raw provider credentials in audit trails
-  - [ ] avoid leaking sensitive runtime env values into structured event payloads
-- [ ] Ensure logs are excluded from workspace export by default
+- [x] Implement observability model and store contracts
+  - [x] create `core/observability/models.py`
+  - [x] create `core/observability/store.py`
+  - [x] create `core/observability/errors.py`
+- [x] Implement platform audit surface separate from raw logs
+  - [x] create `core/observability/audit_log.py`
+  - [x] record control-plane operations such as workspace governance changes, app installation, provider binding, and secret resolution attempts
+  - [x] keep audit records structured and queryable
+  - [x] ensure audit entries never include raw secret values
+- [x] Implement structured event attribution:
+  - [x] create `core/observability/event_log.py`
+  - [x] `workspace_id`
+  - [x] `app_id`
+  - [x] `run_id` or equivalent
+  - [x] event plane
+- [x] Implement correlation and source attribution fields:
+  - [x] `runtime_session_id`
+  - [x] `turn_id`
+  - [x] `provider_id` when relevant
+  - [x] source component or domain
+- [x] Implement metrics surface
+  - [x] create `core/observability/metrics.py`
+  - [x] runtime metrics
+  - [x] recovery and health metrics
+  - [x] app lifecycle and platform operation counters where meaningful
+- [x] Implement runtime log handling
+  - [x] create `core/observability/runtime_log.py`
+- [x] Implement observability orchestration surface
+  - [x] create `core/observability/service.py`
+  - [x] create `core/observability/routes.py`
+- [x] Implement retention and rotation policy
+- [x] Implement redaction rules for observability payloads
+  - [x] avoid raw secrets in logs
+  - [x] avoid raw provider credentials in audit trails
+  - [x] avoid leaking sensitive runtime env values into structured event payloads
+- [x] Ensure logs are excluded from workspace export by default
 
 ## Phase 12: File Inventory, Export, Import, Restore
 

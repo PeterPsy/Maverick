@@ -10,8 +10,12 @@ from core.apps.store import AppStore
 from core.cli.command_registry import CliCommandRegistry
 from core.cli.models import CliCommandDefinition, CliInvocationContext, CliInvocationPolicy
 from core.cli.runner import CliRunner
+from core.recovery.service import plan_session_restart, record_failed_start, recovery_status
+from core.recovery.store import RecoveryStore
 from core.providers.store import ProviderStore
 from core.runtime.store import RuntimeStore
+from core.secrets.service import disable_platform_secret, revoke_platform_secret, rotate_platform_secret
+from core.secrets.store import SecretStore
 from core.shared.entrypoints import run_json_entrypoint
 from core.workspaces.store import WorkspaceStore
 
@@ -21,6 +25,8 @@ def _core_command_specs(
     workspace_store: WorkspaceStore | None = None,
     provider_store: ProviderStore | None = None,
     runtime_store: RuntimeStore | None = None,
+    secret_store: SecretStore | None = None,
+    recovery_store: RecoveryStore | None = None,
 ) -> list[tuple[CliCommandDefinition, Any]]:
     def _workspace_current_handler(arguments: dict[str, Any], context: CliInvocationContext) -> dict[str, Any]:
         if workspace_store is None or context.workspace_id is None:
@@ -67,6 +73,131 @@ def _core_command_specs(
                 }
                 for item in provider_store.list_provider_definitions()
             ],
+        }
+
+    def _secrets_list_handler(arguments: dict[str, Any], context: CliInvocationContext) -> dict[str, Any]:
+        if secret_store is None:
+            return {"secrets": []}
+        return {
+            "command_id": "core.secrets.list",
+            "secrets": [
+                {
+                    "secret_id": item.secret_id,
+                    "alias": item.alias,
+                    "label": item.label,
+                    "status": item.status,
+                }
+                for item in secret_store.list_secrets()
+            ],
+        }
+
+    def _secret_bindings_list_handler(arguments: dict[str, Any], context: CliInvocationContext) -> dict[str, Any]:
+        if secret_store is None:
+            return {"bindings": []}
+        workspace_id = arguments.get("workspace_id") or context.workspace_id
+        return {
+            "command_id": "core.secrets.bindings.list",
+            "bindings": [
+                {
+                    "binding_id": item.binding_id,
+                    "scope": item.scope,
+                    "workspace_id": item.workspace_id,
+                    "app_id": item.app_id,
+                    "provider_id": item.provider_id,
+                    "logical_name": item.logical_name,
+                    "secret_ref": item.secret_ref,
+                    "status": item.status,
+                }
+                for item in secret_store.list_secret_bindings(
+                    workspace_id=workspace_id,
+                    app_id=arguments.get("app_id"),
+                    provider_id=arguments.get("provider_id"),
+                )
+            ],
+        }
+
+    def _secret_rotate_handler(arguments: dict[str, Any], context: CliInvocationContext) -> dict[str, Any]:
+        if secret_store is None:
+            return {"rotated": False}
+        secret = rotate_platform_secret(
+            secret_store,
+            secret_id=str(arguments["secret_id"]),
+            raw_value=str(arguments["raw_value"]),
+        )
+        return {
+            "command_id": "core.secrets.rotate",
+            "rotated": True,
+            "secret": {
+                "secret_id": secret.secret_id,
+                "alias": secret.alias,
+                "label": secret.label,
+                "status": secret.status,
+            },
+        }
+
+    def _secret_disable_handler(arguments: dict[str, Any], context: CliInvocationContext) -> dict[str, Any]:
+        if secret_store is None:
+            return {"disabled": False}
+        secret = disable_platform_secret(secret_store, secret_id=str(arguments["secret_id"]))
+        return {
+            "command_id": "core.secrets.disable",
+            "disabled": True,
+            "secret_id": secret.secret_id,
+            "status": secret.status,
+        }
+
+    def _secret_revoke_handler(arguments: dict[str, Any], context: CliInvocationContext) -> dict[str, Any]:
+        if secret_store is None:
+            return {"revoked": False}
+        secret = revoke_platform_secret(secret_store, secret_id=str(arguments["secret_id"]))
+        return {
+            "command_id": "core.secrets.revoke",
+            "revoked": True,
+            "secret_id": secret.secret_id,
+            "status": secret.status,
+        }
+
+    def _recovery_status_handler(arguments: dict[str, Any], context: CliInvocationContext) -> dict[str, Any]:
+        if recovery_store is None:
+            return {"status": None}
+        return {
+            "command_id": "core.recovery.status",
+            "status": recovery_status(
+                recovery_store,
+                workspace_id=arguments.get("workspace_id") or context.workspace_id,
+                session_id=arguments.get("session_id"),
+            ),
+        }
+
+    def _recovery_restart_handler(arguments: dict[str, Any], context: CliInvocationContext) -> dict[str, Any]:
+        if recovery_store is None or runtime_store is None:
+            return {"planned": False}
+        session = runtime_store.get_session(str(arguments["session_id"]))
+        intent = plan_session_restart(recovery_store, session=session, reason=str(arguments.get("reason") or "operator restart"))
+        return {
+            "command_id": "core.recovery.restart",
+            "planned": True,
+            "intent_id": intent.intent_id,
+            "action": intent.action,
+            "session_id": intent.session_id,
+        }
+
+    def _recovery_failed_start_handler(arguments: dict[str, Any], context: CliInvocationContext) -> dict[str, Any]:
+        if recovery_store is None:
+            return {"planned": False}
+        failure, intent = record_failed_start(
+            recovery_store,
+            category=str(arguments["category"]),
+            detail=str(arguments["detail"]),
+            workspace_id=arguments.get("workspace_id") or context.workspace_id,
+            session_id=arguments.get("session_id"),
+        )
+        return {
+            "command_id": "core.recovery.failed_start",
+            "planned": True,
+            "failure_id": failure.failure_id,
+            "intent_id": intent.intent_id,
+            "action": intent.action,
         }
 
     return [
@@ -129,6 +260,126 @@ def _core_command_specs(
                 entrypoint_path=None,
             ),
             _providers_list_handler,
+        ),
+        (
+            CliCommandDefinition(
+                command_id="core.secrets.list",
+                path_segments=["core", "secrets", "list"],
+                description="Inspect platform secret metadata without raw values.",
+                argument_schema={"type": "object"},
+                owner_kind="core",
+                owner_id="secrets",
+                workspace_id=None,
+                exposure_scope="core_global",
+                invocation_policy=CliInvocationPolicy(True, False, False, False),
+                entrypoint_path=None,
+            ),
+            _secrets_list_handler,
+        ),
+        (
+            CliCommandDefinition(
+                command_id="core.secrets.bindings.list",
+                path_segments=["core", "secrets", "bindings", "list"],
+                description="Inspect secret binding metadata without raw values.",
+                argument_schema={"type": "object"},
+                owner_kind="core",
+                owner_id="secrets",
+                workspace_id=None,
+                exposure_scope="core_global",
+                invocation_policy=CliInvocationPolicy(True, False, False, False),
+                entrypoint_path=None,
+            ),
+            _secret_bindings_list_handler,
+        ),
+        (
+            CliCommandDefinition(
+                command_id="core.secrets.rotate",
+                path_segments=["core", "secrets", "rotate"],
+                description="Rotate one platform secret without exposing the raw value.",
+                argument_schema={"type": "object"},
+                owner_kind="core",
+                owner_id="secrets",
+                workspace_id=None,
+                exposure_scope="core_global",
+                invocation_policy=CliInvocationPolicy(True, False, False, False),
+                entrypoint_path=None,
+            ),
+            _secret_rotate_handler,
+        ),
+        (
+            CliCommandDefinition(
+                command_id="core.secrets.disable",
+                path_segments=["core", "secrets", "disable"],
+                description="Disable one platform secret.",
+                argument_schema={"type": "object"},
+                owner_kind="core",
+                owner_id="secrets",
+                workspace_id=None,
+                exposure_scope="core_global",
+                invocation_policy=CliInvocationPolicy(True, False, False, False),
+                entrypoint_path=None,
+            ),
+            _secret_disable_handler,
+        ),
+        (
+            CliCommandDefinition(
+                command_id="core.secrets.revoke",
+                path_segments=["core", "secrets", "revoke"],
+                description="Revoke one platform secret and remove its raw value.",
+                argument_schema={"type": "object"},
+                owner_kind="core",
+                owner_id="secrets",
+                workspace_id=None,
+                exposure_scope="core_global",
+                invocation_policy=CliInvocationPolicy(True, False, False, False),
+                entrypoint_path=None,
+            ),
+            _secret_revoke_handler,
+        ),
+        (
+            CliCommandDefinition(
+                command_id="core.recovery.status",
+                path_segments=["core", "recovery", "status"],
+                description="Inspect recovery status for one workspace or runtime session.",
+                argument_schema={"type": "object"},
+                owner_kind="core",
+                owner_id="recovery",
+                workspace_id=None,
+                exposure_scope="core_global",
+                invocation_policy=CliInvocationPolicy(True, False, False, False),
+                entrypoint_path=None,
+            ),
+            _recovery_status_handler,
+        ),
+        (
+            CliCommandDefinition(
+                command_id="core.recovery.restart",
+                path_segments=["core", "recovery", "restart"],
+                description="Plan one runtime restart recovery intent.",
+                argument_schema={"type": "object"},
+                owner_kind="core",
+                owner_id="recovery",
+                workspace_id=None,
+                exposure_scope="core_global",
+                invocation_policy=CliInvocationPolicy(True, False, False, False),
+                entrypoint_path=None,
+            ),
+            _recovery_restart_handler,
+        ),
+        (
+            CliCommandDefinition(
+                command_id="core.recovery.failed_start",
+                path_segments=["core", "recovery", "failed-start"],
+                description="Record one failed-start diagnosis and plan recovery.",
+                argument_schema={"type": "object"},
+                owner_kind="core",
+                owner_id="recovery",
+                workspace_id=None,
+                exposure_scope="core_global",
+                invocation_policy=CliInvocationPolicy(True, False, False, False),
+                entrypoint_path=None,
+            ),
+            _recovery_failed_start_handler,
         ),
     ]
 
@@ -206,6 +457,8 @@ def build_core_cli_registry(
     workspace_store: WorkspaceStore | None = None,
     provider_store: ProviderStore | None = None,
     runtime_store: RuntimeStore | None = None,
+    secret_store: SecretStore | None = None,
+    recovery_store: RecoveryStore | None = None,
     workspace_id: str | None = None,
     start_path: Path | None = None,
 ) -> CliCommandRegistry:
@@ -215,6 +468,8 @@ def build_core_cli_registry(
         workspace_store=workspace_store,
         provider_store=provider_store,
         runtime_store=runtime_store,
+        secret_store=secret_store,
+        recovery_store=recovery_store,
     ):
         registry.register_command(definition, handler)
     if app_store is not None and workspace_id is not None:
@@ -229,6 +484,8 @@ def list_core_cli_commands(
     workspace_store: WorkspaceStore | None = None,
     provider_store: ProviderStore | None = None,
     runtime_store: RuntimeStore | None = None,
+    secret_store: SecretStore | None = None,
+    recovery_store: RecoveryStore | None = None,
     workspace_id: str | None = None,
     start_path: Path | None = None,
 ) -> list[CliCommandDefinition]:
@@ -238,6 +495,8 @@ def list_core_cli_commands(
         workspace_store=workspace_store,
         provider_store=provider_store,
         runtime_store=runtime_store,
+        secret_store=secret_store,
+        recovery_store=recovery_store,
         workspace_id=workspace_id,
         start_path=start_path,
     ).list_commands()
@@ -252,6 +511,8 @@ def run_core_cli_command(
     workspace_store: WorkspaceStore | None = None,
     provider_store: ProviderStore | None = None,
     runtime_store: RuntimeStore | None = None,
+    secret_store: SecretStore | None = None,
+    recovery_store: RecoveryStore | None = None,
     workspace_id: str | None = None,
     start_path: Path | None = None,
 ) -> dict[str, Any]:
@@ -261,6 +522,8 @@ def run_core_cli_command(
         workspace_store=workspace_store,
         provider_store=provider_store,
         runtime_store=runtime_store,
+        secret_store=secret_store,
+        recovery_store=recovery_store,
         workspace_id=workspace_id,
         start_path=start_path,
     )

@@ -130,7 +130,11 @@ def build_export_manifest(
     schema_versions: dict[str, str] | None = None,
 ) -> ExportManifest:
     """Build a canonical workspace export manifest."""
-    identities = [build_file_identity(file_path=file_path, workspace_root=workspace_root) for file_path in sorted(files)]
+    identities = [
+        build_file_identity(file_path=file_path, workspace_root=workspace_root)
+        for file_path in sorted(files)
+        if _include_in_export(file_path=file_path, workspace_root=workspace_root)
+    ]
     known_apps = [
         ExportedAppReference(
             app_id=binding.app_id,
@@ -152,4 +156,12 @@ def build_export_manifest(
         },
         known_apps=known_apps,
         files=identities,
+    )
+
+
+def _include_in_export(*, file_path: Path, workspace_root: Path) -> bool:
+    relative_path = file_path.resolve().relative_to(workspace_root.resolve()).as_posix()
+    return not (
+        relative_path.startswith("logs/")
+        or relative_path.startswith(".maverick/")
     )

@@ -25,6 +25,8 @@ def create_application(
     paths.core_root.mkdir(parents=True, exist_ok=True)
     paths.apps_root.mkdir(parents=True, exist_ok=True)
     paths.workspaces_root.mkdir(parents=True, exist_ok=True)
+    paths.platform_logs_root.mkdir(parents=True, exist_ok=True)
+    paths.runtime_logs_root.mkdir(parents=True, exist_ok=True)
     ensure_default_workspace(start_path=paths.repository_root)
     if workspace_store is not None:
         ensure_default_workspace_record(workspace_store, now=now)

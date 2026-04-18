@@ -733,6 +733,39 @@ The first v3 implementation should therefore support:
 - controlled resolution for runtime use
 - operator inspection of metadata without exposing raw values
 
+#### Recommended first file layout
+
+```text
+secrets/
+  models.py
+  errors.py
+  store.py
+  secret_store.py
+  secret_bindings.py
+  secret_resolution.py
+  service.py
+  routes.py
+```
+
+Suggested responsibilities:
+
+- `models.py`
+  - `SecretRecord`
+  - `SecretBindingRecord`
+  - `ResolvedSecretLease` or equivalent short-lived resolution result
+- `store.py`
+  - storage-agnostic store contracts
+- `secret_store.py`
+  - concrete secret persistence and encryption adapter wiring
+- `secret_bindings.py`
+  - binding and alias logic separate from raw value persistence
+- `secret_resolution.py`
+  - controlled runtime resolution and delivery logic
+- `service.py`
+  - orchestration across store, bindings, and resolution
+- `routes.py`
+  - operator-facing or policy-gated surface wiring only
+
 ### `recovery/`
 
 Owns:
@@ -755,6 +788,39 @@ So the recovery layer should coordinate:
 - failed-start diagnosis
 - health-driven recovery decisions
 - operator-facing repair and recovery workflows exposed through controlled CLI or MCP surfaces
+
+#### Recommended first file layout
+
+```text
+recovery/
+  models.py
+  errors.py
+  store.py
+  runtime_recovery.py
+  failed_start_recovery.py
+  health_checks.py
+  service.py
+  routes.py
+```
+
+Suggested responsibilities:
+
+- `models.py`
+  - failure classifications
+  - recovery intent records
+  - health result summaries
+- `store.py`
+  - persistence contracts for recovery markers and health snapshots when needed
+- `runtime_recovery.py`
+  - restart or resume orchestration for runtime sessions
+- `failed_start_recovery.py`
+  - diagnosis and recovery planning for startup failures
+- `health_checks.py`
+  - runtime, provider, and app health probe orchestration
+- `service.py`
+  - platform-level recovery coordination
+- `routes.py`
+  - CLI or MCP surface wiring for controlled recovery operations
 
 ### `observability/`
 
@@ -785,6 +851,42 @@ Observability must also enforce redaction rules so that logs, audit trails, and 
 - raw secret values
 - raw provider credentials
 - sensitive runtime environment payloads unless explicitly allowed by operator policy
+
+#### Recommended first file layout
+
+```text
+observability/
+  models.py
+  errors.py
+  store.py
+  event_log.py
+  audit_log.py
+  runtime_log.py
+  metrics.py
+  service.py
+  routes.py
+```
+
+Suggested responsibilities:
+
+- `models.py`
+  - structured event records
+  - audit records
+  - metrics envelopes or counters when modeled in code
+- `store.py`
+  - storage contracts for event, audit, and metric persistence
+- `event_log.py`
+  - structured event emission and attribution helpers
+- `audit_log.py`
+  - operator-relevant control-plane audit recording
+- `runtime_log.py`
+  - runtime-engine and process log handling
+- `metrics.py`
+  - metrics collection and aggregation surfaces
+- `service.py`
+  - redaction-aware orchestration across observability planes
+- `routes.py`
+  - operator inspection surfaces where intentionally exposed
 
 ### `mcp/`
 
@@ -1095,20 +1197,32 @@ core/
     full_access_policy.py
     workspace_boundary.py
   secrets/
+    models.py
+    errors.py
+    store.py
     routes.py
     secret_store.py
     secret_bindings.py
     secret_resolution.py
+    service.py
   recovery/
+    models.py
+    errors.py
+    store.py
     routes.py
     runtime_recovery.py
     failed_start_recovery.py
     health_checks.py
+    service.py
   observability/
+    models.py
+    errors.py
+    store.py
     event_log.py
     audit_log.py
     runtime_log.py
     metrics.py
+    service.py
   mcp/
     server.py
     tool_registry.py

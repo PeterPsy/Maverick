@@ -289,38 +289,55 @@ without carrying forward legacy structure or backward-compatibility constraints 
 ## Phase 10: Secrets and Recovery
 
 - [ ] Implement platform secret store
+  - [ ] create `core/secrets/models.py`
+  - [ ] create `core/secrets/store.py`
+  - [ ] create `core/secrets/secret_store.py`
   - [ ] define secret metadata model separate from raw secret values
   - [ ] define canonical secret ids, aliases, and provider-independent labels
   - [ ] keep persistence and encryption details confined to secret-store adapters
 - [ ] Implement workspace/app secret references
+  - [ ] create `core/secrets/secret_bindings.py`
   - [ ] model app-owned secret references separately from platform-owned secret values
   - [ ] support workspace-scoped secret bindings without making secrets app-owned data
   - [ ] support provider credential bindings through the same secret-reference model where appropriate
 - [ ] Implement secret resolution at runtime
+  - [ ] create `core/secrets/secret_resolution.py`
   - [ ] resolve secret references through a controlled platform path
   - [ ] deliver secrets to runtime only under explicit policy and only for the current session scope
   - [ ] avoid persisting resolved secret values in runtime state snapshots, app data roots, or workspace files
+- [ ] Implement secrets orchestration surface
+  - [ ] create `core/secrets/service.py`
+  - [ ] create `core/secrets/errors.py`
 - [ ] Ensure secret values never land in app-owned data
   - [ ] keep secret values out of `data/<app_id>/`
   - [ ] keep secret values out of workspace export artifacts
   - [ ] keep secret values out of app-owned embedded databases and cleartext config files
 - [ ] Implement secret management surfaces
+  - [ ] create `core/secrets/routes.py`
   - [ ] operator-oriented CLI hooks for create, rotate, inspect metadata, disable, and revoke
   - [ ] MCP hooks only where the operation is intentionally safe and policy-gated
   - [ ] ensure secret inspection surfaces never return raw secret values
 - [ ] Implement runtime recovery primitives
+  - [ ] create `core/recovery/models.py`
+  - [ ] create `core/recovery/store.py`
+  - [ ] create `core/recovery/runtime_recovery.py`
   - [ ] model recoverable vs non-recoverable runtime failures explicitly
   - [ ] define restart intents and recovery markers separately from normal runtime state
   - [ ] keep recovery orchestration in `recovery/`, not inside runtime session models
 - [ ] Implement failed-start recovery
+  - [ ] create `core/recovery/failed_start_recovery.py`
   - [ ] classify failed start causes such as missing secret, invalid provider setup, contract failure, and process crash
   - [ ] support repair-first recovery paths before restart where the architecture allows them
   - [ ] persist operator-meaningful recovery status without leaking sensitive values
 - [ ] Implement health-check framework
+  - [ ] create `core/recovery/health_checks.py`
   - [ ] distinguish runtime health, provider health, and app health
   - [ ] support scheduled or on-demand health probes without coupling them to transport routes
   - [ ] make health results available to recovery decisions and operator inspection surfaces
 - [ ] Implement recovery-oriented CLI and MCP hooks
+  - [ ] create `core/recovery/service.py`
+  - [ ] create `core/recovery/errors.py`
+  - [ ] create `core/recovery/routes.py`
   - [ ] restart runtime
   - [ ] inspect recovery state
   - [ ] trigger repair or recovery workflows where allowed
@@ -334,11 +351,17 @@ without carrying forward legacy structure or backward-compatibility constraints 
 - [ ] Implement workspace log roots:
   - `logs/workspace/`
   - `logs/apps/<app_id>/`
+- [ ] Implement observability model and store contracts
+  - [ ] create `core/observability/models.py`
+  - [ ] create `core/observability/store.py`
+  - [ ] create `core/observability/errors.py`
 - [ ] Implement platform audit surface separate from raw logs
+  - [ ] create `core/observability/audit_log.py`
   - [ ] record control-plane operations such as workspace governance changes, app installation, provider binding, and secret resolution attempts
   - [ ] keep audit records structured and queryable
   - [ ] ensure audit entries never include raw secret values
 - [ ] Implement structured event attribution:
+  - [ ] create `core/observability/event_log.py`
   - `workspace_id`
   - `app_id`
   - `run_id` or equivalent
@@ -349,9 +372,15 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - `provider_id` when relevant
   - source component or domain
 - [ ] Implement metrics surface
+  - [ ] create `core/observability/metrics.py`
   - [ ] runtime metrics
   - [ ] recovery and health metrics
   - [ ] app lifecycle and platform operation counters where meaningful
+- [ ] Implement runtime log handling
+  - [ ] create `core/observability/runtime_log.py`
+- [ ] Implement observability orchestration surface
+  - [ ] create `core/observability/service.py`
+  - [ ] create `core/observability/routes.py`
 - [ ] Implement retention and rotation policy
 - [ ] Implement redaction rules for observability payloads
   - [ ] avoid raw secrets in logs

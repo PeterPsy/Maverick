@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 import re
 
+from core.observability.service import record_platform_audit, record_platform_event
 from core.providers.errors import ProviderCredentialBindingError, ProviderDisabledError
 from core.providers.models import ProviderCredentialBinding
 from core.providers.store import ProviderStore
@@ -55,6 +56,7 @@ def bind_provider_credential(
     workspace_id: str | None = None,
     label: str | None = None,
     binding_id: str | None = None,
+    observability_store=None,
     now: datetime | None = None,
 ) -> ProviderCredentialBinding:
     """Persist one provider credential binding."""
@@ -66,10 +68,38 @@ def bind_provider_credential(
         label=label,
         now=now,
     )
-    return store.save_provider_binding(record)
+    saved = store.save_provider_binding(record)
+    if observability_store is not None:
+        payload = {"provider_id": provider_id, "workspace_id": workspace_id, "binding_id": saved.binding_id, "secret_ref": saved.secret_ref}
+        record_platform_audit(
+            observability_store,
+            action="provider.binding.create",
+            status="succeeded",
+            source_domain="providers",
+            detail=f"Created provider credential binding for `{provider_id}`.",
+            workspace_id=workspace_id,
+            provider_id=provider_id,
+            payload=payload,
+        )
+        record_platform_event(
+            observability_store,
+            event_type="provider.binding.created",
+            event_plane="platform",
+            source_domain="providers",
+            workspace_id=workspace_id,
+            provider_id=provider_id,
+            payload=payload,
+        )
+    return saved
 
 
-def disable_provider_binding(store: ProviderStore, binding_id: str, *, now: datetime | None = None) -> ProviderCredentialBinding:
+def disable_provider_binding(
+    store: ProviderStore,
+    binding_id: str,
+    *,
+    observability_store=None,
+    now: datetime | None = None,
+) -> ProviderCredentialBinding:
     """Mark one provider binding as disabled without deleting its metadata."""
     binding = store.get_provider_binding(binding_id)
     timestamp = now or utcnow()
@@ -83,7 +113,29 @@ def disable_provider_binding(store: ProviderStore, binding_id: str, *, now: date
         created_at=binding.created_at,
         updated_at=timestamp,
     )
-    return store.save_provider_binding(updated)
+    saved = store.save_provider_binding(updated)
+    if observability_store is not None:
+        payload = {"provider_id": saved.provider_id, "workspace_id": saved.workspace_id, "binding_id": saved.binding_id}
+        record_platform_audit(
+            observability_store,
+            action="provider.binding.disable",
+            status="succeeded",
+            source_domain="providers",
+            detail=f"Disabled provider credential binding `{saved.binding_id}`.",
+            workspace_id=saved.workspace_id,
+            provider_id=saved.provider_id,
+            payload=payload,
+        )
+        record_platform_event(
+            observability_store,
+            event_type="provider.binding.disabled",
+            event_plane="platform",
+            source_domain="providers",
+            workspace_id=saved.workspace_id,
+            provider_id=saved.provider_id,
+            payload=payload,
+        )
+    return saved
 
 
 def resolve_provider_binding(

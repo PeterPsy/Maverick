@@ -71,7 +71,7 @@ def resolve_secret_for_runtime(
         source_binding = store.get_secret_binding(binding_id)
         _assert_binding_allowed(source_binding, context)
         normalized_ref = source_binding.secret_ref
-    elif secret_ref is not None and context.allow_unbound_secret_refs and context.operator_request:
+    elif secret_ref is not None and context.allow_unbound_secret_refs and (context.operator_request or context.platform_delivery):
         normalized_ref = str(secret_ref).strip().lower()
     else:
         raise SecretPolicyError("Runtime secret resolution requires one authorized binding or an operator-approved direct ref.")

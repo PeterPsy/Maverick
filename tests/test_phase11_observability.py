@@ -8,6 +8,9 @@ import tempfile
 import unittest
 
 from core.api.application import create_application
+from core.apps.contracts import build_app_capabilities, build_app_contract, build_parsed_app_contract, write_app_contract_file
+from core.apps.service import install_external_app, register_app_source_from_contract
+from core.apps.store import AppCollections, MongoAppStore
 from core.cli.models import CliInvocationContext
 from core.cli.service import run_core_cli_command
 from core.mcp.models import McpInvocationContext
@@ -18,11 +21,14 @@ from core.observability.audit_log import record_audit_event
 from core.observability.event_log import emit_structured_event
 from core.observability.metrics import record_metric
 from core.observability.runtime_log import append_runtime_log, apply_retention
-from core.providers.service import register_builtin_providers
+from core.providers.models import ProviderCapabilitySet, ProviderDefinition, RuntimeBackendLaunchSpec
+from core.providers.provider_credentials import bind_provider_credential
+from core.providers.provider_registry import ProviderRegistry
+from core.providers.service import build_runtime_backend_launch_spec, configure_workspace_provider, register_builtin_providers
 from core.providers.store import MongoProviderStore, ProviderCollections
 from core.recovery.service import record_failed_start
 from core.recovery.store import MongoRecoveryStore, RecoveryCollections
-from core.runtime.service import create_runtime_session
+from core.runtime.service import create_runtime_session, transition_runtime_session
 from core.runtime.store import MongoRuntimeStore, RuntimeCollections
 from core.secrets.service import bind_workspace_secret, build_secret_ref, create_platform_secret
 from core.secrets.store import MongoSecretStore, SecretCollections
@@ -90,6 +96,15 @@ class Phase11ObservabilityTestCase(unittest.TestCase):
                 definitions=FakeCollection(),
                 bindings=FakeCollection(),
                 selections=FakeCollection(),
+            )
+        )
+
+    def make_app_store(self) -> MongoAppStore:
+        return MongoAppStore(
+            AppCollections(
+                app_sources=FakeCollection(),
+                workspace_local_app_projects=FakeCollection(),
+                workspace_app_bindings=FakeCollection(),
             )
         )
 
@@ -168,6 +183,47 @@ class Phase11ObservabilityTestCase(unittest.TestCase):
         self.assertEqual(mcp_result["items"][0]["secret_id"], secret.secret_id)
         self.assertNotIn("raw_value", mcp_result["items"][0])
 
+    def test_cli_and_mcp_expose_secret_create_and_recovery_health_surfaces(self) -> None:
+        repo_root = self.make_repo_root()
+        secret_store = self.make_secret_store()
+        recovery_store = self.make_recovery_store()
+        runtime_store = self.make_runtime_store()
+        provider_store = self.make_provider_store()
+        register_builtin_providers(provider_store)
+        provider_registry = ProviderRegistry()
+        session = create_runtime_session(
+            runtime_store,
+            session_id="sess-health",
+            workspace_id="default",
+            agent_id="agent-1",
+            start_path=repo_root,
+        )
+
+        cli_context = CliInvocationContext(caller_kind="operator", workspace_id="default", agent_id=None, effective_mode="full-access")
+        create_result = run_core_cli_command(
+            command_id="core.secrets.create",
+            context=cli_context,
+            arguments={"label": "Recovery Key", "raw_value": "recovery-secret", "alias": "recovery-key"},
+            secret_store=secret_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+        self.assertTrue(create_result["created"])
+        self.assertNotIn("raw_value", create_result["secret"])
+
+        mcp_context = McpInvocationContext(caller_kind="operator", workspace_id="default", agent_id=None, effective_mode="full-access")
+        health_result = call_mcp_tool(
+            tool_name="core.recovery.health",
+            context=mcp_context,
+            arguments={"target_kind": "runtime", "session_id": session.session_id},
+            recovery_store=recovery_store,
+            runtime_store=runtime_store,
+            provider_registry=provider_registry,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+        self.assertEqual(health_result["health"]["target_kind"], "runtime")
+
     def test_cli_and_mcp_recovery_hooks_plan_and_inspect_without_main_backend_dependency(self) -> None:
         repo_root = self.make_repo_root()
         runtime_store = self.make_runtime_store()
@@ -197,7 +253,7 @@ class Phase11ObservabilityTestCase(unittest.TestCase):
             workspace_id="default",
             start_path=repo_root,
         )
-        self.assertTrue(restart_result["planned"])
+        self.assertTrue(restart_result["executed"])
 
         mcp_context = McpInvocationContext(caller_kind="operator", workspace_id="default", agent_id=None, effective_mode="full-access")
         status_result = call_mcp_tool(
@@ -210,6 +266,141 @@ class Phase11ObservabilityTestCase(unittest.TestCase):
         )
         self.assertEqual(status_result["status"]["failure_count"], 1)
         self.assertEqual(status_result["status"]["latest_intent_action"], "restart_runtime")
+
+    def test_real_core_flows_emit_audit_and_event_records(self) -> None:
+        class CredentialedAdapter:
+            def provider_definition(self) -> ProviderDefinition:
+                timestamp = datetime.now(tz=UTC)
+                return ProviderDefinition(
+                    provider_id="credentialed",
+                    label="Credentialed",
+                    description="Credentialed provider.",
+                    kind="runtime_backend",
+                    status="active",
+                    capabilities=ProviderCapabilitySet(
+                        supports_interactive_runtime=True,
+                        supports_streaming=True,
+                        supports_tools=True,
+                        supports_mcp=False,
+                        supports_skills=False,
+                        supports_filesystem_access=True,
+                        supports_remote_execution=False,
+                        supports_api_key_auth=True,
+                        supports_local_binary=True,
+                    ),
+                    default_model_family="credentialed",
+                    requires_credentials=True,
+                    supported_execution_modes=["sandbox"],
+                    created_at=timestamp,
+                    updated_at=timestamp,
+                )
+
+            def validate_backend(self) -> None:
+                return None
+
+            def build_launch_spec(self, session, *, secret_env=None, credential_binding_id=None, resolved_secret_refs=None) -> RuntimeBackendLaunchSpec:
+                return RuntimeBackendLaunchSpec(
+                    provider_id="credentialed",
+                    command=["echo"],
+                    env_overrides=dict(secret_env or {}),
+                    credential_binding_id=credential_binding_id,
+                    resolved_secret_refs=list(resolved_secret_refs or []),
+                    working_directory=session.workdir,
+                    execution_mode=session.effective_mode,
+                    writable_roots=[session.workspace_root],
+                )
+
+            def prepare_runtime_skills(self, session, skills):
+                return []
+
+        repo_root = self.make_repo_root()
+        observability_store = self.make_observability_store()
+        app_store = self.make_app_store()
+        provider_store = self.make_provider_store()
+        secret_store = self.make_secret_store()
+        runtime_store = self.make_runtime_store()
+        workspace_store = self.make_workspace_store()
+        ensure_default_workspace_record(workspace_store)
+        registry = ProviderRegistry()
+        registry.register_runtime_adapter(CredentialedAdapter())
+
+        app_root = repo_root / "apps" / "audit-app"
+        app_root.mkdir(parents=True, exist_ok=True)
+        parsed = build_parsed_app_contract(
+            app_id="audit-app",
+            name="Audit App",
+            version="1.0.0",
+            description="Audit app",
+            publisher="maverick",
+            contract=build_app_contract(capabilities=build_app_capabilities()),
+        )
+        write_app_contract_file(app_root, parsed)
+        source = register_app_source_from_contract(app_store, source_kind="platform", source_path=str(app_root))
+        install_external_app(
+            app_store,
+            source_id=source.source_id,
+            workspace_id="default",
+            start_path=repo_root,
+            observability_store=observability_store,
+        )
+
+        create_platform_secret(secret_store, label="Provider", raw_value="provider-secret", alias="provider-secret")
+        bind_provider_credential(
+            provider_store,
+            provider_id="credentialed",
+            secret_ref="platform:secret-alias/provider-secret",
+            workspace_id="default",
+            observability_store=observability_store,
+        )
+        configure_workspace_provider(
+            provider_store,
+            workspace_id="default",
+            provider_id="credentialed",
+            registry=registry,
+            observability_store=observability_store,
+        )
+
+        session = create_runtime_session(
+            runtime_store,
+            session_id="sess-observed",
+            workspace_id="default",
+            agent_id="agent-1",
+            start_path=repo_root,
+            observability_store=observability_store,
+        )
+        transition_runtime_session(
+            runtime_store,
+            session_id=session.session_id,
+            target_status="running",
+            observability_store=observability_store,
+            start_path=repo_root,
+        )
+        build_runtime_backend_launch_spec(
+            provider_store,
+            session=runtime_store.get_session(session.session_id),
+            registry=registry,
+            secret_store=secret_store,
+            observability_store=observability_store,
+        )
+        record_failed_start(
+            store=self.make_recovery_store(),
+            category="missing_secret",
+            detail="missing secret",
+            workspace_id="default",
+            session_id=session.session_id,
+            observability_store=observability_store,
+        )
+
+        audit_actions = {item.action for item in observability_store.list_audit(workspace_id="default")}
+        event_types = {item.event_type for item in observability_store.list_events(workspace_id="default")}
+        self.assertIn("app.install.external", audit_actions)
+        self.assertIn("provider.binding.create", audit_actions)
+        self.assertIn("provider.selection.configure", audit_actions)
+        self.assertIn("provider.launch_spec.build", audit_actions)
+        self.assertIn("runtime.session.create", audit_actions)
+        self.assertIn("app.installed", event_types)
+        self.assertIn("runtime.session.created", event_types)
+        self.assertIn("provider.launch_spec.built", event_types)
 
     def test_observability_store_records_redacted_event_audit_and_metrics(self) -> None:
         store = self.make_observability_store()

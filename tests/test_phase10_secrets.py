@@ -91,7 +91,7 @@ class BrokenAdapter:
     def validate_backend(self) -> None:
         raise RuntimeError("backend unavailable")
 
-    def build_launch_spec(self, session) -> RuntimeBackendLaunchSpec:  # pragma: no cover
+    def build_launch_spec(self, session, *, secret_env=None, credential_binding_id=None, resolved_secret_refs=None) -> RuntimeBackendLaunchSpec:  # pragma: no cover
         raise NotImplementedError
 
     def prepare_runtime_skills(self, session, skills):  # pragma: no cover

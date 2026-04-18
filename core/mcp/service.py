@@ -7,15 +7,24 @@ from typing import Any
 
 from core.apps.surfaces import enabled_workspace_app_bindings, resolve_workspace_app_surface
 from core.apps.store import AppStore
-from core.recovery.service import plan_session_restart, record_failed_start, recovery_status
+from core.observability.service import record_platform_audit, record_platform_event
+from core.recovery.service import (
+    execute_session_restart,
+    record_app_health,
+    record_failed_start,
+    record_provider_health,
+    record_runtime_health,
+    recovery_status,
+)
 from core.recovery.store import RecoveryStore
 from core.mcp.models import McpInvocationContext, McpInvocationPolicy, McpToolDefinition
 from core.mcp.runner import McpRunner
 from core.mcp.server import McpHostSurface, build_mcp_host_surface
 from core.mcp.tool_registry import McpToolRegistry
+from core.providers.provider_registry import ProviderRegistry
 from core.providers.store import ProviderStore
 from core.runtime.store import RuntimeStore
-from core.secrets.service import disable_platform_secret, revoke_platform_secret, rotate_platform_secret
+from core.secrets.service import create_platform_secret, disable_platform_secret, revoke_platform_secret, rotate_platform_secret
 from core.secrets.store import SecretStore
 from core.shared.entrypoints import run_json_entrypoint
 from core.workspaces.store import WorkspaceStore
@@ -28,7 +37,33 @@ def _core_tool_specs(
     runtime_store: RuntimeStore | None = None,
     secret_store: SecretStore | None = None,
     recovery_store: RecoveryStore | None = None,
+    provider_registry: ProviderRegistry | None = None,
+    observability_store=None,
 ) -> list[tuple[McpToolDefinition, Any]]:
+    def _audit(event_type: str, payload: dict[str, Any], *, workspace_id: str | None = None, provider_id: str | None = None, runtime_session_id: str | None = None) -> None:
+        if observability_store is None:
+            return
+        record_platform_audit(
+            observability_store,
+            action=event_type,
+            status="succeeded",
+            source_domain="mcp",
+            detail=event_type,
+            workspace_id=workspace_id,
+            provider_id=provider_id,
+            runtime_session_id=runtime_session_id,
+            payload=payload,
+        )
+        record_platform_event(
+            observability_store,
+            event_type=event_type,
+            event_plane="platform" if runtime_session_id is None else "runtime",
+            source_domain="mcp",
+            workspace_id=workspace_id,
+            provider_id=provider_id,
+            runtime_session_id=runtime_session_id,
+            payload=payload,
+        )
     def _workspace_list_handler(arguments: dict[str, Any], context: McpInvocationContext) -> dict[str, Any]:
         if workspace_store is None:
             return {"items": []}
@@ -92,6 +127,19 @@ def _core_tool_specs(
             ]
         }
 
+    def _secret_create_handler(arguments: dict[str, Any], context: McpInvocationContext) -> dict[str, Any]:
+        if secret_store is None:
+            return {"created": False}
+        secret = create_platform_secret(
+            secret_store,
+            label=str(arguments["label"]),
+            raw_value=str(arguments["raw_value"]),
+            alias=None if arguments.get("alias") is None else str(arguments["alias"]),
+            description=None if arguments.get("description") is None else str(arguments["description"]),
+        )
+        _audit("core.secrets.create", {"secret_id": secret.secret_id, "alias": secret.alias})
+        return {"created": True, "secret": {"secret_id": secret.secret_id, "alias": secret.alias, "label": secret.label, "status": secret.status}}
+
     def _secret_rotate_handler(arguments: dict[str, Any], context: McpInvocationContext) -> dict[str, Any]:
         if secret_store is None:
             return {"rotated": False}
@@ -100,18 +148,21 @@ def _core_tool_specs(
             secret_id=str(arguments["secret_id"]),
             raw_value=str(arguments["raw_value"]),
         )
+        _audit("core.secrets.rotate", {"secret_id": secret.secret_id})
         return {"rotated": True, "secret_id": secret.secret_id, "status": secret.status}
 
     def _secret_disable_handler(arguments: dict[str, Any], context: McpInvocationContext) -> dict[str, Any]:
         if secret_store is None:
             return {"disabled": False}
         secret = disable_platform_secret(secret_store, secret_id=str(arguments["secret_id"]))
+        _audit("core.secrets.disable", {"secret_id": secret.secret_id})
         return {"disabled": True, "secret_id": secret.secret_id, "status": secret.status}
 
     def _secret_revoke_handler(arguments: dict[str, Any], context: McpInvocationContext) -> dict[str, Any]:
         if secret_store is None:
             return {"revoked": False}
         secret = revoke_platform_secret(secret_store, secret_id=str(arguments["secret_id"]))
+        _audit("core.secrets.revoke", {"secret_id": secret.secret_id})
         return {"revoked": True, "secret_id": secret.secret_id, "status": secret.status}
 
     def _recovery_status_handler(arguments: dict[str, Any], context: McpInvocationContext) -> dict[str, Any]:
@@ -127,10 +178,15 @@ def _core_tool_specs(
 
     def _recovery_restart_handler(arguments: dict[str, Any], context: McpInvocationContext) -> dict[str, Any]:
         if recovery_store is None or runtime_store is None:
-            return {"planned": False}
-        session = runtime_store.get_session(str(arguments["session_id"]))
-        intent = plan_session_restart(recovery_store, session=session, reason=str(arguments.get("reason") or "operator restart"))
-        return {"planned": True, "intent_id": intent.intent_id, "action": intent.action}
+            return {"executed": False}
+        intent, restarted = execute_session_restart(
+            recovery_store,
+            runtime_store=runtime_store,
+            session_id=str(arguments["session_id"]),
+            reason=str(arguments.get("reason") or "operator restart"),
+            observability_store=observability_store,
+        )
+        return {"executed": True, "intent_id": intent.intent_id, "action": intent.action, "runtime_status": restarted.status}
 
     def _recovery_failed_start_handler(arguments: dict[str, Any], context: McpInvocationContext) -> dict[str, Any]:
         if recovery_store is None:
@@ -141,8 +197,39 @@ def _core_tool_specs(
             detail=str(arguments["detail"]),
             workspace_id=arguments.get("workspace_id") or context.workspace_id,
             session_id=arguments.get("session_id"),
+            observability_store=observability_store,
         )
         return {"planned": True, "failure_id": failure.failure_id, "intent_id": intent.intent_id, "action": intent.action}
+
+    def _recovery_health_handler(arguments: dict[str, Any], context: McpInvocationContext) -> dict[str, Any]:
+        if recovery_store is None:
+            return {"health": None}
+        target_kind = str(arguments["target_kind"])
+        if target_kind == "runtime":
+            if runtime_store is None:
+                return {"health": None}
+            session = runtime_store.get_session(str(arguments["session_id"]))
+            result = record_runtime_health(recovery_store, session=session, observability_store=observability_store)
+        elif target_kind == "provider":
+            if provider_registry is None:
+                return {"health": None}
+            result = record_provider_health(
+                recovery_store,
+                provider_registry=provider_registry,
+                provider_id=str(arguments["provider_id"]),
+                workspace_id=arguments.get("workspace_id") or context.workspace_id,
+                observability_store=observability_store,
+            )
+        else:
+            result = record_app_health(
+                recovery_store,
+                workspace_id=str(arguments.get("workspace_id") or context.workspace_id),
+                app_id=str(arguments["app_id"]),
+                is_healthy=bool(arguments["is_healthy"]),
+                detail=None if arguments.get("detail") is None else str(arguments["detail"]),
+                observability_store=observability_store,
+            )
+        return {"health": {"target_kind": result.target_kind, "target_id": result.target_id, "status": result.status, "detail": result.detail}}
 
     return [
         (
@@ -207,6 +294,21 @@ def _core_tool_specs(
         ),
         (
             McpToolDefinition(
+                tool_name="core.secrets.create",
+                description="Create one platform secret without exposing the raw value in the result.",
+                input_schema={"type": "object"},
+                output_schema={"type": "object"},
+                owner_kind="core",
+                owner_id="secrets",
+                workspace_id=None,
+                exposure_scope="core_global",
+                invocation_policy=McpInvocationPolicy(True, False, False, False),
+                entrypoint_path=None,
+            ),
+            _secret_create_handler,
+        ),
+        (
+            McpToolDefinition(
                 tool_name="core.secrets.rotate",
                 description="Rotate one platform secret without exposing the raw value.",
                 input_schema={"type": "object"},
@@ -268,7 +370,7 @@ def _core_tool_specs(
         (
             McpToolDefinition(
                 tool_name="core.recovery.restart",
-                description="Plan one runtime restart recovery intent.",
+                description="Execute one runtime restart recovery action when allowed.",
                 input_schema={"type": "object"},
                 output_schema={"type": "object"},
                 owner_kind="core",
@@ -294,6 +396,21 @@ def _core_tool_specs(
                 entrypoint_path=None,
             ),
             _recovery_failed_start_handler,
+        ),
+        (
+            McpToolDefinition(
+                tool_name="core.recovery.health",
+                description="Run one recovery health probe on demand.",
+                input_schema={"type": "object"},
+                output_schema={"type": "object"},
+                owner_kind="core",
+                owner_id="recovery",
+                workspace_id=None,
+                exposure_scope="core_global",
+                invocation_policy=McpInvocationPolicy(True, False, False, False),
+                entrypoint_path=None,
+            ),
+            _recovery_health_handler,
         ),
     ]
 
@@ -371,6 +488,8 @@ def build_core_mcp_registry(
     runtime_store: RuntimeStore | None = None,
     secret_store: SecretStore | None = None,
     recovery_store: RecoveryStore | None = None,
+    provider_registry: ProviderRegistry | None = None,
+    observability_store=None,
     workspace_id: str | None = None,
     start_path: Path | None = None,
 ) -> McpToolRegistry:
@@ -382,6 +501,8 @@ def build_core_mcp_registry(
         runtime_store=runtime_store,
         secret_store=secret_store,
         recovery_store=recovery_store,
+        provider_registry=provider_registry,
+        observability_store=observability_store,
     ):
         registry.register_tool(definition, handler)
     if app_store is not None and workspace_id is not None:
@@ -398,6 +519,8 @@ def build_workspace_mcp_surface(
     runtime_store: RuntimeStore | None = None,
     secret_store: SecretStore | None = None,
     recovery_store: RecoveryStore | None = None,
+    provider_registry: ProviderRegistry | None = None,
+    observability_store=None,
     workspace_id: str | None = None,
     start_path: Path | None = None,
     transport: str = "stdio",
@@ -410,6 +533,8 @@ def build_workspace_mcp_surface(
         runtime_store=runtime_store,
         secret_store=secret_store,
         recovery_store=recovery_store,
+        provider_registry=provider_registry,
+        observability_store=observability_store,
         workspace_id=workspace_id,
         start_path=start_path,
     )
@@ -424,6 +549,8 @@ def list_mcp_tools(
     runtime_store: RuntimeStore | None = None,
     secret_store: SecretStore | None = None,
     recovery_store: RecoveryStore | None = None,
+    provider_registry: ProviderRegistry | None = None,
+    observability_store=None,
     workspace_id: str | None = None,
     start_path: Path | None = None,
 ) -> list[McpToolDefinition]:
@@ -435,6 +562,8 @@ def list_mcp_tools(
         runtime_store=runtime_store,
         secret_store=secret_store,
         recovery_store=recovery_store,
+        provider_registry=provider_registry,
+        observability_store=observability_store,
         workspace_id=workspace_id,
         start_path=start_path,
     ).list_tools()
@@ -451,6 +580,8 @@ def call_mcp_tool(
     runtime_store: RuntimeStore | None = None,
     secret_store: SecretStore | None = None,
     recovery_store: RecoveryStore | None = None,
+    provider_registry: ProviderRegistry | None = None,
+    observability_store=None,
     workspace_id: str | None = None,
     start_path: Path | None = None,
 ) -> dict[str, Any]:
@@ -462,6 +593,8 @@ def call_mcp_tool(
         runtime_store=runtime_store,
         secret_store=secret_store,
         recovery_store=recovery_store,
+        provider_registry=provider_registry,
+        observability_store=observability_store,
         workspace_id=workspace_id,
         start_path=start_path,
     )

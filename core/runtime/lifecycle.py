@@ -6,6 +6,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
+from core.observability.service import append_platform_log, record_platform_audit, record_platform_event
 from core.runtime.errors import RuntimeTransitionError
 from core.runtime.routing import build_runtime_routing
 from core.runtime.runtime_events import RuntimeEventPlane, RuntimeEventRecord
@@ -38,6 +39,7 @@ def create_runtime_session(
     platform_allows_full_access: bool = False,
     now: datetime | None = None,
     start_path: Path | None = None,
+    observability_store=None,
 ) -> RuntimeSessionRecord:
     """Create one runtime session and its initial runtime state."""
     timestamp = now or utcnow()
@@ -77,7 +79,46 @@ def create_runtime_session(
         updated_at=timestamp,
     )
     store.save_state(state)
-    return store.save_session(session)
+    saved = store.save_session(session)
+    if observability_store is not None:
+        payload = {
+            "session_id": session_id,
+            "workspace_id": workspace_id,
+            "agent_id": agent_id,
+            "requested_mode": routing.requested_mode,
+            "effective_mode": routing.effective_mode,
+        }
+        record_platform_event(
+            observability_store,
+            event_type="runtime.session.created",
+            event_plane="runtime",
+            source_domain="runtime",
+            workspace_id=workspace_id,
+            runtime_session_id=session_id,
+            payload=payload,
+            now=timestamp,
+        )
+        record_platform_audit(
+            observability_store,
+            action="runtime.session.create",
+            status="succeeded",
+            source_domain="runtime",
+            detail=f"Created runtime session `{session_id}` for workspace `{workspace_id}`.",
+            workspace_id=workspace_id,
+            runtime_session_id=session_id,
+            payload=payload,
+            now=timestamp,
+        )
+        append_platform_log(
+            log_plane="runtime",
+            message=f"Created runtime session `{session_id}`.",
+            payload=payload,
+            workspace_id=workspace_id,
+            runtime_session_id=session_id,
+            start_path=start_path,
+            now=timestamp,
+        )
+    return saved
 
 
 def create_child_runtime_session(
@@ -130,6 +171,8 @@ def transition_runtime_session(
     error_detail: str | None = None,
     forced_stop_reason: str | None = None,
     now: datetime | None = None,
+    observability_store=None,
+    start_path: Path | None = None,
 ) -> RuntimeSessionRecord:
     """Transition one runtime session between canonical lifecycle statuses."""
     timestamp = now or utcnow()
@@ -137,9 +180,9 @@ def transition_runtime_session(
     allowed: dict[RuntimeSessionStatus, set[RuntimeSessionStatus]] = {
         "created": {"running", "failed"},
         "running": {"stopping", "stopped", "failed"},
-        "stopping": {"stopped", "failed"},
-        "stopped": set(),
-        "failed": set(),
+        "stopping": {"stopped", "failed", "running"},
+        "stopped": {"running"},
+        "failed": {"running"},
     }
     _transition_allowed(session.status, target_status, allowed=allowed, kind="runtime session")
     started_at = session.started_at or (timestamp if target_status == "running" else None)
@@ -163,7 +206,47 @@ def transition_runtime_session(
             updated_at=timestamp,
         )
     )
-    return store.save_session(updated)
+    saved = store.save_session(updated)
+    if observability_store is not None:
+        payload = {
+            "session_id": session_id,
+            "from_status": session.status,
+            "to_status": target_status,
+            "forced_stop_reason": forced_stop_reason,
+            "error_detail": error_detail,
+        }
+        audit_status = "failed" if target_status == "failed" else "succeeded"
+        record_platform_event(
+            observability_store,
+            event_type="runtime.session.transitioned",
+            event_plane="runtime",
+            source_domain="runtime",
+            workspace_id=session.workspace_id,
+            runtime_session_id=session_id,
+            payload=payload,
+            now=timestamp,
+        )
+        record_platform_audit(
+            observability_store,
+            action="runtime.session.transition",
+            status=audit_status,
+            source_domain="runtime",
+            detail=f"Transitioned runtime session `{session_id}` from `{session.status}` to `{target_status}`.",
+            workspace_id=session.workspace_id,
+            runtime_session_id=session_id,
+            payload=payload,
+            now=timestamp,
+        )
+        append_platform_log(
+            log_plane="runtime",
+            message=f"Runtime session `{session_id}` transitioned to `{target_status}`.",
+            payload=payload,
+            workspace_id=session.workspace_id,
+            runtime_session_id=session_id,
+            start_path=start_path,
+            now=timestamp,
+        )
+    return saved
 
 
 def queue_runtime_turn(

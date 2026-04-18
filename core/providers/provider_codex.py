@@ -78,7 +78,14 @@ class CodexProviderAdapter:
         if shutil.which(command) is None:
             raise ProviderLaunchError(f"Codex binary `{command}` is not available on PATH.")
 
-    def build_launch_spec(self, session: RuntimeSessionRecord) -> RuntimeBackendLaunchSpec:
+    def build_launch_spec(
+        self,
+        session: RuntimeSessionRecord,
+        *,
+        secret_env: dict[str, str] | None = None,
+        credential_binding_id: str | None = None,
+        resolved_secret_refs: list[str] | None = None,
+    ) -> RuntimeBackendLaunchSpec:
         """Build one runtime launch spec for the local Codex backend."""
         self.validate_backend()
         workdir = Path(session.workdir)
@@ -92,11 +99,14 @@ class CodexProviderAdapter:
             runtime_root=runtime_root,
             runtime_home=runtime_home,
             execution_mode=session.effective_mode,
+            secret_env=secret_env,
         )
         return RuntimeBackendLaunchSpec(
             provider_id="codex",
             command=self._build_command(execution_mode=session.effective_mode),
             env_overrides=env,
+            credential_binding_id=credential_binding_id,
+            resolved_secret_refs=list(resolved_secret_refs or []),
             working_directory=str(workdir),
             execution_mode=session.effective_mode,
             writable_roots=self._writable_roots(
@@ -154,9 +164,11 @@ class CodexProviderAdapter:
         runtime_root: Path,
         runtime_home: Path,
         execution_mode: str,
+        secret_env: dict[str, str] | None = None,
         base_env: dict[str, str] | None = None,
     ) -> dict[str, str]:
         env = dict(base_env or os.environ)
+        env.update(secret_env or {})
         path_entries = [entry for entry in str(env.get("PATH") or "").split(os.pathsep) if entry]
         prepend_entries: list[str] = []
 

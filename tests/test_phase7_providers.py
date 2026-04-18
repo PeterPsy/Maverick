@@ -9,7 +9,7 @@ import unittest
 
 from core.api.application import create_application
 from core.providers.errors import ProviderCredentialBindingError
-from core.providers.models import ProviderCapabilitySet, ProviderDefinition
+from core.providers.models import ProviderCapabilitySet, ProviderDefinition, RuntimeBackendLaunchSpec
 from core.providers.provider_credentials import bind_provider_credential, disable_provider_binding
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.provider_selection import ProviderSelectionService
@@ -23,6 +23,8 @@ from core.providers.service import (
 from core.providers.store import MongoProviderStore, ProviderCollections
 from core.runtime.service import create_runtime_session
 from core.runtime.store import MongoRuntimeStore, RuntimeCollections
+from core.secrets.service import create_platform_secret
+from core.secrets.store import MongoSecretStore, SecretCollections
 
 
 class FakeCollection:
@@ -70,6 +72,15 @@ class Phase7ProvidersTestCase(unittest.TestCase):
                 events=FakeCollection(),
                 processes=FakeCollection(),
                 states=FakeCollection(),
+            )
+        )
+
+    def make_secret_store(self) -> MongoSecretStore:
+        return MongoSecretStore(
+            SecretCollections(
+                secrets=FakeCollection(),
+                values=FakeCollection(),
+                bindings=FakeCollection(),
             )
         )
 
@@ -226,6 +237,90 @@ class Phase7ProvidersTestCase(unittest.TestCase):
 
         self.assertEqual(disabled.status, "disabled")
         self.assertEqual(provider_store.get_provider_binding(binding.binding_id).status, "disabled")
+
+    def test_launch_spec_receives_provider_secret_via_platform_delivery(self) -> None:
+        class CredentialedAdapter:
+            def provider_definition(self) -> ProviderDefinition:
+                timestamp = datetime.now(tz=UTC)
+                return ProviderDefinition(
+                    provider_id="credentialed",
+                    label="Credentialed",
+                    description="Credentialed runtime backend.",
+                    kind="runtime_backend",
+                    status="active",
+                    capabilities=ProviderCapabilitySet(
+                        supports_interactive_runtime=True,
+                        supports_streaming=True,
+                        supports_tools=True,
+                        supports_mcp=False,
+                        supports_skills=False,
+                        supports_filesystem_access=True,
+                        supports_remote_execution=False,
+                        supports_api_key_auth=True,
+                        supports_local_binary=True,
+                    ),
+                    default_model_family="credentialed",
+                    requires_credentials=True,
+                    supported_execution_modes=["sandbox"],
+                    created_at=timestamp,
+                    updated_at=timestamp,
+                )
+
+            def validate_backend(self) -> None:
+                return None
+
+            def build_launch_spec(self, session, *, secret_env=None, credential_binding_id=None, resolved_secret_refs=None) -> RuntimeBackendLaunchSpec:
+                return RuntimeBackendLaunchSpec(
+                    provider_id="credentialed",
+                    command=["echo"],
+                    env_overrides=dict(secret_env or {}),
+                    credential_binding_id=credential_binding_id,
+                    resolved_secret_refs=list(resolved_secret_refs or []),
+                    working_directory=session.workdir,
+                    execution_mode=session.effective_mode,
+                    writable_roots=[session.workspace_root],
+                )
+
+            def prepare_runtime_skills(self, session, skills):
+                return []
+
+        provider_store = self.make_provider_store()
+        secret_store = self.make_secret_store()
+        registry = ProviderRegistry()
+        registry.register_runtime_adapter(CredentialedAdapter())
+        bind_provider_credential(
+            provider_store,
+            provider_id="credentialed",
+            secret_ref="platform:secret-alias/provider-secret",
+            workspace_id="default",
+        )
+        create_platform_secret(secret_store, label="Provider Secret", raw_value="super-secret-token", alias="provider-secret")
+        configure_workspace_provider(
+            provider_store,
+            workspace_id="default",
+            provider_id="credentialed",
+            registry=registry,
+        )
+        runtime_store = self.make_runtime_store()
+        repo_root = self.make_repo_root()
+        session = create_runtime_session(
+            runtime_store,
+            session_id="sess-credentialed",
+            workspace_id="default",
+            agent_id="agent-1",
+            start_path=repo_root,
+        )
+
+        spec = build_runtime_backend_launch_spec(
+            provider_store,
+            session=session,
+            registry=registry,
+            secret_store=secret_store,
+        )
+
+        self.assertEqual(spec.env_overrides["MAVERICK_PROVIDER_SECRET"], "super-secret-token")
+        self.assertIsNotNone(spec.credential_binding_id)
+        self.assertEqual(spec.resolved_secret_refs, ["platform:secret-alias/provider-secret"])
 
 
 if __name__ == "__main__":

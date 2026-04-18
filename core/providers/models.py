@@ -82,6 +82,8 @@ class RuntimeBackendLaunchSpec:
     provider_id: str
     command: list[str]
     env_overrides: dict[str, str]
+    credential_binding_id: str | None
+    resolved_secret_refs: list[str]
     working_directory: str
     execution_mode: ExecutionMode
     writable_roots: list[str]

@@ -304,6 +304,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] create `core/secrets/secret_resolution.py`
   - [x] resolve secret references through a controlled platform path
   - [x] deliver secrets to runtime only under explicit policy and only for the current session scope
+  - [x] resolve provider credentials into ephemeral runtime launch input through the platform path, not from workspace-owned files
   - [x] avoid persisting resolved secret values in runtime state snapshots, app data roots, or workspace files
 - [x] Implement secrets orchestration surface
   - [x] create `core/secrets/service.py`
@@ -338,8 +339,9 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] create `core/recovery/service.py`
   - [x] create `core/recovery/errors.py`
   - [x] create `core/recovery/routes.py`
-  - [x] restart runtime
+  - [x] restart runtime through the runtime lifecycle when the runtime store is available
   - [x] inspect recovery state
+  - [x] run on-demand runtime, provider, and app health probes
   - [x] trigger repair or recovery workflows where allowed
   - [x] expose recovery status without exposing secret values
 
@@ -358,6 +360,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
 - [x] Implement platform audit surface separate from raw logs
   - [x] create `core/observability/audit_log.py`
   - [x] record control-plane operations such as workspace governance changes, app installation, provider binding, and secret resolution attempts
+  - [x] wire audit emission into real app, provider, runtime, secrets, and recovery flows
   - [x] keep audit records structured and queryable
   - [x] ensure audit entries never include raw secret values
 - [x] Implement structured event attribution:
@@ -366,6 +369,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] `app_id`
   - [x] `run_id` or equivalent
   - [x] event plane
+  - [x] emit structured events from real core flows, not only from tests
 - [x] Implement correlation and source attribution fields:
   - [x] `runtime_session_id`
   - [x] `turn_id`

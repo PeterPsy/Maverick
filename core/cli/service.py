@@ -10,11 +10,25 @@ from core.apps.store import AppStore
 from core.cli.command_registry import CliCommandRegistry
 from core.cli.models import CliCommandDefinition, CliInvocationContext, CliInvocationPolicy
 from core.cli.runner import CliRunner
-from core.recovery.service import plan_session_restart, record_failed_start, recovery_status
+from core.observability.service import record_platform_audit, record_platform_event
+from core.recovery.service import (
+    execute_session_restart,
+    record_app_health,
+    record_failed_start,
+    record_provider_health,
+    record_runtime_health,
+    recovery_status,
+)
 from core.recovery.store import RecoveryStore
+from core.providers.provider_registry import ProviderRegistry
 from core.providers.store import ProviderStore
 from core.runtime.store import RuntimeStore
-from core.secrets.service import disable_platform_secret, revoke_platform_secret, rotate_platform_secret
+from core.secrets.service import (
+    create_platform_secret,
+    disable_platform_secret,
+    revoke_platform_secret,
+    rotate_platform_secret,
+)
 from core.secrets.store import SecretStore
 from core.shared.entrypoints import run_json_entrypoint
 from core.workspaces.store import WorkspaceStore
@@ -27,7 +41,42 @@ def _core_command_specs(
     runtime_store: RuntimeStore | None = None,
     secret_store: SecretStore | None = None,
     recovery_store: RecoveryStore | None = None,
+    provider_registry: ProviderRegistry | None = None,
+    observability_store=None,
 ) -> list[tuple[CliCommandDefinition, Any]]:
+    def _audit(
+        action: str,
+        detail: str,
+        payload: dict[str, Any],
+        *,
+        workspace_id: str | None = None,
+        provider_id: str | None = None,
+        runtime_session_id: str | None = None,
+    ) -> None:
+        if observability_store is None:
+            return
+        record_platform_audit(
+            observability_store,
+            action=action,
+            status="succeeded",
+            source_domain="cli",
+            detail=detail,
+            workspace_id=workspace_id,
+            provider_id=provider_id,
+            runtime_session_id=runtime_session_id,
+            payload=payload,
+        )
+        record_platform_event(
+            observability_store,
+            event_type=action,
+            event_plane="platform" if runtime_session_id is None else "runtime",
+            source_domain="cli",
+            workspace_id=workspace_id,
+            provider_id=provider_id,
+            runtime_session_id=runtime_session_id,
+            payload=payload,
+        )
+
     def _workspace_current_handler(arguments: dict[str, Any], context: CliInvocationContext) -> dict[str, Any]:
         if workspace_store is None or context.workspace_id is None:
             return {"workspace_id": context.workspace_id, "workspace": None}
@@ -116,6 +165,24 @@ def _core_command_specs(
             ],
         }
 
+    def _secret_create_handler(arguments: dict[str, Any], context: CliInvocationContext) -> dict[str, Any]:
+        if secret_store is None:
+            return {"created": False}
+        secret = create_platform_secret(
+            secret_store,
+            label=str(arguments["label"]),
+            raw_value=str(arguments["raw_value"]),
+            alias=None if arguments.get("alias") is None else str(arguments["alias"]),
+            description=None if arguments.get("description") is None else str(arguments["description"]),
+        )
+        result = {
+            "command_id": "core.secrets.create",
+            "created": True,
+            "secret": {"secret_id": secret.secret_id, "alias": secret.alias, "label": secret.label, "status": secret.status},
+        }
+        _audit("core.secrets.create", f"Created platform secret `{secret.secret_id}`.", {"secret_id": secret.secret_id, "alias": secret.alias})
+        return result
+
     def _secret_rotate_handler(arguments: dict[str, Any], context: CliInvocationContext) -> dict[str, Any]:
         if secret_store is None:
             return {"rotated": False}
@@ -124,7 +191,7 @@ def _core_command_specs(
             secret_id=str(arguments["secret_id"]),
             raw_value=str(arguments["raw_value"]),
         )
-        return {
+        result = {
             "command_id": "core.secrets.rotate",
             "rotated": True,
             "secret": {
@@ -134,28 +201,34 @@ def _core_command_specs(
                 "status": secret.status,
             },
         }
+        _audit("core.secrets.rotate", f"Rotated platform secret `{secret.secret_id}`.", {"secret_id": secret.secret_id})
+        return result
 
     def _secret_disable_handler(arguments: dict[str, Any], context: CliInvocationContext) -> dict[str, Any]:
         if secret_store is None:
             return {"disabled": False}
         secret = disable_platform_secret(secret_store, secret_id=str(arguments["secret_id"]))
-        return {
+        result = {
             "command_id": "core.secrets.disable",
             "disabled": True,
             "secret_id": secret.secret_id,
             "status": secret.status,
         }
+        _audit("core.secrets.disable", f"Disabled platform secret `{secret.secret_id}`.", {"secret_id": secret.secret_id})
+        return result
 
     def _secret_revoke_handler(arguments: dict[str, Any], context: CliInvocationContext) -> dict[str, Any]:
         if secret_store is None:
             return {"revoked": False}
         secret = revoke_platform_secret(secret_store, secret_id=str(arguments["secret_id"]))
-        return {
+        result = {
             "command_id": "core.secrets.revoke",
             "revoked": True,
             "secret_id": secret.secret_id,
             "status": secret.status,
         }
+        _audit("core.secrets.revoke", f"Revoked platform secret `{secret.secret_id}`.", {"secret_id": secret.secret_id})
+        return result
 
     def _recovery_status_handler(arguments: dict[str, Any], context: CliInvocationContext) -> dict[str, Any]:
         if recovery_store is None:
@@ -172,14 +245,20 @@ def _core_command_specs(
     def _recovery_restart_handler(arguments: dict[str, Any], context: CliInvocationContext) -> dict[str, Any]:
         if recovery_store is None or runtime_store is None:
             return {"planned": False}
-        session = runtime_store.get_session(str(arguments["session_id"]))
-        intent = plan_session_restart(recovery_store, session=session, reason=str(arguments.get("reason") or "operator restart"))
+        intent, restarted = execute_session_restart(
+            recovery_store,
+            runtime_store=runtime_store,
+            session_id=str(arguments["session_id"]),
+            reason=str(arguments.get("reason") or "operator restart"),
+            observability_store=observability_store,
+        )
         return {
             "command_id": "core.recovery.restart",
-            "planned": True,
+            "executed": True,
             "intent_id": intent.intent_id,
             "action": intent.action,
             "session_id": intent.session_id,
+            "runtime_status": restarted.status,
         }
 
     def _recovery_failed_start_handler(arguments: dict[str, Any], context: CliInvocationContext) -> dict[str, Any]:
@@ -191,6 +270,7 @@ def _core_command_specs(
             detail=str(arguments["detail"]),
             workspace_id=arguments.get("workspace_id") or context.workspace_id,
             session_id=arguments.get("session_id"),
+            observability_store=observability_store,
         )
         return {
             "command_id": "core.recovery.failed_start",
@@ -198,6 +278,39 @@ def _core_command_specs(
             "failure_id": failure.failure_id,
             "intent_id": intent.intent_id,
             "action": intent.action,
+        }
+
+    def _recovery_health_handler(arguments: dict[str, Any], context: CliInvocationContext) -> dict[str, Any]:
+        if recovery_store is None:
+            return {"health": None}
+        target_kind = str(arguments["target_kind"])
+        if target_kind == "runtime":
+            if runtime_store is None:
+                return {"health": None}
+            session = runtime_store.get_session(str(arguments["session_id"]))
+            result = record_runtime_health(recovery_store, session=session, observability_store=observability_store)
+        elif target_kind == "provider":
+            if provider_registry is None:
+                return {"health": None}
+            result = record_provider_health(
+                recovery_store,
+                provider_registry=provider_registry,
+                provider_id=str(arguments["provider_id"]),
+                workspace_id=arguments.get("workspace_id") or context.workspace_id,
+                observability_store=observability_store,
+            )
+        else:
+            result = record_app_health(
+                recovery_store,
+                workspace_id=str(arguments.get("workspace_id") or context.workspace_id),
+                app_id=str(arguments["app_id"]),
+                is_healthy=bool(arguments["is_healthy"]),
+                detail=None if arguments.get("detail") is None else str(arguments["detail"]),
+                observability_store=observability_store,
+            )
+        return {
+            "command_id": "core.recovery.health",
+            "health": {"target_kind": result.target_kind, "target_id": result.target_id, "status": result.status, "detail": result.detail},
         }
 
     return [
@@ -293,6 +406,21 @@ def _core_command_specs(
         ),
         (
             CliCommandDefinition(
+                command_id="core.secrets.create",
+                path_segments=["core", "secrets", "create"],
+                description="Create one platform secret without exposing its raw value in the result.",
+                argument_schema={"type": "object"},
+                owner_kind="core",
+                owner_id="secrets",
+                workspace_id=None,
+                exposure_scope="core_global",
+                invocation_policy=CliInvocationPolicy(True, False, False, False),
+                entrypoint_path=None,
+            ),
+            _secret_create_handler,
+        ),
+        (
+            CliCommandDefinition(
                 command_id="core.secrets.rotate",
                 path_segments=["core", "secrets", "rotate"],
                 description="Rotate one platform secret without exposing the raw value.",
@@ -355,7 +483,7 @@ def _core_command_specs(
             CliCommandDefinition(
                 command_id="core.recovery.restart",
                 path_segments=["core", "recovery", "restart"],
-                description="Plan one runtime restart recovery intent.",
+                description="Execute one runtime restart recovery action when allowed.",
                 argument_schema={"type": "object"},
                 owner_kind="core",
                 owner_id="recovery",
@@ -380,6 +508,21 @@ def _core_command_specs(
                 entrypoint_path=None,
             ),
             _recovery_failed_start_handler,
+        ),
+        (
+            CliCommandDefinition(
+                command_id="core.recovery.health",
+                path_segments=["core", "recovery", "health"],
+                description="Run one recovery health probe on demand.",
+                argument_schema={"type": "object"},
+                owner_kind="core",
+                owner_id="recovery",
+                workspace_id=None,
+                exposure_scope="core_global",
+                invocation_policy=CliInvocationPolicy(True, False, False, False),
+                entrypoint_path=None,
+            ),
+            _recovery_health_handler,
         ),
     ]
 
@@ -459,6 +602,8 @@ def build_core_cli_registry(
     runtime_store: RuntimeStore | None = None,
     secret_store: SecretStore | None = None,
     recovery_store: RecoveryStore | None = None,
+    provider_registry: ProviderRegistry | None = None,
+    observability_store=None,
     workspace_id: str | None = None,
     start_path: Path | None = None,
 ) -> CliCommandRegistry:
@@ -470,6 +615,8 @@ def build_core_cli_registry(
         runtime_store=runtime_store,
         secret_store=secret_store,
         recovery_store=recovery_store,
+        provider_registry=provider_registry,
+        observability_store=observability_store,
     ):
         registry.register_command(definition, handler)
     if app_store is not None and workspace_id is not None:
@@ -486,6 +633,8 @@ def list_core_cli_commands(
     runtime_store: RuntimeStore | None = None,
     secret_store: SecretStore | None = None,
     recovery_store: RecoveryStore | None = None,
+    provider_registry: ProviderRegistry | None = None,
+    observability_store=None,
     workspace_id: str | None = None,
     start_path: Path | None = None,
 ) -> list[CliCommandDefinition]:
@@ -497,6 +646,8 @@ def list_core_cli_commands(
         runtime_store=runtime_store,
         secret_store=secret_store,
         recovery_store=recovery_store,
+        provider_registry=provider_registry,
+        observability_store=observability_store,
         workspace_id=workspace_id,
         start_path=start_path,
     ).list_commands()
@@ -513,6 +664,8 @@ def run_core_cli_command(
     runtime_store: RuntimeStore | None = None,
     secret_store: SecretStore | None = None,
     recovery_store: RecoveryStore | None = None,
+    provider_registry: ProviderRegistry | None = None,
+    observability_store=None,
     workspace_id: str | None = None,
     start_path: Path | None = None,
 ) -> dict[str, Any]:
@@ -524,6 +677,8 @@ def run_core_cli_command(
         runtime_store=runtime_store,
         secret_store=secret_store,
         recovery_store=recovery_store,
+        provider_registry=provider_registry,
+        observability_store=observability_store,
         workspace_id=workspace_id,
         start_path=start_path,
     )

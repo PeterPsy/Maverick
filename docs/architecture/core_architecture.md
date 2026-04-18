@@ -731,8 +731,9 @@ The first v3 implementation should therefore support:
 - platform-owned secret records and aliases
 - workspace-scoped or provider-scoped secret bindings
 - controlled resolution for runtime use
+- ephemeral secret delivery into provider launch paths under platform authority
 - operator inspection of metadata without exposing raw values
-- operator-facing CLI and policy-gated MCP hooks for inspection, rotation, disable, and revoke operations without ever returning raw secret values
+- operator-facing CLI and policy-gated MCP hooks for create, inspection, rotation, disable, and revoke operations without ever returning raw secret values
 
 #### Recommended first file layout
 
@@ -800,6 +801,8 @@ The first v3 implementation should also expose recovery through controlled CLI a
 
 - inspect recovery state
 - record failed-start diagnoses
+- execute runtime restart through the runtime lifecycle when the platform can reach the runtime store
+- run on-demand runtime, provider, and app health probes
 - plan restart or repair-first recovery intents
 
 without relying on app-owned surfaces or on direct access to the primary backend runtime internals.
@@ -851,6 +854,14 @@ The observability layer should keep these concerns distinct:
 - structured platform and runtime events
 - audit records for operator-relevant control-plane actions
 - metrics suitable for health and supportability workflows
+
+The first v3 implementation should wire audit and structured event emission into the real core flows, especially:
+
+- app install, enable, disable, uninstall, and reinstall
+- provider binding, selection, and launch-spec construction
+- secret create, rotate, disable, and revoke surfaces
+- runtime session creation and lifecycle transitions
+- recovery intents and health probes
 
 Observability data must be attributed consistently across planes, for example with:
 

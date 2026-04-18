@@ -46,6 +46,7 @@ from core.apps.lifecycle import (
     load_contract_from_workspace_project,
     run_reactivation_hooks,
 )
+from core.observability.service import record_platform_audit, record_platform_event
 
 
 def _timestamp(now: datetime | None = None) -> str:
@@ -178,6 +179,7 @@ def install_external_app(
     enabled: bool = True,
     now: datetime | None = None,
     start_path: Path | None = None,
+    observability_store=None,
 ) -> WorkspaceAppBindingRecord:
     """Install one installation-level app source into a workspace."""
     source = store.get_app_source(source_id)
@@ -195,7 +197,29 @@ def install_external_app(
         data_root=str(data_root),
         now=now,
     )
-    return store.save_workspace_app_binding(binding)
+    saved = store.save_workspace_app_binding(binding)
+    if observability_store is not None:
+        payload = {"workspace_id": workspace_id, "app_id": source.app_id, "source_id": source.source_id, "status": saved.status}
+        record_platform_audit(
+            observability_store,
+            action="app.install.external",
+            status="succeeded",
+            source_domain="apps",
+            detail=f"Installed external app `{source.app_id}` into workspace `{workspace_id}`.",
+            workspace_id=workspace_id,
+            app_id=source.app_id,
+            payload=payload,
+        )
+        record_platform_event(
+            observability_store,
+            event_type="app.installed",
+            event_plane="workspace",
+            source_domain="apps",
+            workspace_id=workspace_id,
+            app_id=source.app_id,
+            payload=payload,
+        )
+    return saved
 
 
 def install_workspace_local_app(
@@ -206,6 +230,7 @@ def install_workspace_local_app(
     enabled: bool = True,
     now: datetime | None = None,
     start_path: Path | None = None,
+    observability_store=None,
 ) -> WorkspaceAppBindingRecord:
     """Install one workspace-local app project into its owning workspace."""
     project = store.get_workspace_local_app_project(workspace_id=workspace_id, app_id=app_id)
@@ -227,7 +252,29 @@ def install_workspace_local_app(
         data_root=str(data_root),
         now=now,
     )
-    return store.save_workspace_app_binding(binding)
+    saved = store.save_workspace_app_binding(binding)
+    if observability_store is not None:
+        payload = {"workspace_id": workspace_id, "app_id": project.app_id, "project_id": project.project_id, "status": saved.status}
+        record_platform_audit(
+            observability_store,
+            action="app.install.workspace_local",
+            status="succeeded",
+            source_domain="apps",
+            detail=f"Installed workspace-local app `{project.app_id}` in workspace `{workspace_id}`.",
+            workspace_id=workspace_id,
+            app_id=project.app_id,
+            payload=payload,
+        )
+        record_platform_event(
+            observability_store,
+            event_type="app.installed",
+            event_plane="workspace",
+            source_domain="apps",
+            workspace_id=workspace_id,
+            app_id=project.app_id,
+            payload=payload,
+        )
+    return saved
 
 
 def _transition_allowed(current: WorkspaceAppStatus, target: WorkspaceAppStatus) -> bool:
@@ -249,24 +296,90 @@ def transition_workspace_app_status(
     app_id: str,
     target_status: WorkspaceAppStatus,
     now: datetime | None = None,
+    observability_store=None,
 ) -> WorkspaceAppBindingRecord:
     """Transition one installed workspace app binding between canonical lifecycle states."""
     binding = store.get_workspace_app_binding(workspace_id=workspace_id, app_id=app_id)
     if target_status == "enabled" and binding.status == "installed":
         updated = replace(binding, status="enabled", updated_at=_timestamp(now))
-        return store.save_workspace_app_binding(updated)
+        saved = store.save_workspace_app_binding(updated)
+        if observability_store is not None:
+            payload = {"workspace_id": workspace_id, "app_id": app_id, "from_status": binding.status, "to_status": saved.status}
+            record_platform_audit(
+                observability_store,
+                action="app.status.transition",
+                status="succeeded",
+                source_domain="apps",
+                detail=f"Transitioned app `{app_id}` to `{saved.status}`.",
+                workspace_id=workspace_id,
+                app_id=app_id,
+                payload=payload,
+            )
+            record_platform_event(
+                observability_store,
+                event_type="app.status.transitioned",
+                event_plane="workspace",
+                source_domain="apps",
+                workspace_id=workspace_id,
+                app_id=app_id,
+                payload=payload,
+            )
+        return saved
     if not _transition_allowed(binding.status, target_status):
         raise AppLifecycleError(
             f"Cannot transition workspace app `{app_id}` in `{workspace_id}` from `{binding.status}` to `{target_status}`."
         )
     updated = replace(binding, status=target_status, updated_at=_timestamp(now))
-    return store.save_workspace_app_binding(updated)
+    saved = store.save_workspace_app_binding(updated)
+    if observability_store is not None:
+        payload = {"workspace_id": workspace_id, "app_id": app_id, "from_status": binding.status, "to_status": saved.status}
+        record_platform_audit(
+            observability_store,
+            action="app.status.transition",
+            status="succeeded",
+            source_domain="apps",
+            detail=f"Transitioned app `{app_id}` to `{saved.status}`.",
+            workspace_id=workspace_id,
+            app_id=app_id,
+            payload=payload,
+        )
+        record_platform_event(
+            observability_store,
+            event_type="app.status.transitioned",
+            event_plane="workspace",
+            source_domain="apps",
+            workspace_id=workspace_id,
+            app_id=app_id,
+            payload=payload,
+        )
+    return saved
 
 
-def uninstall_workspace_app(store: AppStore, *, workspace_id: str, app_id: str) -> None:
+def uninstall_workspace_app(store: AppStore, *, workspace_id: str, app_id: str, observability_store=None) -> None:
     """Remove one workspace app binding without deleting app-owned data."""
     store.get_workspace_app_binding(workspace_id=workspace_id, app_id=app_id)
     store.delete_workspace_app_binding(workspace_id=workspace_id, app_id=app_id)
+    if observability_store is not None:
+        payload = {"workspace_id": workspace_id, "app_id": app_id}
+        record_platform_audit(
+            observability_store,
+            action="app.uninstall",
+            status="succeeded",
+            source_domain="apps",
+            detail=f"Uninstalled app `{app_id}` from workspace `{workspace_id}`.",
+            workspace_id=workspace_id,
+            app_id=app_id,
+            payload=payload,
+        )
+        record_platform_event(
+            observability_store,
+            event_type="app.uninstalled",
+            event_plane="workspace",
+            source_domain="apps",
+            workspace_id=workspace_id,
+            app_id=app_id,
+            payload=payload,
+        )
 
 
 def purge_workspace_app_data(*, workspace_id: str, app_id: str, start_path: Path | None = None) -> Path:
@@ -287,6 +400,7 @@ def reinstall_workspace_app(
     validate_existing_data: bool = True,
     repair_existing_data: bool = False,
     migration_required: bool = False,
+    observability_store=None,
 ) -> WorkspaceAppReinstallResult:
     """Reinstall one workspace app and reattach to existing app-owned data when available."""
     data_root = workspace_app_data_root(workspace_id=workspace_id, app_id=app_id, start_path=start_path)
@@ -323,10 +437,39 @@ def reinstall_workspace_app(
         now=now,
     )
     binding = store.save_workspace_app_binding(binding)
-    return WorkspaceAppReinstallResult(
+    result = WorkspaceAppReinstallResult(
         binding=binding,
         reused_existing_data_root=reused_existing_data_root,
         validation_requested=validate_existing_data,
         repair_requested=repair_existing_data,
         migration_requested=migration_required,
     )
+    if observability_store is not None:
+        payload = {
+            "workspace_id": workspace_id,
+            "app_id": persisted_app_id,
+            "reused_existing_data_root": reused_existing_data_root,
+            "validation_requested": validate_existing_data,
+            "repair_requested": repair_existing_data,
+            "migration_requested": migration_required,
+        }
+        record_platform_audit(
+            observability_store,
+            action="app.reinstall",
+            status="succeeded",
+            source_domain="apps",
+            detail=f"Reinstalled app `{persisted_app_id}` in workspace `{workspace_id}`.",
+            workspace_id=workspace_id,
+            app_id=persisted_app_id,
+            payload=payload,
+        )
+        record_platform_event(
+            observability_store,
+            event_type="app.reinstalled",
+            event_plane="workspace",
+            source_domain="apps",
+            workspace_id=workspace_id,
+            app_id=persisted_app_id,
+            payload=payload,
+        )
+    return result

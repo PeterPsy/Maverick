@@ -22,7 +22,14 @@ class RuntimeBackendAdapter(Protocol):
     def validate_backend(self) -> None:
         ...
 
-    def build_launch_spec(self, session: RuntimeSessionRecord) -> RuntimeBackendLaunchSpec:
+    def build_launch_spec(
+        self,
+        session: RuntimeSessionRecord,
+        *,
+        secret_env: dict[str, str] | None = None,
+        credential_binding_id: str | None = None,
+        resolved_secret_refs: list[str] | None = None,
+    ) -> RuntimeBackendLaunchSpec:
         ...
 
     def prepare_runtime_skills(

@@ -61,6 +61,7 @@ class SecretResolutionContext:
     runtime_session_id: str | None = None
     operator_request: bool = False
     allow_unbound_secret_refs: bool = False
+    platform_delivery: bool = False
 
 
 @dataclass(frozen=True)

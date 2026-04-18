@@ -250,30 +250,34 @@ without carrying forward legacy structure or backward-compatibility constraints 
 
 ## Phase 9: MCP, CLI, and Skills Surfaces
 
-- [ ] Implement core MCP host surface
-  - [ ] separate core tool registry from HTTP, stdio, or other transport wiring
-  - [ ] expose a deterministic tool discovery manifest or index
-  - [ ] keep MCP host bootstrap out of monolithic application entrypoints
-- [ ] Implement core CLI surface
-  - [ ] separate command registration from invocation policy and transport concerns
-  - [ ] define operator-facing commands separately from agent-safe commands
-  - [ ] support scriptable and batch-safe platform operations
-- [ ] Implement core skills loading model
-  - [ ] load and index core-owned skills as instructional assets
-  - [ ] allow controlled runtime materialization or synchronization of skill content when needed
-  - [ ] keep skill loading separate from runtime session lifecycle
-- [ ] Define which core operations are exposed:
-  - [ ] MCP only
-  - [ ] CLI only
-  - [ ] both
-  - [ ] document why each operation belongs to that surface
-- [ ] Clarify CLI invocation policy for sandboxed workspace agents
-  - [ ] define a controlled allowlist or policy gate for sandbox-safe commands
-  - [ ] ensure sandboxed agents cannot invoke operator-only CLI paths
-  - [ ] keep workspace authority enforcement outside raw CLI argument trust
-- [ ] Ensure `skills/` is treated as instructional, not as executable runtime boundary
-  - [ ] keep runtime and policy enforcement anchored in MCP, CLI, and backend services
-  - [ ] ensure synchronized skill artifacts do not become an implicit capability surface
+- [x] Implement core MCP host surface
+  - [x] separate core tool registry from HTTP, stdio, or other transport wiring
+  - [x] expose a deterministic tool discovery manifest or index
+  - [x] keep MCP host bootstrap out of monolithic application entrypoints
+- [x] Implement core CLI surface
+  - [x] separate command registration from invocation policy and transport concerns
+  - [x] define operator-facing commands separately from agent-safe commands
+  - [x] support scriptable and batch-safe platform operations
+- [x] Implement core skills loading model
+  - [x] load and index core-owned skills as instructional assets
+  - [x] allow controlled runtime materialization or synchronization of skill content when needed
+  - [x] keep skill loading separate from runtime session lifecycle
+  - [x] delegate runtime skill installation strategy to the selected provider adapter
+- [x] Define which core operations are exposed:
+  - [x] MCP only
+  - [x] CLI only
+  - [x] both
+  - [x] document why each operation belongs to that surface
+- [x] Clarify CLI invocation policy for sandboxed workspace agents
+  - [x] define a controlled allowlist or policy gate for sandbox-safe commands
+  - [x] ensure sandboxed agents cannot invoke operator-only CLI paths
+  - [x] keep workspace authority enforcement outside raw CLI argument trust
+- [x] Ensure `skills/` is treated as instructional, not as executable runtime boundary
+  - [x] keep runtime and policy enforcement anchored in MCP, CLI, and backend services
+  - [x] ensure synchronized skill artifacts do not become an implicit capability surface
+- [x] Ensure the core host framework can expose:
+  - [x] core-owned MCP, CLI, and skills surfaces
+  - [x] app-contributed MCP, CLI, and skills surfaces for enabled workspace apps
 
 ## Phase 10: Secrets and Recovery
 

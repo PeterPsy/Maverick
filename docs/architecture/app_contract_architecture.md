@@ -479,6 +479,12 @@ An app may expose capabilities through more than one official surface:
 
 Only `mcp/` and `cli/` are executable surfaces.
 
+The contract declares which surfaces the app exposes, but the platform still decides how they are hosted:
+
+- MCP and CLI are mounted through core-managed platform hosts
+- skills are cataloged by the core as instructional assets
+- provider-specific runtime installation of skill assets is handled by the selected provider adapter
+
 ## Core Boundary Rule
 
 Apps must not directly modify:

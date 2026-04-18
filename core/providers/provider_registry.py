@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 from typing import Protocol
 
 from core.providers.errors import ProviderNotFoundError
 from core.providers.models import ProviderDefinition, RuntimeBackendLaunchSpec
 from core.runtime.runtime_session import RuntimeSessionRecord
+
+if TYPE_CHECKING:
+    from core.skills.models import SkillDefinition, SkillMaterialization
 
 
 class RuntimeBackendAdapter(Protocol):
@@ -19,6 +23,13 @@ class RuntimeBackendAdapter(Protocol):
         ...
 
     def build_launch_spec(self, session: RuntimeSessionRecord) -> RuntimeBackendLaunchSpec:
+        ...
+
+    def prepare_runtime_skills(
+        self,
+        session: RuntimeSessionRecord,
+        skills: list["SkillDefinition"],
+    ) -> list["SkillMaterialization"]:
         ...
 
 
@@ -56,4 +67,3 @@ class ProviderRegistry:
         if provider_id not in self._runtime_adapters:
             raise ProviderNotFoundError(f"Runtime backend adapter `{provider_id}` is not registered.")
         return self._runtime_adapters[provider_id]
-

@@ -6,10 +6,14 @@ from datetime import UTC, datetime
 import os
 from pathlib import Path
 import shutil
+from typing import TYPE_CHECKING
 
 from core.providers.errors import ProviderLaunchError
 from core.providers.models import ProviderCapabilitySet, ProviderDefinition, RuntimeBackendLaunchSpec
 from core.runtime.runtime_session import RuntimeSessionRecord
+
+if TYPE_CHECKING:
+    from core.skills.models import SkillDefinition, SkillMaterialization
 
 
 def utcnow() -> datetime:
@@ -70,8 +74,7 @@ class CodexProviderAdapter:
         """Build one runtime launch spec for the local Codex backend."""
         self.validate_backend()
         workdir = Path(session.workdir)
-        runtime_root = Path(session.runtime_root)
-        runtime_home = runtime_root / "codex-home"
+        runtime_home = self._runtime_home(session)
         runtime_home.mkdir(parents=True, exist_ok=True)
         env = self._build_subprocess_env(workdir=workdir, runtime_home=runtime_home, execution_mode=session.effective_mode)
         return RuntimeBackendLaunchSpec(
@@ -82,6 +85,38 @@ class CodexProviderAdapter:
             execution_mode=session.effective_mode,
             writable_roots=self._writable_roots(workdir=workdir, execution_mode=session.effective_mode),
         )
+
+    def prepare_runtime_skills(
+        self,
+        session: RuntimeSessionRecord,
+        skills: list["SkillDefinition"],
+    ) -> list["SkillMaterialization"]:
+        """Install skills into the Codex runtime home using provider-specific layout rules."""
+        from core.skills.models import SkillMaterialization
+
+        runtime_home = self._runtime_home(session)
+        skills_root = runtime_home / "skills"
+        skills_root.mkdir(parents=True, exist_ok=True)
+        materializations: list[SkillMaterialization] = []
+        for skill in skills:
+            source_root = Path(skill.source_root).resolve()
+            target_root = skills_root / skill.skill_id
+            if target_root.exists() or target_root.is_symlink():
+                if target_root.is_symlink() or target_root.is_file():
+                    target_root.unlink()
+                else:
+                    shutil.rmtree(target_root)
+            target_root.symlink_to(source_root, target_is_directory=True)
+            materializations.append(
+                SkillMaterialization(
+                    provider_id="codex",
+                    skill_id=skill.skill_id,
+                    source_root=str(source_root),
+                    target_root=str(target_root),
+                    strategy="symlink",
+                )
+            )
+        return materializations
 
     def _build_command(self, *, execution_mode: str) -> list[str]:
         command = [self.codex_command]
@@ -134,9 +169,11 @@ class CodexProviderAdapter:
             env["TEMP"] = str(sandbox_tmpdir)
         return env
 
+    def _runtime_home(self, session: RuntimeSessionRecord) -> Path:
+        return Path(session.runtime_root) / "codex-home"
+
     def _writable_roots(self, *, workdir: Path, execution_mode: str) -> list[str]:
         if execution_mode == "full-access":
             return ["/"]
         sandbox_tmpdir = workdir / ".tmp" / "codex-sandbox"
         return [str(workdir), str(sandbox_tmpdir)]
-

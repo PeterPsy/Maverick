@@ -256,6 +256,10 @@ If skill content is synchronized into a runtime home or other runtime-adjacent l
 
 The executable surfaces remain MCP, CLI, and backend-controlled service interfaces.
 
+The platform host should be able to expose app-contributed MCP, CLI, and skills surfaces once the app is installed and enabled for that workspace.
+
+The app declares those surfaces through its contract and source layout, but the core remains responsible for validating them, mounting them, and enforcing workspace boundaries.
+
 Each app should own its own namespace under:
 
 ```text
@@ -1404,6 +1408,8 @@ For sandboxed workspace agents, controlled CLI entrypoints must be explicitly al
 The platform must not treat arbitrary CLI argument passing as sufficient proof of workspace authority.
 
 Workspace authority has to be derived from trusted runtime ownership and policy resolution, then enforced by the command surface.
+
+When skill assets are synchronized into provider-specific runtime homes, that synchronization must still happen through platform-controlled provider adapters rather than through direct app-managed runtime mutation.
 
 The same rule applies to persisted content produced through global app capabilities:
 

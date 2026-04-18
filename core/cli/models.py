@@ -1,0 +1,49 @@
+"""Models for the platform-managed CLI surface."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Literal
+
+from core.execution_policy.models import ExecutionMode
+
+
+CliOwnerKind = Literal["core", "app"]
+CliExposureScope = Literal["core_global", "workspace_enabled_app"]
+CliCallerKind = Literal["operator", "sandbox_agent", "full_access_agent"]
+
+
+@dataclass(frozen=True)
+class CliInvocationPolicy:
+    """Policy gates applied before one CLI command may run."""
+
+    operator_only: bool
+    sandbox_agent_allowed: bool
+    requires_workspace_context: bool
+    requires_full_access: bool
+
+
+@dataclass(frozen=True)
+class CliCommandDefinition:
+    """Describe one command surfaced by the Maverick platform."""
+
+    command_id: str
+    path_segments: list[str]
+    description: str
+    argument_schema: dict[str, Any]
+    owner_kind: CliOwnerKind
+    owner_id: str
+    workspace_id: str | None
+    exposure_scope: CliExposureScope
+    invocation_policy: CliInvocationPolicy
+    entrypoint_path: str | None
+
+
+@dataclass(frozen=True)
+class CliInvocationContext:
+    """Trusted invocation context resolved by the platform before CLI execution."""
+
+    caller_kind: CliCallerKind
+    workspace_id: str | None
+    agent_id: str | None
+    effective_mode: ExecutionMode | None

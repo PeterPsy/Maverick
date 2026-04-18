@@ -287,6 +287,8 @@ These are not separate products.
 
 `skills/` is a non-executable instructional layer attached to those surfaces.
 
+The same platform host framework should also be able to expose app-contributed MCP, CLI, and skill surfaces once those apps are installed and enabled.
+
 ## What The Core Is Not
 
 The core should not own:
@@ -746,6 +748,13 @@ The registry of available tools, their schemas, and their discovery metadata sho
 
 This avoids rebuilding the v2 pattern where too much MCP bootstrap logic accumulated inside the main application startup path.
 
+The core MCP layer is a platform-managed host for both:
+
+- core-owned tools
+- app-contributed tools from enabled workspace apps
+
+The app contract may declare MCP capability surfaces, but the core still owns whether and how those surfaces are mounted.
+
 ### `cli/`
 
 Owns:
@@ -769,6 +778,13 @@ CLI command registration should stay separate from invocation policy.
 
 Whether a sandboxed agent may invoke a command is a core policy decision, not something inferred only from raw command-line arguments.
 
+The same CLI framework should be able to host both:
+
+- core-owned commands
+- app-contributed commands for enabled workspace apps
+
+The core remains responsible for command registration, workspace authority checks, and exposure policy.
+
 ### `skills/`
 
 Owns:
@@ -786,6 +802,15 @@ Core skills may be loaded, indexed, or synchronized into runtime-adjacent locati
 They do not become executable capability surfaces merely because they are materialized for runtime use.
 
 Runtime authority and policy enforcement must continue to live in MCP, CLI, provider, runtime, and backend service layers rather than in `skills/`.
+
+The skill catalog is platform-managed and may include:
+
+- core-owned skills
+- app-contributed skills from enabled workspace apps
+
+How those skill assets are installed into a runtime home is provider-specific.
+
+That installation strategy belongs to the selected provider adapter, because different backends such as Codex, Claude Code, or Gemini CLI may require different runtime-home layouts or sync behavior.
 
 ## Naming Conventions
 

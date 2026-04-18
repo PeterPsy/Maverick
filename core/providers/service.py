@@ -11,6 +11,7 @@ from core.providers.provider_registry import ProviderRegistry
 from core.providers.provider_selection import ProviderSelectionService
 from core.providers.store import ProviderStore
 from core.runtime.runtime_session import RuntimeSessionRecord
+from core.skills.models import SkillDefinition, SkillMaterialization
 
 
 def utcnow() -> datetime:
@@ -108,6 +109,26 @@ def build_runtime_backend_launch_spec(
     return adapter.build_launch_spec(session)
 
 
+def prepare_runtime_skills(
+    store: ProviderStore,
+    *,
+    session: RuntimeSessionRecord,
+    skills: list[SkillDefinition],
+    registry: ProviderRegistry | None = None,
+    codex_command: str = "codex",
+) -> list[SkillMaterialization]:
+    """Prepare provider-specific runtime skill installation for one runtime session."""
+    active_registry = registry or builtin_provider_registry(codex_command=codex_command)
+    definition, _selection = resolve_provider_for_runtime_session(
+        store,
+        session=session,
+        registry=active_registry,
+        codex_command=codex_command,
+    )
+    adapter = active_registry.get_runtime_adapter(definition.provider_id)
+    return adapter.prepare_runtime_skills(session, skills)
+
+
 __all__ = [
     "bind_provider_credential",
     "builtin_provider_registry",
@@ -115,6 +136,7 @@ __all__ = [
     "configure_workspace_provider",
     "disable_provider_binding",
     "list_available_providers",
+    "prepare_runtime_skills",
     "register_builtin_providers",
     "resolve_provider_for_runtime_session",
     "utcnow",

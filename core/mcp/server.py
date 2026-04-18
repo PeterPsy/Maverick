@@ -5,7 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from core.mcp.models import McpDiscoveryManifest
+from core.mcp.models import McpDiscoveryManifest, McpInvocationContext
+from core.mcp.runner import McpRunner
 from core.mcp.tool_registry import McpToolRegistry
 
 
@@ -22,9 +23,9 @@ class McpHostSurface:
     manifest: McpDiscoveryManifest
     registry: McpToolRegistry
 
-    def call_tool(self, tool_name: str, arguments: dict | None = None) -> dict:
+    def call_tool(self, tool_name: str, arguments: dict | None = None, *, context: McpInvocationContext) -> dict:
         """Invoke one visible MCP tool through the platform-managed host surface."""
-        return self.registry.call_tool(tool_name, arguments or {})
+        return McpRunner(self.registry).call_tool(tool_name=tool_name, arguments=arguments or {}, context=context)
 
 
 def build_mcp_host_surface(

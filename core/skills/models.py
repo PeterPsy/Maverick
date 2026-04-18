@@ -16,6 +16,7 @@ class SkillDefinition:
     """Describe one skill asset visible to the platform."""
 
     skill_id: str
+    local_skill_id: str
     name: str
     description: str
     source_root: str

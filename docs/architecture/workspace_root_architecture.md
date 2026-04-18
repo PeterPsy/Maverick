@@ -275,6 +275,11 @@ The platform host should be able to expose app-contributed MCP, CLI, and skills 
 
 The app declares those surfaces through its contract and source layout, but the core remains responsible for validating them, mounting them, and enforcing workspace boundaries.
 
+That includes:
+
+- enforcing invocation policy for shared MCP and CLI hosts
+- applying platform-level namespacing where needed to avoid collisions between app-owned and core-owned surfaces
+
 Each app should own its own namespace under:
 
 ```text

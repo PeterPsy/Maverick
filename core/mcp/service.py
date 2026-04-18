@@ -7,10 +7,11 @@ from typing import Any
 
 from core.apps.surfaces import enabled_workspace_app_bindings, resolve_workspace_app_surface
 from core.apps.store import AppStore
-from core.providers.store import ProviderStore
-from core.mcp.models import McpToolDefinition
+from core.mcp.models import McpInvocationContext, McpInvocationPolicy, McpToolDefinition
+from core.mcp.runner import McpRunner
 from core.mcp.server import McpHostSurface, build_mcp_host_surface
 from core.mcp.tool_registry import McpToolRegistry
+from core.providers.store import ProviderStore
 from core.shared.entrypoints import run_json_entrypoint
 from core.workspaces.store import WorkspaceStore
 
@@ -20,7 +21,7 @@ def _core_tool_specs(
     workspace_store: WorkspaceStore | None = None,
     provider_store: ProviderStore | None = None,
 ) -> list[tuple[McpToolDefinition, Any]]:
-    def _workspace_list_handler(arguments: dict[str, Any]) -> dict[str, Any]:
+    def _workspace_list_handler(arguments: dict[str, Any], context: McpInvocationContext) -> dict[str, Any]:
         if workspace_store is None:
             return {"items": []}
         return {
@@ -34,10 +35,10 @@ def _core_tool_specs(
             ]
         }
 
-    def _runtime_status_handler(arguments: dict[str, Any]) -> dict[str, Any]:
+    def _runtime_status_handler(arguments: dict[str, Any], context: McpInvocationContext) -> dict[str, Any]:
         return {"status": "runtime-surface-available", "workspace_id": arguments.get("workspace_id")}
 
-    def _providers_list_handler(arguments: dict[str, Any]) -> dict[str, Any]:
+    def _providers_list_handler(arguments: dict[str, Any], context: McpInvocationContext) -> dict[str, Any]:
         if provider_store is None:
             return {"items": []}
         return {
@@ -63,7 +64,12 @@ def _core_tool_specs(
             owner_id="workspaces",
             workspace_id=None,
             exposure_scope="core_global",
-            workspace_safe=False,
+            invocation_policy=McpInvocationPolicy(
+                operator_only=True,
+                sandbox_agent_allowed=False,
+                requires_workspace_context=False,
+                requires_full_access=False,
+            ),
             entrypoint_path=None,
         ),
             _workspace_list_handler,
@@ -78,7 +84,12 @@ def _core_tool_specs(
             owner_id="runtime",
             workspace_id=None,
             exposure_scope="core_global",
-            workspace_safe=True,
+            invocation_policy=McpInvocationPolicy(
+                operator_only=False,
+                sandbox_agent_allowed=True,
+                requires_workspace_context=True,
+                requires_full_access=False,
+            ),
             entrypoint_path=None,
         ),
             _runtime_status_handler,
@@ -93,7 +104,12 @@ def _core_tool_specs(
             owner_id="providers",
             workspace_id=None,
             exposure_scope="core_global",
-            workspace_safe=False,
+            invocation_policy=McpInvocationPolicy(
+                operator_only=True,
+                sandbox_agent_allowed=False,
+                requires_workspace_context=False,
+                requires_full_access=False,
+            ),
             entrypoint_path=None,
         ),
             _providers_list_handler,
@@ -118,8 +134,10 @@ def _workspace_app_tool_definitions(
             )
         entrypoint_path = str((source_root / parsed.contract.entrypoints.mcp).resolve())
         for tool_name in parsed.contract.capabilities.mcp_tools:
+            hosted_tool_name = f"app.{parsed.app_id}.{tool_name}"
             def _handler(
                 arguments: dict[str, Any],
+                context: McpInvocationContext,
                 *,
                 _entrypoint_path: str = entrypoint_path,
                 _tool_name: str = tool_name,
@@ -142,7 +160,7 @@ def _workspace_app_tool_definitions(
             definitions.append(
                 (
                     McpToolDefinition(
-                        tool_name=tool_name,
+                        tool_name=hosted_tool_name,
                         description=f"App MCP tool exposed by `{parsed.app_id}`.",
                         input_schema={"type": "object"},
                         output_schema={"type": "object"},
@@ -150,10 +168,15 @@ def _workspace_app_tool_definitions(
                         owner_id=parsed.app_id,
                         workspace_id=workspace_id,
                         exposure_scope="workspace_enabled_app",
-                        workspace_safe=True,
+                        invocation_policy=McpInvocationPolicy(
+                            operator_only=False,
+                            sandbox_agent_allowed=True,
+                            requires_workspace_context=True,
+                            requires_full_access=False,
+                        ),
                         entrypoint_path=entrypoint_path,
                     ),
-                    _handler,
+                    lambda arguments, context, _handler=_handler: _handler(arguments, context),
                 )
             )
     return definitions
@@ -213,3 +236,25 @@ def list_mcp_tools(
         workspace_id=workspace_id,
         start_path=start_path,
     ).list_tools()
+
+
+def call_mcp_tool(
+    *,
+    tool_name: str,
+    context: McpInvocationContext,
+    arguments: dict[str, Any] | None = None,
+    app_store: AppStore | None = None,
+    workspace_store: WorkspaceStore | None = None,
+    provider_store: ProviderStore | None = None,
+    workspace_id: str | None = None,
+    start_path: Path | None = None,
+) -> dict[str, Any]:
+    """Invoke one visible MCP tool under a trusted invocation context."""
+    registry = build_core_mcp_registry(
+        app_store=app_store,
+        workspace_store=workspace_store,
+        provider_store=provider_store,
+        workspace_id=workspace_id,
+        start_path=start_path,
+    )
+    return McpRunner(registry).call_tool(tool_name=tool_name, arguments=arguments or {}, context=context)

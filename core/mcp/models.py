@@ -5,9 +5,32 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from core.execution_policy.models import ExecutionMode
+
 
 McpOwnerKind = Literal["core", "app"]
 McpExposureScope = Literal["core_global", "workspace_enabled_app"]
+McpCallerKind = Literal["operator", "sandbox_agent", "full_access_agent"]
+
+
+@dataclass(frozen=True)
+class McpInvocationPolicy:
+    """Policy gates applied before one MCP tool may run."""
+
+    operator_only: bool
+    sandbox_agent_allowed: bool
+    requires_workspace_context: bool
+    requires_full_access: bool
+
+
+@dataclass(frozen=True)
+class McpInvocationContext:
+    """Trusted invocation context resolved by the platform before MCP execution."""
+
+    caller_kind: McpCallerKind
+    workspace_id: str | None
+    agent_id: str | None
+    effective_mode: ExecutionMode | None
 
 
 @dataclass(frozen=True)
@@ -22,7 +45,7 @@ class McpToolDefinition:
     owner_id: str
     workspace_id: str | None
     exposure_scope: McpExposureScope
-    workspace_safe: bool
+    invocation_policy: McpInvocationPolicy
     entrypoint_path: str | None
 
 

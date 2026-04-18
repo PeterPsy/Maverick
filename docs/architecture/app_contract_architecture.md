@@ -306,7 +306,7 @@ It should instead declare where its instructional assets live.
 For the first local v3 implementation, executable app entrypoints use a deterministic subprocess convention:
 
 - the core resolves the declared entrypoint path inside the app root
-- the core invokes that entrypoint as a local executable script
+- the core invokes that entrypoint as a local executable script with the current core interpreter
 - the core passes a JSON payload on standard input
 - the entrypoint returns a JSON object on standard output
 
@@ -493,6 +493,8 @@ The contract declares which surfaces the app exposes, but the platform still dec
 - MCP and CLI are mounted through core-managed platform hosts
 - skills are cataloged by the core as instructional assets
 - provider-specific runtime installation of skill assets is handled by the selected provider adapter
+
+When app-owned MCP tools and skills are surfaced through the platform, the host may apply namespacing to avoid collisions with core-owned assets or assets from other apps.
 
 ## Core Boundary Rule
 

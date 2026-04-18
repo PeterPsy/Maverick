@@ -26,7 +26,8 @@ def list_core_skills(*, start_path: Path | None = None) -> list[SkillDefinition]
     for skill_root in _iter_skill_roots(paths.local_skills_root):
         skills.append(
             SkillDefinition(
-                skill_id=skill_root.name,
+                skill_id=f"core.{skill_root.name}",
+                local_skill_id=skill_root.name,
                 name=skill_root.name,
                 description=f"Core skill `{skill_root.name}`.",
                 source_root=str(skill_root.resolve()),
@@ -70,7 +71,8 @@ def list_workspace_app_skills(
                 )
             skills.append(
                 SkillDefinition(
-                    skill_id=skill_id,
+                    skill_id=f"app.{parsed.app_id}.{skill_id}",
+                    local_skill_id=skill_id,
                     name=skill_id,
                     description=f"App skill `{skill_id}` from `{parsed.app_id}`.",
                     source_root=str(resolved_root),
@@ -93,4 +95,9 @@ def list_visible_skills(
     skills = list_core_skills(start_path=start_path)
     if app_store is not None and workspace_id is not None:
         skills.extend(list_workspace_app_skills(app_store, workspace_id=workspace_id, start_path=start_path))
+    seen: set[str] = set()
+    for skill in skills:
+        if skill.skill_id in seen:
+            raise ValueError(f"Skill `{skill.skill_id}` is registered more than once.")
+        seen.add(skill.skill_id)
     return sorted(skills, key=lambda item: (item.owner_kind, item.skill_id))

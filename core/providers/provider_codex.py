@@ -120,12 +120,13 @@ class CodexProviderAdapter:
         materializations: list[SkillMaterialization] = []
         for skill in skills:
             source_root = Path(skill.source_root).resolve()
-            target_root = skills_root / skill.skill_id
+            target_root = skills_root.joinpath(*skill.skill_id.split("."))
             if target_root.exists() or target_root.is_symlink():
                 if target_root.is_symlink() or target_root.is_file():
                     target_root.unlink()
                 else:
                     shutil.rmtree(target_root)
+            target_root.parent.mkdir(parents=True, exist_ok=True)
             target_root.symlink_to(source_root, target_is_directory=True)
             materializations.append(
                 SkillMaterialization(

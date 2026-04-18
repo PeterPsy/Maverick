@@ -755,13 +755,24 @@ The core MCP layer is a platform-managed host for both:
 
 The app contract may declare MCP capability surfaces, but the core still owns whether and how those surfaces are mounted.
 
+MCP invocation policy should be enforced by the platform host in the same spirit as controlled CLI entrypoints.
+
+So a tool being visible in discovery metadata is not, by itself, sufficient authority to execute it.
+
 In the first local v3 implementation, app-owned MCP entrypoints are invoked by the platform through a deterministic subprocess contract:
 
 - the core resolves the declared entrypoint path
 - the core passes a JSON payload on standard input
 - the entrypoint returns a JSON object on standard output
+- the entrypoint runs with the same Python interpreter as the core process unless a future runtime-specific interpreter strategy is introduced
 
 This keeps mounting and policy centralized in the core while still allowing app-owned MCP logic to execute for enabled apps.
+
+App-owned MCP tools should be namespaced in the platform host, for example:
+
+- `app.<app_id>.<declared_tool_name>`
+
+This prevents collisions between app-owned tools and core-owned tools in the shared host surface.
 
 ### `cli/`
 
@@ -825,6 +836,13 @@ The skill catalog is platform-managed and may include:
 How those skill assets are installed into a runtime home is provider-specific.
 
 That installation strategy belongs to the selected provider adapter, because different backends such as Codex, Claude Code, or Gemini CLI may require different runtime-home layouts or sync behavior.
+
+Visible skill ids should be namespaced in the platform catalog, for example:
+
+- `core.<skill_id>`
+- `app.<app_id>.<skill_id>`
+
+This avoids collisions between core-owned and app-contributed skill assets.
 
 ## Naming Conventions
 

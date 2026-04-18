@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import subprocess
+import sys
 from typing import Any
 
 
@@ -17,7 +18,7 @@ def run_json_entrypoint(
 ) -> dict[str, Any]:
     """Invoke one Python entrypoint script with JSON stdin and JSON stdout."""
     process = subprocess.run(
-        ["python3", str(entrypoint_path)],
+        [sys.executable, str(entrypoint_path)],
         input=json.dumps(payload, ensure_ascii=True),
         text=True,
         capture_output=True,

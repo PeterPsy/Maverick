@@ -255,6 +255,8 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] expose a deterministic tool discovery manifest or index
   - [x] keep MCP host bootstrap out of monolithic application entrypoints
   - [x] execute app-owned MCP entrypoints through a platform-managed host
+  - [x] enforce invocation policy for MCP calls, not only for CLI
+  - [x] namespace app-owned MCP tools in the platform host to avoid collisions
 - [x] Implement core CLI surface
   - [x] separate command registration from invocation policy and transport concerns
   - [x] define operator-facing commands separately from agent-safe commands
@@ -266,6 +268,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] allow controlled runtime materialization or synchronization of skill content when needed
   - [x] keep skill loading separate from runtime session lifecycle
   - [x] delegate runtime skill installation strategy to the selected provider adapter
+  - [x] namespace visible skill ids to avoid core-app and app-app collisions
 - [x] Define which core operations are exposed:
   - [x] MCP only
   - [x] CLI only

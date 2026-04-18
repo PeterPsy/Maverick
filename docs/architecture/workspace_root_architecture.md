@@ -467,6 +467,12 @@ Provider credentials are also not app-owned workspace data.
 
 They remain under platform control even when one workspace selects which provider binding it wants to use.
 
+The current v3 implementation resolves provider selection in the core and currently ships only one concrete runtime backend adapter:
+
+- `Codex`
+
+That is an implementation starting point, not a narrowing of the architecture. The workspace/runtime boundary remains provider-agnostic.
+
 Examples of app-owned agent definition content:
 
 - common system prompt fragments

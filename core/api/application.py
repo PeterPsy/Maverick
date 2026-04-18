@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
+from core.providers.service import register_builtin_providers
+from core.providers.store import ProviderStore
 from core.shared.repository import installation_paths
 from core.workspaces.service import ensure_default_workspace, ensure_default_workspace_record
 from core.workspaces.store import WorkspaceStore
@@ -14,6 +16,7 @@ def create_application(
     *,
     start_path: Path | None = None,
     workspace_store: WorkspaceStore | None = None,
+    provider_store: ProviderStore | None = None,
     now: datetime | None = None,
 ) -> dict[str, str]:
     """Bootstrap the installation layout and default workspace state."""
@@ -24,6 +27,8 @@ def create_application(
     ensure_default_workspace(start_path=paths.repository_root)
     if workspace_store is not None:
         ensure_default_workspace_record(workspace_store, now=now)
+    if provider_store is not None:
+        register_builtin_providers(provider_store)
     return {
         "name": "maverick-core",
         "status": "initialized",

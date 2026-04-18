@@ -690,6 +690,15 @@ Examples:
 
 The first implementation may ship only one real backend, but the core model should not collapse those categories into a single provider shape.
 
+The current v3 implementation ships:
+
+- a provider registry owned by `core/providers`
+- provider definition records separated from credential bindings and workspace selection records
+- a workspace-aware provider selection flow in the core
+- one concrete runtime backend adapter: `Codex`
+
+`Codex` is therefore the first installed backend, not the architectural identity of the provider layer.
+
 ### `execution_policy/`
 
 Owns:

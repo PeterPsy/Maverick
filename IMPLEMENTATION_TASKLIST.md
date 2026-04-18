@@ -289,13 +289,42 @@ without carrying forward legacy structure or backward-compatibility constraints 
 ## Phase 10: Secrets and Recovery
 
 - [ ] Implement platform secret store
+  - [ ] define secret metadata model separate from raw secret values
+  - [ ] define canonical secret ids, aliases, and provider-independent labels
+  - [ ] keep persistence and encryption details confined to secret-store adapters
 - [ ] Implement workspace/app secret references
+  - [ ] model app-owned secret references separately from platform-owned secret values
+  - [ ] support workspace-scoped secret bindings without making secrets app-owned data
+  - [ ] support provider credential bindings through the same secret-reference model where appropriate
 - [ ] Implement secret resolution at runtime
+  - [ ] resolve secret references through a controlled platform path
+  - [ ] deliver secrets to runtime only under explicit policy and only for the current session scope
+  - [ ] avoid persisting resolved secret values in runtime state snapshots, app data roots, or workspace files
 - [ ] Ensure secret values never land in app-owned data
+  - [ ] keep secret values out of `data/<app_id>/`
+  - [ ] keep secret values out of workspace export artifacts
+  - [ ] keep secret values out of app-owned embedded databases and cleartext config files
+- [ ] Implement secret management surfaces
+  - [ ] operator-oriented CLI hooks for create, rotate, inspect metadata, disable, and revoke
+  - [ ] MCP hooks only where the operation is intentionally safe and policy-gated
+  - [ ] ensure secret inspection surfaces never return raw secret values
 - [ ] Implement runtime recovery primitives
+  - [ ] model recoverable vs non-recoverable runtime failures explicitly
+  - [ ] define restart intents and recovery markers separately from normal runtime state
+  - [ ] keep recovery orchestration in `recovery/`, not inside runtime session models
 - [ ] Implement failed-start recovery
+  - [ ] classify failed start causes such as missing secret, invalid provider setup, contract failure, and process crash
+  - [ ] support repair-first recovery paths before restart where the architecture allows them
+  - [ ] persist operator-meaningful recovery status without leaking sensitive values
 - [ ] Implement health-check framework
+  - [ ] distinguish runtime health, provider health, and app health
+  - [ ] support scheduled or on-demand health probes without coupling them to transport routes
+  - [ ] make health results available to recovery decisions and operator inspection surfaces
 - [ ] Implement recovery-oriented CLI and MCP hooks
+  - [ ] restart runtime
+  - [ ] inspect recovery state
+  - [ ] trigger repair or recovery workflows where allowed
+  - [ ] expose recovery status without exposing secret values
 
 ## Phase 11: Observability and Logs
 
@@ -305,12 +334,29 @@ without carrying forward legacy structure or backward-compatibility constraints 
 - [ ] Implement workspace log roots:
   - `logs/workspace/`
   - `logs/apps/<app_id>/`
+- [ ] Implement platform audit surface separate from raw logs
+  - [ ] record control-plane operations such as workspace governance changes, app installation, provider binding, and secret resolution attempts
+  - [ ] keep audit records structured and queryable
+  - [ ] ensure audit entries never include raw secret values
 - [ ] Implement structured event attribution:
   - `workspace_id`
   - `app_id`
   - `run_id` or equivalent
   - event plane
+- [ ] Implement correlation and source attribution fields:
+  - `runtime_session_id`
+  - `turn_id`
+  - `provider_id` when relevant
+  - source component or domain
+- [ ] Implement metrics surface
+  - [ ] runtime metrics
+  - [ ] recovery and health metrics
+  - [ ] app lifecycle and platform operation counters where meaningful
 - [ ] Implement retention and rotation policy
+- [ ] Implement redaction rules for observability payloads
+  - [ ] avoid raw secrets in logs
+  - [ ] avoid raw provider credentials in audit trails
+  - [ ] avoid leaking sensitive runtime env values into structured event payloads
 - [ ] Ensure logs are excluded from workspace export by default
 
 ## Phase 12: File Inventory, Export, Import, Restore

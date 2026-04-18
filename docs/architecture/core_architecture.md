@@ -717,6 +717,22 @@ Owns:
 - secret resolution
 - binding logic
 
+The secrets layer should distinguish clearly between:
+
+- secret metadata and bindings
+- raw secret values
+
+The domain and service layers should work primarily with references, bindings, aliases, and resolution results, not with persistent raw secret payloads.
+
+Raw secret values must stay confined to controlled secret-store adapters and short-lived runtime delivery paths.
+
+The first v3 implementation should therefore support:
+
+- platform-owned secret records and aliases
+- workspace-scoped or provider-scoped secret bindings
+- controlled resolution for runtime use
+- operator inspection of metadata without exposing raw values
+
 ### `recovery/`
 
 Owns:
@@ -725,6 +741,21 @@ Owns:
 - failed state handling
 - repair orchestration at platform level
 
+Recovery is not just "restart the process".
+
+The platform should distinguish between:
+
+- restartable failures
+- repair-first failures
+- non-recoverable failures that require operator action
+
+So the recovery layer should coordinate:
+
+- runtime restart intents
+- failed-start diagnosis
+- health-driven recovery decisions
+- operator-facing repair and recovery workflows exposed through controlled CLI or MCP surfaces
+
 ### `observability/`
 
 Owns:
@@ -732,6 +763,28 @@ Owns:
 - structured platform events
 - runtime observability
 - platform logging and audit hooks
+
+The observability layer should keep these concerns distinct:
+
+- raw log streams
+- structured platform and runtime events
+- audit records for operator-relevant control-plane actions
+- metrics suitable for health and supportability workflows
+
+Observability data must be attributed consistently across planes, for example with:
+
+- `workspace_id`
+- `app_id`
+- `runtime_session_id`
+- `turn_id`
+- `provider_id` when relevant
+- source domain or component
+
+Observability must also enforce redaction rules so that logs, audit trails, and structured events do not leak:
+
+- raw secret values
+- raw provider credentials
+- sensitive runtime environment payloads unless explicitly allowed by operator policy
 
 ### `mcp/`
 

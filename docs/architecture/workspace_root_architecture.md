@@ -1019,6 +1019,32 @@ The platform should still provide structured event attribution so that operators
 - which app caused it
 - whether it came from core, runtime, workspace, or app scope
 
+The platform should also distinguish clearly between:
+
+- workspace or app logs
+- installation-level platform or runtime logs
+- structured audit records
+- metrics and health telemetry
+
+These surfaces may describe the same incident, but they do not have the same retention, export, or access semantics.
+
+### Redaction rule
+
+Logs and audit surfaces must not leak:
+
+- raw secret values
+- raw provider credentials
+- sensitive runtime environment snapshots unless an operator-level policy explicitly permits them
+
+Debugging support should therefore prefer:
+
+- stable identifiers
+- secret binding ids or aliases
+- runtime session ids
+- app ids and workspace ids
+
+instead of embedding sensitive payloads directly in logs.
+
 ## Resource Limits And Quotas
 
 Resource control is required to keep the platform stable once workspaces can host:
@@ -1372,6 +1398,15 @@ That means:
 - the workspace may declare which secret reference it needs
 - the runtime resolves that reference through the platform
 - the platform decides whether the secret may be used
+
+If the runtime receives a resolved secret value, that delivery should be treated as ephemeral runtime input, not as workspace-owned persisted state.
+
+So resolved values must not be written back into:
+
+- `runtime/state/`
+- `data/<app_id>/`
+- workspace-local config files
+- exported workspace artifacts
 
 ### Export and import behavior
 

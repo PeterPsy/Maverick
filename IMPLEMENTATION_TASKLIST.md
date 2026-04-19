@@ -531,7 +531,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/workspace-panel-surfaces.tsx` -> port only the concept of app panel surfaces; derive availability from v3 registry data
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/workspace-secondary-panels.tsx` -> intentionally replace with v3 registry-driven app mounting until dedicated v3 surfaces exist
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/dialog-stack.tsx` -> port only shell-local dialog orchestration needed by v3 interactions
-    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/dialogs.tsx` -> do not port wholesale; extract only Tutorial and Settings dialogs backed by existing v3 protocols
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/dialogs.tsx` -> port the Tutorial dialog UI/UX directly; keep Settings backed only by existing v3 protocols
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/auth-screen.tsx` -> port login behavior against v3 `/api/session` and `/api/auth/*`, not v2 auth endpoints
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/user-management-panel.tsx` -> intentionally not ported until `users`/identity app or API surface exists in v3
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/provider-settings-control.tsx` -> port provider visibility as v3 provider/runtime status indicators, not v2 provider settings mutation

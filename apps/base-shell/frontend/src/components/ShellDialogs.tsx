@@ -1,5 +1,6 @@
 import { PlatformSettings } from "../api";
 import { Dialog, Surface } from "../ui";
+import { TutorialDialog } from "./TutorialDialog";
 
 type ShellDialog = "settings" | "tutorial" | null;
 
@@ -17,36 +18,7 @@ export function ShellDialogs({
   const governance = settings?.workspace.governance || {};
   return (
     <>
-      <Dialog
-        description="Primi passi della shell v3: workspace, app montate e provider runtime."
-        onClose={onClose}
-        open={activeDialog === "tutorial"}
-        title="Tutorial"
-      >
-        <div className="bs-dialog-grid">
-          <Surface>
-            <p className="bs-dialog-card__eyebrow">App registry</p>
-            <h4 className="bs-dialog-card__title">Apri app dal registry.</h4>
-            <p className="bs-dialog-card__copy">
-              La griglia mostra solo app abilitate nel workspace attivo. Ogni frontend viene servito dal mount dichiarato nel contract.
-            </p>
-          </Surface>
-          <Surface>
-            <p className="bs-dialog-card__eyebrow">Workspace selector</p>
-            <h4 className="bs-dialog-card__title">Cambia tenant senza ricaricare codice.</h4>
-            <p className="bs-dialog-card__copy">
-              Il selettore laterale cambia la sessione attiva sul core. Il registry e le app si riallineano al workspace scelto.
-            </p>
-          </Surface>
-          <Surface>
-            <p className="bs-dialog-card__eyebrow">Provider</p>
-            <h4 className="bs-dialog-card__title">Codex è il backend runtime iniziale.</h4>
-            <p className="bs-dialog-card__copy">
-              Le impostazioni leggono provider e runtime attivi dalle superfici core. In seguito altri provider useranno lo stesso protocollo.
-            </p>
-          </Surface>
-        </div>
-      </Dialog>
+      <TutorialDialog onClose={onClose} open={activeDialog === "tutorial"} />
       <Dialog
         description="Stato reale letto dalle API core del workspace attivo."
         onClose={onClose}

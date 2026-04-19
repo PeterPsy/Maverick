@@ -1,4 +1,5 @@
 import type { ChatMessage, RuntimeEvent } from "../api/client";
+import type { ChatMessageAttachment } from "../api/client";
 
 function textPayload(event: RuntimeEvent): string {
   const value = event.payload.text;
@@ -12,14 +13,19 @@ export function eventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
     const turnId = event.turn_id || event.event_id;
     if (event.event_type === "runtime.turn.queued" && !seenUserTurns.has(turnId)) {
       const input = event.payload.input_text;
+      const clientMessageId = event.payload.client_message_id;
+      const attachments = Array.isArray(event.payload.attachments)
+        ? (event.payload.attachments.filter((item) => item && typeof item === "object") as ChatMessageAttachment[])
+        : [];
       if (typeof input === "string" && input.trim()) {
         seenUserTurns.add(turnId);
         messages.push({
-          id: `${turnId}:human`,
+          id: typeof clientMessageId === "string" && clientMessageId ? clientMessageId : `${turnId}:human`,
           role: "human",
           content: input,
           createdAt: event.created_at,
           status: "complete",
+          attachments,
         });
       }
     }
@@ -41,6 +47,16 @@ export function eventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
         id: `${turnId}:failed`,
         role: "system",
         content: String(error),
+        createdAt: event.created_at,
+        status: "failed",
+      });
+    }
+    if (event.event_type === "runtime.turn.cancelled") {
+      const reason = event.payload.reason || "Runtime turn cancelled.";
+      messages.push({
+        id: `${turnId}:cancelled`,
+        role: "system",
+        content: String(reason),
         createdAt: event.created_at,
         status: "failed",
       });

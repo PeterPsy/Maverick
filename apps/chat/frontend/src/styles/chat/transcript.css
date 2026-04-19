@@ -136,6 +136,90 @@
   max-width: min(24rem, 100%);
 }
 
+.chatapp-agent-block__body {
+  display: grid;
+  gap: 0.65rem;
+  overflow-wrap: anywhere;
+}
+
+.chatapp-agent-block__body > * {
+  min-width: 0;
+}
+
+.chatapp-agent-block__body p,
+.chatapp-agent-block__body ul,
+.chatapp-agent-block__body ol,
+.chatapp-agent-block__body blockquote,
+.chatapp-agent-block__body pre,
+.chatapp-agent-block__body table {
+  margin: 0;
+}
+
+.chatapp-agent-block__body ul,
+.chatapp-agent-block__body ol {
+  padding-left: 1.35rem;
+}
+
+.chatapp-agent-block__body li + li {
+  margin-top: 0.22rem;
+}
+
+.chatapp-agent-block__body a {
+  color: #ffb3cf;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+}
+
+.chatapp-agent-block__body code {
+  padding: 0.08rem 0.28rem;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffe2ed;
+  font-size: 0.9em;
+}
+
+.chatapp-agent-block__body pre {
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 0.9rem 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: #181818;
+}
+
+.chatapp-agent-block__body pre code {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #f5f5f5;
+  white-space: pre;
+}
+
+.chatapp-agent-block__body blockquote {
+  padding-left: 0.85rem;
+  border-left: 3px solid rgba(215, 36, 81, 0.48);
+  color: var(--maverick-text-soft);
+}
+
+.chatapp-agent-block__body table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.chatapp-agent-block__body th,
+.chatapp-agent-block__body td {
+  padding: 0.45rem 0.6rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: left;
+}
+
+.chatapp-agent-block__body th {
+  background: rgba(255, 255, 255, 0.06);
+}
+
 .chatapp-inter-agent-message {
   display: grid;
   gap: 0.55rem;

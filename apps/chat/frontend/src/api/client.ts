@@ -30,6 +30,12 @@ export type ChatProject = {
   updated_at: string;
 };
 
+export type ChatSidebarPayload = {
+  threads: ChatThread[];
+  projects?: ChatProject[];
+  preferences?: Record<string, unknown>;
+};
+
 export type RuntimeSession = {
   session_id: string;
   workspace_id: string;
@@ -65,6 +71,30 @@ export type ChatMessage = {
   content: string;
   createdAt: string;
   status?: "pending" | "failed" | "complete";
+  attachments?: ChatMessageAttachment[];
+};
+
+export type ChatMessageAttachment = {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  isImage: boolean;
+  objectUrl?: string | null;
+  warning?: string | null;
+  fileId?: string;
+  relativePath?: string;
+};
+
+export type UploadedWorkspaceFile = {
+  file_id: string;
+  workspace_id: string;
+  relative_path: string;
+  filename: string;
+  content_type: string;
+  size_bytes: number;
+  sha256: string;
+  created_at: string;
 };
 
 async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -106,11 +136,20 @@ export function createRuntimeSession(): Promise<RuntimeSession> {
   });
 }
 
+export function getRuntimeSession(sessionId: string): Promise<RuntimeSession> {
+  return requestJson<RuntimeSession>(`/api/runtime/sessions/${encodeURIComponent(sessionId)}`);
+}
+
 export function listRuntimeEvents(sessionId: string): Promise<{ items: RuntimeEvent[] }> {
   return requestJson<{ items: RuntimeEvent[] }>(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/events`);
 }
 
-export function sendRuntimeTurn(sessionId: string, inputText: string): Promise<{
+export function sendRuntimeTurn(
+  sessionId: string,
+  inputText: string,
+  clientMessageId?: string,
+  attachments: ChatMessageAttachment[] = [],
+): Promise<{
   session: RuntimeSession;
   turn: RuntimeTurn;
   events: RuntimeEvent[];
@@ -118,19 +157,53 @@ export function sendRuntimeTurn(sessionId: string, inputText: string): Promise<{
   return requestJson(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/turns`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ input_text: inputText }),
+    body: JSON.stringify({ input_text: inputText, client_message_id: clientMessageId, attachments, async: true }),
   });
 }
 
-export function listThreads(): Promise<{ threads: ChatThread[]; projects?: ChatProject[] }> {
-  return requestJson<{ threads: ChatThread[]; projects?: ChatProject[] }>("/api/apps/chat/backend", {
+export function uploadWorkspaceFile(payload: {
+  filename: string;
+  content_type: string;
+  content_base64: string;
+}): Promise<{ file: UploadedWorkspaceFile }> {
+  return requestJson<{ file: UploadedWorkspaceFile }>("/api/workspace-files/uploads", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function interruptRuntimeTurn(turnId: string): Promise<{
+  turn: RuntimeTurn;
+  event?: RuntimeEvent;
+  interrupted: boolean;
+}> {
+  return requestJson(`/api/runtime/turns/${encodeURIComponent(turnId)}/interrupt`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+export function listThreads(): Promise<ChatSidebarPayload> {
+  return requestJson<ChatSidebarPayload>("/api/apps/chat/backend", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action: "sidebar.snapshot" }),
   });
 }
 
-export function createThread(runtimeSessionId: string, projectId?: string | null): Promise<{ thread: ChatThread; threads: ChatThread[]; projects?: ChatProject[] }> {
+export function getThread(threadId: string): Promise<{ thread: ChatThread; threads: ChatThread[]; projects?: ChatProject[] }> {
+  return requestJson<{ thread: ChatThread; threads: ChatThread[]; projects?: ChatProject[] }>("/api/apps/chat/backend", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "threads.get", thread_id: threadId }),
+  });
+}
+
+export function createThread(
+  runtimeSessionId: string,
+  projectId?: string | null,
+): Promise<{ thread: ChatThread; threads: ChatThread[]; projects?: ChatProject[] }> {
   return requestJson<{ thread: ChatThread; threads: ChatThread[]; projects?: ChatProject[] }>("/api/apps/chat/backend", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -149,5 +222,37 @@ export function updateThread(payload: {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action: "threads.update", ...payload }),
+  });
+}
+
+export function deleteThread(threadId: string): Promise<ChatSidebarPayload> {
+  return requestJson<ChatSidebarPayload>("/api/apps/chat/backend", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "threads.delete", thread_id: threadId }),
+  });
+}
+
+export function createProject(name: string): Promise<{ project: ChatProject } & ChatSidebarPayload> {
+  return requestJson<{ project: ChatProject } & ChatSidebarPayload>("/api/apps/chat/backend", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "projects.create", name }),
+  });
+}
+
+export function updateProject(projectId: string, name: string): Promise<{ project: ChatProject } & ChatSidebarPayload> {
+  return requestJson<{ project: ChatProject } & ChatSidebarPayload>("/api/apps/chat/backend", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "projects.update", project_id: projectId, name }),
+  });
+}
+
+export function deleteProject(projectId: string): Promise<ChatSidebarPayload> {
+  return requestJson<ChatSidebarPayload>("/api/apps/chat/backend", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "projects.delete", project_id: projectId }),
   });
 }

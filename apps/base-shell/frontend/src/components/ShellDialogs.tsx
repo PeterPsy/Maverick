@@ -42,7 +42,7 @@ export function ShellDialogs({
             <p className="bs-dialog-card__eyebrow">Provider</p>
             <h4 className="bs-dialog-card__title">Codex è il backend runtime iniziale.</h4>
             <p className="bs-dialog-card__copy">
-              La top bar mostra provider e runtime attivi. In seguito altri provider useranno la stessa superficie core.
+              Le impostazioni leggono provider e runtime attivi dalle superfici core. In seguito altri provider useranno lo stesso protocollo.
             </p>
           </Surface>
         </div>

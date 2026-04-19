@@ -9,7 +9,9 @@ import sys
 from chat_state import (
     create_project,
     create_thread,
+    delete_thread,
     delete_project,
+    find_thread,
     list_projects,
     list_threads,
     read_state,
@@ -41,6 +43,13 @@ def main() -> None:
         write_state(path, state)
         _response(201, {"thread": thread, "threads": list_threads(state), "projects": list_projects(state)})
         return
+    if action == "threads.get":
+        thread = find_thread(state, str(body.get("thread_id") or ""))
+        if thread is None:
+            _response(404, {"error": "thread_not_found"})
+            return
+        _response(200, {"thread": thread, "threads": list_threads(state), "projects": list_projects(state)})
+        return
     if action == "threads.update":
         thread = update_thread(state, body)
         if thread is None:
@@ -48,6 +57,13 @@ def main() -> None:
             return
         write_state(path, state)
         _response(200, {"thread": thread, "threads": list_threads(state), "projects": list_projects(state)})
+        return
+    if action == "threads.delete":
+        if not delete_thread(state, body):
+            _response(404, {"error": "thread_not_found"})
+            return
+        write_state(path, state)
+        _response(200, sidebar_snapshot(state))
         return
     if action == "projects.list":
         _response(200, {"projects": list_projects(state), "threads": list_threads(state)})

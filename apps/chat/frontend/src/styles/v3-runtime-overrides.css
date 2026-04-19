@@ -6,6 +6,16 @@
   overflow: hidden;
 }
 
+.chatapp-root .chatapp-chat-panel {
+  height: 100%;
+}
+
+.chatapp-root .chatapp-chat-workspace,
+.chatapp-root .chatapp-chat-main,
+.chatapp-root .chatapp-chat-scroll {
+  min-height: 0;
+}
+
 .chatapp-provider-selector {
   display: inline-flex;
   align-items: center;
@@ -32,11 +42,14 @@
   box-shadow: 0 0 0 4px var(--maverick-focus);
 }
 
-.chatapp-send-glyph {
-  display: inline-flex;
-  transform: translateX(1px);
-  font-size: 1.05rem;
-  line-height: 1;
+.chatapp-root .chatapp-agent-block__body p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.chatapp-root .chatapp-agent-block__body p + p {
+  margin-top: 0.4rem;
 }
 
 @media (max-width: 640px) {

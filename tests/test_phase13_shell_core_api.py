@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from io import BytesIO
 from pathlib import Path
+import base64
 import json
+import time
 from unittest.mock import patch
 import shutil
 import tempfile
@@ -176,6 +178,65 @@ class ShellCoreApiTestCase(unittest.TestCase):
         self.assertIn("runtime.output.final", event_types)
         self.assertEqual(turn_payload["events"][0]["payload"]["client_message_id"], "client-message-1")
         self.assertEqual(turn_payload["events"][2]["payload"]["text"], "hello from codex")
+
+    def test_runtime_turn_api_can_queue_async_turn_and_interrupt(self) -> None:
+        state = bootstrap_platform_state(start_path=self.make_repo_root())
+        app = PlatformHost(state, start_path=state.repository_root)
+        cookie = self.login(app)
+
+        with patch.dict("os.environ", {"MAVERICK3_RUNTIME_FAKE_RESPONSE": "async hello"}):
+            _status_session, session, _session_headers = self.invoke(
+                app,
+                path="/api/runtime/sessions",
+                method="POST",
+                body={"agent_id": "chat"},
+                cookie=cookie,
+            )
+            status_turn, turn_payload, _turn_headers = self.invoke(
+                app,
+                path=f"/api/runtime/sessions/{session['session_id']}/turns",
+                method="POST",
+                body={"input_text": "hello", "client_message_id": "client-message-async", "async": True},
+                cookie=cookie,
+            )
+
+            self.assertEqual(status_turn, 202)
+            self.assertEqual(turn_payload["turn"]["status"], "queued")
+            for _attempt in range(20):
+                _status_events, events, _events_headers = self.invoke(
+                    app,
+                    path=f"/api/runtime/sessions/{session['session_id']}/events",
+                    cookie=cookie,
+                )
+                event_types = [event["event_type"] for event in events["items"]]
+                if "runtime.turn.completed" in event_types:
+                    break
+                time.sleep(0.05)
+            self.assertIn("runtime.turn.completed", event_types)
+            self.assertIn("runtime.output.final", event_types)
+
+    def test_workspace_file_upload_persists_under_workspace_storage(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=state.repository_root)
+        cookie = self.login(app)
+
+        status, payload, _headers = self.invoke(
+            app,
+            path="/api/workspace-files/uploads",
+            method="POST",
+            body={
+                "filename": "brief.txt",
+                "content_type": "text/plain",
+                "content_base64": base64.b64encode(b"brief").decode("ascii"),
+            },
+            cookie=cookie,
+        )
+
+        self.assertEqual(status, 201)
+        relative_path = payload["file"]["relative_path"]
+        self.assertTrue(relative_path.startswith("storage/uploaded/"))
+        self.assertEqual((repo_root / "workspaces" / "default" / relative_path).read_text(encoding="utf-8"), "brief")
 
 
 if __name__ == "__main__":

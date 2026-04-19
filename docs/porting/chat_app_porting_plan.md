@@ -859,6 +859,158 @@ Phase 5: optional features behind gates
 - Widget rendering.
 - Multi-agent controls.
 
+## UI/UX Parity Tasklist
+
+This tasklist tracks the remaining chat UI/UX parity work after the first mounted v3 chat implementation.
+
+The base-shell sidebar is handled through the chat-owned `chat-sidebar` widget, not through compile-time shell imports.
+
+All tasks must be implemented in v3-owned code only. It is acceptable to copy and adapt visual code, but v3 source must not import from or reference legacy paths.
+
+### Priority 1: Message Rendering And Active Turn Controls
+
+- [x] Restore Markdown and GFM rendering for assistant/provider messages, including links, code blocks, inline code, lists, tables, blockquotes, and safe line breaks.
+- [x] Add only the frontend dependencies needed for Markdown rendering and sanitization.
+- [x] Make assistant/provider message styling match the ported chat visual system exactly: spacing, typography, bubble/card boundaries, code styling, and empty paragraph behavior.
+- [x] Replace hardcoded pending labels such as `Codex sta lavorando` with labels derived from the active provider/runtime state.
+- [x] Implement stop-turn control when a runtime turn is active.
+- [x] Persist the active `turn_id` in frontend state while the turn is running, failed, completed, interrupted, or cancelling.
+- [x] Disable or hide stop-turn controls when no cancellable turn exists.
+- [x] Render cancelled, failed, and interrupted turns as first-class transcript states.
+
+Note: stop-turn is wired to the generic core interrupt endpoint. The current runtime HTTP path still executes turns synchronously, so interrupting an actively running provider will become practically useful once runtime turns are async/streaming.
+
+### Chat-Owned Shell Sidebar Widget
+
+- [x] Keep project and thread navigation owned by the chat app.
+- [x] Mount the sidebar widget through the generic v3 widget registry.
+- [x] Keep the iframe-mounted widget alive when the base-shell sidebar is hidden.
+- [x] Route selected chats to the chat app view through explicit navigation params.
+- [x] Route new-chat actions to a newly created chat in the chat app view.
+- [x] Receive `maverick.app.navigate` messages from the persistent shell app frame instead of relying on iframe query-string reloads.
+- [x] Add floating settings panels for projects and individual chats.
+- [x] Support rename, move, delete, and project creation through the chat backend.
+- [ ] Add browser-level regression coverage for open/close sidebar without iframe reload.
+
+### Composer And Attachments
+
+- [x] Implement local attachment state in the composer.
+- [x] Show a selected-attachment preview strip before sending.
+- [x] Support attachment removal before send.
+- [x] Validate attachment count, size, and accepted file types before submit.
+- [x] Support paste-from-clipboard attachment insertion where the browser allows it.
+- [x] Support drag-and-drop attachment insertion into the composer area.
+- [x] Make the attachment floating panel close on outside click and Escape.
+- [x] Keep attachment panel positioning, icons, spacing, and hover states aligned with the ported v2 visual system.
+- [ ] Wire attachment metadata into the runtime submit payload only through the official v3 attachment surface.
+- [x] If the official attachment surface is not ready, feature-gate sending attachments and keep the picker UI non-destructive.
+- [ ] Render sent human-message attachments once the message is confirmed.
+- [x] Avoid storing attachment data inside chat unless the chat contract explicitly owns that storage.
+
+### Turn UX And Message Queue
+
+- [x] Keep the user's optimistic message visible immediately after submit.
+- [x] Avoid temporary disappearance of the user message while the provider/runtime is working.
+- [x] Use `client_message_id` to reconcile optimistic messages with confirmed runtime events.
+- [x] Prevent duplicate human messages when the runtime history catches up.
+- [x] Implement a local outgoing-message queue when the user sends while a turn is busy.
+- [x] Show queued messages clearly in the transcript or composer status area.
+- [x] Drain queued messages in order after the active turn completes, fails, or is interrupted, if policy allows consecutive turns.
+- [ ] Separate `isBootstrapping`, `isSending`, `isRunningTurn`, and `isStreaming` state.
+- [x] Do not show provider-working indicators during initial history loading unless a real active turn exists.
+- [x] Preserve composer draft text if submit fails before runtime acceptance.
+
+### Transcript Scroll Behavior
+
+- [x] Keep the chat viewport height fixed inside the mounted app instead of pushing content outside the page.
+- [x] Ensure the transcript, not the whole page, owns vertical scrolling.
+- [x] Auto-scroll only when the user is already near the bottom.
+- [x] Do not force-scroll when the user has intentionally scrolled upward.
+- [x] Add a floating scroll-to-bottom affordance when new content arrives while the user is away from the bottom.
+- [ ] Verify long conversations, large code blocks, and streamed output do not break the layout.
+- [ ] Verify desktop, narrow iframe, and mobile viewport scrolling.
+- [x] Keep composer pinned and usable while the transcript scrolls.
+
+### Transcript Message States
+
+- [x] Render system/runtime update cards with the correct visual hierarchy.
+- [x] Render runtime errors distinctly from assistant/provider messages.
+- [ ] Render pending human messages, confirmed human messages, and failed-send human messages distinctly.
+- [ ] Render assistant/provider streaming text without layout jumps.
+- [x] Render empty assistant/provider output without producing broken blank bubbles.
+- [ ] Add heavy-message collapse/expand for very long outputs.
+- [x] Preserve readable code-block wrapping and horizontal scrolling.
+- [x] Add timestamp rendering consistent with the ported visual system.
+- [ ] Add copy affordances for assistant text and code blocks if present in the visual source.
+
+### Runtime And Provider Status
+
+- [x] Replace static `connected` and `sandbox` badges with values from generic core runtime/provider surfaces.
+- [x] Show active provider from the provider selector and runtime session state.
+- [x] Show execution mode from runtime/workspace policy: sandbox or full-access.
+- [x] Show runtime status: ready, queued, running, streaming, failed, interrupted, cancelling, or unavailable.
+- [x] Show current model label only if the generic provider surface exposes it.
+- [ ] Show last activity timestamp only if derived from runtime events or session state.
+- [x] Keep provider selector UI functional without making chat own provider configuration or secrets.
+- [x] Handle provider unavailable or misconfigured states with clear UI feedback.
+
+### Tool Calls And Structured Content
+
+- [ ] Define the runtime-event-to-transcript projection for tool-call started, updated, completed, and failed states.
+- [ ] Render inline tool-call cards when runtime events expose tool-call data.
+- [ ] Add a detail panel or expandable row for tool-call payload details if the visual source includes it.
+- [ ] Keep tool-call rendering passive until the corresponding core runtime events are stable.
+- [ ] Port generic structured message fallback rendering.
+- [ ] Do not reintroduce compile-time cross-app widget imports.
+- [ ] Keep concrete widget rendering disabled until the registry-driven widget host surface exists.
+- [ ] Treat inter-agent/delegation cards as deferred unless generic inter-agent runtime events are already available.
+
+### Prompt Preview And Periodic Controls
+
+- [x] Keep prompt preview hidden or feature-gated until core and the Agents app expose an official resolved-prompt surface.
+- [x] Do not let chat edit base prompts or role prompts directly.
+- [x] Keep periodic task controls hidden or feature-gated until scheduling has an official core/app surface.
+- [ ] If visual components are ported early, make them inert and clearly guarded by feature flags.
+
+### Responsive And Accessibility Parity
+
+- [ ] Verify mobile composer layout.
+- [ ] Verify mobile attachment panel behavior.
+- [ ] Verify mobile keyboard behavior and viewport resize.
+- [ ] Verify transcript scrolling on iOS Safari and Chromium mobile.
+- [ ] Verify keyboard navigation for composer, send, attachment, provider selector, and stop-turn controls.
+- [x] Add accessible labels for icon-only buttons.
+- [ ] Preserve focus after send, attachment selection, panel close, and stop-turn actions.
+- [ ] Ensure color contrast remains acceptable after ported styling and v3 runtime overrides.
+
+### Tests And Verification For UI/UX Parity
+
+- [ ] Add frontend tests for optimistic user-message persistence.
+- [ ] Add frontend tests for duplicate optimistic-message reconciliation.
+- [ ] Add frontend tests for queued-message behavior.
+- [ ] Add frontend tests for attachment panel open, close, select, remove, and validation behavior.
+- [ ] Add frontend tests for Markdown/GFM rendering.
+- [ ] Add frontend tests for runtime status badge rendering.
+- [ ] Add frontend tests for stop-turn enabled and disabled states.
+- [ ] Add frontend tests for transcript scroll behavior where feasible.
+- [x] Keep `npm run build` passing for `apps/chat`.
+- [x] Keep core/app import hygiene checks passing.
+- [x] Scan v3 code for forbidden legacy path or module references after every porting pass.
+- [ ] Verify the mounted app on the deployed host can create a chat, send a message, keep the user message visible, receive provider output, and scroll correctly.
+
+### Recommended Execution Order
+
+1. Message Markdown/rendering parity.
+2. Active turn state, stop-turn control, and provider-working labels.
+3. Optimistic message persistence and duplicate reconciliation.
+4. Queued send behavior.
+5. Attachment panel state, preview, validation, and gated submit payload.
+6. Transcript scroll containment and scroll-to-bottom affordance.
+7. Runtime/provider status badges from generic core surfaces.
+8. Tool-call and structured-message fallback rendering.
+9. Responsive and accessibility pass.
+10. Frontend test coverage and deployed smoke verification.
+
 ## MCP Plan
 
 The chat MCP server should expose chat app operations, not core runtime internals.

@@ -3,10 +3,6 @@
     --maverick-sidebar-width: min(21rem, calc(100vw - 1rem));
   }
 
-  .bs-app-topbar {
-    padding-left: 0.75rem;
-  }
-
   .bs-app-grid-panel,
   .bs-empty-panel {
     padding-left: 0.75rem;
@@ -16,9 +12,5 @@
     left: 0.5rem;
     right: 0.5rem;
     width: auto;
-  }
-
-  .bs-app-topbar__actions {
-    display: none;
   }
 }

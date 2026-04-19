@@ -25,7 +25,7 @@ export function Sidebar({
   activeWorkspaceId: string;
   isOpen: boolean;
   onClose: () => void;
-  onOpenApp: (appId: string) => void;
+  onOpenApp: (appId: string, params?: Record<string, string | boolean | null>) => void;
   onOpenApps: () => void;
   onOpenSettings: () => void;
   onOpenTutorial: () => void;
@@ -34,12 +34,9 @@ export function Sidebar({
   user: SessionUser | null;
   workspaces: WorkspaceItem[];
 }) {
-  if (!isOpen) {
-    return null;
-  }
   const pinned = pinnedApps(apps, pinnedAppIds);
   return (
-    <aside className="bs-sidebar" aria-label="Workspace navigation">
+    <aside className={`bs-sidebar ${isOpen ? "is-open" : "is-closed"}`} aria-hidden={!isOpen} aria-label="Workspace navigation">
       <div className="bs-sidebar__header">
         <div className="bs-sidebar__brand">
           <BrandMark className="bs-sidebar__brand-mark" />
@@ -83,7 +80,7 @@ export function Sidebar({
       </nav>
 
       <WidgetSlot
-        content={{ active_app_id: activeAppId, user: user?.username || null }}
+        content={{ user: user?.username || null }}
         contentKind="shell.sidebar.primary"
         hostAppId="base-shell"
         label="Chat projects and conversations"

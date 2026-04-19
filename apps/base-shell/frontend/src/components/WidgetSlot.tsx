@@ -12,7 +12,7 @@ export function WidgetSlot({
   contentKind: string;
   hostAppId: string;
   label: string;
-  onOpenApp: (appId: string) => void;
+  onOpenApp: (appId: string, params?: Record<string, string | boolean | null>) => void;
 }) {
   const [widget, setWidget] = useState<WidgetRegistryItem | null>(null);
   const [contextToken, setContextToken] = useState<string | null>(null);
@@ -65,9 +65,9 @@ export function WidgetSlot({
       if (event.origin !== window.location.origin || !event.data || typeof event.data !== "object") {
         return;
       }
-      const payload = event.data as { type?: string; app_id?: string };
+      const payload = event.data as { type?: string; app_id?: string; params?: Record<string, string | boolean | null> };
       if (payload.type === "maverick.widget.open-app" && payload.app_id) {
-        onOpenApp(payload.app_id);
+        onOpenApp(payload.app_id, payload.params);
       }
     }
 

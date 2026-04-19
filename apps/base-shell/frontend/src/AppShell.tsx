@@ -1,18 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   AppRegistryItem,
-  getActiveProvider,
   getPlatformSettings,
   getPlatformStatus,
-  getRuntimeStatus,
   getSession,
   listApps,
   listWorkspaces,
   logout,
   PlatformSettings,
   PlatformStatus,
-  ProviderStatus,
-  RuntimeStatus,
   SessionPayload,
   WorkspaceItem,
 } from "./api";
@@ -22,7 +18,6 @@ import { useMobileLayout } from "./hooks/useMobileLayout";
 import { LoginScreen } from "./components/LoginScreen";
 import { Sidebar } from "./components/Sidebar";
 import { ShellDialog, ShellDialogs } from "./components/ShellDialogs";
-import { TopBar } from "./components/TopBar";
 import { WorkspaceView } from "./components/WorkspaceView";
 
 export function AppShell() {
@@ -31,10 +26,9 @@ export function AppShell() {
   const [status, setStatus] = useState<PlatformStatus | null>(null);
   const [session, setSession] = useState<SessionPayload | null>(null);
   const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>([]);
-  const [provider, setProvider] = useState<ProviderStatus | null>(null);
-  const [runtime, setRuntime] = useState<RuntimeStatus | null>(null);
   const [settings, setSettings] = useState<PlatformSettings | null>(null);
   const [activeAppId, setActiveAppId] = useState<string | null>(initialSession.activeAppId);
+  const [activeAppParams, setActiveAppParams] = useState<Record<string, string | boolean | null>>({});
   const [isSidebarOpen, setIsSidebarOpen] = useState(initialSession.isSidebarOpen);
   const [pinnedAppIds, setPinnedAppIds] = useState(initialSession.pinnedAppIds);
   const [activeDialog, setActiveDialog] = useState<ShellDialog>(null);
@@ -51,25 +45,19 @@ export function AppShell() {
         setApps([]);
         setStatus(null);
         setWorkspaces([]);
-        setProvider(null);
-        setRuntime(null);
         setSettings(null);
         setError(null);
         return;
       }
-      const [registry, platformStatus, workspacePayload, providerStatus, runtimeStatus, platformSettings] = await Promise.all([
+      const [registry, platformStatus, workspacePayload, platformSettings] = await Promise.all([
         listApps(),
         getPlatformStatus(),
         listWorkspaces(),
-        getActiveProvider(),
-        getRuntimeStatus(),
         getPlatformSettings(),
       ]);
       setApps(registry.items);
       setStatus(platformStatus);
       setWorkspaces(workspacePayload.items);
-      setProvider(providerStatus);
-      setRuntime(runtimeStatus);
       setSettings(platformSettings);
       setError(null);
     } catch (loadError) {
@@ -93,13 +81,15 @@ export function AppShell() {
     });
   }, [activeAppId, isSidebarOpen, pinnedAppIds]);
 
-  function openApp(appId: string) {
+  function openApp(appId: string, params: Record<string, string | boolean | null> = {}) {
     setActiveAppId(appId);
+    setActiveAppParams(params);
     setIsSidebarOpen(false);
   }
 
   function openApps() {
     setActiveAppId(null);
+    setActiveAppParams({});
     setIsSidebarOpen(false);
   }
 
@@ -127,16 +117,9 @@ export function AppShell() {
   return (
     <main className={`bs-shell ${isSidebarOpen ? "is-sidebar-open" : ""} ${isMobileLayout ? "is-mobile-layout" : ""}`}>
       <div className="bs-workspace-view-shell">
-        <TopBar
-          activeApp={activeApp}
-          isSidebarOpen={isSidebarOpen}
-          onToggleSidebar={() => setIsSidebarOpen((open) => !open)}
-          provider={provider}
-          runtime={runtime}
-          status={status}
-        />
         <WorkspaceView
           activeApp={activeApp}
+          activeAppParams={activeAppParams}
           apps={apps}
           error={error}
           isLoading={isLoading}

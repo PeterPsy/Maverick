@@ -1,54 +1,49 @@
 import { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { ChatProject, ChatThread, createThread, listThreads, updateThread } from "../../api/client";
+import {
+  ChatProject,
+  ChatThread,
+  createProject,
+  createThread,
+  deleteProject,
+  deleteThread,
+  listThreads,
+  updateProject,
+  updateThread,
+} from "../../api/client";
+import { FloatingPanel, FloatingPanelPosition, SettingsPanel } from "./SettingsPanel";
+import { buildSections, isThreadBusy } from "./sections";
 import "./styles.css";
-
-type FolderSection = {
-  id: string;
-  projectId: string | null;
-  title: string;
-  items: ChatThread[];
-  canManage: boolean;
-};
-
-function buildSections(projects: ChatProject[], threads: ChatThread[]): FolderSection[] {
-  const sections: FolderSection[] = projects
-    .slice()
-    .sort((left, right) => left.name.localeCompare(right.name, "it", { sensitivity: "base" }))
-    .map((project) => ({
-      id: project.project_id,
-      projectId: project.project_id,
-      title: project.name,
-      canManage: true,
-      items: threads.filter((thread) => thread.project_id === project.project_id),
-    }));
-  const projectIds = new Set(projects.map((project) => project.project_id));
-  const unassigned = threads.filter((thread) => !thread.project_id || !projectIds.has(thread.project_id));
-  if (unassigned.length || !sections.length) {
-    sections.unshift({
-      id: "unassigned",
-      projectId: null,
-      title: "Senza progetto",
-      canManage: false,
-      items: unassigned,
-    });
-  }
-  return sections;
-}
-
-function isThreadBusy(thread: ChatThread): boolean {
-  return thread.availability === "busy";
-}
 
 function notifyShell(thread?: ChatThread) {
   window.parent?.postMessage(
     {
       type: "maverick.widget.open-app",
       app_id: "chat",
-      thread_id: thread?.thread_id || null,
+      params: thread ? { thread_id: thread.thread_id } : { new_chat: true },
     },
     window.location.origin,
   );
+}
+
+function updateFromSidebarPayload(
+  payload: { projects?: ChatProject[]; threads: ChatThread[] },
+  setProjects: (projects: ChatProject[]) => void,
+  setThreads: (threads: ChatThread[]) => void,
+) {
+  setProjects(payload.projects || []);
+  setThreads(payload.threads);
+}
+
+function panelPositionFromTrigger(trigger: HTMLElement) {
+  const triggerRect = trigger.getBoundingClientRect();
+  const rootRect = document.getElementById("chat-sidebar-root")?.getBoundingClientRect();
+  const rootRight = rootRect?.right ?? window.innerWidth;
+  const rootTop = rootRect?.top ?? 0;
+  return {
+    top: Math.max(8, triggerRect.bottom - rootTop + 6),
+    right: Math.max(4, rootRight - triggerRect.right),
+  };
 }
 
 function ChatSidebarWidget() {
@@ -56,6 +51,7 @@ function ChatSidebarWidget() {
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+  const [panel, setPanel] = useState<FloatingPanel | null>(null);
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const sections = useMemo(() => buildSections(projects, threads), [projects, threads]);
@@ -79,9 +75,9 @@ function ChatSidebarWidget() {
     setIsPending(true);
     try {
       const payload = await createThread("", projectId);
-      setProjects(payload.projects || projects);
-      setThreads(payload.threads);
+      updateFromSidebarPayload(payload, setProjects, setThreads);
       setActiveThreadId(payload.thread.thread_id);
+      setPanel(null);
       setError(null);
       notifyShell(payload.thread);
     } catch (createError) {
@@ -97,9 +93,9 @@ function ChatSidebarWidget() {
     }
     try {
       const payload = await updateThread({ thread_id: thread.thread_id, project_id: projectId });
-      setProjects(payload.projects || projects);
-      setThreads(payload.threads);
+      updateFromSidebarPayload(payload, setProjects, setThreads);
       setActiveThreadId(payload.thread.thread_id);
+      setPanel(null);
       setError(null);
     } catch (moveError) {
       setError(moveError instanceof Error ? moveError.message : "Unable to move chat.");
@@ -109,6 +105,48 @@ function ChatSidebarWidget() {
   function selectThread(thread: ChatThread) {
     setActiveThreadId(thread.thread_id);
     notifyShell(thread);
+  }
+
+  async function addProject(position?: FloatingPanelPosition) {
+    setIsPending(true);
+    try {
+      const payload = await createProject("New project");
+      updateFromSidebarPayload(payload, setProjects, setThreads);
+      setPanel(position ? { kind: "project", project: payload.project, position } : null);
+      setError(null);
+    } catch (projectError) {
+      setError(projectError instanceof Error ? projectError.message : "Unable to create project.");
+    } finally {
+      setIsPending(false);
+    }
+  }
+
+  async function renameProject(projectId: string, name: string) {
+    const payload = await updateProject(projectId, name);
+    updateFromSidebarPayload(payload, setProjects, setThreads);
+    setPanel(null);
+  }
+
+  async function removeProject(projectId: string) {
+    const payload = await deleteProject(projectId);
+    updateFromSidebarPayload(payload, setProjects, setThreads);
+    setPanel(null);
+  }
+
+  async function renameThread(threadId: string, title: string, projectId: string | null) {
+    const payload = await updateThread({ thread_id: threadId, title, project_id: projectId });
+    updateFromSidebarPayload(payload, setProjects, setThreads);
+    setActiveThreadId(payload.thread.thread_id);
+    setPanel(null);
+  }
+
+  async function removeThread(threadId: string) {
+    const payload = await deleteThread(threadId);
+    updateFromSidebarPayload(payload, setProjects, setThreads);
+    if (activeThreadId === threadId) {
+      setActiveThreadId(null);
+    }
+    setPanel(null);
   }
 
   return (
@@ -166,6 +204,36 @@ function ChatSidebarWidget() {
                       </svg>
                     </button>
                   ) : null}
+                  {!section.canManage ? (
+                    <button
+                      aria-label="Nuovo progetto"
+                      className="bs-chat-folder__action-button"
+                      disabled={isPending}
+                      onClick={(event) => addProject(panelPositionFromTrigger(event.currentTarget))}
+                      title="Nuovo progetto"
+                      type="button"
+                    >
+                      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                        <path d="M3.75 7.5A2.75 2.75 0 0 1 6.5 4.75h3.2l1.55 1.8h6.25A2.75 2.75 0 0 1 20.25 9.3v7.2a2.75 2.75 0 0 1-2.75 2.75H6.5a2.75 2.75 0 0 1-2.75-2.75V7.5Z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.6" />
+                        <path d="M12 10.25v5.5M9.25 13h5.5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6" />
+                      </svg>
+                    </button>
+                  ) : null}
+                  {section.canManage ? (
+                    <button
+                      aria-label={`Azioni per il progetto ${section.title}`}
+                      className="bs-instance-menu__trigger bs-folder-menu__trigger"
+                      onClick={(event) => {
+                        const project = projects.find((item) => item.project_id === section.projectId);
+                        if (project) {
+                          setPanel({ kind: "project", project, position: panelPositionFromTrigger(event.currentTarget) });
+                        }
+                      }}
+                      type="button"
+                    >
+                      <span aria-hidden="true" className="material-symbols-rounded">more_horiz</span>
+                    </button>
+                  ) : null}
                 </div>
               </div>
               {!isCollapsed ? (
@@ -189,7 +257,16 @@ function ChatSidebarWidget() {
                           </button>
                           {section.projectId !== thread.project_id ? (
                             <button className="bs-instance-menu__trigger" onClick={() => moveThread(thread, section.projectId)} type="button">⋯</button>
-                          ) : null}
+                          ) : (
+                            <button
+                              aria-label={`Azioni per ${thread.title}`}
+                              className="bs-instance-menu__trigger"
+                              onClick={(event) => setPanel({ kind: "thread", thread, position: panelPositionFromTrigger(event.currentTarget) })}
+                              type="button"
+                            >
+                              <span aria-hidden="true" className="material-symbols-rounded">more_horiz</span>
+                            </button>
+                          )}
                         </div>
                       );
                     })
@@ -202,6 +279,18 @@ function ChatSidebarWidget() {
           );
         })}
       </div>
+      {panel ? (
+        <SettingsPanel
+          onClose={() => setPanel(null)}
+          onCreateChat={createChat}
+          onDeleteProject={removeProject}
+          onDeleteThread={removeThread}
+          onRenameProject={renameProject}
+          onRenameThread={renameThread}
+          panel={panel}
+          projects={projects}
+        />
+      ) : null}
     </main>
   );
 }

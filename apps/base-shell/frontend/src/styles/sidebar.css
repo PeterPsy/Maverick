@@ -15,6 +15,17 @@
   background: rgba(18, 18, 18, 0.9);
   box-shadow: 0 20px 48px rgba(0, 0, 0, 0.34);
   backdrop-filter: blur(18px);
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease,
+    visibility 180ms ease;
+}
+
+.bs-sidebar.is-closed {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(calc(-100% - 1.25rem));
+  visibility: hidden;
 }
 
 .bs-sidebar__header,

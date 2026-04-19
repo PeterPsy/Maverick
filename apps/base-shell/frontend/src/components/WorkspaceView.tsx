@@ -1,8 +1,10 @@
 import { AppRegistryItem } from "../api";
+import { AppFrameHost } from "./AppFrameHost";
 import { AppsPanel } from "./AppsPanel";
 
 export function WorkspaceView({
   activeApp,
+  activeAppParams,
   apps,
   error,
   isLoading,
@@ -11,6 +13,7 @@ export function WorkspaceView({
   pinnedAppIds,
 }: {
   activeApp: AppRegistryItem | null;
+  activeAppParams: Record<string, string | boolean | null>;
   apps: AppRegistryItem[];
   error: string | null;
   isLoading: boolean;
@@ -30,11 +33,5 @@ export function WorkspaceView({
       />
     );
   }
-  return (
-    <section className="bs-workspace-app-panel" aria-label={`${activeApp.name} app`}>
-      <div className="bs-workspace-app-surface">
-        <iframe className="bs-workspace-app-frame" src={activeApp.frontend_mount} title={`${activeApp.name} viewport`} />
-      </div>
-    </section>
-  );
+  return <AppFrameHost activeApp={activeApp} activeAppParams={activeAppParams} />;
 }

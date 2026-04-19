@@ -121,6 +121,13 @@ def delete_project(state: dict, body: dict) -> bool:
     return len(state["projects"]) != original
 
 
+def find_thread(state: dict, thread_id: str) -> dict | None:
+    for thread in state.get("threads", []):
+        if isinstance(thread, dict) and thread.get("thread_id") == thread_id:
+            return thread_payload(thread)
+    return None
+
+
 def create_thread(state: dict, body: dict) -> dict:
     timestamp = now_timestamp()
     title = str(body.get("title") or "").strip() or "New chat"
@@ -139,6 +146,17 @@ def create_thread(state: dict, body: dict) -> dict:
     state["threads"].append(thread)
     state["preferences"]["active_thread_id"] = thread["thread_id"]
     return thread_payload(thread)
+
+
+def delete_thread(state: dict, body: dict) -> bool:
+    thread_id = str(body.get("thread_id") or "").strip()
+    original = len(state.get("threads", []))
+    state["threads"] = [
+        thread for thread in state.get("threads", []) if isinstance(thread, dict) and thread.get("thread_id") != thread_id
+    ]
+    if state.get("preferences", {}).get("active_thread_id") == thread_id:
+        state["preferences"]["active_thread_id"] = None
+    return len(state["threads"]) != original
 
 
 def update_thread(state: dict, body: dict) -> dict | None:

@@ -18,7 +18,6 @@ import { useMobileLayout } from "./hooks/useMobileLayout";
 import { LoginScreen } from "./components/LoginScreen";
 import { Sidebar } from "./components/Sidebar";
 import { ShellDialog, ShellDialogs } from "./components/ShellDialogs";
-import { ShellIcon } from "./components/ShellIcon";
 import { WorkspaceView } from "./components/WorkspaceView";
 
 export function AppShell() {
@@ -146,7 +145,7 @@ export function AppShell() {
         workspaces={workspaces}
       />
       <button aria-label="Apri menu" className="bs-panel-peek bs-panel-peek--left" onClick={() => setIsSidebarOpen(true)} type="button">
-        <ShellIcon name="menu" />
+        <span aria-hidden="true" className="material-symbols-rounded">menu</span>
       </button>
       <ShellDialogs activeDialog={activeDialog} onClose={() => setActiveDialog(null)} onLogout={handleLogout} settings={settings} />
     </main>

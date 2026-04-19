@@ -160,10 +160,7 @@ function ChatSidebarWidget() {
       >
         <span className="bs-sidebar__nav-leading">
           <span className="bs-sidebar__nav-icon">
-            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
-              <path d="M7.75 8.25h8.5M7.75 12h5.5M10 18.25l-3.2 2.5v-2.5H6A2.25 2.25 0 0 1 3.75 16V8A2.25 2.25 0 0 1 6 5.75h12A2.25 2.25 0 0 1 20.25 8v8A2.25 2.25 0 0 1 18 18.25H10Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6" />
-              <path d="M17.75 4.75v4.5M15.5 7h4.5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6" />
-            </svg>
+            <span aria-hidden="true" className="material-symbols-rounded">add_comment</span>
           </span>
           <span className="bs-sidebar__nav-copy">
             <span className="bs-sidebar__nav-title">New chat</span>
@@ -189,7 +186,7 @@ function ChatSidebarWidget() {
                     type="button"
                   >
                     <span className="bs-chat-folder__count">{section.items.length}</span>
-                    <span aria-hidden="true" className="bs-chat-folder__chevron">⌄</span>
+                    <span aria-hidden="true" className="material-symbols-rounded bs-chat-folder__chevron">expand_more</span>
                   </button>
                   {section.canManage ? (
                     <button
@@ -199,9 +196,7 @@ function ChatSidebarWidget() {
                       title="Nuova chat"
                       type="button"
                     >
-                      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
-                        <path d="M12 5.75v12.5M5.75 12h12.5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.7" />
-                      </svg>
+                      <span aria-hidden="true" className="material-symbols-rounded">add</span>
                     </button>
                   ) : null}
                   {!section.canManage ? (
@@ -213,10 +208,7 @@ function ChatSidebarWidget() {
                       title="Nuovo progetto"
                       type="button"
                     >
-                      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
-                        <path d="M3.75 7.5A2.75 2.75 0 0 1 6.5 4.75h3.2l1.55 1.8h6.25A2.75 2.75 0 0 1 20.25 9.3v7.2a2.75 2.75 0 0 1-2.75 2.75H6.5a2.75 2.75 0 0 1-2.75-2.75V7.5Z" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.6" />
-                        <path d="M12 10.25v5.5M9.25 13h5.5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6" />
-                      </svg>
+                      <span aria-hidden="true" className="material-symbols-rounded">create_new_folder</span>
                     </button>
                   ) : null}
                   {section.canManage ? (
@@ -256,7 +248,9 @@ function ChatSidebarWidget() {
                             </div>
                           </button>
                           {section.projectId !== thread.project_id ? (
-                            <button className="bs-instance-menu__trigger" onClick={() => moveThread(thread, section.projectId)} type="button">⋯</button>
+                            <button aria-label={`Sposta ${thread.title} in ${section.title}`} className="bs-instance-menu__trigger" onClick={() => moveThread(thread, section.projectId)} type="button">
+                              <span aria-hidden="true" className="material-symbols-rounded">drive_file_move</span>
+                            </button>
                           ) : (
                             <button
                               aria-label={`Azioni per ${thread.title}`}

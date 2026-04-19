@@ -48,7 +48,7 @@ export function Dialog({ children, description, onClose, open, panelClassName, t
             {description ? <p className="bs-ui-dialog__description">{description}</p> : null}
           </div>
           <button aria-label="Chiudi finestra" className="bs-ui-dialog__close" onClick={onClose} type="button">
-            <span aria-hidden="true">×</span>
+            <span aria-hidden="true" className="material-symbols-rounded">close</span>
           </button>
         </div>
         {children}

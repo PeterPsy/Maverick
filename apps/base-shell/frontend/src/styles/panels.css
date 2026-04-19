@@ -155,8 +155,16 @@
   object-fit: cover;
 }
 
+.bs-app-logo .material-symbols-rounded {
+  font-size: 1.15rem;
+}
+
 .bs-app-logo--card {
   width: 2.7rem;
   height: 2.7rem;
   border-radius: 14px;
+}
+
+.bs-app-logo--card .material-symbols-rounded {
+  font-size: 1.45rem;
 }

@@ -77,7 +77,7 @@ export function SettingsPanel({
       <div className="bs-sidebar-floating-panel__head">
         <p className="bs-sidebar-floating-panel__eyebrow">{panel.kind === "project" ? "Project settings" : "Chat settings"}</p>
         <button className="bs-sidebar-floating-panel__close" onClick={onClose} type="button">
-          ×
+          <span aria-hidden="true" className="material-symbols-rounded">close</span>
         </button>
       </div>
       <label className="bs-sidebar-floating-panel__field">

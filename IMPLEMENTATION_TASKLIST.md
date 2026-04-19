@@ -516,7 +516,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] Port the v2 UI/UX design as the visual reference without preserving v2 runtime coupling:
     - [x] preserve the sidebar shell composition without retaining a topbar in `base-shell`
     - [x] preserve the v2 visual language, spacing, panels, controls, and responsive behavior where still valid
-    - [x] use consistent icon components for collapsed menu and icon-only shell controls instead of raw text glyphs
+    - [x] use `material-symbols-rounded` consistently for app icons, app controls, and widget icon controls instead of raw text glyphs or local SVG icons
     - [x] remove v2 API, auth, workspace, and runtime assumptions that are not available as v3 protocols
     - [x] connect only to v3 platform APIs and mounted app routes
   - [x] Apply this file-by-file v2 to v3 porting map:

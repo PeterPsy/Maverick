@@ -1,0 +1,99 @@
+@import "./versyBrandTokens.css";
+
+:root {
+  font-family: var(--versy-font-family-base);
+  color-scheme: dark;
+  --maverick-bg: #1f1f1f;
+  --maverick-bg-strong: #171717;
+  --maverick-surface: #2a2a2a;
+  --maverick-surface-soft: #252525;
+  --maverick-surface-hover: #2f2f2f;
+  --maverick-border: rgba(255, 255, 255, 0.08);
+  --maverick-border-strong: rgba(255, 255, 255, 0.13);
+  --maverick-text: #ececec;
+  --maverick-text-muted: rgba(236, 236, 236, 0.64);
+  --maverick-text-soft: rgba(236, 236, 236, 0.42);
+  --maverick-primary: var(--brand-500);
+  --maverick-primary-strong: var(--brand-600);
+  --maverick-primary-soft: var(--surface-brand-soft);
+  --maverick-secondary: var(--brand-400);
+  --maverick-secondary-soft: rgba(248, 75, 120, 0.16);
+  --maverick-success: #4ade80;
+  --maverick-warning: #f59e0b;
+  --maverick-danger: #ff4d8d;
+  --maverick-focus: rgba(215, 36, 81, 0.3);
+  --maverick-shadow-soft: 0 12px 30px rgba(0, 0, 0, 0.22);
+  --maverick-shadow-strong: 0 22px 60px rgba(0, 0, 0, 0.34);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  min-height: 100%;
+  overflow: hidden;
+}
+
+body {
+  margin: 0;
+  background: var(--maverick-bg);
+  color: var(--maverick-text);
+  overflow: hidden;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  color: inherit;
+}
+
+.material-symbols-rounded {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "Material Symbols Rounded";
+  font-style: normal;
+  font-weight: 500;
+  font-size: 20px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-smoothing: antialiased;
+  font-variation-settings:
+    "FILL" 0,
+    "wght" 500,
+    "GRAD" 0,
+    "opsz" 24;
+}
+
+a {
+  color: inherit;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.22);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}

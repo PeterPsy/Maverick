@@ -1,3 +1,7 @@
+"""Health hook for the chat app."""
+
+from __future__ import annotations
+
 import json
 from pathlib import Path
 import sys
@@ -5,7 +9,11 @@ import sys
 
 payload = json.loads(sys.stdin.read() or "{}")
 data_root = Path(payload["data_root"])
-messages_path = data_root / "conversations.json"
-if not messages_path.is_file():
+threads_path = data_root / "threads.json"
+if not threads_path.is_file():
     raise SystemExit(1)
-json.loads(messages_path.read_text(encoding="utf-8"))
+state = json.loads(threads_path.read_text(encoding="utf-8"))
+if not isinstance(state.get("threads"), list):
+    raise SystemExit(1)
+if not isinstance(state.get("projects", []), list):
+    raise SystemExit(1)

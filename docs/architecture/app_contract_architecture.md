@@ -853,6 +853,25 @@ Required chat-side work after the core is ready:
 - pass only explicit widget context, never app source paths
 - route widget actions to the widget owner's official surfaces
 
+The same widget mechanism is also the correct way for `base-shell` to host chat-owned navigation.
+
+The shell must not import chat sidebar components or own chat projects.
+
+Instead:
+
+- `base-shell` renders a generic sidebar widget slot
+- the slot discovers widgets with `host=base-shell` and a shell sidebar content kind
+- `chat` declares a widget such as `chat-sidebar`
+- the widget frontend is served from the chat app's own `frontend/dist/widgets/chat-sidebar`
+- project, thread, rename, move, and creation actions go through the chat app backend
+- optional shell navigation uses browser messaging from the iframe to ask the host to open the `chat` app
+
+This preserves the v2 visual layout while moving ownership to the v3 app boundary:
+
+- shell layout and app mounting belong to `base-shell`
+- chat projects and chat list state belong to `chat`
+- widget discovery, auth, workspace context, and controlled frontend mount belong to the core
+
 ### Backend distribution artifacts
 
 Backend surfaces should follow the same principle.

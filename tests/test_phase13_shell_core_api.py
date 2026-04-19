@@ -5,6 +5,7 @@ from __future__ import annotations
 from io import BytesIO
 from pathlib import Path
 import json
+from unittest.mock import patch
 import shutil
 import tempfile
 import unittest
@@ -137,6 +138,42 @@ class ShellCoreApiTestCase(unittest.TestCase):
         self.assertEqual(settings["workspace"]["workspace_id"], "default")
         self.assertEqual(status_recovery, 200)
         self.assertEqual(recovery["workspace_id"], "default")
+
+    def test_runtime_turn_api_executes_selected_provider_and_records_events(self) -> None:
+        state = bootstrap_platform_state(start_path=self.make_repo_root())
+        app = PlatformHost(state, start_path=state.repository_root)
+        cookie = self.login(app)
+
+        with patch.dict("os.environ", {"MAVERICK3_RUNTIME_FAKE_RESPONSE": "hello from codex"}):
+            status_session, session, _session_headers = self.invoke(
+                app,
+                path="/api/runtime/sessions",
+                method="POST",
+                body={"agent_id": "chat"},
+                cookie=cookie,
+            )
+            status_turn, turn_payload, _turn_headers = self.invoke(
+                app,
+                path=f"/api/runtime/sessions/{session['session_id']}/turns",
+                method="POST",
+                body={"input_text": "hello"},
+                cookie=cookie,
+            )
+            status_events, events, _events_headers = self.invoke(
+                app,
+                path=f"/api/runtime/sessions/{session['session_id']}/events",
+                cookie=cookie,
+            )
+
+        self.assertEqual(status_session, 201)
+        self.assertEqual(session["provider_id"], "codex")
+        self.assertEqual(status_turn, 201)
+        self.assertEqual(turn_payload["turn"]["status"], "completed")
+        self.assertEqual(status_events, 200)
+        event_types = [event["event_type"] for event in events["items"]]
+        self.assertIn("runtime.turn.queued", event_types)
+        self.assertIn("runtime.output.final", event_types)
+        self.assertEqual(turn_payload["events"][2]["payload"]["text"], "hello from codex")
 
 
 if __name__ == "__main__":

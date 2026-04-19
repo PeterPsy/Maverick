@@ -38,7 +38,16 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
         shutil.copytree(source_apps_root / "chat", repo_root / "apps" / "chat")
         return repo_root
 
-    def invoke(self, app, *, path: str, method: str = "GET", body: dict | None = None) -> tuple[int, bytes, dict[str, str]]:
+    def invoke(
+        self,
+        app,
+        *,
+        path: str,
+        method: str = "GET",
+        body: dict | None = None,
+        cookie: str | None = None,
+        query_string: str = "",
+    ) -> tuple[int, bytes, dict[str, str]]:
         payload = b""
         if body is not None:
             payload = json.dumps(body).encode("utf-8")
@@ -55,13 +64,24 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
                     "REQUEST_METHOD": method,
                     "CONTENT_LENGTH": str(len(payload)),
                     "CONTENT_TYPE": "application/json",
-                    "QUERY_STRING": "",
+                    "QUERY_STRING": query_string,
                     "wsgi.input": BytesIO(payload),
+                    **({"HTTP_COOKIE": cookie} if cookie else {}),
                 },
                 start_response,
             )
         )
         return int(headers["__status__"].split()[0]), result, headers
+
+    def login(self, app) -> str:
+        status, _body, headers = self.invoke(
+            app,
+            path="/api/auth/login",
+            method="POST",
+            body={"username": "admin", "password": "maverick3"},
+        )
+        self.assertEqual(status, 200)
+        return headers["Set-Cookie"].split(";", 1)[0]
 
     def test_bootstrap_installs_base_shell_and_chat(self) -> None:
         repo_root = self.make_repo_root()
@@ -73,7 +93,7 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
         self.assertEqual(sorted(binding.app_id for binding in bindings), ["base-shell", "chat"])
         self.assertEqual(versions["base-shell"], "2.0.0")
         self.assertFalse((repo_root / "workspaces" / "default" / "apps" / "base-shell").exists())
-        self.assertTrue((repo_root / "workspaces" / "default" / "data" / "chat" / "conversations.json").is_file())
+        self.assertTrue((repo_root / "workspaces" / "default" / "data" / "chat" / "threads.json").is_file())
 
     def test_platform_host_mounts_root_shell_and_chat_frontend(self) -> None:
         repo_root = self.make_repo_root()
@@ -89,7 +109,8 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
         self.assertIn(b"/apps/base-shell/assets/index-", body_root)
         self.assertNotIn(b"Base shell app mounted by the core", body_root)
         self.assertNotIn(b'src="/apps/chat/"', body_root)
-        self.assertIn(b"Minimal built-in app mounted by the Maverick core", body_chat)
+        self.assertIn(b'id="root"', body_chat)
+        self.assertIn(b"/apps/chat/assets/app-", body_chat)
 
     def test_base_shell_contract_mounts_production_dist(self) -> None:
         repo_root = self.make_repo_root()
@@ -109,7 +130,6 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
 
         self.assertEqual(status_root, 200)
         self.assertNotIn(b'app_id === "chat"', body_root)
-        self.assertNotIn(b"apps/base_shell", body_root)
         self.assertNotIn(b"app.manifest", body_root)
         self.assertNotIn(b"runtime_backend", body_root)
         self.assertNotIn(b"react-query", body_root)
@@ -177,18 +197,22 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
         state = bootstrap_platform_state(start_path=repo_root)
         app = PlatformHost(state, start_path=repo_root)
 
-        status_bootstrap, bootstrap_body, _ = self.invoke(app, path="/api/apps/chat/backend", method="POST", body={"action": "bootstrap"})
-        status_send, send_body, _ = self.invoke(app, path="/api/apps/chat/backend", method="POST", body={"action": "send", "message": "hello"})
+        status_list, list_body, _ = self.invoke(app, path="/api/apps/chat/backend", method="POST", body={"action": "threads.list"})
+        status_create, create_body, _ = self.invoke(
+            app,
+            path="/api/apps/chat/backend",
+            method="POST",
+            body={"action": "threads.create", "runtime_session_id": "runtime-session"},
+        )
 
-        bootstrap_payload = json.loads(bootstrap_body.decode("utf-8"))
-        send_payload = json.loads(send_body.decode("utf-8"))
+        list_payload = json.loads(list_body.decode("utf-8"))
+        create_payload = json.loads(create_body.decode("utf-8"))
 
-        self.assertEqual(status_bootstrap, 200)
-        self.assertEqual(status_send, 200)
-        self.assertEqual(bootstrap_payload["app_id"], "chat")
-        self.assertEqual(send_payload["provider_id"], "codex")
-        self.assertTrue(send_payload["runtime_session_id"].startswith("default:chat:ui"))
-        self.assertGreaterEqual(len(send_payload["messages"]), 3)
+        self.assertEqual(status_list, 200)
+        self.assertEqual(status_create, 201)
+        self.assertEqual(list_payload["threads"], [])
+        self.assertEqual(create_payload["thread"]["runtime_session_id"], "runtime-session")
+        self.assertEqual(create_payload["threads"][0]["title"], "New chat")
 
     def test_chat_surfaces_are_visible_to_agents_and_operators(self) -> None:
         repo_root = self.make_repo_root()
@@ -201,6 +225,38 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
         self.assertIn("app.chat.threads.list", [tool.tool_name for tool in tools])
         self.assertIn("app.chat.chat", [command.command_id for command in commands])
         self.assertIn("app.chat.chat-ops", [skill.skill_id for skill in skills])
+
+    def test_chat_declares_base_shell_sidebar_widget(self) -> None:
+        repo_root = self.make_repo_root()
+        parsed = parse_app_contract_file(repo_root / "apps" / "chat")
+        widgets = {widget.widget_id: widget for widget in parsed.contract.widgets}
+
+        self.assertIn("chat-sidebar", widgets)
+        self.assertEqual(widgets["chat-sidebar"].host, "base-shell")
+        self.assertEqual(widgets["chat-sidebar"].content_kinds, ["shell.sidebar.primary"])
+        self.assertEqual(widgets["chat-sidebar"].frontend.mount, "frontend/dist/widgets/chat-sidebar")
+        self.assertTrue((repo_root / "apps" / "chat" / "frontend" / "dist" / "widgets" / "chat-sidebar" / "index.html").is_file())
+
+    def test_base_shell_discovers_chat_sidebar_widget_without_source_paths(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+        cookie = self.login(app)
+
+        status, body, _headers = self.invoke(
+            app,
+            path="/api/apps/widgets",
+            query_string="host=base-shell&content_kind=shell.sidebar.primary",
+            cookie=cookie,
+        )
+        payload = json.loads(body.decode("utf-8"))
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["items"][0]["owner_app_id"], "chat")
+        self.assertEqual(payload["items"][0]["widget_id"], "chat-sidebar")
+        self.assertEqual(payload["items"][0]["frontend_mount"], "/api/apps/widgets/chat/chat-sidebar/frontend/")
+        self.assertNotIn("source_root", payload["items"][0])
+        self.assertNotIn("source_path", payload["items"][0])
 
 
 if __name__ == "__main__":

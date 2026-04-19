@@ -680,6 +680,14 @@ without carrying forward legacy structure or backward-compatibility constraints 
     - [ ] embed matching widgets through iframe-mounted widget routes
     - [ ] send only explicit widget context
     - [ ] route widget mutations to the widget owner's backend/MCP/CLI surfaces
+  - [x] Implement chat-owned sidebar widget for `base-shell`:
+    - [x] declare `chat-sidebar` in `apps/chat/app_contract.json`
+    - [x] use `host=base-shell` and `content_kind=shell.sidebar.primary`
+    - [x] keep projects/folders and thread list owned by the chat app backend
+    - [x] keep visual structure and CSS classes aligned with v2 `base_shell` sidebar
+    - [x] mount the widget from `base-shell` through generic widget discovery, not a chat import
+    - [x] use browser message handoff only for generic shell navigation such as opening the chat app
+    - [x] add tests for contract declaration, widget registry discovery, and absence of source-path leakage
 
 ## Phase 14: Acceptance Criteria for First Usable v3
 

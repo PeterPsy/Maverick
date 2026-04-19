@@ -94,6 +94,24 @@ export type PlatformSettings = {
   recovery: Record<string, unknown>;
 };
 
+export type WidgetRegistryItem = {
+  owner_app_id: string;
+  widget_id: string;
+  host: string;
+  content_kinds: string[];
+  frontend_mount: string;
+  actions: Record<string, boolean>;
+};
+
+export type WidgetRegistryPayload = {
+  items: WidgetRegistryItem[];
+};
+
+export type WidgetContextPayload = {
+  context_token: string;
+  context: Record<string, unknown>;
+};
+
 async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {
     credentials: "same-origin",
@@ -210,4 +228,23 @@ export function getRuntimeStatus(): Promise<RuntimeStatus> {
 
 export function getPlatformSettings(): Promise<PlatformSettings> {
   return requestJson<PlatformSettings>("/api/settings/platform");
+}
+
+export function listWidgets(host: string, contentKind: string): Promise<WidgetRegistryPayload> {
+  const query = new URLSearchParams({ host, content_kind: contentKind });
+  return requestJson<WidgetRegistryPayload>(`/api/apps/widgets?${query.toString()}`);
+}
+
+export function createWidgetContext(payload: {
+  host_app_id: string;
+  owner_app_id: string;
+  widget_id: string;
+  message_id: string;
+  content: Record<string, unknown>;
+}): Promise<WidgetContextPayload> {
+  return requestJson<WidgetContextPayload>("/api/apps/widgets/context", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
 }

@@ -1,122 +1,12 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Chat</title>
-    <style>
-      :root {
-        --bg: #faf7ef;
-        --ink: #1d1c1a;
-        --muted: #70695e;
-        --line: #ddd3c2;
-        --panel: #fffdf8;
-        --accent: #0d6e66;
-      }
-      * { box-sizing: border-box; }
-      body {
-        margin: 0;
-        font-family: Georgia, "Times New Roman", serif;
-        background: linear-gradient(180deg, #f8f4eb, var(--bg));
-        color: var(--ink);
-      }
-      .page { max-width: 960px; margin: 0 auto; padding: 24px 18px 40px; }
-      .hero { display: flex; justify-content: space-between; gap: 16px; align-items: end; margin-bottom: 18px; }
-      h1 { margin: 0; font-size: 34px; }
-      .meta { color: var(--muted); font-size: 14px; }
-      .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 18px; }
-      .messages { min-height: 360px; display: grid; gap: 12px; }
-      .message { padding: 12px 14px; border-radius: 14px; border: 1px solid var(--line); }
-      .message.user { background: #f0e6d7; }
-      .message.assistant { background: #eef7f5; border-color: rgba(13,110,102,0.25); }
-      form { display: grid; grid-template-columns: 1fr auto; gap: 12px; margin-top: 18px; }
-      textarea {
-        min-height: 92px;
-        width: 100%;
-        resize: vertical;
-        border-radius: 14px;
-        border: 1px solid var(--line);
-        padding: 14px;
-        font: inherit;
-        background: #fff;
-      }
-      button {
-        border: 0;
-        border-radius: 14px;
-        background: var(--accent);
-        color: white;
-        padding: 0 18px;
-        font: inherit;
-        cursor: pointer;
-      }
-      @media (max-width: 700px) {
-        .hero { display: block; }
-        form { grid-template-columns: 1fr; }
-        button { padding: 14px 18px; }
-      }
-    </style>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Maverick Chat</title>
   </head>
   <body>
-    <div class="page">
-      <div class="hero">
-        <div>
-          <h1>Chat</h1>
-          <div class="meta">Minimal built-in app mounted by the Maverick core.</div>
-        </div>
-        <div id="runtime-meta" class="meta"></div>
-      </div>
-      <section class="panel">
-        <div id="messages" class="messages"></div>
-        <form id="composer">
-          <textarea id="message-input" placeholder="Write a message to test the mounted app stack..."></textarea>
-          <button type="submit">Send</button>
-        </form>
-      </section>
-    </div>
-    <script>
-      const messagesNode = document.getElementById("messages");
-      const runtimeMeta = document.getElementById("runtime-meta");
-      const composer = document.getElementById("composer");
-      const input = document.getElementById("message-input");
-
-      function renderMessage(message) {
-        const article = document.createElement("article");
-        article.className = `message ${message.role}`;
-        article.innerHTML = `<strong>${message.role}</strong><div>${message.content}</div>`;
-        messagesNode.appendChild(article);
-      }
-
-      async function bootstrap() {
-        const response = await fetch("/api/apps/chat/backend", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "bootstrap" })
-        });
-        const payload = await response.json();
-        messagesNode.innerHTML = "";
-        for (const message of payload.messages) renderMessage(message);
-        runtimeMeta.textContent = `workspace ${payload.workspace_id} · provider ${payload.provider_id} · session ${payload.runtime_session_id}`;
-      }
-
-      composer.addEventListener("submit", async (event) => {
-        event.preventDefault();
-        const text = input.value.trim();
-        if (!text) return;
-        input.value = "";
-        const response = await fetch("/api/apps/chat/backend", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "send", message: text })
-        });
-        const payload = await response.json();
-        messagesNode.innerHTML = "";
-        for (const message of payload.messages) renderMessage(message);
-        runtimeMeta.textContent = `workspace ${payload.workspace_id} · provider ${payload.provider_id} · session ${payload.runtime_session_id}`;
-      });
-
-      bootstrap().catch((error) => {
-        messagesNode.innerHTML = `<article class="message assistant"><strong>assistant</strong><div>Bootstrap failed: ${error}</div></article>`;
-      });
-    </script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

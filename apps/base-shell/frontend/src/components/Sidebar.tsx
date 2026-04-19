@@ -2,6 +2,7 @@ import { AppRegistryItem, SessionUser, WorkspaceItem } from "../api";
 import { pinnedApps } from "../navigation";
 import { AppLogo } from "./AppLogo";
 import { BrandMark } from "./BrandMark";
+import { WidgetSlot } from "./WidgetSlot";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
 export function Sidebar({
@@ -81,11 +82,13 @@ export function Sidebar({
         </button>
       </nav>
 
-      <section className="bs-sidebar__session" aria-label="Current user">
-        <p className="bs-eyebrow">Sessione</p>
-        <strong>{user?.display_name || user?.username || "Utente"}</strong>
-        <span>{user?.platform_role || "member"}</span>
-      </section>
+      <WidgetSlot
+        content={{ active_app_id: activeAppId, user: user?.username || null }}
+        contentKind="shell.sidebar.primary"
+        hostAppId="base-shell"
+        label="Chat projects and conversations"
+        onOpenApp={onOpenApp}
+      />
 
       <div className="bs-sidebar__footer">
         <button className="bs-sidebar__nav-button" onClick={onOpenTutorial} type="button">

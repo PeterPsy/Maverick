@@ -8,7 +8,7 @@ from core.api.http import StartResponse, json_response
 from core.api.platform_state import PlatformState
 from core.api.session_api import RequestSession, require_session
 from core.providers.models import ProviderDefinition, ProviderSelection
-from core.providers.service import list_available_providers, resolve_provider_for_workspace
+from core.providers.service import configure_workspace_provider, list_available_providers, resolve_provider_for_workspace
 from core.runtime.runtime_session import RuntimeSessionRecord
 
 
@@ -88,6 +88,23 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
     if not isinstance(context_or_response, RequestSession):
         return context_or_response
     context = context_or_response
+    if path == "/api/providers/active" and method == "POST":
+        from core.api.http import read_json_body
+
+        body = read_json_body(environ)
+        provider_id = str(body.get("provider_id") or "").strip()
+        if not provider_id:
+            return json_response(start_response, {"error": "missing_provider_id"}, status="400 Bad Request")
+        try:
+            configure_workspace_provider(
+                state.provider_store,
+                workspace_id=context.workspace_id,
+                provider_id=provider_id,
+                observability_store=state.observability_store,
+            )
+        except Exception as error:
+            return json_response(start_response, {"error": str(error)}, status="400 Bad Request")
+        return json_response(start_response, workspace_provider_status(state, workspace_id=context.workspace_id))
     if method != "GET":
         return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")
     if path == "/api/providers":

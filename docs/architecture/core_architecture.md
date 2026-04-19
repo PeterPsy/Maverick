@@ -492,6 +492,16 @@ It must not port chat project buttons, chat orchestration, retrieval settings, p
 
 Project organization belongs to the chat app because projects are chat-domain state, not shell or core platform state.
 
+If the product shell needs to show chat projects or conversations in its sidebar, it must do so by mounting a chat-owned widget through the generic widget registry.
+
+The intended first shape is:
+
+- `base-shell` owns a generic sidebar widget slot
+- `chat` owns a `chat-sidebar` widget compatible with that slot
+- the widget may visually match the Maverick v2 sidebar exactly
+- the widget stores and mutates chat state only through chat-owned backend surfaces
+- `base-shell` may react to a generic browser message asking it to open an app, but it must not import chat code or call chat-private internals
+
 ### Current Product Assumptions To Remove
 
 The current code keeps the core/app boundary clean at the import level: `core/` does not import app frontend code, and `base-shell` does not import `chat`.

@@ -1,0 +1,46 @@
+.chatapp-root {
+  width: 100%;
+  height: 100dvh;
+  min-height: 100vh;
+  background: var(--maverick-bg);
+  overflow: hidden;
+}
+
+.chatapp-provider-selector {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--maverick-text-muted);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.chatapp-provider-selector select {
+  min-height: 28px;
+  padding: 0.18rem 1.9rem 0.18rem 0.7rem;
+  border: 1px solid rgba(215, 36, 81, 0.28);
+  border-radius: 999px;
+  background: rgba(215, 36, 81, 0.12);
+  color: #ffe8ee;
+  cursor: pointer;
+}
+
+.chatapp-provider-selector select:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 4px var(--maverick-focus);
+}
+
+.chatapp-send-glyph {
+  display: inline-flex;
+  transform: translateX(1px);
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+@media (max-width: 640px) {
+  .chatapp-provider-selector__label {
+    display: none;
+  }
+}

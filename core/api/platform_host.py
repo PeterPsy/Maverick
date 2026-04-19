@@ -10,6 +10,7 @@ from core.api.app_registry import enabled_app_items
 from core.api.http import StartResponse, json_response, text_response
 from core.api.platform_state import PlatformState
 from core.api.provider_api import handle_provider_api
+from core.api.runtime_api import handle_runtime_api
 from core.api.session_api import handle_session_api, resolve_request_session
 from core.api.settings_api import handle_settings_api
 from core.api.widget_api import handle_widget_api
@@ -42,6 +43,9 @@ class PlatformHost:
         routed = handle_provider_api(self.state, environ, start_response)
         if routed is not None:
             return routed
+        routed = handle_runtime_api(self.state, environ, start_response, start_path=self.start_path)
+        if routed is not None:
+            return routed
         routed = handle_settings_api(self.state, environ, start_response)
         if routed is not None:
             return routed
@@ -51,6 +55,9 @@ class PlatformHost:
 
         if path == "/health":
             return json_response(start_response, {"status": "ok", "service": "maverick3-core"})
+        if path == "/favicon.ico":
+            start_response("204 No Content", [("Content-Length", "0")])
+            return [b""]
         if path == "/api/status":
             return json_response(
                 start_response,

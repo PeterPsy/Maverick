@@ -758,6 +758,11 @@ The following example shows the kind of app contract Maverick should expect at p
   "description": "Manage rooms, tables, reservations, and service state inside a workspace.",
   "publisher": "third-party-dev",
   "minimum_core_version": "1.0.0",
+  "distribution": {
+    "mode": "source_available",
+    "source_access": "forkable",
+    "modifiable_by_agents": true
+  },
   "capabilities": {
     "mcp_tools": [
       "tables.list",

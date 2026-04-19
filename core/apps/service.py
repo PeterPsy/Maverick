@@ -12,6 +12,7 @@ from core.apps.contracts import (
     build_app_compatibility,
     build_app_capabilities,
     build_app_contract,
+    build_app_distribution,
     build_app_entrypoints,
     build_app_failure_semantics,
     build_app_health_contract,
@@ -24,6 +25,7 @@ from core.apps.contracts import (
     parsed_contract_to_app_source_record,
     parsed_contract_to_workspace_local_project_record,
     utcnow,
+    write_app_contract_file,
 )
 from core.apps.errors import (
     AppDataRootError,
@@ -35,6 +37,7 @@ from core.apps.models import (
     AppHookContext,
     AppSourceKind,
     AppSourceRecord,
+    ParsedAppContract,
     WorkspaceAppBindingRecord,
     WorkspaceAppReinstallResult,
     WorkspaceAppStatus,
@@ -111,6 +114,8 @@ def register_app_source_from_contract(
 ) -> AppSourceRecord:
     """Parse one canonical app contract file and persist an installation-level source record."""
     parsed = parse_app_contract_file(Path(source_path))
+    if parsed.contract.distribution.mode == "workspace_local":
+        raise AppLifecycleError("Workspace-local app contracts cannot be registered as installation-level app sources.")
     record = parsed_contract_to_app_source_record(
         parsed=parsed,
         source_kind=source_kind,
@@ -131,11 +136,74 @@ def register_workspace_local_app_project_from_contract(
 ) -> WorkspaceLocalAppProjectRecord:
     """Parse one canonical app contract file and persist a workspace-local app project record."""
     parsed = parse_app_contract_file(Path(project_root))
+    if parsed.contract.distribution.mode != "workspace_local":
+        raise AppLifecycleError("Workspace-local app projects must declare distribution.mode `workspace_local`.")
     record = parsed_contract_to_workspace_local_project_record(
         parsed=parsed,
         workspace_id=workspace_id,
         project_root=project_root,
         project_id=project_id,
+        now=now,
+    )
+    return register_workspace_local_app_project(store, record)
+
+
+def fork_store_app_to_workspace(
+    store: AppStore,
+    *,
+    source_id: str,
+    workspace_id: str,
+    now: datetime | None = None,
+    start_path: Path | None = None,
+    overwrite: bool = False,
+) -> WorkspaceLocalAppProjectRecord:
+    """Create an explicit workspace-local fork from a source-available store app."""
+    source = store.get_app_source(source_id)
+    source_root, parsed = load_contract_from_source_record(source, start_path=start_path)
+    distribution = parsed.contract.distribution
+    if distribution.mode != "source_available" or distribution.source_access != "forkable":
+        raise AppLifecycleError(f"App source `{source_id}` is not forkable into a workspace.")
+    workspace = workspace_paths(workspace_id=workspace_id, start_path=start_path)
+    project_root = workspace.apps / parsed.app_id
+    if project_root.exists():
+        if not overwrite:
+            raise AppLifecycleError(f"Workspace-local app project `{project_root}` already exists.")
+        shutil.rmtree(project_root)
+    workspace.apps.mkdir(parents=True, exist_ok=True)
+    ignore = shutil.ignore_patterns(
+        "__pycache__",
+        "*.pyc",
+        "node_modules",
+        "dist",
+        "build",
+        ".venv",
+        ".mypy_cache",
+        ".pytest_cache",
+    )
+    shutil.copytree(source_root, project_root, ignore=ignore)
+    forked_contract = replace(
+        parsed.contract,
+        distribution=build_app_distribution(
+            mode="workspace_local",
+            source_access="editable",
+            modifiable_by_agents=distribution.modifiable_by_agents,
+        ),
+    )
+    forked = ParsedAppContract(
+        app_id=parsed.app_id,
+        name=parsed.name,
+        version=parsed.version,
+        description=parsed.description,
+        publisher=parsed.publisher,
+        contract=forked_contract,
+    )
+    write_app_contract_file(project_root, forked)
+    record = parsed_contract_to_workspace_local_project_record(
+        parsed=forked,
+        workspace_id=workspace_id,
+        project_root=str(project_root),
+        forked_from_source_id=source.source_id,
+        forked_from_version=source.version,
         now=now,
     )
     return register_workspace_local_app_project(store, record)
@@ -222,7 +290,7 @@ def _resolve_reinstall_target(store: AppStore, *, workspace_id: str, app_id: str
     return source_root, parsed, source_record_id, source_kind, persisted_app_id
 
 
-def install_external_app(
+def install_store_app(
     store: AppStore,
     *,
     source_id: str,
@@ -232,7 +300,7 @@ def install_external_app(
     start_path: Path | None = None,
     observability_store=None,
 ) -> WorkspaceAppBindingRecord:
-    """Install one installation-level app source into a workspace."""
+    """Install one server app store source into a workspace."""
     source = store.get_app_source(source_id)
     source_root, parsed = load_contract_from_source_record(source, start_path=start_path)
     ensure_app_compatible(compatibility=parsed.contract.compatibility, workspace_id=workspace_id)
@@ -273,10 +341,10 @@ def install_external_app(
         payload = {"workspace_id": workspace_id, "app_id": source.app_id, "source_id": source.source_id, "status": saved.status}
         record_platform_audit(
             observability_store,
-            action="app.install.external",
+            action="app.install.store",
             status="succeeded",
             source_domain="apps",
-            detail=f"Installed external app `{source.app_id}` into workspace `{workspace_id}`.",
+            detail=f"Installed store app `{source.app_id}` into workspace `{workspace_id}`.",
             workspace_id=workspace_id,
             app_id=source.app_id,
             payload=payload,

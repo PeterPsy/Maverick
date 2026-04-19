@@ -25,13 +25,8 @@ runtime/
 !core/runtime/
 !core/runtime/.gitkeep
 
-# Workspace generated content
-workspaces/*/storage/generated/
-workspaces/*/storage/uploaded/
-workspaces/*/logs/
-workspaces/*/tmp/
-workspaces/*/runtime/
-workspaces/*/data/*/indices/
+# Workspace runtime and agent-owned data
+workspaces/
 
 # Node / frontend
 node_modules/

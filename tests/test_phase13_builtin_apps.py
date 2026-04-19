@@ -63,8 +63,11 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
         state = bootstrap_platform_state(start_path=repo_root)
 
         bindings = state.app_store.list_workspace_app_bindings("default")
+        versions = {binding.app_id: binding.active_version for binding in bindings}
 
         self.assertEqual(sorted(binding.app_id for binding in bindings), ["base-shell", "chat"])
+        self.assertEqual(versions["base-shell"], "2.0.0")
+        self.assertFalse((repo_root / "workspaces" / "default" / "apps" / "base-shell").exists())
         self.assertTrue((repo_root / "workspaces" / "default" / "data" / "chat" / "conversations.json").is_file())
 
     def test_platform_host_mounts_root_shell_and_chat_frontend(self) -> None:
@@ -77,8 +80,53 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
 
         self.assertEqual(status_root, 200)
         self.assertEqual(status_chat, 200)
-        self.assertIn(b"Base shell app mounted by the core", body_root)
+        self.assertIn(b'class="bs-shell', body_root)
+        self.assertIn(b"bs-sidebar", body_root)
+        self.assertIn(b"bs-sidebar__workspace-select", body_root)
+        self.assertIn(b"/apps/base-shell/maverick-logo.png", body_root)
+        self.assertIn(b"/apps/base-shell/styles.css", body_root)
+        self.assertIn(b"/apps/base-shell/shell.js", body_root)
+        self.assertIn(b"Codex rate limits", body_root)
+        self.assertIn(b"Versy", body_root)
+        self.assertIn(b"Shared &middot; Admin access", body_root)
+        self.assertIn(b"New chat", body_root)
+        self.assertIn(b"Gallery", self.invoke(app, path="/apps/base-shell/shell.js")[1])
+        self.assertIn(b"App Studio", self.invoke(app, path="/apps/base-shell/shell.js")[1])
+        self.assertIn(b"Checklists", self.invoke(app, path="/apps/base-shell/shell.js")[1])
+        self.assertIn(b"Installed Apps", body_root)
+        self.assertIn(b"App montata dal manifest della shell.", body_root)
+        self.assertIn(b"/api/apps", body_root)
+        self.assertNotIn(b"Base shell app mounted by the core", body_root)
+        self.assertNotIn(b'src="/apps/chat/"', body_root)
         self.assertIn(b"Minimal built-in app mounted by the Maverick core", body_chat)
+
+    def test_base_shell_is_v3_native_without_legacy_runtime_coupling(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+
+        status_root, body_root, _headers_root = self.invoke(app, path="/")
+
+        self.assertEqual(status_root, 200)
+        self.assertNotIn(b'app_id === "chat"', body_root)
+        self.assertNotIn(b"apps/base_shell", body_root)
+        self.assertNotIn(b"app.manifest", body_root)
+        self.assertNotIn(b"runtime_backend", body_root)
+        self.assertNotIn(b"react-query", body_root)
+
+    def test_app_registry_exposes_distribution_policy_for_shell(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+
+        status, body, _headers = self.invoke(app, path="/api/apps")
+        payload = json.loads(body.decode("utf-8"))
+        items = {item["app_id"]: item for item in payload["items"]}
+
+        self.assertEqual(status, 200)
+        self.assertEqual(items["base-shell"]["distribution_mode"], "sealed")
+        self.assertEqual(items["base-shell"]["source_access"], "none")
+        self.assertFalse(items["base-shell"]["modifiable_by_agents"])
 
     def test_chat_backend_works_and_exposes_runtime_metadata(self) -> None:
         repo_root = self.make_repo_root()

@@ -13,6 +13,7 @@ from core.apps.models import (
     AppCapabilities,
     AppCompatibilityDescriptor,
     AppContractDescriptor,
+    AppDistributionDeclaration,
     AppEntrypoints,
     AppFailureSemantics,
     AppHealthContract,
@@ -165,6 +166,20 @@ def build_app_capabilities(
     )
 
 
+def build_app_distribution(
+    *,
+    mode: str = "sealed",
+    source_access: str = "none",
+    modifiable_by_agents: bool = False,
+) -> AppDistributionDeclaration:
+    """Build one app distribution and mutability declaration."""
+    return AppDistributionDeclaration(
+        mode=mode,
+        source_access=source_access,
+        modifiable_by_agents=modifiable_by_agents,
+    )
+
+
 def build_app_lifecycle(
     *,
     install: bool = True,
@@ -263,6 +278,7 @@ def build_app_rollback_support(*, bundle: bool = False, data: bool = False, repa
 
 def build_app_contract(
     *,
+    distribution: AppDistributionDeclaration | None = None,
     compatibility: AppCompatibilityDescriptor | None = None,
     storage: AppStorageDeclaration | None = None,
     capabilities: AppCapabilities | None = None,
@@ -275,6 +291,7 @@ def build_app_contract(
 ) -> AppContractDescriptor:
     """Build an executable app contract descriptor."""
     return AppContractDescriptor(
+        distribution=distribution or build_app_distribution(),
         compatibility=compatibility or build_app_compatibility(),
         storage=storage or build_app_storage(),
         capabilities=capabilities or build_app_capabilities(),
@@ -339,6 +356,8 @@ def parsed_contract_to_workspace_local_project_record(
     workspace_id: str,
     project_root: str,
     project_id: str | None = None,
+    forked_from_source_id: str | None = None,
+    forked_from_version: str | None = None,
     now: datetime | None = None,
 ) -> WorkspaceLocalAppProjectRecord:
     """Persist one parsed app contract as a workspace-local project record."""
@@ -355,6 +374,8 @@ def parsed_contract_to_workspace_local_project_record(
         contract=parsed.contract,
         created_at=timestamp,
         updated_at=timestamp,
+        forked_from_source_id=forked_from_source_id,
+        forked_from_version=forked_from_version,
     )
 
 
@@ -369,6 +390,11 @@ def app_contract_payload(parsed: ParsedAppContract) -> dict[str, Any]:
         "description": parsed.description,
         "publisher": parsed.publisher,
         "minimum_core_version": parsed.contract.compatibility.minimum_core_version,
+        "distribution": {
+            "mode": parsed.contract.distribution.mode,
+            "source_access": parsed.contract.distribution.source_access,
+            "modifiable_by_agents": parsed.contract.distribution.modifiable_by_agents,
+        },
         "capabilities": {
             "mcp_tools": parsed.contract.capabilities.mcp_tools,
             "cli_commands": parsed.contract.capabilities.cli_commands,
@@ -464,6 +490,7 @@ def parse_app_contract_file(source_root: Path) -> ParsedAppContract:
     minimum_core_version = _expect_string(root, "minimum_core_version")
 
     capabilities_payload = _expect_mapping(root.get("capabilities", {}), label="capabilities")
+    distribution_payload = _expect_mapping(root.get("distribution", {}), label="distribution")
     entrypoints_payload = _expect_mapping(root.get("entrypoints", {}), label="entrypoints")
     storage_payload = _expect_mapping(root.get("storage", {}), label="storage")
     compatibility_payload = _expect_mapping(root.get("compatibility", {}), label="compatibility")
@@ -510,6 +537,26 @@ def parse_app_contract_file(source_root: Path) -> ParsedAppContract:
         skills=_expect_string_list(capabilities_payload, "skills"),
         views=_expect_string_list(capabilities_payload, "views"),
     )
+
+    distribution = AppDistributionDeclaration(
+        mode=distribution_payload.get("mode", "sealed"),
+        source_access=distribution_payload.get("source_access", "none"),
+        modifiable_by_agents=_expect_bool(distribution_payload, "modifiable_by_agents", default=False),
+    )
+    if distribution.mode not in {"sealed", "source_available", "workspace_local"}:
+        raise AppContractValidationError("`distribution.mode` must be sealed, source_available, or workspace_local.")
+    if distribution.source_access not in {"none", "read_only", "forkable", "editable"}:
+        raise AppContractValidationError(
+            "`distribution.source_access` must be none, read_only, forkable, or editable."
+        )
+    if distribution.mode == "sealed" and (
+        distribution.source_access != "none" or distribution.modifiable_by_agents
+    ):
+        raise AppContractValidationError("Sealed apps must use source_access none and cannot be modifiable by agents.")
+    if distribution.mode == "source_available" and distribution.source_access not in {"read_only", "forkable"}:
+        raise AppContractValidationError("Source-available apps must use source_access read_only or forkable.")
+    if distribution.mode == "workspace_local" and distribution.source_access != "editable":
+        raise AppContractValidationError("Workspace-local apps must use source_access editable.")
 
     lifecycle = AppLifecycleDeclaration(
         install=_expect_bool(lifecycle_payload, "install", default=False),
@@ -613,6 +660,7 @@ def parse_app_contract_file(source_root: Path) -> ParsedAppContract:
         description=description,
         publisher=publisher,
         contract=AppContractDescriptor(
+            distribution=distribution,
             compatibility=compatibility,
             storage=storage,
             capabilities=capabilities,

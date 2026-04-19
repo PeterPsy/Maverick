@@ -10,6 +10,8 @@ from core.execution_policy.models import ExecutionMode
 
 AppSourceKind = Literal["platform", "external_bundle", "workspace_local_project"]
 WorkspaceAppStatus = Literal["installed", "enabled", "disabled", "failed", "updating", "rolled_back"]
+AppDistributionMode = Literal["sealed", "source_available", "workspace_local"]
+AppSourceAccess = Literal["none", "read_only", "forkable", "editable"]
 HealthMode = Literal["none", "hook"]
 InstallFailureMode = Literal["block_activation", "mark_failed"]
 MigrateFailureMode = Literal["preserve_data_mark_unhealthy", "block_activation"]
@@ -55,6 +57,15 @@ class AppCapabilities:
     cli_commands: list[str]
     skills: list[str]
     views: list[str]
+
+
+@dataclass(frozen=True)
+class AppDistributionDeclaration:
+    """Describe whether app source is sealed, source-available, or workspace-local."""
+
+    mode: AppDistributionMode
+    source_access: AppSourceAccess
+    modifiable_by_agents: bool
 
 
 @dataclass(frozen=True)
@@ -129,6 +140,7 @@ class AppRollbackSupport:
 class AppContractDescriptor:
     """Executable app contract metadata used by the core."""
 
+    distribution: AppDistributionDeclaration
     compatibility: AppCompatibilityDescriptor
     storage: AppStorageDeclaration
     capabilities: AppCapabilities
@@ -172,6 +184,8 @@ class WorkspaceLocalAppProjectRecord:
     contract: AppContractDescriptor
     created_at: str
     updated_at: str
+    forked_from_source_id: str | None = None
+    forked_from_version: str | None = None
 
 
 @dataclass(frozen=True)

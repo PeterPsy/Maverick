@@ -6,6 +6,11 @@
   "description": "Minimal chat smoke app for validating Maverick v3 platform mounting and runtime basics.",
   "publisher": "versy",
   "minimum_core_version": "0.1.0",
+  "distribution": {
+    "mode": "sealed",
+    "source_access": "none",
+    "modifiable_by_agents": false
+  },
   "capabilities": {
     "mcp_tools": [
       "threads.list",

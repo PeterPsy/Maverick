@@ -9,7 +9,7 @@ import unittest
 
 from core.api.application import create_application
 from core.apps.contracts import build_app_capabilities, build_app_contract, build_parsed_app_contract, write_app_contract_file
-from core.apps.service import install_external_app, register_app_source_from_contract
+from core.apps.service import install_store_app, register_app_source_from_contract
 from core.apps.store import AppCollections, MongoAppStore
 from core.cli.models import CliInvocationContext
 from core.cli.service import run_core_cli_command
@@ -336,7 +336,7 @@ class Phase11ObservabilityTestCase(unittest.TestCase):
         )
         write_app_contract_file(app_root, parsed)
         source = register_app_source_from_contract(app_store, source_kind="platform", source_path=str(app_root))
-        install_external_app(
+        install_store_app(
             app_store,
             source_id=source.source_id,
             workspace_id="default",
@@ -393,7 +393,7 @@ class Phase11ObservabilityTestCase(unittest.TestCase):
 
         audit_actions = {item.action for item in observability_store.list_audit(workspace_id="default")}
         event_types = {item.event_type for item in observability_store.list_events(workspace_id="default")}
-        self.assertIn("app.install.external", audit_actions)
+        self.assertIn("app.install.store", audit_actions)
         self.assertIn("provider.binding.create", audit_actions)
         self.assertIn("provider.selection.configure", audit_actions)
         self.assertIn("provider.launch_spec.build", audit_actions)

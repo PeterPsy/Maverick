@@ -15,7 +15,7 @@ from core.apps.contracts import (
     build_parsed_app_contract,
     write_app_contract_file,
 )
-from core.apps.service import install_external_app, register_app_source_from_contract
+from core.apps.service import install_store_app, register_app_source_from_contract
 from core.apps.store import AppCollections, MongoAppStore
 from core.workspaces.files import (
     build_file_identity,
@@ -193,7 +193,7 @@ class Phase12WorkspaceExportTestCase(unittest.TestCase):
                 source_path=str(app_root),
                 now=now,
             )
-            install_external_app(
+            install_store_app(
                 store,
                 source_id=source.source_id,
                 workspace_id="default",

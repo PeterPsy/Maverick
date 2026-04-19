@@ -15,7 +15,7 @@ from core.apps.contracts import (
     build_parsed_app_contract,
     write_app_contract_file,
 )
-from core.apps.service import install_external_app, register_app_source_from_contract, transition_workspace_app_status
+from core.apps.service import install_store_app, register_app_source_from_contract, transition_workspace_app_status
 from core.apps.store import AppCollections, MongoAppStore
 from core.cli.errors import CliInvocationNotAllowedError
 from core.cli.models import CliInvocationContext
@@ -174,7 +174,7 @@ class Phase9SurfacesTestCase(unittest.TestCase):
             source_path=str(app_root),
             now=now,
         )
-        install_external_app(store, source_id=source.source_id, workspace_id="default", start_path=repo_root, now=now)
+        install_store_app(store, source_id=source.source_id, workspace_id="default", start_path=repo_root, now=now)
 
         tools = list_mcp_tools(app_store=store, workspace_id="default", start_path=repo_root)
         surface = build_workspace_mcp_surface(
@@ -251,7 +251,7 @@ class Phase9SurfacesTestCase(unittest.TestCase):
             source_path=str(app_root),
             now=now,
         )
-        install_external_app(store, source_id=source.source_id, workspace_id="default", start_path=repo_root, now=now)
+        install_store_app(store, source_id=source.source_id, workspace_id="default", start_path=repo_root, now=now)
         context = CliInvocationContext(
             caller_kind="sandbox_agent",
             workspace_id="default",
@@ -335,7 +335,7 @@ class Phase9SurfacesTestCase(unittest.TestCase):
             source_path=str(app_root),
             now=now,
         )
-        install_external_app(store, source_id=source.source_id, workspace_id="default", start_path=repo_root, now=now)
+        install_store_app(store, source_id=source.source_id, workspace_id="default", start_path=repo_root, now=now)
 
         skills = list_visible_platform_skills(app_store=store, workspace_id="default", start_path=repo_root)
 
@@ -357,7 +357,7 @@ class Phase9SurfacesTestCase(unittest.TestCase):
             source_path=str(app_root),
             now=now,
         )
-        install_external_app(app_store, source_id=source.source_id, workspace_id="default", start_path=repo_root, now=now)
+        install_store_app(app_store, source_id=source.source_id, workspace_id="default", start_path=repo_root, now=now)
         session = create_runtime_session(
             runtime_store,
             session_id="sess-1",
@@ -392,7 +392,7 @@ class Phase9SurfacesTestCase(unittest.TestCase):
             source_path=str(app_root),
             now=now,
         )
-        install_external_app(store, source_id=source.source_id, workspace_id="default", start_path=repo_root, now=now)
+        install_store_app(store, source_id=source.source_id, workspace_id="default", start_path=repo_root, now=now)
         transition_workspace_app_status(store, workspace_id="default", app_id="checklists", target_status="disabled", now=now)
 
         tools = list_mcp_tools(app_store=store, workspace_id="default", start_path=repo_root)
@@ -415,7 +415,7 @@ class Phase9SurfacesTestCase(unittest.TestCase):
             source_path=str(app_root),
             now=now,
         )
-        install_external_app(store, source_id=source.source_id, workspace_id="default", start_path=repo_root, now=now)
+        install_store_app(store, source_id=source.source_id, workspace_id="default", start_path=repo_root, now=now)
 
         skills = list_visible_platform_skills(app_store=store, workspace_id="default", start_path=repo_root)
 
@@ -434,7 +434,7 @@ class Phase9SurfacesTestCase(unittest.TestCase):
             source_path=str(first_root),
             now=now,
         )
-        install_external_app(store, source_id=first_source.source_id, workspace_id="default", start_path=repo_root, now=now)
+        install_store_app(store, source_id=first_source.source_id, workspace_id="default", start_path=repo_root, now=now)
 
         second_root = repo_root / "apps" / "tasks"
         (second_root / "backend" / "mcp").mkdir(parents=True, exist_ok=True)
@@ -476,7 +476,7 @@ class Phase9SurfacesTestCase(unittest.TestCase):
             source_path=str(second_root),
             now=now,
         )
-        install_external_app(store, source_id=second_source.source_id, workspace_id="default", start_path=repo_root, now=now)
+        install_store_app(store, source_id=second_source.source_id, workspace_id="default", start_path=repo_root, now=now)
 
         tools = list_mcp_tools(app_store=store, workspace_id="default", start_path=repo_root)
 

@@ -1,119 +1,206 @@
 <!doctype html>
-<html lang="en">
+<html lang="it">
   <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Maverick v3</title>
-    <style>
-      :root {
-        --bg: #f5f1e8;
-        --ink: #1c1b19;
-        --muted: #6f675c;
-        --panel: #fffaf1;
-        --line: #d8ccba;
-        --accent: #1f5f5b;
-      }
-      * { box-sizing: border-box; }
-      body {
-        margin: 0;
-        font-family: Georgia, "Times New Roman", serif;
-        background:
-          radial-gradient(circle at top left, rgba(31,95,91,0.08), transparent 30%),
-          linear-gradient(180deg, #f8f3ea, var(--bg));
-        color: var(--ink);
-      }
-      .shell {
-        display: grid;
-        grid-template-columns: 280px 1fr;
-        min-height: 100vh;
-      }
-      .sidebar {
-        border-right: 1px solid var(--line);
-        background: rgba(255,250,241,0.8);
-        padding: 24px 20px;
-      }
-      .brand {
-        font-size: 24px;
-        margin: 0 0 6px;
-      }
-      .subtitle {
-        color: var(--muted);
-        margin: 0 0 24px;
-        line-height: 1.4;
-      }
-      .apps {
-        display: grid;
-        gap: 10px;
-      }
-      .app-link {
-        border: 1px solid var(--line);
-        background: var(--panel);
-        color: var(--ink);
-        text-decoration: none;
-        padding: 12px 14px;
-        border-radius: 12px;
-        display: block;
-      }
-      .app-link.active {
-        border-color: var(--accent);
-        box-shadow: 0 0 0 1px rgba(31,95,91,0.15);
-      }
-      .content {
-        padding: 18px;
-      }
-      iframe {
-        width: 100%;
-        min-height: calc(100vh - 36px);
-        border: 1px solid var(--line);
-        border-radius: 16px;
-        background: white;
-      }
-      @media (max-width: 900px) {
-        .shell { grid-template-columns: 1fr; }
-        .sidebar { border-right: 0; border-bottom: 1px solid var(--line); }
-        iframe { min-height: 72vh; }
-      }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#0f0f10">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Maverick</title>
+    <link rel="stylesheet" href="/apps/base-shell/styles.css">
   </head>
   <body>
-    <div class="shell">
-      <aside class="sidebar">
-        <h1 class="brand">Maverick v3</h1>
-        <p class="subtitle">Base shell app mounted by the core. It hosts the frontend of enabled apps.</p>
-        <div id="apps" class="apps"></div>
+    <main class="bs-shell is-sidebar-open" id="shell" data-apps-api="/api/apps">
+      <section class="bs-workspace-view-shell" aria-live="polite">
+        <section class="bs-app-grid-panel is-active" id="appGridPanel" aria-label="Installed Apps">
+          <div class="bs-app-grid-panel__header">
+            <div>
+              <p class="bs-eyebrow">Registry installato</p>
+              <h1 class="bs-app-grid-panel__title">Installed Apps</h1>
+              <p class="bs-app-grid-panel__description">App montata dal manifest della shell.</p>
+            </div>
+          </div>
+          <div class="bs-app-grid" id="appGrid"></div>
+        </section>
+
+        <section class="bs-workspace-app-panel" id="appPanel" aria-label="Mounted app">
+          <div class="bs-workspace-app-surface">
+            <iframe class="bs-workspace-app-frame" id="appFrame" title="Mounted app viewport"></iframe>
+          </div>
+        </section>
+      </section>
+
+      <button class="bs-shell__backdrop" id="backdrop" type="button" aria-label="Chiudi menu"></button>
+
+      <aside class="bs-sidebar" aria-label="Workspace navigation">
+        <div class="bs-sidebar__header">
+          <div class="bs-sidebar__brand">
+            <img alt="Maverick" class="bs-sidebar__brand-mark" src="/apps/base-shell/maverick-logo.png" width="48" height="48">
+            <div>
+              <p class="bs-eyebrow">Workspace</p>
+              <h2 class="bs-sidebar__title">Maverick</h2>
+            </div>
+          </div>
+          <div class="bs-sidebar__header-actions">
+            <div class="bs-sidebar__usage-mini" aria-label="Codex rate limits">
+              <span class="bs-sidebar__usage-mini-item is-healthy">
+                <svg aria-hidden="true" class="bs-sidebar__usage-mini-ring" viewBox="0 0 32 32">
+                  <circle class="bs-sidebar__usage-mini-track" cx="16" cy="16" r="12"></circle>
+                  <circle class="bs-sidebar__usage-mini-progress" cx="16" cy="16" r="12"></circle>
+                </svg>
+              </span>
+              <span class="bs-sidebar__usage-mini-item is-healthy">
+                <svg aria-hidden="true" class="bs-sidebar__usage-mini-ring" viewBox="0 0 32 32">
+                  <circle class="bs-sidebar__usage-mini-track" cx="16" cy="16" r="12"></circle>
+                  <circle class="bs-sidebar__usage-mini-progress" cx="16" cy="16" r="12"></circle>
+                </svg>
+              </span>
+            </div>
+            <button class="bs-panel-minimize" id="panelMinimize" type="button" aria-label="Chiudi pannello laterale">
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                <path d="M4.75 5.75h14.5v12.5H4.75zM9.25 5.75v12.5" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"></path>
+                <path d="m14.5 9.25-2.75 2.75 2.75 2.75" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <nav class="bs-sidebar__nav-list" aria-label="Primary navigation">
+          <button class="bs-sidebar__workspace-select" type="button">
+            <span class="bs-sidebar__workspace-icon">
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                <path d="M4.75 7.5A2.75 2.75 0 0 1 7.5 4.75h3.2l1.55 1.8h4.25a2.75 2.75 0 0 1 2.75 2.75v6.2a2.75 2.75 0 0 1-2.75 2.75H7.5a2.75 2.75 0 0 1-2.75-2.75V7.5Z" stroke="currentColor" stroke-linejoin="round" stroke-width="1.6"></path>
+              </svg>
+            </span>
+            <span class="bs-sidebar__workspace-copy">
+              <span class="bs-sidebar__workspace-title">Versy</span>
+              <span class="bs-sidebar__workspace-subtitle">Shared &middot; Admin access</span>
+            </span>
+            <svg aria-hidden="true" class="bs-sidebar__workspace-chevron" viewBox="0 0 24 24" fill="none">
+              <path d="m7 10 5 5 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+          </button>
+
+          <button class="bs-sidebar__nav-button" id="newChatButton" type="button" title="Crea una nuova chat">
+            <span class="bs-sidebar__nav-leading">
+              <span class="bs-sidebar__nav-icon">
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                  <path d="M7.75 8.25h8.5M7.75 12h5.5M10 18.25l-3.2 2.5v-2.5H6A2.25 2.25 0 0 1 3.75 16V8A2.25 2.25 0 0 1 6 5.75h12A2.25 2.25 0 0 1 20.25 8v8A2.25 2.25 0 0 1 18 18.25H10Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6"></path>
+                  <path d="M17.75 4.75v4.5M15.5 7h4.5" stroke="currentColor" stroke-linecap="round" stroke-width="1.6"></path>
+                </svg>
+              </span>
+              <span class="bs-sidebar__nav-copy">
+                <span class="bs-sidebar__nav-title">New chat</span>
+              </span>
+            </span>
+          </button>
+
+          <div id="pinnedApps" class="bs-sidebar__nav-list"></div>
+
+          <button class="bs-sidebar__nav-button is-active" id="appsButton" type="button">
+            <span class="bs-sidebar__nav-leading">
+              <span class="bs-sidebar__nav-icon">
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                  <path d="M6 4.75h4.25V9H6zM13.75 4.75H18V9h-4.25zM6 15h4.25v4.25H6zM13.75 15H18v4.25h-4.25z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path>
+                  <path d="M8.125 9v6M15.875 9v6M10.25 12h3.5" stroke="currentColor" stroke-linecap="round" stroke-width="1.6"></path>
+                </svg>
+              </span>
+              <span class="bs-sidebar__nav-copy">
+                <span class="bs-sidebar__nav-title">Apps</span>
+              </span>
+            </span>
+          </button>
+
+          <button class="bs-sidebar__nav-button" id="usersButton" type="button">
+            <span class="bs-sidebar__nav-leading">
+              <span class="bs-sidebar__nav-icon">
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                  <path d="M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm6.25 1.25a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" stroke="currentColor" stroke-width="1.6"></path>
+                  <path d="M4.75 18.25c0-2.35 2.2-4.25 4.92-4.25h.66c2.72 0 4.92 1.9 4.92 4.25M14 18.25c.17-1.66 1.72-3 3.63-3h.24c1.22 0 2.32.5 3.13 1.31" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6"></path>
+                </svg>
+              </span>
+              <span class="bs-sidebar__nav-copy">
+                <span class="bs-sidebar__nav-title">Users</span>
+              </span>
+            </span>
+          </button>
+        </nav>
+
+        <section class="bs-chat-list" aria-label="Project folders">
+          <div class="bs-chat-folder">
+            <div class="bs-chat-folder__header">
+              <p class="bs-chat-folder__title">Senza progetto</p>
+              <div class="bs-chat-folder__header-actions">
+                <button class="bs-chat-folder__toggle" type="button" aria-label="Mostra chat del progetto Senza progetto">
+                  <span class="bs-chat-folder__count">0</span>
+                  <svg aria-hidden="true" class="bs-chat-folder__chevron" viewBox="0 0 24 24" fill="none">
+                    <path d="m7 10 5 5 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>
+                  </svg>
+                </button>
+                <button class="bs-chat-folder__action-button" type="button" title="Nuovo progetto" aria-label="Nuovo progetto">
+                  <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                    <path d="M3.75 7.5A2.75 2.75 0 0 1 6.5 4.75h3.2l1.55 1.8h6.25A2.75 2.75 0 0 1 20.25 9.3v7.2a2.75 2.75 0 0 1-2.75 2.75H6.5a2.75 2.75 0 0 1-2.75-2.75V7.5Z" stroke="currentColor" stroke-linejoin="round" stroke-width="1.6"></path>
+                    <path d="M12 10.25v5.5M9.25 13h5.5" stroke="currentColor" stroke-linecap="round" stroke-width="1.6"></path>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div class="bs-sidebar__footer">
+          <div class="bs-sidebar__footer-section">
+            <button class="bs-sidebar__nav-button" type="button">
+              <span class="bs-sidebar__nav-leading">
+                <span class="bs-sidebar__nav-icon">
+                  <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 16.25v.25M9.65 9.15a2.6 2.6 0 1 1 4.48 1.8c-.8.78-1.38 1.28-1.38 2.3v.25" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6"></path>
+                    <path d="M12 20.25c4.56 0 8.25-3.69 8.25-8.25S16.56 3.75 12 3.75 3.75 7.44 3.75 12 7.44 20.25 12 20.25Z" stroke="currentColor" stroke-width="1.6"></path>
+                  </svg>
+                </span>
+                <span class="bs-sidebar__nav-copy">
+                  <span class="bs-sidebar__nav-title">Tutorial</span>
+                </span>
+              </span>
+            </button>
+            <button class="bs-sidebar__nav-button" type="button">
+              <span class="bs-sidebar__nav-leading">
+                <span class="bs-sidebar__nav-icon">
+                  <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z" stroke="currentColor" stroke-width="1.6"></path>
+                    <path d="M19 12a7 7 0 0 0-.08-1l2.03-1.58-1.92-3.32-2.43.76a7.3 7.3 0 0 0-1.73-1L14.5 3h-5l-.37 2.86c-.61.24-1.19.58-1.72 1l-2.44-.76-1.92 3.32L4.08 11A7 7 0 0 0 4 12c0 .34.03.67.08 1l-2.03 1.58 1.92 3.32 2.43-.76c.53.42 1.11.76 1.73 1L9.5 21h5l.37-2.86c.61-.24 1.19-.58 1.72-1l2.44.76 1.92-3.32L18.92 13c.05-.33.08-.66.08-1Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6"></path>
+                  </svg>
+                </span>
+                <span class="bs-sidebar__nav-copy">
+                  <span class="bs-sidebar__nav-title">Settings</span>
+                </span>
+              </span>
+            </button>
+            <button class="bs-sidebar__nav-button" type="button">
+              <span class="bs-sidebar__nav-leading">
+                <span class="bs-sidebar__nav-icon">
+                  <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+                    <path d="M10.75 6.75H8A2.25 2.25 0 0 0 5.75 9v6A2.25 2.25 0 0 0 8 17.25h2.75" stroke="currentColor" stroke-linecap="round" stroke-width="1.6"></path>
+                    <path d="M13 8.25 16.75 12 13 15.75" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6"></path>
+                    <path d="M9.75 12h7" stroke="currentColor" stroke-linecap="round" stroke-width="1.6"></path>
+                  </svg>
+                </span>
+                <span class="bs-sidebar__nav-copy">
+                  <span class="bs-sidebar__nav-title">Logout</span>
+                </span>
+              </span>
+            </button>
+          </div>
+        </div>
       </aside>
-      <main class="content">
-        <iframe id="viewport" title="Mounted app viewport" src="/apps/chat/"></iframe>
-      </main>
-    </div>
-    <script>
-      const appsRoot = document.getElementById("apps");
-      const viewport = document.getElementById("viewport");
 
-      async function loadApps() {
-        const response = await fetch("/api/apps");
-        const payload = await response.json();
-        const apps = payload.items.filter((item) => item.app_id !== "base-shell");
-        appsRoot.innerHTML = "";
-        for (const app of apps) {
-          const link = document.createElement("a");
-          link.href = `/apps/${app.app_id}/`;
-          link.className = "app-link";
-          link.textContent = app.name;
-          link.addEventListener("click", (event) => {
-            event.preventDefault();
-            viewport.src = link.href;
-            for (const item of appsRoot.querySelectorAll(".app-link")) item.classList.remove("active");
-            link.classList.add("active");
-          });
-          if (app.app_id === "chat") link.classList.add("active");
-          appsRoot.appendChild(link);
-        }
-      }
-
-      loadApps().catch((error) => {
-        appsRoot.innerHTML = `<div class="app-link">Failed to load apps: ${error}</div>`;
-      });
-    </script>
+      <button class="bs-panel-peek bs-panel-peek--left" id="panelPeek" type="button" aria-label="Apri menu">
+        <svg aria-hidden="true" class="bs-panel-peek__icon" viewBox="0 0 24 24" fill="none">
+          <path d="M4.75 5.75h14.5v12.5H4.75zM9.25 5.75v12.5" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"></path>
+          <path d="m12 9.25 2.75 2.75L12 14.75" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path>
+        </svg>
+      </button>
+    </main>
+    <script src="/apps/base-shell/shell.js"></script>
   </body>
 </html>

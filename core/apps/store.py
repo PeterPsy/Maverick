@@ -13,6 +13,7 @@ from core.apps.errors import (
 from core.apps.models import (
     AppCapabilities,
     AppContractDescriptor,
+    AppDistributionDeclaration,
     AppEntrypoints,
     AppFailureSemantics,
     AppHealthContract,
@@ -95,6 +96,7 @@ class MongoAppStore:
 
     def _app_contract(self, payload: dict[str, Any]) -> AppContractDescriptor:
         return AppContractDescriptor(
+            distribution=AppDistributionDeclaration(**payload["distribution"]),
             compatibility=AppCompatibilityDescriptor(**payload["compatibility"]),
             storage=AppStorageDeclaration(
                 **{

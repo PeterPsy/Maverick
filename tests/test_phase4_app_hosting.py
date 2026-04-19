@@ -11,6 +11,7 @@ from core.apps.contracts import (
     build_app_capabilities,
     build_app_compatibility,
     build_app_contract,
+    build_app_distribution,
     build_app_entrypoints,
     build_app_failure_semantics,
     build_app_health_contract,
@@ -28,7 +29,8 @@ from core.apps.errors import (
     WorkspaceLocalAppProjectNotFoundError,
 )
 from core.apps.service import (
-    install_external_app,
+    fork_store_app_to_workspace,
+    install_store_app,
     install_workspace_local_app,
     purge_workspace_app_data,
     register_app_source_from_contract,
@@ -116,7 +118,7 @@ class Phase4AppHostingTestCase(unittest.TestCase):
         )
         write_app_contract_file(app_root, parsed)
 
-    def test_external_app_install_creates_workspace_binding_and_data_root(self) -> None:
+    def test_store_app_install_creates_workspace_binding_without_source_copy(self) -> None:
         store = self.make_store()
         now = datetime.now(tz=UTC)
         with TemporaryDirectory() as temp_dir:
@@ -130,7 +132,7 @@ class Phase4AppHostingTestCase(unittest.TestCase):
                 now=now,
             )
 
-            binding = install_external_app(
+            binding = install_store_app(
                 store,
                 source_id=source.source_id,
                 workspace_id="default",
@@ -139,7 +141,85 @@ class Phase4AppHostingTestCase(unittest.TestCase):
             )
 
             self.assertEqual(binding.status, "enabled")
+            self.assertEqual(binding.source_kind, "platform")
             self.assertTrue((repo_root / "workspaces" / "default" / "data" / "checklists").is_dir())
+            self.assertFalse((repo_root / "workspaces" / "default" / "apps" / "checklists").exists())
+
+    def test_source_available_store_app_can_be_forked_into_workspace(self) -> None:
+        store = self.make_store()
+        now = datetime.now(tz=UTC)
+        with TemporaryDirectory() as temp_dir:
+            repo_root = self.make_repo_root(temp_dir)
+            app_root = repo_root / "apps" / "customizable"
+            (app_root / "frontend").mkdir(parents=True, exist_ok=True)
+            (app_root / "frontend" / "index.html").write_text("<main>Customizable</main>", encoding="utf-8")
+            self.write_contract(
+                app_root,
+                app_id="customizable",
+                name="Customizable",
+                contract=build_app_contract(
+                    distribution=build_app_distribution(
+                        mode="source_available",
+                        source_access="forkable",
+                        modifiable_by_agents=True,
+                    ),
+                    entrypoints=build_app_entrypoints(frontend="frontend"),
+                ),
+            )
+            source = register_app_source_from_contract(
+                store,
+                source_kind="platform",
+                source_path=str(app_root),
+                now=now,
+            )
+
+            project = fork_store_app_to_workspace(
+                store,
+                source_id=source.source_id,
+                workspace_id="acme",
+                start_path=repo_root,
+                now=now,
+            )
+
+            fork_root = repo_root / "workspaces" / "acme" / "apps" / "customizable"
+            self.assertEqual(project.project_root, str(fork_root))
+            self.assertEqual(project.forked_from_source_id, source.source_id)
+            self.assertEqual(project.contract.distribution.mode, "workspace_local")
+            self.assertTrue((fork_root / "frontend" / "index.html").is_file())
+
+            binding = install_workspace_local_app(
+                store,
+                workspace_id="acme",
+                app_id="customizable",
+                start_path=repo_root,
+                now=now,
+            )
+            self.assertEqual(binding.source_kind, "workspace_local_project")
+
+    def test_sealed_store_app_cannot_be_forked_by_default(self) -> None:
+        store = self.make_store()
+        now = datetime.now(tz=UTC)
+        with TemporaryDirectory() as temp_dir:
+            repo_root = self.make_repo_root(temp_dir)
+            app_root = repo_root / "apps" / "sealed-app"
+            self.write_contract(app_root, app_id="sealed-app", name="Sealed App")
+            source = register_app_source_from_contract(
+                store,
+                source_kind="platform",
+                source_path=str(app_root),
+                now=now,
+            )
+
+            with self.assertRaises(AppLifecycleError):
+                fork_store_app_to_workspace(
+                    store,
+                    source_id=source.source_id,
+                    workspace_id="acme",
+                    start_path=repo_root,
+                    now=now,
+                )
+
+            self.assertFalse((repo_root / "workspaces" / "acme" / "apps" / "sealed-app").exists())
 
     def test_workspace_local_app_can_only_install_into_its_own_workspace(self) -> None:
         store = self.make_store()
@@ -147,7 +227,19 @@ class Phase4AppHostingTestCase(unittest.TestCase):
         with TemporaryDirectory() as temp_dir:
             repo_root = self.make_repo_root(temp_dir)
             project_root = repo_root / "workspaces" / "acme" / "apps" / "notes"
-            self.write_contract(project_root, app_id="notes", name="Notes", publisher="workspace-user")
+            self.write_contract(
+                project_root,
+                app_id="notes",
+                name="Notes",
+                publisher="workspace-user",
+                contract=build_app_contract(
+                    distribution=build_app_distribution(
+                        mode="workspace_local",
+                        source_access="editable",
+                        modifiable_by_agents=True,
+                    ),
+                ),
+            )
             record = register_workspace_local_app_project_from_contract(
                 store,
                 workspace_id="acme",
@@ -176,7 +268,7 @@ class Phase4AppHostingTestCase(unittest.TestCase):
                 now=now,
             )
             data_root = repo_root / "workspaces" / "default" / "data" / "crm"
-            install_external_app(store, source_id=source.source_id, workspace_id="default", start_path=repo_root, now=now)
+            install_store_app(store, source_id=source.source_id, workspace_id="default", start_path=repo_root, now=now)
             (data_root / "records.json").write_text("{}", encoding="utf-8")
 
             uninstall_workspace_app(store, workspace_id="default", app_id="crm")
@@ -353,9 +445,9 @@ class Phase4AppHostingTestCase(unittest.TestCase):
                 now=now,
             )
             with self.assertRaises(AppCompatibilityError):
-                install_external_app(store, source_id=bad_contract.source_id, workspace_id="default", start_path=repo_root, now=now)
+                install_store_app(store, source_id=bad_contract.source_id, workspace_id="default", start_path=repo_root, now=now)
             with self.assertRaises(AppCompatibilityError):
-                install_external_app(store, source_id=full_access_only.source_id, workspace_id="acme", start_path=repo_root, now=now)
+                install_store_app(store, source_id=full_access_only.source_id, workspace_id="acme", start_path=repo_root, now=now)
 
     def test_cannot_enable_before_install_and_can_transition_installed_to_enabled(self) -> None:
         store = self.make_store()
@@ -373,7 +465,7 @@ class Phase4AppHostingTestCase(unittest.TestCase):
                 source_path=str(app_root),
                 now=now,
             )
-            install_external_app(
+            install_store_app(
                 store,
                 source_id=source.source_id,
                 workspace_id="default",
@@ -404,7 +496,7 @@ class Phase4AppHostingTestCase(unittest.TestCase):
                 source_path=str(app_root),
                 now=now,
             )
-            install_external_app(store, source_id=source.source_id, workspace_id="default", start_path=repo_root, now=now)
+            install_store_app(store, source_id=source.source_id, workspace_id="default", start_path=repo_root, now=now)
             with self.assertRaises(AppLifecycleError):
                 transition_workspace_app_status(
                     store,
@@ -414,7 +506,7 @@ class Phase4AppHostingTestCase(unittest.TestCase):
                     now=now,
                 )
 
-    def test_external_bundle_must_live_under_trusted_installation_root(self) -> None:
+    def test_trusted_bundle_must_live_under_installation_managed_root(self) -> None:
         store = self.make_store()
         now = datetime.now(tz=UTC)
         with TemporaryDirectory() as temp_dir:
@@ -429,7 +521,7 @@ class Phase4AppHostingTestCase(unittest.TestCase):
             )
 
             with self.assertRaises(AppLifecycleError):
-                install_external_app(store, source_id=source.source_id, workspace_id="default", start_path=repo_root, now=now)
+                install_store_app(store, source_id=source.source_id, workspace_id="default", start_path=repo_root, now=now)
 
     def test_install_hook_runs_and_health_failure_marks_binding_failed(self) -> None:
         store = self.make_store()
@@ -463,7 +555,7 @@ class Phase4AppHostingTestCase(unittest.TestCase):
                 now=now,
             )
 
-            binding = install_external_app(store, source_id=source.source_id, workspace_id="default", start_path=repo_root, now=now)
+            binding = install_store_app(store, source_id=source.source_id, workspace_id="default", start_path=repo_root, now=now)
 
             self.assertTrue((app_root / "install-ran.txt").exists())
             self.assertEqual(binding.status, "failed")
@@ -490,7 +582,7 @@ class Phase4AppHostingTestCase(unittest.TestCase):
             )
 
             with self.assertRaises(AppLifecycleError):
-                install_external_app(store, source_id=source.source_id, workspace_id="default", start_path=repo_root, now=now)
+                install_store_app(store, source_id=source.source_id, workspace_id="default", start_path=repo_root, now=now)
 
     def test_upgrade_workspace_app_runs_upgrade_and_migrate_and_updates_data_schema_version(self) -> None:
         store = self.make_store()
@@ -541,7 +633,7 @@ class Phase4AppHostingTestCase(unittest.TestCase):
                 source_path=str(upgraded_root),
                 now=now,
             )
-            install_external_app(store, source_id=initial_source.source_id, workspace_id="default", start_path=repo_root, now=now)
+            install_store_app(store, source_id=initial_source.source_id, workspace_id="default", start_path=repo_root, now=now)
 
             result = upgrade_workspace_app(
                 store,
@@ -593,7 +685,7 @@ class Phase4AppHostingTestCase(unittest.TestCase):
                 source_path=str(broken_root),
                 now=now,
             )
-            install_external_app(store, source_id=initial_source.source_id, workspace_id="default", start_path=repo_root, now=now)
+            install_store_app(store, source_id=initial_source.source_id, workspace_id="default", start_path=repo_root, now=now)
 
             result = upgrade_workspace_app(
                 store,

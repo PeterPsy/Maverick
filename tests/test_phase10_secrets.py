@@ -8,7 +8,7 @@ import tempfile
 import unittest
 
 from core.apps.contracts import build_app_contract, build_app_entrypoints, build_app_health_contract, build_app_lifecycle, build_parsed_app_contract, write_app_contract_file
-from core.apps.service import install_external_app, register_app_source_from_contract
+from core.apps.service import install_store_app, register_app_source_from_contract
 from core.apps.store import AppCollections, MongoAppStore
 from core.providers.models import ProviderCapabilitySet, ProviderDefinition, RuntimeBackendLaunchSpec
 from core.providers.provider_registry import ProviderRegistry
@@ -291,7 +291,7 @@ class Phase10SecretsAndRecoveryTestCase(unittest.TestCase):
             ),
         )
         source = register_app_source_from_contract(app_store, source_kind="platform", source_path=str(app_root))
-        install_external_app(app_store, source_id=source.source_id, workspace_id="acme", start_path=repo_root)
+        install_store_app(app_store, source_id=source.source_id, workspace_id="acme", start_path=repo_root)
 
         app_health = record_app_health(
             recovery_store,

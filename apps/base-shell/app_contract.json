@@ -2,10 +2,15 @@
   "app_id": "base-shell",
   "contract_version": "1.0",
   "name": "Base Shell",
-  "version": "0.1.0",
-  "description": "Minimal product shell app mounted by the Maverick core host.",
+  "version": "2.0.0",
+  "description": "Maverick v3 product shell app that hosts enabled app frontends through the platform registry.",
   "publisher": "versy",
   "minimum_core_version": "0.1.0",
+  "distribution": {
+    "mode": "sealed",
+    "source_access": "none",
+    "modifiable_by_agents": false
+  },
   "capabilities": {
     "mcp_tools": [],
     "cli_commands": [],
@@ -24,7 +29,7 @@
   },
   "storage": {
     "storage_kind": "json",
-    "data_schema_version": "1",
+    "data_schema_version": "2",
     "primary_paths": [
       "data/base-shell/preferences.json"
     ],

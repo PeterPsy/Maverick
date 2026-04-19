@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from core.apps.service import install_external_app, register_app_source_from_contract
+from core.apps.service import install_store_app, register_app_source_from_contract
 from core.apps.store import AppStore
 from core.shared.repository import installation_paths
 from core.workspaces.store import WorkspaceStore
@@ -49,7 +49,7 @@ def register_and_install_builtin_apps(
             source_path=str(spec.source_path),
             now=now,
         )
-        install_external_app(
+        install_store_app(
             app_store,
             source_id=source.source_id,
             workspace_id=workspace_id,

@@ -593,9 +593,9 @@ without carrying forward legacy structure or backward-compatibility constraints 
     - [ ] relevant frontend tests if introduced
     - [x] `python3 -m unittest discover -s tests -p 'test_*.py'`
     - [x] `python3 -m compileall core tests apps`
-    - [ ] live smoke check on `https://maverick3.versy.ai/`
+    - [x] live smoke check on `https://maverick3.versy.ai/`
   - [ ] Restart and verify hosted services after deployment:
-    - [ ] `maverick3-core.service`
+    - [x] `maverick3-core.service`
     - [ ] `maverick3-rescue.service` if touched
     - [ ] `nginx` config unchanged or reloaded if changed
   - [ ] Commit and push the completed porting checkpoint

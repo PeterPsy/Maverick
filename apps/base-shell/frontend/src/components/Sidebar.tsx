@@ -10,6 +10,8 @@ export function Sidebar({
   onClose,
   onOpenApp,
   onOpenApps,
+  onOpenSettings,
+  onOpenTutorial,
   pinnedAppIds,
 }: {
   activeAppId: string | null;
@@ -18,6 +20,8 @@ export function Sidebar({
   onClose: () => void;
   onOpenApp: (appId: string) => void;
   onOpenApps: () => void;
+  onOpenSettings: () => void;
+  onOpenTutorial: () => void;
   pinnedAppIds: string[];
 }) {
   if (!isOpen) {
@@ -40,11 +44,11 @@ export function Sidebar({
       </div>
 
       <nav className="bs-sidebar__nav-list" aria-label="Primary navigation">
-        <button className="bs-sidebar__workspace-select" type="button">
+        <button className="bs-sidebar__workspace-select" disabled type="button">
           <span className="bs-sidebar__workspace-icon">▣</span>
           <span className="bs-sidebar__workspace-copy">
-            <span className="bs-sidebar__workspace-title">Versy</span>
-            <span className="bs-sidebar__workspace-subtitle">Shared · Admin access</span>
+            <span className="bs-sidebar__workspace-title">default</span>
+            <span className="bs-sidebar__workspace-subtitle">Workspace corrente</span>
           </span>
         </button>
 
@@ -84,7 +88,7 @@ export function Sidebar({
       </section>
 
       <div className="bs-sidebar__footer">
-        <button className="bs-sidebar__nav-button" type="button">
+        <button className="bs-sidebar__nav-button" onClick={onOpenTutorial} type="button">
           <span className="bs-sidebar__nav-leading">
             <span className="bs-sidebar__nav-icon">?</span>
             <span className="bs-sidebar__nav-copy">
@@ -92,7 +96,7 @@ export function Sidebar({
             </span>
           </span>
         </button>
-        <button className="bs-sidebar__nav-button" type="button">
+        <button className="bs-sidebar__nav-button" onClick={onOpenSettings} type="button">
           <span className="bs-sidebar__nav-leading">
             <span className="bs-sidebar__nav-icon">⚙</span>
             <span className="bs-sidebar__nav-copy">

@@ -1,5 +1,6 @@
 import { AppRegistryItem } from "../api";
-import { shellVisibleApps } from "../navigation";
+import { appStatusTone, shellVisibleApps } from "../navigation";
+import { Badge, Button, EmptyPanel, LoadingPanel } from "../ui";
 import { AppLogo } from "./AppLogo";
 
 export function AppsPanel({
@@ -7,15 +8,19 @@ export function AppsPanel({
   error,
   isLoading,
   onOpenApp,
+  onTogglePinnedApp,
+  pinnedAppIds,
 }: {
   apps: AppRegistryItem[];
   error: string | null;
   isLoading: boolean;
   onOpenApp: (appId: string) => void;
+  onTogglePinnedApp: (appId: string) => void;
+  pinnedAppIds: string[];
 }) {
   const visibleApps = shellVisibleApps(apps);
   if (isLoading) {
-    return <EmptyPanel description="Recupero il registry corrente del sistema." title="Carico le app installate" />;
+    return <LoadingPanel description="Recupero il registry corrente del sistema." title="Carico le app installate" />;
   }
   if (error) {
     return <EmptyPanel description={error} title="Impossibile leggere il registry app" />;
@@ -32,27 +37,28 @@ export function AppsPanel({
       </div>
       <div className="bs-app-grid">
         {visibleApps.map((app) => (
-          <button className="bs-app-card" key={app.app_id} onClick={() => onOpenApp(app.app_id)} type="button">
-            <span className="bs-app-card__header">
+          <article className="bs-app-card" key={app.app_id}>
+            <button className="bs-app-card__open" onClick={() => onOpenApp(app.app_id)} type="button">
               <AppLogo app={app} className="bs-app-logo--card" />
-              <span>
+              <span className="bs-app-card__copy">
                 <span className="bs-app-card__title">{app.name}</span>
                 <span className="bs-app-card__description">{app.description || "App montata dal registry v3."}</span>
               </span>
-            </span>
-          </button>
+            </button>
+            <div className="bs-app-card__meta">
+              <Badge tone={appStatusTone(app.status)}>{app.status}</Badge>
+              <Badge>{app.version}</Badge>
+            </div>
+            <div className="bs-app-card__actions">
+              <Button onClick={() => onOpenApp(app.app_id)} size="sm" variant="primary">
+                Apri
+              </Button>
+              <Button onClick={() => onTogglePinnedApp(app.app_id)} size="sm" variant="ghost">
+                {pinnedAppIds.includes(app.app_id) ? "Rimuovi pin" : "Fissa"}
+              </Button>
+            </div>
+          </article>
         ))}
-      </div>
-    </section>
-  );
-}
-
-function EmptyPanel({ description, title }: { description: string; title: string }) {
-  return (
-    <section className="bs-empty-panel">
-      <div className="bs-empty-panel__surface">
-        <p className="bs-empty-panel__title">{title}</p>
-        <p className="bs-empty-panel__description">{description}</p>
       </div>
     </section>
   );

@@ -52,17 +52,3 @@
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.06);
 }
-
-.bs-badge {
-  padding: 0.32rem 0.6rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 999px;
-  background: rgba(215, 36, 81, 0.14);
-  color: var(--maverick-text);
-  font-size: 0.72rem;
-}
-
-.bs-badge.is-muted {
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--maverick-text-muted);
-}

@@ -1,4 +1,5 @@
 import { AppRegistryItem, PlatformStatus } from "../api";
+import { Badge } from "../ui";
 import { AppLogo } from "./AppLogo";
 
 export function TopBar({
@@ -25,8 +26,8 @@ export function TopBar({
         </div>
       </div>
       <div className="bs-app-topbar__actions">
-        <span className="bs-badge">{status?.workspace_id || "default"}</span>
-        <span className="bs-badge is-muted">{status?.status || "loading"}</span>
+        <Badge tone="primary">{status?.workspace_id || "default"}</Badge>
+        <Badge>{status?.status || "loading"}</Badge>
       </div>
     </section>
   );

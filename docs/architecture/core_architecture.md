@@ -434,6 +434,15 @@ The shell may visually frame mounted app frontends, but it must not hardcode opt
 
 This keeps the product shell replaceable and prevents product UI concerns from leaking into the core.
 
+The completed v3 `base-shell` port intentionally carries only shell-owned behavior:
+
+- local browser session state such as active app, sidebar state, and pinned app ids
+- reusable shell UI primitives used by the app itself
+- registry-driven app catalog and mounted app iframe surfaces
+- local Tutorial and Settings dialogs that describe currently available v3 capabilities
+
+It must not port v2 auth, user management, provider settings, retrieval settings, push notifications, or backend restart controls into the shell until those capabilities exist as v3 core APIs or separate v3 apps.
+
 The rule is:
 
 - the core is the platform host

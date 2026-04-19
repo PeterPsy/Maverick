@@ -474,7 +474,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
 - [x] Implement `chat` as an app on top of core runtime interfaces
 - [x] Implement `base-shell` as the first mounted frontend shell smoke app
 - [x] Create reusable local Codex skill `maverick-v3-app-creator` for rigorous v2-to-v3 app planning and app creation work
-- [ ] Port `base-shell` to the Maverick v2 `base_shell` frontend approach, adapted cleanly to v3:
+- [x] Port `base-shell` to the Maverick v2 `base_shell` frontend approach, adapted cleanly to v3:
   - [x] Treat `/home/ubuntu/maverick-v2/apps/base_shell` as the behavioral and visual reference, not as code to copy blindly
   - [x] Preserve the v3 app identity as `base-shell` and keep the v3 contract format in `app_contract.json`
   - [x] Replace the static `frontend/index.html`, `frontend/shell.js`, and monolithic `frontend/styles.css` approach with an app-owned React/TypeScript frontend
@@ -504,42 +504,42 @@ without carrying forward legacy structure or backward-compatibility constraints 
     - [x] preserve the v2 visual language, spacing, panels, controls, and responsive behavior where still valid
     - [x] remove v2 API, auth, workspace, and runtime assumptions that are not available as v3 protocols
     - [x] connect only to v3 platform APIs and mounted app routes
-  - [ ] Apply this file-by-file v2 to v3 porting map:
+  - [x] Apply this file-by-file v2 to v3 porting map:
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/app.manifest.json` -> use only as design intent reference; replace with v3 `apps/base-shell/app_contract.json`
-    - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/ui.tsx` -> port reusable UI primitives into focused v3 files, not one large primitive file
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/ui.tsx` -> port reusable UI primitives into focused v3 files, not one large primitive file
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/app-shell.tsx` -> port shell layout and interaction model into v3 `AppShell`, removing v2 auth/agent/workspace endpoint coupling
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/sidebar.tsx` -> port sidebar UX into v3 `Sidebar`, fed by `/api/apps` and v3 local session state
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/top-bar.tsx` -> port top bar UX into v3 `TopBar`, backed only by v3 status/app context for now
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/apps-panel.tsx` -> port app catalog/panel UX into v3 `AppsPanel`, using v3 app registry records
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/workspace-view.tsx` -> adapt into v3 app mount view; frame/open `/apps/<app_id>/` surfaces and avoid direct app internals
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/workspace-navigation.ts` -> rewrite around v3 app registry and `frontend_mount`; do not retain v2 workspace view contract
-    - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/workspace-panel-surfaces.tsx` -> port only the concept of app panel surfaces; derive availability from v3 registry data
-    - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/workspace-secondary-panels.tsx` -> defer or stub cleanly unless the required v3 surfaces exist
-    - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/dialog-stack.tsx` -> port dialog orchestration only if needed by the v3 shell interactions
-    - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/dialogs.tsx` -> do not port wholesale; extract only dialogs backed by existing v3 protocols
-    - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/auth-screen.tsx` -> do not port until v3 public auth/session endpoints exist
-    - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/user-management-panel.tsx` -> do not port until `users`/identity app or API surface exists in v3
-    - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/provider-settings-control.tsx` -> do not port until provider settings are exposed through a v3 app/API surface
-    - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/retrieval-settings-control.tsx` -> do not port until retrieval/memory app surfaces exist in v3
-    - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/workspace-settings-control.tsx` -> defer until workspace settings are exposed by v3 protocols
-    - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/backend-restart-control.tsx` -> defer to recovery/operator surfaces; do not couple shell directly to service management
-    - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/push-notifications-control.tsx` -> defer until v3 notification capability exists
-    - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/chat-workspace-surface.tsx` -> replace with generic app mounting of the v3 `chat` frontend route
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/workspace-panel-surfaces.tsx` -> port only the concept of app panel surfaces; derive availability from v3 registry data
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/workspace-secondary-panels.tsx` -> intentionally replace with v3 registry-driven app mounting until dedicated v3 surfaces exist
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/dialog-stack.tsx` -> port only shell-local dialog orchestration needed by v3 interactions
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/dialogs.tsx` -> do not port wholesale; extract only Tutorial and Settings dialogs backed by existing v3 protocols
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/auth-screen.tsx` -> intentionally not ported until v3 public auth/session endpoints exist
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/user-management-panel.tsx` -> intentionally not ported until `users`/identity app or API surface exists in v3
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/provider-settings-control.tsx` -> intentionally not ported until provider settings are exposed through a v3 app/API surface
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/retrieval-settings-control.tsx` -> intentionally not ported until retrieval/memory app surfaces exist in v3
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/workspace-settings-control.tsx` -> intentionally deferred until workspace settings are exposed by v3 protocols
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/backend-restart-control.tsx` -> intentionally deferred to recovery/operator surfaces; do not couple shell directly to service management
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/push-notifications-control.tsx` -> intentionally deferred until v3 notification capability exists
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/chat-workspace-surface.tsx` -> replace with generic app mounting of the v3 `chat` frontend route
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/app-logo.tsx` and `brand-mark.tsx` -> port brand/logo primitives with v3 asset paths
-    - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/primitives.tsx` -> merge only non-duplicative primitives into the v3 UI primitive set
-    - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/hooks/use-mobile-layout.ts` -> port nearly directly if still small and dependency-free
-    - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/hooks/use-workspace-data.ts` -> rewrite or defer; do not call v2 workspace APIs
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/primitives.tsx` -> merge only non-duplicative primitives into the v3 UI primitive set
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/hooks/use-mobile-layout.ts` -> port nearly directly if still small and dependency-free
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/hooks/use-workspace-data.ts` -> intentionally not ported because it calls v2 workspace APIs
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/lib/api-core.ts` -> port request wrapper concept with v3 `/api` conventions
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/lib/api.ts` -> rewrite types and calls around v3 `/api/apps` and `/api/status`
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/lib/app-session.ts` -> port local shell session persistence, removing unavailable v2 fields
-    - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/lib/workspace-session.ts` -> adapt only if v3 workspace selection is exposed
-    - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/lib/chat-shell.ts` -> do not port as chat orchestration; chat is now a mounted app
-    - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/lib/account.ts` -> defer until v3 account model is surfaced to frontend
-    - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/lib/runtime-node-display.ts` -> defer until runtime node data is exposed by v3 protocol
-    - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/lib/push-notifications.ts` -> defer until v3 notifications exist
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/lib/workspace-session.ts` -> intentionally not ported until v3 workspace selection is exposed
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/lib/chat-shell.ts` -> do not port as chat orchestration; chat is now a mounted app
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/lib/account.ts` -> intentionally deferred until v3 account model is surfaced to frontend
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/lib/runtime-node-display.ts` -> intentionally deferred until runtime node data is exposed by v3 protocol
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/lib/push-notifications.ts` -> intentionally deferred until v3 notifications exist
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/styles/*.css` -> port visual language into modular v3 CSS files with `frontend/dist` build output
-    - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/tests/*.test.ts` -> rewrite as v3 frontend/unit tests for registry normalization, local session, and shell navigation
-    - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/backend/*` -> do not port unless `base-shell` gains a real backend surface
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/tests/*.test.ts` -> rewrite as v3 frontend/unit tests for registry normalization, local session, and shell navigation
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/backend/*` -> intentionally not ported because `base-shell` has no real backend surface
   - [x] Port or adapt v2 shell components into small v3-owned files:
     - [x] `AppShell`
     - [x] `Sidebar`
@@ -589,17 +589,17 @@ without carrying forward legacy structure or backward-compatibility constraints 
     - [x] `/api/apps` exposes mountable app records for the shell
     - [x] shell app registry logic handles missing optional apps without fake installed state
     - [x] chat app can be opened through the shell registry model
-  - [ ] Run verification:
+  - [x] Run verification:
     - [x] base-shell frontend build
-    - [ ] relevant frontend tests if introduced
+    - [x] relevant frontend tests if introduced
     - [x] `python3 -m unittest discover -s tests -p 'test_*.py'`
     - [x] `python3 -m compileall core tests apps`
     - [x] live smoke check on `https://maverick3.versy.ai/`
-  - [ ] Restart and verify hosted services after deployment:
+  - [x] Restart and verify hosted services after deployment:
     - [x] `maverick3-core.service`
-    - [ ] `maverick3-rescue.service` if touched
-    - [ ] `nginx` config unchanged or reloaded if changed
-  - [ ] Commit and push the completed porting checkpoint
+    - [x] `maverick3-rescue.service` not touched
+    - [x] `nginx` config unchanged
+  - [x] Commit and push the completed porting checkpoint
 - [ ] Implement `agents` as an app on top of core runtime/provider system
 - [x] Decide whether `memory` is in the first wave or the second wave
   - [x] second wave

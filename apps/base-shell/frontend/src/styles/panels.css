@@ -56,15 +56,17 @@
 
 .bs-app-card,
 .bs-empty-panel__surface {
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.04);
   color: var(--maverick-text);
 }
 
 .bs-app-card {
+  display: grid;
+  gap: 0.82rem;
   min-height: 8rem;
   padding: 0.82rem;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
   text-align: left;
 }
 
@@ -73,10 +75,19 @@
   background: rgba(215, 36, 81, 0.12);
 }
 
-.bs-app-card__header {
+.bs-app-card__open {
   display: flex;
   gap: 0.75rem;
   align-items: start;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.bs-app-card__copy {
+  min-width: 0;
 }
 
 .bs-app-card__title {
@@ -91,6 +102,14 @@
   color: var(--maverick-text-muted);
   font-size: 0.72rem;
   line-height: 1.45;
+}
+
+.bs-app-card__meta,
+.bs-app-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
 }
 
 .bs-empty-panel__surface {

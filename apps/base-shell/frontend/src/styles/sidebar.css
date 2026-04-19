@@ -77,6 +77,11 @@
   background: rgba(255, 255, 255, 0.04);
 }
 
+.bs-sidebar__workspace-select:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
 .bs-sidebar__workspace-title,
 .bs-sidebar__nav-title {
   display: block;

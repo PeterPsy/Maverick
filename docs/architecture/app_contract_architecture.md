@@ -619,6 +619,14 @@ The v3 shell attaches only to v3 platform protocols such as:
 
 The shell must derive app navigation from registry records such as `app_id`, `name`, `description`, `views`, `frontend_mount`, `backend_mount`, and optional icon or logo metadata.
 
+The `base-shell` port may retain app-owned local preferences in the browser, such as pinned app ids and the last active app.
+
+Those preferences are shell UI state only. They are not core workspace records, app installation state, provider configuration, or app-owned backend data.
+
+V2 shell panels that configured auth, users, providers, retrieval, notifications, backend restarts, or chat internals should not be copied into `base-shell`.
+
+When those capabilities become available in v3, they should be exposed through their own app contracts or generic core surfaces, then discovered or mounted by `base-shell` through the same registry-driven mechanism.
+
 It must not create fake installed state for product apps that are not present in the registry.
 
 The core remains responsible for routing, install state, enablement, policy, and app registry data.

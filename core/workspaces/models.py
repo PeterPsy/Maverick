@@ -118,6 +118,8 @@ class ExportedAppReference:
     status: str
     source_kind: AppSourceKind
     source_record_id: str
+    forked_from_source_id: str | None = None
+    forked_from_version: str | None = None
 
 
 @dataclass(frozen=True)
@@ -132,6 +134,8 @@ class WorkspaceExportParticipant:
     source_kind: AppSourceKind
     source_record_id: str
     export_hook_path: str | None
+    forked_from_source_id: str | None = None
+    forked_from_version: str | None = None
 
 
 @dataclass(frozen=True)

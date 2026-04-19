@@ -126,7 +126,10 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(items["base-shell"]["distribution_mode"], "sealed")
         self.assertEqual(items["base-shell"]["source_access"], "none")
-        self.assertFalse(items["base-shell"]["modifiable_by_agents"])
+        self.assertEqual(
+            set(items["base-shell"]),
+            {"app_id", "name", "version", "status", "distribution_mode", "source_access", "frontend_mount", "backend_mount"},
+        )
 
     def test_chat_backend_works_and_exposes_runtime_metadata(self) -> None:
         repo_root = self.make_repo_root()

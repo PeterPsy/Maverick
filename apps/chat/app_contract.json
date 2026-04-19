@@ -8,8 +8,7 @@
   "minimum_core_version": "0.1.0",
   "distribution": {
     "mode": "sealed",
-    "source_access": "none",
-    "modifiable_by_agents": false
+    "source_access": "none"
   },
   "capabilities": {
     "mcp_tools": [

@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 from core.apps.contracts import (
     build_app_capabilities,
@@ -161,7 +162,6 @@ class Phase4AppHostingTestCase(unittest.TestCase):
                     distribution=build_app_distribution(
                         mode="source_available",
                         source_access="forkable",
-                        modifiable_by_agents=True,
                     ),
                     entrypoints=build_app_entrypoints(frontend="frontend"),
                 ),
@@ -236,7 +236,6 @@ class Phase4AppHostingTestCase(unittest.TestCase):
                     distribution=build_app_distribution(
                         mode="workspace_local",
                         source_access="editable",
-                        modifiable_by_agents=True,
                     ),
                 ),
             )
@@ -699,6 +698,145 @@ class Phase4AppHostingTestCase(unittest.TestCase):
             self.assertTrue(result.rolled_back)
             self.assertEqual(result.binding.status, "rolled_back")
             self.assertEqual(result.binding.active_version, "1.0.0")
+
+    def test_upgrade_rejects_target_source_for_different_app(self) -> None:
+        store = self.make_store()
+        now = datetime.now(tz=UTC)
+        with TemporaryDirectory() as temp_dir:
+            repo_root = self.make_repo_root(temp_dir)
+            foo_root = repo_root / "apps" / "_bundles" / "foo" / "1.0.0"
+            bar_root = repo_root / "apps" / "_bundles" / "bar" / "2.0.0"
+            self.write_contract(foo_root, app_id="foo")
+            self.write_contract(bar_root, app_id="bar", version="2.0.0")
+            foo_source = register_app_source_from_contract(
+                store,
+                source_kind="external_bundle",
+                source_path=str(foo_root),
+                now=now,
+            )
+            bar_source = register_app_source_from_contract(
+                store,
+                source_kind="external_bundle",
+                source_path=str(bar_root),
+                now=now,
+            )
+            install_store_app(store, source_id=foo_source.source_id, workspace_id="default", start_path=repo_root, now=now)
+
+            with self.assertRaises(AppLifecycleError):
+                upgrade_workspace_app(
+                    store,
+                    workspace_id="default",
+                    app_id="foo",
+                    target_source_id=bar_source.source_id,
+                    start_path=repo_root,
+                    now=now,
+                )
+
+    def test_workspace_fork_upgrade_to_store_source_requires_explicit_rebase(self) -> None:
+        store = self.make_store()
+        now = datetime.now(tz=UTC)
+        with TemporaryDirectory() as temp_dir:
+            repo_root = self.make_repo_root(temp_dir)
+            store_root = repo_root / "apps" / "customizable"
+            upgraded_store_root = repo_root / "apps" / "_bundles" / "customizable" / "2.0.0"
+            self.write_contract(
+                store_root,
+                app_id="customizable",
+                contract=build_app_contract(
+                    distribution=build_app_distribution(mode="source_available", source_access="forkable"),
+                ),
+            )
+            self.write_contract(upgraded_store_root, app_id="customizable", version="2.0.0")
+            source = register_app_source_from_contract(
+                store,
+                source_kind="platform",
+                source_path=str(store_root),
+                now=now,
+            )
+            target = register_app_source_from_contract(
+                store,
+                source_kind="external_bundle",
+                source_path=str(upgraded_store_root),
+                now=now,
+            )
+            fork_store_app_to_workspace(store, source_id=source.source_id, workspace_id="acme", start_path=repo_root, now=now)
+            install_workspace_local_app(store, workspace_id="acme", app_id="customizable", start_path=repo_root, now=now)
+
+            with self.assertRaises(AppLifecycleError):
+                upgrade_workspace_app(
+                    store,
+                    workspace_id="acme",
+                    app_id="customizable",
+                    target_source_id=target.source_id,
+                    start_path=repo_root,
+                    now=now,
+                )
+
+            result = upgrade_workspace_app(
+                store,
+                workspace_id="acme",
+                app_id="customizable",
+                target_source_id=target.source_id,
+                rebase_workspace_fork=True,
+                start_path=repo_root,
+                now=now,
+            )
+
+            self.assertEqual(result.binding.source_kind, "external_bundle")
+            self.assertEqual(result.binding.active_version, "2.0.0")
+
+    def test_register_app_source_rejects_invalid_source_kind(self) -> None:
+        store = self.make_store()
+        now = datetime.now(tz=UTC)
+        with TemporaryDirectory() as temp_dir:
+            repo_root = self.make_repo_root(temp_dir)
+            app_root = repo_root / "apps" / "bad-kind"
+            self.write_contract(app_root, app_id="bad-kind")
+
+            with self.assertRaises(AppLifecycleError):
+                register_app_source_from_contract(
+                    store,
+                    source_kind="workspace_local_project",
+                    source_path=str(app_root),
+                    now=now,
+                )
+
+    def test_fork_overwrite_preserves_existing_project_when_contract_write_fails(self) -> None:
+        store = self.make_store()
+        now = datetime.now(tz=UTC)
+        with TemporaryDirectory() as temp_dir:
+            repo_root = self.make_repo_root(temp_dir)
+            app_root = repo_root / "apps" / "customizable"
+            self.write_contract(
+                app_root,
+                app_id="customizable",
+                contract=build_app_contract(
+                    distribution=build_app_distribution(mode="source_available", source_access="forkable"),
+                ),
+            )
+            source = register_app_source_from_contract(
+                store,
+                source_kind="platform",
+                source_path=str(app_root),
+                now=now,
+            )
+            fork_store_app_to_workspace(store, source_id=source.source_id, workspace_id="acme", start_path=repo_root, now=now)
+            fork_root = repo_root / "workspaces" / "acme" / "apps" / "customizable"
+            marker = fork_root / "marker.txt"
+            marker.write_text("keep", encoding="utf-8")
+
+            with patch("core.apps.service.write_app_contract_file", side_effect=RuntimeError("write failed")):
+                with self.assertRaises(RuntimeError):
+                    fork_store_app_to_workspace(
+                        store,
+                        source_id=source.source_id,
+                        workspace_id="acme",
+                        start_path=repo_root,
+                        now=now,
+                        overwrite=True,
+                    )
+
+            self.assertEqual(marker.read_text(encoding="utf-8"), "keep")
 
 
 if __name__ == "__main__":

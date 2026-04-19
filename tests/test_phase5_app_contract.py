@@ -94,7 +94,6 @@ class Phase5AppContractTestCase(unittest.TestCase):
             self.assertEqual(loaded.contract.capabilities.views, ["floor_map"])
             self.assertEqual(loaded.contract.distribution.mode, "sealed")
             self.assertEqual(loaded.contract.distribution.source_access, "none")
-            self.assertFalse(loaded.contract.distribution.modifiable_by_agents)
             self.assertTrue(loaded.contract.lifecycle.validate_after_import)
             self.assertTrue(loaded.contract.lifecycle.repair_after_import)
             self.assertEqual(loaded.contract.hook_timeouts.upgrade_seconds, 180)
@@ -114,7 +113,6 @@ class Phase5AppContractTestCase(unittest.TestCase):
                     distribution=build_app_distribution(
                         mode="source_available",
                         source_access="forkable",
-                        modifiable_by_agents=True,
                     ),
                 ),
             )
@@ -124,7 +122,6 @@ class Phase5AppContractTestCase(unittest.TestCase):
 
             self.assertEqual(loaded.contract.distribution.mode, "source_available")
             self.assertEqual(loaded.contract.distribution.source_access, "forkable")
-            self.assertTrue(loaded.contract.distribution.modifiable_by_agents)
 
     def test_parse_contract_rejects_invalid_distribution_policy(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -139,11 +136,34 @@ class Phase5AppContractTestCase(unittest.TestCase):
                     distribution=build_app_distribution(
                         mode="sealed",
                         source_access="forkable",
-                        modifiable_by_agents=True,
                     ),
                 ),
             )
             write_app_contract_file(app_root, parsed)
+
+            with self.assertRaises(AppContractValidationError):
+                parse_app_contract_file(app_root)
+
+    def test_parse_contract_rejects_unknown_distribution_fields(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            app_root = Path(temp_dir) / "apps" / "bad-field"
+            parsed = build_parsed_app_contract(
+                app_id="bad-field",
+                name="Bad Field",
+                version="1.0.0",
+                description="Bad field app.",
+                publisher="vendor",
+                contract=build_app_contract(
+                    distribution=build_app_distribution(mode="source_available", source_access="forkable"),
+                ),
+            )
+            write_app_contract_file(app_root, parsed)
+            contract_file = app_contract_path(app_root)
+            payload = contract_file.read_text(encoding="utf-8").replace(
+                '"source_access": "forkable"',
+                '"source_access": "forkable",\n    "unexpected": true',
+            )
+            contract_file.write_text(payload, encoding="utf-8")
 
             with self.assertRaises(AppContractValidationError):
                 parse_app_contract_file(app_root)

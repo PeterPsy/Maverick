@@ -11,7 +11,7 @@ This document establishes the intended end state:
 - a top-level `workspaces/` directory exists alongside `core/` and `apps/`
 - each workspace owns its own filesystem root
 - sandboxed agents can work freely inside their workspace root
-- sandboxed agents cannot directly modify `core/`, `apps/`, or other workspaces
+- sandboxed agents cannot directly write to `core/`, installation-level `apps/`, or other workspaces
 - interactions with platform capabilities outside the workspace root happen only through official platform interfaces such as MCP, CLI, and backend APIs
 - workspace memory, files, apps, and execution context remain confined to that workspace
 
@@ -195,7 +195,7 @@ Each workspace root is the canonical home for everything that belongs to that te
 
 `apps/` contains workspace-local app source trees, app bundles under development, and workspace-specific app material.
 
-This is where an agent can create or modify apps that belong only to that workspace.
+This is where users and workspace agents can develop app projects that belong only to that workspace.
 
 This workspace-local `apps/` directory must not be confused with the installation-level `/apps` directory.
 
@@ -681,6 +681,14 @@ When an app is upgraded in a workspace, Maverick should:
 
 Upgrade must not silently discard app-owned data.
 
+Upgrade must also preserve the source boundary.
+
+If the workspace binding points to a workspace-local fork, normal upgrade should continue using that workspace-local project.
+
+Moving a workspace-local fork back onto an installation-level store artifact is a rebase operation, not a normal upgrade, and must be requested explicitly.
+
+Both upgrade and rebase must verify that the target source has the same `app_id` as the current workspace binding.
+
 #### Uninstall
 
 Uninstall should remove the app as an active capability from the workspace, but should not automatically delete the app's persisted data.
@@ -893,6 +901,8 @@ The manifest should include at least:
 - export timestamp
 - installed or known app references
 - app version metadata
+- app source kind metadata
+- workspace-local fork provenance when applicable
 - app-level data schema version metadata
 - schema version metadata
 - inventory or checksum information as needed
@@ -1770,8 +1780,8 @@ When a new tenant workspace is created:
 The platform should enforce all of the following:
 
 1. A sandboxed workspace agent cannot write outside its workspace root.
-2. A sandboxed workspace agent cannot directly modify installation-level `core/`.
-3. A sandboxed workspace agent cannot directly modify installation-level `apps/`.
+2. A sandboxed workspace agent cannot directly write to installation-level `core/`.
+3. A sandboxed workspace agent cannot directly write to installation-level `apps/`.
 4. A sandboxed workspace agent cannot directly access another workspace root.
 5. Workspace files, memory, and retrieval artifacts remain scoped to the same `workspace_id`.
 6. Gallery, file APIs, and retrieval must never return artifacts from another workspace.

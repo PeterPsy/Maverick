@@ -80,6 +80,8 @@ def build_export_manifest(
                 source_kind=binding.source_kind,
                 source_record_id=binding.source_record_id,
                 export_hook_path=None,
+                forked_from_source_id=None,
+                forked_from_version=None,
             )
             for binding in sorted(app_bindings or [], key=lambda item: item.app_id)
         ]
@@ -91,6 +93,8 @@ def build_export_manifest(
             status=participant.status,
             source_kind=participant.source_kind,
             source_record_id=participant.source_record_id,
+            forked_from_source_id=participant.forked_from_source_id,
+            forked_from_version=participant.forked_from_version,
         )
         for participant in sorted(manifest_participants, key=lambda item: item.app_id)
     ]
@@ -118,9 +122,13 @@ def _participant_for_binding(
     if binding.source_kind == "workspace_local_project":
         project = store.get_workspace_local_app_project(workspace_id=binding.workspace_id, app_id=binding.app_id)
         source_root, parsed = load_contract_from_workspace_project(project, start_path=start_path)
+        forked_from_source_id = project.forked_from_source_id
+        forked_from_version = project.forked_from_version
     else:
         source = store.get_app_source(binding.source_record_id)
         source_root, parsed = load_contract_from_source_record(source, start_path=start_path)
+        forked_from_source_id = None
+        forked_from_version = None
 
     export_hook_path = parsed.contract.entrypoints.hooks.get("export")
     use_export_hook = parsed.contract.lifecycle.export and export_hook_path is not None
@@ -138,6 +146,8 @@ def _participant_for_binding(
         source_kind=binding.source_kind,
         source_record_id=binding.source_record_id,
         export_hook_path=export_hook_path,
+        forked_from_source_id=forked_from_source_id,
+        forked_from_version=forked_from_version,
     )
     return participant, source_root, parsed.contract
 

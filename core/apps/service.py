@@ -6,6 +6,7 @@ from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 import shutil
+from uuid import uuid4
 
 from core.apps.data_state import read_app_data_state, write_app_data_state
 from core.apps.contracts import (
@@ -113,6 +114,8 @@ def register_app_source_from_contract(
     now: datetime | None = None,
 ) -> AppSourceRecord:
     """Parse one canonical app contract file and persist an installation-level source record."""
+    if source_kind not in {"platform", "external_bundle"}:
+        raise AppLifecycleError(f"Unsupported installation-level app source kind `{source_kind}`.")
     parsed = parse_app_contract_file(Path(source_path))
     if parsed.contract.distribution.mode == "workspace_local":
         raise AppLifecycleError("Workspace-local app contracts cannot be registered as installation-level app sources.")
@@ -156,6 +159,7 @@ def fork_store_app_to_workspace(
     now: datetime | None = None,
     start_path: Path | None = None,
     overwrite: bool = False,
+    observability_store=None,
 ) -> WorkspaceLocalAppProjectRecord:
     """Create an explicit workspace-local fork from a source-available store app."""
     source = store.get_app_source(source_id)
@@ -165,10 +169,11 @@ def fork_store_app_to_workspace(
         raise AppLifecycleError(f"App source `{source_id}` is not forkable into a workspace.")
     workspace = workspace_paths(workspace_id=workspace_id, start_path=start_path)
     project_root = workspace.apps / parsed.app_id
+    temp_root = workspace.apps / f".{parsed.app_id}.fork-tmp-{uuid4().hex}"
+    backup_root = workspace.apps / f".{parsed.app_id}.fork-backup-{uuid4().hex}"
     if project_root.exists():
         if not overwrite:
             raise AppLifecycleError(f"Workspace-local app project `{project_root}` already exists.")
-        shutil.rmtree(project_root)
     workspace.apps.mkdir(parents=True, exist_ok=True)
     ignore = shutil.ignore_patterns(
         "__pycache__",
@@ -180,13 +185,11 @@ def fork_store_app_to_workspace(
         ".mypy_cache",
         ".pytest_cache",
     )
-    shutil.copytree(source_root, project_root, ignore=ignore)
     forked_contract = replace(
         parsed.contract,
         distribution=build_app_distribution(
             mode="workspace_local",
             source_access="editable",
-            modifiable_by_agents=distribution.modifiable_by_agents,
         ),
     )
     forked = ParsedAppContract(
@@ -197,7 +200,25 @@ def fork_store_app_to_workspace(
         publisher=parsed.publisher,
         contract=forked_contract,
     )
-    write_app_contract_file(project_root, forked)
+    backup_created = False
+    try:
+        shutil.copytree(source_root, temp_root, ignore=ignore)
+        write_app_contract_file(temp_root, forked)
+        if project_root.exists():
+            project_root.rename(backup_root)
+            backup_created = True
+        temp_root.rename(project_root)
+    except Exception:
+        if backup_created and project_root.exists():
+            shutil.rmtree(project_root)
+        if backup_created and backup_root.exists() and not project_root.exists():
+            backup_root.rename(project_root)
+        raise
+    finally:
+        if temp_root.exists():
+            shutil.rmtree(temp_root)
+        if backup_root.exists():
+            shutil.rmtree(backup_root)
     record = parsed_contract_to_workspace_local_project_record(
         parsed=forked,
         workspace_id=workspace_id,
@@ -206,7 +227,35 @@ def fork_store_app_to_workspace(
         forked_from_version=source.version,
         now=now,
     )
-    return register_workspace_local_app_project(store, record)
+    saved = register_workspace_local_app_project(store, record)
+    if observability_store is not None:
+        payload = {
+            "workspace_id": workspace_id,
+            "app_id": parsed.app_id,
+            "source_id": source.source_id,
+            "source_version": source.version,
+            "project_id": saved.project_id,
+        }
+        record_platform_audit(
+            observability_store,
+            action="app.fork",
+            status="succeeded",
+            source_domain="apps",
+            detail=f"Forked store app `{parsed.app_id}` into workspace `{workspace_id}`.",
+            workspace_id=workspace_id,
+            app_id=parsed.app_id,
+            payload=payload,
+        )
+        record_platform_event(
+            observability_store,
+            event_type="app.forked",
+            event_plane="workspace",
+            source_domain="apps",
+            workspace_id=workspace_id,
+            app_id=parsed.app_id,
+            payload=payload,
+        )
+    return saved
 
 
 def _ensure_workspace_app_data_root(*, workspace_id: str, app_id: str, start_path: Path | None = None) -> Path:
@@ -728,8 +777,13 @@ def _resolve_upgrade_target(
     *,
     current_binding: WorkspaceAppBindingRecord,
     target_source_id: str | None,
+    rebase_workspace_fork: bool = False,
     start_path: Path | None = None,
 ) -> tuple[Path, object, str, AppSourceKind]:
+    if current_binding.source_kind == "workspace_local_project" and target_source_id is not None and not rebase_workspace_fork:
+        raise AppLifecycleError(
+            "Workspace-local app forks cannot be upgraded to store sources without an explicit rebase."
+        )
     if current_binding.source_kind == "workspace_local_project" and target_source_id is None:
         project = store.get_workspace_local_app_project(
             workspace_id=current_binding.workspace_id,
@@ -749,6 +803,10 @@ def _resolve_upgrade_target(
         if not candidate_sources:
             raise AppLifecycleError(f"No newer app source is available to upgrade `{current_binding.app_id}`.")
         source = sorted(candidate_sources, key=lambda item: _parse_version_tuple(item.version))[-1]
+    if source.app_id != current_binding.app_id:
+        raise AppLifecycleError(
+            f"Cannot upgrade app `{current_binding.app_id}` using source `{source.source_id}` for app `{source.app_id}`."
+        )
     source_root, parsed = load_contract_from_source_record(source, start_path=start_path)
     return source_root, parsed, source.source_id, source.source_kind
 
@@ -761,6 +819,7 @@ def upgrade_workspace_app(
     target_source_id: str | None = None,
     now: datetime | None = None,
     start_path: Path | None = None,
+    rebase_workspace_fork: bool = False,
     observability_store=None,
 ) -> WorkspaceAppUpgradeResult:
     """Upgrade one installed workspace app, rolling back the bundle when declared."""
@@ -769,6 +828,7 @@ def upgrade_workspace_app(
         store,
         current_binding=current,
         target_source_id=target_source_id,
+        rebase_workspace_fork=rebase_workspace_fork,
         start_path=start_path,
     )
     if parsed.version == current.active_version and source_record_id == current.source_record_id:

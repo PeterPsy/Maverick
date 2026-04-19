@@ -63,7 +63,6 @@ def _enabled_app_items(state: PlatformState, *, workspace_id: str, start_path: P
                 "status": binding.status,
                 "distribution_mode": parsed.contract.distribution.mode,
                 "source_access": parsed.contract.distribution.source_access,
-                "modifiable_by_agents": parsed.contract.distribution.modifiable_by_agents,
                 "frontend_mount": f"/apps/{parsed.app_id}/" if parsed.contract.entrypoints.frontend else "",
                 "backend_mount": f"/api/apps/{parsed.app_id}/backend" if parsed.contract.entrypoints.backend else "",
             }

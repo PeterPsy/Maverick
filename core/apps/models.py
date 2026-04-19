@@ -65,7 +65,6 @@ class AppDistributionDeclaration:
 
     mode: AppDistributionMode
     source_access: AppSourceAccess
-    modifiable_by_agents: bool
 
 
 @dataclass(frozen=True)

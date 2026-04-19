@@ -64,6 +64,8 @@ def source_root_for_record(record: AppSourceRecord, *, start_path: Path | None =
     """Resolve and validate one installation-level app source root."""
     root = Path(record.source_path).resolve()
     trusted_platform_root = installed_app_root(app_id=record.app_id, start_path=start_path).resolve()
+    if record.source_kind not in {"platform", "external_bundle"}:
+        raise AppLifecycleError(f"Unsupported app source kind `{record.source_kind}` for `{record.app_id}`.")
     if record.source_kind == "platform" and root != trusted_platform_root:
         raise AppLifecycleError(
             f"Platform app `{record.app_id}` must resolve to `{trusted_platform_root}`, got `{root}`."

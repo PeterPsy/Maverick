@@ -105,7 +105,7 @@ The recommended distribution modes are:
 
 `sealed` apps are installed as non-editable artifacts.
 
-They may expose frontend, backend, MCP, CLI, and skills surfaces, but workspace agents must not modify their app source.
+They may expose frontend, backend, MCP, CLI, and skills surfaces, but their app source is not workspace-editable.
 
 This is the correct mode for commercial closed-source apps, signed vendor bundles, and apps distributed only as runtime artifacts.
 
@@ -119,15 +119,22 @@ If a workspace needs to customize the app, the core should create a workspace-lo
 
 They may later be promoted into an installation-level distribution channel, but that promotion is an explicit packaging step, not an implicit side effect of local development.
 
-The app contract should also make clear whether agents may modify the app source.
+The app contract should make source access explicit.
+
+Source mutability is app-level distribution metadata, not actor-specific metadata.
+
+The contract should not declare separate actor-scoped mutability fields.
+
+If a source is editable, it is editable because its distribution mode and source access permit workspace-local editing under platform policy.
+
+If a source is not editable, neither users nor agents should bypass that through a contract field.
 
 For example:
 
 ```json
 "distribution": {
   "mode": "source_available",
-  "source_access": "forkable",
-  "modifiable_by_agents": true
+  "source_access": "forkable"
 }
 ```
 
@@ -136,12 +143,19 @@ For a sealed commercial app:
 ```json
 "distribution": {
   "mode": "sealed",
-  "source_access": "none",
-  "modifiable_by_agents": false
+  "source_access": "none"
 }
 ```
 
 The core should enforce this at install, fork, upgrade, and workspace execution boundaries.
+
+Upgrade and rebase are different operations.
+
+Normal upgrade should preserve a workspace-local fork and upgrade only against the fork's own source unless the operator explicitly requests a rebase to a store source.
+
+That rebase must still target the same `app_id`.
+
+The core must reject any upgrade or rebase that attempts to move a workspace binding for one app onto a source artifact for a different app.
 
 ## Canonical Contract File
 
@@ -781,8 +795,7 @@ The following example shows the kind of app contract Maverick should expect at p
   "minimum_core_version": "1.0.0",
   "distribution": {
     "mode": "source_available",
-    "source_access": "forkable",
-    "modifiable_by_agents": true
+    "source_access": "forkable"
   },
   "capabilities": {
     "mcp_tools": [

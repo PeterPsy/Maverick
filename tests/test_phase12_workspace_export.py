@@ -9,13 +9,19 @@ import unittest
 
 from core.apps.contracts import (
     build_app_contract,
+    build_app_distribution,
     build_app_entrypoints,
     build_app_lifecycle,
     build_app_storage,
     build_parsed_app_contract,
     write_app_contract_file,
 )
-from core.apps.service import install_store_app, register_app_source_from_contract
+from core.apps.service import (
+    fork_store_app_to_workspace,
+    install_store_app,
+    install_workspace_local_app,
+    register_app_source_from_contract,
+)
 from core.apps.store import AppCollections, MongoAppStore
 from core.workspaces.files import (
     build_file_identity,
@@ -213,6 +219,46 @@ class Phase12WorkspaceExportTestCase(unittest.TestCase):
             self.assertEqual((app_root / "export-hook-name.txt").read_text(encoding="utf-8"), "workspace_export")
             self.assertEqual(bundle.manifest.known_apps[0].app_id, "reports")
             self.assertEqual(bundle.manifest.known_apps[0].data_schema_version, "7")
+
+    def test_export_manifest_includes_workspace_fork_provenance(self) -> None:
+        store = self.make_store()
+        now = datetime.now(tz=UTC)
+        with TemporaryDirectory() as temp_dir:
+            repo_root = self.make_repo_root(temp_dir)
+            workspace_root = repo_root / "workspaces" / "acme"
+            app_root = repo_root / "apps" / "customizable"
+            contract = build_app_contract(
+                distribution=build_app_distribution(mode="source_available", source_access="forkable"),
+            )
+            self.write_contract(app_root, app_id="customizable", contract=contract)
+            source = register_app_source_from_contract(
+                store,
+                source_kind="platform",
+                source_path=str(app_root),
+                now=now,
+            )
+            fork_store_app_to_workspace(
+                store,
+                source_id=source.source_id,
+                workspace_id="acme",
+                start_path=repo_root,
+                now=now,
+            )
+            install_workspace_local_app(
+                store,
+                workspace_id="acme",
+                app_id="customizable",
+                start_path=repo_root,
+                now=now,
+            )
+
+            bundle = export_workspace_bundle("acme", workspace_root, app_store=store, start_path=repo_root)
+
+            app_ref = bundle.manifest.known_apps[0]
+            self.assertEqual(app_ref.app_id, "customizable")
+            self.assertEqual(app_ref.source_kind, "workspace_local_project")
+            self.assertEqual(app_ref.forked_from_source_id, source.source_id)
+            self.assertEqual(app_ref.forked_from_version, source.version)
 
 
 if __name__ == "__main__":

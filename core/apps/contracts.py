@@ -170,13 +170,11 @@ def build_app_distribution(
     *,
     mode: str = "sealed",
     source_access: str = "none",
-    modifiable_by_agents: bool = False,
 ) -> AppDistributionDeclaration:
     """Build one app distribution and mutability declaration."""
     return AppDistributionDeclaration(
         mode=mode,
         source_access=source_access,
-        modifiable_by_agents=modifiable_by_agents,
     )
 
 
@@ -393,7 +391,6 @@ def app_contract_payload(parsed: ParsedAppContract) -> dict[str, Any]:
         "distribution": {
             "mode": parsed.contract.distribution.mode,
             "source_access": parsed.contract.distribution.source_access,
-            "modifiable_by_agents": parsed.contract.distribution.modifiable_by_agents,
         },
         "capabilities": {
             "mcp_tools": parsed.contract.capabilities.mcp_tools,
@@ -541,18 +538,19 @@ def parse_app_contract_file(source_root: Path) -> ParsedAppContract:
     distribution = AppDistributionDeclaration(
         mode=distribution_payload.get("mode", "sealed"),
         source_access=distribution_payload.get("source_access", "none"),
-        modifiable_by_agents=_expect_bool(distribution_payload, "modifiable_by_agents", default=False),
     )
+    unexpected_distribution_keys = set(distribution_payload) - {"mode", "source_access"}
+    if unexpected_distribution_keys:
+        unexpected = ", ".join(sorted(unexpected_distribution_keys))
+        raise AppContractValidationError(f"Unsupported distribution field(s): {unexpected}.")
     if distribution.mode not in {"sealed", "source_available", "workspace_local"}:
         raise AppContractValidationError("`distribution.mode` must be sealed, source_available, or workspace_local.")
     if distribution.source_access not in {"none", "read_only", "forkable", "editable"}:
         raise AppContractValidationError(
             "`distribution.source_access` must be none, read_only, forkable, or editable."
         )
-    if distribution.mode == "sealed" and (
-        distribution.source_access != "none" or distribution.modifiable_by_agents
-    ):
-        raise AppContractValidationError("Sealed apps must use source_access none and cannot be modifiable by agents.")
+    if distribution.mode == "sealed" and distribution.source_access != "none":
+        raise AppContractValidationError("Sealed apps must use source_access none.")
     if distribution.mode == "source_available" and distribution.source_access not in {"read_only", "forkable"}:
         raise AppContractValidationError("Source-available apps must use source_access read_only or forkable.")
     if distribution.mode == "workspace_local" and distribution.source_access != "editable":

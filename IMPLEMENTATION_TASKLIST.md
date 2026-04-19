@@ -138,8 +138,11 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] support `source_available`
   - [x] support `workspace_local`
   - [x] add source access policy
-  - [x] add `modifiable_by_agents`
+  - [x] keep mutability controlled by distribution mode and source access only
+  - [x] remove actor-specific mutability fields from the contract surface
   - [x] validate distribution policy during contract parsing
+  - [x] reject unsupported distribution fields during contract parsing
+  - [x] validate app source kind at runtime registration boundaries
 - [x] Implement server app store artifact handling:
   - [x] model `/apps` as the installation-level trusted app artifact area
   - [x] support store-installed sealed artifacts without copying source into workspaces
@@ -149,12 +152,16 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] create `workspaces/<workspace_id>/apps/<app_id>/` from a source-available store app when explicitly requested
   - [x] prevent fork of sealed apps unless operator policy explicitly allows an override
   - [x] record fork source metadata for upgrade, rollback, audit, and provenance
+  - [x] emit audit and structured events when a workspace-local fork is created
+  - [x] make destructive fork overwrite replacement rollback-safe with a temporary copy and swap
   - [x] ensure forked apps install only into their owning workspace by default
 - [x] Update app install semantics:
   - [x] install from store artifact creates a workspace binding
   - [x] install from workspace-local project creates a workspace-local binding
   - [x] enablement checks resolve the correct app source according to binding type
   - [x] upgrades preserve workspace-local forks unless explicitly rebased
+  - [x] reject upgrade or rebase targets whose source `app_id` differs from the current workspace binding
+  - [x] require an explicit rebase flag before moving a workspace-local fork back to a store source
 - [x] Define canonical app lifecycle states and transitions:
   - [x] `installed`
   - [x] `enabled`
@@ -436,6 +443,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] run declared app export hooks before manifest generation
   - [x] pass workspace and app data-plane context into export hooks
   - [x] include per-app data schema metadata in the manifest
+  - [x] include workspace-local fork provenance in exported app references
   - [x] exclude runtime, tmp, logs, and inventory metadata from default workspace export snapshots
   - [x] exclude caches from default workspace export snapshots
 - [ ] Implement import flow with dormant app data support

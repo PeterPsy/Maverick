@@ -101,6 +101,12 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] `store.py`
   - [x] `errors.py` when needed
 - [x] Ensure the core tree lives directly under `/maverick-v3/core/` with no wrapper layers such as `backend/`, `runtime_backend/`, or `app/`
+- [x] Split oversized domain services that had started mixing registry, lifecycle, policy, and execution concerns:
+  - [x] split app lifecycle service into registration, forks, installation, status, reinstall, hook payloads, health, and upgrades modules
+  - [x] split app contract code into builders, parser, serializer, records, validation, and common contract helpers
+  - [x] split CLI surface code into core command groups, app command mounting, and registry builder
+  - [x] split MCP surface code into core tool groups, app tool mounting, and registry builder
+  - [x] split oversized Phase 4, Phase 9, and Phase 11 tests into focused files with shared fixtures
 
 ## Phase 3: Identity and Workspace Governance
 
@@ -402,6 +408,8 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] create `core/observability/audit_log.py`
   - [x] record control-plane operations such as workspace governance changes, app installation, provider binding, and secret resolution attempts
   - [x] wire audit emission into real app, provider, runtime, secrets, and recovery flows
+  - [x] document the cross-domain audit/event boundary for control-plane changes and trust-boundary crossings
+  - [x] cover app lifecycle, surface mounting, provider, secrets, runtime, workspace export/import, and recovery observability expectations
   - [x] keep audit records structured and queryable
   - [x] ensure audit entries never include raw secret values
 - [x] Implement structured event attribution:

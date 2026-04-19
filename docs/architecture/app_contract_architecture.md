@@ -83,7 +83,7 @@ It should not automatically copy the app's full source tree into the workspace.
 
 Copying app source into `workspaces/<workspace_id>/apps/<app_id>/` should happen only when:
 
-- the app is declared source-available and modifiable
+- the app is declared `source_available` with `source_access: forkable`
 - the user or an authorized agent explicitly creates a workspace-local fork
 - the app was born as a workspace-local project
 

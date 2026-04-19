@@ -197,6 +197,22 @@ The core app-hosting domain should model at least these distribution modes:
 
 This lets the core host closed commercial apps, open-source store apps, and fully local agent-created apps without changing the app surface model.
 
+Implementation files in `core/apps/` should keep lifecycle responsibilities separate.
+
+Recommended split:
+
+- `registration.py` owns app source and workspace-local project registration
+- `forks.py` owns workspace-local fork creation and provenance
+- `installation.py` owns initial store and workspace-local app installation
+- `status.py` owns enable, disable, uninstall, and purge transitions
+- `reinstall.py` owns reattachment and import-recovery style reactivation
+- `upgrades.py` owns upgrade, migration, rollback, and explicit rebase semantics
+- `hook_payloads.py` owns canonical lifecycle hook context construction
+- `health.py` owns app health probe execution
+- `contracts.py` may remain a small public facade over contract builders, parser, serializer, records, and validation modules
+
+`service.py` may remain as a public app-hosting facade, but it should not contain full lifecycle implementation.
+
 ### 4. Runtime orchestration
 
 The core owns the generic runtime model for agent execution.
@@ -986,13 +1002,24 @@ The observability layer should keep these concerns distinct:
 - audit records for operator-relevant control-plane actions
 - metrics suitable for health and supportability workflows
 
+Every operation that changes control-plane state or crosses a trust boundary should emit structured observability.
+
+The audit record is the governance trail.
+
+The structured event is the operational timeline.
+
+Runtime and app logs are supporting debug streams, not the source of truth for governance.
+
 The first v3 implementation should wire audit and structured event emission into the real core flows, especially:
 
-- app install, enable, disable, uninstall, and reinstall
-- provider binding, selection, and launch-spec construction
-- secret create, rotate, disable, and revoke surfaces
-- runtime session creation and lifecycle transitions
-- recovery intents and health probes
+- app source registration, install, enable, disable, fork, rebase, upgrade, rollback, uninstall, purge, and reinstall
+- frontend, backend, CLI, MCP, and skill mounting or unmounting
+- app-owned CLI and MCP invocation failures, policy denials, and entrypoint execution failures
+- provider binding, selection, launch-spec construction, credential binding, and provider health probes
+- secret create, rotate, resolve attempts, denied resolution, disable, and revoke surfaces
+- runtime session creation, lifecycle transitions, provider launch, process failure, and execution policy decisions
+- workspace export, app export hook execution, manifest generation, import, and restore
+- recovery health probes, recovery intents, actions executed, and actions failed
 
 Observability data must be attributed consistently across planes, for example with:
 
@@ -1129,6 +1156,32 @@ In the first local v3 implementation, app-owned CLI entrypoints follow the same 
 - the core resolves the declared CLI entrypoint path
 - the core passes trusted invocation context and arguments as JSON on standard input
 - the command returns a JSON object on standard output
+
+Implementation files should keep command ownership explicit.
+
+Recommended CLI split:
+
+- `core_commands.py` composes core-owned command groups
+- `workspace_commands.py` owns workspace inspection commands
+- `runtime_provider_commands.py` owns runtime and provider commands
+- `secret_commands.py` owns secret management commands
+- `recovery_commands.py` owns recovery commands
+- `app_commands.py` owns enabled-app command mounting
+- `registry_builder.py` builds the visible command registry and runs commands
+
+`service.py` may remain as a small public facade, but it should not accumulate registry, policy, and execution logic.
+
+Recommended MCP split follows the same shape:
+
+- `core_tools.py` composes core-owned tool groups
+- `workspace_tools.py` owns workspace registry tools
+- `runtime_provider_tools.py` owns runtime and provider tools
+- `secret_tools.py` owns secret management tools
+- `recovery_tools.py` owns recovery tools
+- `app_tools.py` owns enabled-app tool mounting
+- `registry_builder.py` builds the visible tool registry and invokes tools
+
+This prevents the core surfaces from becoming mixed registry/spec/execution monoliths.
 
 ### `skills/`
 

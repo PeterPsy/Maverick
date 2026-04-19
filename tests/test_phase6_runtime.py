@@ -19,6 +19,7 @@ from core.runtime.service import (
     transition_runtime_turn,
 )
 from core.runtime.store import MongoRuntimeStore, RuntimeCollections
+from core.shared.json_file_collection import JsonFileCollection
 from core.workspaces.service import default_workspace_governance
 
 
@@ -58,6 +59,17 @@ class Phase6RuntimeTestCase(unittest.TestCase):
                 events=FakeCollection(),
                 processes=FakeCollection(),
                 states=FakeCollection(),
+            )
+        )
+
+    def make_json_store(self, state_root: Path) -> MongoRuntimeStore:
+        return MongoRuntimeStore(
+            RuntimeCollections(
+                sessions=JsonFileCollection(state_root / "sessions.json"),
+                turns=JsonFileCollection(state_root / "turns.json"),
+                events=JsonFileCollection(state_root / "events.json"),
+                processes=JsonFileCollection(state_root / "processes.json"),
+                states=JsonFileCollection(state_root / "states.json"),
             )
         )
 
@@ -153,6 +165,32 @@ class Phase6RuntimeTestCase(unittest.TestCase):
         self.assertEqual(event.workspace_id, "acme")
         self.assertEqual(event.plane, "turn")
         self.assertEqual(store.list_events("sess-1")[0].event_type, "turn.started")
+
+    def test_json_runtime_store_keeps_history_across_bootstrap_instances(self) -> None:
+        repo_root = self.make_repo_root()
+        state_root = repo_root / ".maverick" / "local-state" / "runtime"
+        now = datetime.now(tz=UTC)
+        first_store = self.make_json_store(state_root)
+
+        create_runtime_session(first_store, session_id="sess-1", workspace_id="acme", agent_id="chat", now=now, start_path=repo_root)
+        queue_runtime_turn(first_store, turn_id="turn-1", session_id="sess-1", input_text="hello", now=now)
+        record_runtime_event(
+            first_store,
+            event_id="evt-1",
+            session_id="sess-1",
+            plane="turn",
+            event_type="runtime.turn.queued",
+            payload={"input_text": "hello"},
+            turn_id="turn-1",
+            now=now,
+        )
+
+        second_store = self.make_json_store(state_root)
+
+        self.assertEqual(second_store.get_session("sess-1").workspace_id, "acme")
+        self.assertEqual(second_store.list_turns("sess-1")[0].input_text, "hello")
+        self.assertEqual(second_store.list_events("sess-1")[0].event_type, "runtime.turn.queued")
+        self.assertEqual(second_store.get_state("sess-1").session_status, "created")
 
     def test_runtime_process_lifecycle_tracks_exit_and_timeout(self) -> None:
         store = self.make_store()

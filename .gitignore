@@ -8,6 +8,7 @@ __pycache__/
 .ruff_cache/
 .venv/
 venv/
+.maverick/local-state/
 
 # Local databases and app-owned storage
 *.db

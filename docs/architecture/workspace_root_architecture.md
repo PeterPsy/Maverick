@@ -1099,6 +1099,12 @@ This area is for workspace-scoped operational events such as:
 - workspace restore
 - workspace-level operational transitions
 
+Runtime-domain records are authoritative execution state, not debug logs.
+
+The local bootstrap host may persist runtime collections under installation-local `.maverick/local-state/runtime/` until the production store adapter is wired.
+
+That persistence must preserve runtime sessions, turns, events, processes, and state across host restarts so app-owned references such as chat thread `runtime_session_id` remain resolvable.
+
 #### `logs/apps/<app_id>/`
 
 This area is for app-local logs within that workspace.

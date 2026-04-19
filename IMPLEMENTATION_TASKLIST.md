@@ -248,6 +248,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] define structured event types instead of raw transport messages
   - [x] attribute runtime events to `workspace_id`, runtime session, turn, and process when present
   - [x] distinguish runtime-domain events from websocket or transport framing
+  - [x] persist local bootstrap runtime collections so chat thread history survives logout/login and host restarts
 - [x] Implement runtime process abstraction
   - [x] define a local process handle model
   - [x] track stdin or stdout lifecycle, exit code, and crash or timeout outcomes

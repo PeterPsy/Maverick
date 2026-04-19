@@ -858,6 +858,16 @@ That id is not a chat-specific concept.
 
 It is a generic correlation value that lets mounted apps reconcile optimistic UI state with authoritative runtime events without duplicating user messages.
 
+Runtime session, turn, event, process, and state records must survive auth logout/login cycles and local host restarts.
+
+For the local hosted bootstrap, runtime-domain collections are persisted under installation-local `.maverick/local-state/runtime/`.
+
+This is a bootstrap adapter detail, not the domain model. Production deployments may replace it with MongoDB or another store adapter without changing runtime service interfaces.
+
+Chat thread records may reference runtime session ids, but chat history rendering must load authoritative runtime events from the runtime surface.
+
+Therefore a persisted chat thread must not outlive its runtime event history in a way that silently appears as an empty new chat.
+
 #### Runtime process
 
 A runtime process is the execution handle that a runtime session currently controls.

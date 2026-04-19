@@ -27,6 +27,7 @@ class BaseShellAppMountingTests(unittest.TestCase):
         self.assertIn("handleNavigationParams", chat_source)
         self.assertIn("window.addEventListener(\"message\"", chat_source)
         self.assertIn("getThread(requestedThreadId)", chat_source)
+        self.assertIn("activeSession || events.length > 0", chat_source)
 
 
 if __name__ == "__main__":

@@ -18,6 +18,7 @@ from core.recovery.store import MongoRecoveryStore, RecoveryCollections
 from core.runtime.store import MongoRuntimeStore, RuntimeCollections
 from core.secrets.store import MongoSecretStore, SecretCollections
 from core.shared.in_memory_collection import InMemoryCollection
+from core.shared.json_file_collection import JsonFileCollection
 from core.shared.repository import discover_repository_root
 from core.workspaces.store import MongoWorkspaceStore, WorkspaceCollections
 
@@ -70,13 +71,14 @@ def bootstrap_platform_state(*, start_path: Path | None = None, now: datetime | 
             selections=InMemoryCollection(),
         )
     )
+    runtime_state_root = repository_root / ".maverick" / "local-state" / "runtime"
     runtime_store = MongoRuntimeStore(
         RuntimeCollections(
-            sessions=InMemoryCollection(),
-            turns=InMemoryCollection(),
-            events=InMemoryCollection(),
-            processes=InMemoryCollection(),
-            states=InMemoryCollection(),
+            sessions=JsonFileCollection(runtime_state_root / "sessions.json"),
+            turns=JsonFileCollection(runtime_state_root / "turns.json"),
+            events=JsonFileCollection(runtime_state_root / "events.json"),
+            processes=JsonFileCollection(runtime_state_root / "processes.json"),
+            states=JsonFileCollection(runtime_state_root / "states.json"),
         )
     )
     secret_store = MongoSecretStore(

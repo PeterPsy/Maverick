@@ -212,7 +212,7 @@ export function App() {
   }
 
   async function openThreadById(threadId: string) {
-    if (activeThread?.thread_id === threadId) {
+    if (activeThread?.thread_id === threadId && (!activeThread.runtime_session_id || activeSession || events.length > 0)) {
       return;
     }
     const existingThread = threads.find((thread) => thread.thread_id === threadId);

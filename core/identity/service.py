@@ -7,6 +7,7 @@ from dataclasses import replace
 import hashlib
 import hmac
 import secrets
+import re
 
 from core.identity.models import (
     AccountType,
@@ -23,6 +24,8 @@ from core.workspaces.store import WorkspaceStore
 
 PASSWORD_ALGORITHM = "pbkdf2_sha256"
 PASSWORD_ITERATIONS = 210_000
+USERNAME_PATTERN = re.compile(r"^[a-zA-Z0-9._-]{2,64}$")
+UNSET = object()
 
 
 def utcnow() -> datetime:
@@ -54,6 +57,97 @@ def build_user_record(
         created_at=timestamp,
         updated_at=timestamp,
     )
+
+
+def create_user(
+    store: IdentityStore,
+    *,
+    username: str,
+    password: str,
+    email: str | None = None,
+    display_name: str | None = None,
+    account_type: AccountType = "standard",
+    platform_role: PlatformRole = "member",
+    now: datetime | None = None,
+) -> UserRecord:
+    """Create a password-authenticated platform user."""
+    normalized_username = username.strip()
+    if not USERNAME_PATTERN.match(normalized_username):
+        raise ValueError("username must be 2-64 chars and use letters, numbers, dot, underscore, or dash")
+    if len(password) < 8:
+        raise ValueError("password must be at least 8 characters")
+    try:
+        store.get_user_by_username(normalized_username)
+    except UserNotFoundError:
+        pass
+    else:
+        raise ValueError(f"user `{normalized_username}` already exists")
+    timestamp = now or utcnow()
+    user = build_user_record(
+        user_id=f"user:{normalized_username}",
+        username=normalized_username,
+        email=email,
+        display_name=display_name,
+        account_type=account_type,
+        platform_role=platform_role,
+        now=timestamp,
+    )
+    credential = build_password_credential(
+        user_id=user.user_id,
+        password_hash=hash_password(password),
+        algorithm=PASSWORD_ALGORITHM,
+        now=timestamp,
+    )
+    return register_user(store, user, credential)
+
+
+def update_user(
+    store: IdentityStore,
+    *,
+    user_id: str,
+    email: str | None | object = UNSET,
+    display_name: str | None | object = UNSET,
+    account_type: AccountType | object = UNSET,
+    platform_role: PlatformRole | object = UNSET,
+    is_active: bool | object = UNSET,
+    now: datetime | None = None,
+) -> UserRecord:
+    """Update mutable metadata for one platform user."""
+    user = store.get_user(user_id)
+    updates = {
+        "email": user.email if email is UNSET else email,
+        "display_name": user.display_name if display_name is UNSET else display_name,
+        "account_type": user.account_type if account_type is UNSET else account_type,
+        "platform_role": user.platform_role if platform_role is UNSET else platform_role,
+        "is_active": user.is_active if is_active is UNSET else bool(is_active),
+        "updated_at": now or utcnow(),
+    }
+    if updates["account_type"] not in {"standard", "facilitated"}:
+        raise ValueError("account_type must be standard or facilitated")
+    if updates["platform_role"] not in {"admin", "member"}:
+        raise ValueError("platform_role must be admin or member")
+    updated = replace(user, **updates)
+    return store.save_user(updated)
+
+
+def set_user_password(
+    store: IdentityStore,
+    *,
+    user_id: str,
+    password: str,
+    now: datetime | None = None,
+) -> PasswordCredentialRecord:
+    """Replace one user's password credential."""
+    if len(password) < 8:
+        raise ValueError("password must be at least 8 characters")
+    store.get_user(user_id)
+    credential = build_password_credential(
+        user_id=user_id,
+        password_hash=hash_password(password),
+        algorithm=PASSWORD_ALGORITHM,
+        now=now or utcnow(),
+    )
+    return store.save_password_credential(credential)
 
 
 def build_password_credential(*, user_id: str, password_hash: str, algorithm: str, now: datetime | None = None) -> PasswordCredentialRecord:

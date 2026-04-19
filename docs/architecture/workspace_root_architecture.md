@@ -1038,6 +1038,17 @@ That platform backup covers:
 
 This backup is distinct from workspace export.
 
+For the local hosted bootstrap, identity and workspace control-plane records may be stored under installation-local `.maverick/local-state/` files until the production persistence adapter is attached.
+
+This local persistence is still a control-plane store, not workspace data:
+
+- user records and password credentials stay under local identity state
+- auth sessions stay under local identity state
+- workspace registry, membership, governance, quota, and active workspace selection stay under local workspace state
+- app-owned operational content remains under `workspaces/<workspace_id>/data/<app_id>/`
+
+The file-backed bootstrap adapter must not leak JSON-file shapes into domain models or app contracts.
+
 ## Observability And Logs
 
 Observability must distinguish clearly between:

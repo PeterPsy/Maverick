@@ -51,6 +51,12 @@ class WorkspaceStore(Protocol):
     def list_memberships_for_user(self, user_id: str) -> list[WorkspaceMembershipRecord]:
         ...
 
+    def list_memberships(self) -> list[WorkspaceMembershipRecord]:
+        ...
+
+    def list_memberships_for_workspace(self, workspace_id: str) -> list[WorkspaceMembershipRecord]:
+        ...
+
     def save_governance(self, record: WorkspaceGovernanceRecord) -> WorkspaceGovernanceRecord:
         ...
 
@@ -122,6 +128,15 @@ class MongoWorkspaceStore:
 
     def list_memberships_for_user(self, user_id: str) -> list[WorkspaceMembershipRecord]:
         return [WorkspaceMembershipRecord(**document) for document in self.collections.memberships.find({"user_id": user_id})]
+
+    def list_memberships(self) -> list[WorkspaceMembershipRecord]:
+        return [WorkspaceMembershipRecord(**document) for document in self.collections.memberships.find({})]
+
+    def list_memberships_for_workspace(self, workspace_id: str) -> list[WorkspaceMembershipRecord]:
+        return [
+            WorkspaceMembershipRecord(**document)
+            for document in self.collections.memberships.find({"workspace_id": workspace_id})
+        ]
 
     def save_governance(self, record: WorkspaceGovernanceRecord) -> WorkspaceGovernanceRecord:
         self.collections.governance.update_one(

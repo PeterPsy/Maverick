@@ -14,6 +14,7 @@ from core.runtime.errors import RuntimeSessionNotFoundError
 from core.runtime.service import create_runtime_session, queue_runtime_turn, transition_runtime_session, transition_runtime_turn
 from core.shared.entrypoints import run_json_entrypoint
 from core.workspaces.paths import workspace_paths
+from core.identity.models import UserRecord
 
 
 def ensure_runtime_session(state: PlatformState, *, workspace_id: str, app_id: str, start_path: Path):
@@ -91,6 +92,7 @@ def handle_app_frontend(
     workspace_id: str,
     app_id: str,
     subpath: str,
+    user: UserRecord | None,
     start_path: Path,
     start_response: StartResponse,
 ) -> list[bytes]:
@@ -101,6 +103,9 @@ def handle_app_frontend(
         app_id=app_id,
         start_path=start_path,
     )
+    allowed_roles = parsed.contract.visibility.platform_roles
+    if allowed_roles and (user is None or user.platform_role not in allowed_roles):
+        return json_response(start_response, {"error": "app_forbidden"}, status="403 Forbidden")
     frontend = parsed.contract.entrypoints.frontend
     if frontend is None:
         return text_response(start_response, "App frontend not found", status="404 Not Found")
@@ -113,6 +118,7 @@ def handle_app_backend(
     environ: dict,
     workspace_id: str,
     app_id: str,
+    user: UserRecord | None,
     start_path: Path,
     start_response: StartResponse,
 ) -> list[bytes]:
@@ -124,6 +130,9 @@ def handle_app_backend(
         app_id=app_id,
         start_path=start_path,
     )
+    allowed_roles = parsed.contract.visibility.platform_roles
+    if allowed_roles and (user is None or user.platform_role not in allowed_roles):
+        return json_response(start_response, {"error": "app_forbidden"}, status="403 Forbidden")
     backend = parsed.contract.entrypoints.backend
     if backend is None:
         return text_response(start_response, "App backend not found", status="404 Not Found")

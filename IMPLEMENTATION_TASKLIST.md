@@ -729,6 +729,11 @@ without carrying forward legacy structure or backward-compatibility constraints 
 
 - [ ] Fresh install creates `default` workspace correctly
 - [ ] New non-default workspace can be created
+- [x] Core exposes admin-only user CRUD and workspace assignment APIs
+- [x] Core enforces admin-only access for identity and workspace membership management
+- [x] App contract visibility can hide and deny app mounts by platform role
+- [x] User Admin is installed as a sealed Maverick app for admin-only identity/workspace access management
+- [x] Local hosted bootstrap persists identity and workspace control-plane state under `.maverick/local-state/`
 - [ ] Non-default workspace agent is sandboxed to workspace root
 - [ ] Default workspace agent can run `full-access`
 - [ ] External app can be installed into one workspace only

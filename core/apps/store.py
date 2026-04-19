@@ -24,6 +24,7 @@ from core.apps.models import (
     AppSourceRecord,
     AppStorageDeclaration,
     AppStorageIndices,
+    AppVisibilityDeclaration,
     WidgetActionDeclaration,
     WidgetDeclaration,
     WidgetFrontendDeclaration,
@@ -100,6 +101,7 @@ class MongoAppStore:
     def _app_contract(self, payload: dict[str, Any]) -> AppContractDescriptor:
         return AppContractDescriptor(
             distribution=AppDistributionDeclaration(**payload["distribution"]),
+            visibility=AppVisibilityDeclaration(**payload.get("visibility", {"platform_roles": None})),
             compatibility=AppCompatibilityDescriptor(**payload["compatibility"]),
             storage=AppStorageDeclaration(
                 **{

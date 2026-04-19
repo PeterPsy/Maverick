@@ -41,20 +41,23 @@ class PlatformState:
 def bootstrap_platform_state(*, start_path: Path | None = None, now: datetime | None = None) -> PlatformState:
     """Build in-memory platform state and install first-boot built-in apps."""
     repository_root = discover_repository_root(start_path=start_path)
+    control_state_root = repository_root / ".maverick" / "local-state"
+    workspace_state_root = control_state_root / "workspaces"
+    identity_state_root = control_state_root / "identity"
     workspace_store = MongoWorkspaceStore(
         WorkspaceCollections(
-            workspaces=InMemoryCollection(),
-            memberships=InMemoryCollection(),
-            governance=InMemoryCollection(),
-            quotas=InMemoryCollection(),
-            active_workspace_selections=InMemoryCollection(),
+            workspaces=JsonFileCollection(workspace_state_root / "workspaces.json"),
+            memberships=JsonFileCollection(workspace_state_root / "memberships.json"),
+            governance=JsonFileCollection(workspace_state_root / "governance.json"),
+            quotas=JsonFileCollection(workspace_state_root / "quotas.json"),
+            active_workspace_selections=JsonFileCollection(workspace_state_root / "active_workspace_selections.json"),
         )
     )
     identity_store = MongoIdentityStore(
         IdentityCollections(
-            users=InMemoryCollection(),
-            credentials=InMemoryCollection(),
-            auth_sessions=InMemoryCollection(),
+            users=JsonFileCollection(identity_state_root / "users.json"),
+            credentials=JsonFileCollection(identity_state_root / "credentials.json"),
+            auth_sessions=JsonFileCollection(identity_state_root / "auth_sessions.json"),
         )
     )
     app_store = MongoAppStore(
@@ -71,7 +74,7 @@ def bootstrap_platform_state(*, start_path: Path | None = None, now: datetime | 
             selections=InMemoryCollection(),
         )
     )
-    runtime_state_root = repository_root / ".maverick" / "local-state" / "runtime"
+    runtime_state_root = control_state_root / "runtime"
     runtime_store = MongoRuntimeStore(
         RuntimeCollections(
             sessions=JsonFileCollection(runtime_state_root / "sessions.json"),

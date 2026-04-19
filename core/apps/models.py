@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from core.execution_policy.models import ExecutionMode
+from core.identity.models import PlatformRole
 
 
 AppSourceKind = Literal["platform", "external_bundle", "workspace_local_project"]
@@ -66,6 +67,13 @@ class AppDistributionDeclaration:
 
     mode: AppDistributionMode
     source_access: AppSourceAccess
+
+
+@dataclass(frozen=True)
+class AppVisibilityDeclaration:
+    """Describe which platform users may see and mount one app."""
+
+    platform_roles: list[PlatformRole] | None
 
 
 @dataclass(frozen=True)
@@ -170,6 +178,7 @@ class AppContractDescriptor:
     """Executable app contract metadata used by the core."""
 
     distribution: AppDistributionDeclaration
+    visibility: AppVisibilityDeclaration
     compatibility: AppCompatibilityDescriptor
     storage: AppStorageDeclaration
     capabilities: AppCapabilities

@@ -15,6 +15,9 @@ class MongoCollection(Protocol):
     def find_one(self, query: dict[str, Any]) -> dict[str, Any] | None:
         ...
 
+    def find(self, query: dict[str, Any]) -> list[dict[str, Any]] | Any:
+        ...
+
     def update_one(self, query: dict[str, Any], update: dict[str, Any], *, upsert: bool = False) -> Any:
         ...
 
@@ -29,6 +32,9 @@ class IdentityStore(Protocol):
         ...
 
     def get_user_by_username(self, username: str) -> UserRecord:
+        ...
+
+    def list_users(self) -> list[UserRecord]:
         ...
 
     def save_password_credential(self, record: PasswordCredentialRecord) -> PasswordCredentialRecord:
@@ -75,6 +81,9 @@ class MongoIdentityStore:
         if document is None:
             raise UserNotFoundError(f"User `{username}` was not found.")
         return UserRecord(**document)
+
+    def list_users(self) -> list[UserRecord]:
+        return [UserRecord(**document) for document in self.collections.users.find({})]
 
     def save_password_credential(self, record: PasswordCredentialRecord) -> PasswordCredentialRecord:
         payload = asdict(record)

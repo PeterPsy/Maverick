@@ -19,6 +19,7 @@ from core.apps.models import (
     AppRollbackSupport,
     AppStorageDeclaration,
     AppStorageIndices,
+    AppVisibilityDeclaration,
     ParsedAppContract,
     WidgetActionDeclaration,
     WidgetDeclaration,
@@ -211,6 +212,7 @@ def build_widget_declaration(
 def build_app_contract(
     *,
     distribution: AppDistributionDeclaration | None = None,
+    visibility: AppVisibilityDeclaration | None = None,
     compatibility: AppCompatibilityDescriptor | None = None,
     storage: AppStorageDeclaration | None = None,
     capabilities: AppCapabilities | None = None,
@@ -225,6 +227,7 @@ def build_app_contract(
     """Build an executable app contract descriptor."""
     return AppContractDescriptor(
         distribution=distribution or build_app_distribution(),
+        visibility=visibility or AppVisibilityDeclaration(platform_roles=None),
         compatibility=compatibility or build_app_compatibility(),
         storage=storage or build_app_storage(),
         capabilities=capabilities or build_app_capabilities(),

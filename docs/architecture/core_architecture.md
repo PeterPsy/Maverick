@@ -467,6 +467,7 @@ The core serves only the declared `frontend/dist` artifact and exposes generic s
 The first shell-facing API slice is intentionally core-generic, not `base-shell` specific:
 
 - `/api/session`, `/api/auth/login`, and `/api/auth/logout` expose the current user session
+- `/api/admin/users` and `/api/admin/workspaces` expose admin-only identity, role, and workspace assignment management
 - `/api/workspaces` and `/api/workspaces/active` expose workspace list, creation, and active workspace selection
 - `/api/apps` exposes enabled app registry records for the active workspace
 - `/api/status` exposes platform status for the active workspace
@@ -477,6 +478,15 @@ The first shell-facing API slice is intentionally core-generic, not `base-shell`
 These APIs are platform capabilities that any suitable shell app may consume.
 
 They do not make the core own shell UX, chat project organization, or app-specific settings panels.
+
+Admin-facing apps must still stay app-agnostic at the core boundary.
+
+For example, a `user-admin` app may provide the UI for creating users, changing platform roles, and assigning users to workspaces, but the records remain owned by the core identity and workspace governance domains.
+
+Admin app visibility is enforced through generic app contract visibility metadata, not through app-specific branches in the core.
+
+The core may filter `/api/apps` and mounted app routes according to `visibility.platform_roles`.
+An app that declares `visibility.platform_roles: ["admin"]` is not listed or mounted for member users.
 
 For the local hosted deployment, the bootstrap admin username and password are supplied by `MAVERICK3_ADMIN_USERNAME` and `MAVERICK3_ADMIN_PASSWORD`.
 

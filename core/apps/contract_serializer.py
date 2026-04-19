@@ -31,6 +31,9 @@ def app_contract_payload(parsed: ParsedAppContract) -> dict[str, Any]:
             "mode": parsed.contract.distribution.mode,
             "source_access": parsed.contract.distribution.source_access,
         },
+        "visibility": {
+            "platform_roles": parsed.contract.visibility.platform_roles,
+        },
         "capabilities": {
             "mcp_tools": parsed.contract.capabilities.mcp_tools,
             "cli_commands": parsed.contract.capabilities.cli_commands,

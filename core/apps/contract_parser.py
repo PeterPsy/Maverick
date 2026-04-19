@@ -19,6 +19,7 @@ from core.apps.models import (
     AppRollbackSupport,
     AppStorageDeclaration,
     AppStorageIndices,
+    AppVisibilityDeclaration,
     ParsedAppContract,
 )
 
@@ -59,6 +60,7 @@ def parse_app_contract_file(source_root: Path) -> ParsedAppContract:
 
     capabilities_payload = _expect_mapping(root.get("capabilities", {}), label="capabilities")
     distribution_payload = _expect_mapping(root.get("distribution", {}), label="distribution")
+    visibility_payload = _expect_mapping(root.get("visibility", {}), label="visibility")
     entrypoints_payload = _expect_mapping(root.get("entrypoints", {}), label="entrypoints")
     storage_payload = _expect_mapping(root.get("storage", {}), label="storage")
     compatibility_payload = _expect_mapping(root.get("compatibility", {}), label="compatibility")
@@ -126,6 +128,20 @@ def parse_app_contract_file(source_root: Path) -> ParsedAppContract:
         raise AppContractValidationError("Source-available apps must use source_access read_only or forkable.")
     if distribution.mode == "workspace_local" and distribution.source_access != "editable":
         raise AppContractValidationError("Workspace-local apps must use source_access editable.")
+
+    visibility_roles = None
+    if visibility_payload.get("platform_roles") is not None:
+        visibility_roles = _expect_string_list(visibility_payload, "platform_roles") or None
+    if visibility_roles is not None:
+        unsupported_roles = set(visibility_roles) - {"admin", "member"}
+        if unsupported_roles:
+            unsupported = ", ".join(sorted(unsupported_roles))
+            raise AppContractValidationError(f"Unsupported visibility platform role(s): {unsupported}.")
+    unexpected_visibility_keys = set(visibility_payload) - {"platform_roles"}
+    if unexpected_visibility_keys:
+        unexpected = ", ".join(sorted(unexpected_visibility_keys))
+        raise AppContractValidationError(f"Unsupported visibility field(s): {unexpected}.")
+    visibility = AppVisibilityDeclaration(platform_roles=visibility_roles)
 
     lifecycle = AppLifecycleDeclaration(
         install=_expect_bool(lifecycle_payload, "install", default=False),
@@ -231,6 +247,7 @@ def parse_app_contract_file(source_root: Path) -> ParsedAppContract:
         publisher=publisher,
         contract=AppContractDescriptor(
             distribution=distribution,
+            visibility=visibility,
             compatibility=compatibility,
             storage=storage,
             capabilities=capabilities,

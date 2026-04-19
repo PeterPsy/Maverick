@@ -331,6 +331,28 @@ This declaration allows the platform to:
 - understand which app owns which kind of content
 - understand which surface should be used for a given operation
 
+### Visibility Declaration
+
+App visibility is a platform policy hint declared in the app contract and enforced by the core host.
+
+The canonical optional shape is:
+
+```json
+"visibility": {
+  "platform_roles": ["admin"]
+}
+```
+
+Rules:
+
+- omitted `visibility` or `platform_roles: null` means the app is visible to every authenticated workspace member
+- `platform_roles` is a list of global platform roles, initially `admin` or `member`
+- visibility affects app registry responses and mounted frontend/backend access
+- visibility does not move business logic into the core
+- visibility must not be implemented as app-specific conditionals such as `if app_id == "user-admin"`
+
+An admin tool app can therefore be a normal sealed app under `/apps/<app_id>/` while user records, platform roles, sessions, memberships, and workspace governance remain core-owned control-plane state.
+
 The recommended mental model is:
 
 - `mcp/` = structured tool surface

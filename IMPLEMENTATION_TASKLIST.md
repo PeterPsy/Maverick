@@ -473,6 +473,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] the product shell is also an app, not part of the core
 - [x] Implement `chat` as an app on top of core runtime interfaces
 - [x] Implement `base-shell` as the first mounted frontend shell smoke app
+- [x] Create reusable local Codex skill `maverick-v3-app-creator` for rigorous v2-to-v3 app planning and app creation work
 - [ ] Port `base-shell` to the Maverick v2 `base_shell` frontend approach, adapted cleanly to v3:
   - [x] Treat `/home/ubuntu/maverick-v2/apps/base_shell` as the behavioral and visual reference, not as code to copy blindly
   - [x] Preserve the v3 app identity as `base-shell` and keep the v3 contract format in `app_contract.json`

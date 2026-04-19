@@ -10,7 +10,6 @@ from core.identity.service import build_auth_session, build_password_credential,
 from core.identity.store import MongoIdentityStore, IdentityCollections
 from core.workspaces.models import WorkspaceRecord
 from core.workspaces.service import (
-    build_workspace_record,
     create_workspace,
     default_workspace_governance,
     ensure_default_workspace_record,

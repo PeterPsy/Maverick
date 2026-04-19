@@ -107,6 +107,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] split CLI surface code into core command groups, app command mounting, and registry builder
   - [x] split MCP surface code into core tool groups, app tool mounting, and registry builder
   - [x] split oversized Phase 4, Phase 9, and Phase 11 tests into focused files with shared fixtures
+  - [x] add dependency-free unused-import check for refactor cleanup
 
 ## Phase 3: Identity and Workspace Governance
 

@@ -1,33 +1,11 @@
-"""Canonical app contract builders, serializer, and parser/validator."""
+"""Shared constants and naming helpers for app contracts."""
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
-import json
 from pathlib import Path
 import re
-from typing import Any
 
-from core.apps.errors import AppContractValidationError
-from core.apps.models import (
-    AppCapabilities,
-    AppCompatibilityDescriptor,
-    AppContractDescriptor,
-    AppDistributionDeclaration,
-    AppEntrypoints,
-    AppFailureSemantics,
-    AppHealthContract,
-    AppHookTimeouts,
-    AppLifecycleDeclaration,
-    AppRollbackSupport,
-    AppSourceRecord,
-    AppStorageDeclaration,
-    AppStorageIndices,
-    ParsedAppContract,
-    WorkspaceLocalAppProjectRecord,
-)
-from core.execution_policy.models import ExecutionMode
-from core.shared.version import current_core_version
 
 
 CURRENT_APP_CONTRACT_VERSION = "1.0"

@@ -7,7 +7,6 @@ from typing import Any, Protocol
 
 from core.recovery.errors import (
     RecoveryFailureNotFoundError,
-    RecoveryHealthResultNotFoundError,
     RecoveryIntentNotFoundError,
 )
 from core.recovery.models import HealthCheckResult, RecoveryIntentRecord, RuntimeFailureRecord

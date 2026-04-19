@@ -103,6 +103,7 @@ Rules:
 - new core logic should ship with tests when the behavior is stable enough to assert
 - filesystem, path, policy, and contract logic should be covered early with focused unit tests
 - run the smallest relevant verification for every change
+- after refactors or file splits, run `python3 scripts/check_unused_imports.py` to catch stale imports that `compileall` cannot detect
 - if a check cannot be run, state that clearly in the work summary
 - do not claim a feature is complete if only the scaffold exists
 - do not stop with failing tests when the failure is within the current scope to fix

@@ -1,17 +1,14 @@
-"""Canonical app contract builders, serializer, and parser/validator."""
+"""Parser for canonical app contract files."""
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 import json
 from pathlib import Path
 import re
-from typing import Any
 
 from core.apps.errors import AppContractValidationError
 from core.apps.models import (
     AppCapabilities,
-    AppCompatibilityDescriptor,
     AppContractDescriptor,
     AppDistributionDeclaration,
     AppEntrypoints,
@@ -20,25 +17,17 @@ from core.apps.models import (
     AppHookTimeouts,
     AppLifecycleDeclaration,
     AppRollbackSupport,
-    AppSourceRecord,
     AppStorageDeclaration,
     AppStorageIndices,
     ParsedAppContract,
-    WorkspaceLocalAppProjectRecord,
 )
-from core.execution_policy.models import ExecutionMode
-from core.shared.version import current_core_version
 
 
 CURRENT_APP_CONTRACT_VERSION = "1.0"
 APP_CONTRACT_FILENAME = "app_contract.json"
 APP_ID_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
-from core.apps.contract_builders import (
-    build_app_compatibility,
-    build_app_contract,
-    build_app_entrypoints,
-)
+from core.apps.contract_builders import build_app_compatibility
 from core.apps.contract_common import app_contract_path
 from core.apps.contract_validation import (
     _expect_app_id,

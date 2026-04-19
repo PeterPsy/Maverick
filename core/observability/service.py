@@ -8,7 +8,6 @@ from core.observability.audit_log import record_audit_event
 from core.observability.event_log import emit_structured_event
 from core.observability.metrics import record_metric
 from core.observability.models import AuditRecord, MetricRecord, RuntimeLogRecord, StructuredEventRecord
-from core.observability.redaction import redact_payload
 from core.observability.runtime_log import append_runtime_log, ensure_log_roots
 from core.observability.store import ObservabilityStore
 

@@ -535,6 +535,19 @@ The receiving app owns the meaning of the scalar params.
 
 The core and shell only provide the generic delivery mechanism.
 
+Mounted apps should also emit:
+
+```json
+{
+  "type": "maverick.app.ready",
+  "app_id": "chat"
+}
+```
+
+The shell should treat this as a lifecycle acknowledgement and resend the latest pending navigation params for that mounted app.
+
+This keeps navigation reliable after login/logout cycles and cold iframe mounts without switching back to query-string driven iframe reloads.
+
 ### Current Product Assumptions To Remove
 
 The current code keeps the core/app boundary clean at the import level: `core/` does not import app frontend code, and `base-shell` does not import `chat`.

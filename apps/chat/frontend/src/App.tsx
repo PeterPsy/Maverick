@@ -127,6 +127,7 @@ export function App() {
     }
 
     window.addEventListener("message", handleShellMessage);
+    window.parent?.postMessage({ type: "maverick.app.ready", app_id: "chat" }, window.location.origin);
     return () => window.removeEventListener("message", handleShellMessage);
   }, [activeThread?.thread_id, threads]);
 

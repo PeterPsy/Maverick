@@ -13,6 +13,7 @@ class BaseShellAppMountingTests(unittest.TestCase):
         workspace_source = (REPO_ROOT / "apps/base-shell/frontend/src/components/WorkspaceView.tsx").read_text()
 
         self.assertIn("maverick.app.navigate", host_source)
+        self.assertIn("maverick.app.ready", host_source)
         self.assertIn("postMessage", host_source)
         self.assertIn("src={app.frontend_mount}", host_source)
         self.assertNotIn("URLSearchParams", workspace_source)
@@ -22,6 +23,7 @@ class BaseShellAppMountingTests(unittest.TestCase):
         chat_source = (REPO_ROOT / "apps/chat/frontend/src/App.tsx").read_text()
 
         self.assertIn("maverick.app.navigate", chat_source)
+        self.assertIn("maverick.app.ready", chat_source)
         self.assertIn("handleNavigationParams", chat_source)
         self.assertIn("window.addEventListener(\"message\"", chat_source)
         self.assertIn("getThread(requestedThreadId)", chat_source)

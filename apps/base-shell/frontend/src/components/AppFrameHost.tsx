@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { AppRegistryItem } from "../api";
 
 type AppFrameParams = Record<string, string | boolean | null>;
+type AppReadyMessage = {
+  app_id?: string;
+  type?: string;
+};
 
 export function AppFrameHost({
   activeApp,
@@ -12,6 +16,10 @@ export function AppFrameHost({
 }) {
   const [mountedApps, setMountedApps] = useState<AppRegistryItem[]>([activeApp]);
   const frameRefs = useRef<Record<string, HTMLIFrameElement | null>>({});
+  const latestNavigationRef = useRef<{ appId: string; params: AppFrameParams }>({
+    appId: activeApp.app_id,
+    params: activeAppParams,
+  });
   const paramsSignature = JSON.stringify(activeAppParams);
 
   useEffect(() => {
@@ -24,8 +32,32 @@ export function AppFrameHost({
   }, [activeApp]);
 
   useEffect(() => {
+    latestNavigationRef.current = { appId: activeApp.app_id, params: activeAppParams };
     postNavigation(frameRefs.current[activeApp.app_id], activeApp.app_id, activeAppParams);
   }, [activeApp.app_id, paramsSignature]);
+
+  useEffect(() => {
+    function handleAppReady(event: MessageEvent) {
+      if (event.origin !== window.location.origin || !event.data || typeof event.data !== "object") {
+        return;
+      }
+      const payload = event.data as AppReadyMessage;
+      if (payload.type !== "maverick.app.ready" || !payload.app_id) {
+        return;
+      }
+      const frame = frameRefs.current[payload.app_id];
+      if (!frame || event.source !== frame.contentWindow) {
+        return;
+      }
+      const latestNavigation = latestNavigationRef.current;
+      if (latestNavigation.appId === payload.app_id) {
+        postNavigation(frame, payload.app_id, latestNavigation.params);
+      }
+    }
+
+    window.addEventListener("message", handleAppReady);
+    return () => window.removeEventListener("message", handleAppReady);
+  }, []);
 
   return (
     <section className="bs-workspace-app-panel" aria-label={`${activeApp.name} app`}>

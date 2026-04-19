@@ -719,6 +719,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
     - [x] open selected chat threads in the chat app view through generic app navigation params
     - [x] open newly created chats in the chat app view
     - [x] forward chat widget navigation to the persistent mounted chat app without remounting its iframe
+    - [x] resend pending app navigation after mounted app `maverick.app.ready` acknowledgement so chat selection survives logout/login cold mounts
     - [x] add app-owned floating settings panels for projects and individual chats
     - [x] support chat-owned rename, move, delete, and project creation actions through the chat backend
     - [x] add tests for contract declaration, widget registry discovery, and absence of source-path leakage

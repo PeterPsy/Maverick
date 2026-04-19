@@ -658,6 +658,19 @@ Rules:
 - `type` identifies the generic host-to-app lifecycle message
 - `app_id` must match the target mounted app
 - `params` contains only explicit scalar navigation data
+
+Mounted app frontends should acknowledge readiness with the matching app-owned lifecycle message:
+
+```json
+{
+  "type": "maverick.app.ready",
+  "app_id": "chat"
+}
+```
+
+The host should resend the latest pending navigation params for that app when it receives `maverick.app.ready`.
+
+This avoids losing navigation requests when an app iframe is freshly mounted after login, logout, refresh, or recovery and the host message arrives before the app has installed its listener.
 - the host may know the target `app_id`, but must not know app-private storage or route internals
 - the receiving app owns interpretation of `params`
 - the receiving app must ignore messages from unexpected origins

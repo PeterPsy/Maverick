@@ -1,28 +1,37 @@
-import { AppRegistryItem } from "../api";
+import { AppRegistryItem, SessionUser, WorkspaceItem } from "../api";
 import { pinnedApps } from "../navigation";
 import { AppLogo } from "./AppLogo";
 import { BrandMark } from "./BrandMark";
+import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
 export function Sidebar({
   activeAppId,
   apps,
+  activeWorkspaceId,
   isOpen,
   onClose,
   onOpenApp,
   onOpenApps,
   onOpenSettings,
   onOpenTutorial,
+  onWorkspaceChanged,
   pinnedAppIds,
+  user,
+  workspaces,
 }: {
   activeAppId: string | null;
   apps: AppRegistryItem[];
+  activeWorkspaceId: string;
   isOpen: boolean;
   onClose: () => void;
   onOpenApp: (appId: string) => void;
   onOpenApps: () => void;
   onOpenSettings: () => void;
   onOpenTutorial: () => void;
+  onWorkspaceChanged: () => void;
   pinnedAppIds: string[];
+  user: SessionUser | null;
+  workspaces: WorkspaceItem[];
 }) {
   if (!isOpen) {
     return null;
@@ -44,13 +53,7 @@ export function Sidebar({
       </div>
 
       <nav className="bs-sidebar__nav-list" aria-label="Primary navigation">
-        <button className="bs-sidebar__workspace-select" disabled type="button">
-          <span className="bs-sidebar__workspace-icon">▣</span>
-          <span className="bs-sidebar__workspace-copy">
-            <span className="bs-sidebar__workspace-title">default</span>
-            <span className="bs-sidebar__workspace-subtitle">Workspace corrente</span>
-          </span>
-        </button>
+        <WorkspaceSwitcher activeWorkspaceId={activeWorkspaceId} onChanged={onWorkspaceChanged} workspaces={workspaces} />
 
         {pinned.map((app) => (
           <button
@@ -78,13 +81,10 @@ export function Sidebar({
         </button>
       </nav>
 
-      <section className="bs-chat-list" aria-label="Project folders">
-        <div className="bs-chat-folder">
-          <div className="bs-chat-folder__header">
-            <p className="bs-chat-folder__title">Senza progetto</p>
-            <span className="bs-chat-folder__count">0</span>
-          </div>
-        </div>
+      <section className="bs-sidebar__session" aria-label="Current user">
+        <p className="bs-eyebrow">Sessione</p>
+        <strong>{user?.display_name || user?.username || "Utente"}</strong>
+        <span>{user?.platform_role || "member"}</span>
       </section>
 
       <div className="bs-sidebar__footer">

@@ -118,6 +118,20 @@ def resolve_provider_for_runtime_session(
     return service.resolve_runtime_backend_provider(workspace_id=session.workspace_id)
 
 
+def resolve_provider_for_workspace(
+    store: ProviderStore,
+    *,
+    workspace_id: str,
+    registry: ProviderRegistry | None = None,
+    codex_command: str = "codex",
+) -> tuple[ProviderDefinition, ProviderSelection | None]:
+    """Resolve the effective provider selection for one workspace."""
+    active_registry = registry or builtin_provider_registry(codex_command=codex_command)
+    register_builtin_providers(store, registry=active_registry, codex_command=codex_command)
+    service = ProviderSelectionService(store, active_registry)
+    return service.resolve_runtime_backend_provider(workspace_id=workspace_id)
+
+
 def build_runtime_backend_launch_spec(
     store: ProviderStore,
     *,
@@ -236,6 +250,7 @@ __all__ = [
     "list_available_providers",
     "prepare_runtime_skills",
     "register_builtin_providers",
+    "resolve_provider_for_workspace",
     "resolve_provider_for_runtime_session",
     "utcnow",
 ]

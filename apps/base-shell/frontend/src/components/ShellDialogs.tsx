@@ -1,12 +1,24 @@
+import { PlatformSettings } from "../api";
 import { Dialog, Surface } from "../ui";
 
 type ShellDialog = "settings" | "tutorial" | null;
 
-export function ShellDialogs({ activeDialog, onClose }: { activeDialog: ShellDialog; onClose: () => void }) {
+export function ShellDialogs({
+  activeDialog,
+  onClose,
+  onLogout,
+  settings,
+}: {
+  activeDialog: ShellDialog;
+  onClose: () => void;
+  onLogout: () => void;
+  settings: PlatformSettings | null;
+}) {
+  const governance = settings?.workspace.governance || {};
   return (
     <>
       <Dialog
-        description="Una guida breve alle superfici già disponibili nella shell v3."
+        description="Primi passi della shell v3: workspace, app montate e provider runtime."
         onClose={onClose}
         open={activeDialog === "tutorial"}
         title="Tutorial"
@@ -14,48 +26,59 @@ export function ShellDialogs({ activeDialog, onClose }: { activeDialog: ShellDia
         <div className="bs-dialog-grid">
           <Surface>
             <p className="bs-dialog-card__eyebrow">App registry</p>
-            <h4 className="bs-dialog-card__title">Le app arrivano dal core.</h4>
+            <h4 className="bs-dialog-card__title">Apri app dal registry.</h4>
             <p className="bs-dialog-card__copy">
-              La shell mostra solo app abilitate dal registry v3 e monta i frontend dichiarati dal contract.
+              La griglia mostra solo app abilitate nel workspace attivo. Ogni frontend viene servito dal mount dichiarato nel contract.
             </p>
           </Surface>
           <Surface>
-            <p className="bs-dialog-card__eyebrow">Workspace</p>
-            <h4 className="bs-dialog-card__title">La shell non possiede dati core.</h4>
+            <p className="bs-dialog-card__eyebrow">Workspace selector</p>
+            <h4 className="bs-dialog-card__title">Cambia tenant senza ricaricare codice.</h4>
             <p className="bs-dialog-card__copy">
-              Le preferenze locali restano nel browser; dati app e runtime restano nelle superfici app/core dedicate.
+              Il selettore laterale cambia la sessione attiva sul core. Il registry e le app si riallineano al workspace scelto.
             </p>
           </Surface>
           <Surface>
-            <p className="bs-dialog-card__eyebrow">Agents</p>
-            <h4 className="bs-dialog-card__title">MCP, CLI e skills vivono fuori dalla UI.</h4>
+            <p className="bs-dialog-card__eyebrow">Provider</p>
+            <h4 className="bs-dialog-card__title">Codex è il backend runtime iniziale.</h4>
             <p className="bs-dialog-card__copy">
-              Questa app visualizza e ospita; gli agent usano le superfici dichiarate dai singoli app contract.
+              La top bar mostra provider e runtime attivi. In seguito altri provider useranno la stessa superficie core.
             </p>
           </Surface>
         </div>
       </Dialog>
       <Dialog
-        description="Impostazioni locali disponibili senza introdurre dipendenze da domini v3 non ancora pubblici."
+        description="Stato reale letto dalle API core del workspace attivo."
         onClose={onClose}
         open={activeDialog === "settings"}
         title="Settings"
       >
         <div className="bs-settings-list">
           <Surface>
-            <p className="bs-dialog-card__eyebrow">Storage locale</p>
-            <h4 className="bs-dialog-card__title">Sessione shell</h4>
+            <p className="bs-dialog-card__eyebrow">Utente</p>
+            <h4 className="bs-dialog-card__title">{settings?.user.display_name || settings?.user.username || "Non disponibile"}</h4>
+            <p className="bs-dialog-card__copy">{settings?.user.platform_role || "member"} · {settings?.workspace.name || "Workspace"}</p>
+          </Surface>
+          <Surface>
+            <p className="bs-dialog-card__eyebrow">Provider</p>
+            <h4 className="bs-dialog-card__title">{settings?.provider.active_provider.label || "Provider non caricato"}</h4>
             <p className="bs-dialog-card__copy">
-              App attiva, menu laterale e app fissate sono salvate in `localStorage` del browser.
+              {settings?.provider.active_provider.default_model_family || "model"} · {settings?.runtime.sessions.length ?? 0} sessioni runtime
             </p>
           </Surface>
           <Surface>
-            <p className="bs-dialog-card__eyebrow">Backend</p>
-            <h4 className="bs-dialog-card__title">Nessuna impostazione server qui.</h4>
-            <p className="bs-dialog-card__copy">
-              Provider, recovery, utenti e workspace saranno esposti solo tramite app o API v3 dedicate.
-            </p>
+            <p className="bs-dialog-card__eyebrow">Governance</p>
+            <div className="bs-settings-flags">
+              {Object.entries(governance).map(([key, value]) => (
+                <span className={`bs-settings-flag ${value ? "is-on" : "is-off"}`} key={key}>
+                  {key.replaceAll("_", " ")}
+                </span>
+              ))}
+            </div>
           </Surface>
+          <button className="bs-settings-logout" onClick={onLogout} type="button">
+            Logout
+          </button>
         </div>
       </Dialog>
     </>

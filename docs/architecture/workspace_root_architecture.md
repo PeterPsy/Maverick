@@ -102,6 +102,18 @@ Rules:
 - service-layer contracts should depend on store interfaces or equivalent abstractions
 - Mongo-specific queries and update operators stay inside store adapters only
 
+The hosted shell may expose workspace selection through generic core APIs.
+
+The current active workspace is session state for a user, not a property of the shell app.
+
+That means:
+
+- `/api/session` may report the active workspace id for the current user
+- `/api/workspaces` may list workspace records the user is a member of
+- `/api/workspaces/active` may switch the active workspace for that user session
+- `/api/apps` and `/api/status` should resolve against the active workspace
+- chat projects are not workspace selection; project organization remains app-domain state owned by the chat app
+
 ### Workspace data plane
 
 The workspace data plane contains the actual operational content owned by the workspace and by the apps installed inside it.
@@ -301,6 +313,38 @@ That includes:
 
 - enforcing invocation policy for shared MCP and CLI hosts
 - applying platform-level namespacing where needed to avoid collisions between app-owned and core-owned surfaces
+
+Apps may also declare embeddable frontend widgets.
+
+Widgets are visual surfaces owned by the app that declares them.
+
+They may be rendered inside another app's UI, but they do not create app-to-app communication.
+
+For example:
+
+- the `chat` app may render a structured message
+- the structured message may contain a content kind such as `checklist.design`
+- the installed `checklists` app may declare a widget that can render `checklist.design`
+- the platform registry exposes that widget as available in the workspace
+- chat embeds the widget through the core-mounted widget surface
+
+The ownership remains separate:
+
+- `chat` owns the chat transcript and message container
+- `checklists` owns the widget renderer and checklist data
+- the core owns registry, mounting, auth, workspace context, and enablement checks
+
+The embedding app must not import source files from the widget owner.
+
+The widget owner must not write into the embedding app's data root.
+
+Widget state must be stored under the widget owner's app data namespace:
+
+```text
+/workspaces/<workspace_id>/data/<widget_owner_app_id>/
+```
+
+If no enabled widget can render a structured payload, the embedding app must show a safe generic fallback instead of failing the transcript or hiding the content.
 
 Each app should own its own namespace under:
 

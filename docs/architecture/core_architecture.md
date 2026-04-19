@@ -393,6 +393,7 @@ The core should be able to mount:
 - app MCP surfaces
 - app CLI surfaces
 - app skills
+- app widget frontend surfaces
 
 The platform should not force every app into the same UI or runtime style, but it should remain the owner of:
 
@@ -401,6 +402,31 @@ The platform should not force every app into the same UI or runtime style, but i
 - mounting
 - installation and enablement checks
 - workspace-aware dispatch
+
+Widget mounting follows the same platform-host rule.
+
+An embeddable widget is not core UI and not direct app-to-app communication.
+
+The core is responsible only for:
+
+- validating widget declarations in app contracts
+- exposing enabled widget metadata through the workspace app registry
+- mounting widget frontend surfaces through controlled routes
+- enforcing auth, workspace context, install state, and enablement before loading a widget
+- providing deterministic routing metadata so host apps can find compatible widgets
+
+The core must not:
+
+- render chat widgets itself
+- own widget business state
+- let one app import another app's source tree
+- special-case a specific widget owner inside the runtime or registry
+
+For example, if chat embeds a checklist widget:
+
+- chat owns the transcript host
+- checklists owns the widget renderer and checklist data
+- core owns registry, routing, auth, and workspace enablement
 
 ## Everything Above The Core Is An App
 
@@ -428,7 +454,25 @@ That means:
 
 The current v3 `base-shell` implementation is a React/TypeScript app-owned frontend built with Vite.
 
-The core serves only the declared `frontend/dist` artifact and exposes the registry data the shell needs through `/api/apps` and `/api/status`.
+The core serves only the declared `frontend/dist` artifact and exposes generic shell-facing control-plane APIs.
+
+The first shell-facing API slice is intentionally core-generic, not `base-shell` specific:
+
+- `/api/session`, `/api/auth/login`, and `/api/auth/logout` expose the current user session
+- `/api/workspaces` and `/api/workspaces/active` expose workspace list, creation, and active workspace selection
+- `/api/apps` exposes enabled app registry records for the active workspace
+- `/api/status` exposes platform status for the active workspace
+- `/api/providers/active` and `/api/runtime/status` expose active runtime provider and runtime sessions
+- `/api/settings/platform` exposes read-only platform/workspace/provider/runtime/recovery metadata for settings UI
+- `/api/recovery/status`, `/api/recovery/health`, and `/api/recovery/restart-runtime` expose operator recovery inspection and actions
+
+These APIs are platform capabilities that any suitable shell app may consume.
+
+They do not make the core own shell UX, chat project organization, or app-specific settings panels.
+
+For the local hosted deployment, the bootstrap admin username and password are supplied by `MAVERICK3_ADMIN_USERNAME` and `MAVERICK3_ADMIN_PASSWORD`.
+
+If those variables are absent, the development bootstrap falls back to `admin` / `maverick3`; public deployments should set explicit service-level environment values.
 
 The shell may visually frame mounted app frontends, but it must not hardcode optional product apps that are not installed in the current workspace.
 
@@ -439,9 +483,14 @@ The completed v3 `base-shell` port intentionally carries only shell-owned behavi
 - local browser session state such as active app, sidebar state, and pinned app ids
 - reusable shell UI primitives used by the app itself
 - registry-driven app catalog and mounted app iframe surfaces
-- local Tutorial and Settings dialogs that describe currently available v3 capabilities
+- login/session UI backed by core identity/session APIs
+- workspace selector backed by core workspace APIs
+- provider/runtime indicators backed by core provider/runtime APIs
+- Tutorial and Settings dialogs backed by currently available v3 core metadata
 
-It must not port v2 auth, user management, provider settings, retrieval settings, push notifications, or backend restart controls into the shell until those capabilities exist as v3 core APIs or separate v3 apps.
+It must not port chat project buttons, chat orchestration, retrieval settings, push notifications, or app-specific backend controls into `base-shell`.
+
+Project organization belongs to the chat app because projects are chat-domain state, not shell or core platform state.
 
 The rule is:
 

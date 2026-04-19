@@ -517,11 +517,11 @@ without carrying forward legacy structure or backward-compatibility constraints 
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/workspace-secondary-panels.tsx` -> intentionally replace with v3 registry-driven app mounting until dedicated v3 surfaces exist
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/dialog-stack.tsx` -> port only shell-local dialog orchestration needed by v3 interactions
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/dialogs.tsx` -> do not port wholesale; extract only Tutorial and Settings dialogs backed by existing v3 protocols
-    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/auth-screen.tsx` -> intentionally not ported until v3 public auth/session endpoints exist
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/auth-screen.tsx` -> port login behavior against v3 `/api/session` and `/api/auth/*`, not v2 auth endpoints
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/user-management-panel.tsx` -> intentionally not ported until `users`/identity app or API surface exists in v3
-    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/provider-settings-control.tsx` -> intentionally not ported until provider settings are exposed through a v3 app/API surface
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/provider-settings-control.tsx` -> port provider visibility as v3 provider/runtime status indicators, not v2 provider settings mutation
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/retrieval-settings-control.tsx` -> intentionally not ported until retrieval/memory app surfaces exist in v3
-    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/workspace-settings-control.tsx` -> intentionally deferred until workspace settings are exposed by v3 protocols
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/workspace-settings-control.tsx` -> expose generic workspace metadata/settings through v3 core APIs
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/backend-restart-control.tsx` -> intentionally deferred to recovery/operator surfaces; do not couple shell directly to service management
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/push-notifications-control.tsx` -> intentionally deferred until v3 notification capability exists
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/chat-workspace-surface.tsx` -> replace with generic app mounting of the v3 `chat` frontend route
@@ -532,7 +532,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/lib/api-core.ts` -> port request wrapper concept with v3 `/api` conventions
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/lib/api.ts` -> rewrite types and calls around v3 `/api/apps` and `/api/status`
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/lib/app-session.ts` -> port local shell session persistence, removing unavailable v2 fields
-    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/lib/workspace-session.ts` -> intentionally not ported until v3 workspace selection is exposed
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/lib/workspace-session.ts` -> replace with v3 active workspace selection through core session/workspace APIs
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/lib/chat-shell.ts` -> do not port as chat orchestration; chat is now a mounted app
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/lib/account.ts` -> intentionally deferred until v3 account model is surfaced to frontend
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/lib/runtime-node-display.ts` -> intentionally deferred until runtime node data is exposed by v3 protocol
@@ -555,10 +555,13 @@ without carrying forward legacy structure or backward-compatibility constraints 
     - [x] mobile layout hook
     - [x] app navigation helpers based on v3 registry records
   - [x] Rewrite v2-only API types and calls for the v3 core host:
-    - [x] remove dependency on v2 auth endpoints until v3 auth is exposed publicly
-    - [x] remove dependency on v2 agent/workspace management endpoints until those app surfaces exist
+    - [x] replace v2 auth endpoints with v3 session/login/logout APIs
+    - [x] remove dependency on v2 agent endpoints; keep workspace selection on v3 core APIs
     - [x] consume `/api/apps` as the initial app registry source
     - [x] consume `/api/status` for platform status where useful
+    - [x] consume `/api/workspaces` and `/api/workspaces/active` for real workspace selection
+    - [x] consume `/api/providers/active` and `/api/runtime/status` for Codex/runtime indicators
+    - [x] consume `/api/settings/platform` for real settings metadata
   - [x] Keep the shell composition app-owned:
     - [x] `base-shell` discovers enabled app frontends from the core registry
     - [x] `base-shell` frames or mounts app frontend routes exposed by the core
@@ -578,6 +581,13 @@ without carrying forward legacy structure or backward-compatibility constraints 
     - [x] serve build output assets for app frontends
     - [x] support SPA fallback for mounted app frontends
     - [x] keep root `/` mapped to the mounted `base-shell` frontend
+    - [x] split platform host routing into focused app/session/workspace/provider/settings modules
+    - [x] expose shell-facing identity session APIs
+    - [x] bootstrap the hosted admin user from service environment credentials
+    - [x] expose shell-facing workspace list/create/switch APIs
+    - [x] expose shell-facing provider/runtime status APIs
+    - [x] expose shell-facing settings and recovery status APIs
+    - [x] keep chat project controls out of `base-shell`; defer them to the chat app
   - [x] Update documentation:
     - [x] document buildable app frontends in `docs/architecture/app_contract_architecture.md`
     - [x] document root shell as an app-owned React frontend in `docs/architecture/core_architecture.md`
@@ -589,6 +599,9 @@ without carrying forward legacy structure or backward-compatibility constraints 
     - [x] `/api/apps` exposes mountable app records for the shell
     - [x] shell app registry logic handles missing optional apps without fake installed state
     - [x] chat app can be opened through the shell registry model
+    - [x] session login/logout APIs work for the shell
+    - [x] workspace create/switch APIs update active workspace and app registry context
+    - [x] provider/runtime/settings/recovery APIs expose shell-readable metadata
   - [x] Run verification:
     - [x] base-shell frontend build
     - [x] relevant frontend tests if introduced
@@ -611,6 +624,12 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] main core `systemd` service
   - [x] independent `rescue` `systemd` service
   - [x] `nginx` routing for mounted app frontend/backend paths
+- [ ] Define and implement registry-driven widget mounting:
+  - [x] document widget ownership and embedding model in architecture docs
+  - [ ] extend app contract parsing/validation for widget declarations
+  - [ ] expose enabled widget metadata through a workspace-scoped core registry endpoint
+  - [ ] mount widget frontend surfaces without allowing host apps to import widget-owner source
+  - [ ] update chat structured message rendering to use registry-driven widgets with a generic fallback
 
 ## Phase 14: Acceptance Criteria for First Usable v3
 

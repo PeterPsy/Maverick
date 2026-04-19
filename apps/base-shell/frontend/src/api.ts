@@ -28,8 +28,78 @@ export type PlatformStatus = {
   apps: AppRegistryItem[];
 };
 
-async function requestJson<T>(path: string): Promise<T> {
-  const response = await fetch(path, { headers: { Accept: "application/json" } });
+export type SessionUser = {
+  user_id: string;
+  username: string;
+  email: string | null;
+  display_name: string | null;
+  account_type: string;
+  platform_role: string;
+};
+
+export type SessionPayload =
+  | {
+      authenticated: false;
+    }
+  | {
+      authenticated: true;
+      user: SessionUser;
+      workspace_id: string;
+      expires_at: string;
+    };
+
+export type WorkspaceItem = {
+  workspace_id: string;
+  name: string;
+  description: string | null;
+  status: string;
+  governance: Record<string, boolean>;
+  quota: Record<string, unknown>;
+  is_active: boolean;
+};
+
+export type WorkspacesPayload = {
+  items: WorkspaceItem[];
+  active_workspace_id: string;
+};
+
+export type ProviderStatus = {
+  workspace_id: string;
+  active_provider: {
+    provider_id: string;
+    label: string;
+    description: string;
+    status: string;
+    default_model_family: string | null;
+    capabilities: Record<string, boolean>;
+  };
+  selection: Record<string, unknown> | null;
+};
+
+export type RuntimeStatus = ProviderStatus & {
+  sessions: Array<{
+    session_id: string;
+    agent_id: string;
+    status: string;
+    effective_mode: string;
+    last_progress_at: string | null;
+  }>;
+};
+
+export type PlatformSettings = {
+  user: SessionUser;
+  workspace: WorkspaceItem;
+  provider: ProviderStatus;
+  runtime: RuntimeStatus;
+  recovery: Record<string, unknown>;
+};
+
+async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const response = await fetch(path, {
+    credentials: "same-origin",
+    ...init,
+    headers: { Accept: "application/json", ...(init.headers || {}) },
+  });
   if (!response.ok) {
     throw new Error(`Request failed ${response.status}: ${path}`);
   }
@@ -92,4 +162,52 @@ export function getPlatformStatus(): Promise<PlatformStatus> {
       apps: normalizeAppRegistryPayload({ items: payload.apps }).items,
     };
   });
+}
+
+export function getSession(): Promise<SessionPayload> {
+  return requestJson<SessionPayload>("/api/session");
+}
+
+export function login(username: string, password: string): Promise<SessionPayload> {
+  return requestJson<SessionPayload>("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+}
+
+export function logout(): Promise<SessionPayload> {
+  return requestJson<SessionPayload>("/api/auth/logout", { method: "POST" });
+}
+
+export function listWorkspaces(): Promise<WorkspacesPayload> {
+  return requestJson<WorkspacesPayload>("/api/workspaces");
+}
+
+export function createWorkspace(name: string): Promise<WorkspaceItem> {
+  return requestJson<WorkspaceItem>("/api/workspaces", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function switchWorkspace(workspace_id: string): Promise<{ active_workspace_id: string }> {
+  return requestJson<{ active_workspace_id: string }>("/api/workspaces/active", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ workspace_id }),
+  });
+}
+
+export function getActiveProvider(): Promise<ProviderStatus> {
+  return requestJson<ProviderStatus>("/api/providers/active");
+}
+
+export function getRuntimeStatus(): Promise<RuntimeStatus> {
+  return requestJson<RuntimeStatus>("/api/runtime/status");
+}
+
+export function getPlatformSettings(): Promise<PlatformSettings> {
+  return requestJson<PlatformSettings>("/api/settings/platform");
 }

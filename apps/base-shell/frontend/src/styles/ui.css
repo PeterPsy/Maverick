@@ -195,6 +195,104 @@
   padding: 0.9rem;
 }
 
+.bs-login {
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding: 1rem;
+  background:
+    radial-gradient(circle at 20% 15%, rgba(215, 36, 81, 0.24), transparent 32rem),
+    linear-gradient(145deg, #101010, #202020 52%, #141414);
+}
+
+.bs-login__panel {
+  display: grid;
+  gap: 0.85rem;
+  width: min(24rem, 100%);
+  padding: 1.1rem;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.42);
+}
+
+.bs-login__brand {
+  width: 3.8rem;
+  height: 3.8rem;
+  border-radius: 18px;
+}
+
+.bs-login__title,
+.bs-login__copy {
+  margin: 0;
+}
+
+.bs-login__title {
+  font-size: 1.35rem;
+}
+
+.bs-login__copy {
+  color: var(--maverick-text-muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.bs-login__form,
+.bs-form-field {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.bs-form-field span {
+  color: var(--maverick-text-soft);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.bs-form-field input {
+  min-height: 2.7rem;
+  padding: 0 0.78rem;
+  border: 1px solid var(--maverick-border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--maverick-text);
+  font: inherit;
+}
+
+.bs-form-error {
+  margin: 0;
+  color: #ffb3bf;
+  font-size: 0.78rem;
+}
+
+.bs-settings-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.bs-settings-flag,
+.bs-settings-logout {
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
+.bs-settings-flag {
+  padding: 0.35rem 0.62rem;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--maverick-text-muted);
+}
+
+.bs-settings-flag.is-on {
+  background: rgba(51, 210, 137, 0.13);
+  color: #9ff0ca;
+}
+
+.bs-settings-logout {
+  min-height: 2.3rem;
+  background: rgba(255, 83, 105, 0.14);
+  color: #ffb3bf;
+}
+
 @keyframes bs-spin {
   to {
     transform: rotate(360deg);

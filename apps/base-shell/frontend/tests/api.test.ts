@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getPlatformStatus, listApps, normalizeAppRegistryPayload } from "../src/api";
+import { getActiveProvider, getPlatformStatus, getSession, listApps, normalizeAppRegistryPayload } from "../src/api";
 
 describe("base-shell api normalization", () => {
   afterEach(() => {
@@ -45,7 +45,7 @@ describe("base-shell api normalization", () => {
     await expect(listApps()).resolves.toEqual({
       items: [expect.objectContaining({ app_id: "chat", name: "Chat" })],
     });
-    expect(fetch).toHaveBeenCalledWith("/api/apps", { headers: { Accept: "application/json" } });
+    expect(fetch).toHaveBeenCalledWith("/api/apps", { credentials: "same-origin", headers: { Accept: "application/json" } });
   });
 
   it("normalizes platform status app records", async () => {
@@ -61,5 +61,24 @@ describe("base-shell api normalization", () => {
       status: "ok",
       workspace_id: "default",
     });
+  });
+
+  it("reads session and provider surfaces from core APIs", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ authenticated: true, user: { username: "admin" }, workspace_id: "default" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ workspace_id: "default", active_provider: { provider_id: "codex", label: "Codex" } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+
+    await expect(getSession()).resolves.toMatchObject({ authenticated: true, workspace_id: "default" });
+    await expect(getActiveProvider()).resolves.toMatchObject({ active_provider: { provider_id: "codex" } });
   });
 });

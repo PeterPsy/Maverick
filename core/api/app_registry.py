@@ -1,0 +1,43 @@
+"""App registry serialization for the hosted platform shell."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from core.api.platform_state import PlatformState
+from core.apps.surfaces import enabled_workspace_app_bindings, resolve_workspace_app_surface
+
+
+def enabled_app_items(state: PlatformState, *, workspace_id: str, start_path: Path) -> list[dict[str, object]]:
+    """Return enabled app registry items for one workspace."""
+    items: list[dict[str, object]] = []
+    for binding in enabled_workspace_app_bindings(state.app_store, workspace_id=workspace_id):
+        source_root, parsed = resolve_workspace_app_surface(state.app_store, binding=binding, start_path=start_path)
+        logo_path = source_root / "frontend" / "dist" / "maverick-icon-compact.png"
+        items.append(
+            {
+                "app_id": parsed.app_id,
+                "name": parsed.name,
+                "version": parsed.version,
+                "description": parsed.description,
+                "publisher": parsed.publisher,
+                "status": binding.status,
+                "distribution_mode": parsed.contract.distribution.mode,
+                "source_access": parsed.contract.distribution.source_access,
+                "views": list(parsed.contract.capabilities.views),
+                "logo": (
+                    {"kind": "image", "value": f"/apps/{parsed.app_id}/maverick-icon-compact.png"}
+                    if logo_path.exists()
+                    else None
+                ),
+                "frontend_mount": f"/apps/{parsed.app_id}/" if parsed.contract.entrypoints.frontend else "",
+                "backend_mount": f"/api/apps/{parsed.app_id}/backend" if parsed.contract.entrypoints.backend else "",
+            }
+        )
+    return items
+
+
+def resolve_app_surface(state: PlatformState, *, workspace_id: str, app_id: str, start_path: Path):
+    """Resolve one installed app to binding, source root, and parsed contract."""
+    binding = state.app_store.get_workspace_app_binding(workspace_id=workspace_id, app_id=app_id)
+    return binding, *resolve_workspace_app_surface(state.app_store, binding=binding, start_path=start_path)

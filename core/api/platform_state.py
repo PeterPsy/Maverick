@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+import os
 from pathlib import Path
 
 from core.api.application import create_application
 from core.apps.store import AppCollections, MongoAppStore
+from core.identity.service import bootstrap_default_admin
+from core.identity.store import IdentityCollections, MongoIdentityStore
 from core.observability.store import MongoObservabilityStore, ObservabilityCollections
 from core.providers.service import configure_workspace_provider
 from core.providers.store import MongoProviderStore, ProviderCollections
@@ -25,6 +28,7 @@ class PlatformState:
 
     repository_root: Path
     workspace_store: MongoWorkspaceStore
+    identity_store: MongoIdentityStore
     app_store: MongoAppStore
     provider_store: MongoProviderStore
     runtime_store: MongoRuntimeStore
@@ -43,6 +47,13 @@ def bootstrap_platform_state(*, start_path: Path | None = None, now: datetime | 
             governance=InMemoryCollection(),
             quotas=InMemoryCollection(),
             active_workspace_selections=InMemoryCollection(),
+        )
+    )
+    identity_store = MongoIdentityStore(
+        IdentityCollections(
+            users=InMemoryCollection(),
+            credentials=InMemoryCollection(),
+            auth_sessions=InMemoryCollection(),
         )
     )
     app_store = MongoAppStore(
@@ -103,9 +114,17 @@ def bootstrap_platform_state(*, start_path: Path | None = None, now: datetime | 
         observability_store=observability_store,
         now=now,
     )
+    bootstrap_default_admin(
+        identity_store,
+        workspace_store,
+        username=os.environ.get("MAVERICK3_ADMIN_USERNAME", "admin"),
+        password=os.environ.get("MAVERICK3_ADMIN_PASSWORD", "maverick3"),
+        now=now,
+    )
     return PlatformState(
         repository_root=repository_root,
         workspace_store=workspace_store,
+        identity_store=identity_store,
         app_store=app_store,
         provider_store=provider_store,
         runtime_store=runtime_store,

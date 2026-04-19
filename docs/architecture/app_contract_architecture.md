@@ -313,7 +313,8 @@ Examples:
 - MCP tools
 - CLI commands
 - skills
-- views or widgets
+- views
+- embeddable widgets
 - import/export hooks
 - health or maintenance hooks
 
@@ -612,8 +613,13 @@ The port must not preserve v2 runtime coupling, v2 API assumptions, v2 auth assu
 
 The v3 shell attaches only to v3 platform protocols such as:
 
+- `/api/session`, `/api/auth/login`, and `/api/auth/logout` for session state
+- `/api/workspaces` and `/api/workspaces/active` for workspace selection
 - `/api/apps` for enabled app registry data
 - `/api/status` for platform status
+- `/api/providers/active` and `/api/runtime/status` for runtime provider indicators
+- `/api/settings/platform` for generic settings metadata
+- `/api/recovery/status` and related recovery routes for operator status where appropriate
 - mounted app frontend routes under `/apps/<app_id>/`
 - mounted app backend routes under `/api/apps/<app_id>/...`
 
@@ -623,9 +629,13 @@ The `base-shell` port may retain app-owned local preferences in the browser, suc
 
 Those preferences are shell UI state only. They are not core workspace records, app installation state, provider configuration, or app-owned backend data.
 
-V2 shell panels that configured auth, users, providers, retrieval, notifications, backend restarts, or chat internals should not be copied into `base-shell`.
+V2 shell panels that configured users, retrieval, notifications, backend restarts, or chat internals should not be copied into `base-shell`.
 
-When those capabilities become available in v3, they should be exposed through their own app contracts or generic core surfaces, then discovered or mounted by `base-shell` through the same registry-driven mechanism.
+When capabilities become available in v3, they should be exposed through their own app contracts or generic core surfaces, then discovered or mounted by `base-shell` through the same registry-driven mechanism.
+
+The initial v3 shell may include login, workspace selection, provider/runtime indicators, and generic settings only because those are backed by generic core APIs rather than shell-private backend assumptions.
+
+Chat projects and project action buttons must not be implemented in `base-shell`; they belong to the chat app.
 
 It must not create fake installed state for product apps that are not present in the registry.
 
@@ -659,6 +669,129 @@ The core must remain frontend-framework agnostic.
 It should not know whether a build artifact came from React, Vue, Svelte, static HTML, or another frontend stack.
 
 It should only know how to mount the declared frontend artifact.
+
+## Embeddable Widget Surfaces
+
+Some apps may expose small visual surfaces intended to be embedded inside another app's UI.
+
+The first known case is chat structured content:
+
+- the runtime emits or stores a structured message payload
+- the payload has a stable `kind`
+- an installed app declares that it can render that `kind`
+- the chat app renders the matching app-owned widget surface
+
+This is an app surface model, not app-to-app communication.
+
+The embedding app does not import source code from the widget owner.
+
+The embedded widget does not call private APIs of the embedding app.
+
+The core remains responsible for:
+
+- validating the widget declaration in the app contract
+- publishing enabled widget metadata through the app registry
+- mounting or routing the widget surface according to workspace enablement
+- enforcing auth, workspace context, and install state before a widget can load
+
+The app that owns the widget remains responsible for:
+
+- rendering the widget frontend
+- interpreting the structured payload it supports
+- calling its own backend, MCP, or CLI surfaces for widget actions
+- storing widget-owned state under `data/<widget_app_id>/`
+
+The embedding app remains responsible for:
+
+- deciding where the widget appears in its own UI
+- passing the structured payload and host context to the widget
+- providing a safe fallback if no matching widget exists
+- avoiding direct imports from the widget app
+
+For chat, this means the v2 model based on compile-time imports such as:
+
+```text
+../../*/chat/*widget.tsx
+```
+
+must not be preserved in v3.
+
+That pattern makes the chat app aware of other apps' source trees and breaks the standalone app boundary.
+
+The v3 model should be registry-driven.
+
+An app contract may declare widgets with a structure like:
+
+```json
+"widgets": [
+  {
+    "widget_id": "design-checklist",
+    "host": "chat",
+    "content_kinds": ["checklist.design"],
+    "frontend": {
+      "kind": "iframe",
+      "mount": "frontend/dist/widgets/design-checklist"
+    },
+    "actions": {
+      "backend": true,
+      "mcp": false,
+      "cli": false
+    }
+  }
+]
+```
+
+The exact schema can evolve, but the stable concepts are:
+
+- `widget_id` identifies the widget inside its owning app
+- `host` identifies the host UI family it is designed for, such as `chat`
+- `content_kinds` declares which structured payload kinds it can render
+- `frontend` declares how the core can mount it
+- `actions` declares which official surfaces the widget may use for mutations
+
+If multiple installed apps declare widgets for the same `host` and `content_kind`, the host must use deterministic registry ordering or a workspace preference.
+
+The default fallback must always exist.
+
+For chat, the fallback is a generic structured message card that shows the payload in a readable form.
+
+### Widget Runtime Contract
+
+An embedded widget should receive only explicit host context.
+
+Recommended initial context:
+
+```json
+{
+  "workspace_id": "acme",
+  "host_app_id": "chat",
+  "owner_app_id": "checklists",
+  "widget_id": "design-checklist",
+  "message_id": "msg_123",
+  "content": {
+    "kind": "checklist.design",
+    "payload": {}
+  }
+}
+```
+
+For iframe-based widgets, the context may be passed by:
+
+- signed or opaque URL context id
+- initial `postMessage`
+- backend bootstrap endpoint scoped to the mounted widget
+
+The widget must not receive broad app registry data unless it needs it and the core explicitly exposes it.
+
+Widget actions should go to the widget owner's own backend or tool surface.
+
+For example, a checklist widget embedded in chat should persist checklist edits through the `checklists` app, not through the `chat` app.
+
+This preserves app ownership:
+
+- chat owns the message container
+- checklists owns checklist data and checklist widget behavior
+- core owns registry, routing, auth, and workspace context
 
 ### Backend distribution artifacts
 
@@ -836,7 +969,25 @@ The following example shows the kind of app contract Maverick should expect at p
       "reservation_board"
     ]
   },
+  "widgets": [
+    {
+      "widget_id": "reservation-summary",
+      "host": "chat",
+      "content_kinds": ["restaurant.reservation_summary"],
+      "frontend": {
+        "kind": "iframe",
+        "mount": "frontend/dist/widgets/reservation-summary"
+      },
+      "actions": {
+        "backend": true,
+        "mcp": false,
+        "cli": false
+      }
+    }
+  ],
   "entrypoints": {
+    "frontend": "frontend/dist",
+    "backend": "backend/app_backend.py",
     "mcp": "backend/mcp/server.py",
     "cli": "backend/cli/app_cli.py",
     "skills_root": "backend/skills/",

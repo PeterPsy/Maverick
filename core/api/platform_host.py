@@ -12,6 +12,7 @@ from core.api.platform_state import PlatformState
 from core.api.provider_api import handle_provider_api
 from core.api.session_api import handle_session_api, resolve_request_session
 from core.api.settings_api import handle_settings_api
+from core.api.widget_api import handle_widget_api
 from core.api.workspace_api import handle_workspace_api
 
 
@@ -42,6 +43,9 @@ class PlatformHost:
         if routed is not None:
             return routed
         routed = handle_settings_api(self.state, environ, start_response)
+        if routed is not None:
+            return routed
+        routed = handle_widget_api(self.state, environ, start_response, start_path=self.start_path)
         if routed is not None:
             return routed
 

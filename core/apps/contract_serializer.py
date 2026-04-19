@@ -19,7 +19,7 @@ from core.apps.contract_common import app_contract_path
 def app_contract_payload(parsed: ParsedAppContract) -> dict[str, Any]:
     """Render one parsed contract into the canonical JSON payload shape."""
     lifecycle = parsed.contract.lifecycle
-    return {
+    payload = {
         "app_id": parsed.app_id,
         "contract_version": parsed.contract.compatibility.contract_version,
         "name": parsed.name,
@@ -98,6 +98,26 @@ def app_contract_payload(parsed: ParsedAppContract) -> dict[str, Any]:
             "repair_only": parsed.contract.rollback_support.repair_only,
         },
     }
+    if parsed.contract.widgets:
+        payload["widgets"] = [
+            {
+                "widget_id": widget.widget_id,
+                "host": widget.host,
+                "content_kinds": widget.content_kinds,
+                "frontend": {
+                    "kind": widget.frontend.kind,
+                    "mount": widget.frontend.mount,
+                    "spa_fallback": widget.frontend.spa_fallback,
+                },
+                "actions": {
+                    "backend": widget.actions.backend,
+                    "mcp": widget.actions.mcp,
+                    "cli": widget.actions.cli,
+                },
+            }
+            for widget in parsed.contract.widgets
+        ]
+    return payload
 
 def write_app_contract_file(source_root: Path, parsed: ParsedAppContract) -> Path:
     """Write one canonical app contract file into the given app root."""

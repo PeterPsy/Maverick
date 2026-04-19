@@ -630,49 +630,49 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] `nginx` routing for mounted app frontend/backend paths
 - [ ] Define and implement registry-driven widget mounting:
   - [x] document widget ownership and embedding model in architecture docs
-  - [ ] Define widget contract model:
-    - [ ] add `WidgetDeclaration`
-    - [ ] add `WidgetFrontendDeclaration`
-    - [ ] add `WidgetActionDeclaration`
-    - [ ] include widgets in parsed app contract objects without making them chat-specific
-  - [ ] Extend app contract parser/serializer:
-    - [ ] parse top-level `widgets`
-    - [ ] serialize widgets back to canonical `app_contract.json`
-    - [ ] keep old contracts without widgets valid
-    - [ ] add contract parser tests for round-trip behavior
-  - [ ] Extend contract validation:
-    - [ ] reject duplicate widget ids within one app
-    - [ ] reject invalid widget ids, host ids, and content kinds
-    - [ ] reject widget frontend mounts outside the owning app root
-    - [ ] reject widget actions that reference undeclared backend/MCP/CLI surfaces
-    - [ ] add negative tests for invalid declarations
-  - [ ] Implement workspace widget registry:
-    - [ ] index widgets only from installed and enabled workspace app bindings
-    - [ ] filter by `host`
-    - [ ] filter by `content_kind`
-    - [ ] return owner app id, widget id, content kinds, frontend mount, and declared actions
-    - [ ] avoid exposing owner app source paths in the registry payload
-    - [ ] define deterministic ordering for multiple matching widgets
-  - [ ] Expose widget discovery HTTP API:
-    - [ ] add `GET /api/apps/widgets?host=<host>&content_kind=<kind>`
-    - [ ] resolve active workspace through the same session/workspace context as `/api/apps`
-    - [ ] enforce auth, workspace membership, app installation state, and enabled status
-    - [ ] add focused API tests for enabled, disabled, and missing widgets
-  - [ ] Mount widget frontend surfaces:
-    - [ ] add a controlled widget route such as `/api/apps/widgets/<owner_app_id>/<widget_id>/frontend/`
-    - [ ] serve only the owning app's declared widget frontend mount
-    - [ ] support SPA fallback where the widget declaration allows it
-    - [ ] prevent host apps from directly resolving widget owner filesystem paths
-    - [ ] add mount tests for successful and denied widget loads
-  - [ ] Define widget runtime/bootstrap context:
-    - [ ] choose signed context token, opaque context id, or initial postMessage for iframe widgets
-    - [ ] include workspace id, host app id, owner app id, widget id, message id, and structured content
-    - [ ] prevent broad app registry or source-path leakage into widget context
-    - [ ] add tests for context shape and denied context access
-  - [ ] Add observability and policy records:
-    - [ ] record widget registry lookups
-    - [ ] record widget mount success/failure
-    - [ ] record policy denials without logging full structured payloads
+  - [x] Define widget contract model:
+    - [x] add `WidgetDeclaration`
+    - [x] add `WidgetFrontendDeclaration`
+    - [x] add `WidgetActionDeclaration`
+    - [x] include widgets in parsed app contract objects without making them chat-specific
+  - [x] Extend app contract parser/serializer:
+    - [x] parse top-level `widgets`
+    - [x] serialize widgets back to canonical `app_contract.json`
+    - [x] keep old contracts without widgets valid
+    - [x] add contract parser tests for round-trip behavior
+  - [x] Extend contract validation:
+    - [x] reject duplicate widget ids within one app
+    - [x] reject invalid widget ids, host ids, and content kinds
+    - [x] reject widget frontend mounts outside the owning app root
+    - [x] reject widget actions that reference undeclared backend/MCP/CLI surfaces
+    - [x] add negative tests for invalid declarations
+  - [x] Implement workspace widget registry:
+    - [x] index widgets only from installed and enabled workspace app bindings
+    - [x] filter by `host`
+    - [x] filter by `content_kind`
+    - [x] return owner app id, widget id, content kinds, frontend mount, and declared actions
+    - [x] avoid exposing owner app source paths in the registry payload
+    - [x] define deterministic ordering for multiple matching widgets
+  - [x] Expose widget discovery HTTP API:
+    - [x] add `GET /api/apps/widgets?host=<host>&content_kind=<kind>`
+    - [x] resolve active workspace through the same session/workspace context as `/api/apps`
+    - [x] enforce auth, workspace membership, app installation state, and enabled status
+    - [x] add focused API tests for enabled, disabled, and missing widgets
+  - [x] Mount widget frontend surfaces:
+    - [x] add a controlled widget route such as `/api/apps/widgets/<owner_app_id>/<widget_id>/frontend/`
+    - [x] serve only the owning app's declared widget frontend mount
+    - [x] support SPA fallback where the widget declaration allows it
+    - [x] prevent host apps from directly resolving widget owner filesystem paths
+    - [x] add mount tests for successful and denied widget loads
+  - [x] Define widget runtime/bootstrap context:
+    - [x] choose signed context token, opaque context id, or initial postMessage for iframe widgets
+    - [x] include workspace id, host app id, owner app id, widget id, message id, and structured content
+    - [x] prevent broad app registry or source-path leakage into widget context
+    - [x] add tests for context shape and denied context access
+  - [x] Add observability and policy records:
+    - [x] record widget registry lookups
+    - [x] record widget mount success/failure
+    - [x] record policy denials without logging full structured payloads
   - [ ] Update chat structured message rendering after core support exists:
     - [ ] remove v2 compile-time widget import model
     - [ ] render generic fallback when no widget is available

@@ -18,6 +18,7 @@ MigrateFailureMode = Literal["preserve_data_mark_unhealthy", "block_activation"]
 ImportFailureMode = Literal["preserve_payload_mark_failed", "block_activation"]
 StorageKind = Literal["sqlite", "duckdb", "json", "jsonl", "mixed"]
 StorageIndexKind = Literal["embedded", "file_based"]
+WidgetFrontendKind = Literal["iframe"]
 
 
 @dataclass(frozen=True)
@@ -136,6 +137,35 @@ class AppRollbackSupport:
 
 
 @dataclass(frozen=True)
+class WidgetFrontendDeclaration:
+    """Describe how the core mounts one app-owned embeddable widget frontend."""
+
+    kind: WidgetFrontendKind
+    mount: str
+    spa_fallback: bool
+
+
+@dataclass(frozen=True)
+class WidgetActionDeclaration:
+    """Describe which official owner-app surfaces a widget may use."""
+
+    backend: bool
+    mcp: bool
+    cli: bool
+
+
+@dataclass(frozen=True)
+class WidgetDeclaration:
+    """Describe one app-owned embeddable widget surface."""
+
+    widget_id: str
+    host: str
+    content_kinds: list[str]
+    frontend: WidgetFrontendDeclaration
+    actions: WidgetActionDeclaration
+
+
+@dataclass(frozen=True)
 class AppContractDescriptor:
     """Executable app contract metadata used by the core."""
 
@@ -149,6 +179,7 @@ class AppContractDescriptor:
     failure_semantics: AppFailureSemantics
     health_contract: AppHealthContract
     rollback_support: AppRollbackSupport
+    widgets: list[WidgetDeclaration]
 
 
 @dataclass(frozen=True)

@@ -44,8 +44,14 @@ def ensure_runtime_session(state: PlatformState, *, workspace_id: str, app_id: s
     return session
 
 
-def serve_frontend(start_response: StartResponse, *, frontend_root: Path, subpath: str) -> list[bytes]:
-    """Serve an app frontend asset with SPA index fallback."""
+def serve_frontend(
+    start_response: StartResponse,
+    *,
+    frontend_root: Path,
+    subpath: str,
+    spa_fallback: bool = True,
+) -> list[bytes]:
+    """Serve an app frontend asset, optionally falling back to index.html for SPA routes."""
     root = frontend_root.resolve()
     candidate = (root / subpath.lstrip("/")).resolve() if subpath.strip("/") else (root / "index.html").resolve()
     if candidate == root or root not in candidate.parents:
@@ -53,7 +59,11 @@ def serve_frontend(start_response: StartResponse, *, frontend_root: Path, subpat
     if candidate.is_dir():
         candidate = candidate / "index.html"
     if not candidate.exists():
+        if not spa_fallback:
+            return text_response(start_response, "Not found", status="404 Not Found")
         candidate = root / "index.html"
+    if not candidate.exists() or not candidate.is_file():
+        return text_response(start_response, "Not found", status="404 Not Found")
     body = candidate.read_bytes()
     content_type = mimetypes.guess_type(str(candidate))[0] or "text/html; charset=utf-8"
     start_response("200 OK", [("Content-Type", content_type), ("Content-Length", str(len(body)))])

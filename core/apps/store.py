@@ -24,6 +24,9 @@ from core.apps.models import (
     AppSourceRecord,
     AppStorageDeclaration,
     AppStorageIndices,
+    WidgetActionDeclaration,
+    WidgetDeclaration,
+    WidgetFrontendDeclaration,
     WorkspaceAppBindingRecord,
     WorkspaceLocalAppProjectRecord,
 )
@@ -115,6 +118,16 @@ class MongoAppStore:
             failure_semantics=AppFailureSemantics(**payload["failure_semantics"]),
             health_contract=AppHealthContract(**payload["health_contract"]),
             rollback_support=AppRollbackSupport(**payload["rollback_support"]),
+            widgets=[
+                WidgetDeclaration(
+                    widget_id=widget["widget_id"],
+                    host=widget["host"],
+                    content_kinds=list(widget["content_kinds"]),
+                    frontend=WidgetFrontendDeclaration(**widget["frontend"]),
+                    actions=WidgetActionDeclaration(**widget["actions"]),
+                )
+                for widget in payload.get("widgets", [])
+            ],
         )
 
     def _app_source_record(self, document: dict[str, Any]) -> AppSourceRecord:

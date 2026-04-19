@@ -730,7 +730,8 @@ An app contract may declare widgets with a structure like:
     "content_kinds": ["checklist.design"],
     "frontend": {
       "kind": "iframe",
-      "mount": "frontend/dist/widgets/design-checklist"
+      "mount": "frontend/dist/widgets/design-checklist",
+      "spa_fallback": true
     },
     "actions": {
       "backend": true,
@@ -757,6 +758,7 @@ Initial contract validation rules:
 - every `content_kind` must be a non-empty dotted string such as `checklist.design`
 - `frontend.kind` initially supports only `iframe`
 - `frontend.mount` must be a relative path under the app source root and should normally point under `frontend/dist`
+- `frontend.spa_fallback` controls whether missing widget frontend paths fall back to the widget `index.html`
 - `actions.backend`, `actions.mcp`, and `actions.cli` may only be true when the owning app declares the corresponding surface
 - widget declarations must not name files, routes, or storage locations owned by the embedding app
 - widget declarations are ignored unless the owning app is installed and enabled in the current workspace
@@ -789,11 +791,18 @@ Recommended initial context:
 
 For iframe-based widgets, the context may be passed by:
 
-- signed or opaque URL context id
+- signed context token returned by the core widget context endpoint
 - initial `postMessage`
 - backend bootstrap endpoint scoped to the mounted widget
 
 The widget must not receive broad app registry data unless it needs it and the core explicitly exposes it.
+
+The initial v3 core implementation uses:
+
+- `GET /api/apps/widgets?host=<host>&content_kind=<kind>` for workspace-scoped widget discovery
+- `GET /api/apps/widgets/<owner_app_id>/<widget_id>/frontend/...` for controlled iframe frontend mounting
+- `POST /api/apps/widgets/context` to create a signed context token after validating workspace, host, widget owner, widget id, and content kind
+- `GET /api/apps/widgets/context/<token>` to read the explicit context from the widget iframe without exposing source paths or registry internals
 
 Widget actions should go to the widget owner's own backend or tool surface.
 

@@ -20,6 +20,9 @@ from core.apps.models import (
     AppStorageDeclaration,
     AppStorageIndices,
     ParsedAppContract,
+    WidgetActionDeclaration,
+    WidgetDeclaration,
+    WidgetFrontendDeclaration,
 )
 from core.execution_policy.models import ExecutionMode
 from core.shared.version import current_core_version
@@ -180,6 +183,31 @@ def build_app_rollback_support(*, bundle: bool = False, data: bool = False, repa
     """Build rollback support metadata."""
     return AppRollbackSupport(bundle=bundle, data=data, repair_only=repair_only)
 
+def build_widget_frontend(*, kind: str = "iframe", mount: str, spa_fallback: bool = True) -> WidgetFrontendDeclaration:
+    """Build one widget frontend declaration."""
+    return WidgetFrontendDeclaration(kind=kind, mount=mount, spa_fallback=spa_fallback)
+
+def build_widget_actions(*, backend: bool = False, mcp: bool = False, cli: bool = False) -> WidgetActionDeclaration:
+    """Build one widget action declaration."""
+    return WidgetActionDeclaration(backend=backend, mcp=mcp, cli=cli)
+
+def build_widget_declaration(
+    *,
+    widget_id: str,
+    host: str,
+    content_kinds: list[str],
+    frontend: WidgetFrontendDeclaration,
+    actions: WidgetActionDeclaration | None = None,
+) -> WidgetDeclaration:
+    """Build one app-owned widget declaration."""
+    return WidgetDeclaration(
+        widget_id=widget_id,
+        host=host,
+        content_kinds=content_kinds,
+        frontend=frontend,
+        actions=actions or build_widget_actions(),
+    )
+
 def build_app_contract(
     *,
     distribution: AppDistributionDeclaration | None = None,
@@ -192,6 +220,7 @@ def build_app_contract(
     failure_semantics: AppFailureSemantics | None = None,
     health_contract: AppHealthContract | None = None,
     rollback_support: AppRollbackSupport | None = None,
+    widgets: list[WidgetDeclaration] | None = None,
 ) -> AppContractDescriptor:
     """Build an executable app contract descriptor."""
     return AppContractDescriptor(
@@ -205,6 +234,7 @@ def build_app_contract(
         failure_semantics=failure_semantics or build_app_failure_semantics(),
         health_contract=health_contract or build_app_health_contract(),
         rollback_support=rollback_support or build_app_rollback_support(),
+        widgets=widgets or [],
     )
 
 def build_parsed_app_contract(

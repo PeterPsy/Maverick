@@ -38,6 +38,7 @@ from core.apps.contract_validation import (
     _expect_string_list,
     _expect_timeout,
 )
+from core.apps.contract_widgets import parse_widget_declarations
 
 def parse_app_contract_file(source_root: Path) -> ParsedAppContract:
     """Parse and validate the canonical app contract file in one app source root."""
@@ -187,6 +188,7 @@ def parse_app_contract_file(source_root: Path) -> ParsedAppContract:
         ),
         hooks=hooks,
     )
+    widgets = parse_widget_declarations(source_root, root, entrypoints)
 
     if lifecycle.health_check and "health_check" not in hooks and health_contract_payload.get("mode") == "hook":
         raise AppContractValidationError("Health-check lifecycle support requires a `health_check` hook.")
@@ -238,5 +240,6 @@ def parse_app_contract_file(source_root: Path) -> ParsedAppContract:
             failure_semantics=failure_semantics,
             health_contract=health_contract,
             rollback_support=rollback_support,
+            widgets=widgets,
         ),
     )

@@ -13,6 +13,9 @@ from core.apps.contract_builders import (
     build_app_rollback_support,
     build_app_storage,
     build_parsed_app_contract,
+    build_widget_actions,
+    build_widget_declaration,
+    build_widget_frontend,
 )
 from core.apps.contract_common import (
     APP_CONTRACT_FILENAME,
@@ -45,6 +48,9 @@ __all__ = [
     "build_app_rollback_support",
     "build_app_storage",
     "build_parsed_app_contract",
+    "build_widget_actions",
+    "build_widget_declaration",
+    "build_widget_frontend",
     "parse_app_contract_file",
     "parsed_contract_to_app_source_record",
     "parsed_contract_to_workspace_local_project_record",

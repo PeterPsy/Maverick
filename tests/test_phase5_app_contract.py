@@ -17,6 +17,9 @@ from core.apps.contracts import (
     build_app_lifecycle,
     build_app_storage,
     build_parsed_app_contract,
+    build_widget_actions,
+    build_widget_declaration,
+    build_widget_frontend,
     parse_app_contract_file,
     write_app_contract_file,
 )
@@ -122,6 +125,132 @@ class Phase5AppContractTestCase(unittest.TestCase):
 
             self.assertEqual(loaded.contract.distribution.mode, "source_available")
             self.assertEqual(loaded.contract.distribution.source_access, "forkable")
+
+    def test_parse_contract_round_trips_widget_declarations(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            app_root = Path(temp_dir) / "apps" / "checklists"
+            (app_root / "frontend" / "dist" / "widgets" / "design-checklist").mkdir(parents=True, exist_ok=True)
+            (app_root / "backend").mkdir(parents=True, exist_ok=True)
+            (app_root / "backend" / "app_backend.py").write_text("print('backend')\n", encoding="utf-8")
+            parsed = build_parsed_app_contract(
+                app_id="checklists",
+                name="Checklists",
+                version="1.0.0",
+                description="Checklist widgets.",
+                publisher="maverick",
+                contract=build_app_contract(
+                    entrypoints=build_app_entrypoints(backend="backend/app_backend.py"),
+                    widgets=[
+                        build_widget_declaration(
+                            widget_id="design-checklist",
+                            host="chat",
+                            content_kinds=["checklist.design"],
+                            frontend=build_widget_frontend(
+                                mount="frontend/dist/widgets/design-checklist",
+                                spa_fallback=True,
+                            ),
+                            actions=build_widget_actions(backend=True),
+                        )
+                    ],
+                ),
+            )
+            write_app_contract_file(app_root, parsed)
+
+            loaded = parse_app_contract_file(app_root)
+
+            self.assertEqual(len(loaded.contract.widgets), 1)
+            widget = loaded.contract.widgets[0]
+            self.assertEqual(widget.widget_id, "design-checklist")
+            self.assertEqual(widget.host, "chat")
+            self.assertEqual(widget.content_kinds, ["checklist.design"])
+            self.assertEqual(widget.frontend.mount, "frontend/dist/widgets/design-checklist")
+            self.assertTrue(widget.actions.backend)
+
+    def test_parse_contract_rejects_duplicate_widget_ids(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            app_root = Path(temp_dir) / "apps" / "widgets"
+            widget_root = app_root / "frontend" / "dist" / "widgets" / "card"
+            widget_root.mkdir(parents=True, exist_ok=True)
+            parsed = build_parsed_app_contract(
+                app_id="widgets",
+                name="Widgets",
+                version="1.0.0",
+                description="Widget app.",
+                publisher="maverick",
+                contract=build_app_contract(
+                    widgets=[
+                        build_widget_declaration(
+                            widget_id="card",
+                            host="chat",
+                            content_kinds=["demo.card"],
+                            frontend=build_widget_frontend(mount="frontend/dist/widgets/card"),
+                        ),
+                        build_widget_declaration(
+                            widget_id="card",
+                            host="chat",
+                            content_kinds=["demo.card"],
+                            frontend=build_widget_frontend(mount="frontend/dist/widgets/card"),
+                        ),
+                    ]
+                ),
+            )
+            write_app_contract_file(app_root, parsed)
+
+            with self.assertRaises(AppContractValidationError):
+                parse_app_contract_file(app_root)
+
+    def test_parse_contract_rejects_unsafe_widget_mount(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            app_root = Path(temp_dir) / "apps" / "widgets"
+            (app_root / "frontend" / "dist").mkdir(parents=True, exist_ok=True)
+            parsed = build_parsed_app_contract(
+                app_id="widgets",
+                name="Widgets",
+                version="1.0.0",
+                description="Widget app.",
+                publisher="maverick",
+                contract=build_app_contract(
+                    widgets=[
+                        build_widget_declaration(
+                            widget_id="card",
+                            host="chat",
+                            content_kinds=["demo.card"],
+                            frontend=build_widget_frontend(mount="../outside"),
+                        )
+                    ]
+                ),
+            )
+            write_app_contract_file(app_root, parsed)
+
+            with self.assertRaises(AppContractValidationError):
+                parse_app_contract_file(app_root)
+
+    def test_parse_contract_rejects_widget_actions_without_surface(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            app_root = Path(temp_dir) / "apps" / "widgets"
+            (app_root / "frontend" / "dist" / "widgets" / "card").mkdir(parents=True, exist_ok=True)
+            parsed = build_parsed_app_contract(
+                app_id="widgets",
+                name="Widgets",
+                version="1.0.0",
+                description="Widget app.",
+                publisher="maverick",
+                contract=build_app_contract(
+                    widgets=[
+                        build_widget_declaration(
+                            widget_id="card",
+                            host="chat",
+                            content_kinds=["demo.card"],
+                            frontend=build_widget_frontend(mount="frontend/dist/widgets/card"),
+                            actions=build_widget_actions(backend=True),
+                        )
+                    ]
+                ),
+            )
+            write_app_contract_file(app_root, parsed)
+
+            with self.assertRaises(AppContractValidationError):
+                parse_app_contract_file(app_root)
 
     def test_parse_contract_rejects_invalid_distribution_policy(self) -> None:
         with TemporaryDirectory() as temp_dir:

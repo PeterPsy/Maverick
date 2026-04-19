@@ -580,6 +580,27 @@ apps/<app_id>/
 
 In that shape, the platform host should mount `frontend/dist/`, not the TypeScript source tree.
 
+For the first real `base-shell` port, `frontend/dist` is the canonical production mount target.
+
+The `base-shell` source may use React, TypeScript, and Vite internally, but the core must only serve the declared static build output.
+
+The v2 `base_shell` UI/UX is the visual and interaction reference for the v3 `base-shell`.
+
+The port should preserve the shell experience, layout behavior, sidebar/topbar composition, workspace/app panels, and responsive behavior where those concepts are still valid.
+
+The port must not preserve v2 runtime coupling, v2 API assumptions, v2 auth assumptions, or v2 manifest format.
+
+The v3 shell attaches only to v3 platform protocols such as:
+
+- `/api/apps` for enabled app registry data
+- `/api/status` for platform status
+- mounted app frontend routes under `/apps/<app_id>/`
+- mounted app backend routes under `/api/apps/<app_id>/...`
+
+The core remains responsible for routing, install state, enablement, policy, and app registry data.
+
+The shell remains responsible only for visual composition and user interaction.
+
 The contract may start with a simple path:
 
 ```json

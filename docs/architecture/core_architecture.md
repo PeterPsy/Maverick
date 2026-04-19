@@ -399,6 +399,17 @@ That means the system may include apps such as:
 
 The `base-shell` app may host the frontend of other apps, but it is still only an app mounted by the core.
 
+For the v3 port, `base-shell` should reuse the Maverick v2 `base_shell` UI/UX as the product reference while replacing its runtime dependencies with v3 protocols.
+
+That means:
+
+- preserve the user-facing shell design and interaction model where still relevant
+- do not copy v2 API contracts into the core
+- do not move shell-specific composition logic into the core
+- treat `base-shell` as a sealed server app store artifact under `/apps/base-shell`
+- serve its production frontend from its declared build output, currently `frontend/dist`
+- let the shell discover mountable apps through the v3 registry instead of static app assumptions
+
 This keeps the product shell replaceable and prevents product UI concerns from leaking into the core.
 
 The rule is:

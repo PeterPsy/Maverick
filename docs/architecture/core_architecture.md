@@ -492,6 +492,20 @@ It must not port chat project buttons, chat orchestration, retrieval settings, p
 
 Project organization belongs to the chat app because projects are chat-domain state, not shell or core platform state.
 
+### Current Product Assumptions To Remove
+
+The current code keeps the core/app boundary clean at the import level: `core/` does not import app frontend code, and `base-shell` does not import `chat`.
+
+There are still three explicit product assumptions that should be removed in a later cleanup before calling the core and apps fully standalone:
+
+- built-in app bootstrap currently lists `base-shell` and `chat` directly instead of reading built-ins from installation configuration or app-store metadata
+- the root `/` platform route currently resolves the root shell by the `base-shell` app id instead of a configurable root-shell app setting
+- `base-shell` currently prefers/pins `chat` as the initial app in local browser state instead of deriving the first-open app from workspace preference or registry metadata
+
+These are not direct code-contamination problems because they do not import app internals into core.
+
+They are product defaults encoded in code, and they should become configuration or registry-driven policy.
+
 The rule is:
 
 - the core is the platform host

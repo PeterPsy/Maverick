@@ -613,6 +613,10 @@ without carrying forward legacy structure or backward-compatibility constraints 
     - [x] `maverick3-rescue.service` not touched
     - [x] `nginx` config unchanged
   - [x] Commit and push the completed porting checkpoint
+- [ ] Remove remaining product assumptions from core/base-shell boundaries:
+  - [ ] replace hardcoded built-in app id list in core bootstrap with installation configuration or app-store metadata
+  - [ ] replace hardcoded root shell app id with configurable root-shell app selection
+  - [ ] replace base-shell's hardcoded `chat` initial/pinned preference with registry/workspace preference metadata
 - [ ] Implement `agents` as an app on top of core runtime/provider system
 - [x] Decide whether `memory` is in the first wave or the second wave
   - [x] second wave
@@ -626,10 +630,56 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] `nginx` routing for mounted app frontend/backend paths
 - [ ] Define and implement registry-driven widget mounting:
   - [x] document widget ownership and embedding model in architecture docs
-  - [ ] extend app contract parsing/validation for widget declarations
-  - [ ] expose enabled widget metadata through a workspace-scoped core registry endpoint
-  - [ ] mount widget frontend surfaces without allowing host apps to import widget-owner source
-  - [ ] update chat structured message rendering to use registry-driven widgets with a generic fallback
+  - [ ] Define widget contract model:
+    - [ ] add `WidgetDeclaration`
+    - [ ] add `WidgetFrontendDeclaration`
+    - [ ] add `WidgetActionDeclaration`
+    - [ ] include widgets in parsed app contract objects without making them chat-specific
+  - [ ] Extend app contract parser/serializer:
+    - [ ] parse top-level `widgets`
+    - [ ] serialize widgets back to canonical `app_contract.json`
+    - [ ] keep old contracts without widgets valid
+    - [ ] add contract parser tests for round-trip behavior
+  - [ ] Extend contract validation:
+    - [ ] reject duplicate widget ids within one app
+    - [ ] reject invalid widget ids, host ids, and content kinds
+    - [ ] reject widget frontend mounts outside the owning app root
+    - [ ] reject widget actions that reference undeclared backend/MCP/CLI surfaces
+    - [ ] add negative tests for invalid declarations
+  - [ ] Implement workspace widget registry:
+    - [ ] index widgets only from installed and enabled workspace app bindings
+    - [ ] filter by `host`
+    - [ ] filter by `content_kind`
+    - [ ] return owner app id, widget id, content kinds, frontend mount, and declared actions
+    - [ ] avoid exposing owner app source paths in the registry payload
+    - [ ] define deterministic ordering for multiple matching widgets
+  - [ ] Expose widget discovery HTTP API:
+    - [ ] add `GET /api/apps/widgets?host=<host>&content_kind=<kind>`
+    - [ ] resolve active workspace through the same session/workspace context as `/api/apps`
+    - [ ] enforce auth, workspace membership, app installation state, and enabled status
+    - [ ] add focused API tests for enabled, disabled, and missing widgets
+  - [ ] Mount widget frontend surfaces:
+    - [ ] add a controlled widget route such as `/api/apps/widgets/<owner_app_id>/<widget_id>/frontend/`
+    - [ ] serve only the owning app's declared widget frontend mount
+    - [ ] support SPA fallback where the widget declaration allows it
+    - [ ] prevent host apps from directly resolving widget owner filesystem paths
+    - [ ] add mount tests for successful and denied widget loads
+  - [ ] Define widget runtime/bootstrap context:
+    - [ ] choose signed context token, opaque context id, or initial postMessage for iframe widgets
+    - [ ] include workspace id, host app id, owner app id, widget id, message id, and structured content
+    - [ ] prevent broad app registry or source-path leakage into widget context
+    - [ ] add tests for context shape and denied context access
+  - [ ] Add observability and policy records:
+    - [ ] record widget registry lookups
+    - [ ] record widget mount success/failure
+    - [ ] record policy denials without logging full structured payloads
+  - [ ] Update chat structured message rendering after core support exists:
+    - [ ] remove v2 compile-time widget import model
+    - [ ] render generic fallback when no widget is available
+    - [ ] call widget registry with `host=chat` and structured content kind
+    - [ ] embed matching widgets through iframe-mounted widget routes
+    - [ ] send only explicit widget context
+    - [ ] route widget mutations to the widget owner's backend/MCP/CLI surfaces
 
 ## Phase 14: Acceptance Criteria for First Usable v3
 

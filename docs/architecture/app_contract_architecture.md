@@ -749,6 +749,18 @@ The exact schema can evolve, but the stable concepts are:
 - `frontend` declares how the core can mount it
 - `actions` declares which official surfaces the widget may use for mutations
 
+Initial contract validation rules:
+
+- `widget_id` must be unique within the owning app contract
+- `widget_id` must be a stable slug and must not contain path traversal
+- `host` must be a stable slug such as `chat`
+- every `content_kind` must be a non-empty dotted string such as `checklist.design`
+- `frontend.kind` initially supports only `iframe`
+- `frontend.mount` must be a relative path under the app source root and should normally point under `frontend/dist`
+- `actions.backend`, `actions.mcp`, and `actions.cli` may only be true when the owning app declares the corresponding surface
+- widget declarations must not name files, routes, or storage locations owned by the embedding app
+- widget declarations are ignored unless the owning app is installed and enabled in the current workspace
+
 If multiple installed apps declare widgets for the same `host` and `content_kind`, the host must use deterministic registry ordering or a workspace preference.
 
 The default fallback must always exist.
@@ -792,6 +804,45 @@ This preserves app ownership:
 - chat owns the message container
 - checklists owns checklist data and checklist widget behavior
 - core owns registry, routing, auth, and workspace context
+
+### Widget Core Implementation Plan
+
+The core implementation should be generic and not reference `chat`, `checklists`, or any specific widget owner.
+
+Required core pieces:
+
+- extend app contract models with `WidgetDeclaration`, `WidgetFrontendDeclaration`, and `WidgetActionDeclaration`
+- extend the contract parser, serializer, and validator to round-trip and reject invalid widget declarations
+- expose widget declarations through app source records and parsed workspace app surfaces
+- add a workspace-scoped widget registry service that indexes only enabled app bindings
+- add collision and ordering rules for same `host` and `content_kind`
+- add `GET /api/apps/widgets?host=<host>&content_kind=<kind>` for registry discovery
+- add a widget frontend mount route that serves the owning app's declared widget mount, not the embedding app's source
+- add a widget bootstrap/context route or signed context token so iframe widgets receive only explicit host context
+- enforce auth, active workspace, app installation state, and app enabled state on all widget routes
+- include widget metadata in app registry responses only where useful and without leaking unrelated app internals
+- add observability events for widget registry lookup, widget mount success, and policy denial
+
+Required tests:
+
+- contract parser accepts a valid widget declaration
+- contract parser rejects duplicate widget ids
+- contract parser rejects path traversal in widget mounts
+- registry lists only widgets from enabled apps in the active workspace
+- registry filters by `host` and `content_kind`
+- disabled/uninstalled apps do not expose widgets
+- widget mount serves the owner app's frontend artifact
+- host apps cannot import or resolve widget owner source paths through the registry payload
+- policy denial returns a clear error for unavailable widgets
+
+Required chat-side work after the core is ready:
+
+- remove the v2 compile-time widget import model
+- keep generic structured-message fallback rendering
+- call the widget registry by `host=chat` and message `content.kind`
+- embed compatible widgets through iframe-mounted widget routes
+- pass only explicit widget context, never app source paths
+- route widget actions to the widget owner's official surfaces
 
 ### Backend distribution artifacts
 

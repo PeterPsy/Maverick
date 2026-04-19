@@ -32,6 +32,8 @@ workspaces/
 node_modules/
 dist/
 build/
+!apps/*/frontend/dist/
+!apps/*/frontend/dist/**
 
 # OS/editor
 .DS_Store

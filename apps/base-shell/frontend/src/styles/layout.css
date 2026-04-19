@@ -1,0 +1,63 @@
+.bs-shell {
+  position: relative;
+  display: grid;
+  width: 100vw;
+  height: 100dvh;
+  min-height: 100vh;
+  overflow: hidden;
+  background: #101011;
+}
+
+.bs-workspace-view-shell {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  filter: blur(4px) brightness(0.62);
+  transform: scale(1.012);
+  transform-origin: center;
+  pointer-events: none;
+}
+
+.bs-shell:not(.is-sidebar-open) .bs-workspace-view-shell {
+  filter: none;
+  transform: none;
+  pointer-events: auto;
+}
+
+.bs-shell__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 39;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(4px);
+}
+
+.bs-shell:not(.is-sidebar-open) .bs-shell__backdrop {
+  display: none;
+}
+
+.bs-panel-peek {
+  position: fixed;
+  z-index: 35;
+  display: grid;
+  place-items: center;
+  width: 2.65rem;
+  height: 3.2rem;
+  border-radius: 999px;
+  background: rgba(20, 20, 20, 0.9);
+  color: var(--maverick-text);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.28);
+}
+
+.bs-panel-peek--left {
+  left: 0.7rem;
+  top: calc(env(safe-area-inset-top, 0px) + 1rem);
+}
+
+.bs-shell.is-sidebar-open .bs-panel-peek {
+  opacity: 0;
+  pointer-events: none;
+}

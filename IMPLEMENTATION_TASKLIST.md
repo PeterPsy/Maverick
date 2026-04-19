@@ -474,44 +474,44 @@ without carrying forward legacy structure or backward-compatibility constraints 
 - [x] Implement `chat` as an app on top of core runtime interfaces
 - [x] Implement `base-shell` as the first mounted frontend shell smoke app
 - [ ] Port `base-shell` to the Maverick v2 `base_shell` frontend approach, adapted cleanly to v3:
-  - [ ] Treat `/home/ubuntu/maverick-v2/apps/base_shell` as the behavioral and visual reference, not as code to copy blindly
-  - [ ] Preserve the v3 app identity as `base-shell` and keep the v3 contract format in `app_contract.json`
-  - [ ] Replace the static `frontend/index.html`, `frontend/shell.js`, and monolithic `frontend/styles.css` approach with an app-owned React/TypeScript frontend
-  - [ ] Add an app-local frontend build setup for `base-shell`:
-    - [ ] `package.json`
-    - [ ] `tsconfig.json`
-    - [ ] `vite.config.ts`
-    - [ ] frontend source root
-    - [ ] frontend build output root
-  - [ ] Use `frontend/dist` as the canonical production mount target for `base-shell`
-  - [ ] Set `apps/base-shell/app_contract.json` `entrypoints.frontend` to `frontend/dist` after the build pipeline exists
+  - [x] Treat `/home/ubuntu/maverick-v2/apps/base_shell` as the behavioral and visual reference, not as code to copy blindly
+  - [x] Preserve the v3 app identity as `base-shell` and keep the v3 contract format in `app_contract.json`
+  - [x] Replace the static `frontend/index.html`, `frontend/shell.js`, and monolithic `frontend/styles.css` approach with an app-owned React/TypeScript frontend
+  - [x] Add an app-local frontend build setup for `base-shell`:
+    - [x] `package.json`
+    - [x] `tsconfig.json`
+    - [x] `vite.config.ts`
+    - [x] frontend source root
+    - [x] frontend build output root
+  - [x] Use `frontend/dist` as the canonical production mount target for `base-shell`
+  - [x] Set `apps/base-shell/app_contract.json` `entrypoints.frontend` to `frontend/dist` after the build pipeline exists
   - [x] Treat `base-shell` as a server app store artifact under installation-level `/apps`, not as workspace-local editable source
   - [x] Keep future customization of `base-shell` as an explicit workspace-local fork operation, not as the default install behavior
-  - [ ] Decide and document the canonical frontend mount target for buildable apps:
-    - [ ] whether contracts point to source root, build output root, or both
-    - [ ] how the platform host serves SPA assets and fallback routes
-    - [ ] how development builds differ from production builds
-  - [ ] Port the v2 shell runtime approach:
-    - [ ] root React shell entrypoint
-    - [ ] runtime loading/error boundary
-    - [ ] app registry loading
-    - [ ] app panel mounting
-    - [ ] mobile layout behavior
-    - [ ] local session persistence
-  - [ ] Port the v2 UI/UX design as the visual reference without preserving v2 runtime coupling:
-    - [ ] preserve the sidebar/topbar shell composition
-    - [ ] preserve the v2 visual language, spacing, panels, controls, and responsive behavior where still valid
-    - [ ] remove v2 API, auth, workspace, and runtime assumptions that are not available as v3 protocols
-    - [ ] connect only to v3 platform APIs and mounted app routes
+  - [x] Decide and document the canonical frontend mount target for buildable apps:
+    - [x] whether contracts point to source root, build output root, or both
+    - [x] how the platform host serves SPA assets and fallback routes
+    - [x] how development builds differ from production builds
+  - [x] Port the v2 shell runtime approach:
+    - [x] root React shell entrypoint
+    - [x] runtime loading/error boundary
+    - [x] app registry loading
+    - [x] app panel mounting
+    - [x] mobile layout behavior
+    - [x] local session persistence
+  - [x] Port the v2 UI/UX design as the visual reference without preserving v2 runtime coupling:
+    - [x] preserve the sidebar/topbar shell composition
+    - [x] preserve the v2 visual language, spacing, panels, controls, and responsive behavior where still valid
+    - [x] remove v2 API, auth, workspace, and runtime assumptions that are not available as v3 protocols
+    - [x] connect only to v3 platform APIs and mounted app routes
   - [ ] Apply this file-by-file v2 to v3 porting map:
-    - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/app.manifest.json` -> use only as design intent reference; replace with v3 `apps/base-shell/app_contract.json`
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/app.manifest.json` -> use only as design intent reference; replace with v3 `apps/base-shell/app_contract.json`
     - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/ui.tsx` -> port reusable UI primitives into focused v3 files, not one large primitive file
-    - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/app-shell.tsx` -> port shell layout and interaction model into v3 `AppShell`, removing v2 auth/agent/workspace endpoint coupling
-    - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/sidebar.tsx` -> port sidebar UX into v3 `Sidebar`, fed by `/api/apps` and v3 local session state
-    - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/top-bar.tsx` -> port top bar UX into v3 `TopBar`, backed only by v3 status/app context for now
-    - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/apps-panel.tsx` -> port app catalog/panel UX into v3 `AppsPanel`, using v3 app registry records
-    - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/workspace-view.tsx` -> adapt into v3 app mount view; frame/open `/apps/<app_id>/` surfaces and avoid direct app internals
-    - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/workspace-navigation.ts` -> rewrite around v3 app registry and `frontend_mount`; do not retain v2 workspace view contract
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/app-shell.tsx` -> port shell layout and interaction model into v3 `AppShell`, removing v2 auth/agent/workspace endpoint coupling
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/sidebar.tsx` -> port sidebar UX into v3 `Sidebar`, fed by `/api/apps` and v3 local session state
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/top-bar.tsx` -> port top bar UX into v3 `TopBar`, backed only by v3 status/app context for now
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/apps-panel.tsx` -> port app catalog/panel UX into v3 `AppsPanel`, using v3 app registry records
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/workspace-view.tsx` -> adapt into v3 app mount view; frame/open `/apps/<app_id>/` surfaces and avoid direct app internals
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/workspace-navigation.ts` -> rewrite around v3 app registry and `frontend_mount`; do not retain v2 workspace view contract
     - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/workspace-panel-surfaces.tsx` -> port only the concept of app panel surfaces; derive availability from v3 registry data
     - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/workspace-secondary-panels.tsx` -> defer or stub cleanly unless the required v3 surfaces exist
     - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/dialog-stack.tsx` -> port dialog orchestration only if needed by the v3 shell interactions
@@ -524,75 +524,75 @@ without carrying forward legacy structure or backward-compatibility constraints 
     - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/backend-restart-control.tsx` -> defer to recovery/operator surfaces; do not couple shell directly to service management
     - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/push-notifications-control.tsx` -> defer until v3 notification capability exists
     - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/chat-workspace-surface.tsx` -> replace with generic app mounting of the v3 `chat` frontend route
-    - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/app-logo.tsx` and `brand-mark.tsx` -> port brand/logo primitives with v3 asset paths
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/app-logo.tsx` and `brand-mark.tsx` -> port brand/logo primitives with v3 asset paths
     - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/primitives.tsx` -> merge only non-duplicative primitives into the v3 UI primitive set
     - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/hooks/use-mobile-layout.ts` -> port nearly directly if still small and dependency-free
     - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/hooks/use-workspace-data.ts` -> rewrite or defer; do not call v2 workspace APIs
-    - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/lib/api-core.ts` -> port request wrapper concept with v3 `/api` conventions
-    - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/lib/api.ts` -> rewrite types and calls around v3 `/api/apps` and `/api/status`
-    - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/lib/app-session.ts` -> port local shell session persistence, removing unavailable v2 fields
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/lib/api-core.ts` -> port request wrapper concept with v3 `/api` conventions
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/lib/api.ts` -> rewrite types and calls around v3 `/api/apps` and `/api/status`
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/lib/app-session.ts` -> port local shell session persistence, removing unavailable v2 fields
     - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/lib/workspace-session.ts` -> adapt only if v3 workspace selection is exposed
     - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/lib/chat-shell.ts` -> do not port as chat orchestration; chat is now a mounted app
     - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/lib/account.ts` -> defer until v3 account model is surfaced to frontend
     - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/lib/runtime-node-display.ts` -> defer until runtime node data is exposed by v3 protocol
     - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/lib/push-notifications.ts` -> defer until v3 notifications exist
-    - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/styles/*.css` -> port visual language into modular v3 CSS files with `frontend/dist` build output
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/styles/*.css` -> port visual language into modular v3 CSS files with `frontend/dist` build output
     - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/tests/*.test.ts` -> rewrite as v3 frontend/unit tests for registry normalization, local session, and shell navigation
     - [ ] `/home/ubuntu/maverick-v2/apps/base_shell/backend/*` -> do not port unless `base-shell` gains a real backend surface
-  - [ ] Port or adapt v2 shell components into small v3-owned files:
-    - [ ] `AppShell`
-    - [ ] `Sidebar`
-    - [ ] `TopBar`
-    - [ ] `AppsPanel`
-    - [ ] `WorkspaceView`
-    - [ ] shared UI primitives
-    - [ ] app logo/brand primitives
-  - [ ] Port or adapt v2 frontend helpers only where they match v3:
-    - [ ] API request wrapper using v3 `/api`
-    - [ ] app/session persistence helpers
-    - [ ] workspace selection helpers where still applicable
-    - [ ] mobile layout hook
-    - [ ] app navigation helpers based on v3 registry records
-  - [ ] Rewrite v2-only API types and calls for the v3 core host:
-    - [ ] remove dependency on v2 auth endpoints until v3 auth is exposed publicly
-    - [ ] remove dependency on v2 agent/workspace management endpoints until those app surfaces exist
-    - [ ] consume `/api/apps` as the initial app registry source
-    - [ ] consume `/api/status` for platform status where useful
-  - [ ] Keep the shell composition app-owned:
-    - [ ] `base-shell` discovers enabled app frontends from the core registry
-    - [ ] `base-shell` frames or mounts app frontend routes exposed by the core
-    - [ ] core remains responsible for installation, enablement, routes, and policy
-    - [ ] no shell-specific behavior is moved into core
-  - [ ] Remove placeholder pinned apps that are not actually installed or mark them explicitly unavailable
-  - [ ] Fix `New chat` so it opens the installed `chat` app from the registry rather than searching hardcoded sidebar text
-  - [ ] Split styling into focused files instead of a single monolithic stylesheet:
-    - [ ] base tokens
-    - [ ] layout
-    - [ ] sidebar
-    - [ ] app panels
-    - [ ] responsive rules
-    - [ ] UI primitives
-  - [ ] Optimize or replace oversized static assets such as the current 2000x2000 logo
-  - [ ] Update the core platform host if needed:
-    - [ ] serve build output assets for app frontends
-    - [ ] support SPA fallback for mounted app frontends
-    - [ ] keep root `/` mapped to the mounted `base-shell` frontend
-  - [ ] Update documentation:
-    - [ ] document buildable app frontends in `docs/architecture/app_contract_architecture.md`
-    - [ ] document root shell as an app-owned React frontend in `docs/architecture/core_architecture.md`
-    - [ ] document what was intentionally not ported yet from v2 because the v3 domain is not ready
-  - [ ] Add focused tests:
-    - [ ] `base-shell` contract validates under the v3 parser
-    - [ ] frontend build output is mounted by the platform host
-    - [ ] `/` serves the shell
-    - [ ] `/api/apps` exposes mountable app records for the shell
-    - [ ] shell app registry logic handles missing optional apps without fake installed state
-    - [ ] chat app can be opened through the shell registry model
+  - [x] Port or adapt v2 shell components into small v3-owned files:
+    - [x] `AppShell`
+    - [x] `Sidebar`
+    - [x] `TopBar`
+    - [x] `AppsPanel`
+    - [x] `WorkspaceView`
+    - [x] shared UI primitives
+    - [x] app logo/brand primitives
+  - [x] Port or adapt v2 frontend helpers only where they match v3:
+    - [x] API request wrapper using v3 `/api`
+    - [x] app/session persistence helpers
+    - [x] workspace selection helpers where still applicable
+    - [x] mobile layout hook
+    - [x] app navigation helpers based on v3 registry records
+  - [x] Rewrite v2-only API types and calls for the v3 core host:
+    - [x] remove dependency on v2 auth endpoints until v3 auth is exposed publicly
+    - [x] remove dependency on v2 agent/workspace management endpoints until those app surfaces exist
+    - [x] consume `/api/apps` as the initial app registry source
+    - [x] consume `/api/status` for platform status where useful
+  - [x] Keep the shell composition app-owned:
+    - [x] `base-shell` discovers enabled app frontends from the core registry
+    - [x] `base-shell` frames or mounts app frontend routes exposed by the core
+    - [x] core remains responsible for installation, enablement, routes, and policy
+    - [x] no shell-specific behavior is moved into core
+  - [x] Remove placeholder pinned apps that are not actually installed or mark them explicitly unavailable
+  - [x] Fix `New chat` so it opens the installed `chat` app from the registry rather than searching hardcoded sidebar text
+  - [x] Split styling into focused files instead of a single monolithic stylesheet:
+    - [x] base tokens
+    - [x] layout
+    - [x] sidebar
+    - [x] app panels
+    - [x] responsive rules
+    - [x] UI primitives
+  - [x] Optimize or replace oversized static assets such as the current 2000x2000 logo
+  - [x] Update the core platform host if needed:
+    - [x] serve build output assets for app frontends
+    - [x] support SPA fallback for mounted app frontends
+    - [x] keep root `/` mapped to the mounted `base-shell` frontend
+  - [x] Update documentation:
+    - [x] document buildable app frontends in `docs/architecture/app_contract_architecture.md`
+    - [x] document root shell as an app-owned React frontend in `docs/architecture/core_architecture.md`
+    - [x] document what was intentionally not ported yet from v2 because the v3 domain is not ready
+  - [x] Add focused tests:
+    - [x] `base-shell` contract validates under the v3 parser
+    - [x] frontend build output is mounted by the platform host
+    - [x] `/` serves the shell
+    - [x] `/api/apps` exposes mountable app records for the shell
+    - [x] shell app registry logic handles missing optional apps without fake installed state
+    - [x] chat app can be opened through the shell registry model
   - [ ] Run verification:
-    - [ ] base-shell frontend build
+    - [x] base-shell frontend build
     - [ ] relevant frontend tests if introduced
-    - [ ] `python3 -m unittest discover -s tests -p 'test_*.py'`
-    - [ ] `python3 -m compileall core tests apps`
+    - [x] `python3 -m unittest discover -s tests -p 'test_*.py'`
+    - [x] `python3 -m compileall core tests apps`
     - [ ] live smoke check on `https://maverick3.versy.ai/`
   - [ ] Restart and verify hosted services after deployment:
     - [ ] `maverick3-core.service`

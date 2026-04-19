@@ -426,6 +426,12 @@ That means:
 - serve its production frontend from its declared build output, currently `frontend/dist`
 - let the shell discover mountable apps through the v3 registry instead of static app assumptions
 
+The current v3 `base-shell` implementation is a React/TypeScript app-owned frontend built with Vite.
+
+The core serves only the declared `frontend/dist` artifact and exposes the registry data the shell needs through `/api/apps` and `/api/status`.
+
+The shell may visually frame mounted app frontends, but it must not hardcode optional product apps that are not installed in the current workspace.
+
 This keeps the product shell replaceable and prevents product UI concerns from leaking into the core.
 
 The rule is:

@@ -598,6 +598,12 @@ For the first real `base-shell` port, `frontend/dist` is the canonical productio
 
 The `base-shell` source may use React, TypeScript, and Vite internally, but the core must only serve the declared static build output.
 
+For sealed built-in apps, the repository may keep both the app source needed to rebuild the artifact and the generated `frontend/dist` artifact used by the hosted core.
+
+The generated artifact is part of the app store payload, not part of the core package.
+
+The build source remains app-owned and must not introduce framework-specific assumptions into the core host.
+
 The v2 `base_shell` UI/UX is the visual and interaction reference for the v3 `base-shell`.
 
 The port should preserve the shell experience, layout behavior, sidebar/topbar composition, workspace/app panels, and responsive behavior where those concepts are still valid.
@@ -610,6 +616,10 @@ The v3 shell attaches only to v3 platform protocols such as:
 - `/api/status` for platform status
 - mounted app frontend routes under `/apps/<app_id>/`
 - mounted app backend routes under `/api/apps/<app_id>/...`
+
+The shell must derive app navigation from registry records such as `app_id`, `name`, `description`, `views`, `frontend_mount`, `backend_mount`, and optional icon or logo metadata.
+
+It must not create fake installed state for product apps that are not present in the registry.
 
 The core remains responsible for routing, install state, enablement, policy, and app registry data.
 

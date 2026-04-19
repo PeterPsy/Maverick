@@ -22,7 +22,7 @@
     "mcp": null,
     "cli": null,
     "backend": null,
-    "frontend": "frontend",
+    "frontend": "frontend/dist",
     "skills_root": null,
     "hooks": {}
   },

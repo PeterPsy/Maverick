@@ -11,6 +11,7 @@ import unittest
 
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
+from core.apps.contracts import parse_app_contract_file
 from core.cli.service import list_core_cli_commands
 from core.mcp.service import list_mcp_tools
 from core.skills.service import list_visible_platform_skills
@@ -29,7 +30,11 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
         (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
         (repo_root / "IMPLEMENTATION_TASKLIST.md").write_text("", encoding="utf-8")
         source_apps_root = Path(__file__).resolve().parents[1] / "apps"
-        shutil.copytree(source_apps_root / "base-shell", repo_root / "apps" / "base-shell")
+        shutil.copytree(
+            source_apps_root / "base-shell",
+            repo_root / "apps" / "base-shell",
+            ignore=shutil.ignore_patterns("node_modules"),
+        )
         shutil.copytree(source_apps_root / "chat", repo_root / "apps" / "chat")
         return repo_root
 
@@ -80,25 +85,20 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
 
         self.assertEqual(status_root, 200)
         self.assertEqual(status_chat, 200)
-        self.assertIn(b'class="bs-shell', body_root)
-        self.assertIn(b"bs-sidebar", body_root)
-        self.assertIn(b"bs-sidebar__workspace-select", body_root)
-        self.assertIn(b"/apps/base-shell/maverick-logo.png", body_root)
-        self.assertIn(b"/apps/base-shell/styles.css", body_root)
-        self.assertIn(b"/apps/base-shell/shell.js", body_root)
-        self.assertIn(b"Codex rate limits", body_root)
-        self.assertIn(b"Versy", body_root)
-        self.assertIn(b"Shared &middot; Admin access", body_root)
-        self.assertIn(b"New chat", body_root)
-        self.assertIn(b"Gallery", self.invoke(app, path="/apps/base-shell/shell.js")[1])
-        self.assertIn(b"App Studio", self.invoke(app, path="/apps/base-shell/shell.js")[1])
-        self.assertIn(b"Checklists", self.invoke(app, path="/apps/base-shell/shell.js")[1])
-        self.assertIn(b"Installed Apps", body_root)
-        self.assertIn(b"App montata dal manifest della shell.", body_root)
-        self.assertIn(b"/api/apps", body_root)
+        self.assertIn(b'id="root"', body_root)
+        self.assertIn(b"/apps/base-shell/assets/index-", body_root)
         self.assertNotIn(b"Base shell app mounted by the core", body_root)
         self.assertNotIn(b'src="/apps/chat/"', body_root)
         self.assertIn(b"Minimal built-in app mounted by the Maverick core", body_chat)
+
+    def test_base_shell_contract_mounts_production_dist(self) -> None:
+        repo_root = self.make_repo_root()
+
+        parsed = parse_app_contract_file(repo_root / "apps" / "base-shell")
+
+        self.assertEqual(parsed.app_id, "base-shell")
+        self.assertEqual(parsed.contract.entrypoints.frontend, "frontend/dist")
+        self.assertTrue((repo_root / "apps" / "base-shell" / "frontend" / "dist" / "index.html").is_file())
 
     def test_base_shell_is_v3_native_without_legacy_runtime_coupling(self) -> None:
         repo_root = self.make_repo_root()
@@ -113,6 +113,9 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
         self.assertNotIn(b"app.manifest", body_root)
         self.assertNotIn(b"runtime_backend", body_root)
         self.assertNotIn(b"react-query", body_root)
+        self.assertNotIn(b"Gallery", body_root)
+        self.assertNotIn(b"App Studio", body_root)
+        self.assertNotIn(b"Checklists", body_root)
 
     def test_app_registry_exposes_distribution_policy_for_shell(self) -> None:
         repo_root = self.make_repo_root()
@@ -126,10 +129,48 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(items["base-shell"]["distribution_mode"], "sealed")
         self.assertEqual(items["base-shell"]["source_access"], "none")
+        self.assertEqual(items["base-shell"]["description"], "Maverick v3 product shell app that hosts enabled app frontends through the platform registry.")
+        self.assertEqual(items["base-shell"]["views"], ["shell"])
         self.assertEqual(
             set(items["base-shell"]),
-            {"app_id", "name", "version", "status", "distribution_mode", "source_access", "frontend_mount", "backend_mount"},
+            {
+                "app_id",
+                "name",
+                "version",
+                "description",
+                "publisher",
+                "status",
+                "distribution_mode",
+                "source_access",
+                "views",
+                "logo",
+                "frontend_mount",
+                "backend_mount",
+            },
         )
+
+    def test_base_shell_uses_registry_without_fake_static_apps(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+
+        status_index, body_index, _ = self.invoke(app, path="/apps/base-shell/")
+        status_asset, logo_body, _ = self.invoke(app, path="/apps/base-shell/maverick-logo.png")
+        script_path = next((repo_root / "apps" / "base-shell" / "frontend" / "dist" / "assets").glob("index-*.js")).name
+        status_script, script_body, _ = self.invoke(app, path=f"/apps/base-shell/assets/{script_path}")
+
+        self.assertEqual(status_index, 200)
+        self.assertEqual(status_asset, 200)
+        self.assertEqual(status_script, 200)
+        self.assertGreater(len(logo_body), 100)
+        self.assertLess(len(logo_body), 10_000)
+        self.assertIn(b"/api/apps", script_body)
+        self.assertIn(b"/api/status", script_body)
+        self.assertIn(b"chat", script_body)
+        self.assertNotIn(b"Gallery", script_body)
+        self.assertNotIn(b"App Studio", script_body)
+        self.assertNotIn(b"Checklists", script_body)
+        self.assertIn(b"/apps/base-shell/assets/index-", body_index)
 
     def test_chat_backend_works_and_exposes_runtime_metadata(self) -> None:
         repo_root = self.make_repo_root()

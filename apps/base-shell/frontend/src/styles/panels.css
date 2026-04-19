@@ -1,0 +1,133 @@
+.bs-workspace-app-panel,
+.bs-workspace-app-surface,
+.bs-app-grid-panel,
+.bs-empty-panel {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.bs-workspace-app-surface {
+  background: #111;
+}
+
+.bs-workspace-app-frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #111;
+}
+
+.bs-app-grid-panel,
+.bs-empty-panel {
+  align-content: start;
+  gap: 1rem;
+  padding: 2rem 1rem 1rem calc(var(--maverick-sidebar-width) + 2rem);
+  background: linear-gradient(180deg, rgba(18, 18, 18, 0.92), rgba(18, 18, 18, 0.98)), var(--maverick-bg);
+}
+
+.bs-app-grid-panel__header {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.bs-app-grid-panel__title {
+  margin: 0;
+  font-size: 1.12rem;
+}
+
+.bs-app-grid-panel__description,
+.bs-empty-panel__description {
+  margin: 0;
+  color: rgba(214, 223, 235, 0.76);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.bs-app-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: 0.75rem;
+  align-content: start;
+  max-width: 58rem;
+}
+
+.bs-app-card,
+.bs-empty-panel__surface {
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--maverick-text);
+}
+
+.bs-app-card {
+  min-height: 8rem;
+  padding: 0.82rem;
+  text-align: left;
+}
+
+.bs-app-card:hover {
+  border-color: rgba(215, 36, 81, 0.24);
+  background: rgba(215, 36, 81, 0.12);
+}
+
+.bs-app-card__header {
+  display: flex;
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.bs-app-card__title {
+  display: block;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.bs-app-card__description {
+  display: block;
+  margin-top: 0.45rem;
+  color: var(--maverick-text-muted);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.bs-empty-panel__surface {
+  max-width: 28rem;
+  padding: 1rem;
+}
+
+.bs-empty-panel__title {
+  margin: 0 0 0.35rem;
+  font-weight: 700;
+}
+
+.bs-app-logo {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(215, 36, 81, 0.95), rgba(248, 75, 120, 0.75));
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.bs-app-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.bs-app-logo--card {
+  width: 2.7rem;
+  height: 2.7rem;
+  border-radius: 14px;
+}
+
+.bs-app-logo--topbar {
+  grid-row: 1 / span 2;
+}

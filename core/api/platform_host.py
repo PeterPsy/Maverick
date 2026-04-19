@@ -50,8 +50,8 @@ def _read_body(environ: dict) -> dict:
     return json.loads(raw.decode("utf-8"))
 
 
-def _enabled_app_items(state: PlatformState, *, workspace_id: str, start_path: Path) -> list[dict[str, str]]:
-    items: list[dict[str, str]] = []
+def _enabled_app_items(state: PlatformState, *, workspace_id: str, start_path: Path) -> list[dict[str, object]]:
+    items: list[dict[str, object]] = []
     for binding in enabled_workspace_app_bindings(state.app_store, workspace_id=workspace_id):
         source_root, parsed = resolve_workspace_app_surface(state.app_store, binding=binding, start_path=start_path)
         items.append(
@@ -59,9 +59,13 @@ def _enabled_app_items(state: PlatformState, *, workspace_id: str, start_path: P
                 "app_id": parsed.app_id,
                 "name": parsed.name,
                 "version": parsed.version,
+                "description": parsed.description,
+                "publisher": parsed.publisher,
                 "status": binding.status,
                 "distribution_mode": parsed.contract.distribution.mode,
                 "source_access": parsed.contract.distribution.source_access,
+                "views": list(parsed.contract.capabilities.views),
+                "logo": None,
                 "frontend_mount": f"/apps/{parsed.app_id}/" if parsed.contract.entrypoints.frontend else "",
                 "backend_mount": f"/api/apps/{parsed.app_id}/backend" if parsed.contract.entrypoints.backend else "",
             }

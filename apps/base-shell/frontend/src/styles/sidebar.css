@@ -1,0 +1,140 @@
+.bs-sidebar {
+  position: fixed;
+  top: env(safe-area-inset-top, 0px);
+  left: 0.75rem;
+  bottom: 0.75rem;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: var(--maverick-sidebar-width);
+  min-height: 0;
+  padding: 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 16px;
+  background: rgba(18, 18, 18, 0.9);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(18px);
+}
+
+.bs-sidebar__header,
+.bs-sidebar__brand,
+.bs-sidebar__workspace-select,
+.bs-sidebar__nav-leading,
+.bs-chat-folder__header {
+  display: flex;
+  align-items: center;
+}
+
+.bs-sidebar__header {
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.bs-sidebar__brand {
+  gap: 0.72rem;
+  min-width: 0;
+}
+
+.bs-sidebar__brand-mark {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 14px;
+}
+
+.bs-eyebrow {
+  margin: 0;
+  color: var(--maverick-text-soft);
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.bs-sidebar__title {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.bs-sidebar__nav-list {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.bs-sidebar__workspace-select,
+.bs-sidebar__nav-button {
+  width: 100%;
+  min-height: 3rem;
+  padding: 0.58rem 0.7rem;
+  border-radius: 14px;
+  background: transparent;
+  text-align: left;
+}
+
+.bs-sidebar__workspace-select {
+  gap: 0.65rem;
+  border: 1px solid var(--maverick-border);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.bs-sidebar__workspace-title,
+.bs-sidebar__nav-title {
+  display: block;
+  font-weight: 700;
+}
+
+.bs-sidebar__workspace-subtitle {
+  display: block;
+  color: var(--maverick-text-muted);
+  font-size: 0.72rem;
+}
+
+.bs-sidebar__nav-button:hover,
+.bs-sidebar__nav-button.is-active {
+  background: rgba(215, 36, 81, 0.14);
+}
+
+.bs-sidebar__nav-leading {
+  gap: 0.65rem;
+}
+
+.bs-sidebar__nav-icon,
+.bs-sidebar__workspace-icon {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.bs-chat-list {
+  min-height: 0;
+  flex: 1;
+  color: var(--maverick-text-muted);
+  overflow: auto;
+}
+
+.bs-chat-folder {
+  padding: 0.8rem 0.55rem;
+}
+
+.bs-chat-folder__header {
+  justify-content: space-between;
+}
+
+.bs-chat-folder__title {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.bs-chat-folder__count {
+  color: var(--maverick-text-soft);
+  font-size: 0.72rem;
+}
+
+.bs-sidebar__footer {
+  display: grid;
+  gap: 0.35rem;
+}

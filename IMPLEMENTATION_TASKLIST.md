@@ -126,6 +126,35 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] external installed app
   - [x] workspace-local app project
   - [x] app enabled state
+- [x] Define server app store versus workspace-local app ownership:
+  - [x] installation-level `/apps` is the server-managed app store, trusted artifact cache, and built-in app area
+  - [x] `workspaces/<workspace_id>/apps/` is editable workspace-local app material
+  - [x] installing a store app creates a workspace binding by default, not a source copy
+  - [x] modifying a store app requires an explicit workspace-local fork
+  - [x] app data remains under `workspaces/<workspace_id>/data/<app_id>/`
+- [ ] Extend the app contract distribution model:
+  - [ ] add `distribution.mode`
+  - [ ] support `sealed`
+  - [ ] support `source_available`
+  - [ ] support `workspace_local`
+  - [ ] add source access policy
+  - [ ] add `modifiable_by_agents`
+  - [ ] validate distribution policy during contract parsing
+- [ ] Implement server app store artifact handling:
+  - [ ] model `/apps` as the installation-level trusted app artifact area
+  - [ ] support store-installed sealed artifacts without copying source into workspaces
+  - [ ] support source-available artifacts that can be forked when allowed
+  - [ ] keep store artifact metadata separate from workspace app binding state
+- [ ] Implement workspace-local app fork flow:
+  - [ ] create `workspaces/<workspace_id>/apps/<app_id>/` from a source-available store app when explicitly requested
+  - [ ] prevent fork of sealed apps unless operator policy explicitly allows an override
+  - [ ] record fork source metadata for upgrade, rollback, audit, and provenance
+  - [ ] ensure forked apps install only into their owning workspace by default
+- [ ] Update app install semantics:
+  - [ ] install from store artifact creates a workspace binding
+  - [ ] install from workspace-local project creates a workspace-local binding
+  - [ ] enablement checks resolve the correct app source according to binding type
+  - [ ] upgrades preserve workspace-local forks unless explicitly rebased
 - [x] Define canonical app lifecycle states and transitions:
   - [x] `installed`
   - [x] `enabled`
@@ -437,6 +466,8 @@ without carrying forward legacy structure or backward-compatibility constraints 
     - [ ] `vite.config.ts`
     - [ ] frontend source root
     - [ ] frontend build output root
+  - [ ] Treat `base-shell` as a server app store artifact under installation-level `/apps`, not as workspace-local editable source
+  - [ ] Keep future customization of `base-shell` as an explicit workspace-local fork operation, not as the default install behavior
   - [ ] Decide and document the canonical frontend mount target for buildable apps:
     - [ ] whether contracts point to source root, build output root, or both
     - [ ] how the platform host serves SPA assets and fallback routes

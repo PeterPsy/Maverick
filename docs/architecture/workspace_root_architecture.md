@@ -181,7 +181,7 @@ Notes:
 
 - `default/` is the installation-level workspace created automatically by Maverick.
 - Every additional company or tenant workspace gets its own sibling root under `workspaces/`.
-- `core/` and `apps/` stay outside the workspace roots.
+- `core/` and the installation-level app store/cache under `apps/` stay outside the workspace roots.
 - A sandboxed agent assigned to a non-default workspace may not write outside `/workspaces/<workspace_id>/`.
 - `core/` is itself the package root of the platform core and should not contain wrapper layers such as `backend/`, `runtime_backend/`, or `app/`.
 
@@ -197,16 +197,38 @@ Each workspace root is the canonical home for everything that belongs to that te
 
 This is where an agent can create or modify apps that belong only to that workspace.
 
+This workspace-local `apps/` directory must not be confused with the installation-level `/apps` directory.
+
+The installation-level `/apps` directory is the server-managed app store, trusted artifact cache, and built-in app area.
+
+The workspace-local `workspaces/<workspace_id>/apps/` directory is editable tenant material.
+
+Installing an app from the server app store creates a workspace binding to the installation-level artifact unless the app is explicitly forked into the workspace.
+
+A workspace-local fork or app project should live under:
+
+```text
+workspaces/<workspace_id>/apps/<app_id>/
+```
+
+The app's workspace-owned data still lives separately under:
+
+```text
+workspaces/<workspace_id>/data/<app_id>/
+```
+
 Important trust rule:
 
 - code under `workspaces/<workspace_id>/apps/` is editable workspace material
 - it is not automatically trusted or executable just because it exists there
 - a workspace-local app must still be explicitly installed or mounted for that workspace before it becomes an active capability
+- code under installation-level `/apps` is not workspace-editable unless a fork is explicitly created under the workspace root
 
 This means:
 
 - workspace-created apps can be developed locally and installed only into their own workspace
 - they are invisible to other workspaces unless later promoted into a platform-level distribution channel
+- store-installed apps can be enabled in many workspaces without duplicating source into every workspace
 - installation state and enablement are still governed by the core
 
 The agent must not directly edit platform apps under the installation-level `apps/` directory.
@@ -348,7 +370,9 @@ When an app is installed in a workspace, Maverick should:
 
 Bundle source may differ:
 
-- external app bundles remain outside the workspace and are enabled for the workspace through core-managed installation state
+- server app store artifacts under installation-level `/apps` remain outside the workspace and are enabled for the workspace through core-managed installation state
+- sealed app artifacts are not copied into the workspace for modification
+- source-available store apps may be forked into `workspaces/<workspace_id>/apps/<app_id>/` only through an explicit fork/customize operation
 - workspace-local app projects under `workspaces/<workspace_id>/apps/` may be installed only into that same workspace unless later promoted through a platform-level distribution channel
 
 Install should create the minimum required structure, not arbitrary seeded content unless the app explicitly defines it.
@@ -639,7 +663,9 @@ When an app is installed in a workspace, Maverick should:
 
 Bundle source may differ:
 
-- external app bundles remain outside the workspace and are only enabled for that workspace
+- server app store artifacts under installation-level `/apps` remain outside the workspace and are only bound or enabled for that workspace
+- sealed app artifacts remain non-editable and should not be copied into workspace app source directories
+- source-available store apps may be forked into `workspaces/<workspace_id>/apps/<app_id>/` when the user or an authorized agent requests customization
 - workspace-local app projects under `workspaces/<workspace_id>/apps/` may be installed only into that same workspace
 
 Install should create the minimum required structure, not arbitrary seeded content unless the app explicitly defines it.

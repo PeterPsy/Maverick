@@ -163,6 +163,7 @@ The core does not own app business data.
 For v3, the app-hosting domain should keep at least these concepts distinct:
 
 - app source or project material
+- app distribution artifact
 - app installation record
 - workspace app enablement or binding state
 
@@ -170,11 +171,31 @@ These concepts are related, but they are not interchangeable.
 
 Examples:
 
-- an external app bundle may be known to the installation without being enabled in every workspace
+- a server app store artifact under `/apps` may be known to the installation without being enabled in every workspace
 - a workspace-local app project may exist under `workspaces/<workspace_id>/apps/` without being installed yet
 - an installed app may be disabled in one workspace while remaining enabled in another
 
 This separation is required to keep lifecycle orchestration, compatibility checks, and uninstall or reinstall behavior deterministic.
+
+The installation-level `/apps` directory is the server-managed app store and trusted artifact cache.
+
+It may contain built-in apps, commercial sealed apps, source-available store apps, and validated app bundles.
+
+The workspace-level `workspaces/<workspace_id>/apps/` directory is editable workspace material.
+
+It should contain only workspace-created apps and explicit workspace-local forks of store apps.
+
+Installing a store app into a workspace should create a binding to the store artifact by default.
+
+It should not copy source into the workspace unless the distribution contract allows forking and the user or an authorized agent requests customization.
+
+The core app-hosting domain should model at least these distribution modes:
+
+- sealed
+- source-available
+- workspace-local
+
+This lets the core host closed commercial apps, open-source store apps, and fully local agent-created apps without changing the app surface model.
 
 ### 4. Runtime orchestration
 

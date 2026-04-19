@@ -37,19 +37,111 @@ The app contract is not the same thing as app installation state.
 Maverick v3 should distinguish clearly between:
 
 - app source or project material
+- app distribution artifact
 - app contract metadata
 - app installation state in the core
 - app enablement state inside one workspace
 
 Examples:
 
-- an external app bundle may carry valid contract metadata before it is installed anywhere
+- a server-installed app store artifact may carry valid contract metadata before it is enabled in any workspace
 - a workspace-local app project may exist under `workspaces/<workspace_id>/apps/` before it becomes an active capability
 - an app may be installed but not enabled in a given workspace
 
 The contract describes what the app is and how it behaves.
 
 The core installation system decides where that app is known, installed, enabled, disabled, upgraded, uninstalled, or reattached.
+
+## App Distribution Sources
+
+Maverick v3 supports two canonical app source locations:
+
+- installation-level app artifacts under `/apps`
+- workspace-local app projects under `workspaces/<workspace_id>/apps`
+
+The installation-level `/apps` directory is the server's app store, trusted bundle cache, and platform-installed app area.
+
+It may contain:
+
+- built-in platform apps such as `base-shell` and `chat`
+- closed commercial apps distributed as sealed artifacts
+- open-source or source-available apps distributed through the server app store
+- versioned app bundles validated by the core
+
+The workspace-level `workspaces/<workspace_id>/apps` directory is not the app store.
+
+It contains:
+
+- apps created directly inside that workspace
+- app projects under development for that workspace
+- workspace-local forks of store-installed apps
+- agent-modified app source material scoped to that workspace
+
+Installing an app from the server app store should create a workspace app binding.
+
+It should not automatically copy the app's full source tree into the workspace.
+
+Copying app source into `workspaces/<workspace_id>/apps/<app_id>/` should happen only when:
+
+- the app is declared source-available and modifiable
+- the user or an authorized agent explicitly creates a workspace-local fork
+- the app was born as a workspace-local project
+
+Workspace app bindings and workspace-local projects are different concepts.
+
+The binding says the workspace can use an app capability.
+
+The workspace-local project says the workspace owns editable app source material.
+
+## Distribution Mutability
+
+An app contract should declare its distribution and mutability expectations.
+
+The recommended distribution modes are:
+
+- `sealed`
+- `source_available`
+- `workspace_local`
+
+`sealed` apps are installed as non-editable artifacts.
+
+They may expose frontend, backend, MCP, CLI, and skills surfaces, but workspace agents must not modify their app source.
+
+This is the correct mode for commercial closed-source apps, signed vendor bundles, and apps distributed only as runtime artifacts.
+
+`source_available` apps are distributed by the server app store with source material available for inspection or forking.
+
+They can still run from the installation-level artifact while remaining centrally governed.
+
+If a workspace needs to customize the app, the core should create a workspace-local fork under `workspaces/<workspace_id>/apps/<app_id>/`.
+
+`workspace_local` apps originate inside a workspace and are editable workspace material.
+
+They may later be promoted into an installation-level distribution channel, but that promotion is an explicit packaging step, not an implicit side effect of local development.
+
+The app contract should also make clear whether agents may modify the app source.
+
+For example:
+
+```json
+"distribution": {
+  "mode": "source_available",
+  "source_access": "forkable",
+  "modifiable_by_agents": true
+}
+```
+
+For a sealed commercial app:
+
+```json
+"distribution": {
+  "mode": "sealed",
+  "source_access": "none",
+  "modifiable_by_agents": false
+}
+```
+
+The core should enforce this at install, fork, upgrade, and workspace execution boundaries.
 
 ## Canonical Contract File
 
@@ -65,7 +157,7 @@ Examples:
 
 ```text
 /apps/checklists/app_contract.json
-/apps/_bundles/vendor-reporting/app_contract.json
+/apps/vendor-reporting/app_contract.json
 /workspaces/acme/apps/notes/app_contract.json
 ```
 
@@ -465,6 +557,74 @@ and for the backend declaration to identify either:
 The important rule is not the packaging style.
 
 The important rule is that the mount contract is explicit and comes from the app contract.
+
+### Frontend distribution artifacts
+
+For apps that ship a frontend, the contract should distinguish between source and served artifact when that distinction matters.
+
+Simple apps may point `entrypoints.frontend` directly at a static asset root.
+
+Buildable apps such as React/Vite apps should declare the production build output as the mounted surface.
+
+The source root may remain available for development, fork, audit, or agent customization only when the distribution mode allows it.
+
+Recommended production shape:
+
+```text
+apps/<app_id>/
+  app_contract.json
+  frontend/
+    src/
+    dist/
+```
+
+In that shape, the platform host should mount `frontend/dist/`, not the TypeScript source tree.
+
+The contract may start with a simple path:
+
+```json
+"entrypoints": {
+  "frontend": "frontend/dist"
+}
+```
+
+As the contract matures, frontend declarations may become structured:
+
+```json
+"entrypoints": {
+  "frontend": {
+    "kind": "static_build",
+    "source": "frontend",
+    "mount": "frontend/dist",
+    "spa_fallback": true
+  }
+}
+```
+
+The core must remain frontend-framework agnostic.
+
+It should not know whether a build artifact came from React, Vue, Svelte, static HTML, or another frontend stack.
+
+It should only know how to mount the declared frontend artifact.
+
+### Backend distribution artifacts
+
+Backend surfaces should follow the same principle.
+
+The app contract declares the backend surface, but the core should not depend on the app's internal framework.
+
+Examples of backend surface kinds that may be supported over time:
+
+- local subprocess JSON entrypoint
+- subprocess HTTP service
+- packaged local service
+- remote backend reference governed by platform policy
+
+For the first implementation wave, app-owned backend entrypoints may remain local and platform-managed.
+
+Sealed apps may provide only packaged backend artifacts.
+
+Source-available or workspace-local apps may provide editable backend source that is built or launched according to a declared backend contract.
 
 ## Real Example: Base Shell And Chat
 

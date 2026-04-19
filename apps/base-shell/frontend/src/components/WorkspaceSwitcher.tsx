@@ -1,4 +1,5 @@
 import { createWorkspace, switchWorkspace, WorkspaceItem } from "../api";
+import { ShellIcon } from "./ShellIcon";
 
 export function WorkspaceSwitcher({
   activeWorkspaceId,
@@ -40,7 +41,7 @@ export function WorkspaceSwitcher({
           ))}
         </select>
         <button aria-label="Crea workspace" className="bs-workspace-switcher__create" onClick={handleCreate} type="button">
-          +
+          <ShellIcon name="plus" />
         </button>
       </div>
     </div>

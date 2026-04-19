@@ -2,6 +2,7 @@ import { AppRegistryItem, SessionUser, WorkspaceItem } from "../api";
 import { pinnedApps } from "../navigation";
 import { AppLogo } from "./AppLogo";
 import { BrandMark } from "./BrandMark";
+import { ShellIcon } from "./ShellIcon";
 import { WidgetSlot } from "./WidgetSlot";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
@@ -46,7 +47,7 @@ export function Sidebar({
           </div>
         </div>
         <button aria-label="Chiudi pannello laterale" className="bs-panel-minimize" onClick={onClose} type="button">
-          <span aria-hidden="true">‹</span>
+          <ShellIcon name="chevron-left" />
         </button>
       </div>
 
@@ -71,7 +72,9 @@ export function Sidebar({
 
         <button className={`bs-sidebar__nav-button ${activeAppId === null ? "is-active" : ""}`} onClick={onOpenApps} type="button">
           <span className="bs-sidebar__nav-leading">
-            <span className="bs-sidebar__nav-icon">⌘</span>
+            <span className="bs-sidebar__nav-icon">
+              <ShellIcon name="apps" />
+            </span>
             <span className="bs-sidebar__nav-copy">
               <span className="bs-sidebar__nav-title">Apps</span>
             </span>
@@ -90,7 +93,9 @@ export function Sidebar({
       <div className="bs-sidebar__footer">
         <button className="bs-sidebar__nav-button" onClick={onOpenTutorial} type="button">
           <span className="bs-sidebar__nav-leading">
-            <span className="bs-sidebar__nav-icon">?</span>
+            <span className="bs-sidebar__nav-icon">
+              <ShellIcon name="help" />
+            </span>
             <span className="bs-sidebar__nav-copy">
               <span className="bs-sidebar__nav-title">Tutorial</span>
             </span>
@@ -98,7 +103,9 @@ export function Sidebar({
         </button>
         <button className="bs-sidebar__nav-button" onClick={onOpenSettings} type="button">
           <span className="bs-sidebar__nav-leading">
-            <span className="bs-sidebar__nav-icon">⚙</span>
+            <span className="bs-sidebar__nav-icon">
+              <ShellIcon name="settings" />
+            </span>
             <span className="bs-sidebar__nav-copy">
               <span className="bs-sidebar__nav-title">Settings</span>
             </span>

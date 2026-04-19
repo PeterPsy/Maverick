@@ -426,7 +426,88 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] each app may expose `frontend/`, `backend/`, `mcp/`, `cli/`, and `skills/`
   - [x] the product shell is also an app, not part of the core
 - [x] Implement `chat` as an app on top of core runtime interfaces
-- [x] Implement `base-shell` as the minimal mounted frontend shell app
+- [x] Implement `base-shell` as the first mounted frontend shell smoke app
+- [ ] Port `base-shell` to the Maverick v2 `base_shell` frontend approach, adapted cleanly to v3:
+  - [ ] Treat `/home/ubuntu/maverick-v2/apps/base_shell` as the behavioral and visual reference, not as code to copy blindly
+  - [ ] Preserve the v3 app identity as `base-shell` and keep the v3 contract format in `app_contract.json`
+  - [ ] Replace the static `frontend/index.html`, `frontend/shell.js`, and monolithic `frontend/styles.css` approach with an app-owned React/TypeScript frontend
+  - [ ] Add an app-local frontend build setup for `base-shell`:
+    - [ ] `package.json`
+    - [ ] `tsconfig.json`
+    - [ ] `vite.config.ts`
+    - [ ] frontend source root
+    - [ ] frontend build output root
+  - [ ] Decide and document the canonical frontend mount target for buildable apps:
+    - [ ] whether contracts point to source root, build output root, or both
+    - [ ] how the platform host serves SPA assets and fallback routes
+    - [ ] how development builds differ from production builds
+  - [ ] Port the v2 shell runtime approach:
+    - [ ] root React shell entrypoint
+    - [ ] runtime loading/error boundary
+    - [ ] app registry loading
+    - [ ] app panel mounting
+    - [ ] mobile layout behavior
+    - [ ] local session persistence
+  - [ ] Port or adapt v2 shell components into small v3-owned files:
+    - [ ] `AppShell`
+    - [ ] `Sidebar`
+    - [ ] `TopBar`
+    - [ ] `AppsPanel`
+    - [ ] `WorkspaceView`
+    - [ ] shared UI primitives
+    - [ ] app logo/brand primitives
+  - [ ] Port or adapt v2 frontend helpers only where they match v3:
+    - [ ] API request wrapper using v3 `/api`
+    - [ ] app/session persistence helpers
+    - [ ] workspace selection helpers where still applicable
+    - [ ] mobile layout hook
+    - [ ] app navigation helpers based on v3 registry records
+  - [ ] Rewrite v2-only API types and calls for the v3 core host:
+    - [ ] remove dependency on v2 auth endpoints until v3 auth is exposed publicly
+    - [ ] remove dependency on v2 agent/workspace management endpoints until those app surfaces exist
+    - [ ] consume `/api/apps` as the initial app registry source
+    - [ ] consume `/api/status` for platform status where useful
+  - [ ] Keep the shell composition app-owned:
+    - [ ] `base-shell` discovers enabled app frontends from the core registry
+    - [ ] `base-shell` frames or mounts app frontend routes exposed by the core
+    - [ ] core remains responsible for installation, enablement, routes, and policy
+    - [ ] no shell-specific behavior is moved into core
+  - [ ] Remove placeholder pinned apps that are not actually installed or mark them explicitly unavailable
+  - [ ] Fix `New chat` so it opens the installed `chat` app from the registry rather than searching hardcoded sidebar text
+  - [ ] Split styling into focused files instead of a single monolithic stylesheet:
+    - [ ] base tokens
+    - [ ] layout
+    - [ ] sidebar
+    - [ ] app panels
+    - [ ] responsive rules
+    - [ ] UI primitives
+  - [ ] Optimize or replace oversized static assets such as the current 2000x2000 logo
+  - [ ] Update the core platform host if needed:
+    - [ ] serve build output assets for app frontends
+    - [ ] support SPA fallback for mounted app frontends
+    - [ ] keep root `/` mapped to the mounted `base-shell` frontend
+  - [ ] Update documentation:
+    - [ ] document buildable app frontends in `docs/architecture/app_contract_architecture.md`
+    - [ ] document root shell as an app-owned React frontend in `docs/architecture/core_architecture.md`
+    - [ ] document what was intentionally not ported yet from v2 because the v3 domain is not ready
+  - [ ] Add focused tests:
+    - [ ] `base-shell` contract validates under the v3 parser
+    - [ ] frontend build output is mounted by the platform host
+    - [ ] `/` serves the shell
+    - [ ] `/api/apps` exposes mountable app records for the shell
+    - [ ] shell app registry logic handles missing optional apps without fake installed state
+    - [ ] chat app can be opened through the shell registry model
+  - [ ] Run verification:
+    - [ ] base-shell frontend build
+    - [ ] relevant frontend tests if introduced
+    - [ ] `python3 -m unittest discover -s tests -p 'test_*.py'`
+    - [ ] `python3 -m compileall core tests apps`
+    - [ ] live smoke check on `https://maverick3.versy.ai/`
+  - [ ] Restart and verify hosted services after deployment:
+    - [ ] `maverick3-core.service`
+    - [ ] `maverick3-rescue.service` if touched
+    - [ ] `nginx` config unchanged or reloaded if changed
+  - [ ] Commit and push the completed porting checkpoint
 - [ ] Implement `agents` as an app on top of core runtime/provider system
 - [x] Decide whether `memory` is in the first wave or the second wave
   - [x] second wave
@@ -452,7 +533,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
 - [ ] Core can switch runtime backend via provider abstraction
 - [x] Chat app works on top of core runtime interfaces
 - [x] Hosted v3 is reachable at `maverick3.versy.ai`
-- [x] Base shell app mounts chat frontend through the core host
+- [x] Base shell app discovers and mounts enabled app frontends through the core host
 - [ ] Export/import works for one workspace without legacy assumptions
 
 ## Phase 8: Inter-Agent Communication

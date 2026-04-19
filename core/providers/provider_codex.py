@@ -199,11 +199,10 @@ class CodexProviderAdapter:
         env["MAVERICK_WORKSPACE_ROOT"] = str(workspace_root)
         env["MAVERICK_RUNTIME_ROOT"] = str(runtime_root)
         if execution_mode == "sandbox":
-            sandbox_tmpdir = runtime_root / ".tmp" / "codex-sandbox"
-            sandbox_tmpdir.mkdir(parents=True, exist_ok=True)
-            env["TMPDIR"] = str(sandbox_tmpdir)
-            env["TMP"] = str(sandbox_tmpdir)
-            env["TEMP"] = str(sandbox_tmpdir)
+            runtime_root.mkdir(parents=True, exist_ok=True)
+            env["TMPDIR"] = str(runtime_root)
+            env["TMP"] = str(runtime_root)
+            env["TEMP"] = str(runtime_root)
         return env
 
     def _runtime_home(self, session: RuntimeSessionRecord) -> Path:
@@ -212,5 +211,4 @@ class CodexProviderAdapter:
     def _writable_roots(self, *, workspace_root: Path, runtime_root: Path, execution_mode: str) -> list[str]:
         if execution_mode == "full-access":
             return ["/"]
-        sandbox_tmpdir = runtime_root / ".tmp" / "codex-sandbox"
-        return [str(workspace_root), str(sandbox_tmpdir)]
+        return [str(workspace_root)]

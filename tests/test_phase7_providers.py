@@ -219,10 +219,11 @@ class Phase7ProvidersTestCase(unittest.TestCase):
         self.assertEqual(launch_spec.provider_id, "codex")
         self.assertEqual(launch_spec.command[:4], ["/bin/echo", "--enable", "use_legacy_landlock", "app-server"])
         self.assertEqual(launch_spec.execution_mode, "sandbox")
-        self.assertEqual(launch_spec.working_directory, str(repo_root / "workspaces" / "acme" / "runtime" / "working"))
-        self.assertIn(str(repo_root / "workspaces" / "acme"), launch_spec.writable_roots)
+        self.assertEqual(launch_spec.working_directory, str(repo_root / "workspaces" / "acme"))
+        self.assertEqual(launch_spec.writable_roots, [str(repo_root / "workspaces" / "acme")])
         self.assertIn("CODEX_HOME", launch_spec.env_overrides)
         self.assertEqual(launch_spec.env_overrides["MAVERICK_WORKSPACE_ROOT"], str(repo_root / "workspaces" / "acme"))
+        self.assertEqual(launch_spec.env_overrides["TMPDIR"], str(repo_root / "workspaces" / "acme" / "runtime"))
         self.assertTrue((Path(launch_spec.env_overrides["CODEX_HOME"])).is_dir())
 
     def test_disable_binding_preserves_record_but_makes_it_inactive(self) -> None:

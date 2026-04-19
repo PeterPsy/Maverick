@@ -96,7 +96,7 @@ class Phase6RuntimeTestCase(unittest.TestCase):
         self.assertEqual(session.agent_id, "agent-1")
         self.assertEqual(session.effective_mode, "sandbox")
         self.assertEqual(Path(session.workspace_root), repo_root / "workspaces" / "acme")
-        self.assertEqual(Path(session.workdir), repo_root / "workspaces" / "acme" / "runtime" / "working")
+        self.assertEqual(Path(session.workdir), repo_root / "workspaces" / "acme")
         self.assertEqual(Path(session.runtime_root), repo_root / "workspaces" / "acme" / "runtime")
         self.assertEqual(session.system_prompt, "You are a focused test agent.")
         self.assertEqual(session.skill_ids, ["app.agents.agents-ops"])

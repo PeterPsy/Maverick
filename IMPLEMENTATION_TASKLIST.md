@@ -260,6 +260,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] ensure child runtime sessions inherit the same workspace boundary unless a trusted control-plane action says otherwise
 - [x] Implement `sandbox` execution mode
   - [x] make the workspace root the writable runtime perimeter
+  - [x] launch workspace runtime providers from the workspace root instead of a runtime-only working directory
   - [x] keep `runtime/` ephemeral and separate from `storage/` and `data/`
 - [x] Implement `full-access` execution mode
   - [x] keep it operator-only and policy-gated

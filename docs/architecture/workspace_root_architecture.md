@@ -176,18 +176,20 @@ At installation level, Maverick should have:
 
 The workspace root remains the writable tenant boundary for sandboxed agents.
 
-Within that boundary, the runtime may still choose a more specific process working directory such as:
+Runtime-owned temporary state remains inside:
 
 ```text
-/workspaces/<workspace_id>/runtime/working/
+/workspaces/<workspace_id>/runtime/
 ```
 
-This working directory is an operational convenience, not a reduction of the writable workspace perimeter.
+This runtime directory is for ephemeral provider state, logs, process metadata, and temporary files.
 
 So the distinction is:
 
 - `workspace_root` = the writable sandbox boundary for the workspace
-- `runtime/working/` = the initial process working directory for runtime execution
+- `runtime/` = runtime-local temporary and operational state, not the provider process cwd
+
+Provider processes that operate on workspace files should start in the workspace root.
 
 Notes:
 

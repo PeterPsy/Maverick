@@ -36,6 +36,7 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
             ignore=shutil.ignore_patterns("node_modules"),
         )
         shutil.copytree(source_apps_root / "chat", repo_root / "apps" / "chat")
+        shutil.copytree(source_apps_root / "agents", repo_root / "apps" / "agents", ignore=shutil.ignore_patterns("node_modules"))
         return repo_root
 
     def invoke(
@@ -90,10 +91,11 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
         bindings = state.app_store.list_workspace_app_bindings("default")
         versions = {binding.app_id: binding.active_version for binding in bindings}
 
-        self.assertEqual(sorted(binding.app_id for binding in bindings), ["base-shell", "chat"])
+        self.assertEqual(sorted(binding.app_id for binding in bindings), ["agents", "base-shell", "chat"])
         self.assertEqual(versions["base-shell"], "2.0.0")
         self.assertFalse((repo_root / "workspaces" / "default" / "apps" / "base-shell").exists())
         self.assertTrue((repo_root / "workspaces" / "default" / "data" / "chat" / "threads.json").is_file())
+        self.assertTrue((repo_root / "workspaces" / "default" / "data" / "agents" / "agent_types.json").is_file())
 
     def test_platform_host_mounts_root_shell_and_chat_frontend(self) -> None:
         repo_root = self.make_repo_root()
@@ -187,6 +189,8 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
         self.assertIn(b"/api/apps", script_body)
         self.assertIn(b"/api/status", script_body)
         self.assertIn(b"chat", script_body)
+        self.assertNotIn(b"bs-app-topbar", script_body)
+        self.assertNotIn(b"TopBar", script_body)
         self.assertNotIn(b"Gallery", script_body)
         self.assertNotIn(b"App Studio", script_body)
         self.assertNotIn(b"Checklists", script_body)
@@ -257,6 +261,50 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
         self.assertEqual(payload["items"][0]["frontend_mount"], "/api/apps/widgets/chat/chat-sidebar/frontend/")
         self.assertNotIn("source_root", payload["items"][0])
         self.assertNotIn("source_path", payload["items"][0])
+
+    def test_chat_sidebar_backend_supports_project_and_thread_settings(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+
+        status_project, project_body, _ = self.invoke(
+            app,
+            path="/api/apps/chat/backend",
+            method="POST",
+            body={"action": "projects.create", "name": "Client work"},
+        )
+        project_payload = json.loads(project_body.decode("utf-8"))
+        project_id = project_payload["project"]["project_id"]
+        status_thread, thread_body, _ = self.invoke(
+            app,
+            path="/api/apps/chat/backend",
+            method="POST",
+            body={"action": "threads.create", "project_id": project_id},
+        )
+        thread_payload = json.loads(thread_body.decode("utf-8"))
+        thread_id = thread_payload["thread"]["thread_id"]
+        status_rename, rename_body, _ = self.invoke(
+            app,
+            path="/api/apps/chat/backend",
+            method="POST",
+            body={"action": "threads.update", "thread_id": thread_id, "title": "Audit plan", "project_id": ""},
+        )
+        rename_payload = json.loads(rename_body.decode("utf-8"))
+        status_delete, delete_body, _ = self.invoke(
+            app,
+            path="/api/apps/chat/backend",
+            method="POST",
+            body={"action": "threads.delete", "thread_id": thread_id},
+        )
+        delete_payload = json.loads(delete_body.decode("utf-8"))
+
+        self.assertEqual(status_project, 201)
+        self.assertEqual(status_thread, 201)
+        self.assertEqual(status_rename, 200)
+        self.assertEqual(status_delete, 200)
+        self.assertEqual(rename_payload["thread"]["title"], "Audit plan")
+        self.assertIsNone(rename_payload["thread"]["project_id"])
+        self.assertEqual(delete_payload["threads"], [])
 
 
 if __name__ == "__main__":

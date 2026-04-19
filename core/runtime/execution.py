@@ -52,6 +52,9 @@ def _runtime_env(command_path: str) -> dict[str, str]:
 
 def _codex_command(session: RuntimeSessionRecord, input_text: str, *, output_path: Path) -> list[str]:
     executable = _codex_executable()
+    runtime_input = input_text
+    if session.system_prompt:
+        runtime_input = f"{session.system_prompt.strip()}\n\nUser task:\n{input_text}"
     command = [
         executable,
         "exec",
@@ -66,7 +69,7 @@ def _codex_command(session: RuntimeSessionRecord, input_text: str, *, output_pat
         command.append("--dangerously-bypass-approvals-and-sandbox")
     else:
         command.append("--full-auto")
-    command.append(input_text)
+    command.append(runtime_input)
     return command
 
 

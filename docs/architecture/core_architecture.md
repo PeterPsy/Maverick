@@ -226,6 +226,13 @@ This includes:
 - execution state transitions
 - orchestration of tool execution
 - process lifecycle
+- runtime sessions that can carry an app-provided materialized `system_prompt`
+- runtime sessions that can carry selected `skill_ids`
+- runtime sessions that can identify the app surface that created them with `source_app_id`
+
+These fields are generic runtime configuration. They are not an Agents app dependency.
+
+An app such as `agents` may compose prompt text and pass it to the runtime session creation surface, but the core must not parse app-owned role files or know agent type semantics.
 
 The core does not define workspace-specific agent personas as built-in runtime types.
 
@@ -297,6 +304,7 @@ The core owns:
 The core exposes the generic runtime-facing interface for:
 
 - sending an agent message
+- accepting a client-generated message id for idempotent UI reconciliation
 - reading current turn state
 - receiving turn updates
 - receiving runtime events
@@ -500,7 +508,32 @@ The intended first shape is:
 - `chat` owns a `chat-sidebar` widget compatible with that slot
 - the widget may visually match the Maverick v2 sidebar exactly
 - the widget stores and mutates chat state only through chat-owned backend surfaces
-- `base-shell` may react to a generic browser message asking it to open an app, but it must not import chat code or call chat-private internals
+- `base-shell` keeps the iframe-mounted widget alive while the sidebar is hidden, so opening and closing the menu does not reload app-owned widget state
+- `base-shell` may react to a generic browser message asking it to open an app with scalar navigation params, but it must not import chat code or call chat-private internals
+- `base-shell` keeps mounted app iframe documents alive after first open and sends app navigation through a generic `postMessage` protocol instead of rebuilding iframe URLs for every internal app route
+- `chat` owns project/thread settings panels, rename/move/delete actions, and "new chat" behavior through its own backend
+
+Mounted app navigation is intentionally message-driven.
+
+The shell may activate an app frame and send:
+
+```json
+{
+  "type": "maverick.app.navigate",
+  "app_id": "chat",
+  "params": {
+    "thread_id": "thread_123"
+  }
+}
+```
+
+The shell must not append chat-specific query strings such as `thread_id` to the mounted iframe URL after the app is loaded.
+
+This keeps iframe identity stable, prevents full app reloads during sidebar navigation, and preserves app-owned in-memory state.
+
+The receiving app owns the meaning of the scalar params.
+
+The core and shell only provide the generic delivery mechanism.
 
 ### Current Product Assumptions To Remove
 
@@ -805,6 +838,12 @@ Examples:
 Runtime events should be modeled independently from websocket framing or any other transport protocol.
 
 The transport may carry runtime events, but it must not define the domain model.
+
+When a runtime turn is submitted with a client-generated message id, the core should carry that id through the queued-turn event payload.
+
+That id is not a chat-specific concept.
+
+It is a generic correlation value that lets mounted apps reconcile optimistic UI state with authoritative runtime events without duplicating user messages.
 
 #### Runtime process
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from threading import Thread
 from uuid import uuid4
 
 from core.api.http import StartResponse, json_response, read_json_body, status_line
@@ -50,6 +51,9 @@ def _create_session(state: PlatformState, context: RequestSession, body: dict, *
         workspace_id=context.workspace_id,
         agent_id=str(body.get("agent_id") or "chat"),
         requested_mode=body.get("requested_mode"),
+        system_prompt=str(body.get("system_prompt") or "").strip() or None,
+        skill_ids=body.get("skill_ids") if isinstance(body.get("skill_ids"), list) else [],
+        source_app_id=str(body.get("source_app_id") or "").strip() or None,
         governance=state.workspace_store.get_governance(context.workspace_id),
         platform_allows_full_access=context.workspace_id == "default",
         start_path=start_path,
@@ -64,10 +68,22 @@ def _create_session(state: PlatformState, context: RequestSession, body: dict, *
     )
 
 
-def _run_turn(state: PlatformState, *, session: RuntimeSessionRecord, input_text: str) -> tuple[RuntimeTurnRecord, list[RuntimeEventRecord]]:
+def _run_turn(
+    state: PlatformState,
+    *,
+    session: RuntimeSessionRecord,
+    input_text: str,
+    client_message_id: str | None = None,
+    attachments: list[dict[str, object]] | None = None,
+) -> tuple[RuntimeTurnRecord, list[RuntimeEventRecord]]:
     provider, _selection = resolve_provider_for_runtime_session(state.provider_store, session=session)
     turn = queue_runtime_turn(state.runtime_store, turn_id=str(uuid4()), session_id=session.session_id, input_text=input_text)
     events: list[RuntimeEventRecord] = []
+    turn_payload = {"input_text": input_text, "provider_id": provider.provider_id}
+    if client_message_id:
+        turn_payload["client_message_id"] = client_message_id
+    if attachments:
+        turn_payload["attachments"] = attachments
     events.append(
         record_runtime_event(
             state.runtime_store,
@@ -76,7 +92,7 @@ def _run_turn(state: PlatformState, *, session: RuntimeSessionRecord, input_text
             turn_id=turn.turn_id,
             plane="turn",
             event_type="runtime.turn.queued",
-            payload={"input_text": input_text, "provider_id": provider.provider_id},
+            payload=turn_payload,
         )
     )
     turn = transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="active")
@@ -149,6 +165,99 @@ def _run_turn(state: PlatformState, *, session: RuntimeSessionRecord, input_text
     return turn, events
 
 
+def _run_turn_async(
+    state: PlatformState,
+    *,
+    session: RuntimeSessionRecord,
+    input_text: str,
+    client_message_id: str | None = None,
+    attachments: list[dict[str, object]] | None = None,
+) -> tuple[RuntimeTurnRecord, list[RuntimeEventRecord]]:
+    """Queue one runtime turn and execute it in a background worker."""
+    provider, _selection = resolve_provider_for_runtime_session(state.provider_store, session=session)
+    turn = queue_runtime_turn(state.runtime_store, turn_id=str(uuid4()), session_id=session.session_id, input_text=input_text)
+    payload = {"input_text": input_text, "provider_id": provider.provider_id}
+    if client_message_id:
+        payload["client_message_id"] = client_message_id
+    if attachments:
+        payload["attachments"] = attachments
+    queued_event = record_runtime_event(
+        state.runtime_store,
+        event_id=str(uuid4()),
+        session_id=session.session_id,
+        turn_id=turn.turn_id,
+        plane="turn",
+        event_type="runtime.turn.queued",
+        payload=payload,
+    )
+
+    def worker() -> None:
+        try:
+            current = state.runtime_store.get_turn(turn.turn_id)
+            if current.status == "cancelled":
+                return
+            active = transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="active")
+            record_runtime_event(
+                state.runtime_store,
+                event_id=str(uuid4()),
+                session_id=session.session_id,
+                turn_id=active.turn_id,
+                plane="turn",
+                event_type="runtime.turn.started",
+                payload={"provider_id": provider.provider_id},
+            )
+            result = execute_runtime_turn(session=session, provider=provider, input_text=input_text)
+            current = state.runtime_store.get_turn(turn.turn_id)
+            if current.status == "cancelled":
+                return
+            record_runtime_event(
+                state.runtime_store,
+                event_id=str(uuid4()),
+                session_id=session.session_id,
+                turn_id=turn.turn_id,
+                plane="turn",
+                event_type="runtime.output.final",
+                payload={"text": result.output_text, "provider_id": provider.provider_id, "exit_code": result.exit_code},
+            )
+            if result.exit_code == 0:
+                completed = transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="completed")
+                event_type = "runtime.turn.completed"
+            else:
+                completed = transition_runtime_turn(
+                    state.runtime_store,
+                    turn_id=turn.turn_id,
+                    target_status="failed",
+                    failure_reason=f"Provider exited with code {result.exit_code}.",
+                )
+                event_type = "runtime.turn.failed"
+            record_runtime_event(
+                state.runtime_store,
+                event_id=str(uuid4()),
+                session_id=session.session_id,
+                turn_id=completed.turn_id,
+                plane="turn",
+                event_type=event_type,
+                payload={"provider_id": provider.provider_id, "exit_code": result.exit_code},
+            )
+        except Exception as error:
+            current = state.runtime_store.get_turn(turn.turn_id)
+            if current.status in {"completed", "failed", "cancelled", "timed-out"}:
+                return
+            failed = transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="failed", failure_reason=str(error))
+            record_runtime_event(
+                state.runtime_store,
+                event_id=str(uuid4()),
+                session_id=session.session_id,
+                turn_id=failed.turn_id,
+                plane="turn",
+                event_type="runtime.turn.failed",
+                payload={"error": str(error), "provider_id": provider.provider_id},
+            )
+
+    Thread(target=worker, name=f"maverick-runtime-turn-{turn.turn_id}", daemon=True).start()
+    return turn, [queued_event]
+
+
 def _handle_session_collection(state: PlatformState, context: RequestSession, method: str, body: dict, start_response: StartResponse, *, start_path):
     if method == "GET":
         return json_response(start_response, {"items": _list_session_payloads(state, workspace_id=context.workspace_id)})
@@ -197,7 +306,27 @@ def _handle_session_turns(state: PlatformState, context: RequestSession, session
     input_text = str(body.get("input_text") or body.get("message") or "").strip()
     if not input_text:
         return json_response(start_response, {"error": "empty_runtime_input"}, status="400 Bad Request")
-    turn, events = _run_turn(state, session=session, input_text=input_text)
+    client_message_id = str(body.get("client_message_id") or "").strip() or None
+    attachments = body.get("attachments") if isinstance(body.get("attachments"), list) else []
+    async_requested = bool(body.get("async"))
+    if async_requested:
+        turn, events = _run_turn_async(
+            state,
+            session=session,
+            input_text=input_text,
+            client_message_id=client_message_id,
+            attachments=[item for item in attachments if isinstance(item, dict)],
+        )
+        status = "202 Accepted"
+    else:
+        turn, events = _run_turn(
+            state,
+            session=session,
+            input_text=input_text,
+            client_message_id=client_message_id,
+            attachments=[item for item in attachments if isinstance(item, dict)],
+        )
+        status = status_line(201)
     return json_response(
         start_response,
         {
@@ -205,7 +334,7 @@ def _handle_session_turns(state: PlatformState, context: RequestSession, session
             "turn": _turn_payload(turn),
             "events": [_event_payload(event) for event in events],
         },
-        status=status_line(201),
+        status=status,
     )
 
 

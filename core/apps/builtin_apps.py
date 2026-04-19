@@ -24,8 +24,13 @@ class BuiltinAppSpec:
 def discover_builtin_apps(*, start_path: Path | None = None) -> list[BuiltinAppSpec]:
     """Return the built-in apps shipped in the repository app root."""
     paths = installation_paths(start_path=start_path)
-    app_ids = ("base-shell", "chat")
-    return [BuiltinAppSpec(app_id=app_id, source_path=paths.apps_root / app_id) for app_id in app_ids]
+    if not paths.apps_root.is_dir():
+        return []
+    specs: list[BuiltinAppSpec] = []
+    for source_path in sorted(path for path in paths.apps_root.iterdir() if path.is_dir()):
+        if (source_path / "app_contract.json").is_file():
+            specs.append(BuiltinAppSpec(app_id=source_path.name, source_path=source_path))
+    return specs
 
 
 def register_and_install_builtin_apps(

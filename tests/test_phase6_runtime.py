@@ -85,6 +85,9 @@ class Phase6RuntimeTestCase(unittest.TestCase):
             session_id="sess-1",
             workspace_id="acme",
             agent_id="agent-1",
+            system_prompt="You are a focused test agent.",
+            skill_ids=["app.agents.agents-ops"],
+            source_app_id="agents",
             now=now,
             start_path=repo_root,
         )
@@ -95,6 +98,9 @@ class Phase6RuntimeTestCase(unittest.TestCase):
         self.assertEqual(Path(session.workspace_root), repo_root / "workspaces" / "acme")
         self.assertEqual(Path(session.workdir), repo_root / "workspaces" / "acme" / "runtime" / "working")
         self.assertEqual(Path(session.runtime_root), repo_root / "workspaces" / "acme" / "runtime")
+        self.assertEqual(session.system_prompt, "You are a focused test agent.")
+        self.assertEqual(session.skill_ids, ["app.agents.agents-ops"])
+        self.assertEqual(session.source_app_id, "agents")
         self.assertEqual(store.get_state("sess-1").session_status, "created")
 
     def test_runtime_turn_lifecycle_updates_runtime_state(self) -> None:

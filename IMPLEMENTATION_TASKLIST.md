@@ -472,6 +472,19 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] each app may expose `frontend/`, `backend/`, `mcp/`, `cli/`, and `skills/`
   - [x] the product shell is also an app, not part of the core
 - [x] Implement `chat` as an app on top of core runtime interfaces
+  - [x] Render assistant/provider messages with Markdown/GFM and sanitized HTML output
+  - [x] Preserve optimistic user messages while the provider runtime is working
+  - [x] Persist `client_message_id` through generic runtime queued events for deterministic optimistic reconciliation
+  - [x] Add local outgoing-message queue behavior in the chat frontend
+  - [x] Add local attachment picker state, preview, validation, paste, drag-and-drop, and non-destructive feature gating
+  - [x] Replace hardcoded provider-working text with active provider/runtime-derived labels
+  - [x] Consume generic runtime session metadata for execution-mode and runtime-status indicators
+  - [x] Add stop-turn UI wired to the generic runtime interrupt endpoint
+  - [x] Add transcript scroll containment and scroll-to-bottom behavior
+  - [x] Add focused chat frontend tests for attachment helpers and runtime-event transcript projection
+  - [ ] Implement async/streaming runtime turns so stop-turn can interrupt an active provider before the synchronous HTTP call completes
+  - [ ] Implement official attachment storage/sending through the owning v3 attachment surface
+  - [ ] Implement tool-call and structured-content rendering on top of stable generic runtime/widget events
 - [x] Implement `base-shell` as the first mounted frontend shell smoke app
 - [x] Create reusable local Codex skill `maverick-v3-app-creator` for rigorous v2-to-v3 app planning and app creation work
 - [x] Port `base-shell` to the Maverick v2 `base_shell` frontend approach, adapted cleanly to v3:
@@ -500,7 +513,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
     - [x] mobile layout behavior
     - [x] local session persistence
   - [x] Port the v2 UI/UX design as the visual reference without preserving v2 runtime coupling:
-    - [x] preserve the sidebar/topbar shell composition
+    - [x] preserve the sidebar shell composition without retaining a topbar in `base-shell`
     - [x] preserve the v2 visual language, spacing, panels, controls, and responsive behavior where still valid
     - [x] remove v2 API, auth, workspace, and runtime assumptions that are not available as v3 protocols
     - [x] connect only to v3 platform APIs and mounted app routes
@@ -509,7 +522,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/ui.tsx` -> port reusable UI primitives into focused v3 files, not one large primitive file
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/app-shell.tsx` -> port shell layout and interaction model into v3 `AppShell`, removing v2 auth/agent/workspace endpoint coupling
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/sidebar.tsx` -> port sidebar UX into v3 `Sidebar`, fed by `/api/apps` and v3 local session state
-    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/top-bar.tsx` -> port top bar UX into v3 `TopBar`, backed only by v3 status/app context for now
+    - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/top-bar.tsx` -> intentionally removed from v3 `base-shell`; provider/runtime metadata remains in generic settings surfaces
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/apps-panel.tsx` -> port app catalog/panel UX into v3 `AppsPanel`, using v3 app registry records
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/workspace-view.tsx` -> adapt into v3 app mount view; frame/open `/apps/<app_id>/` surfaces and avoid direct app internals
     - [x] `/home/ubuntu/maverick-v2/apps/base_shell/frontend/workspace-navigation.ts` -> rewrite around v3 app registry and `frontend_mount`; do not retain v2 workspace view contract
@@ -543,7 +556,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] Port or adapt v2 shell components into small v3-owned files:
     - [x] `AppShell`
     - [x] `Sidebar`
-    - [x] `TopBar`
+    - [x] remove `TopBar` and its CSS instead of leaving hidden legacy code
     - [x] `AppsPanel`
     - [x] `WorkspaceView`
     - [x] shared UI primitives
@@ -565,6 +578,8 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] Keep the shell composition app-owned:
     - [x] `base-shell` discovers enabled app frontends from the core registry
     - [x] `base-shell` frames or mounts app frontend routes exposed by the core
+    - [x] keep mounted app iframes persistent after first open
+    - [x] route app-internal navigation through generic `maverick.app.navigate` browser messages instead of iframe URL mutation
     - [x] core remains responsible for installation, enablement, routes, and policy
     - [x] no shell-specific behavior is moved into core
   - [x] Remove placeholder pinned apps that are not actually installed or mark them explicitly unavailable
@@ -614,10 +629,20 @@ without carrying forward legacy structure or backward-compatibility constraints 
     - [x] `nginx` config unchanged
   - [x] Commit and push the completed porting checkpoint
 - [ ] Remove remaining product assumptions from core/base-shell boundaries:
-  - [ ] replace hardcoded built-in app id list in core bootstrap with installation configuration or app-store metadata
+  - [x] replace hardcoded built-in app id list in core bootstrap with contract-driven built-in discovery
   - [ ] replace hardcoded root shell app id with configurable root-shell app selection
   - [ ] replace base-shell's hardcoded `chat` initial/pinned preference with registry/workspace preference metadata
-- [ ] Implement `agents` as an app on top of core runtime/provider system
+- [x] Implement `agents` as an app on top of core runtime/provider system
+  - [x] add `apps/agents/app_contract.json`
+  - [x] implement app-owned JSON and markdown data under `data/agents`
+  - [x] seed all 17 initial roles and one agent type per role
+  - [x] implement backend catalog, CRUD, common prompt, prompt preview, and instance metadata actions
+  - [x] implement `app.agents.maverick_agents_app` MCP surface
+  - [x] implement `app.agents.agents` CLI surface
+  - [x] implement `agents-ops` skill
+  - [x] implement a React/Vite management frontend
+  - [x] add generic runtime session prompt injection fields: `system_prompt`, `skill_ids`, and `source_app_id`
+  - [x] let the Agents frontend open a runtime session from the selected agent type and materialized prompt
 - [x] Decide whether `memory` is in the first wave or the second wave
   - [x] second wave
 - [x] For each built-in app, enforce:
@@ -687,6 +712,12 @@ without carrying forward legacy structure or backward-compatibility constraints 
     - [x] keep visual structure and CSS classes aligned with v2 `base_shell` sidebar
     - [x] mount the widget from `base-shell` through generic widget discovery, not a chat import
     - [x] use browser message handoff only for generic shell navigation such as opening the chat app
+    - [x] keep the sidebar widget mounted when the shell menu is hidden to avoid slow iframe reloads
+    - [x] open selected chat threads in the chat app view through generic app navigation params
+    - [x] open newly created chats in the chat app view
+    - [x] forward chat widget navigation to the persistent mounted chat app without remounting its iframe
+    - [x] add app-owned floating settings panels for projects and individual chats
+    - [x] support chat-owned rename, move, delete, and project creation actions through the chat backend
     - [x] add tests for contract declaration, widget registry discovery, and absence of source-path leakage
 
 ## Phase 14: Acceptance Criteria for First Usable v3

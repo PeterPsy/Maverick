@@ -167,6 +167,12 @@ The recommended canonical file is:
 <app_root>/app_contract.json
 ```
 
+Installation-level built-in app discovery should be contract-driven.
+
+The platform may scan the installation-level `/apps` directory for app roots that contain a valid `app_contract.json`. This keeps first-boot app registration independent from hardcoded app id lists while still requiring every executable app to pass the same contract validation.
+
+Discovering an app contract does not make the app's business data part of the core. It only makes the app source eligible for registration, installation, and workspace binding through generic app-hosting flows.
+
 Examples:
 
 ```text
@@ -607,7 +613,9 @@ The build source remains app-owned and must not introduce framework-specific ass
 
 The v2 `base_shell` UI/UX is the visual and interaction reference for the v3 `base-shell`.
 
-The port should preserve the shell experience, layout behavior, sidebar/topbar composition, workspace/app panels, and responsive behavior where those concepts are still valid.
+The port should preserve the shell experience, layout behavior, sidebar composition, workspace/app panels, and responsive behavior where those concepts are still valid.
+
+The v3 `base-shell` intentionally does not include a topbar. Provider, runtime, workspace, and status metadata must be exposed through generic settings or app-owned surfaces instead of leaving a hidden topbar component behind.
 
 The port must not preserve v2 runtime coupling, v2 API assumptions, v2 auth assumptions, or v2 manifest format.
 
@@ -628,6 +636,35 @@ The shell must derive app navigation from registry records such as `app_id`, `na
 The `base-shell` port may retain app-owned local preferences in the browser, such as pinned app ids and the last active app.
 
 Those preferences are shell UI state only. They are not core workspace records, app installation state, provider configuration, or app-owned backend data.
+
+Mounted app frontends should be treated as stable app documents after first open.
+
+The shell should not force internal app navigation by mutating iframe `src` with app-owned query parameters.
+
+Instead, host apps should keep the iframe mounted and send a generic browser message:
+
+```json
+{
+  "type": "maverick.app.navigate",
+  "app_id": "chat",
+  "params": {
+    "thread_id": "thread_123"
+  }
+}
+```
+
+Rules:
+
+- `type` identifies the generic host-to-app lifecycle message
+- `app_id` must match the target mounted app
+- `params` contains only explicit scalar navigation data
+- the host may know the target `app_id`, but must not know app-private storage or route internals
+- the receiving app owns interpretation of `params`
+- the receiving app must ignore messages from unexpected origins
+
+The initial iframe URL remains the registry-provided `frontend_mount`.
+
+This avoids unnecessary reloads, keeps app state alive, and preserves a clean core/app boundary.
 
 V2 shell panels that configured users, retrieval, notifications, backend restarts, or chat internals should not be copied into `base-shell`.
 
@@ -864,7 +901,10 @@ Instead:
 - `chat` declares a widget such as `chat-sidebar`
 - the widget frontend is served from the chat app's own `frontend/dist/widgets/chat-sidebar`
 - project, thread, rename, move, and creation actions go through the chat app backend
-- optional shell navigation uses browser messaging from the iframe to ask the host to open the `chat` app
+- project and thread settings panels are rendered by the chat widget, not by the shell
+- optional shell navigation uses browser messaging from the iframe to ask the host to open the `chat` app with explicit scalar params such as a thread id or a new-chat request
+- the shell forwards those scalar params to the mounted chat app through `maverick.app.navigate` without reloading the chat iframe
+- host apps should hide iframe widget slots without unmounting them when a temporary shell panel closes, unless a widget explicitly asks to be reset
 
 This preserves the v2 visual layout while moving ownership to the v3 app boundary:
 

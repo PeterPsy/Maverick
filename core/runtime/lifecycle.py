@@ -35,6 +35,9 @@ def create_runtime_session(
     workspace_id: str,
     agent_id: str,
     requested_mode: str | None = None,
+    system_prompt: str | None = None,
+    skill_ids: list[str] | None = None,
+    source_app_id: str | None = None,
     governance: WorkspaceGovernanceRecord | None = None,
     platform_allows_full_access: bool = False,
     now: datetime | None = None,
@@ -65,6 +68,9 @@ def create_runtime_session(
         updated_at=timestamp,
         ended_at=None,
         last_progress_at=None,
+        system_prompt=system_prompt.strip() if isinstance(system_prompt, str) and system_prompt.strip() else None,
+        skill_ids=[str(skill_id).strip() for skill_id in (skill_ids or []) if str(skill_id).strip()],
+        source_app_id=source_app_id.strip() if isinstance(source_app_id, str) and source_app_id.strip() else None,
     )
     state = RuntimeStateRecord(
         session_id=session_id,
@@ -146,6 +152,9 @@ def create_child_runtime_session(
         updated_at=timestamp,
         ended_at=None,
         last_progress_at=None,
+        system_prompt=parent.system_prompt,
+        skill_ids=list(parent.skill_ids),
+        source_app_id=parent.source_app_id,
     )
     state = RuntimeStateRecord(
         session_id=child_session_id,

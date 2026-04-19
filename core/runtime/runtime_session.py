@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal
 
@@ -29,3 +29,6 @@ class RuntimeSessionRecord:
     updated_at: datetime
     ended_at: datetime | None
     last_progress_at: datetime | None
+    system_prompt: str | None = None
+    skill_ids: list[str] = field(default_factory=list)
+    source_app_id: str | None = None

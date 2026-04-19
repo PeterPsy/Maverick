@@ -33,6 +33,7 @@ class ShellCoreApiTestCase(unittest.TestCase):
             ignore=shutil.ignore_patterns("node_modules"),
         )
         shutil.copytree(source_apps_root / "chat", repo_root / "apps" / "chat")
+        shutil.copytree(source_apps_root / "agents", repo_root / "apps" / "agents", ignore=shutil.ignore_patterns("node_modules"))
         return repo_root
 
     def invoke(
@@ -116,7 +117,7 @@ class ShellCoreApiTestCase(unittest.TestCase):
         self.assertEqual(workspaces["active_workspace_id"], "client-lab")
         self.assertEqual(status_status, 200)
         self.assertEqual(platform_status["workspace_id"], "client-lab")
-        self.assertEqual({item["app_id"] for item in platform_status["apps"]}, {"base-shell", "chat"})
+        self.assertEqual({item["app_id"] for item in platform_status["apps"]}, {"agents", "base-shell", "chat"})
 
     def test_provider_runtime_settings_and_recovery_surfaces_are_shell_visible(self) -> None:
         state = bootstrap_platform_state(start_path=self.make_repo_root())
@@ -156,7 +157,7 @@ class ShellCoreApiTestCase(unittest.TestCase):
                 app,
                 path=f"/api/runtime/sessions/{session['session_id']}/turns",
                 method="POST",
-                body={"input_text": "hello"},
+                body={"input_text": "hello", "client_message_id": "client-message-1"},
                 cookie=cookie,
             )
             status_events, events, _events_headers = self.invoke(
@@ -173,6 +174,7 @@ class ShellCoreApiTestCase(unittest.TestCase):
         event_types = [event["event_type"] for event in events["items"]]
         self.assertIn("runtime.turn.queued", event_types)
         self.assertIn("runtime.output.final", event_types)
+        self.assertEqual(turn_payload["events"][0]["payload"]["client_message_id"], "client-message-1")
         self.assertEqual(turn_payload["events"][2]["payload"]["text"], "hello from codex")
 
 

@@ -249,6 +249,15 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] attribute runtime events to `workspace_id`, runtime session, turn, and process when present
   - [x] distinguish runtime-domain events from websocket or transport framing
   - [x] persist local bootstrap runtime collections so chat thread history survives logout/login and host restarts
+- [x] Implement runtime WebSocket transport
+  - [x] expose `WS /ws/runtime/sessions/<session_id>` as the official realtime runtime stream
+  - [x] authenticate and authorize workspace/session access during the WebSocket handshake
+  - [x] stream persisted runtime events in order as they are recorded
+  - [x] support replay from a client-provided last seen event id after reconnect
+  - [x] send transport heartbeat or keepalive frames without persisting them as runtime events
+  - [x] deliver terminal turn events before closing or idling the stream
+  - [x] keep `GET /api/runtime/sessions/<session_id>/events` as HTTP replay and fallback, not as the primary active-turn UI transport
+  - [x] add core tests for handshake denial, ordered delivery, replay, heartbeat framing, and terminal delivery
 - [x] Implement runtime process abstraction
   - [x] define a local process handle model
   - [x] track stdin or stdout lifecycle, exit code, and crash or timeout outcomes
@@ -484,9 +493,13 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] Add stop-turn UI wired to the generic runtime interrupt endpoint
   - [x] Add transcript scroll containment and scroll-to-bottom behavior
   - [x] Add focused chat frontend tests for attachment helpers and runtime-event transcript projection
-  - [ ] Implement async/streaming runtime turns so stop-turn can interrupt an active provider before the synchronous HTTP call completes
-  - [ ] Implement official attachment storage/sending through the owning v3 attachment surface
-  - [ ] Implement tool-call and structured-content rendering on top of stable generic runtime/widget events
+  - [x] Implement async runtime turns so stop-turn can interrupt queued/active turns before the HTTP request blocks on provider completion
+  - [x] Normalize Codex JSONL progress into generic runtime step, tool-call, and output-delta events
+  - [x] Replace active-turn event polling with the core runtime WebSocket stream
+  - [x] Keep HTTP event replay as reconnect and bootstrap fallback in the chat runtime client
+  - [x] Add chat frontend tests for WebSocket event projection, reconnect replay, heartbeat ignore, and fallback replay
+  - [x] Implement official workspace upload storage and attachment metadata submission through a generic v3 core surface
+  - [x] Implement tool-call and structured-content rendering on top of stable generic runtime/widget events
 - [x] Implement `base-shell` as the first mounted frontend shell smoke app
 - [x] Create reusable local Codex skill `maverick-v3-app-porting` for rigorous legacy-to-v3 app porting work
 - [x] Create reusable local Codex skill `maverick-v3-app-creator` for clean-slate v3 app creation work
@@ -584,6 +597,8 @@ without carrying forward legacy structure or backward-compatibility constraints 
     - [x] `base-shell` frames or mounts app frontend routes exposed by the core
     - [x] keep mounted app iframes persistent after first open
     - [x] route app-internal navigation through generic `maverick.app.navigate` browser messages instead of iframe URL mutation
+    - [x] support app-open navigation with scalar params such as Chat `runtime_session_id`, while the target app owns any app-data creation
+    - [x] support generic app data invalidation from mounted apps to same-owner widgets without shell-owned app data logic
     - [x] core remains responsible for installation, enablement, routes, and policy
     - [x] no shell-specific behavior is moved into core
   - [x] Remove placeholder pinned apps that are not actually installed or mark them explicitly unavailable
@@ -634,17 +649,22 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] Commit and push the completed porting checkpoint
 - [ ] Remove remaining product assumptions from core/base-shell boundaries:
   - [x] replace hardcoded built-in app id list in core bootstrap with contract-driven built-in discovery
+  - [x] rebuild built-in app bindings for every active persisted workspace during local hosted bootstrap
   - [ ] replace hardcoded root shell app id with configurable root-shell app selection
-  - [ ] replace base-shell's hardcoded `chat` initial/pinned preference with registry/workspace preference metadata
+  - [x] move base-shell pinned app shortcuts into App Store-owned workspace state and a registry-mounted widget
+  - [ ] replace base-shell's hardcoded `chat` initial preference with registry/workspace preference metadata
 - [x] Implement `agents` as an app on top of core runtime/provider system
   - [x] add `apps/agents/app_contract.json`
   - [x] implement app-owned JSON and markdown data under `data/agents`
   - [x] seed all 17 initial roles and one agent type per role
-  - [x] implement backend catalog, CRUD, common prompt, prompt preview, and instance metadata actions
+  - [x] implement backend catalog, agent type CRUD, common prompt, and prompt preview actions
   - [x] implement `app.agents.maverick_agents_app` MCP surface
   - [x] implement `app.agents.agents` CLI surface
   - [x] implement `agents-ops` skill
   - [x] implement a React/Vite management frontend
+  - [x] align the Agents frontend with the dark base-shell/chat/app-store visual theme
+  - [x] let operators create and delete agent types directly from the Agents frontend
+  - [x] remove the separate agent instance flow in favor of direct `Use In Runtime`
   - [x] add generic runtime session prompt injection fields: `system_prompt`, `skill_ids`, and `source_app_id`
   - [x] let the Agents frontend open a runtime session from the selected agent type and materialized prompt
 - [x] Decide whether `memory` is in the first wave or the second wave
@@ -657,6 +677,25 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] main core `systemd` service
   - [x] independent `rescue` `systemd` service
   - [x] `nginx` routing for mounted app frontend/backend paths
+- [x] Implement App Store as a first-class Maverick app:
+  - [x] create `apps/app-store/app_contract.json`
+  - [x] implement app-owned frontend, backend, MCP, CLI, skill, and lifecycle hooks
+  - [x] persist app-owned state under `workspaces/<workspace_id>/data/app-store/`
+  - [x] expose authenticated core catalog and install APIs for the app to consume
+  - [x] download remote bundles, verify SHA-256, stage under `apps/_bundles/<app_id>/<version>/`, register `external_bundle` sources, and bind selected workspaces
+  - [x] show installed state for selected workspaces and expose authenticated uninstall through core binding removal
+  - [x] show catalog apps, installed apps, and workspace-local apps as separate App Store tabs
+  - [x] align App Store frontend with the dark base-shell/chat visual theme
+  - [x] split App Store UI into installed-app and store-catalog sections, with installed rows opening mounted apps through shell navigation
+  - [x] add focused contract, mount, auth, MCP/CLI, and remote install tests
+- [x] Implement Gallery as a first-class Maverick app:
+  - [x] create `apps/gallery/app_contract.json`
+  - [x] implement app-owned frontend, backend, MCP, CLI, skill, and lifecycle hooks
+  - [x] persist Gallery app state under `workspaces/<workspace_id>/data/gallery/`
+  - [x] derive file inventory from `storage/uploaded/` and `storage/generated/`
+  - [x] protect file preview reads with workspace-storage path validation
+  - [x] align Gallery frontend with the dark base-shell/chat/app-store visual theme
+  - [x] add focused contract, mount, backend, MCP/CLI, and path validation tests
 - [ ] Define and implement registry-driven widget mounting:
   - [x] document widget ownership and embedding model in architecture docs
   - [x] Define widget contract model:
@@ -703,11 +742,11 @@ without carrying forward legacy structure or backward-compatibility constraints 
     - [x] record widget mount success/failure
     - [x] record policy denials without logging full structured payloads
   - [ ] Update chat structured message rendering after core support exists:
-    - [ ] remove v2 compile-time widget import model
-    - [ ] render generic fallback when no widget is available
-    - [ ] call widget registry with `host=chat` and structured content kind
-    - [ ] embed matching widgets through iframe-mounted widget routes
-    - [ ] send only explicit widget context
+    - [x] remove v2 compile-time widget import model
+    - [x] render generic fallback when no widget is available
+    - [x] call widget registry with `host=chat` and structured content kind
+    - [x] embed matching widgets through iframe-mounted widget routes
+    - [x] send only explicit widget context
     - [ ] route widget mutations to the widget owner's backend/MCP/CLI surfaces
   - [x] Implement chat-owned sidebar widget for `base-shell`:
     - [x] declare `chat-sidebar` in `apps/chat/app_contract.json`
@@ -721,25 +760,39 @@ without carrying forward legacy structure or backward-compatibility constraints 
     - [x] open newly created chats in the chat app view
     - [x] forward chat widget navigation to the persistent mounted chat app without remounting its iframe
     - [x] resend pending app navigation after mounted app `maverick.app.ready` acknowledgement so chat selection survives logout/login cold mounts
+    - [x] remount the chat sidebar widget when the active workspace changes so thread lists cannot leak across workspace context
+    - [x] refresh the chat sidebar widget after Chat creates a thread from an external runtime session
     - [x] add app-owned floating settings panels for projects and individual chats
     - [x] support chat-owned rename, move, delete, and project creation actions through the chat backend
     - [x] add tests for contract declaration, widget registry discovery, and absence of source-path leakage
+  - [x] Implement App Store-owned sidebar shortcut widget for `base-shell`:
+    - [x] declare `app-shortcuts` in `apps/app-store/app_contract.json`
+    - [x] use `host=base-shell` and `content_kind=shell.sidebar.apps`
+    - [x] store pinned app ids under `workspaces/<workspace_id>/data/app-store/state.json`
+    - [x] remove base-shell local pinned app session state and hardcoded pinned buttons
+    - [x] keep the fixed `Apps` button as shell navigation to App Store
+    - [x] add tests for widget declaration, widget registry discovery, widget mount, and App Store-owned pin actions
 
 ## Phase 14: Acceptance Criteria for First Usable v3
 
 - [ ] Fresh install creates `default` workspace correctly
 - [ ] New non-default workspace can be created
 - [x] Core exposes admin-only user CRUD and workspace assignment APIs
+- [x] Core exposes admin-only workspace app installation and enablement APIs
 - [x] Core enforces admin-only access for identity and workspace membership management
+- [x] Disabled installed workspace apps are hidden from `/api/apps` and denied by app mount routes
 - [x] App contract visibility can hide and deny app mounts by platform role
 - [x] User Admin is installed as a sealed Maverick app for admin-only identity/workspace access management
+- [x] User Admin can manage workspace app installed/enabled state through generic core APIs
+- [x] User Admin frontend uses the same dark visual language as the shell and first-wave apps
 - [x] Local hosted bootstrap persists identity and workspace control-plane state under `.maverick/local-state/`
 - [x] Persisted non-default workspaces receive built-in app bindings again after host restart
 - [ ] Non-default workspace agent is sandboxed to workspace root
-- [ ] Default workspace agent can run `full-access`
+- [x] Default workspace agent can run `full-access`
 - [ ] External app can be installed into one workspace only
+- [x] App Store is installed as a Maverick app and can install a remote app into selected authorized workspaces
 - [ ] Workspace-local app can be created, installed, enabled, disabled, uninstalled
-- [ ] Core can route runtime turns
+- [x] Core can route runtime turns
 - [ ] Core can delegate between agents
 - [ ] Core can switch runtime backend via provider abstraction
 - [x] Chat app works on top of core runtime interfaces

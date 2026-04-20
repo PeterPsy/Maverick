@@ -70,6 +70,8 @@ It may contain:
 - open-source or source-available apps distributed through the server app store
 - versioned app bundles validated by the core
 
+The Maverick App Store itself is also an app. Its UI, backend, CLI, MCP, skills, and workspace-owned state live under `apps/app-store` and `workspaces/<workspace_id>/data/app-store/`. It may present the remote catalog, show whether catalog apps are already installed in selected workspaces, show workspace-local app projects for the selected workspace context, open installed app frontends through generic shell navigation, and collect install or uninstall choices, but it does not bypass platform boundaries: authenticated installation state reads, checksum verification, source registration, workspace binding, and uninstall binding removal remain generic core app-hosting operations.
+
 The workspace-level `workspaces/<workspace_id>/apps` directory is not the app store.
 
 It contains:
@@ -657,9 +659,11 @@ The v3 shell attaches only to v3 platform protocols such as:
 
 The shell must derive app navigation from registry records such as `app_id`, `name`, `description`, `views`, `frontend_mount`, `backend_mount`, and optional icon or logo metadata.
 
-The `base-shell` port may retain app-owned local preferences in the browser, such as pinned app ids and the last active app.
+The `base-shell` port may retain shell-owned local preferences in the browser, such as the last active app and sidebar state.
 
 Those preferences are shell UI state only. They are not core workspace records, app installation state, provider configuration, or app-owned backend data.
+
+Pinned app shortcuts are not shell-owned browser preferences. They are App Store app data, exposed through an App Store-owned sidebar widget that `base-shell` mounts through the generic widget registry.
 
 Mounted app frontends should be treated as stable app documents after first open.
 
@@ -767,6 +771,14 @@ The core remains responsible for:
 - publishing enabled widget metadata through the app registry
 - mounting or routing the widget surface according to workspace enablement
 - enforcing auth, workspace context, and install state before a widget can load
+
+Host apps may forward generic app data invalidation messages to widgets when the invalidation belongs to the widget owner.
+
+For example, if the chat app creates a thread in its own backend, it may emit `maverick.app.data-changed` with `owner_app_id: "chat"` and `resource: "threads"`.
+
+A shell-hosted chat sidebar widget may receive that as `maverick.widget.data-changed` and refresh through the chat app's own backend.
+
+This is not direct app-to-app communication: the shell only relays a generic invalidation event and does not read or write app data.
 
 The app that owns the widget remains responsible for:
 
@@ -941,6 +953,8 @@ Instead:
 - project and thread settings panels are rendered by the chat widget, not by the shell
 - optional shell navigation uses browser messaging from the iframe to ask the host to open the `chat` app with explicit scalar params such as a thread id or a new-chat request
 - the shell forwards those scalar params to the mounted chat app through `maverick.app.navigate` without reloading the chat iframe
+- shell-hosted widget slots must include the active workspace id in the signed widget context and remount the widget iframe when the active workspace changes
+- a widget must never keep showing app-owned data loaded under a previous workspace after the host has switched workspace context
 - host apps should hide iframe widget slots without unmounting them when a temporary shell panel closes, unless a widget explicitly asks to be reset
 
 This preserves the v2 visual layout while moving ownership to the v3 app boundary:

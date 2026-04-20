@@ -181,6 +181,8 @@ The installation-level `/apps` directory is the server-managed app store and tru
 
 It may contain built-in apps, commercial sealed apps, source-available store apps, and validated app bundles.
 
+Remote catalog ingestion is still a core app-hosting responsibility. The app-store UI may request installation or uninstall for selected workspaces, but the core must own the authenticated operation that downloads a remote bundle, verifies its checksum, stages it under `apps/_bundles/<app_id>/<version>/`, registers the source as an `external_bundle`, creates workspace bindings for the authorized target workspaces, reports current workspace installation state, reports workspace-local app projects for the selected workspace context, and removes bindings during uninstall without deleting app-owned data.
+
 The workspace-level `workspaces/<workspace_id>/apps/` directory is editable workspace material.
 
 It should contain only workspace-created apps and explicit workspace-local forks of store apps.
@@ -202,6 +204,7 @@ Implementation files in `core/apps/` should keep lifecycle responsibilities sepa
 Recommended split:
 
 - `registration.py` owns app source and workspace-local project registration
+- `remote_store.py` owns remote catalog bundle staging and authenticated install orchestration
 - `forks.py` owns workspace-local fork creation and provenance
 - `installation.py` owns initial store and workspace-local app installation
 - `status.py` owns enable, disable, uninstall, and purge transitions
@@ -277,6 +280,10 @@ The core owns:
 - workspace execution boundary enforcement
 
 The workspace domain may declare metadata and governance state, but the effective runtime mode must still be resolved by `execution_policy/`.
+
+For the `default` workspace, the effective runtime mode is `full-access` by default when both platform policy and workspace governance allow it.
+
+For non-default workspaces, the effective runtime mode remains sandbox-only regardless of runtime request.
 
 ### 8. Secret management
 
@@ -445,6 +452,7 @@ That means the system may include apps such as:
 - `base-shell`
 - `chat`
 - `agents`
+- `app-store`
 - `memory`
 
 The `base-shell` app may host the frontend of other apps, but it is still only an app mounted by the core.
@@ -471,6 +479,7 @@ The first shell-facing API slice is intentionally core-generic, not `base-shell`
 - `/api/admin/workspace-apps` exposes admin-only workspace app installation and enablement management
 - `/api/workspaces` and `/api/workspaces/active` expose workspace list, creation, and active workspace selection
 - `/api/apps` exposes enabled app registry records for the active workspace
+- `/api/app-store/apps`, `/api/app-store/installations`, `/api/app-store/install`, and `/api/app-store/uninstall` expose authenticated catalog reads, installation state, remote app installation, and workspace binding removal
 - `/api/status` exposes platform status for the active workspace
 - `/api/providers/active` and `/api/runtime/status` expose active runtime provider and runtime sessions
 - `/api/settings/platform` exposes read-only platform/workspace/provider/runtime/recovery metadata for settings UI
@@ -501,9 +510,13 @@ The shell may visually frame mounted app frontends, but it must not hardcode opt
 
 This keeps the product shell replaceable and prevents product UI concerns from leaking into the core.
 
+Local hosted bootstrap must rebuild enabled built-in app bindings for every active workspace in the workspace registry, not only for `default`. Workspace selection and `/api/apps` must remain consistent after a host restart because the workspace registry is durable control-plane state while the local app registry is reconstructed at process startup.
+
+Mounted app frontends may request generic shell navigation by posting an explicit app-open message to their parent frame. The shell may honor that request only by opening another app from the workspace app registry; the message is not a filesystem, backend, or privilege boundary.
+
 The completed v3 `base-shell` port intentionally carries only shell-owned behavior:
 
-- local browser session state such as active app, sidebar state, and pinned app ids
+- local browser session state such as active app and sidebar state
 - reusable shell UI primitives used by the app itself
 - registry-driven app catalog and mounted app iframe surfaces
 - login/session UI backed by core identity/session APIs
@@ -517,9 +530,14 @@ Project organization belongs to the chat app because projects are chat-domain st
 
 If the product shell needs to show chat projects or conversations in its sidebar, it must do so by mounting a chat-owned widget through the generic widget registry.
 
+If the product shell needs to show app shortcuts in its sidebar, it must do so by mounting an App Store-owned widget through the same generic widget registry.
+
+`base-shell` may keep a fixed `Apps` entry that opens the App Store, but it must not own or hardcode the shortcut list. Pinned app shortcut state belongs to `app-store` workspace data and is mutated through the App Store app's own backend surface.
+
 The intended first shape is:
 
 - `base-shell` owns a generic sidebar widget slot
+- `app-store` owns an `app-shortcuts` widget compatible with `shell.sidebar.apps`
 - `chat` owns a `chat-sidebar` widget compatible with that slot
 - the widget may visually match the Maverick v2 sidebar exactly
 - the widget stores and mutates chat state only through chat-owned backend surfaces
@@ -549,6 +567,41 @@ This keeps iframe identity stable, prevents full app reloads during sidebar navi
 The receiving app owns the meaning of the scalar params.
 
 The core and shell only provide the generic delivery mechanism.
+
+For example, the Agents app may create a generic core runtime session and ask the shell to open Chat with:
+
+```json
+{
+  "type": "maverick.app.open-app",
+  "app_id": "chat",
+  "params": {
+    "runtime_session_id": "runtime_session_123",
+    "agent_label": "Backend Systems Engineer",
+    "agent_type_id": "backend-systems-engineer",
+    "thread_title": "Backend Systems Engineer"
+  }
+}
+```
+
+The shell should only activate Chat and deliver the scalar params.
+
+Chat remains responsible for creating or reusing its own thread record for that runtime session because thread state is chat-owned app data.
+
+If that creates or changes app-owned data that is also represented by an embedded widget, the app may emit a generic invalidation message:
+
+```json
+{
+  "type": "maverick.app.data-changed",
+  "owner_app_id": "chat",
+  "resource": "threads"
+}
+```
+
+The shell may forward that invalidation to mounted widgets owned by the same app.
+
+The shell must not inspect, mutate, or reconstruct the app data.
+
+The receiving widget owns the refresh behavior.
 
 Mounted apps should also emit:
 
@@ -630,6 +683,12 @@ For the first hosted v3 wave, this means:
 - a minimal app set mounted by the core:
   - `base-shell`
   - `chat`
+
+The main core host should run through the ASGI platform host so HTTP and WebSocket traffic share the same `PlatformState` and persistence adapters.
+
+The WSGI host may remain useful for isolated local smoke checks, but it is not the production runtime host once WebSocket is part of the agent communication surface.
+
+`nginx` must forward `/ws/` with `Upgrade` and `Connection: upgrade` headers to the main core host.
 
 ## Target Core Tree
 
@@ -801,6 +860,35 @@ Owns:
 
 This package should be provider-agnostic.
 
+The HTTP runtime API is a host surface over this domain, not the domain itself.
+
+The ASGI platform host is the canonical interactive host because it serves both:
+
+- REST-style HTTP APIs used by apps and operators
+- WebSocket runtime streams used by apps that need realtime agent communication
+
+Current first-use endpoints include:
+
+- `POST /api/runtime/sessions`
+- `GET /api/runtime/sessions`
+- `GET /api/runtime/sessions/<session_id>`
+- `GET /api/runtime/sessions/<session_id>/events`
+- `GET /api/runtime/sessions/<session_id>/turns`
+- `POST /api/runtime/sessions/<session_id>/turns`
+- `GET /api/runtime/turns/<turn_id>`
+- `POST /api/runtime/turns/<turn_id>/interrupt`
+- `WS /ws/runtime/sessions/<session_id>`
+
+Turn submission is implemented through a dedicated runtime service so future CLI, MCP, WebSocket, or automation surfaces can reuse the same orchestration without embedding execution logic in HTTP route handlers.
+
+The runtime WebSocket endpoint is the official realtime transport for mounted apps and other interactive clients.
+
+The HTTP event endpoint remains useful for initial history loading, replay, diagnostics, and fallback clients, but it should not be the primary active-turn transport for the product chat experience.
+
+Apps that want realtime agent updates should connect to the WebSocket surface directly.
+
+They should not implement app-specific WebSocket routes for core runtime events.
+
 ### Runtime model decomposition
 
 The runtime domain should separate at least these concepts:
@@ -863,7 +951,7 @@ Examples:
 - runtime stalled
 - process exited
 
-Runtime events should be modeled independently from websocket framing or any other transport protocol.
+Runtime events should be modeled independently from WebSocket framing or any other transport protocol.
 
 The transport may carry runtime events, but it must not define the domain model.
 
@@ -872,6 +960,36 @@ When a runtime turn is submitted with a client-generated message id, the core sh
 That id is not a chat-specific concept.
 
 It is a generic correlation value that lets mounted apps reconcile optimistic UI state with authoritative runtime events without duplicating user messages.
+
+The queued-turn event may also carry runtime input attachment metadata.
+
+Attachment metadata is not file storage.
+
+The core file upload surface persists file bytes under workspace storage and returns stable metadata. Runtime turns should carry references such as `file_id`, `relative_path`, content type, size, and checksum, not inline file bytes.
+
+The first HTTP implementation supports async turn submission through an explicit request flag.
+
+In async mode:
+
+- the route queues the turn
+- the route returns immediately with `202 Accepted`
+- the provider execution runs in a background worker
+- ordered runtime events record start, step updates, tool calls, output deltas, final output, completion, failure, or cancellation
+
+Provider adapters may emit provider-specific raw output, but the runtime domain must normalize it before persistence.
+
+For Codex, the local provider runs `codex exec --json` and maps JSONL provider events into generic runtime events such as:
+
+- `runtime.step.updated`
+- `runtime.tool_call.started`
+- `runtime.tool_call.updated`
+- `runtime.tool_call.completed`
+- `runtime.tool_call.failed`
+- `runtime.output.delta`
+
+WebSocket delivery is the canonical realtime transport for active runtime turns.
+
+The runtime WebSocket stream should deliver the same persisted event records that `GET /api/runtime/sessions/<session_id>/events` returns.
 
 Runtime session, turn, event, process, and state records must survive auth logout/login cycles and local host restarts.
 
@@ -882,6 +1000,17 @@ This is a bootstrap adapter detail, not the domain model. Production deployments
 Chat thread records may reference runtime session ids, but chat history rendering must load authoritative runtime events from the runtime surface.
 
 Therefore a persisted chat thread must not outlive its runtime event history in a way that silently appears as an empty new chat.
+
+The WebSocket transport must support:
+
+- workspace/session authorization during handshake
+- ordered event delivery
+- replay from a client-provided last seen event id
+- heartbeat or keepalive messages that are transport-level, not runtime-domain events
+- clean terminal delivery for completed, failed, cancelled, or timed-out turns
+- graceful fallback to HTTP event replay when a client reconnects
+
+Polling is only a compatibility fallback. SSE is not the target first-class transport unless a future deployment environment makes WebSocket impossible.
 
 #### Runtime process
 

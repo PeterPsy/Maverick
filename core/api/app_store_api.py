@@ -7,12 +7,15 @@ import os
 from pathlib import Path
 
 from core.api.http import StartResponse, json_response, read_json_body, status_line
+from core.api.app_registry import user_can_mount_app
 from core.api.platform_state import PlatformState
 from core.api.session_api import RequestSession, require_session
 from core.apps.errors import AppHostingError
+from core.apps.models import AppContractDescriptor, WorkspaceAppBindingRecord, WorkspaceLocalAppProjectRecord
 from core.apps.remote_store import fetch_remote_catalog, install_remote_store_app
 from core.apps.service import delete_workspace_local_app_project, install_workspace_local_app, uninstall_workspace_app
 from core.apps.workspace_local_discovery import sync_workspace_local_app_projects
+from core.workspaces.models import WorkspaceMembershipRecord
 from core.workspaces.errors import WorkspaceMembershipError, WorkspaceNotFoundError
 
 
@@ -65,10 +68,101 @@ def _user_workspace_ids(state: PlatformState, context: RequestSession) -> list[s
     ]
 
 
-def _installation_payload(state: PlatformState, workspace_ids: list[str]) -> dict[str, object]:
+def _can_manage_workspace_apps(context: RequestSession, membership: WorkspaceMembershipRecord) -> bool:
+    return context.user.platform_role == "admin" or membership.role == "admin"
+
+
+def _workspace_membership(state: PlatformState, context: RequestSession, workspace_id: str) -> WorkspaceMembershipRecord | None:
+    try:
+        membership = state.workspace_store.get_membership(user_id=context.user.user_id, workspace_id=workspace_id)
+    except WorkspaceMembershipError:
+        return None
+    if membership.status != "active":
+        return None
+    return membership
+
+
+def _binding_contract(state: PlatformState, binding: WorkspaceAppBindingRecord) -> AppContractDescriptor:
+    if binding.source_kind == "workspace_local_project":
+        project = state.app_store.get_workspace_local_app_project(workspace_id=binding.workspace_id, app_id=binding.app_id)
+        return project.contract
+    source = state.app_store.get_app_source(binding.source_record_id)
+    return source.contract
+
+
+def _app_visible_for_context(
+    context: RequestSession,
+    membership: WorkspaceMembershipRecord,
+    contract: AppContractDescriptor,
+) -> bool:
+    if _can_manage_workspace_apps(context, membership):
+        return True
+    return user_can_mount_app(context.user, contract.visibility.platform_roles)
+
+
+def _catalog_item_visible_for_context(context: RequestSession, item: dict[str, object]) -> bool:
+    visibility = item.get("visibility")
+    if not isinstance(visibility, dict):
+        return True
+    platform_roles = visibility.get("platform_roles")
+    if platform_roles is None:
+        return True
+    if not isinstance(platform_roles, list):
+        return False
+    roles = [role for role in platform_roles if isinstance(role, str)]
+    if not roles:
+        return True
+    return context.user.platform_role in roles
+
+
+def _filter_catalog_for_context(catalog: dict[str, object], context: RequestSession) -> dict[str, object]:
+    raw_items = catalog.get("items")
+    if not isinstance(raw_items, list):
+        return catalog
+    items = [
+        item
+        for item in raw_items
+        if isinstance(item, dict) and _catalog_item_visible_for_context(context, item)
+    ]
+    return {**catalog, "items": items, "count": len(items)}
+
+
+def _installed_binding_visible_for_context(
+    state: PlatformState,
+    context: RequestSession,
+    membership: WorkspaceMembershipRecord,
+    binding: WorkspaceAppBindingRecord,
+) -> bool:
+    try:
+        contract = _binding_contract(state, binding)
+    except AppHostingError:
+        return _can_manage_workspace_apps(context, membership)
+    return _app_visible_for_context(context, membership, contract)
+
+
+def _local_project_visible_for_context(
+    state: PlatformState,
+    context: RequestSession,
+    membership: WorkspaceMembershipRecord,
+    project: WorkspaceLocalAppProjectRecord,
+    binding: WorkspaceAppBindingRecord | None,
+) -> bool:
+    if _can_manage_workspace_apps(context, membership):
+        return True
+    if binding is None:
+        return False
+    return _app_visible_for_context(context, membership, project.contract)
+
+
+def _installation_payload(state: PlatformState, context: RequestSession, workspace_ids: list[str]) -> dict[str, object]:
     items = []
     for workspace_id in workspace_ids:
+        membership = _workspace_membership(state, context, workspace_id)
+        if membership is None:
+            continue
         for binding in state.app_store.list_workspace_app_bindings(workspace_id):
+            if not _installed_binding_visible_for_context(state, context, membership, binding):
+                continue
             items.append(
                 {
                     "workspace_id": workspace_id,
@@ -82,9 +176,12 @@ def _installation_payload(state: PlatformState, workspace_ids: list[str]) -> dic
     return {"items": items}
 
 
-def _local_apps_payload(state: PlatformState, workspace_ids: list[str], *, start_path: Path) -> list[dict[str, object]]:
+def _local_apps_payload(state: PlatformState, context: RequestSession, workspace_ids: list[str], *, start_path: Path) -> list[dict[str, object]]:
     items = []
     for workspace_id in workspace_ids:
+        membership = _workspace_membership(state, context, workspace_id)
+        if membership is None:
+            continue
         sync_workspace_local_app_projects(state.app_store, workspace_id=workspace_id, start_path=start_path)
         bindings = {
             binding.app_id: binding
@@ -92,6 +189,8 @@ def _local_apps_payload(state: PlatformState, workspace_ids: list[str], *, start
         }
         for project in state.app_store.list_workspace_local_app_projects(workspace_id):
             binding = bindings.get(project.app_id)
+            if not _local_project_visible_for_context(state, context, membership, project, binding):
+                continue
             items.append(
                 {
                     "workspace_id": workspace_id,
@@ -155,12 +254,12 @@ def handle_app_store_api(
                 {"error": "catalog_unavailable", "detail": str(error)},
                 status=status_line(500),
             )
-        return json_response(start_response, catalog)
+        return json_response(start_response, _filter_catalog_for_context(catalog, context))
 
     if path == "/api/app-store/installations" and method == "GET":
         workspace_ids = _user_workspace_ids(state, context)
-        payload = _installation_payload(state, workspace_ids)
-        payload["local_apps"] = _local_apps_payload(state, workspace_ids, start_path=start_path)
+        payload = _installation_payload(state, context, workspace_ids)
+        payload["local_apps"] = _local_apps_payload(state, context, workspace_ids, start_path=start_path)
         return json_response(start_response, payload)
 
     if path == "/api/app-store/install" and method == "POST":

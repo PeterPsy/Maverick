@@ -45,6 +45,7 @@ def build_runtime_routing(
         workspace_root=str(resolved_workspace_root),
         workdir=str(resolved_workspace_root),
         runtime_root=str(runtime_root),
+        readable_roots=boundary.readable_roots,
         writable_roots=boundary.writable_roots,
         allows_outside_workspace_root=boundary.allows_outside_workspace_root,
     )

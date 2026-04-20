@@ -8,6 +8,7 @@ from pathlib import Path
 import shutil
 import tempfile
 import unittest
+import zipfile
 
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
@@ -214,6 +215,59 @@ class GalleryAppTestCase(unittest.TestCase):
             self.assertTrue((generated_root / "final-report.md").is_file())
             self.assertFalse((generated_root / "report.md").exists())
             self.assertEqual(rejected["status_code"], 400)
+
+    def test_backend_deletes_file_inside_workspace_storage(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            generated_root = root / "storage" / "generated"
+            generated_root.mkdir(parents=True)
+            target = generated_root / "report.md"
+            target.write_text("# report", encoding="utf-8")
+
+            deleted = self.run_backend(
+                data_root=root / "data" / "gallery",
+                uploaded_root=root / "storage" / "uploaded",
+                generated_root=generated_root,
+                body={"action": "delete_file", "workspace_relative_path": "storage/generated/report.md"},
+            )
+            rejected = self.run_backend(
+                data_root=root / "data" / "gallery",
+                uploaded_root=root / "storage" / "uploaded",
+                generated_root=generated_root,
+                body={"action": "delete_file", "role": "generated", "relative_path": "../secret.txt"},
+            )
+
+            self.assertEqual(deleted["status_code"], 200)
+            self.assertTrue(deleted["json"]["deleted"])
+            self.assertEqual(deleted["json"]["file"]["workspace_relative_path"], "storage/generated/report.md")
+            self.assertFalse(target.exists())
+            self.assertEqual(rejected["status_code"], 400)
+
+    def test_backend_extracts_office_preview_text(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            generated_root = root / "storage" / "generated"
+            generated_root.mkdir(parents=True)
+            docx = generated_root / "brief.docx"
+            with zipfile.ZipFile(docx, "w") as archive:
+                archive.writestr(
+                    "word/document.xml",
+                    """<?xml version="1.0" encoding="UTF-8"?>
+                    <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+                      <w:body><w:p><w:r><w:t>Quarterly brief</w:t></w:r></w:p></w:body>
+                    </w:document>""",
+                )
+
+            preview = self.run_backend(
+                data_root=root / "data" / "gallery",
+                uploaded_root=root / "storage" / "uploaded",
+                generated_root=generated_root,
+                body={"action": "preview_text", "workspace_relative_path": "storage/generated/brief.docx"},
+            )
+
+            self.assertEqual(preview["status_code"], 200)
+            self.assertEqual(preview["json"]["file"]["preview_kind"], "document")
+            self.assertIn("Quarterly brief", preview["json"]["preview_text"])
 
     def test_bootstrap_installs_gallery_and_exposes_surfaces(self) -> None:
         repo_root = self.make_repo_root()

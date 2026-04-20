@@ -47,5 +47,6 @@ class RuntimeRoutingDecision:
     workspace_root: str
     workdir: str
     runtime_root: str
+    readable_roots: list[str]
     writable_roots: list[str]
     allows_outside_workspace_root: bool

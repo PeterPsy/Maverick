@@ -106,8 +106,8 @@ export function App() {
     if (!isRuntimeBusy) {
       return "";
     }
-    return latestRuntimeStepLabel(events) || "Thinking";
-  }, [events, isBootstrapping, isHistoryLoading, isRuntimeBusy]);
+    return latestRuntimeStepLabel(events, activeTurn?.turn_id) || "Thinking";
+  }, [activeTurn?.turn_id, events, isBootstrapping, isHistoryLoading, isRuntimeBusy]);
 
   useRuntimeEvents({
     activeTurn,
@@ -393,6 +393,7 @@ export function App() {
       }
     } catch (sendError) {
       setError(sendError instanceof Error ? sendError.message : "Unable to send message.");
+      setActiveTurn(null);
       setComposer(message.content);
       setPendingUserMessages((current) => current.filter((item) => item.clientMessageId !== message.clientMessageId));
       setFailedUserMessages((current) => [

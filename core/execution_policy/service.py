@@ -76,14 +76,17 @@ def resolve_workspace_runtime_boundary(
     )
     root = workspace_root(workspace_id=workspace_id, start_path=start_path or Path(__file__))
     if profile.effective_mode == "full-access":
+        readable_roots = ["/"]
         writable_roots = ["/"]
         allows_outside_workspace_root = True
     else:
+        readable_roots = [str(root)]
         writable_roots = [str(root)]
         allows_outside_workspace_root = False
     return WorkspaceRuntimeBoundary(
         workspace_id=workspace_id,
         workspace_root=str(root),
+        readable_roots=readable_roots,
         writable_roots=writable_roots,
         allows_outside_workspace_root=allows_outside_workspace_root,
     )

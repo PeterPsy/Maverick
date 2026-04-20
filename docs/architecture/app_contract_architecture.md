@@ -360,8 +360,13 @@ Rules:
 - omitted `visibility` or `platform_roles: null` means the app is visible to every authenticated workspace member
 - `platform_roles` is a list of global platform roles, initially `admin` or `member`
 - visibility affects app registry responses and mounted frontend/backend access
+- visibility also affects user-facing App Store catalog, installed-app, and workspace-local app listings
 - visibility does not move business logic into the core
 - visibility must not be implemented as app-specific conditionals such as `if app_id == "user-admin"`
+
+App Store management views may show restricted apps to users who can manage apps for the relevant workspace, such as platform admins or workspace admins.
+
+Users without app-management authority should see only apps they can actually mount or use. Workspace-local projects that are not installed are management material and should not be listed to ordinary members.
 
 An admin tool app can therefore be a normal sealed app under `/apps/<app_id>/` while user records, platform roles, sessions, memberships, and workspace governance remain core-owned control-plane state.
 

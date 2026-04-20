@@ -58,8 +58,11 @@ export function runtimeStepLabel(event: RuntimeEvent): string | null {
   return label;
 }
 
-export function latestRuntimeStepLabel(events: RuntimeEvent[]): string {
+export function latestRuntimeStepLabel(events: RuntimeEvent[], turnId?: string | null): string {
   for (const event of [...events].reverse()) {
+    if (turnId && event.turn_id !== turnId) {
+      continue;
+    }
     const label = runtimeStepLabel(event);
     if (label) {
       return label;

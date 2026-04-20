@@ -1436,14 +1436,21 @@ This directory is not the canonical home for:
 
 ### Sandbox rule
 
-A sandboxed agent must have write access to its entire workspace root and nowhere else.
+A sandboxed agent must have read and write access to its entire workspace root and nowhere else.
 
 That means:
 
 - readable and writable: `/workspaces/<workspace_id>/...`
-- not writable: `/core/...`
-- not writable: `/apps/...`
-- not writable: `/workspaces/<other_workspace_id>/...`
+- not readable or writable: `/core/...`
+- not readable or writable: `/apps/...`
+- not readable or writable: repository-root files such as `IMPLEMENTATION_TASKLIST.md`
+- not readable or writable: `/workspaces/<other_workspace_id>/...`
+
+Default may use `full-access` only when policy explicitly allows it.
+
+Every non-default workspace is sandbox-only, and its provider launch spec must express identical `readable_roots` and `writable_roots` equal to that workspace root.
+
+If the local host cannot establish a real read/write filesystem sandbox for a non-default workspace, runtime launch must fail closed instead of degrading to write-only confinement.
 
 This is the key behavior change from the current model.
 
@@ -1689,6 +1696,10 @@ then:
 - preview/index metadata may be created asynchronously
 - no extra manual persistence dance is required
 
+The Gallery app may expose file operations over this derived inventory, but those operations must still resolve against the current workspace storage root before touching bytes. Preview, download, rename, and delete actions must accept either the derived role plus relative path or a normalized `workspace_relative_path`, reject traversal outside `storage/uploaded/` and `storage/generated/`, and treat the filesystem as the final existence check.
+
+Gallery cards should show the best available inline preview without requiring a modal open. Browser-previewable media and documents such as images, video, audio, PDFs, Markdown, and text can render directly from Gallery's validated read surface. Modern Office formats such as DOCX, PPTX, and XLSX may expose extracted text previews through a Gallery-owned preview action. Legacy binary formats such as DOC, PPT, and XLS remain represented by typed file previews unless a dedicated conversion/indexing capability is introduced.
+
 ## Workspace Memory Model
 
 Memory is an app.
@@ -1883,13 +1894,14 @@ When a new tenant workspace is created:
 The platform should enforce all of the following:
 
 1. A sandboxed workspace agent cannot write outside its workspace root.
-2. A sandboxed workspace agent cannot directly write to installation-level `core/`.
-3. A sandboxed workspace agent cannot directly write to installation-level `apps/`.
-4. A sandboxed workspace agent cannot directly access another workspace root.
-5. Workspace files, memory, and retrieval artifacts remain scoped to the same `workspace_id`.
-6. Gallery, file APIs, and retrieval must never return artifacts from another workspace.
-7. Child agents inherit the same workspace root unless an explicit trusted control-plane action says otherwise.
-8. Cross-workspace operations happen only through explicit product features, never by path traversal or raw runtime access.
+2. A sandboxed workspace agent cannot read outside its workspace root through raw filesystem access.
+3. A sandboxed workspace agent cannot directly read or write installation-level `core/`.
+4. A sandboxed workspace agent cannot directly read or write installation-level `apps/`.
+5. A sandboxed workspace agent cannot directly access another workspace root.
+6. Workspace files, memory, and retrieval artifacts remain scoped to the same `workspace_id`.
+7. Gallery, file APIs, and retrieval must never return artifacts from another workspace.
+8. Child agents inherit the same workspace root unless an explicit trusted control-plane action says otherwise.
+9. Cross-workspace operations happen only through explicit product features, never by path traversal or raw runtime access.
 
 ## Why the Current Model Feels Wrong
 

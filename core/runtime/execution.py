@@ -40,8 +40,6 @@ def _codex_executable() -> str:
 def _codex_app_server_command(*, execution_mode: str, codex_command: str | None = None) -> list[str]:
     """Return the canonical Codex app-server command for interactive sessions."""
     command = [str(codex_command or "").strip() or _codex_executable()]
-    if execution_mode == "sandbox":
-        command.extend(["--enable", "use_legacy_landlock"])
     command.extend(["app-server", "--listen", "stdio://"])
     return command
 
@@ -83,6 +81,7 @@ def _fallback_launch_spec(session: RuntimeSessionRecord) -> RuntimeBackendLaunch
         resolved_secret_refs=[],
         working_directory=session.workdir,
         execution_mode=session.effective_mode,
+        readable_roots=["/"] if session.effective_mode == "full-access" else [session.workspace_root],
         writable_roots=["/"] if session.effective_mode == "full-access" else [session.workspace_root],
     )
 

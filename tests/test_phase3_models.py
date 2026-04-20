@@ -187,6 +187,7 @@ class Phase3ModelTestCase(unittest.TestCase):
         self.assertEqual(default_profile.effective_mode, "full-access")
         self.assertEqual(isolated_profile.effective_mode, "sandbox")
         self.assertEqual(denied_default_profile.effective_mode, "sandbox")
+        self.assertEqual(full_access_boundary.readable_roots, ["/"])
         self.assertEqual(full_access_boundary.writable_roots, ["/"])
 
 

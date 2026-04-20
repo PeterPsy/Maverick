@@ -134,6 +134,49 @@ class UserAdminApiTestCase(unittest.TestCase):
         self.assertEqual(status_assign, 200)
         self.assertIn(workspace["workspace_id"], {item["workspace_id"] for item in assigned["memberships"]})
 
+    def test_admin_can_reset_another_users_password(self) -> None:
+        state = bootstrap_platform_state(start_path=self.make_repo_root())
+        app = PlatformHost(state, start_path=state.repository_root)
+        admin_cookie = self.login(app)
+        status_create, created, _create_headers = self.invoke(
+            app,
+            path="/api/admin/users",
+            method="POST",
+            body={"username": "forgotten", "password": "initial-password", "platform_role": "member"},
+            cookie=admin_cookie,
+        )
+        self.invoke(
+            app,
+            path=f"/api/admin/users/{created['user_id']}/workspaces",
+            method="PUT",
+            body={"memberships": [{"workspace_id": "default", "role": "member"}]},
+            cookie=admin_cookie,
+        )
+
+        status_reset, reset, _reset_headers = self.invoke(
+            app,
+            path=f"/api/admin/users/{created['user_id']}/password",
+            method="POST",
+            body={"password": "replacement-password"},
+            cookie=admin_cookie,
+        )
+        status_old, old_login, _old_headers = self.invoke(
+            app,
+            path="/api/auth/login",
+            method="POST",
+            body={"username": "forgotten", "password": "initial-password"},
+        )
+        replacement_cookie = self.login(app, username="forgotten", password="replacement-password")
+        status_session, session, _session_headers = self.invoke(app, path="/api/session", cookie=replacement_cookie)
+
+        self.assertEqual(status_create, 201)
+        self.assertEqual(status_reset, 200)
+        self.assertEqual(reset["status"], "updated")
+        self.assertEqual(status_old, 401)
+        self.assertEqual(old_login["error"], "invalid_credentials")
+        self.assertEqual(status_session, 200)
+        self.assertEqual(session["user"]["username"], "forgotten")
+
     def test_member_cannot_use_admin_api_or_see_admin_app(self) -> None:
         state = bootstrap_platform_state(start_path=self.make_repo_root())
         app = PlatformHost(state, start_path=state.repository_root)
@@ -143,6 +186,13 @@ class UserAdminApiTestCase(unittest.TestCase):
             path="/api/admin/users",
             method="POST",
             body={"username": "viewer", "password": "viewer-password", "platform_role": "member"},
+            cookie=admin_cookie,
+        )
+        self.invoke(
+            app,
+            path="/api/admin/users/user:viewer/workspaces",
+            method="PUT",
+            body={"memberships": [{"workspace_id": "default", "role": "member"}]},
             cookie=admin_cookie,
         )
         member_cookie = self.login(app, username="viewer", password="viewer-password")
@@ -168,6 +218,13 @@ class UserAdminApiTestCase(unittest.TestCase):
             path="/api/admin/users",
             method="POST",
             body={"username": "persistent", "password": "persistent-password"},
+            cookie=admin_cookie,
+        )
+        self.invoke(
+            app,
+            path="/api/admin/users/user:persistent/workspaces",
+            method="PUT",
+            body={"memberships": [{"workspace_id": "default", "role": "member"}]},
             cookie=admin_cookie,
         )
 

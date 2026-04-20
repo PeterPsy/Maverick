@@ -79,8 +79,15 @@ button {
 .ua-main {
   display: grid;
   align-content: start;
+  justify-items: center;
+  padding: 28px clamp(22px, 3vw, 48px);
+}
+
+.ua-content {
+  display: grid;
+  align-content: start;
   gap: 18px;
-  padding: 28px;
+  width: min(100%, 1320px);
 }
 
 .ua-kicker {
@@ -217,11 +224,16 @@ h2 {
 }
 
 .ua-create {
-  grid-template-columns: repeat(6, minmax(120px, 1fr));
+  grid-template-columns: minmax(180px, 1.1fr) repeat(2, minmax(180px, 1fr)) minmax(150px, 0.8fr) auto;
   align-items: end;
 }
 
 .ua-create > div {
+  min-width: 0;
+}
+
+.ua-create input[name="display_name"],
+.ua-create input[name="email"] {
   grid-column: span 2;
 }
 
@@ -294,15 +306,41 @@ button:not(.ua-user):hover {
 }
 
 .ua-grid {
-  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
 }
 
-.ua-grid label {
+.ua-grid label,
+.ua-password-grid label {
   display: grid;
   gap: 7px;
   color: var(--ua-muted);
   font-size: 0.76rem;
   font-weight: 750;
+}
+
+.ua-password {
+  border-color: rgba(248, 75, 120, 0.22);
+}
+
+.ua-password-icon {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 10px;
+  background: rgba(215, 36, 81, 0.18);
+  color: var(--ua-primary-strong);
+}
+
+.ua-password-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.ua-profile-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.75fr);
+  gap: 18px;
+  align-items: start;
 }
 
 .ua-toggle,
@@ -446,11 +484,15 @@ button.ua-secondary:hover {
   }
 
   .ua-create,
-  .ua-grid {
+  .ua-grid,
+  .ua-password-grid,
+  .ua-profile-row {
     grid-template-columns: 1fr;
   }
 
-  .ua-create > div {
+  .ua-create > div,
+  .ua-create input[name="display_name"],
+  .ua-create input[name="email"] {
     grid-column: auto;
   }
 }

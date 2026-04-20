@@ -1,68 +1,43 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { decodeBase64, loadCatalog, readFile, renameFile } from './galleryApi';
-import { formatBytes, iconForKind, kindLabels, roleLabels } from './galleryMeta';
+import { decodeBase64, deleteFile, loadCatalog, readFile, readPreviewText, renameFile } from './galleryApi';
+import { canInlinePreview, canTextPreview, FileCardPreview, GalleryPreview } from './filePreview';
+import { formatBytes, kindLabels, roleLabels } from './galleryMeta';
 import type { FileRole, GalleryFile } from './types';
 import './styles/main.css';
 
 const PREVIEW_BYTES = 8 * 1024 * 1024;
 const DOWNLOAD_BYTES = 100 * 1024 * 1024;
 
-function canInlinePreview(file: GalleryFile) {
-  return ['image', 'video', 'audio', 'text', 'markdown', 'pdf'].includes(file.preview_kind);
-}
-
-function GalleryPreview({ file, previewUrl, previewText }: { file: GalleryFile; previewUrl: string; previewText: string }) {
-  if (file.preview_kind === 'image' && previewUrl) return <img src={previewUrl} alt={file.name} />;
-  if (file.preview_kind === 'video' && previewUrl) return <video src={previewUrl} controls />;
-  if (file.preview_kind === 'audio' && previewUrl) return <audio src={previewUrl} controls />;
-  if (file.preview_kind === 'pdf' && previewUrl) return <iframe src={previewUrl} title={file.name} />;
-  if (['text', 'markdown'].includes(file.preview_kind)) return <pre>{previewText || 'Loading preview...'}</pre>;
-  return (
-    <div className="format-preview">
-      <span className="material-symbols-rounded" aria-hidden="true">{iconForKind(file.preview_kind)}</span>
-      <strong>{kindLabels[file.preview_kind]}</strong>
-      <p>{file.name}</p>
-      <small>Preview metadata is available. Download this file to open it with the native editor or viewer.</small>
-    </div>
-  );
-}
-
-function FileCard({ file, selected, onOpen, onDownload }: {
+function FileCard({ file, selected, onOpen, onDownload, onDelete }: {
   file: GalleryFile;
   selected: boolean;
   onOpen: () => void;
   onDownload: () => void;
+  onDelete: () => void;
 }) {
   return (
-    <button className={selected ? 'gallery-card selected' : 'gallery-card'} onClick={onOpen} type="button">
-      <span className="gallery-card-icon material-symbols-rounded" aria-hidden="true">{iconForKind(file.preview_kind)}</span>
+    <article className={selected ? 'gallery-card selected' : 'gallery-card'}>
+      <button className="gallery-card-open" onClick={onOpen} type="button">
+        <div className="gallery-card-preview">
+          <FileCardPreview file={file} />
+        </div>
+        <span className="gallery-card-main">
+          <strong>{file.name}</strong>
+          <span>{kindLabels[file.preview_kind]} · {formatBytes(file.size_bytes)}</span>
+        </span>
+        <span className="gallery-card-path">{file.workspace_relative_path}</span>
+      </button>
       <span className="gallery-card-role">{roleLabels[file.role]}</span>
-      <span className="gallery-card-main">
-        <strong>{file.name}</strong>
-        <span>{kindLabels[file.preview_kind]} · {formatBytes(file.size_bytes)}</span>
+      <span className="gallery-card-actions">
+        <button className="card-action material-symbols-rounded" aria-label={`Download ${file.name}`} onClick={onDownload} type="button">
+          download
+        </button>
+        <button className="card-action danger material-symbols-rounded" aria-label={`Delete ${file.name}`} onClick={onDelete} type="button">
+          delete
+        </button>
       </span>
-      <span className="gallery-card-path">{file.workspace_relative_path}</span>
-      <span
-        className="card-download material-symbols-rounded"
-        aria-label={`Download ${file.name}`}
-        role="button"
-        tabIndex={0}
-        onClick={(event) => {
-          event.stopPropagation();
-          onDownload();
-        }}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            event.stopPropagation();
-            onDownload();
-          }
-        }}
-      >
-        download
-      </span>
-    </button>
+    </article>
   );
 }
 
@@ -106,12 +81,20 @@ function App() {
     setPreviewText('');
     setPreviewUrl('');
     setRenameValue(selectedFile?.name || '');
-    if (!selectedFile || !canInlinePreview(selectedFile)) return;
+    if (!selectedFile || (!canInlinePreview(selectedFile) && !canTextPreview(selectedFile))) return;
     let active = true;
     let objectUrl = '';
-    readFile(selectedFile, PREVIEW_BYTES)
+    const previewPromise = canInlinePreview(selectedFile)
+      ? readFile(selectedFile, PREVIEW_BYTES).then((payload) => ({ file: payload.file, content_base64: payload.content_base64, preview_text: '' }))
+      : readPreviewText(selectedFile, 12000).then((payload) => ({ file: payload.file, content_base64: '', preview_text: payload.preview_text }));
+    previewPromise
       .then((payload) => {
         if (!active) return;
+        if (payload.preview_text) {
+          setPreviewText(payload.preview_text);
+          return;
+        }
+        if (!payload.content_base64) return;
         const blob = decodeBase64(payload.content_base64, payload.file.content_type);
         if (['text', 'markdown'].includes(payload.file.preview_kind)) {
           blob.text().then((text) => active && setPreviewText(text));
@@ -142,6 +125,13 @@ function App() {
     const payload = await renameFile(selectedFile, renameValue);
     await refresh();
     setSelectedFile(payload.file);
+  }
+
+  async function removeFile(file: GalleryFile) {
+    if (!window.confirm(`Delete ${file.name}? This removes the file from workspace storage.`)) return;
+    await deleteFile(file);
+    setFiles((current) => current.filter((item) => item.id !== file.id));
+    if (selectedFile?.id === file.id) setSelectedFile(null);
   }
 
   return (
@@ -191,6 +181,7 @@ function App() {
             selected={selectedFile?.id === file.id}
             onOpen={() => setSelectedFile(file)}
             onDownload={() => download(file).catch((err: Error) => setError(err.message))}
+            onDelete={() => removeFile(file).catch((err: Error) => setError(err.message))}
           />
         ))}
         {!filteredFiles.length ? <div className="empty-state">No files in workspace storage yet.</div> : null}
@@ -224,6 +215,10 @@ function App() {
               <button className="primary-action" onClick={() => download(selectedFile).catch((err: Error) => setError(err.message))}>
                 <span className="material-symbols-rounded" aria-hidden="true">download</span>
                 Download
+              </button>
+              <button className="danger-action" onClick={() => removeFile(selectedFile).catch((err: Error) => setError(err.message))}>
+                <span className="material-symbols-rounded" aria-hidden="true">delete</span>
+                Delete
               </button>
             </footer>
           </section>

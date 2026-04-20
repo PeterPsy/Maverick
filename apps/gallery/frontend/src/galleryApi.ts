@@ -1,4 +1,4 @@
-import type { CatalogPayload, GalleryFile, ReadFilePayload } from './types';
+import type { CatalogPayload, DeleteFilePayload, GalleryFile, PreviewTextPayload, ReadFilePayload } from './types';
 
 export async function callBackend<T>(body: Record<string, unknown>): Promise<T> {
   const response = await fetch('/api/apps/gallery/backend', {
@@ -29,6 +29,15 @@ export async function readFile(file: GalleryFile, maxBytes: number) {
   });
 }
 
+export async function readPreviewText(file: GalleryFile, maxChars: number) {
+  return callBackend<PreviewTextPayload>({
+    action: 'preview_text',
+    role: file.role,
+    relative_path: file.relative_path,
+    max_chars: maxChars
+  });
+}
+
 export async function renameFile(file: GalleryFile, newName: string) {
   return callBackend<{ file: GalleryFile }>({
     action: 'rename_file',
@@ -38,3 +47,10 @@ export async function renameFile(file: GalleryFile, newName: string) {
   });
 }
 
+export async function deleteFile(file: GalleryFile) {
+  return callBackend<DeleteFilePayload>({
+    action: 'delete_file',
+    role: file.role,
+    relative_path: file.relative_path
+  });
+}

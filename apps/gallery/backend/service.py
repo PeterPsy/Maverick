@@ -8,9 +8,11 @@ from typing import Any
 from errors import GalleryValidationError
 from store import (
     MAX_PREVIEW_BYTES,
+    delete_file_payload,
     file_info_payload,
     list_files,
     load_state,
+    preview_text_payload,
     read_file_payload,
     reference_from_payload,
     rename_file_payload,
@@ -39,6 +41,20 @@ def handle_action(data_root: Path, uploaded_root: Path, generated_root: Path, bo
             generated_root=generated_root,
             max_bytes=max_bytes,
         )
+    if action == "preview_text":
+        role, relative_path = reference_from_payload(
+            role=str(body.get("role") or ""),
+            relative_path=str(body.get("relative_path") or ""),
+            workspace_relative_path=str(body.get("workspace_relative_path") or ""),
+        )
+        max_chars = int(body.get("max_chars") or 4000)
+        return 200, preview_text_payload(
+            role=role,
+            relative_path=relative_path,
+            uploaded_root=uploaded_root,
+            generated_root=generated_root,
+            max_chars=max_chars,
+        )
     if action == "file_info":
         role, relative_path = reference_from_payload(
             role=str(body.get("role") or ""),
@@ -61,6 +77,18 @@ def handle_action(data_root: Path, uploaded_root: Path, generated_root: Path, bo
             role=role,
             relative_path=relative_path,
             new_name=str(body.get("new_name") or ""),
+            uploaded_root=uploaded_root,
+            generated_root=generated_root,
+        )
+    if action == "delete_file":
+        role, relative_path = reference_from_payload(
+            role=str(body.get("role") or ""),
+            relative_path=str(body.get("relative_path") or ""),
+            workspace_relative_path=str(body.get("workspace_relative_path") or ""),
+        )
+        return 200, delete_file_payload(
+            role=role,
+            relative_path=relative_path,
             uploaded_root=uploaded_root,
             generated_root=generated_root,
         )

@@ -37,16 +37,6 @@ const TUTORIAL_STEPS: TutorialStep[] = [
     mediaLabel: "Integrated apps",
   },
   {
-    eyebrow: "Web motion",
-    title: "Animate backgrounds with a few layers, not the whole scene.",
-    description:
-      "Use two or three blurred gradients on a dedicated layer and animate only transform and opacity. Keep the animation slow, isolate it behind content, and disable motion with prefers-reduced-motion.",
-    linkLabel: "Review the lightweight background pattern",
-    linkHref: "#",
-    mediaLabel: "Animated background example",
-    mediaVariant: "animated-background",
-  },
-  {
     eyebrow: "Agents",
     title: "Choose the right agent for the job.",
     description: "Agent types define behavior, runtime access, and how new chats get started.",

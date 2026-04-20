@@ -274,6 +274,8 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] ensure child runtime sessions inherit the same workspace boundary unless a trusted control-plane action says otherwise
 - [x] Implement `sandbox` execution mode
   - [x] make the workspace root the writable runtime perimeter
+  - [x] make the workspace root the readable runtime perimeter
+  - [x] express sandbox `readable_roots` in runtime routing and provider launch specs
   - [x] launch workspace runtime providers from the workspace root instead of a runtime-only working directory
   - [x] keep `runtime/` ephemeral and separate from `storage/` and `data/`
 - [x] Implement `full-access` execution mode
@@ -308,6 +310,14 @@ without carrying forward legacy structure or backward-compatibility constraints 
     - [x] prepare a session-local Codex runtime home from a configurable Codex source home
     - [x] copy Codex auth/config identity without hardcoded host paths
     - [x] sanitize inherited Codex config so stale MCP server and plugin sections are not imported into every runtime
+    - [x] disable Codex apps/plugins for Maverick-managed runtime sessions and remove runtime-home plugin residue before launch
+    - [x] write managed Codex runtime feature flags that disable apps, plugins, and skill MCP dependency installation
+    - [x] strip sandboxed Codex project trust entries that point outside the active workspace
+    - [x] copy runtime rules and selected skills into the session-local runtime home instead of symlinking outside the workspace
+    - [x] wrap sandbox app-server launches in a workspace-only OS sandbox and fail closed if read/write confinement is unavailable
+    - [x] mount host DNS resolver metadata read-only when required by sandboxed Codex app-server networking
+    - [x] send Codex app-server `readOnlyAccess` policy so sandboxed turns cannot read arbitrary host paths
+    - [x] launch the packaged standalone Codex binary instead of mounting the whole NVM runtime tree
 - [x] Replace the current stateless Codex execution path with the canonical app-server runtime path:
   - [x] launch `codex app-server --listen stdio://` for interactive runtime sessions
   - [x] send `initialize` before creating or resuming provider threads
@@ -410,6 +420,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] model recoverable vs non-recoverable runtime failures explicitly
   - [x] define restart intents and recovery markers separately from normal runtime state
   - [x] keep recovery orchestration in `recovery/`, not inside runtime session models
+  - [x] enqueue deterministic `resume` turns for running sessions interrupted by backend restart
 - [x] Implement failed-start recovery
   - [x] create `core/recovery/failed_start_recovery.py`
   - [x] classify failed start causes such as missing secret, invalid provider setup, contract failure, and process crash
@@ -533,8 +544,10 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] Segment chat `Tool Used` groups by consecutive tool-call events so visible runtime updates split later tool calls into a new group
   - [x] Keep repeated invocations of the same tool chronologically distinct unless provider events share a stable tool-call id
   - [x] Preserve runtime event sequence as the primary transcript order so tool groups stay where they appeared even when provider timestamps match
+  - [x] Preserve streamed assistant output segments after final output so tool groups and text updates stay chronologically interleaved
   - [x] Close active tool indicators when later runtime output or terminal events prove the tool no longer owns the live turn
   - [x] Treat final runtime output as terminal UI evidence so completed turns cannot leave chat stuck in Thinking/stop state
+  - [x] Scope live Thinking labels to the active turn and clear busy state on session-level terminal events
   - [x] Show an explicit transcript loader while existing chat history is being loaded
 - [x] Implement `base-shell` as the first mounted frontend shell smoke app
 - [x] Create reusable local Codex skill `maverick-v3-app-porting` for rigorous legacy-to-v3 app porting work
@@ -738,6 +751,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] keep App Store rows visually clean by moving workspace assignment, uninstall, and pin actions into a per-app more-options menu
   - [x] expose uninstall for installation-level platform apps and workspace-local app projects from App Store management flows
   - [x] expose complete deletion for workspace-local app projects, removing binding, app data, project source, and project registry records
+  - [x] filter App Store catalog, installed-app, and workspace-local listings by app contract visibility for non-manager users
   - [x] align App Store frontend with the dark base-shell/chat visual theme
   - [x] split App Store UI into installed-app and store-catalog sections, with installed rows opening mounted apps through shell navigation
   - [x] add focused contract, mount, auth, MCP/CLI, and remote install tests
@@ -750,6 +764,8 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] align Gallery frontend with the dark base-shell/chat/app-store visual theme
   - [x] redesign Gallery around file cards with modal previews instead of a list/detail layout
   - [x] support Gallery downloads and safe same-directory file renames
+  - [x] support Gallery file deletion through validated workspace storage references
+  - [x] render Gallery grid-card previews for browser-previewable workspace files and extracted DOCX/PPTX/XLSX text
   - [x] declare and build a Gallery-owned chat widget for inline file previews
   - [x] support Gallery backend file lookup through `workspace_relative_path` widget payloads
   - [x] add focused contract, mount, backend, MCP/CLI, and path validation tests
@@ -856,6 +872,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
 - [ ] New non-default workspace can be created
 - [x] Non-admin members cannot create workspaces through `/api/workspaces`
 - [x] Core exposes admin-only user CRUD and workspace assignment APIs
+- [x] Core exposes admin-only user password reset and User Admin surfaces it for forgotten passwords
 - [x] Core exposes admin-only workspace app installation and enablement APIs
 - [x] Core enforces admin-only access for identity and workspace membership management
 - [x] Disabled installed workspace apps are hidden from `/api/apps` and denied by app mount routes
@@ -865,7 +882,8 @@ without carrying forward legacy structure or backward-compatibility constraints 
 - [x] User Admin frontend uses the same dark visual language as the shell and first-wave apps
 - [x] Local hosted bootstrap persists identity and workspace control-plane state under `.maverick/local-state/`
 - [x] Persisted non-default workspaces receive built-in app bindings again after host restart
-- [ ] Non-default workspace agent is sandboxed to workspace root
+- [x] Backend restart automatically resumes interrupted running runtime sessions
+- [x] Non-default workspace agent is sandboxed to workspace root
 - [x] Default workspace agent can run `full-access`
 - [ ] External app can be installed into one workspace only
 - [x] App Store is installed as a Maverick app and can install a remote app into selected authorized workspaces

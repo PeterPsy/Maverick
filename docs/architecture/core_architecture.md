@@ -505,7 +505,7 @@ The core serves only the declared `frontend/dist` artifact and exposes generic s
 The first shell-facing API slice is intentionally core-generic, not `base-shell` specific:
 
 - `/api/session`, `/api/auth/login`, and `/api/auth/logout` expose the current user session
-- `/api/admin/users` and `/api/admin/workspaces` expose admin-only identity, role, and workspace assignment management
+- `/api/admin/users` and `/api/admin/workspaces` expose admin-only identity, password reset, role, and workspace assignment management
 - `/api/admin/workspace-apps` exposes admin-only workspace app installation and enablement management
 - `/api/workspaces` and `/api/workspaces/active` expose workspace list, creation, and active workspace selection
 - `/api/apps` exposes enabled app registry records for the active workspace
@@ -521,12 +521,17 @@ They do not make the core own shell UX, chat project organization, or app-specif
 
 Admin-facing apps must still stay app-agnostic at the core boundary.
 
-For example, a `user-admin` app may provide the UI for creating users, changing platform roles, and assigning users to workspaces, but the records remain owned by the core identity and workspace governance domains.
+For example, a `user-admin` app may provide the UI for creating users, resetting a user's password, changing platform roles, and assigning users to workspaces, but the records remain owned by the core identity and workspace governance domains.
 
 Admin app visibility is enforced through generic app contract visibility metadata, not through app-specific branches in the core.
 
 The core may filter `/api/apps` and mounted app routes according to `visibility.platform_roles`.
 An app that declares `visibility.platform_roles: ["admin"]` is not listed or mounted for member users.
+
+The same visibility policy applies to App Store read surfaces.
+`/api/app-store/apps` must hide catalog entries whose declared visibility excludes the current user.
+`/api/app-store/installations` must hide installed and workspace-local app rows whose resolved app contract excludes the current user, unless the user can manage apps for that workspace.
+Workspace-local app projects without a workspace binding are management material and should be visible only to platform admins or workspace admins.
 
 Workspace app installation and enablement are separate control-plane states.
 
@@ -1075,9 +1080,29 @@ The adapter may copy required files such as auth, version, installation identity
 
 The sanitized runtime config must remove inherited MCP server and plugin sections from the operator Codex home. Maverick runtime sessions should not automatically expose user-global Codex connector apps such as GitHub, Gmail, Photoshop, AllTrails, or Notion unless Maverick explicitly materializes an allowed tool surface for that runtime.
 
+The Codex app-server command for Maverick-managed runtimes must also disable Codex's built-in `apps` and `plugins` features. Runtime config preparation must write a managed Codex `[features]` section with `apps`, `plugins`, and `skill_mcp_dependency_install` disabled, instead of inheriting those feature switches from the operator home. Runtime-home preparation must remove plugin/app connector residue such as `plugins/`, `cache/codex_apps_tools/`, `.tmp/plugins/`, `.tmp/plugins.sha`, and `.tmp/app-server-remote-plugin-sync-v1` before launch so Codex does not attempt to start the `codex_apps` MCP bridge.
+
+For sandboxed Codex sessions, sanitized runtime config must also drop inherited Codex `[projects.*]` trust entries that point outside the workspace root. This is provider-specific defense in depth: the generic Maverick runtime policy remains provider-agnostic, while the Codex adapter prevents Codex-specific trust configuration from weakening a Maverick sandbox.
+
+For sandbox execution, the provider launch spec must carry both `readable_roots` and `writable_roots`.
+
+For non-default workspace runtimes, both lists are exactly the workspace root.
+
+The Codex provider must enforce that boundary before the app-server starts. It must launch the backend inside an operating-system workspace sandbox that mounts the workspace read/write, mounts only required runtime dependencies read-only, and does not mount the repository root, installation-level `core/`, installation-level `apps/`, another workspace, or operator home material.
+
+The workspace operating-system sandbox may mount host resolver metadata such as the resolved `/etc/resolv.conf` target read-only when the host resolver lives outside `/etc`; this is a runtime dependency for DNS and does not broaden write access or expose workspace material outside the boundary. Runtime dependency mounts must mask broad system document roots such as `/usr/share` and `/usr/local/share` so sandboxed agents cannot inventory host package documentation as user-accessible material outside the workspace.
+
+When the configured Codex command is the NPM/NVM wrapper, the provider adapter should launch the packaged standalone Codex binary through a read-only bind at `runtime/bin/codex`. It must not mount the whole NVM installation, the whole Node version tree, or other operator-home package trees into sandboxed runtime sessions.
+
+Codex turn sandbox policy must keep writable roots and read-only roots constrained to the workspace while allowing provider network access. The Codex app-server protocol represents read access through its typed `readOnlyAccess` object, using the `restricted` variant with workspace readable roots and platform defaults enabled only for required tool execution. Passing only top-level `readableRoots` is insufficient because Codex otherwise treats read-only access as full host access. The network permission is required for Codex app-server sampling, streaming, and explicit web-research tasks; it is not permission to broaden raw filesystem access beyond the workspace boundary.
+
+If the host cannot create that read/write confinement, sandbox runtime launch must fail closed. It must not fall back to Codex `workspace-write`, legacy Landlock flags, or any mode that still permits raw reads outside the workspace.
+
 It must not copy every user-global skill into the runtime home by default.
 
 App-selected and core-selected skills are materialized through the Maverick v3 skills surface so each runtime receives only the skills its app/agent context declares.
+
+Materialized runtime skills, rules, and system skill assets must be copied into the session-local runtime home for sandbox sessions, not symlinked to source repository or operator home paths outside the workspace boundary.
 
 Codex app-server retry notifications must be streamed as runtime step updates without prematurely closing the Maverick turn.
 
@@ -1121,6 +1146,12 @@ For the local hosted bootstrap, runtime-domain collections are persisted under i
 
 This is a bootstrap adapter detail, not the domain model. Production deployments may replace it with MongoDB or another store adapter without changing runtime service interfaces.
 
+Backend process restart is a runtime recovery event.
+
+On startup, the platform must inspect persisted running runtime sessions. If a running session has a queued or active turn, the in-memory worker that owned that turn died with the previous backend process. The startup recovery pass must close those stale non-terminal turns with explicit backend-restart evidence, then enqueue a new asynchronous turn with the fixed input `resume` on the same runtime session.
+
+This behavior is deterministic platform recovery. It must not depend on frontend reconnect timing, agent-specific logic, or a user manually sending another message.
+
 Runtime session persistence must include enough provider binding state to resume a provider conversation when the provider supports it.
 
 For Codex this means storing the app-server thread id returned by `thread/start` and reusing it with `thread/resume`.
@@ -1135,9 +1166,15 @@ The runtime store should still record explicit terminal turn events, but the cha
 
 Terminal turn evidence must also dominate earlier or late-arriving `queued` or `started` events for the same turn so replay ordering cannot reactivate a finished turn.
 
+If a provider emits session-level terminal evidence without a `turn_id`, chat replay must close the latest active turn for that session rather than leaving the transcript in a permanent loading state.
+
+Live loading labels must be derived only from runtime step events for the active turn. Historical step labels from earlier turns, including failure text, must not be reused as the current `Thinking` label for a later or idle turn.
+
 Transcript rendering must also close active tool indicators when later output, final output, failure, or cancellation proves the turn has moved past that tool. A tool may be shown as actively running only while it is the latest evidence for an active turn.
 
 Chat transcript rendering must preserve the runtime event ordering for visible tool usage.
+
+Streamed assistant output is part of that same event timeline. When a later `runtime.output.final` arrives, the chat renderer must use it as terminal evidence and as a source for any missing suffix or structured link previews, but it must not replace already-rendered output segments in a way that moves tool groups above or below the text updates that originally separated them.
 
 Consecutive runtime tool-call invocations within one turn may be rendered as a single `Tool Used` group, with start/update/completion events for the same invocation merged inside that group only when the provider supplies a stable call id such as `tool_call_id`, `call_id`, or `item_id`.
 
@@ -1384,6 +1421,7 @@ The platform should distinguish between:
 So the recovery layer should coordinate:
 
 - runtime restart intents
+- backend-startup recovery for interrupted runtime turns
 - failed-start diagnosis
 - health-driven recovery decisions
 - operator-facing repair and recovery workflows exposed through controlled CLI or MCP surfaces

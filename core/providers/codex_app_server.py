@@ -210,7 +210,10 @@ def _thread_params(*, session: RuntimeSessionRecord, launch_spec: RuntimeBackend
 def _turn_sandbox_policy(launch_spec: RuntimeBackendLaunchSpec) -> dict[str, Any]:
     if launch_spec.execution_mode == "full-access":
         return {"type": "dangerFullAccess"}
-    policy: dict[str, Any] = {"type": "workspaceWrite"}
+    policy: dict[str, Any] = {"type": "workspaceWrite", "networkAccess": True}
+    readable_roots = [root for root in launch_spec.readable_roots if root and root != "/"]
+    if readable_roots:
+        policy["readOnlyAccess"] = {"type": "restricted", "includePlatformDefaults": True, "readableRoots": readable_roots}
     writable_roots = [root for root in launch_spec.writable_roots if root and root != "/"]
     if writable_roots:
         policy["writableRoots"] = writable_roots

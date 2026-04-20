@@ -34,3 +34,12 @@ export type ReadFilePayload = {
   content_base64: string;
 };
 
+export type DeleteFilePayload = {
+  deleted: boolean;
+  file: GalleryFile;
+};
+
+export type PreviewTextPayload = {
+  file: GalleryFile;
+  preview_text: string;
+};

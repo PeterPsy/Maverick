@@ -446,7 +446,7 @@ describe("runtime event transcript projection", () => {
     expect(messages).toMatchObject([{ role: "step", step: { label: "Reading workspace" } }]);
   });
 
-  it("uses output deltas only until a final answer exists", () => {
+  it("preserves streamed output segment positions after a final answer exists", () => {
     const streaming = eventsToMessages([
       event({
         event_type: "runtime.output.delta",
@@ -467,7 +467,110 @@ describe("runtime event transcript projection", () => {
         payload: { text: "final" },
       }),
     ]);
-    expect(completed).toMatchObject([{ role: "agent", content: "final", status: "complete" }]);
+    expect(completed).toMatchObject([
+      { id: "turn-1:agent:stream:0", role: "agent", content: "partial", status: "complete" },
+      { id: "turn-1:agent", role: "agent", content: "final", status: "complete" },
+    ]);
+  });
+
+  it("keeps tool-used blocks interleaved with streamed assistant updates after completion", () => {
+    const messages = eventsToMessages([
+      event({
+        event_id: "tool-1",
+        event_type: "runtime.tool_call.completed",
+        payload: { name: "web_search" },
+        created_at: "2026-04-19T00:00:01.000Z",
+      }),
+      event({
+        event_id: "delta-1",
+        event_type: "runtime.output.delta",
+        payload: { text: "Uso una ricerca web. " },
+        created_at: "2026-04-19T00:00:02.000Z",
+      }),
+      event({
+        event_id: "tool-2",
+        event_type: "runtime.tool_call.completed",
+        payload: { name: "functions.exec_command" },
+        created_at: "2026-04-19T00:00:03.000Z",
+      }),
+      event({
+        event_id: "delta-2",
+        event_type: "runtime.output.delta",
+        payload: { text: "Scrivo il report." },
+        created_at: "2026-04-19T00:00:04.000Z",
+      }),
+      event({
+        event_id: "tool-3",
+        event_type: "runtime.tool_call.completed",
+        payload: { name: "functions.exec_command" },
+        created_at: "2026-04-19T00:00:05.000Z",
+      }),
+      event({
+        event_id: "final-1",
+        event_type: "runtime.output.final",
+        payload: { text: "Uso una ricerca web. Scrivo il report." },
+        created_at: "2026-04-19T00:00:06.000Z",
+      }),
+    ]);
+
+    expect(messages.map((message) => message.id)).toEqual([
+      "turn-1:tools:0",
+      "turn-1:agent:stream:0",
+      "turn-1:tools:1",
+      "turn-1:agent:stream:1",
+      "turn-1:tools:2",
+    ]);
+    expect(messages).toMatchObject([
+      { role: "tool", toolCalls: [{ id: "tool-1" }] },
+      { role: "agent", content: "Uso una ricerca web. ", status: "complete" },
+      { role: "tool", toolCalls: [{ id: "tool-2" }] },
+      { role: "agent", content: "Scrivo il report.", status: "complete" },
+      { role: "tool", toolCalls: [{ id: "tool-3" }] },
+    ]);
+  });
+
+  it("uses final output only for the missing suffix after streamed output", () => {
+    const messages = eventsToMessages([
+      event({
+        event_id: "delta-1",
+        event_type: "runtime.output.delta",
+        payload: { text: "Prima parte. " },
+        created_at: "2026-04-19T00:00:01.000Z",
+      }),
+      event({
+        event_id: "final-1",
+        event_type: "runtime.output.final",
+        payload: { text: "Prima parte. Parte finale." },
+        created_at: "2026-04-19T00:00:02.000Z",
+      }),
+    ]);
+
+    expect(messages).toMatchObject([
+      { id: "turn-1:agent:stream:0", role: "agent", content: "Prima parte. ", status: "complete" },
+      { id: "turn-1:agent", role: "agent", content: "Parte finale.", status: "complete" },
+    ]);
+  });
+
+  it("deduplicates final output prefixes when only whitespace changed", () => {
+    const messages = eventsToMessages([
+      event({
+        event_id: "delta-1",
+        event_type: "runtime.output.delta",
+        payload: { text: "Prima parte. " },
+        created_at: "2026-04-19T00:00:01.000Z",
+      }),
+      event({
+        event_id: "final-1",
+        event_type: "runtime.output.final",
+        payload: { text: "Prima parte.\n\nParte finale." },
+        created_at: "2026-04-19T00:00:02.000Z",
+      }),
+    ]);
+
+    expect(messages).toMatchObject([
+      { id: "turn-1:agent:stream:0", role: "agent", content: "Prima parte. ", status: "complete" },
+      { id: "turn-1:agent", role: "agent", content: "Parte finale.", status: "complete" },
+    ]);
   });
 
   it("concatenates streaming deltas without injecting newlines or trimming spaces", () => {

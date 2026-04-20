@@ -220,14 +220,73 @@ class Phase7ProvidersTestCase(unittest.TestCase):
         launch_spec = build_runtime_backend_launch_spec(provider_store, session=session, codex_command="/bin/echo")
 
         self.assertEqual(launch_spec.provider_id, "codex")
-        self.assertEqual(launch_spec.command[:4], ["/bin/echo", "--enable", "use_legacy_landlock", "app-server"])
+        self.assertEqual(launch_spec.command[:3], [os.sys.executable, "-m", "core.runtime.workspace_sandbox"])
+        self.assertIn("--workspace-root", launch_spec.command)
+        self.assertIn(str(repo_root / "workspaces" / "acme"), launch_spec.command)
+        self.assertIn("--runtime-root", launch_spec.command)
+        self.assertIn(str(repo_root / "workspaces" / "acme" / "runtime"), launch_spec.command)
+        separator_index = launch_spec.command.index("--")
+        self.assertEqual(
+            launch_spec.command[separator_index + 1 : separator_index + 6],
+            ["/bin/echo", "--disable", "apps", "--disable", "plugins"],
+        )
+        self.assertEqual(launch_spec.command[separator_index + 6], "app-server")
+        self.assertNotIn("use_legacy_landlock", launch_spec.command)
         self.assertEqual(launch_spec.execution_mode, "sandbox")
         self.assertEqual(launch_spec.working_directory, str(repo_root / "workspaces" / "acme"))
+        self.assertEqual(launch_spec.readable_roots, [str(repo_root / "workspaces" / "acme")])
         self.assertEqual(launch_spec.writable_roots, [str(repo_root / "workspaces" / "acme")])
         self.assertIn("CODEX_HOME", launch_spec.env_overrides)
         self.assertEqual(launch_spec.env_overrides["MAVERICK_WORKSPACE_ROOT"], str(repo_root / "workspaces" / "acme"))
         self.assertEqual(launch_spec.env_overrides["TMPDIR"], str(repo_root / "workspaces" / "acme" / "runtime"))
+        self.assertEqual(launch_spec.env_overrides["HOME"], launch_spec.env_overrides["CODEX_HOME"])
+        self.assertIn(str(Path(__file__).resolve().parents[1]), launch_spec.env_overrides["PYTHONPATH"])
         self.assertTrue((Path(launch_spec.env_overrides["CODEX_HOME"])).is_dir())
+
+    def test_codex_nvm_dependency_root_is_standalone_binary_parent(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp)
+            node_version_root = home / ".nvm" / "versions" / "node" / "v24.14.0"
+            codex_bin = node_version_root / "bin" / "codex"
+            codex_js = node_version_root / "lib" / "node_modules" / "@openai" / "codex" / "bin" / "codex.js"
+            standalone = (
+                node_version_root
+                / "lib"
+                / "node_modules"
+                / "@openai"
+                / "codex"
+                / "node_modules"
+                / "@openai"
+                / "codex-linux-x64"
+                / "vendor"
+                / "x86_64-unknown-linux-musl"
+                / "codex"
+                / "codex"
+            )
+            codex_js.parent.mkdir(parents=True)
+            standalone.parent.mkdir(parents=True)
+            codex_js.write_text("#!/usr/bin/env node\n", encoding="utf-8")
+            standalone.write_text("binary\n", encoding="utf-8")
+            codex_bin.parent.mkdir(parents=True)
+            codex_bin.symlink_to("../lib/node_modules/@openai/codex/bin/codex.js")
+            adapter = CodexProviderAdapter(codex_command="codex")
+
+            with patch.dict(os.environ, {"HOME": str(home)}, clear=False):
+                with patch("core.providers.provider_codex.shutil.which", return_value=str(codex_bin)):
+                    roots = adapter._command_dependency_roots("codex")
+                    runtime_command = adapter._runtime_command("codex")
+                    sandbox_command = adapter._build_command(
+                        workspace_root=home / "workspace",
+                        runtime_root=home / "workspace" / "runtime",
+                        execution_mode="sandbox",
+                    )
+
+        self.assertEqual(roots, [standalone.parent])
+        self.assertEqual(runtime_command, str(standalone))
+        self.assertIn("--dependency-file", sandbox_command)
+        self.assertIn(f"{standalone}={home / 'workspace' / 'runtime' / 'bin' / 'codex'}", sandbox_command)
+        separator_index = sandbox_command.index("--")
+        self.assertEqual(sandbox_command[separator_index + 1], str(home / "workspace" / "runtime" / "bin" / "codex"))
 
     def test_codex_runtime_home_is_prepared_from_configured_source_home(self) -> None:
         runtime_store = self.make_runtime_store()
@@ -249,6 +308,17 @@ class Phase7ProvidersTestCase(unittest.TestCase):
                     '[plugins."github@openai-curated"]',
                     "enabled = true",
                     "",
+                    '[projects."/tmp/outside-workspace"]',
+                    'trust_level = "trusted"',
+                    "",
+                    f'[projects."{repo_root / "workspaces" / "default"}"]',
+                    'trust_level = "trusted"',
+                    "",
+                    "[features]",
+                    "apps = true",
+                    "plugins = true",
+                    "skill_mcp_dependency_install = true",
+                    "",
                     "[profiles.default]",
                     'approval_policy = "never"',
                     "",
@@ -267,15 +337,25 @@ class Phase7ProvidersTestCase(unittest.TestCase):
             agent_id="agent-1",
             start_path=repo_root,
         )
+        stale_runtime_home = repo_root / "workspaces" / "default" / "runtime" / "codex-home"
+        (stale_runtime_home / "plugins").mkdir(parents=True)
+        (stale_runtime_home / "cache" / "codex_apps_tools").mkdir(parents=True)
+        (stale_runtime_home / ".tmp" / "plugins").mkdir(parents=True)
+        (stale_runtime_home / ".tmp" / "plugins.sha").write_text("stale\n", encoding="utf-8")
+        (stale_runtime_home / ".tmp" / "app-server-remote-plugin-sync-v1").write_text("ok\n", encoding="utf-8")
 
         with patch.dict(os.environ, {"MAVERICK3_CODEX_HOME": str(source_home)}, clear=False):
             spec = CodexProviderAdapter(codex_command="/bin/echo").build_launch_spec(session)
 
         runtime_home = Path(spec.env_overrides["CODEX_HOME"])
+        separator_index = spec.command.index("--")
+        self.assertEqual(spec.command[separator_index + 1 : separator_index + 6], ["/bin/echo", "--disable", "apps", "--disable", "plugins"])
         self.assertEqual(runtime_home, repo_root / "workspaces" / "default" / "runtime" / "codex-home")
         self.assertEqual((runtime_home / "auth.json").read_text(encoding="utf-8"), '{"tokens": "test"}\n')
         self.assertTrue((runtime_home / "rules" / "base.md").exists())
+        self.assertFalse((runtime_home / "rules").is_symlink())
         self.assertTrue((runtime_home / "skills" / ".system" / "SKILL.md").exists())
+        self.assertFalse((runtime_home / "skills" / ".system").is_symlink())
         runtime_config = (runtime_home / "config.toml").read_text(encoding="utf-8")
         self.assertIn('model = "gpt-5.4"', runtime_config)
         self.assertIn("[profiles.default]", runtime_config)
@@ -283,8 +363,17 @@ class Phase7ProvidersTestCase(unittest.TestCase):
         self.assertNotIn("127.0.0.1:8002", runtime_config)
         self.assertNotIn("[plugins.", runtime_config)
         self.assertNotIn("github@openai-curated", runtime_config)
+        self.assertNotIn("/tmp/outside-workspace", runtime_config)
+        self.assertIn(f'[projects."{repo_root / "workspaces" / "default"}"]', runtime_config)
+        self.assertIn("[features]", runtime_config)
+        self.assertIn("apps = false", runtime_config)
+        self.assertIn("plugins = false", runtime_config)
+        self.assertIn("skill_mcp_dependency_install = false", runtime_config)
         self.assertFalse((runtime_home / "plugins").exists())
         self.assertFalse((runtime_home / "cache" / "codex_apps_tools").exists())
+        self.assertFalse((runtime_home / ".tmp" / "plugins").exists())
+        self.assertFalse((runtime_home / ".tmp" / "plugins.sha").exists())
+        self.assertFalse((runtime_home / ".tmp" / "app-server-remote-plugin-sync-v1").exists())
 
     def test_disable_binding_preserves_record_but_makes_it_inactive(self) -> None:
         provider_store = self.make_provider_store()
@@ -339,6 +428,7 @@ class Phase7ProvidersTestCase(unittest.TestCase):
                     resolved_secret_refs=list(resolved_secret_refs or []),
                     working_directory=session.workdir,
                     execution_mode=session.effective_mode,
+                    readable_roots=[session.workspace_root],
                     writable_roots=[session.workspace_root],
                 )
 

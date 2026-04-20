@@ -28,7 +28,7 @@ class ChatWidgetHostingTests(unittest.TestCase):
         transcript_source = (REPO_ROOT / "apps/chat/frontend/src/lib/transcript.ts").read_text()
         preview_source = (REPO_ROOT / "apps/chat/frontend/src/lib/linkPreviews.ts").read_text()
 
-        self.assertIn("structuredContentFromAgentLinks(text)", transcript_source)
+        self.assertRegex(transcript_source, r"structuredContentFromAgentLinks\((text|finalText)\)")
         self.assertIn('kind: "workspace.file.preview"', preview_source)
         self.assertIn("workspace_relative_path", preview_source)
         self.assertIn("generated|uploaded", preview_source)

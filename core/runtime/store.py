@@ -56,6 +56,9 @@ class RuntimeStore(Protocol):
     def list_sessions(self, workspace_id: str) -> list[RuntimeSessionRecord]:
         ...
 
+    def list_all_sessions(self) -> list[RuntimeSessionRecord]:
+        ...
+
     def save_turn(self, record: RuntimeTurnRecord) -> RuntimeTurnRecord:
         ...
 
@@ -105,6 +108,9 @@ class MongoRuntimeStore:
 
     def list_sessions(self, workspace_id: str) -> list[RuntimeSessionRecord]:
         return [RuntimeSessionRecord(**document) for document in self.collections.sessions.find({"workspace_id": workspace_id})]
+
+    def list_all_sessions(self) -> list[RuntimeSessionRecord]:
+        return [RuntimeSessionRecord(**document) for document in self.collections.sessions.find({})]
 
     def save_turn(self, record: RuntimeTurnRecord) -> RuntimeTurnRecord:
         self.collections.turns.update_one({"turn_id": record.turn_id}, {"$set": asdict(record)}, upsert=True)

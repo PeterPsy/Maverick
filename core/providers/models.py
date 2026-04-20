@@ -86,4 +86,5 @@ class RuntimeBackendLaunchSpec:
     resolved_secret_refs: list[str]
     working_directory: str
     execution_mode: ExecutionMode
+    readable_roots: list[str]
     writable_roots: list[str]

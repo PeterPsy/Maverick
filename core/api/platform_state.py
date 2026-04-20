@@ -13,6 +13,7 @@ from core.identity.service import bootstrap_default_admin
 from core.identity.store import IdentityCollections, MongoIdentityStore
 from core.observability.store import MongoObservabilityStore, ObservabilityCollections
 from core.providers.service import configure_workspace_provider
+from core.recovery.backend_restart import recover_interrupted_runtime_turns_after_backend_restart
 from core.providers.store import MongoProviderStore, ProviderCollections
 from core.recovery.store import MongoRecoveryStore, RecoveryCollections
 from core.runtime.event_bus import RuntimeEventBus
@@ -130,7 +131,7 @@ def bootstrap_platform_state(*, start_path: Path | None = None, now: datetime | 
         password=os.environ.get("MAVERICK3_ADMIN_PASSWORD", "maverick3"),
         now=now,
     )
-    return PlatformState(
+    state = PlatformState(
         repository_root=repository_root,
         workspace_store=workspace_store,
         identity_store=identity_store,
@@ -142,3 +143,5 @@ def bootstrap_platform_state(*, start_path: Path | None = None, now: datetime | 
         recovery_store=recovery_store,
         observability_store=observability_store,
     )
+    recover_interrupted_runtime_turns_after_backend_restart(state)
+    return state

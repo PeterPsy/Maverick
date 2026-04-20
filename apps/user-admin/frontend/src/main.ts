@@ -109,6 +109,21 @@ async function updateSelectedUser(form: HTMLFormElement, user: User) {
   await refresh();
 }
 
+async function resetSelectedUserPassword(form: HTMLFormElement, user: User) {
+  const data = new FormData(form);
+  const password = String(data.get('password') || '');
+  const confirmation = String(data.get('password_confirmation') || '');
+  if (password !== confirmation) {
+    throw new Error('Le password non coincidono');
+  }
+  await requestJson<{ status: string }>(`/api/admin/users/${encodeURIComponent(user.user_id)}/password`, {
+    method: 'POST',
+    body: JSON.stringify({ password })
+  });
+  form.reset();
+  window.alert('Password aggiornata');
+}
+
 async function updateMemberships(user: User) {
   const memberships = workspaces
     .map((workspace) => {
@@ -249,27 +264,29 @@ function render() {
       <div class="ua-users">${userListHtml()}</div>
     </aside>
     <section class="ua-main">
-      <form class="ua-card ua-create" id="create-user">
-        <div>
-          <p class="ua-kicker">Nuovo utente</p>
-          <h2>Crea accesso</h2>
-        </div>
-        <input name="username" placeholder="username" required />
-        <input name="password" type="password" placeholder="password temporanea" required />
-        <input name="display_name" placeholder="nome visualizzato" />
-        <input name="email" type="email" placeholder="email" />
-        <select name="platform_role">
-          <option value="member">Member</option>
-          <option value="admin">Admin</option>
-        </select>
-        <button type="submit">
-          <span class="material-symbols-rounded" aria-hidden="true">person_add</span>
-          Crea utente
-        </button>
-      </form>
-      ${
-        user
-          ? `<form class="ua-card ua-detail" id="edit-user">
+      <div class="ua-content">
+        <form class="ua-card ua-create" id="create-user">
+          <div>
+            <p class="ua-kicker">Nuovo utente</p>
+            <h2>Crea accesso</h2>
+          </div>
+          <input name="username" placeholder="username" required />
+          <input name="password" type="password" placeholder="password temporanea" required />
+          <input name="display_name" placeholder="nome visualizzato" />
+          <input name="email" type="email" placeholder="email" />
+          <select name="platform_role">
+            <option value="member">Member</option>
+            <option value="admin">Admin</option>
+          </select>
+          <button type="submit">
+            <span class="material-symbols-rounded" aria-hidden="true">person_add</span>
+            Crea utente
+          </button>
+        </form>
+        ${
+          user
+            ? `<div class="ua-profile-row">
+            <form class="ua-card ua-detail" id="edit-user">
             <div class="ua-heading">
               <div>
                 <p class="ua-kicker">Utente selezionato</p>
@@ -295,6 +312,25 @@ function render() {
               Salva utente
             </button>
           </form>
+          <form class="ua-card ua-password" id="reset-password">
+            <div class="ua-heading">
+              <div>
+                <p class="ua-kicker">Password</p>
+                <h2>Reset accesso</h2>
+              </div>
+              <span class="ua-password-icon material-symbols-rounded" aria-hidden="true">key</span>
+            </div>
+            <p class="ua-card-copy">Imposta una nuova password temporanea per l'utente selezionato.</p>
+            <div class="ua-password-grid">
+              <label>Nuova password<input name="password" type="password" minlength="8" autocomplete="new-password" required /></label>
+              <label>Conferma password<input name="password_confirmation" type="password" minlength="8" autocomplete="new-password" required /></label>
+            </div>
+            <button type="submit" class="ua-secondary">
+              <span class="material-symbols-rounded" aria-hidden="true">password</span>
+              Aggiorna password
+            </button>
+          </form>
+          </div>
           <section class="ua-card">
             <div class="ua-heading">
               <div>
@@ -319,8 +355,9 @@ function render() {
             <p class="ua-card-copy">Installata significa montata nel workspace. Solo le app abilitate sono visibili agli utenti e servite dal core.</p>
             <div class="ua-app-workspaces">${workspaceAppHtml()}</div>
           </details>`
-          : '<section class="ua-card"><h2>Nessun utente</h2></section>'
-      }
+            : '<section class="ua-card"><h2>Nessun utente</h2></section>'
+        }
+      </div>
     </section>
   </section>`;
   bindEvents();
@@ -341,6 +378,10 @@ function bindEvents() {
   document.getElementById('edit-user')?.addEventListener('submit', (event) => {
     event.preventDefault();
     if (user) updateSelectedUser(event.currentTarget as HTMLFormElement, user).catch(showError);
+  });
+  document.getElementById('reset-password')?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    if (user) resetSelectedUserPassword(event.currentTarget as HTMLFormElement, user).catch(showError);
   });
   document.getElementById('save-memberships')?.addEventListener('click', () => {
     if (user) updateMemberships(user).catch(showError);

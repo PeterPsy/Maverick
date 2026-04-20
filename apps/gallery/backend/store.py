@@ -9,6 +9,7 @@ import mimetypes
 from pathlib import Path
 
 from errors import GalleryValidationError
+from text_preview import MAX_TEXT_PREVIEW_CHARS, extract_text_preview
 
 
 SCHEMA_VERSION = "1"
@@ -172,6 +173,20 @@ def read_file_payload(*, role: str, relative_path: str, uploaded_root: Path, gen
     }
 
 
+def preview_text_payload(*, role: str, relative_path: str, uploaded_root: Path, generated_root: Path, max_chars: int) -> dict:
+    if max_chars <= 0 or max_chars > MAX_TEXT_PREVIEW_CHARS:
+        raise GalleryValidationError(f"max_chars must be between 1 and {MAX_TEXT_PREVIEW_CHARS}.")
+    path = resolve_storage_file(
+        role=role,
+        relative_path=relative_path,
+        uploaded_root=uploaded_root,
+        generated_root=generated_root,
+    )
+    root = storage_root_for_role(role=role, uploaded_root=uploaded_root, generated_root=generated_root).resolve()
+    record = file_record(role=role, root=root, path=path.resolve())
+    return {"file": record, "preview_text": extract_text_preview(path, record["preview_kind"], max_chars)}
+
+
 def file_info_payload(*, role: str, relative_path: str, uploaded_root: Path, generated_root: Path) -> dict:
     path = resolve_storage_file(
         role=role,
@@ -201,3 +216,16 @@ def rename_file_payload(*, role: str, relative_path: str, new_name: str, uploade
         return {"file": file_record(role=role, root=root, path=source)}
     source.rename(target)
     return {"file": file_record(role=role, root=root, path=target)}
+
+
+def delete_file_payload(*, role: str, relative_path: str, uploaded_root: Path, generated_root: Path) -> dict:
+    path = resolve_storage_file(
+        role=role,
+        relative_path=relative_path,
+        uploaded_root=uploaded_root,
+        generated_root=generated_root,
+    )
+    root = storage_root_for_role(role=role, uploaded_root=uploaded_root, generated_root=generated_root).resolve()
+    record = file_record(role=role, root=root, path=path.resolve())
+    path.unlink()
+    return {"deleted": True, "file": record}

@@ -59,8 +59,10 @@ class TestPhase9SkillSurfaces(Phase9SurfacesBase):
         target_roots = [Path(item.target_root) for item in materializations]
         self.assertTrue(any(path.as_posix().endswith("/core/core-ops") for path in target_roots))
         self.assertTrue(any(path.as_posix().endswith("/app/checklists/task-helper") for path in target_roots))
+        self.assertTrue(all(item.strategy == "copy" for item in materializations))
         for path in target_roots:
-            self.assertTrue(path.is_symlink())
+            self.assertTrue(path.is_dir())
+            self.assertFalse(path.is_symlink())
             self.assertIn("codex-home", path.parts)
             codex_home_index = path.parts.index("codex-home")
             self.assertEqual(path.parts[codex_home_index + 1], "skills")

@@ -48,6 +48,7 @@ class TestPhase11CoreFlowObservability(Phase11ObservabilityBase):
                     resolved_secret_refs=list(resolved_secret_refs or []),
                     working_directory=session.workdir,
                     execution_mode=session.effective_mode,
+                    readable_roots=[session.workspace_root],
                     writable_roots=[session.workspace_root],
                 )
 

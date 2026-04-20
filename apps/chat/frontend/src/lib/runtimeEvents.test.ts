@@ -95,6 +95,42 @@ describe("runtime websocket helpers", () => {
     expect(activeTurn).toBeNull();
   });
 
+  it("treats session-level terminal runtime events as closing the latest active turn", () => {
+    const activeTurn = inferActiveRuntimeTurn(
+      [
+        { ...event("queued", "2026-04-19T10:00:00Z"), event_type: "runtime.turn.queued", payload: { input_text: "work" } },
+        { ...event("started", "2026-04-19T10:00:01Z"), event_type: "runtime.turn.started" },
+        {
+          ...event("failed", "2026-04-19T10:00:02Z"),
+          turn_id: "",
+          event_type: "runtime.turn.failed",
+          payload: { error: "Codex app-server error" },
+        },
+      ],
+      "session-1",
+    );
+
+    expect(activeTurn).toBeNull();
+  });
+
+  it("scopes live runtime labels to the current active turn", () => {
+    const oldStep = {
+      ...event("old-step", "2026-04-19T10:00:00Z"),
+      turn_id: "turn-1",
+      event_type: "runtime.step.updated",
+      payload: { label: "Codex app-server error" },
+    };
+    const newTurn = {
+      ...event("new-turn", "2026-04-19T10:00:01Z"),
+      turn_id: "turn-2",
+      event_type: "runtime.turn.started",
+      payload: {},
+    };
+
+    expect(latestRuntimeStepLabel([oldStep, newTurn], "turn-2")).toBe("");
+    expect(latestRuntimeStepLabel([oldStep, newTurn], "turn-1")).toBe("Codex app-server error");
+  });
+
   it("classifies transient runtime replay failures", () => {
     expect(isTransientReplayError(new Error("Request failed 502: /api/runtime/sessions/session-1/events"))).toBe(true);
     expect(isTransientReplayError(new Error("Request failed 404: /api/runtime/sessions/session-1/events"))).toBe(false);

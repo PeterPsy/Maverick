@@ -125,13 +125,37 @@ export function eventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
   let messageSequence = 0;
   const seenUserTurns = new Set<string>();
   const finalTurnIds = new Set(events.filter((event) => event.event_type === "runtime.output.final").map((event) => event.turn_id || event.event_id));
-  const deltaByTurn = new Map<string, { text: string; createdAt: string; order: number }>();
+  const outputSegmentsByTurn = new Map<string, { text: string; createdAt: string; index: number; order: number }>();
+  const nextOutputSegmentIndexByTurn = new Map<string, number>();
+  const renderedOutputByTurn = new Map<string, string>();
   const toolSegmentsByTurn = new Map<string, { createdAt: string; itemsByKey: Map<string, ToolCallMessage>; index: number; order: number }>();
   const nextToolSegmentIndexByTurn = new Map<string, number>();
 
   function pushMessage(message: ChatMessage, order: number) {
     orderedMessages.push({ order, sequence: messageSequence, message });
     messageSequence += 1;
+  }
+
+  function appendRenderedOutput(turnId: string, text: string) {
+    if (text) {
+      renderedOutputByTurn.set(turnId, `${renderedOutputByTurn.get(turnId) || ""}${text}`);
+    }
+  }
+
+  function flushOutputSegment(turnId: string, closeActive = false) {
+    const segment = outputSegmentsByTurn.get(turnId);
+    if (!segment || !segment.text) {
+      return;
+    }
+    pushMessage({
+      id: `${turnId}:agent:stream:${segment.index}`,
+      role: "agent",
+      content: segment.text,
+      createdAt: segment.createdAt,
+      status: closeActive ? "complete" : "pending",
+    }, segment.order);
+    appendRenderedOutput(turnId, segment.text);
+    outputSegmentsByTurn.delete(turnId);
   }
 
   function flushToolSegment(turnId: string, closeActive = false) {
@@ -177,27 +201,34 @@ export function eventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
         }, eventIndex);
       }
     }
-    if (event.event_type === "runtime.output.delta" && !finalTurnIds.has(turnId)) {
+    if (event.event_type === "runtime.output.delta") {
       const text = deltaTextPayload(event);
       if (text) {
         flushToolSegment(turnId, true);
-        const current = deltaByTurn.get(turnId);
-        deltaByTurn.set(turnId, {
+        const current = outputSegmentsByTurn.get(turnId);
+        const index = nextOutputSegmentIndexByTurn.get(turnId) || 0;
+        if (!current) {
+          nextOutputSegmentIndexByTurn.set(turnId, index + 1);
+        }
+        outputSegmentsByTurn.set(turnId, {
           text: current ? `${current.text}${text}` : text,
           createdAt: event.created_at,
           order: current ? current.order : eventIndex,
+          index: current ? current.index : index,
         });
       }
     }
     if (event.event_type === "runtime.output.final") {
       flushToolSegment(turnId, true);
+      flushOutputSegment(turnId, true);
       const structured = structuredPayload(event.payload.structured_content || event.payload.structuredContent || event.payload.content);
-      const text = textPayload(event);
+      const finalText = textPayload(event);
+      const text = finalTextRemainder(finalText, renderedOutputByTurn.get(turnId) || "");
       if (structured) {
         pushMessage({
           id: `${turnId}:structured:${event.event_id}`,
           role: "structured",
-          content: text || structured.kind,
+          content: text || finalText || structured.kind,
           createdAt: event.created_at,
           status: "complete",
           structuredContent: structured,
@@ -211,20 +242,21 @@ export function eventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
           createdAt: event.created_at,
           status: "complete",
         }, eventIndex);
-        structuredContentFromAgentLinks(text).forEach((linkPreview, index) => {
-          pushMessage({
-            id: `${turnId}:link-preview:${event.event_id}:${index}`,
-            role: "structured",
-            content: linkPreview.kind,
-            createdAt: event.created_at,
-            status: "complete",
-            structuredContent: linkPreview,
-          }, eventIndex);
-        });
       }
+      structuredContentFromAgentLinks(finalText).forEach((linkPreview, index) => {
+        pushMessage({
+          id: `${turnId}:link-preview:${event.event_id}:${index}`,
+          role: "structured",
+          content: linkPreview.kind,
+          createdAt: event.created_at,
+          status: "complete",
+          structuredContent: linkPreview,
+        }, eventIndex);
+      });
     }
     const toolCall = toolCallPayload(event) || skillChangeToolCallPayload(event);
     if (toolCall) {
+      flushOutputSegment(turnId, finalTurnIds.has(turnId));
       const current = toolSegmentsByTurn.get(turnId);
       const key = toolCallKey(toolCall);
       if (current) {
@@ -240,6 +272,7 @@ export function eventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
     const step = stepPayload(event);
     if (step) {
       flushToolSegment(turnId, true);
+      flushOutputSegment(turnId, finalTurnIds.has(turnId));
       pushMessage({
         id: `${turnId}:step:${event.event_id}`,
         role: "step",
@@ -251,6 +284,7 @@ export function eventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
     }
     if (event.event_type === "runtime.turn.failed") {
       flushToolSegment(turnId, true);
+      flushOutputSegment(turnId, true);
       const error = readableSystemText(event.payload.error || event.payload.exit_code, "Runtime turn failed.");
       pushMessage({
         id: `${turnId}:failed`,
@@ -262,6 +296,7 @@ export function eventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
     }
     if (event.event_type === "runtime.turn.cancelled") {
       flushToolSegment(turnId, true);
+      flushOutputSegment(turnId, true);
       const reason = readableSystemText(event.payload.reason, "Runtime turn cancelled.");
       pushMessage({
         id: `${turnId}:cancelled`,
@@ -272,20 +307,67 @@ export function eventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
       }, eventIndex);
     }
   }
-  for (const [turnId, delta] of deltaByTurn) {
-    pushMessage({
-      id: `${turnId}:agent:streaming`,
-      role: "agent",
-      content: delta.text,
-      createdAt: delta.createdAt,
-      status: "pending",
-    }, delta.order);
+  for (const turnId of outputSegmentsByTurn.keys()) {
+    flushOutputSegment(turnId, finalTurnIds.has(turnId));
   }
   for (const turnId of toolSegmentsByTurn.keys()) {
     flushToolSegment(turnId);
   }
   orderedMessages.sort((left, right) => left.order - right.order || left.sequence - right.sequence);
   return orderedMessages.map((entry) => entry.message);
+}
+
+function finalTextRemainder(finalText: string, renderedText: string): string {
+  if (!finalText || !renderedText) {
+    return finalText;
+  }
+  if (finalText.startsWith(renderedText)) {
+    return finalText.slice(renderedText.length).trimStart();
+  }
+  const whitespaceInsensitivePrefixEnd = prefixEndIgnoringWhitespace(finalText, renderedText);
+  if (whitespaceInsensitivePrefixEnd !== null) {
+    return finalText.slice(whitespaceInsensitivePrefixEnd).trimStart();
+  }
+  if (normalizedText(finalText) === normalizedText(renderedText)) {
+    return "";
+  }
+  return finalText;
+}
+
+function prefixEndIgnoringWhitespace(text: string, prefix: string): number | null {
+  let textIndex = 0;
+  let prefixIndex = 0;
+  while (prefixIndex < prefix.length) {
+    const prefixChar = prefix[prefixIndex];
+    if (/\s/.test(prefixChar)) {
+      while (prefixIndex < prefix.length && /\s/.test(prefix[prefixIndex])) {
+        prefixIndex += 1;
+      }
+      if (prefixIndex >= prefix.length) {
+        while (textIndex < text.length && /\s/.test(text[textIndex])) {
+          textIndex += 1;
+        }
+        return textIndex;
+      }
+      if (textIndex >= text.length || !/\s/.test(text[textIndex])) {
+        return null;
+      }
+      while (textIndex < text.length && /\s/.test(text[textIndex])) {
+        textIndex += 1;
+      }
+      continue;
+    }
+    if (text[textIndex] !== prefixChar) {
+      return null;
+    }
+    textIndex += 1;
+    prefixIndex += 1;
+  }
+  return textIndex;
+}
+
+function normalizedText(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
 }
 
 export function firstUserTitle(value: string): string {

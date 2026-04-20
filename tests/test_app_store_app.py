@@ -39,7 +39,7 @@ class AppStoreAppTestCase(unittest.TestCase):
         (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
         (repo_root / "IMPLEMENTATION_TASKLIST.md").write_text("", encoding="utf-8")
         source_apps_root = Path(__file__).resolve().parents[1] / "apps"
-        for app_id in ("base-shell", "chat", "agents", "app-store"):
+        for app_id in ("base-shell", "chat", "agents", "app-store", "user-admin"):
             shutil.copytree(
                 source_apps_root / app_id,
                 repo_root / "apps" / app_id,
@@ -80,15 +80,34 @@ class AppStoreAppTestCase(unittest.TestCase):
             return status, json.loads(raw.decode("utf-8")), headers
         return status, raw, headers
 
-    def login(self, app) -> str:
+    def login(self, app, *, username: str = "admin", password: str = "maverick3") -> str:
         status, _payload, headers = self.invoke(
             app,
             path="/api/auth/login",
             method="POST",
-            body={"username": "admin", "password": "maverick3"},
+            body={"username": username, "password": password},
         )
         self.assertEqual(status, 200)
         return headers["Set-Cookie"].split(";", 1)[0]
+
+    def create_member_user(self, app, admin_cookie: str, *, username: str = "viewer") -> str:
+        status_user, user, _user_headers = self.invoke(
+            app,
+            path="/api/admin/users",
+            method="POST",
+            body={"username": username, "password": "memberpass", "platform_role": "member"},
+            cookie=admin_cookie,
+        )
+        self.assertEqual(status_user, 201)
+        status_workspace, _workspace, _workspace_headers = self.invoke(
+            app,
+            path=f"/api/admin/users/{user['user_id']}/workspaces",
+            method="PUT",
+            body={"memberships": [{"workspace_id": "default", "role": "member"}]},
+            cookie=admin_cookie,
+        )
+        self.assertEqual(status_workspace, 200)
+        return self.login(app, username=username, password="memberpass")
 
     def write_remote_app_contract(self, app_root: Path) -> None:
         contract = {
@@ -145,7 +164,13 @@ class AppStoreAppTestCase(unittest.TestCase):
         app_root.mkdir(parents=True)
         (app_root / "app_contract.json").write_text(json.dumps(contract, indent=2), encoding="utf-8")
 
-    def write_workspace_local_app_contract(self, app_root: Path, *, frontend: bool = False) -> None:
+    def write_workspace_local_app_contract(
+        self,
+        app_root: Path,
+        *,
+        frontend: bool = False,
+        platform_roles: list[str] | None = None,
+    ) -> None:
         contract = {
             "app_id": "local-notes",
             "contract_version": "1.0",
@@ -155,6 +180,7 @@ class AppStoreAppTestCase(unittest.TestCase):
             "publisher": "workspace",
             "minimum_core_version": "0.1.0",
             "distribution": {"mode": "workspace_local", "source_access": "editable"},
+            **({"visibility": {"platform_roles": platform_roles}} if platform_roles is not None else {}),
             "capabilities": {"mcp_tools": [], "cli_commands": [], "skills": [], "views": ["main"] if frontend else []},
             "entrypoints": {"frontend": "frontend/dist", "hooks": {}} if frontend else {"hooks": {}},
             "storage": {
@@ -376,6 +402,30 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertEqual(install_status, 401)
         self.assertEqual(install_payload["error"], "authentication_required")
 
+    def test_catalog_api_hides_admin_only_apps_from_members(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+        admin_cookie = self.login(app)
+        member_cookie = self.create_member_user(app, admin_cookie)
+        catalog = {
+            "count": 2,
+            "items": [
+                {"app_id": "notes", "name": "Notes"},
+                {"app_id": "admin-panel", "name": "Admin Panel", "visibility": {"platform_roles": ["admin"]}},
+            ],
+        }
+
+        with patch("core.api.app_store_api.fetch_remote_catalog", return_value=catalog):
+            admin_status, admin_payload, _admin_headers = self.invoke(app, path="/api/app-store/apps", cookie=admin_cookie)
+            member_status, member_payload, _member_headers = self.invoke(app, path="/api/app-store/apps", cookie=member_cookie)
+
+        self.assertEqual(admin_status, 200)
+        self.assertEqual(member_status, 200)
+        self.assertIn("admin-panel", {item["app_id"] for item in admin_payload["items"]})
+        self.assertNotIn("admin-panel", {item["app_id"] for item in member_payload["items"]})
+        self.assertEqual(member_payload["count"], 1)
+
     def test_installations_api_reports_enabled_builtin_apps(self) -> None:
         repo_root = self.make_repo_root()
         state = bootstrap_platform_state(start_path=repo_root)
@@ -390,6 +440,20 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertIn(("default", "app-store"), installed)
         self.assertIn(("default", "base-shell"), installed)
         self.assertIn(("default", "chat"), installed)
+
+    def test_member_installations_api_hides_admin_only_installed_apps(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+        admin_cookie = self.login(app)
+        member_cookie = self.create_member_user(app, admin_cookie)
+
+        status, payload, _headers = self.invoke(app, path="/api/app-store/installations", cookie=member_cookie)
+
+        self.assertEqual(status, 200)
+        installed_app_ids = {item["app_id"] for item in payload["items"]}
+        self.assertIn("chat", installed_app_ids)
+        self.assertNotIn("user-admin", installed_app_ids)
 
     def test_installations_api_reports_workspace_local_apps(self) -> None:
         repo_root = self.make_repo_root()
@@ -410,6 +474,28 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertIn("local_apps", payload)
         local_apps = {(item["workspace_id"], item["app_id"], item["status"]) for item in payload["local_apps"]}
         self.assertIn(("default", "local-notes", "uninstalled"), local_apps)
+
+    def test_member_installations_api_hides_admin_only_local_apps(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        local_app_root = repo_root / "workspaces" / "default" / "apps" / "local-notes"
+        self.write_workspace_local_app_contract(local_app_root, platform_roles=["admin"])
+        register_workspace_local_app_project_from_contract(
+            state.app_store,
+            workspace_id="default",
+            project_root=str(local_app_root),
+        )
+        app = PlatformHost(state, start_path=repo_root)
+        admin_cookie = self.login(app)
+        member_cookie = self.create_member_user(app, admin_cookie)
+
+        admin_status, admin_payload, _admin_headers = self.invoke(app, path="/api/app-store/installations", cookie=admin_cookie)
+        member_status, member_payload, _member_headers = self.invoke(app, path="/api/app-store/installations", cookie=member_cookie)
+
+        self.assertEqual(admin_status, 200)
+        self.assertEqual(member_status, 200)
+        self.assertIn("local-notes", {item["app_id"] for item in admin_payload["local_apps"]})
+        self.assertNotIn("local-notes", {item["app_id"] for item in member_payload["local_apps"]})
 
     def test_installations_api_discovers_workspace_local_app_projects_on_disk(self) -> None:
         repo_root = self.make_repo_root()

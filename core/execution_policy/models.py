@@ -29,5 +29,6 @@ class WorkspaceRuntimeBoundary:
 
     workspace_id: str
     workspace_root: str
+    readable_roots: list[str]
     writable_roots: list[str]
     allows_outside_workspace_root: bool

@@ -8,18 +8,18 @@ from unittest.mock import patch
 
 from core.providers.models import RuntimeBackendLaunchSpec
 from core.providers.provider_codex import build_codex_definition
+from core.providers.codex_app_server import _turn_sandbox_policy
 from core.runtime.execution import execute_runtime_turn
 from core.runtime.execution import _codex_app_server_command
 from core.runtime.runtime_session import RuntimeSessionRecord
 
 
 class RuntimeExecutionCommandTest(unittest.TestCase):
-    def test_sandbox_session_uses_codex_app_server_with_landlock_flag(self) -> None:
+    def test_sandbox_session_uses_codex_app_server_without_legacy_landlock_flag(self) -> None:
         with patch.dict(os.environ, {"MAVERICK3_CODEX_COMMAND": "/usr/bin/codex"}, clear=False):
             command = _codex_app_server_command(execution_mode=_session("sandbox").effective_mode)
 
-        self.assertEqual(command[:3], ["/usr/bin/codex", "--enable", "use_legacy_landlock"])
-        self.assertEqual(command[-3:], ["app-server", "--listen", "stdio://"])
+        self.assertEqual(command, ["/usr/bin/codex", "app-server", "--listen", "stdio://"])
         self.assertNotIn("exec", command)
 
     def test_full_access_session_uses_codex_app_server_without_landlock_flag(self) -> None:
@@ -28,6 +28,16 @@ class RuntimeExecutionCommandTest(unittest.TestCase):
 
         self.assertEqual(command, ["/usr/bin/codex", "app-server", "--listen", "stdio://"])
         self.assertNotIn("exec", command)
+
+    def test_turn_sandbox_policy_carries_readable_and_writable_roots(self) -> None:
+        session = _session("sandbox")
+        policy = _turn_sandbox_policy(_launch_spec(session))
+
+        self.assertEqual(policy["type"], "workspaceWrite")
+        self.assertTrue(policy["networkAccess"])
+        self.assertEqual(policy["readOnlyAccess"], {"type": "restricted", "includePlatformDefaults": True, "readableRoots": [session.workspace_root]})
+        self.assertNotIn("readableRoots", policy)
+        self.assertEqual(policy["writableRoots"], [session.workspace_root])
 
     def test_codex_execution_uses_persistent_app_server_thread(self) -> None:
         temp_dir = tempfile.TemporaryDirectory()
@@ -181,6 +191,7 @@ def _launch_spec(session: RuntimeSessionRecord) -> RuntimeBackendLaunchSpec:
         resolved_secret_refs=[],
         working_directory=session.workdir,
         execution_mode=session.effective_mode,
+        readable_roots=[session.workspace_root],
         writable_roots=[session.workspace_root],
     )
 

@@ -25,6 +25,18 @@ export function inferActiveRuntimeTurn(events: RuntimeEvent[], sessionId: string
   const turns = new Map<string, RuntimeTurn>();
   for (const event of events) {
     if (!event.turn_id) {
+      const eventStatus = event.session_id === sessionId ? turnStatusFromEvent(event.event_type) : null;
+      if (eventStatus && turnStatusRank(eventStatus) >= turnStatusRank("completed")) {
+        const activeTurn = [...turns.values()].filter((turn) => turn.status === "queued" || turn.status === "active").at(-1);
+        if (activeTurn) {
+          turns.set(activeTurn.turn_id, {
+            ...activeTurn,
+            status: eventStatus,
+            failure_reason: typeof event.payload.error === "string" ? event.payload.error : activeTurn.failure_reason,
+            updated_at: event.created_at,
+          });
+        }
+      }
       continue;
     }
     const previous = turns.get(event.turn_id);

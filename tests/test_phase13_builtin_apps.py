@@ -7,7 +7,9 @@ from pathlib import Path
 import json
 import shutil
 import tempfile
+import time
 import unittest
+from unittest.mock import patch
 
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
@@ -123,6 +125,41 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
         self.assertTrue((repo_root / "workspaces" / "ceida" / "data" / "chat" / "threads.json").is_file())
         self.assertTrue((repo_root / "workspaces" / "ceida" / "data" / "agents" / "agent_types.json").is_file())
         self.assertTrue((repo_root / "workspaces" / "ceida" / "data" / "skills" / "state.json").is_file())
+
+    def test_bootstrap_queues_resume_turn_for_running_session_interrupted_by_backend_restart(self) -> None:
+        repo_root = self.make_repo_root()
+        initial_state = bootstrap_platform_state(start_path=repo_root)
+        session = create_runtime_session(
+            initial_state.runtime_store,
+            session_id="runtime-restart",
+            workspace_id="default",
+            agent_id="chat",
+            governance=initial_state.workspace_store.get_governance("default"),
+            platform_allows_full_access=True,
+            start_path=repo_root,
+        )
+        transition_runtime_session(initial_state.runtime_store, session_id=session.session_id, target_status="running")
+        turn = queue_runtime_turn(initial_state.runtime_store, turn_id="interrupted-turn", session_id=session.session_id, input_text="long work")
+        transition_runtime_turn(initial_state.runtime_store, turn_id=turn.turn_id, target_status="active")
+
+        with patch.dict("os.environ", {"MAVERICK3_RUNTIME_FAKE_RESPONSE": "resumed after restart"}):
+            restarted_state = bootstrap_platform_state(start_path=repo_root)
+            for _attempt in range(20):
+                turns = restarted_state.runtime_store.list_turns(session.session_id)
+                if any(item.input_text == "resume" and item.status == "completed" for item in turns):
+                    break
+                time.sleep(0.05)
+
+        turns = restarted_state.runtime_store.list_turns(session.session_id)
+        interrupted = restarted_state.runtime_store.get_turn("interrupted-turn")
+        resume_turns = [item for item in turns if item.input_text == "resume"]
+        event_types = [event.event_type for event in restarted_state.runtime_store.list_events(session.session_id)]
+
+        self.assertEqual(interrupted.status, "failed")
+        self.assertEqual(len(resume_turns), 1)
+        self.assertEqual(resume_turns[0].status, "completed")
+        self.assertIn("runtime.recovery.resume_queued", event_types)
+        self.assertIn("runtime.turn.failed", event_types)
 
     def test_platform_host_mounts_root_shell_and_chat_frontend(self) -> None:
         repo_root = self.make_repo_root()

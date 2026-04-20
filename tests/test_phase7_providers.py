@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from core.api.application import create_application
 from core.providers.errors import ProviderCredentialBindingError
 from core.providers.models import ProviderCapabilitySet, ProviderDefinition, RuntimeBackendLaunchSpec
 from core.providers.provider_credentials import bind_provider_credential, disable_provider_binding
+from core.providers.provider_codex import CodexProviderAdapter
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.provider_selection import ProviderSelectionService
 from core.providers.service import (
@@ -225,6 +228,63 @@ class Phase7ProvidersTestCase(unittest.TestCase):
         self.assertEqual(launch_spec.env_overrides["MAVERICK_WORKSPACE_ROOT"], str(repo_root / "workspaces" / "acme"))
         self.assertEqual(launch_spec.env_overrides["TMPDIR"], str(repo_root / "workspaces" / "acme" / "runtime"))
         self.assertTrue((Path(launch_spec.env_overrides["CODEX_HOME"])).is_dir())
+
+    def test_codex_runtime_home_is_prepared_from_configured_source_home(self) -> None:
+        runtime_store = self.make_runtime_store()
+        repo_root = self.make_repo_root()
+        source_home = repo_root / "operator-codex-home"
+        source_home.mkdir()
+        (source_home / "auth.json").write_text('{"tokens": "test"}\n', encoding="utf-8")
+        (source_home / "version.json").write_text('{"version": "test"}\n', encoding="utf-8")
+        (source_home / ".personality_migration").write_text("done\n", encoding="utf-8")
+        (source_home / "installation_id").write_text("install-1\n", encoding="utf-8")
+        (source_home / "config.toml").write_text(
+            "\n".join(
+                [
+                    'model = "gpt-5.4"',
+                    "",
+                    "[mcp_servers.legacy]",
+                    'url = "http://127.0.0.1:8002/mcp/"',
+                    "",
+                    '[plugins."github@openai-curated"]',
+                    "enabled = true",
+                    "",
+                    "[profiles.default]",
+                    'approval_policy = "never"',
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        (source_home / "rules").mkdir()
+        (source_home / "rules" / "base.md").write_text("rules\n", encoding="utf-8")
+        (source_home / "skills" / ".system").mkdir(parents=True)
+        (source_home / "skills" / ".system" / "SKILL.md").write_text("---\nname: system\n---\n", encoding="utf-8")
+        session = create_runtime_session(
+            runtime_store,
+            session_id="sess-codex-home",
+            workspace_id="default",
+            agent_id="agent-1",
+            start_path=repo_root,
+        )
+
+        with patch.dict(os.environ, {"MAVERICK3_CODEX_HOME": str(source_home)}, clear=False):
+            spec = CodexProviderAdapter(codex_command="/bin/echo").build_launch_spec(session)
+
+        runtime_home = Path(spec.env_overrides["CODEX_HOME"])
+        self.assertEqual(runtime_home, repo_root / "workspaces" / "default" / "runtime" / "codex-home")
+        self.assertEqual((runtime_home / "auth.json").read_text(encoding="utf-8"), '{"tokens": "test"}\n')
+        self.assertTrue((runtime_home / "rules" / "base.md").exists())
+        self.assertTrue((runtime_home / "skills" / ".system" / "SKILL.md").exists())
+        runtime_config = (runtime_home / "config.toml").read_text(encoding="utf-8")
+        self.assertIn('model = "gpt-5.4"', runtime_config)
+        self.assertIn("[profiles.default]", runtime_config)
+        self.assertNotIn("[mcp_servers.legacy]", runtime_config)
+        self.assertNotIn("127.0.0.1:8002", runtime_config)
+        self.assertNotIn("[plugins.", runtime_config)
+        self.assertNotIn("github@openai-curated", runtime_config)
+        self.assertFalse((runtime_home / "plugins").exists())
+        self.assertFalse((runtime_home / "cache" / "codex_apps_tools").exists())
 
     def test_disable_binding_preserves_record_but_makes_it_inactive(self) -> None:
         provider_store = self.make_provider_store()

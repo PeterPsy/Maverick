@@ -116,8 +116,7 @@ h3 {
   font-size: 0.94rem;
 }
 
-.icon-button,
-.app-row-action {
+.icon-button {
   min-height: 1.9rem;
   padding: 0 0.72rem;
   border-radius: 999px;
@@ -127,31 +126,8 @@ h3 {
   font-weight: 800;
 }
 
-.icon-button:hover,
-.app-row-action:hover:not(:disabled) {
+.icon-button:hover {
   transform: translateY(-1px);
-}
-
-.app-row-action[data-action="uninstall"] {
-  border: 1px solid var(--app-border-strong);
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--app-text);
-}
-
-.app-row-action--secondary {
-  border: 1px solid var(--app-border-strong);
-  background: rgba(255, 255, 255, 0.055);
-  color: var(--app-text-muted);
-}
-
-.app-row-action--secondary:hover:not(:disabled) {
-  color: var(--app-text);
-}
-
-.app-row-action:disabled {
-  cursor: not-allowed;
-  opacity: 0.46;
-  transform: none;
 }
 
 .workspace-strip {
@@ -331,57 +307,137 @@ h3 {
 .app-row-actions {
   flex: none;
   gap: 0.35rem;
+  position: relative;
 }
 
-.app-row-workspaces {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.32rem;
+.app-row-menu {
+  position: relative;
 }
 
-.app-row-workspace-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.28rem;
-  min-height: 1.45rem;
-  padding: 0 0.45rem;
-  border: 1px solid var(--app-border);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.035);
-  color: var(--app-text-soft);
-  cursor: pointer;
-  font-size: 0.68rem;
-  font-weight: 750;
+.app-row-menu summary {
+  list-style: none;
 }
 
-.app-row-workspace-chip:has(input:checked) {
-  background: rgba(51, 210, 137, 0.12);
-  color: var(--app-success);
+.app-row-menu summary::-webkit-details-marker {
+  display: none;
 }
 
-.app-row-workspace-chip input {
-  accent-color: var(--app-primary);
-  margin: 0;
-}
-
+.app-row-more,
 .app-row-chevron {
   display: grid;
   place-items: center;
-  width: 1.55rem;
-  height: 1.55rem;
+  width: 1.72rem;
+  height: 1.72rem;
   padding: 0;
   border-radius: 999px;
   background: transparent;
   color: var(--app-text-soft);
 }
 
-.app-row-chevron .material-symbols-rounded {
-  font-size: 1.15rem;
+.app-row-more {
+  border: 1px solid transparent;
 }
 
+.app-row-more:hover,
+.app-row-menu[open] .app-row-more,
 .app-row-chevron:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.08);
   color: var(--app-text);
+}
+
+.app-row-menu[open] .app-row-more {
+  border-color: var(--app-border-strong);
+}
+
+.app-row-menu-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  display: grid;
+  gap: 0.22rem;
+  width: min(17.5rem, calc(100vw - 32px));
+  padding: 0.42rem;
+  border: 1px solid var(--app-border-strong);
+  border-radius: 8px;
+  background: rgba(24, 24, 24, 0.98);
+  box-shadow: 0 18px 54px rgba(0, 0, 0, 0.36);
+}
+
+.app-row-menu-item,
+.app-row-menu-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2rem;
+  width: 100%;
+  border-radius: 6px;
+  color: var(--app-text-muted);
+  font-size: 0.76rem;
+  font-weight: 750;
+}
+
+.app-row-menu-item {
+  padding: 0 0.55rem;
+  background: transparent;
+  text-align: left;
+}
+
+.app-row-menu-item:hover:not(:disabled),
+.app-row-menu-check:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--app-text);
+}
+
+.app-row-menu-item[data-intent="danger"] {
+  color: var(--app-danger);
+}
+
+.app-row-menu-item:disabled,
+.app-row-menu-check:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.app-row-menu-item:disabled {
+  cursor: not-allowed;
+}
+
+.app-row-menu-section {
+  display: grid;
+  gap: 0.18rem;
+  padding-top: 0.3rem;
+  border-top: 1px solid var(--app-border);
+}
+
+.app-row-menu-label {
+  margin: 0.1rem 0.48rem 0.08rem;
+  color: var(--app-text-soft);
+  font-size: 0.62rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.app-row-menu-check {
+  padding: 0 0.55rem;
+}
+
+.app-row-menu-check:has(input:checked) {
+  color: var(--app-success);
+}
+
+.app-row-menu-check input {
+  accent-color: var(--app-primary);
+  margin: 0;
+}
+
+.app-row-chevron {
+  border: 0;
+}
+
+.app-row-chevron .material-symbols-rounded {
+  font-size: 1.15rem;
 }
 
 .app-row-chevron:disabled {

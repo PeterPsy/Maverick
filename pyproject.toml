@@ -7,7 +7,9 @@ name = "maverick-v3"
 version = "0.1.0"
 description = "Maverick v3 clean-slate platform core scaffold"
 requires-python = ">=3.12"
+dependencies = [
+    "uvicorn[standard]>=0.30",
+]
 
 [tool.setuptools]
 include-package-data = true
-

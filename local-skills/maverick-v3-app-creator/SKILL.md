@@ -53,6 +53,49 @@ Clarify or infer these before implementation. If any requirement is still produc
 - If the app needs a missing generic capability, add a generic core surface or document the gap in `IMPLEMENTATION_TASKLIST.md`.
 - If behavior is app-specific, implement it inside the app.
 
+## Workspace-Local App Registration
+
+Creating files under `workspaces/<workspace_id>/apps/<app_id>/` does not make the app visible to Maverick.
+
+For every `distribution.mode = "workspace_local"` app, the agent must complete the app-hosting registration flow after writing the files.
+
+Required flow:
+
+1. Create the app source tree under `workspaces/<workspace_id>/apps/<app_id>/`.
+2. Write a valid `app_contract.json` with:
+   - `app_id` matching the folder name
+   - `distribution.mode = "workspace_local"`
+   - `distribution.source_access = "editable"`
+   - every declared entrypoint pointing to a real file or directory
+3. Validate the contract with the core contract parser.
+4. Register the project in the core app-hosting control plane with `register_workspace_local_app_project_from_contract(...)` or the official core CLI/API equivalent when available.
+5. If the user wants to use the app immediately, install it into the owning workspace with `install_workspace_local_app(...)` or the official core CLI/API equivalent when available.
+6. Verify `/api/app-store/installations` includes the app in `local_apps`.
+7. If installed, verify the workspace app binding appears in the installation list and the app is mountable/enabled according to the core app-hosting state.
+
+Do not say an app has been created for Maverick just because the directory exists.
+
+A workspace-local app has three distinct states:
+
+- source exists on disk under `workspaces/<workspace_id>/apps/<app_id>/`
+- project is registered in app-hosting control-plane records
+- app is installed/enabled for the workspace
+
+Keep these states explicit in the implementation summary.
+
+Until a stable core CLI exists, use the core service functions directly in tests or a focused repository script only when necessary.
+
+Preferred future CLI shape:
+
+```bash
+maverick apps register-local --workspace <workspace_id> --path workspaces/<workspace_id>/apps/<app_id>
+maverick apps install-local --workspace <workspace_id> --app <app_id>
+```
+
+Do not implement app-specific registration shortcuts.
+
+Registration and installation must remain generic core app-hosting operations.
+
 ## Planning Workflow
 
 For non-trivial apps, produce a short plan before coding.
@@ -221,6 +264,9 @@ Default to focused tests for contracts, path rules, store behavior, and entrypoi
 Useful test categories:
 
 - contract parses under `parse_app_contract_file`
+- workspace-local app is registered with `register_workspace_local_app_project_from_contract`
+- `/api/app-store/installations` reports registered workspace-local app in `local_apps`
+- workspace-local app can be installed with `install_workspace_local_app` when requested
 - install hook creates expected data under `data/<app_id>`
 - seed is idempotent
 - backend actions return expected status and payloads
@@ -269,6 +315,9 @@ If a command cannot run, state why in the final summary.
 
 - creating app-specific shortcuts in core
 - adding an app to a hardcoded core list when contract-driven discovery is available
+- assuming a workspace-local app is visible because its folder exists
+- forgetting to register a `workspace_local` app after creating its `app_contract.json`
+- installing a workspace-local app into a workspace other than its owning workspace
 - declaring surfaces that are not implemented
 - storing app business data in core stores
 - writing app data outside `data/<app_id>`
@@ -282,6 +331,9 @@ If a command cannot run, state why in the final summary.
 A new Maverick v3 app is done when:
 
 - `app_contract.json` is valid
+- workspace-local apps are registered in app-hosting control-plane records
+- apps that should be usable immediately are installed/enabled in their owning workspace
+- App Store visibility is verified through `local_apps` for workspace-local apps
 - every declared surface exists and works
 - app-owned data is under `data/<app_id>`
 - install and health behavior are idempotent

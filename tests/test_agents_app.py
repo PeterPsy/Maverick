@@ -111,6 +111,36 @@ class AgentsAppTestCase(unittest.TestCase):
             self.assertEqual(preview_status, 200)
             self.assertEqual(len(payload["roles"]), 17)
             self.assertIn("Server Coding Engineer", preview_payload["rendered"])
+            self.assertNotIn("instances", payload)
+
+    def test_backend_creates_and_deletes_agent_types(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "agents"
+            seed_defaults(data_root)
+
+            create_status, create_payload = handle_action(
+                data_root,
+                {
+                    "action": "create_agent_type",
+                    "id": "agent-type-custom-test",
+                    "name": "Custom Test Agent",
+                    "description": "Temporary test agent.",
+                    "role_id": "agent-builder",
+                    "codex_skill_ids": [],
+                    "execution_mode_policy": "fixed",
+                    "default_execution_mode": "sandbox",
+                    "trace_verbosity": "compact",
+                    "enabled": True,
+                },
+            )
+            delete_status, delete_payload = handle_action(
+                data_root,
+                {"action": "delete_agent_type", "agent_type_id": "agent-type-custom-test"},
+            )
+            self.assertEqual(create_status, 200)
+            self.assertEqual(create_payload["agent_type"]["id"], "agent-type-custom-test")
+            self.assertEqual(delete_status, 200)
+            self.assertEqual(delete_payload, {"deleted": True})
 
     def test_bootstrap_installs_agents_and_exposes_surfaces(self) -> None:
         repo_root = self.make_repo_root()

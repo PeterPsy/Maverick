@@ -8,7 +8,7 @@ User=ubuntu
 Group=ubuntu
 WorkingDirectory=/home/ubuntu/maverick-v3
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/usr/bin/python3 -m core.api.server --service core --host 127.0.0.1 --port 8014
+ExecStart=/usr/bin/python3 -m uvicorn core.api.asgi_application:app --host 127.0.0.1 --port 8014
 Restart=always
 RestartSec=3
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from core.observability.service import append_platform_log, record_platform_audit, record_platform_event
 from core.runtime.errors import RuntimeTransitionError
@@ -16,6 +17,9 @@ from core.runtime.runtime_state import RuntimeStateRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord, RuntimeTurnStatus
 from core.runtime.store import RuntimeStore
 from core.workspaces.models import WorkspaceGovernanceRecord
+
+if TYPE_CHECKING:
+    from core.runtime.event_bus import RuntimeEventBus
 
 
 def utcnow() -> datetime:
@@ -258,6 +262,43 @@ def transition_runtime_session(
     return saved
 
 
+def reconcile_runtime_session_policy(
+    store: RuntimeStore,
+    session: RuntimeSessionRecord,
+    *,
+    governance: WorkspaceGovernanceRecord | None = None,
+    platform_allows_full_access: bool = False,
+    now: datetime | None = None,
+    start_path: Path | None = None,
+) -> RuntimeSessionRecord:
+    """Bring a persisted runtime session back in line with current execution policy."""
+    timestamp = now or utcnow()
+    routing = build_runtime_routing(
+        workspace_id=session.workspace_id,
+        agent_id=session.agent_id,
+        requested_mode=session.requested_mode,
+        governance=governance,
+        platform_allows_full_access=platform_allows_full_access,
+        start_path=start_path,
+    )
+    if (
+        session.effective_mode == routing.effective_mode
+        and session.workspace_root == routing.workspace_root
+        and session.workdir == routing.workdir
+        and session.runtime_root == routing.runtime_root
+    ):
+        return session
+    reconciled = replace(
+        session,
+        effective_mode=routing.effective_mode,
+        workspace_root=routing.workspace_root,
+        workdir=routing.workdir,
+        runtime_root=routing.runtime_root,
+        updated_at=timestamp,
+    )
+    return store.save_session(reconciled)
+
+
 def queue_runtime_turn(
     store: RuntimeStore,
     *,
@@ -340,6 +381,7 @@ def record_runtime_event(
     turn_id: str | None = None,
     process_id: str | None = None,
     now: datetime | None = None,
+    event_bus: "RuntimeEventBus | None" = None,
 ) -> RuntimeEventRecord:
     """Persist one structured runtime-domain event."""
     timestamp = now or utcnow()
@@ -355,7 +397,10 @@ def record_runtime_event(
         payload=payload,
         created_at=timestamp,
     )
-    return store.save_event(event)
+    saved = store.save_event(event)
+    if event_bus is not None:
+        event_bus.publish(saved)
+    return saved
 
 
 def create_runtime_process(

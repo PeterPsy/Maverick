@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { type MutableRefObject, useEffect, useMemo, useRef, useState } from "react";
 import {
   ChatThread,
   createRuntimeSession,
   createThread,
+  getAgentsCommonPrompt,
   getThread,
   getRuntimeSession,
   interruptRuntimeTurn,
@@ -21,14 +22,29 @@ import { ChatComposer } from "./components/ChatComposer";
 import { ChatHeader } from "./components/ChatHeader";
 import { ChatTranscript } from "./components/ChatTranscript";
 import { useComposerAttachments } from "./hooks/useComposerAttachments";
+import { useRuntimeEvents } from "./hooks/useRuntimeEvents";
 import { hasInvalidAttachments } from "./lib/attachments";
 import { PendingMessage, QueuedMessage, uploadComposerAttachment } from "./lib/messageState";
+import { inferActiveRuntimeTurn, mergeRuntimeEvents } from "./lib/runtimeEvents";
+import { latestRuntimeStepLabel } from "./lib/runtimeStepLabels";
+import { findThreadByRuntimeSession } from "./lib/threadNavigation";
 import { eventsToMessages, firstUserTitle } from "./lib/transcript";
 
 type ShellNavigationMessage = {
   type?: string;
+  deleted_thread_id?: string;
+  owner_app_id?: string;
   app_id?: string;
   params?: Record<string, string | boolean | null>;
+  resource?: string;
+};
+
+type RuntimeSessionThreadMetadata = {
+  agent_label?: string;
+  agent_type_id?: string;
+  agent_role_id?: string;
+  source_app_id?: string;
+  title?: string;
 };
 
 export function App() {
@@ -41,12 +57,16 @@ export function App() {
   const [composer, setComposer] = useState("");
   const { addAttachments, attachments, clearAttachments, removeAttachment } = useComposerAttachments();
   const [pendingUserMessages, setPendingUserMessages] = useState<PendingMessage[]>([]);
+  const [failedUserMessages, setFailedUserMessages] = useState<PendingMessage[]>([]);
   const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>([]);
   const [activeTurn, setActiveTurn] = useState<RuntimeTurn | null>(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [composerError, setComposerError] = useState<string | null>(null);
+  const consumedNewChatRequests = useRef<Set<string>>(new Set());
+  const consumedLegacyNewChatRequest = useRef(false);
 
   const messages = useMemo(() => {
     const currentMessages = eventsToMessages(events);
@@ -63,13 +83,40 @@ export function App() {
           status: "pending" as const,
           attachments: message.attachments,
         })),
+      ...failedUserMessages.map((message) => ({
+        id: `${message.clientMessageId}:failed`,
+        role: "human" as const,
+        content: message.content,
+        createdAt: message.createdAt,
+        status: "failed" as const,
+        attachments: message.attachments,
+      })),
     ];
-  }, [events, pendingUserMessages]);
-  const activeProvider = providers.find((provider) => provider.provider_id === activeProviderId) || providers[0] || null;
-  const runtimeStatus = activeTurn?.status || (isSending ? "running" : isBootstrapping ? "loading" : "ready");
+  }, [events, failedUserMessages, pendingUserMessages]);
   const executionMode = activeSession?.effective_mode || "runtime";
   const canStopTurn = activeTurn?.status === "queued" || activeTurn?.status === "active";
-  const isRuntimeBusy = isSending || canStopTurn;
+  const isRuntimeBusy = canStopTurn;
+  const loadingLabel = useMemo(() => {
+    if (isHistoryLoading) {
+      return "Loading history";
+    }
+    if (isBootstrapping) {
+      return "Loading chat";
+    }
+    if (!isRuntimeBusy) {
+      return "";
+    }
+    return latestRuntimeStepLabel(events) || "Thinking";
+  }, [events, isBootstrapping, isHistoryLoading, isRuntimeBusy]);
+
+  useRuntimeEvents({
+    activeTurn,
+    runtimeSessionId: activeThread?.runtime_session_id || null,
+    setActiveTurn,
+    setError,
+    setEvents,
+    setPendingUserMessages,
+  });
 
   async function loadInitialState() {
     setIsBootstrapping(true);
@@ -96,12 +143,14 @@ export function App() {
         ]);
         setActiveSession(runtimeSession);
         setEvents(runtimeEvents.items);
+        setActiveTurn(inferActiveRuntimeTurn(runtimeEvents.items, firstThread.runtime_session_id));
       } else {
         setActiveSession(null);
+        setActiveTurn(null);
       }
       setPendingUserMessages([]);
+      setFailedUserMessages([]);
       setQueuedMessages([]);
-      setActiveTurn(null);
       setError(null);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to load chat.");
@@ -120,6 +169,10 @@ export function App() {
         return;
       }
       const payload = event.data as ShellNavigationMessage;
+      if (payload.type === "maverick.app.data-changed" && payload.owner_app_id === "chat" && payload.resource === "threads") {
+        void refreshThreadsAfterDataChange(payload.deleted_thread_id || "");
+        return;
+      }
       if (payload.type !== "maverick.app.navigate" || (payload.app_id && payload.app_id !== "chat")) {
         return;
       }
@@ -130,6 +183,26 @@ export function App() {
     window.parent?.postMessage({ type: "maverick.app.ready", app_id: "chat" }, window.location.origin);
     return () => window.removeEventListener("message", handleShellMessage);
   }, [activeThread?.thread_id, threads]);
+
+  async function refreshThreadsAfterDataChange(deletedThreadId: string) {
+    try {
+      const payload = await listThreads();
+      setThreads(payload.threads);
+      const activeThreadStillExists = activeThread ? payload.threads.some((thread) => thread.thread_id === activeThread.thread_id) : false;
+      if (activeThread && (!activeThreadStillExists || activeThread.thread_id === deletedThreadId)) {
+        setActiveThread(null);
+        setActiveSession(null);
+        setEvents([]);
+        setPendingUserMessages([]);
+        setFailedUserMessages([]);
+        setQueuedMessages([]);
+        setActiveTurn(null);
+      }
+      setError(null);
+    } catch (refreshError) {
+      setError(refreshError instanceof Error ? refreshError.message : "Unable to refresh chats.");
+    }
+  }
 
   async function handleSelectProvider(providerId: string) {
     setActiveProviderId(providerId);
@@ -143,62 +216,65 @@ export function App() {
   }
 
   async function createChat() {
-    const session = await createRuntimeSession();
-    const payload = await createThread(session.session_id);
+    const systemPrompt = await loadDefaultSystemPrompt();
+    const payload = await createThread("", null, { system_prompt: systemPrompt });
     setThreads(payload.threads);
     setActiveThread(payload.thread);
-    setActiveSession(session);
+    setActiveSession(null);
     setEvents([]);
     setPendingUserMessages([]);
+    setFailedUserMessages([]);
     setQueuedMessages([]);
     setActiveTurn(null);
+    notifyAppDataChanged("chat", "threads");
     return payload.thread;
   }
 
-  async function handleCreateChat() {
-    setIsBootstrapping(true);
-    try {
-      await createChat();
-      setError(null);
-    } catch (createError) {
-      setError(createError instanceof Error ? createError.message : "Unable to create chat.");
-    } finally {
-      setIsBootstrapping(false);
-    }
-  }
-
   async function handleSelectThread(thread: ChatThread) {
+    setIsHistoryLoading(true);
     setActiveThread(thread);
     setActiveSession(null);
     setEvents([]);
     setPendingUserMessages([]);
+    setFailedUserMessages([]);
     setQueuedMessages([]);
     setActiveTurn(null);
-    if (!thread.runtime_session_id) {
-      return;
-    }
     try {
+      if (!thread.runtime_session_id) {
+        setError(null);
+        return;
+      }
       const [runtimeSession, runtimeEvents] = await Promise.all([
         getRuntimeSession(thread.runtime_session_id),
         listRuntimeEvents(thread.runtime_session_id),
       ]);
       setActiveSession(runtimeSession);
       setEvents(runtimeEvents.items);
+      setActiveTurn(inferActiveRuntimeTurn(runtimeEvents.items, thread.runtime_session_id));
       setError(null);
     } catch (selectError) {
       setError(selectError instanceof Error ? selectError.message : "Unable to load thread.");
+    } finally {
+      setIsHistoryLoading(false);
     }
   }
 
   async function handleNavigationParams(params: Record<string, string | boolean | null>) {
     const requestedThreadId = typeof params.thread_id === "string" ? params.thread_id : null;
+    const requestedRuntimeSessionId = typeof params.runtime_session_id === "string" ? params.runtime_session_id : null;
+    const runtimeThreadMetadata = runtimeSessionThreadMetadataFromParams(params);
     const shouldCreateChat = params.new_chat === true || params.new_chat === "1";
-    if (!requestedThreadId && !shouldCreateChat) {
+    if (!requestedThreadId && !requestedRuntimeSessionId && !shouldCreateChat) {
+      return;
+    }
+    if (shouldCreateChat && !consumeNewChatRequest(params, consumedNewChatRequests.current, consumedLegacyNewChatRequest)) {
       return;
     }
     setIsBootstrapping(true);
     try {
-      if (shouldCreateChat) {
+      if (requestedRuntimeSessionId) {
+        await openRuntimeSessionThread(requestedRuntimeSessionId, runtimeThreadMetadata);
+      } else if (shouldCreateChat) {
         await createChat();
       } else if (requestedThreadId) {
         await openThreadById(requestedThreadId);
@@ -208,6 +284,30 @@ export function App() {
       setError(navigationError instanceof Error ? navigationError.message : "Unable to open chat.");
     } finally {
       setIsBootstrapping(false);
+    }
+  }
+
+  async function openRuntimeSessionThread(runtimeSessionId: string, metadata: RuntimeSessionThreadMetadata) {
+    const existingThread = findThreadByRuntimeSession(threads, runtimeSessionId);
+    if (existingThread) {
+      await handleSelectThread(existingThread);
+      return;
+    }
+    setIsHistoryLoading(true);
+    try {
+      const [runtimeSession, payload] = await Promise.all([getRuntimeSession(runtimeSessionId), createThread(runtimeSessionId, null, metadata)]);
+      setThreads(payload.threads);
+      setActiveThread(payload.thread);
+      setActiveSession(runtimeSession);
+      const runtimeEvents = await listRuntimeEvents(runtimeSessionId);
+      setEvents(runtimeEvents.items);
+      setPendingUserMessages([]);
+      setFailedUserMessages([]);
+      setQueuedMessages([]);
+      setActiveTurn(inferActiveRuntimeTurn(runtimeEvents.items, runtimeSessionId));
+      notifyAppDataChanged("chat", "threads");
+    } finally {
+      setIsHistoryLoading(false);
     }
   }
 
@@ -241,7 +341,7 @@ export function App() {
     }
     setComposer("");
     clearAttachments();
-    if (isRuntimeBusy) {
+    if (isRuntimeBusy || isSending) {
       setQueuedMessages((current) => [...current, { clientMessageId, content: input, attachments: messageAttachments }]);
       return;
     }
@@ -258,15 +358,21 @@ export function App() {
         attachments: message.attachments,
       },
     ]);
+    setFailedUserMessages((current) => current.filter((item) => item.clientMessageId !== message.clientMessageId));
     setIsSending(true);
     setError(null);
     try {
       let thread = activeThread;
       if (!thread) {
         thread = await createChat();
+      } else if (!threads.some((item) => item.thread_id === thread?.thread_id)) {
+        throw new Error("This chat no longer exists.");
       }
       if (!thread.runtime_session_id) {
-        const session = await createRuntimeSession();
+        const session = await createRuntimeSession({
+          system_prompt: thread.system_prompt,
+          source_app_id: "chat",
+        });
         const updated = await updateThread({ thread_id: thread.thread_id, runtime_session_id: session.session_id });
         thread = updated.thread;
         setActiveThread(thread);
@@ -276,7 +382,7 @@ export function App() {
       const response = await sendRuntimeTurn(thread.runtime_session_id, message.content, message.clientMessageId, message.attachments);
       setActiveSession(response.session);
       setActiveTurn(response.turn);
-      setEvents((current) => [...current, ...response.events]);
+      setEvents((current) => mergeRuntimeEvents(current, response.events));
       if (response.turn.status !== "queued" && response.turn.status !== "active") {
         setPendingUserMessages((current) => current.filter((item) => item.clientMessageId !== message.clientMessageId));
       }
@@ -289,45 +395,28 @@ export function App() {
       setError(sendError instanceof Error ? sendError.message : "Unable to send message.");
       setComposer(message.content);
       setPendingUserMessages((current) => current.filter((item) => item.clientMessageId !== message.clientMessageId));
+      setFailedUserMessages((current) => [
+        ...current,
+        {
+          clientMessageId: message.clientMessageId,
+          content: message.content,
+          createdAt: new Date().toISOString(),
+          attachments: message.attachments,
+        },
+      ]);
     } finally {
       setIsSending(false);
     }
   }
 
   useEffect(() => {
-    if (isRuntimeBusy || queuedMessages.length === 0) {
+    if (isRuntimeBusy || isSending || queuedMessages.length === 0) {
       return;
     }
     const [nextMessage, ...remainingMessages] = queuedMessages;
     setQueuedMessages(remainingMessages);
     void submitMessage(nextMessage);
-  }, [isRuntimeBusy, queuedMessages]);
-
-  useEffect(() => {
-    if (!activeThread?.runtime_session_id || !activeTurn || !["queued", "active"].includes(activeTurn.status)) {
-      return;
-    }
-    const interval = window.setInterval(async () => {
-      try {
-        const runtimeEvents = await listRuntimeEvents(activeThread.runtime_session_id);
-        setEvents(runtimeEvents.items);
-        const matchingMessages = eventsToMessages(runtimeEvents.items);
-        const hasConfirmedMessage = matchingMessages.some((message) => message.id === activeTurn.turn_id || message.id.includes(activeTurn.turn_id));
-        const terminalEvent = runtimeEvents.items.find((event) =>
-          event.turn_id === activeTurn.turn_id && ["runtime.turn.completed", "runtime.turn.failed", "runtime.turn.cancelled"].includes(event.event_type),
-        );
-        if (terminalEvent) {
-          setActiveTurn((current) => (current?.turn_id === activeTurn.turn_id ? { ...current, status: terminalEvent.event_type.split(".").at(-1) || current.status } : current));
-          setPendingUserMessages((current) => current.filter((item) => !matchingMessages.some((message) => message.id === item.clientMessageId)));
-        } else if (hasConfirmedMessage) {
-          setPendingUserMessages((current) => current.filter((item) => !matchingMessages.some((message) => message.id === item.clientMessageId)));
-        }
-      } catch (pollError) {
-        setError(pollError instanceof Error ? pollError.message : "Unable to refresh runtime events.");
-      }
-    }, 900);
-    return () => window.clearInterval(interval);
-  }, [activeThread?.runtime_session_id, activeTurn]);
+  }, [isRuntimeBusy, isSending, queuedMessages]);
 
   function handleAddAttachments(files: File[]) {
     addAttachments(files);
@@ -342,7 +431,7 @@ export function App() {
       const response = await interruptRuntimeTurn(activeTurn.turn_id);
       setActiveTurn(response.turn);
       if (response.event) {
-        setEvents((current) => [...current, response.event as RuntimeEvent]);
+        setEvents((current) => mergeRuntimeEvents(current, [response.event as RuntimeEvent]));
       }
       setError(null);
     } catch (stopError) {
@@ -354,31 +443,28 @@ export function App() {
     <main className="chatapp-root">
       <section className="chatapp-chat-panel">
         <ChatHeader
-          activeProvider={activeProvider}
           activeProviderId={activeProviderId}
           disabled={isBootstrapping || isSending}
           executionMode={executionMode}
-          onCreateChat={handleCreateChat}
           onSelectProvider={handleSelectProvider}
           providers={providers}
-          runtimeStatus={runtimeStatus}
-          title={activeThread?.title || "New chat"}
         />
 
         <div className="chatapp-chat-workspace">
           <div className="chatapp-chat-main">
             <ChatTranscript
+              activeThread={activeThread}
               error={error}
-              isLoading={isRuntimeBusy || isBootstrapping}
-              loadingLabel={isRuntimeBusy ? `${activeProvider?.label || "Provider"} sta lavorando` : "Caricamento chat"}
+              isLoading={isRuntimeBusy || isBootstrapping || isHistoryLoading}
+              loadingLabel={loadingLabel}
               messages={messages}
             />
             <ChatComposer
               attachments={attachments}
               canStopTurn={canStopTurn}
-              disabled={isBootstrapping}
+              disabled={isBootstrapping || isHistoryLoading}
               error={composerError}
-              isSending={isRuntimeBusy}
+              isSending={isRuntimeBusy || isSending}
               onAddAttachments={handleAddAttachments}
               onChange={setComposer}
               onRemoveAttachment={removeAttachment}
@@ -392,5 +478,60 @@ export function App() {
         </div>
       </section>
     </main>
+  );
+}
+
+function runtimeSessionThreadMetadataFromParams(params: Record<string, string | boolean | null>): RuntimeSessionThreadMetadata {
+  const agentLabel = scalarString(params.agent_label);
+  const threadTitle = scalarString(params.thread_title) || agentLabel;
+  return {
+    agent_label: agentLabel,
+    agent_type_id: scalarString(params.agent_type_id),
+    agent_role_id: scalarString(params.agent_role_id),
+    source_app_id: scalarString(params.source_app_id) || "agents",
+    title: threadTitle,
+  };
+}
+
+function consumeNewChatRequest(
+  params: Record<string, string | boolean | null>,
+  consumedRequestIds: Set<string>,
+  consumedLegacyRequest: MutableRefObject<boolean>,
+): boolean {
+  const requestId = scalarString(params.new_chat_request_id);
+  if (!requestId) {
+    if (consumedLegacyRequest.current) {
+      return false;
+    }
+    consumedLegacyRequest.current = true;
+    return true;
+  }
+  if (consumedRequestIds.has(requestId)) {
+    return false;
+  }
+  consumedRequestIds.add(requestId);
+  return true;
+}
+
+async function loadDefaultSystemPrompt(): Promise<string> {
+  try {
+    return await getAgentsCommonPrompt();
+  } catch {
+    return "";
+  }
+}
+
+function scalarString(value: string | boolean | null | undefined): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function notifyAppDataChanged(ownerAppId: string, resource: string) {
+  window.parent?.postMessage(
+    {
+      type: "maverick.app.data-changed",
+      owner_app_id: ownerAppId,
+      resource,
+    },
+    window.location.origin,
   );
 }

@@ -8,6 +8,7 @@ from typing import Iterable
 from core.api.admin_api import handle_admin_api
 from core.api.app_mounts import handle_app_backend, handle_app_frontend, handle_root_shell
 from core.api.app_registry import enabled_app_items
+from core.api.app_store_api import handle_app_store_api
 from core.api.http import StartResponse, json_response, text_response
 from core.api.platform_state import PlatformState
 from core.api.provider_api import handle_provider_api
@@ -41,6 +42,9 @@ class PlatformHost:
         if routed is not None:
             return routed
         routed = handle_admin_api(self.state, environ, start_response, start_path=self.start_path)
+        if routed is not None:
+            return routed
+        routed = handle_app_store_api(self.state, environ, start_response, start_path=self.start_path)
         if routed is not None:
             return routed
         routed = handle_provider_api(self.state, environ, start_response)

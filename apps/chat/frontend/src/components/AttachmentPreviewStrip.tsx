@@ -32,7 +32,6 @@ export function AttachmentPreviewStrip({
             <span className="chatapp-attachment-card__name">{attachment.name}</span>
             <span className="chatapp-attachment-card__detail">{formatFileSize(attachment.size)}</span>
             {attachment.warning ? <span className="chatapp-attachment-card__warning">{attachment.warning}</span> : null}
-            {!attachment.warning ? <span className="chatapp-attachment-card__info">Upload non ancora abilitato in v3</span> : null}
           </span>
           <button
             aria-label={`Rimuovi ${attachment.name}`}

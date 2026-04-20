@@ -32,3 +32,5 @@ class RuntimeSessionRecord:
     system_prompt: str | None = None
     skill_ids: list[str] = field(default_factory=list)
     source_app_id: str | None = None
+    provider_id: str | None = None
+    provider_thread_id: str | None = None

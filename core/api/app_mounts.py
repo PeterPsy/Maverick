@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import mimetypes
+import os
 from pathlib import Path
 from uuid import uuid4
 
 from core.api.app_registry import resolve_app_surface
 from core.api.http import StartResponse, json_response, query_params, read_json_body, status_line, text_response
 from core.api.platform_state import PlatformState
-from core.apps.errors import WorkspaceAppBindingNotFoundError
+from core.apps.errors import AppHostingError, WorkspaceAppBindingNotFoundError
 from core.providers.service import resolve_provider_for_runtime_session
 from core.runtime.errors import RuntimeSessionNotFoundError
+from core.runtime.session_termination import terminate_runtime_session
 from core.runtime.service import create_runtime_session, queue_runtime_turn, transition_runtime_session, transition_runtime_turn
 from core.shared.entrypoints import run_json_entrypoint
 from core.workspaces.paths import workspace_paths
@@ -83,6 +85,8 @@ def handle_root_shell(state: PlatformState, *, workspace_id: str, start_path: Pa
         )
     except WorkspaceAppBindingNotFoundError:
         return json_response(start_response, {"error": "shell_not_installed"}, status="404 Not Found")
+    except AppHostingError:
+        return json_response(start_response, {"error": "shell_unavailable"}, status="503 Service Unavailable")
     return serve_frontend(
         start_response,
         frontend_root=(source_root / parsed.contract.entrypoints.frontend).resolve(),
@@ -110,6 +114,8 @@ def handle_app_frontend(
         )
     except WorkspaceAppBindingNotFoundError:
         return json_response(start_response, {"error": "app_not_installed"}, status="404 Not Found")
+    except AppHostingError:
+        return json_response(start_response, {"error": "app_unavailable"}, status="404 Not Found")
     allowed_roles = parsed.contract.visibility.platform_roles
     if allowed_roles and (user is None or user.platform_role not in allowed_roles):
         return json_response(start_response, {"error": "app_forbidden"}, status="403 Forbidden")
@@ -140,6 +146,8 @@ def handle_app_backend(
         )
     except WorkspaceAppBindingNotFoundError:
         return json_response(start_response, {"error": "app_not_installed"}, status="404 Not Found")
+    except AppHostingError:
+        return json_response(start_response, {"error": "app_unavailable"}, status="404 Not Found")
     allowed_roles = parsed.contract.visibility.platform_roles
     if allowed_roles and (user is None or user.platform_role not in allowed_roles):
         return json_response(start_response, {"error": "app_forbidden"}, status="403 Forbidden")
@@ -169,6 +177,7 @@ def handle_app_backend(
                 "data_root": binding.data_root,
                 "uploaded_storage_root": str(paths.uploaded_storage),
                 "generated_storage_root": str(paths.generated_storage),
+                "agent_skill_roots": _agent_skill_roots(),
                 "route_path": environ.get("PATH_INFO", ""),
                 "method": method,
                 "query": query_params(environ),
@@ -191,7 +200,44 @@ def handle_app_backend(
         return json_response(start_response, {"error": str(error)}, status=status_line(500))
     status_code = int(result.get("status_code", 200))
     if "json" in result:
-        return json_response(start_response, result["json"], status=status_line(status_code))
+        response_json = result["json"]
+        if isinstance(response_json, dict):
+            _handle_app_backend_side_effects(
+                state,
+                app_id=app_id,
+                request_body=body,
+                response_json=response_json,
+                start_path=start_path,
+            )
+        return json_response(start_response, response_json, status=status_line(status_code))
     if "body" in result:
         return text_response(start_response, str(result["body"]), status=status_line(status_code))
     return json_response(start_response, result, status=status_line(status_code))
+
+
+def _agent_skill_roots() -> list[str]:
+    codex_home = Path(os.environ.get("CODEX_HOME") or (Path.home() / ".codex"))
+    return [str(codex_home / "skills"), str(codex_home / "plugins" / "cache")]
+
+
+def _handle_app_backend_side_effects(
+    state: PlatformState,
+    *,
+    app_id: str,
+    request_body: dict,
+    response_json: dict,
+    start_path: Path,
+) -> None:
+    if app_id != "chat" or request_body.get("action") != "threads.delete":
+        return
+    runtime_session_id = str(response_json.get("deleted_runtime_session_id") or "").strip()
+    if not runtime_session_id:
+        return
+    response_json["runtime_termination"] = terminate_runtime_session(
+        state.runtime_store,
+        session_id=runtime_session_id,
+        reason="chat_deleted",
+        event_bus=state.runtime_event_bus,
+        observability_store=state.observability_store,
+        start_path=start_path,
+    )

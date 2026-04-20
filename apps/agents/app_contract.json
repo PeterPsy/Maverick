@@ -3,7 +3,7 @@
   "contract_version": "1.0",
   "name": "Agents",
   "version": "0.1.0",
-  "description": "Workspace app for managing agent roles, prompt composition, agent types, and agent instances.",
+  "description": "Workspace app for managing agent roles, prompt composition, and runtime-ready agent types.",
   "publisher": "versy",
   "minimum_core_version": "0.1.0",
   "distribution": {
@@ -42,8 +42,7 @@
     "primary_paths": [
       "data/agents/common_prompt.md",
       "data/agents/roles",
-      "data/agents/agent_types.json",
-      "data/agents/agent_instances.json"
+      "data/agents/agent_types.json"
     ],
     "indices": null,
     "supports_export": true,

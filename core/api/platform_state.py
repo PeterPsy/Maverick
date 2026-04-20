@@ -15,6 +15,7 @@ from core.observability.store import MongoObservabilityStore, ObservabilityColle
 from core.providers.service import configure_workspace_provider
 from core.providers.store import MongoProviderStore, ProviderCollections
 from core.recovery.store import MongoRecoveryStore, RecoveryCollections
+from core.runtime.event_bus import RuntimeEventBus
 from core.runtime.store import MongoRuntimeStore, RuntimeCollections
 from core.secrets.store import MongoSecretStore, SecretCollections
 from core.shared.in_memory_collection import InMemoryCollection
@@ -33,6 +34,7 @@ class PlatformState:
     app_store: MongoAppStore
     provider_store: MongoProviderStore
     runtime_store: MongoRuntimeStore
+    runtime_event_bus: RuntimeEventBus
     secret_store: MongoSecretStore
     recovery_store: MongoRecoveryStore
     observability_store: MongoObservabilityStore
@@ -42,6 +44,7 @@ def bootstrap_platform_state(*, start_path: Path | None = None, now: datetime | 
     """Build in-memory platform state and install first-boot built-in apps."""
     repository_root = discover_repository_root(start_path=start_path)
     control_state_root = repository_root / ".maverick" / "local-state"
+    app_state_root = control_state_root / "apps"
     workspace_state_root = control_state_root / "workspaces"
     identity_state_root = control_state_root / "identity"
     workspace_store = MongoWorkspaceStore(
@@ -62,9 +65,9 @@ def bootstrap_platform_state(*, start_path: Path | None = None, now: datetime | 
     )
     app_store = MongoAppStore(
         AppCollections(
-            app_sources=InMemoryCollection(),
-            workspace_local_app_projects=InMemoryCollection(),
-            workspace_app_bindings=InMemoryCollection(),
+            app_sources=JsonFileCollection(app_state_root / "app_sources.json"),
+            workspace_local_app_projects=JsonFileCollection(app_state_root / "workspace_local_app_projects.json"),
+            workspace_app_bindings=JsonFileCollection(app_state_root / "workspace_app_bindings.json"),
         )
     )
     provider_store = MongoProviderStore(
@@ -84,6 +87,7 @@ def bootstrap_platform_state(*, start_path: Path | None = None, now: datetime | 
             states=JsonFileCollection(runtime_state_root / "states.json"),
         )
     )
+    runtime_event_bus = RuntimeEventBus()
     secret_store = MongoSecretStore(
         SecretCollections(
             secrets=InMemoryCollection(),
@@ -133,6 +137,7 @@ def bootstrap_platform_state(*, start_path: Path | None = None, now: datetime | 
         app_store=app_store,
         provider_store=provider_store,
         runtime_store=runtime_store,
+        runtime_event_bus=runtime_event_bus,
         secret_store=secret_store,
         recovery_store=recovery_store,
         observability_store=observability_store,

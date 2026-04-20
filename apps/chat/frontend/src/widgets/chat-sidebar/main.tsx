@@ -20,7 +20,19 @@ function notifyShell(thread?: ChatThread) {
     {
       type: "maverick.widget.open-app",
       app_id: "chat",
-      params: thread ? { thread_id: thread.thread_id } : { new_chat: true },
+      params: thread ? { thread_id: thread.thread_id } : { new_chat: true, new_chat_request_id: crypto.randomUUID() },
+    },
+    window.location.origin,
+  );
+}
+
+function notifyChatDataChanged(resource: string, detail: Record<string, string> = {}) {
+  window.parent?.postMessage(
+    {
+      type: "maverick.app.data-changed",
+      owner_app_id: "chat",
+      resource,
+      ...detail,
     },
     window.location.origin,
   );
@@ -163,6 +175,7 @@ function ChatSidebarWidget() {
       setActiveThreadId(null);
     }
     setPanel(null);
+    notifyChatDataChanged("threads", { deleted_thread_id: threadId });
   }
 
   return (

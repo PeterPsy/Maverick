@@ -70,6 +70,9 @@ class AppStore(Protocol):
     def list_workspace_local_app_projects(self, workspace_id: str) -> list[WorkspaceLocalAppProjectRecord]:
         ...
 
+    def delete_workspace_local_app_project(self, *, workspace_id: str, app_id: str) -> None:
+        ...
+
     def save_workspace_app_binding(self, record: WorkspaceAppBindingRecord) -> WorkspaceAppBindingRecord:
         ...
 
@@ -182,6 +185,9 @@ class MongoAppStore:
             self._workspace_local_project_record(document)
             for document in self.collections.workspace_local_app_projects.find({"workspace_id": workspace_id})
         ]
+
+    def delete_workspace_local_app_project(self, *, workspace_id: str, app_id: str) -> None:
+        self.collections.workspace_local_app_projects.delete_one({"workspace_id": workspace_id, "app_id": app_id})
 
     def save_workspace_app_binding(self, record: WorkspaceAppBindingRecord) -> WorkspaceAppBindingRecord:
         self.collections.workspace_app_bindings.update_one(

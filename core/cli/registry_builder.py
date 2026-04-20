@@ -7,6 +7,7 @@ from typing import Any
 
 from core.apps.store import AppStore
 from core.cli.app_commands import _workspace_app_command_specs
+from core.cli.app_lifecycle_commands import app_lifecycle_command_specs
 from core.cli.command_registry import CliCommandRegistry
 from core.cli.core_commands import _core_command_specs
 from core.cli.models import CliCommandDefinition, CliInvocationContext
@@ -47,6 +48,13 @@ def build_core_cli_registry(
         registry.register_command(definition, handler)
     if app_store is not None and workspace_id is not None:
         for definition, handler in _workspace_app_command_specs(app_store, workspace_id=workspace_id, start_path=start_path):
+            registry.register_command(definition, handler)
+        for definition, handler in app_lifecycle_command_specs(
+            app_store=app_store,
+            observability_store=observability_store,
+            workspace_id=workspace_id,
+            start_path=start_path,
+        ):
             registry.register_command(definition, handler)
     return registry
 

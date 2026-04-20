@@ -21,26 +21,38 @@ type AgentType = {
   enabled: boolean;
 };
 
-type Instance = {
-  id: string;
-  name: string;
-  agent_type_id: string;
-  status: string;
-  runtime_session_id: string | null;
-};
-
 type Catalog = {
   common_prompt: string;
   roles: Role[];
   agent_types: AgentType[];
-  instances: Instance[];
 };
 
 type Preview = {
   rendered: string;
 };
 
-const emptyCatalog: Catalog = { common_prompt: '', roles: [], agent_types: [], instances: [] };
+const emptyCatalog: Catalog = { common_prompt: '', roles: [], agent_types: [] };
+
+function newAgentTypeId() {
+  return `agent-type-custom-${Date.now().toString(36)}`;
+}
+
+function openChatForRuntimeSession(runtimeSessionId: string, agentType: AgentType) {
+  window.parent?.postMessage(
+    {
+      type: 'maverick.app.open-app',
+      app_id: 'chat',
+      params: {
+        runtime_session_id: runtimeSessionId,
+        agent_type_id: agentType.id,
+        agent_label: agentType.name,
+        agent_role_id: agentType.role_id,
+        thread_title: agentType.name
+      }
+    },
+    window.location.origin
+  );
+}
 
 async function callBackend<T>(body: Record<string, unknown>): Promise<T> {
   const response = await fetch('/api/apps/agents/backend', {
@@ -64,10 +76,18 @@ function App() {
   const [runtimeSessionId, setRuntimeSessionId] = useState('');
   const [savingPrompt, setSavingPrompt] = useState(false);
 
-  async function refresh() {
+  async function refresh(preferredAgentTypeId?: string) {
     const next = await callBackend<Catalog>({ action: 'catalog' });
     setCatalog(next);
-    setSelectedAgentTypeId((current) => current || next.agent_types[0]?.id || '');
+    setSelectedAgentTypeId((current) => {
+      if (preferredAgentTypeId && next.agent_types.some((item) => item.id === preferredAgentTypeId)) {
+        return preferredAgentTypeId;
+      }
+      if (current && next.agent_types.some((item) => item.id === current)) {
+        return current;
+      }
+      return next.agent_types[0]?.id || '';
+    });
   }
 
   useEffect(() => {
@@ -153,11 +173,39 @@ function App() {
     }
   }
 
-  async function createInstance() {
-    if (!selectedAgentType) return;
+  async function createAgentType() {
+    const role = selectedRole || catalog.roles[0];
+    if (!role) return;
+    const id = newAgentTypeId();
     setError('');
     try {
-      await callBackend({ action: 'create_instance', agent_type_id: selectedAgentType.id, name: selectedAgentType.name });
+      await callBackend({
+        action: 'create_agent_type',
+        id,
+        name: 'New Agent',
+        description: 'Describe what this agent should do.',
+        role_id: role.id,
+        codex_skill_ids: [],
+        execution_mode_policy: 'fixed',
+        default_execution_mode: 'sandbox',
+        trace_verbosity: 'compact',
+        enabled: true
+      });
+      setQuery('');
+      await refresh(id);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  async function deleteAgentType() {
+    if (!selectedAgentType) return;
+    const confirmed = window.confirm(`Delete ${selectedAgentType.name}?`);
+    if (!confirmed) return;
+    setError('');
+    try {
+      await callBackend({ action: 'delete_agent_type', agent_type_id: selectedAgentType.id });
+      setRuntimeSessionId('');
       await refresh();
     } catch (err) {
       setError((err as Error).message);
@@ -184,6 +232,7 @@ function App() {
         throw new Error(payload.detail || payload.error || 'Runtime session failed');
       }
       setRuntimeSessionId(payload.session_id);
+      openChatForRuntimeSession(payload.session_id, selectedAgentType);
     } catch (err) {
       setError((err as Error).message);
     }
@@ -193,8 +242,16 @@ function App() {
     <main className="agents-shell">
       <section className="agents-sidebar">
         <div className="agents-titlebar">
-          <h1>Agents</h1>
-          <span>{catalog.agent_types.length}</span>
+          <div>
+            <p className="agents-eyebrow">Maverick</p>
+            <h1>Agents</h1>
+          </div>
+          <div className="agents-titlebar-actions">
+            <span>{catalog.agent_types.length}</span>
+            <button className="agents-new-button" onClick={createAgentType} type="button" aria-label="Create agent">
+              <span className="material-symbols-rounded" aria-hidden="true">add</span>
+            </button>
+          </div>
         </div>
         <input
           className="agents-search"
@@ -210,8 +267,11 @@ function App() {
               className={agentType.id === selectedAgentTypeId ? 'agent-row selected' : 'agent-row'}
               onClick={() => setSelectedAgentTypeId(agentType.id)}
             >
-              <strong>{agentType.name}</strong>
-              <span>{agentType.role_id}</span>
+              <span className="agent-row-icon material-symbols-rounded" aria-hidden="true">smart_toy</span>
+              <span className="agent-row-copy">
+                <strong>{agentType.name}</strong>
+                <span>{agentType.role_id}</span>
+              </span>
             </button>
           ))}
         </div>
@@ -227,8 +287,14 @@ function App() {
                 <p>{selectedAgentType.description}</p>
               </div>
               <div className="action-group">
-                <button className="secondary-action" onClick={createInstance}>Create Instance</button>
-                <button className="primary-action" onClick={startRuntimeSession}>Use In Runtime</button>
+                <button className="danger-action" onClick={deleteAgentType}>
+                  <span className="material-symbols-rounded" aria-hidden="true">delete</span>
+                  Delete Agent
+                </button>
+                <button className="primary-action" onClick={startRuntimeSession}>
+                  <span className="material-symbols-rounded" aria-hidden="true">play_arrow</span>
+                  Use In Runtime
+                </button>
               </div>
             </header>
             {runtimeSessionId ? <div className="runtime-banner">Runtime session: {runtimeSessionId}</div> : null}
@@ -243,7 +309,10 @@ function App() {
             <section className="editor-band">
               <div className="band-heading">
                 <h3>Agent Type</h3>
-                <button onClick={saveAgentType}>Save</button>
+                <button onClick={saveAgentType}>
+                  <span className="material-symbols-rounded" aria-hidden="true">save</span>
+                  Save
+                </button>
               </div>
               <input id="agent-type-name" key={`${selectedAgentType.id}-name`} defaultValue={selectedAgentType.name} />
               <textarea
@@ -256,7 +325,10 @@ function App() {
             <section className="editor-band">
               <div className="band-heading">
                 <h3>Role Instructions</h3>
-                <button onClick={saveRole}>Save</button>
+                <button onClick={saveRole}>
+                  <span className="material-symbols-rounded" aria-hidden="true">save</span>
+                  Save
+                </button>
               </div>
               <textarea id="role-instructions" key={selectedRole.id} defaultValue={selectedRole.instructions} />
             </section>
@@ -264,7 +336,10 @@ function App() {
             <section className="editor-band">
               <div className="band-heading">
                 <h3>Common Prompt</h3>
-                <button onClick={saveCommonPrompt} disabled={savingPrompt}>{savingPrompt ? 'Saving' : 'Save'}</button>
+                <button onClick={saveCommonPrompt} disabled={savingPrompt}>
+                  <span className="material-symbols-rounded" aria-hidden="true">{savingPrompt ? 'progress_activity' : 'save'}</span>
+                  {savingPrompt ? 'Saving' : 'Save'}
+                </button>
               </div>
               <textarea id="common-prompt" defaultValue={catalog.common_prompt} />
             </section>
@@ -272,18 +347,6 @@ function App() {
             <section className="editor-band">
               <h3>Prompt Preview</h3>
               <pre>{preview}</pre>
-            </section>
-
-            <section className="editor-band">
-              <h3>Instances</h3>
-              <div className="instance-list">
-                {catalog.instances.length ? catalog.instances.map((instance) => (
-                  <div className="instance-row" key={instance.id}>
-                    <strong>{instance.name}</strong>
-                    <span>{instance.status}</span>
-                  </div>
-                )) : <p>No instances yet.</p>}
-              </div>
             </section>
           </>
         ) : (

@@ -4,8 +4,12 @@ import { AppRegistryItem } from "../api";
 type AppFrameParams = Record<string, string | boolean | null>;
 type AppReadyMessage = {
   app_id?: string;
+  deleted_thread_id?: string;
+  owner_app_id?: string;
   params?: Record<string, string | boolean | null>;
+  resource?: string;
   type?: string;
+  workspace_id?: string;
 };
 
 export function AppFrameHost({
@@ -51,7 +55,25 @@ export function AppFrameHost({
         return;
       }
       const payload = event.data as AppReadyMessage;
-      if (!payload.type || !payload.app_id) {
+      if (!payload.type) {
+        return;
+      }
+      if (payload.type === "maverick.app.data-changed" && payload.owner_app_id) {
+        const ownerFrame = frameRefs.current[payload.owner_app_id];
+        if (ownerFrame?.contentWindow && event.source !== ownerFrame.contentWindow) {
+          ownerFrame.contentWindow.postMessage(
+            {
+              type: "maverick.app.data-changed",
+              owner_app_id: payload.owner_app_id,
+              resource: payload.resource || "",
+              deleted_thread_id: payload.deleted_thread_id || "",
+            },
+            window.location.origin,
+          );
+        }
+        return;
+      }
+      if (!payload.app_id) {
         return;
       }
       const senderIsMountedApp = Object.values(frameRefs.current).some((frame) => frame?.contentWindow === event.source);
@@ -69,7 +91,10 @@ export function AppFrameHost({
         }
       }
       if (payload.type === "maverick.app.open-app") {
-        onOpenApp(payload.app_id, payload.params || {});
+        onOpenApp(payload.app_id, {
+          ...(payload.params || {}),
+          workspace_id: payload.workspace_id || payload.params?.workspace_id || null,
+        });
       }
     }
 

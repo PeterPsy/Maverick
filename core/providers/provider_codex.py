@@ -15,6 +15,8 @@ from core.runtime.runtime_session import RuntimeSessionRecord
 if TYPE_CHECKING:
     from core.skills.models import SkillDefinition, SkillMaterialization
 
+CODEX_RUNTIME_HOME_FILES = ("auth.json", "version.json", ".personality_migration", "installation_id")
+
 
 def utcnow() -> datetime:
     """Return the current UTC timestamp."""
@@ -55,11 +57,11 @@ class CodexProviderAdapter:
     def __init__(
         self,
         *,
-        codex_command: str = "codex",
+        codex_command: str | None = None,
         sandbox_enable_flag: str = "use_legacy_landlock",
         server_args: list[str] | None = None,
     ) -> None:
-        self.codex_command = str(codex_command or "").strip() or "codex"
+        self.codex_command = str(codex_command or os.environ.get("MAVERICK3_CODEX_COMMAND") or "").strip() or "codex"
         self.sandbox_enable_flag = str(sandbox_enable_flag or "").strip() or "use_legacy_landlock"
         self.server_args = list(server_args or ["app-server", "--listen", "stdio://"])
 
@@ -91,8 +93,7 @@ class CodexProviderAdapter:
         workdir = Path(session.workdir)
         workspace_root = Path(session.workspace_root)
         runtime_root = Path(session.runtime_root)
-        runtime_home = self._runtime_home(session)
-        runtime_home.mkdir(parents=True, exist_ok=True)
+        runtime_home = self._prepare_runtime_home(session)
         env = self._build_subprocess_env(
             workdir=workdir,
             workspace_root=workspace_root,
@@ -207,6 +208,78 @@ class CodexProviderAdapter:
 
     def _runtime_home(self, session: RuntimeSessionRecord) -> Path:
         return Path(session.runtime_root) / "codex-home"
+
+    def _prepare_runtime_home(self, session: RuntimeSessionRecord) -> Path:
+        runtime_home = self._runtime_home(session)
+        runtime_home.mkdir(parents=True, exist_ok=True)
+        source_home = self._source_codex_home()
+        if self._same_path(runtime_home, source_home):
+            return runtime_home
+        for filename in CODEX_RUNTIME_HOME_FILES:
+            self._copy_file_if_present(source_home / filename, runtime_home / filename)
+        self._write_runtime_config(source_home / "config.toml", runtime_home / "config.toml")
+        self._link_or_copy_if_present(source_home / "rules", runtime_home / "rules")
+        self._link_or_copy_if_present(source_home / "skills" / ".system", runtime_home / "skills" / ".system")
+        return runtime_home
+
+    def _source_codex_home(self) -> Path:
+        configured = str(os.environ.get("MAVERICK3_CODEX_HOME") or os.environ.get("CODEX_HOME") or "").strip()
+        if configured:
+            return Path(configured).expanduser()
+        return Path.home() / ".codex"
+
+    def _same_path(self, left: Path, right: Path) -> bool:
+        try:
+            return left.resolve(strict=False) == right.resolve(strict=False)
+        except OSError:
+            return False
+
+    def _copy_file_if_present(self, source: Path, destination: Path) -> None:
+        if not source.is_file():
+            return
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+
+    def _write_runtime_config(self, source: Path, destination: Path) -> None:
+        if not source.is_file():
+            return
+        raw_lines = source.read_text(encoding="utf-8").splitlines()
+        sanitized_lines: list[str] = []
+        skipping_disabled_section = False
+        for line in raw_lines:
+            stripped = line.strip()
+            if stripped.startswith("[") and stripped.endswith("]"):
+                skipping_disabled_section = self._is_disabled_runtime_config_section(stripped)
+                if skipping_disabled_section:
+                    continue
+            if skipping_disabled_section:
+                continue
+            sanitized_lines.append(line)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text("\n".join(sanitized_lines).strip() + "\n", encoding="utf-8")
+
+    def _is_disabled_runtime_config_section(self, section: str) -> bool:
+        return section == "[mcp_servers]" or section.startswith("[mcp_servers.") or section == "[plugins]" or section.startswith("[plugins.")
+
+    def _link_or_copy_if_present(self, source: Path, destination: Path) -> None:
+        if not source.exists():
+            return
+        self._reset_path(destination)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            destination.symlink_to(source, target_is_directory=source.is_dir())
+        except OSError:
+            if source.is_dir():
+                shutil.copytree(source, destination, dirs_exist_ok=True)
+            else:
+                shutil.copy2(source, destination)
+
+    def _reset_path(self, path: Path) -> None:
+        if path.is_symlink() or path.is_file():
+            path.unlink(missing_ok=True)
+            return
+        if path.is_dir():
+            shutil.rmtree(path, ignore_errors=True)
 
     def _writable_roots(self, *, workspace_root: Path, runtime_root: Path, execution_mode: str) -> list[str]:
         if execution_mode == "full-access":

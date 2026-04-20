@@ -197,17 +197,19 @@
 .chatapp-tool-call-panel-layer {
   position: fixed;
   inset: 0;
-  z-index: 70;
-  pointer-events: none;
+  z-index: 1000;
+  pointer-events: auto;
 }
 
 .chatapp-tool-call-panel {
   position: fixed;
-  width: min(30rem, calc(100vw - 2rem));
-  min-width: 20rem;
+  top: var(--chatapp-tool-call-panel-top, max(1rem, env(safe-area-inset-top, 0px)));
+  left: var(--chatapp-tool-call-panel-left, max(1rem, env(safe-area-inset-left, 0px)));
+  width: min(22.5rem, calc(100vw - 1.5rem));
+  min-width: min(17.5rem, calc(100vw - 1.5rem));
   max-width: calc(100vw - 2rem);
-  min-height: 16rem;
-  max-height: min(75vh, 42rem);
+  min-height: 11rem;
+  max-height: min(28rem, calc(100dvh - 1.5rem));
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   resize: both;
@@ -236,7 +238,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
-  padding: 1rem 1rem 0.85rem;
+  padding: 0.85rem 0.9rem 0.75rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
@@ -303,8 +305,8 @@
   min-height: 0;
   overflow: auto;
   display: grid;
-  gap: 0.8rem;
-  padding: 1rem;
+  gap: 0.65rem;
+  padding: 0.85rem;
 }
 
 .chatapp-tool-call-panel__section {
@@ -336,7 +338,7 @@
 
 .chatapp-tool-call-panel__pre {
   margin: 0;
-  padding: 0.8rem 0.9rem;
+  padding: 0.65rem 0.75rem;
   border-radius: 0.8rem;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.06);
@@ -408,4 +410,56 @@
   .chatapp-tool-inline__stroke--spin {
     animation: none;
   }
+}
+
+.chatapp-tool-inline-message {
+  display: grid;
+  gap: 0.55rem;
+  max-width: min(100%, 560px);
+  padding: 0.65rem 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.84);
+}
+
+.chatapp-tool-inline-message__button {
+  align-items: center;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.65rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.chatapp-tool-inline-message.is-failed {
+  border-color: rgba(255, 77, 141, 0.24);
+  background: rgba(255, 77, 141, 0.08);
+  color: #ffd1e4;
+}
+
+.chatapp-tool-inline-message__copy {
+  display: grid;
+  gap: 0.08rem;
+}
+
+.chatapp-tool-inline-message__copy small {
+  color: var(--maverick-text-muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+}
+
+.chatapp-tool-inline-message__detail {
+  max-height: 18rem;
+  overflow: auto;
+  margin: 0;
+  padding: 0.75rem;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--maverick-text-muted);
 }

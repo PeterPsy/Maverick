@@ -7,19 +7,15 @@ from pathlib import Path
 from seeds import seed_defaults
 from store import (
     AgentsValidationError,
-    create_instance,
     delete_agent_type,
-    delete_instance,
     delete_role,
     get_agent_type,
     get_role,
     list_agent_types,
-    list_instances,
     list_roles,
     read_common_prompt,
     save_agent_type,
     save_role,
-    update_instance,
     write_common_prompt,
 )
 
@@ -30,7 +26,6 @@ def catalog(data_root: Path) -> dict:
         "common_prompt": read_common_prompt(data_root),
         "roles": list_roles(data_root),
         "agent_types": list_agent_types(data_root),
-        "instances": list_instances(data_root),
     }
 
 
@@ -92,22 +87,6 @@ def handle_action(data_root: Path, body: dict) -> tuple[int, dict]:
         return 200, {"common_prompt": write_common_prompt(data_root, str(body.get("prompt") or ""))}
     if action == "preview_prompt":
         return 200, prompt_preview(data_root, body)
-    if action == "list_instances":
-        return 200, {"instances": list_instances(data_root)}
-    if action == "create_instance":
-        return 201, {"instance": create_instance(data_root, body)}
-    if action == "update_instance":
-        instance = update_instance(data_root, body)
-        return (200, {"instance": instance}) if instance is not None else (404, {"error": "instance_not_found"})
-    if action == "delete_instance":
-        deleted = delete_instance(data_root, str(body.get("instance_id") or ""))
-        return (200, {"deleted": True}) if deleted else (404, {"error": "instance_not_found"})
-    if action in {"start_instance", "stop_instance", "send_message_to_instance", "delegate_to_agent"}:
-        return 409, {
-            "accepted": False,
-            "error": "runtime_binding_not_available",
-            "detail": "Agent runtime execution requires the generic v3 runtime launch contract.",
-        }
     if action == "health.check":
         return 200, {"status": "ok", "data_root": str(data_root)}
     return 400, {"error": "unsupported_action", "action": action}

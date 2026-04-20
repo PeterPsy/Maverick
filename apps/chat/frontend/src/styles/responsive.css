@@ -434,7 +434,7 @@
   .chatapp-auth-card,
   .chatapp-empty-panel,
   .chatapp-chat-empty__panel {
-    padding: 0.7rem;
+    padding: 0.7rem 0.85rem;
   }
 
   .chatapp-composer {

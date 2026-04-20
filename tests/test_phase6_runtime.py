@@ -113,6 +113,7 @@ class Phase6RuntimeTestCase(unittest.TestCase):
         self.assertEqual(session.system_prompt, "You are a focused test agent.")
         self.assertEqual(session.skill_ids, ["app.agents.agents-ops"])
         self.assertEqual(session.source_app_id, "agents")
+        self.assertIsNone(session.provider_thread_id)
         self.assertEqual(store.get_state("sess-1").session_status, "created")
 
     def test_runtime_turn_lifecycle_updates_runtime_state(self) -> None:
@@ -264,6 +265,21 @@ class Phase6RuntimeTestCase(unittest.TestCase):
             platform_allows_full_access=True,
             start_path=repo_root,
         )
+        default_route = build_runtime_routing(
+            workspace_id="default",
+            agent_id="agent-ops",
+            governance=default_workspace_governance("default"),
+            platform_allows_full_access=True,
+            start_path=repo_root,
+        )
+        explicit_sandbox_route = build_runtime_routing(
+            workspace_id="default",
+            agent_id="agent-ops",
+            requested_mode="sandbox",
+            governance=default_workspace_governance("default"),
+            platform_allows_full_access=True,
+            start_path=repo_root,
+        )
 
         self.assertEqual(sandbox_route.effective_mode, "sandbox")
         self.assertEqual(sandbox_route.writable_roots, [str(repo_root / "workspaces" / "acme")])
@@ -271,6 +287,10 @@ class Phase6RuntimeTestCase(unittest.TestCase):
         self.assertEqual(full_access_route.effective_mode, "full-access")
         self.assertEqual(full_access_route.writable_roots, ["/"])
         self.assertTrue(full_access_route.allows_outside_workspace_root)
+        self.assertEqual(default_route.effective_mode, "full-access")
+        self.assertEqual(default_route.writable_roots, ["/"])
+        self.assertTrue(default_route.allows_outside_workspace_root)
+        self.assertEqual(explicit_sandbox_route.effective_mode, "sandbox")
 
     def test_child_runtime_session_inherits_parent_workspace_boundary(self) -> None:
         store = self.make_store()

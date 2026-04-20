@@ -11,10 +11,21 @@ import unittest
 
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
-from core.apps.contracts import parse_app_contract_file
+from core.apps.contracts import (
+    build_app_contract,
+    build_app_distribution,
+    build_app_entrypoints,
+    build_app_lifecycle,
+    build_parsed_app_contract,
+    parse_app_contract_file,
+    write_app_contract_file,
+)
+from core.apps.service import install_workspace_local_app, register_workspace_local_app_project_from_contract
 from core.cli.service import list_core_cli_commands
 from core.mcp.service import list_mcp_tools
+from core.runtime.service import create_runtime_session, queue_runtime_turn, transition_runtime_session, transition_runtime_turn
 from core.skills.service import list_visible_platform_skills
+from core.workspaces.service import create_workspace, ensure_workspace_layout
 
 
 class Phase13BuiltinAppsTestCase(unittest.TestCase):
@@ -37,6 +48,7 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
         )
         shutil.copytree(source_apps_root / "chat", repo_root / "apps" / "chat")
         shutil.copytree(source_apps_root / "agents", repo_root / "apps" / "agents", ignore=shutil.ignore_patterns("node_modules"))
+        shutil.copytree(source_apps_root / "skills", repo_root / "apps" / "skills", ignore=shutil.ignore_patterns("node_modules"))
         return repo_root
 
     def invoke(
@@ -91,11 +103,26 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
         bindings = state.app_store.list_workspace_app_bindings("default")
         versions = {binding.app_id: binding.active_version for binding in bindings}
 
-        self.assertEqual(sorted(binding.app_id for binding in bindings), ["agents", "base-shell", "chat"])
+        self.assertEqual(sorted(binding.app_id for binding in bindings), ["agents", "base-shell", "chat", "skills"])
         self.assertEqual(versions["base-shell"], "2.0.0")
         self.assertFalse((repo_root / "workspaces" / "default" / "apps" / "base-shell").exists())
         self.assertTrue((repo_root / "workspaces" / "default" / "data" / "chat" / "threads.json").is_file())
         self.assertTrue((repo_root / "workspaces" / "default" / "data" / "agents" / "agent_types.json").is_file())
+        self.assertTrue((repo_root / "workspaces" / "default" / "data" / "skills" / "state.json").is_file())
+
+    def test_bootstrap_rebuilds_builtin_app_bindings_for_persisted_workspaces(self) -> None:
+        repo_root = self.make_repo_root()
+        initial_state = bootstrap_platform_state(start_path=repo_root)
+        workspace = create_workspace(initial_state.workspace_store, name="CEIDA", created_by_user_id="user:admin")
+        ensure_workspace_layout(workspace.workspace_id, start_path=repo_root)
+
+        restarted_state = bootstrap_platform_state(start_path=repo_root)
+
+        bindings = restarted_state.app_store.list_workspace_app_bindings(workspace.workspace_id)
+        self.assertEqual(sorted(binding.app_id for binding in bindings), ["agents", "base-shell", "chat", "skills"])
+        self.assertTrue((repo_root / "workspaces" / "ceida" / "data" / "chat" / "threads.json").is_file())
+        self.assertTrue((repo_root / "workspaces" / "ceida" / "data" / "agents" / "agent_types.json").is_file())
+        self.assertTrue((repo_root / "workspaces" / "ceida" / "data" / "skills" / "state.json").is_file())
 
     def test_platform_host_mounts_root_shell_and_chat_frontend(self) -> None:
         repo_root = self.make_repo_root()
@@ -171,6 +198,41 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
             },
         )
 
+    def test_app_registry_skips_enabled_workspace_local_app_with_missing_source(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        local_root = repo_root / "workspaces" / "default" / "apps" / "missing-local"
+        parsed = build_parsed_app_contract(
+            app_id="missing-local",
+            name="Missing Local",
+            version="1.0.0",
+            description="Workspace-local app whose source was removed.",
+            publisher="workspace",
+            contract=build_app_contract(
+                distribution=build_app_distribution(mode="workspace_local", source_access="editable"),
+                lifecycle=build_app_lifecycle(health_check=False),
+                entrypoints=build_app_entrypoints(frontend="frontend/dist"),
+            ),
+        )
+        (local_root / "frontend" / "dist").mkdir(parents=True)
+        (local_root / "frontend" / "dist" / "index.html").write_text("<div>Missing local</div>", encoding="utf-8")
+        write_app_contract_file(local_root, parsed)
+        register_workspace_local_app_project_from_contract(
+            state.app_store,
+            workspace_id="default",
+            project_root=str(local_root),
+        )
+        install_workspace_local_app(state.app_store, workspace_id="default", app_id="missing-local", start_path=repo_root)
+        shutil.rmtree(local_root)
+        app = PlatformHost(state, start_path=repo_root)
+
+        status, body, _headers = self.invoke(app, path="/api/apps")
+        payload = json.loads(body.decode("utf-8"))
+
+        self.assertEqual(status, 200)
+        self.assertNotIn("missing-local", {item["app_id"] for item in payload["items"]})
+        self.assertIn("base-shell", {item["app_id"] for item in payload["items"]})
+
     def test_base_shell_uses_registry_without_fake_static_apps(self) -> None:
         repo_root = self.make_repo_root()
         state = bootstrap_platform_state(start_path=repo_root)
@@ -217,6 +279,83 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
         self.assertEqual(list_payload["threads"], [])
         self.assertEqual(create_payload["thread"]["runtime_session_id"], "runtime-session")
         self.assertEqual(create_payload["threads"][0]["title"], "New chat")
+
+    def test_chat_backend_stores_runtime_session_agent_metadata(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+
+        status, body, _ = self.invoke(
+            app,
+            path="/api/apps/chat/backend",
+            method="POST",
+            body={
+                "action": "threads.create",
+                "runtime_session_id": "runtime-session",
+                "title": "Backend Systems Engineer",
+                "agent_label": "Backend Systems Engineer",
+                "agent_type_id": "backend-systems-engineer",
+                "agent_role_id": "backend-systems-engineer",
+                "source_app_id": "agents",
+            },
+        )
+
+        payload = json.loads(body.decode("utf-8"))
+
+        self.assertEqual(status, 201)
+        self.assertEqual(payload["thread"]["title"], "Backend Systems Engineer")
+        self.assertEqual(payload["thread"]["agent_label"], "Backend Systems Engineer")
+        self.assertEqual(payload["thread"]["agent_type_id"], "backend-systems-engineer")
+        self.assertEqual(payload["thread"]["agent_role_id"], "backend-systems-engineer")
+        self.assertEqual(payload["thread"]["source_app_id"], "agents")
+
+    def test_chat_backend_stores_thread_system_prompt(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+
+        status, body, _ = self.invoke(
+            app,
+            path="/api/apps/chat/backend",
+            method="POST",
+            body={
+                "action": "threads.create",
+                "runtime_session_id": "",
+                "system_prompt": "Use the workspace common prompt.",
+            },
+        )
+
+        payload = json.loads(body.decode("utf-8"))
+
+        self.assertEqual(status, 201)
+        self.assertEqual(payload["thread"]["runtime_session_id"], "")
+        self.assertEqual(payload["thread"]["system_prompt"], "Use the workspace common prompt.")
+
+    def test_chat_thread_create_reuses_existing_runtime_session(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+
+        first_status, first_body, _ = self.invoke(
+            app,
+            path="/api/apps/chat/backend",
+            method="POST",
+            body={"action": "threads.create", "runtime_session_id": "runtime-session"},
+        )
+        second_status, second_body, _ = self.invoke(
+            app,
+            path="/api/apps/chat/backend",
+            method="POST",
+            body={"action": "threads.create", "runtime_session_id": "runtime-session"},
+        )
+
+        first_payload = json.loads(first_body.decode("utf-8"))
+        second_payload = json.loads(second_body.decode("utf-8"))
+
+        self.assertEqual(first_status, 201)
+        self.assertEqual(second_status, 201)
+        self.assertEqual(first_payload["thread"]["thread_id"], second_payload["thread"]["thread_id"])
+        self.assertEqual(len(second_payload["threads"]), 1)
 
     def test_chat_surfaces_are_visible_to_agents_and_operators(self) -> None:
         repo_root = self.make_repo_root()
@@ -305,6 +444,47 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
         self.assertEqual(rename_payload["thread"]["title"], "Audit plan")
         self.assertIsNone(rename_payload["thread"]["project_id"])
         self.assertEqual(delete_payload["threads"], [])
+
+    def test_chat_thread_delete_stops_linked_runtime_session(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+        session = create_runtime_session(
+            state.runtime_store,
+            session_id="runtime-to-delete",
+            workspace_id="default",
+            agent_id="chat",
+            governance=state.workspace_store.get_governance("default"),
+            platform_allows_full_access=True,
+            start_path=repo_root,
+        )
+        transition_runtime_session(state.runtime_store, session_id=session.session_id, target_status="running")
+        turn = queue_runtime_turn(state.runtime_store, turn_id="turn-to-delete", session_id=session.session_id, input_text="work")
+        transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="active")
+        status_thread, thread_body, _ = self.invoke(
+            app,
+            path="/api/apps/chat/backend",
+            method="POST",
+            body={"action": "threads.create", "runtime_session_id": session.session_id},
+        )
+        thread_payload = json.loads(thread_body.decode("utf-8"))
+        thread_id = thread_payload["thread"]["thread_id"]
+
+        status_delete, delete_body, _ = self.invoke(
+            app,
+            path="/api/apps/chat/backend",
+            method="POST",
+            body={"action": "threads.delete", "thread_id": thread_id},
+        )
+        delete_payload = json.loads(delete_body.decode("utf-8"))
+
+        self.assertEqual(status_thread, 201)
+        self.assertEqual(status_delete, 200)
+        self.assertEqual(delete_payload["deleted_runtime_session_id"], session.session_id)
+        self.assertEqual(delete_payload["runtime_termination"]["session_id"], session.session_id)
+        self.assertEqual(delete_payload["runtime_termination"]["cancelled_turns"], 1)
+        self.assertEqual(state.runtime_store.get_session(session.session_id).status, "stopped")
+        self.assertEqual(state.runtime_store.get_turn(turn.turn_id).status, "cancelled")
 
 
 if __name__ == "__main__":

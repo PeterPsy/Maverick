@@ -62,6 +62,11 @@ def thread_payload(thread: dict) -> dict:
         "thread_id": str(thread.get("thread_id") or ""),
         "runtime_session_id": str(thread.get("runtime_session_id") or ""),
         "title": str(thread.get("title") or "New chat"),
+        "agent_label": str(thread.get("agent_label") or ""),
+        "agent_type_id": str(thread.get("agent_type_id") or ""),
+        "agent_role_id": str(thread.get("agent_role_id") or ""),
+        "source_app_id": str(thread.get("source_app_id") or ""),
+        "system_prompt": str(thread.get("system_prompt") or ""),
         "project_id": str(thread.get("project_id") or "") or None,
         "archived": bool(thread.get("archived", False)),
         "availability": str(thread.get("availability") or "free"),
@@ -128,15 +133,33 @@ def find_thread(state: dict, thread_id: str) -> dict | None:
     return None
 
 
+def find_thread_by_runtime_session(state: dict, runtime_session_id: str) -> dict | None:
+    if not runtime_session_id:
+        return None
+    for thread in state.get("threads", []):
+        if isinstance(thread, dict) and thread.get("runtime_session_id") == runtime_session_id:
+            state["preferences"]["active_thread_id"] = thread.get("thread_id")
+            return thread_payload(thread)
+    return None
+
+
 def create_thread(state: dict, body: dict) -> dict:
     timestamp = now_timestamp()
     title = str(body.get("title") or "").strip() or "New chat"
     runtime_session_id = str(body.get("runtime_session_id") or "").strip()
+    existing_thread = find_thread_by_runtime_session(state, runtime_session_id)
+    if existing_thread is not None:
+        return existing_thread
     project_id = str(body.get("project_id") or "").strip() or None
     thread = {
         "thread_id": str(uuid4()),
         "runtime_session_id": runtime_session_id,
         "title": title[:80],
+        "agent_label": str(body.get("agent_label") or "").strip()[:120],
+        "agent_type_id": str(body.get("agent_type_id") or "").strip()[:120],
+        "agent_role_id": str(body.get("agent_role_id") or "").strip()[:120],
+        "source_app_id": str(body.get("source_app_id") or "").strip()[:80],
+        "system_prompt": str(body.get("system_prompt") or "").strip(),
         "project_id": project_id,
         "archived": False,
         "availability": "free",
@@ -148,15 +171,17 @@ def create_thread(state: dict, body: dict) -> dict:
     return thread_payload(thread)
 
 
-def delete_thread(state: dict, body: dict) -> bool:
+def delete_thread(state: dict, body: dict) -> dict | None:
     thread_id = str(body.get("thread_id") or "").strip()
-    original = len(state.get("threads", []))
+    deleted_thread = find_thread(state, thread_id)
+    if deleted_thread is None:
+        return None
     state["threads"] = [
         thread for thread in state.get("threads", []) if isinstance(thread, dict) and thread.get("thread_id") != thread_id
     ]
     if state.get("preferences", {}).get("active_thread_id") == thread_id:
         state["preferences"]["active_thread_id"] = None
-    return len(state["threads"]) != original
+    return deleted_thread
 
 
 def update_thread(state: dict, body: dict) -> dict | None:
@@ -171,6 +196,16 @@ def update_thread(state: dict, body: dict) -> dict | None:
                 thread["title"] = title[:80]
         if "runtime_session_id" in body:
             thread["runtime_session_id"] = str(body.get("runtime_session_id") or "").strip()
+        if "agent_label" in body:
+            thread["agent_label"] = str(body.get("agent_label") or "").strip()[:120]
+        if "agent_type_id" in body:
+            thread["agent_type_id"] = str(body.get("agent_type_id") or "").strip()[:120]
+        if "agent_role_id" in body:
+            thread["agent_role_id"] = str(body.get("agent_role_id") or "").strip()[:120]
+        if "source_app_id" in body:
+            thread["source_app_id"] = str(body.get("source_app_id") or "").strip()[:80]
+        if "system_prompt" in body:
+            thread["system_prompt"] = str(body.get("system_prompt") or "").strip()
         if "project_id" in body:
             thread["project_id"] = str(body.get("project_id") or "").strip() or None
         if "archived" in body:

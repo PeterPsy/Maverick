@@ -46,7 +46,12 @@ export function Sidebar({
       </div>
 
       <nav className="bs-sidebar__nav-list" aria-label="Primary navigation">
-        <WorkspaceSwitcher activeWorkspaceId={activeWorkspaceId} onChanged={onWorkspaceChanged} workspaces={workspaces} />
+        <WorkspaceSwitcher
+          activeWorkspaceId={activeWorkspaceId}
+          canCreateWorkspace={user?.platform_role === "admin"}
+          onChanged={onWorkspaceChanged}
+          workspaces={workspaces}
+        />
 
         <button className={`bs-sidebar__nav-button ${activeAppId === "app-store" ? "is-active" : ""}`} onClick={onOpenApps} type="button">
           <span className="bs-sidebar__nav-leading">

@@ -13,14 +13,22 @@ from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
 from core.apps.contracts import (
     build_app_contract,
+    build_app_distribution,
     build_app_entrypoints,
+    build_app_lifecycle,
     build_parsed_app_contract,
     build_widget_actions,
     build_widget_declaration,
     build_widget_frontend,
     write_app_contract_file,
 )
-from core.apps.service import install_store_app, register_app_source_from_contract, transition_workspace_app_status
+from core.apps.service import (
+    install_store_app,
+    install_workspace_local_app,
+    register_app_source_from_contract,
+    register_workspace_local_app_project_from_contract,
+    transition_workspace_app_status,
+)
 
 
 class Phase13WidgetsTestCase(unittest.TestCase):
@@ -182,6 +190,54 @@ class Phase13WidgetsTestCase(unittest.TestCase):
 
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(body.decode("utf-8"))["items"], [])
+
+    def test_widget_registry_skips_workspace_local_app_with_missing_source(self) -> None:
+        repo_root, state = self.install_widget_app()
+        local_root = repo_root / "workspaces" / "default" / "apps" / "missing-widget"
+        widget_root = local_root / "frontend" / "dist" / "widgets" / "preview"
+        widget_root.mkdir(parents=True)
+        (widget_root / "index.html").write_text("<div>Missing widget</div>", encoding="utf-8")
+        parsed = build_parsed_app_contract(
+            app_id="missing-widget",
+            name="Missing Widget",
+            version="1.0.0",
+            description="Workspace-local widget app whose source was removed.",
+            publisher="workspace",
+            contract=build_app_contract(
+                distribution=build_app_distribution(mode="workspace_local", source_access="editable"),
+                lifecycle=build_app_lifecycle(health_check=False),
+                entrypoints=build_app_entrypoints(frontend="frontend/dist"),
+                widgets=[
+                    build_widget_declaration(
+                        widget_id="preview",
+                        host="chat",
+                        content_kinds=["checklist.design"],
+                        frontend=build_widget_frontend(mount="frontend/dist/widgets/preview"),
+                    )
+                ],
+            ),
+        )
+        write_app_contract_file(local_root, parsed)
+        register_workspace_local_app_project_from_contract(
+            state.app_store,
+            workspace_id="default",
+            project_root=str(local_root),
+        )
+        install_workspace_local_app(state.app_store, workspace_id="default", app_id="missing-widget", start_path=repo_root)
+        shutil.rmtree(local_root)
+        app = PlatformHost(state, start_path=repo_root)
+        cookie = self.login(app)
+
+        status, body, _headers = self.invoke(
+            app,
+            path="/api/apps/widgets",
+            query_string="host=chat&content_kind=checklist.design",
+            cookie=cookie,
+        )
+        payload = json.loads(body.decode("utf-8"))
+
+        self.assertEqual(status, 200)
+        self.assertEqual([item["owner_app_id"] for item in payload["items"]], ["checklists"])
 
     def test_widget_frontend_mount_serves_owner_frontend(self) -> None:
         repo_root, state = self.install_widget_app()

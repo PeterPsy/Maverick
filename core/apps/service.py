@@ -14,11 +14,13 @@ from core.apps.registration import (
 from core.apps.reinstall import reinstall_workspace_app
 from core.apps.status import purge_workspace_app_data, transition_workspace_app_status, uninstall_workspace_app
 from core.apps.upgrades import upgrade_workspace_app
+from core.apps.workspace_local_deletion import delete_workspace_local_app_project
 
 __all__ = [
     "build_app_export_hook_payload",
     "build_app_health_hook_payload",
     "build_workspace_app_binding_record",
+    "delete_workspace_local_app_project",
     "fork_store_app_to_workspace",
     "install_store_app",
     "install_workspace_local_app",

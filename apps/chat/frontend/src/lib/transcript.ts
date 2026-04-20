@@ -1,15 +1,163 @@
-import type { ChatMessage, RuntimeEvent } from "../api/client";
+import type { ChatMessage, RuntimeEvent, RuntimeStepMessage, StructuredContent, ToolCallMessage } from "../api/client";
 import type { ChatMessageAttachment } from "../api/client";
+import { structuredContentFromAgentLinks } from "./linkPreviews";
+import { runtimeStepLabel } from "./runtimeStepLabels";
 
 function textPayload(event: RuntimeEvent): string {
   const value = event.payload.text;
   return typeof value === "string" ? value.trim() : "";
 }
 
+function deltaTextPayload(event: RuntimeEvent): string {
+  const value = event.payload.text;
+  return typeof value === "string" ? value : "";
+}
+
+function structuredPayload(value: unknown): StructuredContent | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  const kind = typeof record.kind === "string" ? record.kind : "";
+  if (!kind) {
+    return null;
+  }
+  const payload = record.payload && typeof record.payload === "object" ? (record.payload as Record<string, unknown>) : record;
+  return { kind, payload };
+}
+
+function toolCallPayload(event: RuntimeEvent): ToolCallMessage | null {
+  if (!event.event_type.startsWith("runtime.tool_call.")) {
+    return null;
+  }
+  const status = event.event_type.split(".").at(-1);
+  if (status !== "started" && status !== "updated" && status !== "completed" && status !== "failed") {
+    return null;
+  }
+  const name = event.payload.name || event.payload.tool_name || event.payload.tool;
+  return {
+    id: event.event_id,
+    name: typeof name === "string" && name ? name : "tool",
+    status,
+    detail: event.payload,
+    createdAt: event.created_at,
+  };
+}
+
+function normalizedRuntimeLabel(value: string): string {
+  return value
+    .replace(/\u001b\[[0-9;]*m/g, "")
+    .replace(/\u2026/g, "...")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[._-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function skillChangeToolCallPayload(event: RuntimeEvent): ToolCallMessage | null {
+  if (event.event_type !== "runtime.step.updated") {
+    return null;
+  }
+  const label = String(event.payload.label || event.payload.message || event.payload.provider_event_type || "");
+  if (normalizedRuntimeLabel(label) !== "skills changed") {
+    return null;
+  }
+  return {
+    id: event.event_id,
+    name: "skills",
+    status: "completed",
+    detail: {
+      ...event.payload,
+      name: "skills",
+      tool_kind: "skill_change",
+      status: "completed",
+      summary: "Skills changed",
+    },
+    createdAt: event.created_at,
+  };
+}
+
+function toolCallKey(toolCall: ToolCallMessage): string {
+  for (const key of ["tool_call_id", "call_id", "item_id"]) {
+    const value = toolCall.detail[key];
+    if (typeof value === "string" && value.trim()) {
+      return `${key}:${value.trim()}`;
+    }
+  }
+  return `event:${toolCall.id}`;
+}
+
+function mergeToolCall(previous: ToolCallMessage, next: ToolCallMessage): ToolCallMessage {
+  const statusRank: Record<ToolCallMessage["status"], number> = {
+    started: 1,
+    updated: 2,
+    completed: 3,
+    failed: 4,
+  };
+  const selected = statusRank[next.status] >= statusRank[previous.status] ? next : previous;
+  return {
+    ...previous,
+    ...selected,
+    detail: { ...previous.detail, ...next.detail },
+    createdAt: selected.createdAt || previous.createdAt,
+  };
+}
+
+function stepPayload(event: RuntimeEvent): RuntimeStepMessage | null {
+  const label = runtimeStepLabel(event);
+  if (!label) {
+    return null;
+  }
+  return {
+    label,
+    detail: event.payload,
+  };
+}
+
+function readableSystemText(value: unknown, fallback: string): string {
+  const text = String(value || fallback).trim();
+  return text.replace(/_/g, " ");
+}
+
 export function eventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
-  const messages: ChatMessage[] = [];
+  const orderedMessages: Array<{ order: number; sequence: number; message: ChatMessage }> = [];
+  let messageSequence = 0;
   const seenUserTurns = new Set<string>();
-  for (const event of events) {
+  const finalTurnIds = new Set(events.filter((event) => event.event_type === "runtime.output.final").map((event) => event.turn_id || event.event_id));
+  const deltaByTurn = new Map<string, { text: string; createdAt: string; order: number }>();
+  const toolSegmentsByTurn = new Map<string, { createdAt: string; itemsByKey: Map<string, ToolCallMessage>; index: number; order: number }>();
+  const nextToolSegmentIndexByTurn = new Map<string, number>();
+
+  function pushMessage(message: ChatMessage, order: number) {
+    orderedMessages.push({ order, sequence: messageSequence, message });
+    messageSequence += 1;
+  }
+
+  function flushToolSegment(turnId: string, closeActive = false) {
+    const segment = toolSegmentsByTurn.get(turnId);
+    if (!segment) {
+      return;
+    }
+    const items = [...segment.itemsByKey.values()].map((item) =>
+      closeActive && (item.status === "started" || item.status === "updated") ? { ...item, status: "completed" as const } : item,
+    );
+    if (items.length) {
+      const hasFailedTool = items.some((item) => item.status === "failed");
+      pushMessage({
+        id: `${turnId}:tools:${segment.index}`,
+        role: "tool",
+        content: "Tool Used",
+        createdAt: segment.createdAt,
+        status: hasFailedTool ? "failed" : "complete",
+        toolCalls: items,
+        toolCall: items[0],
+      }, segment.order);
+    }
+    toolSegmentsByTurn.delete(turnId);
+  }
+
+  for (const [eventIndex, event] of events.entries()) {
     const turnId = event.turn_id || event.event_id;
     if (event.event_type === "runtime.turn.queued" && !seenUserTurns.has(turnId)) {
       const input = event.payload.input_text;
@@ -19,50 +167,125 @@ export function eventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
         : [];
       if (typeof input === "string" && input.trim()) {
         seenUserTurns.add(turnId);
-        messages.push({
+        pushMessage({
           id: typeof clientMessageId === "string" && clientMessageId ? clientMessageId : `${turnId}:human`,
           role: "human",
           content: input,
           createdAt: event.created_at,
           status: "complete",
           attachments,
+        }, eventIndex);
+      }
+    }
+    if (event.event_type === "runtime.output.delta" && !finalTurnIds.has(turnId)) {
+      const text = deltaTextPayload(event);
+      if (text) {
+        flushToolSegment(turnId, true);
+        const current = deltaByTurn.get(turnId);
+        deltaByTurn.set(turnId, {
+          text: current ? `${current.text}${text}` : text,
+          createdAt: event.created_at,
+          order: current ? current.order : eventIndex,
         });
       }
     }
     if (event.event_type === "runtime.output.final") {
+      flushToolSegment(turnId, true);
+      const structured = structuredPayload(event.payload.structured_content || event.payload.structuredContent || event.payload.content);
       const text = textPayload(event);
+      if (structured) {
+        pushMessage({
+          id: `${turnId}:structured:${event.event_id}`,
+          role: "structured",
+          content: text || structured.kind,
+          createdAt: event.created_at,
+          status: "complete",
+          structuredContent: structured,
+        }, eventIndex);
+      }
       if (text) {
-        messages.push({
+        pushMessage({
           id: `${turnId}:agent`,
           role: "agent",
           content: text,
           createdAt: event.created_at,
           status: "complete",
+        }, eventIndex);
+        structuredContentFromAgentLinks(text).forEach((linkPreview, index) => {
+          pushMessage({
+            id: `${turnId}:link-preview:${event.event_id}:${index}`,
+            role: "structured",
+            content: linkPreview.kind,
+            createdAt: event.created_at,
+            status: "complete",
+            structuredContent: linkPreview,
+          }, eventIndex);
         });
       }
     }
+    const toolCall = toolCallPayload(event) || skillChangeToolCallPayload(event);
+    if (toolCall) {
+      const current = toolSegmentsByTurn.get(turnId);
+      const key = toolCallKey(toolCall);
+      if (current) {
+        const previous = current.itemsByKey.get(key);
+        current.itemsByKey.set(key, previous ? mergeToolCall(previous, toolCall) : toolCall);
+      } else {
+        const index = nextToolSegmentIndexByTurn.get(turnId) || 0;
+        nextToolSegmentIndexByTurn.set(turnId, index + 1);
+        toolSegmentsByTurn.set(turnId, { createdAt: event.created_at, itemsByKey: new Map([[key, toolCall]]), index, order: eventIndex });
+      }
+      continue;
+    }
+    const step = stepPayload(event);
+    if (step) {
+      flushToolSegment(turnId, true);
+      pushMessage({
+        id: `${turnId}:step:${event.event_id}`,
+        role: "step",
+        content: step.label,
+        createdAt: event.created_at,
+        status: "complete",
+        step,
+      }, eventIndex);
+    }
     if (event.event_type === "runtime.turn.failed") {
-      const error = event.payload.error || event.payload.exit_code || "Runtime turn failed.";
-      messages.push({
+      flushToolSegment(turnId, true);
+      const error = readableSystemText(event.payload.error || event.payload.exit_code, "Runtime turn failed.");
+      pushMessage({
         id: `${turnId}:failed`,
         role: "system",
-        content: String(error),
+        content: error,
         createdAt: event.created_at,
         status: "failed",
-      });
+      }, eventIndex);
     }
     if (event.event_type === "runtime.turn.cancelled") {
-      const reason = event.payload.reason || "Runtime turn cancelled.";
-      messages.push({
+      flushToolSegment(turnId, true);
+      const reason = readableSystemText(event.payload.reason, "Runtime turn cancelled.");
+      pushMessage({
         id: `${turnId}:cancelled`,
         role: "system",
-        content: String(reason),
+        content: reason,
         createdAt: event.created_at,
         status: "failed",
-      });
+      }, eventIndex);
     }
   }
-  return messages;
+  for (const [turnId, delta] of deltaByTurn) {
+    pushMessage({
+      id: `${turnId}:agent:streaming`,
+      role: "agent",
+      content: delta.text,
+      createdAt: delta.createdAt,
+      status: "pending",
+    }, delta.order);
+  }
+  for (const turnId of toolSegmentsByTurn.keys()) {
+    flushToolSegment(turnId);
+  }
+  orderedMessages.sort((left, right) => left.order - right.order || left.sequence - right.sequence);
+  return orderedMessages.map((entry) => entry.message);
 }
 
 export function firstUserTitle(value: string): string {

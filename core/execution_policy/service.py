@@ -32,9 +32,9 @@ def resolve_workspace_execution_profile(
     default_workspace = workspace_id == "default"
     governance_allows_full_access = bool(governance and governance.allow_full_access_runtime)
     can_run_full_access = default_workspace and governance_allows_full_access and platform_allows_full_access
-    if can_run_full_access and normalized_requested_mode == "full-access":
+    if can_run_full_access and normalized_requested_mode in {None, "full-access"}:
         effective_mode = "full-access"
-        reason = "default workspace explicitly requested full-access and platform policy allows it"
+        reason = "default workspace uses full-access when platform and governance policy allow it"
     else:
         effective_mode = "sandbox"
         if not default_workspace:
@@ -43,6 +43,8 @@ def resolve_workspace_execution_profile(
             reason = "default workspace requested full-access but governance does not allow it"
         elif normalized_requested_mode == "full-access" and not platform_allows_full_access:
             reason = "default workspace requested full-access but platform policy does not allow it"
+        elif default_workspace and normalized_requested_mode == "sandbox":
+            reason = "default workspace explicitly requested sandbox"
         else:
             reason = "default workspace defaults to sandbox"
     return WorkspaceExecutionProfile(

@@ -70,7 +70,7 @@ It may contain:
 - open-source or source-available apps distributed through the server app store
 - versioned app bundles validated by the core
 
-The Maverick App Store itself is also an app. Its UI, backend, CLI, MCP, skills, and workspace-owned state live under `apps/app-store` and `workspaces/<workspace_id>/data/app-store/`. It may present the remote catalog, show whether catalog apps are already installed in selected workspaces, show workspace-local app projects for the selected workspace context, open installed app frontends through generic shell navigation, and collect install or uninstall choices, but it does not bypass platform boundaries: authenticated installation state reads, checksum verification, source registration, workspace binding, and uninstall binding removal remain generic core app-hosting operations.
+The Maverick App Store itself is also an app. Its UI, backend, CLI, MCP, skills, and workspace-owned state live under `apps/app-store` and `workspaces/<workspace_id>/data/app-store/`. It may present the remote catalog, show whether catalog apps are already installed in selected workspaces, show workspace-local app projects for the selected workspace context, open installed app frontends through generic shell navigation, and collect install, uninstall, complete workspace-local deletion, workspace assignment, and shortcut pinning choices, but it does not bypass platform boundaries: authenticated installation state reads, checksum verification, source registration, workspace-local project registration, workspace binding, workspace-local project deletion, and uninstall binding removal remain generic core app-hosting operations.
 
 The workspace-level `workspaces/<workspace_id>/apps` directory is not the app store.
 
@@ -96,6 +96,14 @@ Workspace app bindings and workspace-local projects are different concepts.
 The binding says the workspace can use an app capability.
 
 The workspace-local project says the workspace owns editable app source material.
+
+Workspace-facing aggregate surfaces must degrade per app when a binding points to source material that is no longer available.
+
+For example, `/api/apps`, `/api/status`, and widget discovery must skip an unavailable enabled app and continue returning the remaining workspace capabilities. Direct mounts for that unavailable app should return an app-unavailable response instead of leaking a filesystem exception or failing the whole shell.
+
+Complete deletion is intentionally narrower than uninstall.
+
+Uninstall removes only the workspace binding and preserves app-owned data by default. Complete deletion is valid for workspace-local app projects, where the workspace owns the app source. It must remove the workspace binding if present, delete `workspaces/<workspace_id>/data/<app_id>/`, delete the project directory under `workspaces/<workspace_id>/apps/<app_id>/`, and remove the workspace-local project record so the app no longer appears in the workspace-local catalog. Platform store apps and remote catalog entries are not deleted through a workspace-local delete action because their source is installation-level or external catalog state rather than workspace-owned material.
 
 ## Distribution Mutability
 
@@ -938,6 +946,24 @@ Required chat-side work after the core is ready:
 - embed compatible widgets through iframe-mounted widget routes
 - pass only explicit widget context, never app source paths
 - route widget actions to the widget owner's official surfaces
+
+The chat app must treat widget hosting as a generic host responsibility.
+
+It must not maintain a built-in list of widget owners or known structured content kinds.
+For every structured message, chat resolves widgets by `host=chat` and the message's `content.kind`, selects the deterministic first registry match, creates an explicit widget context token, and mounts the owner app's declared iframe route.
+
+If no enabled app declares a compatible widget, chat renders the same generic structured-content fallback card for every kind.
+
+Agents are not required to emit widget JSON for common file preview flows.
+
+When an agent answer contains a normal Markdown link, URL, or plain text reference to workspace storage under `storage/generated/` or `storage/uploaded/`, the chat transcript layer may synthesize an internal structured content item with `kind: "workspace.file.preview"` and a payload containing the normalized `workspace_relative_path`.
+
+That synthesized item follows the same widget registry path as any other structured message:
+
+- chat asks the core for `host=chat` and `content_kind=workspace.file.preview`
+- the enabled widget owner renders the preview
+- the original agent text remains ordinary Markdown
+- local filesystem paths are not exposed to iframe widgets
 
 The same widget mechanism is also the correct way for `base-shell` to host chat-owned navigation.
 

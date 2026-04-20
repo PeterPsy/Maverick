@@ -43,6 +43,15 @@ class BaseShellAppMountingTests(unittest.TestCase):
         self.assertNotIn("nextPinnedAppIds", navigation_source)
         self.assertIn('return "New Chat"', shortcut_source)
         self.assertIn("new_chat: true", shortcut_source)
+        self.assertIn("new_chat_request_id: crypto.randomUUID()", shortcut_source)
+
+    def test_workspace_create_button_is_admin_only_in_shell(self) -> None:
+        sidebar_source = (REPO_ROOT / "apps/base-shell/frontend/src/components/Sidebar.tsx").read_text()
+        switcher_source = (REPO_ROOT / "apps/base-shell/frontend/src/components/WorkspaceSwitcher.tsx").read_text()
+
+        self.assertIn('canCreateWorkspace={user?.platform_role === "admin"}', sidebar_source)
+        self.assertIn("canCreateWorkspace: boolean", switcher_source)
+        self.assertIn("canCreateWorkspace ? (", switcher_source)
 
     def test_chat_sidebar_does_not_render_duplicate_new_chat_button(self) -> None:
         widget_source = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/main.tsx").read_text()
@@ -59,6 +68,23 @@ class BaseShellAppMountingTests(unittest.TestCase):
         self.assertIn("window.addEventListener(\"message\"", chat_source)
         self.assertIn("getThread(requestedThreadId)", chat_source)
         self.assertIn("activeSession || events.length > 0", chat_source)
+        self.assertIn("consumeNewChatRequest", chat_source)
+        self.assertIn("new_chat_request_id", chat_source)
+        self.assertIn("getAgentsCommonPrompt", chat_source)
+        self.assertIn("system_prompt: systemPrompt", chat_source)
+
+    def test_empty_chat_creation_does_not_start_runtime_session(self) -> None:
+        chat_source = (REPO_ROOT / "apps/chat/frontend/src/App.tsx").read_text()
+
+        create_chat_start = chat_source.index("async function createChat()")
+        create_chat_end = chat_source.index("async function handleSelectThread(", create_chat_start)
+        create_chat_source = chat_source[create_chat_start:create_chat_end]
+
+        self.assertIn('createThread("", null, { system_prompt: systemPrompt })', create_chat_source)
+        self.assertIn("setActiveSession(null)", create_chat_source)
+        self.assertNotIn("createRuntimeSession()", create_chat_source)
+        self.assertIn("if (!thread.runtime_session_id)", chat_source)
+        self.assertIn("system_prompt: thread.system_prompt", chat_source)
 
     def test_chat_sidebar_settings_panel_escapes_scroll_clipping(self) -> None:
         widget_source = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/main.tsx").read_text()

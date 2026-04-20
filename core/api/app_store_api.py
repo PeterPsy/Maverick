@@ -11,7 +11,8 @@ from core.api.platform_state import PlatformState
 from core.api.session_api import RequestSession, require_session
 from core.apps.errors import AppHostingError
 from core.apps.remote_store import fetch_remote_catalog, install_remote_store_app
-from core.apps.service import uninstall_workspace_app
+from core.apps.service import delete_workspace_local_app_project, install_workspace_local_app, uninstall_workspace_app
+from core.apps.workspace_local_discovery import sync_workspace_local_app_projects
 from core.workspaces.errors import WorkspaceMembershipError, WorkspaceNotFoundError
 
 
@@ -81,9 +82,10 @@ def _installation_payload(state: PlatformState, workspace_ids: list[str]) -> dic
     return {"items": items}
 
 
-def _local_apps_payload(state: PlatformState, workspace_ids: list[str]) -> list[dict[str, object]]:
+def _local_apps_payload(state: PlatformState, workspace_ids: list[str], *, start_path: Path) -> list[dict[str, object]]:
     items = []
     for workspace_id in workspace_ids:
+        sync_workspace_local_app_projects(state.app_store, workspace_id=workspace_id, start_path=start_path)
         bindings = {
             binding.app_id: binding
             for binding in state.app_store.list_workspace_app_bindings(workspace_id)
@@ -132,7 +134,9 @@ def handle_app_store_api(
     if path not in {
         "/api/app-store/apps",
         "/api/app-store/install",
+        "/api/app-store/install-local",
         "/api/app-store/installations",
+        "/api/app-store/delete-local",
         "/api/app-store/uninstall",
     }:
         return None
@@ -156,7 +160,7 @@ def handle_app_store_api(
     if path == "/api/app-store/installations" and method == "GET":
         workspace_ids = _user_workspace_ids(state, context)
         payload = _installation_payload(state, workspace_ids)
-        payload["local_apps"] = _local_apps_payload(state, workspace_ids)
+        payload["local_apps"] = _local_apps_payload(state, workspace_ids, start_path=start_path)
         return json_response(start_response, payload)
 
     if path == "/api/app-store/install" and method == "POST":
@@ -187,6 +191,92 @@ def handle_app_store_api(
                 status="400 Bad Request",
             )
         return json_response(start_response, result, status="201 Created")
+
+    if path == "/api/app-store/install-local" and method == "POST":
+        body = read_json_body(environ)
+        app_id = str(body.get("app_id") or "").strip()
+        workspace_ids = _unique_workspace_ids(_workspace_ids_from_body(body, context))
+        authorization_error = _authorize_app_management_targets(state, context, workspace_ids)
+        if not app_id:
+            return json_response(start_response, {"error": "app_id_required"}, status="400 Bad Request")
+        if authorization_error is not None:
+            return json_response(start_response, {"error": authorization_error}, status="403 Forbidden")
+        try:
+            bindings = []
+            for workspace_id in workspace_ids:
+                sync_workspace_local_app_projects(state.app_store, workspace_id=workspace_id, start_path=start_path)
+                binding = install_workspace_local_app(
+                    state.app_store,
+                    workspace_id=workspace_id,
+                    app_id=app_id,
+                    start_path=start_path,
+                    observability_store=state.observability_store,
+                )
+                bindings.append(
+                    {
+                        "workspace_id": binding.workspace_id,
+                        "app_id": binding.app_id,
+                        "status": binding.status,
+                        "active_version": binding.active_version,
+                        "source_kind": binding.source_kind,
+                        "source_record_id": binding.source_record_id,
+                    }
+                )
+        except (AppHostingError, WorkspaceNotFoundError) as error:
+            return json_response(
+                start_response,
+                {"error": "install_failed", "detail": str(error)},
+                status="400 Bad Request",
+            )
+        return json_response(
+            start_response,
+            {
+                "app": {"app_id": app_id},
+                "workspace_ids": workspace_ids,
+                "status": "installed",
+                "source_kind": "workspace_local_project",
+                "items": bindings,
+            },
+            status="201 Created",
+        )
+
+    if path == "/api/app-store/delete-local" and method == "POST":
+        body = read_json_body(environ)
+        app_id = str(body.get("app_id") or "").strip()
+        workspace_ids = _unique_workspace_ids(_workspace_ids_from_body(body, context))
+        authorization_error = _authorize_app_management_targets(state, context, workspace_ids)
+        if not app_id:
+            return json_response(start_response, {"error": "app_id_required"}, status="400 Bad Request")
+        if authorization_error is not None:
+            return json_response(start_response, {"error": authorization_error}, status="403 Forbidden")
+        try:
+            items = []
+            for workspace_id in workspace_ids:
+                sync_workspace_local_app_projects(state.app_store, workspace_id=workspace_id, start_path=start_path)
+                items.append(
+                    delete_workspace_local_app_project(
+                        state.app_store,
+                        workspace_id=workspace_id,
+                        app_id=app_id,
+                        start_path=start_path,
+                        observability_store=state.observability_store,
+                    )
+                )
+        except (AppHostingError, WorkspaceNotFoundError) as error:
+            return json_response(
+                start_response,
+                {"error": "delete_failed", "detail": str(error)},
+                status="400 Bad Request",
+            )
+        return json_response(
+            start_response,
+            {
+                "app": {"app_id": app_id},
+                "workspace_ids": workspace_ids,
+                "status": "deleted",
+                "items": items,
+            },
+        )
 
     if path == "/api/app-store/uninstall" and method == "POST":
         body = read_json_body(environ)

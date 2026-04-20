@@ -1,0 +1,297 @@
+"""Tests for the native Gallery app."""
+
+from __future__ import annotations
+
+from io import BytesIO
+import json
+from pathlib import Path
+import shutil
+import tempfile
+import unittest
+
+from core.api.platform_host import PlatformHost
+from core.api.platform_state import bootstrap_platform_state
+from core.apps.contracts import parse_app_contract_file
+from core.cli.models import CliInvocationContext
+from core.cli.service import list_core_cli_commands, run_core_cli_command
+from core.mcp.models import McpInvocationContext
+from core.mcp.service import call_mcp_tool, list_mcp_tools
+from core.shared.entrypoints import run_json_entrypoint
+from core.skills.service import list_visible_platform_skills
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+GALLERY_ROOT = REPO_ROOT / "apps" / "gallery"
+
+
+class GalleryAppTestCase(unittest.TestCase):
+    def make_repo_root(self) -> Path:
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        repo_root = Path(temp_dir.name) / "maverick-v3"
+        for name in ("core", "apps", "workspaces", "local-skills", "scripts"):
+            (repo_root / name).mkdir(parents=True, exist_ok=True)
+        (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
+        (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
+        (repo_root / "IMPLEMENTATION_TASKLIST.md").write_text("", encoding="utf-8")
+        source_apps_root = REPO_ROOT / "apps"
+        for app_id in ("base-shell", "chat", "gallery"):
+            shutil.copytree(
+                source_apps_root / app_id,
+                repo_root / "apps" / app_id,
+                ignore=shutil.ignore_patterns("node_modules", "__pycache__"),
+            )
+        return repo_root
+
+    def invoke(
+        self,
+        app,
+        *,
+        path: str,
+        method: str = "GET",
+        body: dict | None = None,
+        cookie: str | None = None,
+        query_string: str = "",
+    ) -> tuple[int, dict | bytes, dict[str, str]]:
+        payload = b"" if body is None else json.dumps(body).encode("utf-8")
+        headers: dict[str, str] = {}
+        environ = {
+            "PATH_INFO": path,
+            "REQUEST_METHOD": method,
+            "CONTENT_LENGTH": str(len(payload)),
+            "CONTENT_TYPE": "application/json",
+            "QUERY_STRING": query_string,
+            "wsgi.input": BytesIO(payload),
+        }
+        if cookie is not None:
+            environ["HTTP_COOKIE"] = cookie
+
+        def start_response(status: str, response_headers: list[tuple[str, str]]) -> None:
+            headers.update(dict(response_headers))
+            headers["__status__"] = status
+
+        raw = b"".join(app(environ, start_response))
+        status = int(headers["__status__"].split()[0])
+        if "application/json" in headers.get("Content-Type", ""):
+            return status, json.loads(raw.decode("utf-8")), headers
+        return status, raw, headers
+
+    def run_backend(self, *, data_root: Path, uploaded_root: Path, generated_root: Path, body: dict) -> dict:
+        return run_json_entrypoint(
+            GALLERY_ROOT / "backend" / "app_backend.py",
+            payload={
+                "data_root": str(data_root),
+                "uploaded_storage_root": str(uploaded_root),
+                "generated_storage_root": str(generated_root),
+                "body": body,
+            },
+            cwd=GALLERY_ROOT,
+        )
+
+    def test_contract_declares_gallery_surfaces(self) -> None:
+        parsed = parse_app_contract_file(GALLERY_ROOT)
+
+        self.assertEqual(parsed.app_id, "gallery")
+        self.assertEqual(parsed.contract.entrypoints.backend, "backend/app_backend.py")
+        self.assertEqual(parsed.contract.entrypoints.frontend, "frontend/dist")
+        self.assertEqual(parsed.contract.capabilities.mcp_tools, ["maverick_gallery"])
+        self.assertEqual(parsed.contract.capabilities.cli_commands, ["gallery"])
+        self.assertEqual(parsed.contract.capabilities.skills, ["gallery-ops"])
+        self.assertEqual(len(parsed.contract.widgets), 1)
+        widget = parsed.contract.widgets[0]
+        self.assertEqual(widget.widget_id, "file-preview")
+        self.assertEqual(widget.host, "chat")
+        self.assertIn("gallery.file.preview", widget.content_kinds)
+        self.assertEqual(widget.frontend.mount, "frontend/dist/widgets/file-preview")
+        self.assertTrue((GALLERY_ROOT / "frontend" / "dist" / "widgets" / "file-preview" / "index.html").is_file())
+
+    def test_backend_catalog_derives_uploaded_and_generated_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            uploaded_root = root / "storage" / "uploaded"
+            generated_root = root / "storage" / "generated"
+            data_root = root / "data" / "gallery"
+            (uploaded_root / "file-1").mkdir(parents=True)
+            generated_root.mkdir(parents=True)
+            (uploaded_root / "file-1" / "brief.txt").write_text("brief", encoding="utf-8")
+            (generated_root / "report.md").write_text("# report", encoding="utf-8")
+            (generated_root / "deck.pptx").write_bytes(b"deck")
+            (generated_root / "clip.mp4").write_bytes(b"video")
+
+            result = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={"action": "catalog"},
+            )
+
+            self.assertEqual(result["status_code"], 200)
+            paths = {item["workspace_relative_path"] for item in result["json"]["files"]}
+            self.assertEqual(
+                paths,
+                {
+                    "storage/uploaded/file-1/brief.txt",
+                    "storage/generated/report.md",
+                    "storage/generated/deck.pptx",
+                    "storage/generated/clip.mp4",
+                },
+            )
+            kinds = {item["workspace_relative_path"]: item["preview_kind"] for item in result["json"]["files"]}
+            self.assertEqual(kinds["storage/generated/report.md"], "markdown")
+            self.assertEqual(kinds["storage/generated/deck.pptx"], "presentation")
+            self.assertEqual(kinds["storage/generated/clip.mp4"], "video")
+
+    def test_backend_rejects_path_traversal_when_reading_file(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            result = self.run_backend(
+                data_root=root / "data" / "gallery",
+                uploaded_root=root / "storage" / "uploaded",
+                generated_root=root / "storage" / "generated",
+                body={"action": "read_file", "role": "generated", "relative_path": "../secret.txt"},
+            )
+
+            self.assertEqual(result["status_code"], 400)
+            self.assertEqual(result["json"]["error"], "validation_error")
+
+    def test_backend_reads_file_reference_from_workspace_relative_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            generated_root = root / "storage" / "generated"
+            generated_root.mkdir(parents=True)
+            (generated_root / "report.md").write_text("# report", encoding="utf-8")
+
+            info = self.run_backend(
+                data_root=root / "data" / "gallery",
+                uploaded_root=root / "storage" / "uploaded",
+                generated_root=generated_root,
+                body={"action": "file_info", "workspace_relative_path": "storage/generated/report.md"},
+            )
+            preview = self.run_backend(
+                data_root=root / "data" / "gallery",
+                uploaded_root=root / "storage" / "uploaded",
+                generated_root=generated_root,
+                body={"action": "read_file", "workspace_relative_path": "storage/generated/report.md"},
+            )
+
+            self.assertEqual(info["status_code"], 200)
+            self.assertEqual(info["json"]["file"]["relative_path"], "report.md")
+            self.assertEqual(preview["status_code"], 200)
+            self.assertEqual(preview["json"]["file"]["preview_kind"], "markdown")
+
+    def test_backend_renames_file_inside_same_storage_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            generated_root = root / "storage" / "generated"
+            generated_root.mkdir(parents=True)
+            (generated_root / "report.md").write_text("# report", encoding="utf-8")
+
+            renamed = self.run_backend(
+                data_root=root / "data" / "gallery",
+                uploaded_root=root / "storage" / "uploaded",
+                generated_root=generated_root,
+                body={
+                    "action": "rename_file",
+                    "role": "generated",
+                    "relative_path": "report.md",
+                    "new_name": "final-report.md",
+                },
+            )
+            rejected = self.run_backend(
+                data_root=root / "data" / "gallery",
+                uploaded_root=root / "storage" / "uploaded",
+                generated_root=generated_root,
+                body={
+                    "action": "rename_file",
+                    "role": "generated",
+                    "relative_path": "final-report.md",
+                    "new_name": "../escape.md",
+                },
+            )
+
+            self.assertEqual(renamed["status_code"], 200)
+            self.assertEqual(renamed["json"]["file"]["workspace_relative_path"], "storage/generated/final-report.md")
+            self.assertTrue((generated_root / "final-report.md").is_file())
+            self.assertFalse((generated_root / "report.md").exists())
+            self.assertEqual(rejected["status_code"], 400)
+
+    def test_bootstrap_installs_gallery_and_exposes_surfaces(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+
+        bindings = state.app_store.list_workspace_app_bindings("default")
+        self.assertIn("gallery", {binding.app_id for binding in bindings})
+        self.assertTrue((repo_root / "workspaces" / "default" / "data" / "gallery" / "state.json").is_file())
+
+        tools = list_mcp_tools(app_store=state.app_store, workspace_id="default", start_path=repo_root)
+        commands = list_core_cli_commands(app_store=state.app_store, workspace_id="default", start_path=repo_root)
+        skills = list_visible_platform_skills(app_store=state.app_store, workspace_id="default", start_path=repo_root)
+
+        self.assertIn("app.gallery.maverick_gallery", [tool.tool_name for tool in tools])
+        self.assertIn("app.gallery.gallery", [command.command_id for command in commands])
+        self.assertIn("app.gallery.gallery-ops", [skill.skill_id for skill in skills])
+
+    def test_platform_backend_and_frontend_mount_gallery(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+        generated = repo_root / "workspaces" / "default" / "storage" / "generated" / "report.txt"
+        generated.parent.mkdir(parents=True, exist_ok=True)
+        generated.write_text("hello", encoding="utf-8")
+
+        backend_status, backend_payload, _backend_headers = self.invoke(
+            app,
+            path="/api/apps/gallery/backend",
+            method="POST",
+            body={"action": "catalog"},
+        )
+        frontend_status, frontend_payload, frontend_headers = self.invoke(app, path="/apps/gallery/")
+
+        self.assertEqual(backend_status, 200)
+        self.assertEqual(backend_payload["files"][0]["workspace_relative_path"], "storage/generated/report.txt")
+        self.assertEqual(frontend_status, 200)
+        self.assertIn("text/html", frontend_headers["Content-Type"])
+        self.assertIn(b"Maverick Gallery", frontend_payload)
+
+    def test_mcp_and_cli_call_gallery_catalog(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        uploaded = repo_root / "workspaces" / "default" / "storage" / "uploaded" / "source.txt"
+        uploaded.parent.mkdir(parents=True, exist_ok=True)
+        uploaded.write_text("source", encoding="utf-8")
+
+        mcp_payload = call_mcp_tool(
+            tool_name="app.gallery.maverick_gallery",
+            context=McpInvocationContext(
+                caller_kind="sandbox_agent",
+                workspace_id="default",
+                agent_id="tester",
+                effective_mode="sandbox",
+            ),
+            arguments={"action": "catalog"},
+            app_store=state.app_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+        cli_payload = run_core_cli_command(
+            command_id="app.gallery.gallery",
+            context=CliInvocationContext(
+                caller_kind="sandbox_agent",
+                workspace_id="default",
+                agent_id="tester",
+                effective_mode="sandbox",
+            ),
+            arguments={"action": "catalog"},
+            app_store=state.app_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+
+        self.assertEqual(mcp_payload["status_code"], 200)
+        self.assertEqual(cli_payload["status_code"], 200)
+        self.assertEqual(mcp_payload["files"][0]["workspace_relative_path"], "storage/uploaded/source.txt")
+        self.assertEqual(cli_payload["files"][0]["workspace_relative_path"], "storage/uploaded/source.txt")
+
+
+if __name__ == "__main__":
+    unittest.main()

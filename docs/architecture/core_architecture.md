@@ -148,6 +148,10 @@ The initial v3 model should keep these records distinct:
 
 The execution-policy domain may read these records, but it should still compute the effective runtime policy separately.
 
+Only platform admins may create new workspaces through the hosted platform API.
+
+Platform members may list and enter workspaces where they have active membership, but they must not create workspace records. Workspace assignment for members is an admin control-plane action.
+
 ### 3. App installation and hosting
 
 The core owns:
@@ -269,6 +273,31 @@ This includes:
 `Codex` is one supported runtime backend, not the architectural definition of the core itself.
 
 The system must be designed so that other backends can be supported without changing the app model.
+
+Runtime-style providers must preserve conversation continuity inside a runtime session.
+
+For Codex specifically, the core must use the Codex app-server protocol, not one-off `codex exec` calls.
+
+The Codex adapter should own the provider-specific protocol:
+
+- start one local `codex app-server --listen stdio://` process for the runtime session
+- initialize the app-server process
+- prepare a session-local `CODEX_HOME` under the runtime root before launch
+- populate that runtime home from a configurable operator Codex home, using `MAVERICK3_CODEX_HOME`, `CODEX_HOME`, or the current user's default Codex home
+- copy only required identity and configuration material into the runtime home, such as Codex auth, version, installation identity, sanitized config, rules, and system skills
+- avoid hardcoded host paths for Codex identity or configuration
+- keep app-selected skills materialized separately through the v3 skills surface rather than loading arbitrary user-global skills into every runtime
+- create a persistent Codex thread with `thread/start` when no provider thread exists
+- resume the existing Codex thread with `thread/resume` when a runtime session already has a provider thread id
+- submit each user turn with `turn/start` against the same provider thread id
+- interrupt active work with the provider's turn interrupt method
+- keep the provider thread id as provider-runtime state, not as chat-app state
+
+The core runtime session remains the Maverick-owned lifecycle container.
+
+The provider thread is the selected backend's conversation container.
+
+Those two ids are intentionally different but must be linked by the core runtime state so a chat can be reopened, a browser can refresh, and the next turn still reaches the same provider conversation.
 
 ### 7. Execution policy
 
@@ -452,6 +481,7 @@ That means the system may include apps such as:
 - `base-shell`
 - `chat`
 - `agents`
+- `skills`
 - `app-store`
 - `memory`
 
@@ -479,7 +509,7 @@ The first shell-facing API slice is intentionally core-generic, not `base-shell`
 - `/api/admin/workspace-apps` exposes admin-only workspace app installation and enablement management
 - `/api/workspaces` and `/api/workspaces/active` expose workspace list, creation, and active workspace selection
 - `/api/apps` exposes enabled app registry records for the active workspace
-- `/api/app-store/apps`, `/api/app-store/installations`, `/api/app-store/install`, and `/api/app-store/uninstall` expose authenticated catalog reads, installation state, remote app installation, and workspace binding removal
+- `/api/app-store/apps`, `/api/app-store/installations`, `/api/app-store/install`, `/api/app-store/install-local`, and `/api/app-store/uninstall` expose authenticated catalog reads, installation state, remote app installation, workspace-local app installation, and workspace binding removal
 - `/api/status` exposes platform status for the active workspace
 - `/api/providers/active` and `/api/runtime/status` expose active runtime provider and runtime sessions
 - `/api/settings/platform` exposes read-only platform/workspace/provider/runtime/recovery metadata for settings UI
@@ -567,6 +597,20 @@ This keeps iframe identity stable, prevents full app reloads during sidebar navi
 The receiving app owns the meaning of the scalar params.
 
 The core and shell only provide the generic delivery mechanism.
+
+If an app asks the shell to open a workspace-local app from a workspace that is not currently active, the open request must include the target `workspace_id`.
+
+The shell may switch the active workspace through the generic workspace API, reload the app registry, and then mount the requested app.
+
+This does not make workspace-local apps cross-workspace capabilities: the app still mounts only after the shell enters the workspace that owns the app binding.
+
+One-shot navigation commands must be idempotent at the receiving app boundary.
+
+For example, `chat` may accept `{ "new_chat": true }` from a shell widget, but that request must include a unique app-owned request id such as `new_chat_request_id`, and the chat app must consume that id only once. This prevents repeated iframe ready/navigation handshakes from creating duplicate empty threads.
+
+Creating a new empty chat thread must not preallocate or start a runtime session. A runtime session is created only when the first user message or an explicit runtime-session handoff requires execution.
+
+When the `agents` app is installed and enabled in the active workspace, `chat` may use the Agents backend surface to initialize a new empty chat with the workspace common prompt. This is an app-to-app use of an official app backend surface, not a core dependency: the core must not read Agents data, parse role files, or special-case the Chat/Agents relationship.
 
 For example, the Agents app may create a generic core runtime session and ask the shell to open Chat with:
 
@@ -683,6 +727,9 @@ For the first hosted v3 wave, this means:
 - a minimal app set mounted by the core:
   - `base-shell`
   - `chat`
+  - `agents`
+  - `skills`
+  - `app-store`
 
 The main core host should run through the ASGI platform host so HTTP and WebSocket traffic share the same `PlatformState` and persistence adapters.
 
@@ -967,6 +1014,13 @@ Attachment metadata is not file storage.
 
 The core file upload surface persists file bytes under workspace storage and returns stable metadata. Runtime turns should carry references such as `file_id`, `relative_path`, content type, size, and checksum, not inline file bytes.
 
+Before dispatching a turn to a text-oriented provider backend, the runtime should materialize uploaded attachment references into the provider input as workspace-relative links and local workspace paths. The queued runtime event should still preserve the original user text and structured attachment metadata for transcript rendering.
+
+Provider lifecycle prompts such as waiting for stdin, turn start, turn completion, turn diff update, and item start or completion are internal runtime noise.
+
+The provider normalization layer should drop those lines before they become persisted runtime events or frontend transport frames.
+Chat-facing runtime views may still defensively ignore such labels, but the core runtime must not publish them as user-visible progress.
+
 The first HTTP implementation supports async turn submission through an explicit request flag.
 
 In async mode:
@@ -976,9 +1030,13 @@ In async mode:
 - the provider execution runs in a background worker
 - ordered runtime events record start, step updates, tool calls, output deltas, final output, completion, failure, or cancellation
 
+Interactive runtime turns must not have a fixed wall-clock timeout.
+
+An agent may work for minutes or hours inside one turn. The core may keep short protocol handshakes bounded, and users may explicitly stop a turn, but the runtime must not interrupt active provider work solely because a static turn-duration timer expired.
+
 Provider adapters may emit provider-specific raw output, but the runtime domain must normalize it before persistence.
 
-For Codex, the local provider runs `codex exec --json` and maps JSONL provider events into generic runtime events such as:
+For Codex, the local provider runs a persistent `codex app-server --listen stdio://` process and maps app-server JSON events into generic runtime events such as:
 
 - `runtime.step.updated`
 - `runtime.tool_call.started`
@@ -987,9 +1045,75 @@ For Codex, the local provider runs `codex exec --json` and maps JSONL provider e
 - `runtime.tool_call.failed`
 - `runtime.output.delta`
 
+The Codex adapter must not silently drop app-server notifications just because their method name is not yet known by Maverick.
+
+Known methods should be mapped intentionally. Codex app-server item types such as `commandExecution`, `fileChange`, and `webSearch` must be normalized as first-class generic tool calls with stable `tool_kind`, `tool_call_id`, status, summary, and structured detail fields such as command output, file changes, web-search query, and web-search results.
+
+Codex agent-message output may arrive both as streamed `item/agentMessage/delta` fragments and as a later completed item snapshot. The adapter must emit the text once per provider item: completion snapshots should fill gaps when no delta was streamed, but must not be re-emitted as duplicate transcript output for an item already streamed.
+
+Unknown methods should still become generic runtime events with `provider_event_type` and compact raw payload preserved. If the method or payload looks like a tool, search, browser, fetch, command, or execution operation, it should be emitted as a generic `runtime.tool_call.*` event so the chat UI can show that a tool was used while the exact provider schema is still being learned.
+
+Tool-like provider notifications without an explicit lifecycle state are point-in-time observations. They should be normalized as completed tool calls instead of active updates, otherwise generic notifications such as provider progress activity can leave stale spinners in transcript views.
+
+Provider lifecycle and telemetry notifications that do not represent user-visible work should be filtered before persistence and transport. Examples include account rate-limit refreshes, token-usage updates, and generic thread status changes.
+
+The Codex adapter must not use stateless `codex exec` for interactive chat or agent sessions.
+
+Before launching the Codex process, the adapter must prepare a runtime-scoped `CODEX_HOME`.
+
+This home is operational provider state for one Maverick runtime session.
+
+It must live below the session runtime root, not in the workspace data plane and not inside the source repository.
+
+The source of Codex identity/configuration is configurable and path-agnostic:
+
+1. `MAVERICK3_CODEX_HOME`
+2. `CODEX_HOME`
+3. the current operating-system user's default Codex home
+
+The adapter may copy required files such as auth, version, installation identity, sanitized config, rules, and system skills.
+
+The sanitized runtime config must remove inherited MCP server and plugin sections from the operator Codex home. Maverick runtime sessions should not automatically expose user-global Codex connector apps such as GitHub, Gmail, Photoshop, AllTrails, or Notion unless Maverick explicitly materializes an allowed tool surface for that runtime.
+
+It must not copy every user-global skill into the runtime home by default.
+
+App-selected and core-selected skills are materialized through the Maverick v3 skills surface so each runtime receives only the skills its app/agent context declares.
+
+Codex app-server retry notifications must be streamed as runtime step updates without prematurely closing the Maverick turn.
+
+Only terminal app-server failures should transition the runtime turn to failed.
+
+`codex exec` can be useful for isolated operator commands, tests, or one-shot automation, but it is not the product chat runtime because it does not preserve the provider conversation.
+
+The canonical Codex runtime flow is:
+
+1. runtime session starts
+2. provider adapter launches `codex app-server --listen stdio://`
+3. adapter sends `initialize`
+4. adapter sends `thread/start` or `thread/resume`
+5. runtime turn submission sends `turn/start` with the provider thread id
+6. provider app-server emits structured turn, item, tool, and output events
+7. runtime normalization persists provider events as Maverick runtime events
+8. WebSocket transport streams the persisted Maverick runtime events
+
+Conversation memory for the active provider session comes from the provider thread.
+
+Chat thread records and runtime event history are still persisted by Maverick for UI replay, audit, recovery, and app-owned metadata, but the Codex model context must be preserved through `thread/start` and `thread/resume`.
+
 WebSocket delivery is the canonical realtime transport for active runtime turns.
 
-The runtime WebSocket stream should deliver the same persisted event records that `GET /api/runtime/sessions/<session_id>/events` returns.
+The runtime WebSocket stream must deliver the same persisted event records that `GET /api/runtime/sessions/<session_id>/events` returns, but live delivery must not poll the persistence adapter.
+
+Runtime event recording has two distinct responsibilities:
+
+- persist the event for replay, history, audit, and recovery
+- publish the saved event to the in-memory runtime event bus for live subscribers
+
+Provider output deltas may arrive as very small fragments. The runtime execution layer should coalesce adjacent output deltas before they reach runtime event persistence and live transport. Coalescing should be content-threshold based, not a tiny time-slice flush that turns slow provider tokens into one-character or one-syllable UI updates. Tool events, step updates, terminal events, and other non-output events must flush any pending output first so transcript chronology remains correct.
+
+The WebSocket transport should subscribe to that bus before performing its initial replay so events recorded during replay are not lost. After replay, the WebSocket waits on the bus and sends events as they are published.
+
+The local JSON persistence adapter is suitable for bootstrap control-plane state and runtime history replay. It is not a live token-streaming mechanism and must not sit in the active-turn hot path as a polling source.
 
 Runtime session, turn, event, process, and state records must survive auth logout/login cycles and local host restarts.
 
@@ -997,20 +1121,54 @@ For the local hosted bootstrap, runtime-domain collections are persisted under i
 
 This is a bootstrap adapter detail, not the domain model. Production deployments may replace it with MongoDB or another store adapter without changing runtime service interfaces.
 
+Runtime session persistence must include enough provider binding state to resume a provider conversation when the provider supports it.
+
+For Codex this means storing the app-server thread id returned by `thread/start` and reusing it with `thread/resume`.
+
+If a provider cannot resume native conversation state, its adapter must make that limitation explicit and choose a documented fallback such as reconstructing bounded conversation context from runtime events.
+
 Chat thread records may reference runtime session ids, but chat history rendering must load authoritative runtime events from the runtime surface.
+
+For chat UI state, `runtime.output.final` is terminal evidence for the active turn even if `runtime.turn.completed` is delayed, dropped by the active WebSocket, or replayed out of order.
+
+The runtime store should still record explicit terminal turn events, but the chat frontend must clear its busy/stop state once final output for that turn is present.
+
+Terminal turn evidence must also dominate earlier or late-arriving `queued` or `started` events for the same turn so replay ordering cannot reactivate a finished turn.
+
+Transcript rendering must also close active tool indicators when later output, final output, failure, or cancellation proves the turn has moved past that tool. A tool may be shown as actively running only while it is the latest evidence for an active turn.
+
+Chat transcript rendering must preserve the runtime event ordering for visible tool usage.
+
+Consecutive runtime tool-call invocations within one turn may be rendered as a single `Tool Used` group, with start/update/completion events for the same invocation merged inside that group only when the provider supplies a stable call id such as `tool_call_id`, `call_id`, or `item_id`.
+
+The renderer must not merge separate invocations merely because they use the same tool name or command.
+
+A visible runtime update, output, failure, cancellation, or other non-tool transcript event must close the current tool group.
+
+If more tool calls arrive after that update, chat must render a new `Tool Used` group rather than appending those later tools to an earlier group.
+
+Provider notifications that describe a concrete runtime capability change may also be projected into the `Tool Used` affordance when that gives the user a better audit trail than a plain step label.
+
+For example, a `skills changed` runtime update may be rendered as a synthetic `skill_change` tool item while preserving the original runtime event payload in the tool detail panel.
+
+Deleting a chat thread is also a runtime ownership operation when the thread references a runtime session.
+
+The platform host must terminate any live provider subprocesses registered for that runtime session, cancel queued or active turns, and transition the runtime session to `stopped` before completing the delete response.
+The chat app backend may own thread metadata, but it must not directly kill provider processes; process termination remains a core runtime responsibility.
 
 Therefore a persisted chat thread must not outlive its runtime event history in a way that silently appears as an empty new chat.
 
 The WebSocket transport must support:
 
 - workspace/session authorization during handshake
-- ordered event delivery
+- ordered initial replay from persisted runtime events
+- push delivery for newly recorded runtime events through the runtime event bus
 - replay from a client-provided last seen event id
 - heartbeat or keepalive messages that are transport-level, not runtime-domain events
 - clean terminal delivery for completed, failed, cancelled, or timed-out turns
 - graceful fallback to HTTP event replay when a client reconnects
 
-Polling is only a compatibility fallback. SSE is not the target first-class transport unless a future deployment environment makes WebSocket impossible.
+HTTP event replay is a recovery and history surface, not the active-turn transport. Polling the event store during a live WebSocket session is not an acceptable implementation of realtime streaming. SSE is not the target first-class transport unless a future deployment environment makes WebSocket impossible.
 
 #### Runtime process
 
@@ -1442,8 +1600,11 @@ The same CLI framework should be able to host both:
 
 - core-owned commands
 - app-contributed commands for enabled workspace apps
+- core-owned per-app lifecycle commands for app installation, uninstallation, and complete workspace-local removal when those operations are available
 
 The core remains responsible for command registration, workspace authority checks, and exposure policy.
+
+Per-app lifecycle CLI commands use the app namespace but remain core-owned operations. They do not require each app to implement its own install or uninstall script. `app.<app_id>.install` is available when a platform app source or workspace-local project exists. `app.<app_id>.uninstall` is available when the app has a workspace binding. `app.<app_id>.remove` is available only for workspace-local app projects, because complete removal deletes workspace-owned source and data rather than merely detaching a binding.
 
 In the first local v3 implementation, app-owned CLI entrypoints follow the same deterministic subprocess contract:
 
@@ -1460,6 +1621,7 @@ Recommended CLI split:
 - `runtime_provider_commands.py` owns runtime and provider commands
 - `secret_commands.py` owns secret management commands
 - `recovery_commands.py` owns recovery commands
+- `app_lifecycle_commands.py` owns core-managed per-app lifecycle commands
 - `app_commands.py` owns enabled-app command mounting
 - `registry_builder.py` builds the visible command registry and runs commands
 
@@ -1499,6 +1661,7 @@ The skill catalog is platform-managed and may include:
 
 - core-owned skills
 - app-contributed skills from enabled workspace apps
+- skills already installed in the host Codex agent environment
 
 How those skill assets are installed into a runtime home is provider-specific.
 
@@ -1510,6 +1673,22 @@ Visible skill ids should be namespaced in the platform catalog, for example:
 - `app.<app_id>.<skill_id>`
 
 This avoids collisions between core-owned and app-contributed skill assets.
+
+The separate workspace app named `Skills` may expose a broader operator view than the runtime materialization catalog.
+
+It owns editable workspace skills under `workspaces/<workspace_id>/data/skills/`, and it may also discover installed Codex agent skills from the host Codex home so operators can inspect the same instruction assets Codex sees from the terminal.
+
+Installed host-agent skills are not workspace-owned just because they are visible in that app.
+
+The Skills app may still edit their `SKILL.md` files directly when the platform host can write to the source file.
+
+Those edits intentionally modify the real skill used by the host Codex agent, including normal Codex skills, system skills, symlinked local skills, and plugin-provided skills.
+
+The app must retain source metadata that identifies where the skill came from and which path is being edited.
+
+If a source skill is not writable in the current deployment, the app may offer import as a fallback.
+
+Import creates a workspace-owned copy under `data/skills/` with normal workspace skill semantics.
 
 ## Naming Conventions
 

@@ -17,7 +17,7 @@ from unittest.mock import patch
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
 from core.apps.contracts import parse_app_contract_file
-from core.apps.errors import WorkspaceAppBindingNotFoundError
+from core.apps.errors import WorkspaceAppBindingNotFoundError, WorkspaceLocalAppProjectNotFoundError
 from core.apps.service import register_workspace_local_app_project_from_contract
 from core.cli.models import CliInvocationContext
 from core.cli.service import list_core_cli_commands, run_core_cli_command
@@ -145,7 +145,7 @@ class AppStoreAppTestCase(unittest.TestCase):
         app_root.mkdir(parents=True)
         (app_root / "app_contract.json").write_text(json.dumps(contract, indent=2), encoding="utf-8")
 
-    def write_workspace_local_app_contract(self, app_root: Path) -> None:
+    def write_workspace_local_app_contract(self, app_root: Path, *, frontend: bool = False) -> None:
         contract = {
             "app_id": "local-notes",
             "contract_version": "1.0",
@@ -155,8 +155,8 @@ class AppStoreAppTestCase(unittest.TestCase):
             "publisher": "workspace",
             "minimum_core_version": "0.1.0",
             "distribution": {"mode": "workspace_local", "source_access": "editable"},
-            "capabilities": {"mcp_tools": [], "cli_commands": [], "skills": [], "views": []},
-            "entrypoints": {"hooks": {}},
+            "capabilities": {"mcp_tools": [], "cli_commands": [], "skills": [], "views": ["main"] if frontend else []},
+            "entrypoints": {"frontend": "frontend/dist", "hooks": {}} if frontend else {"hooks": {}},
             "storage": {
                 "storage_kind": "json",
                 "data_schema_version": "1",
@@ -199,6 +199,10 @@ class AppStoreAppTestCase(unittest.TestCase):
         }
         app_root.mkdir(parents=True)
         (app_root / "app_contract.json").write_text(json.dumps(contract, indent=2), encoding="utf-8")
+        if frontend:
+            dist_root = app_root / "frontend" / "dist"
+            dist_root.mkdir(parents=True)
+            (dist_root / "index.html").write_text("<h1>Local Notes</h1>", encoding="utf-8")
 
     def start_catalog_server(self) -> tuple[str, tempfile.TemporaryDirectory]:
         temp_dir = tempfile.TemporaryDirectory()
@@ -407,6 +411,62 @@ class AppStoreAppTestCase(unittest.TestCase):
         local_apps = {(item["workspace_id"], item["app_id"], item["status"]) for item in payload["local_apps"]}
         self.assertIn(("default", "local-notes", "uninstalled"), local_apps)
 
+    def test_installations_api_discovers_workspace_local_app_projects_on_disk(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        local_app_root = repo_root / "workspaces" / "default" / "apps" / "local-notes"
+        self.write_workspace_local_app_contract(local_app_root)
+        app = PlatformHost(state, start_path=repo_root)
+        cookie = self.login(app)
+
+        status, payload, _headers = self.invoke(app, path="/api/app-store/installations", cookie=cookie)
+
+        self.assertEqual(status, 200)
+        local_apps = {(item["workspace_id"], item["app_id"], item["status"]) for item in payload["local_apps"]}
+        self.assertIn(("default", "local-notes", "uninstalled"), local_apps)
+        saved = state.app_store.get_workspace_local_app_project(workspace_id="default", app_id="local-notes")
+        self.assertEqual(saved.project_root, str(local_app_root))
+
+    def test_local_app_discovery_persists_across_platform_bootstrap(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        local_app_root = repo_root / "workspaces" / "default" / "apps" / "local-notes"
+        self.write_workspace_local_app_contract(local_app_root)
+        app = PlatformHost(state, start_path=repo_root)
+        cookie = self.login(app)
+        self.invoke(app, path="/api/app-store/installations", cookie=cookie)
+
+        restarted_state = bootstrap_platform_state(start_path=repo_root)
+
+        saved = restarted_state.app_store.get_workspace_local_app_project(workspace_id="default", app_id="local-notes")
+        self.assertEqual(saved.project_root, str(local_app_root))
+
+    def test_authenticated_install_local_app_enables_workspace_mount(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        local_app_root = repo_root / "workspaces" / "default" / "apps" / "local-notes"
+        self.write_workspace_local_app_contract(local_app_root, frontend=True)
+        app = PlatformHost(state, start_path=repo_root)
+        cookie = self.login(app)
+
+        install_status, install, _install_headers = self.invoke(
+            app,
+            path="/api/app-store/install-local",
+            method="POST",
+            body={"app_id": "local-notes", "workspace_ids": ["default"]},
+            cookie=cookie,
+        )
+        mount_status, mount_body, mount_headers = self.invoke(app, path="/apps/local-notes/", cookie=cookie)
+
+        binding = state.app_store.get_workspace_app_binding(workspace_id="default", app_id="local-notes")
+        self.assertEqual(install_status, 201)
+        self.assertEqual(install["source_kind"], "workspace_local_project")
+        self.assertEqual(binding.status, "enabled")
+        self.assertEqual(binding.source_kind, "workspace_local_project")
+        self.assertEqual(mount_status, 200)
+        self.assertIn("text/html", mount_headers["Content-Type"])
+        self.assertIn(b"Local Notes", mount_body)
+
     def test_app_store_backend_owns_pinned_sidebar_apps(self) -> None:
         repo_root = self.make_repo_root()
         state = bootstrap_platform_state(start_path=repo_root)
@@ -524,6 +584,173 @@ class AppStoreAppTestCase(unittest.TestCase):
             state.app_store.get_workspace_app_binding(workspace_id="default", app_id="notes")
         self.assertEqual(installations_status, 200)
         self.assertNotIn("notes", [item["app_id"] for item in installations["items"]])
+
+    def test_authenticated_uninstall_removes_installed_platform_app_binding(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+        cookie = self.login(app)
+
+        uninstall_status, uninstall, _headers = self.invoke(
+            app,
+            path="/api/app-store/uninstall",
+            method="POST",
+            body={"app_id": "agents", "workspace_ids": ["default"]},
+            cookie=cookie,
+        )
+        installations_status, installations, _installations_headers = self.invoke(
+            app,
+            path="/api/app-store/installations",
+            cookie=cookie,
+        )
+
+        self.assertEqual(uninstall_status, 200)
+        self.assertEqual(uninstall["status"], "uninstalled")
+        with self.assertRaises(WorkspaceAppBindingNotFoundError):
+            state.app_store.get_workspace_app_binding(workspace_id="default", app_id="agents")
+        self.assertEqual(installations_status, 200)
+        self.assertNotIn("agents", [item["app_id"] for item in installations["items"]])
+
+    def test_authenticated_uninstall_removes_workspace_local_app_binding(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+        cookie = self.login(app)
+        local_app_root = repo_root / "workspaces" / "default" / "apps" / "local-notes"
+        self.write_workspace_local_app_contract(local_app_root, frontend=True)
+        self.invoke(
+            app,
+            path="/api/app-store/install-local",
+            method="POST",
+            body={"app_id": "local-notes", "workspace_ids": ["default"]},
+            cookie=cookie,
+        )
+
+        uninstall_status, uninstall, _headers = self.invoke(
+            app,
+            path="/api/app-store/uninstall",
+            method="POST",
+            body={"app_id": "local-notes", "workspace_ids": ["default"]},
+            cookie=cookie,
+        )
+        installations_status, installations, _installations_headers = self.invoke(
+            app,
+            path="/api/app-store/installations",
+            cookie=cookie,
+        )
+
+        self.assertEqual(uninstall_status, 200)
+        self.assertEqual(uninstall["status"], "uninstalled")
+        with self.assertRaises(WorkspaceAppBindingNotFoundError):
+            state.app_store.get_workspace_app_binding(workspace_id="default", app_id="local-notes")
+        self.assertEqual(installations_status, 200)
+        local_apps = {(item["workspace_id"], item["app_id"], item["status"]) for item in installations["local_apps"]}
+        self.assertIn(("default", "local-notes", "uninstalled"), local_apps)
+
+    def test_authenticated_delete_local_app_removes_project_binding_and_data(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+        cookie = self.login(app)
+        local_app_root = repo_root / "workspaces" / "default" / "apps" / "local-notes"
+        local_data_root = repo_root / "workspaces" / "default" / "data" / "local-notes"
+        self.write_workspace_local_app_contract(local_app_root, frontend=True)
+        self.invoke(
+            app,
+            path="/api/app-store/install-local",
+            method="POST",
+            body={"app_id": "local-notes", "workspace_ids": ["default"]},
+            cookie=cookie,
+        )
+        (local_data_root / "state.json").write_text("{}", encoding="utf-8")
+
+        delete_status, deleted, _headers = self.invoke(
+            app,
+            path="/api/app-store/delete-local",
+            method="POST",
+            body={"app_id": "local-notes", "workspace_ids": ["default"]},
+            cookie=cookie,
+        )
+        installations_status, installations, _installations_headers = self.invoke(
+            app,
+            path="/api/app-store/installations",
+            cookie=cookie,
+        )
+
+        self.assertEqual(delete_status, 200)
+        self.assertEqual(deleted["status"], "deleted")
+        self.assertFalse(local_app_root.exists())
+        self.assertFalse(local_data_root.exists())
+        with self.assertRaises(WorkspaceAppBindingNotFoundError):
+            state.app_store.get_workspace_app_binding(workspace_id="default", app_id="local-notes")
+        with self.assertRaises(WorkspaceLocalAppProjectNotFoundError):
+            state.app_store.get_workspace_local_app_project(workspace_id="default", app_id="local-notes")
+        self.assertEqual(installations_status, 200)
+        self.assertNotIn("local-notes", [item["app_id"] for item in installations["local_apps"]])
+
+    def test_app_lifecycle_cli_exposes_install_uninstall_and_remove_when_available(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        local_app_root = repo_root / "workspaces" / "default" / "apps" / "local-notes"
+        local_data_root = repo_root / "workspaces" / "default" / "data" / "local-notes"
+        self.write_workspace_local_app_contract(local_app_root, frontend=True)
+        context = CliInvocationContext(
+            caller_kind="operator",
+            workspace_id="default",
+            agent_id=None,
+            effective_mode=None,
+        )
+
+        initial_commands = {
+            command.command_id
+            for command in list_core_cli_commands(
+                app_store=state.app_store,
+                workspace_id="default",
+                start_path=repo_root,
+            )
+        }
+        install_result = run_core_cli_command(
+            command_id="app.local-notes.install",
+            context=context,
+            app_store=state.app_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+        installed_commands = {
+            command.command_id
+            for command in list_core_cli_commands(
+                app_store=state.app_store,
+                workspace_id="default",
+                start_path=repo_root,
+            )
+        }
+        uninstall_result = run_core_cli_command(
+            command_id="app.agents.uninstall",
+            context=context,
+            app_store=state.app_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+        remove_result = run_core_cli_command(
+            command_id="app.local-notes.remove",
+            context=context,
+            app_store=state.app_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+
+        self.assertIn("app.agents.install", initial_commands)
+        self.assertIn("app.agents.uninstall", initial_commands)
+        self.assertNotIn("app.agents.remove", initial_commands)
+        self.assertIn("app.local-notes.install", initial_commands)
+        self.assertIn("app.local-notes.remove", initial_commands)
+        self.assertNotIn("app.local-notes.uninstall", initial_commands)
+        self.assertEqual(install_result["status"], "installed")
+        self.assertIn("app.local-notes.uninstall", installed_commands)
+        self.assertEqual(uninstall_result["status"], "uninstalled")
+        self.assertEqual(remove_result["status"], "removed")
+        self.assertFalse(local_app_root.exists())
+        self.assertFalse(local_data_root.exists())
 
     def test_mcp_and_cli_can_read_catalog(self) -> None:
         repo_root = self.make_repo_root()

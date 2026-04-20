@@ -17,8 +17,7 @@ from core.identity.service import (
     session_expiry,
     touch_auth_session,
 )
-from core.workspaces.errors import WorkspaceNotFoundError
-from core.workspaces.service import get_active_workspace_for_user, set_active_workspace_for_user
+from core.workspaces.service import resolve_active_workspace_for_user
 
 
 SESSION_COOKIE = "maverick3_session"
@@ -67,13 +66,10 @@ def resolve_request_session(state: PlatformState, environ: dict) -> RequestSessi
     except UserNotFoundError:
         return None
     touch_auth_session(state.identity_store, session=session, now=now)
-    selection = get_active_workspace_for_user(state.workspace_store, user_id=user.user_id)
-    workspace_id = selection.workspace_id if selection is not None else "default"
-    try:
-        state.workspace_store.get_workspace(workspace_id)
-    except WorkspaceNotFoundError:
-        workspace_id = "default"
-        set_active_workspace_for_user(state.workspace_store, user_id=user.user_id, workspace_id=workspace_id, now=now)
+    selection = resolve_active_workspace_for_user(state.workspace_store, user_id=user.user_id, now=now)
+    if selection is None:
+        return None
+    workspace_id = selection.workspace_id
     return RequestSession(user=user, session=session, workspace_id=workspace_id)
 
 
@@ -127,8 +123,10 @@ def handle_session_api(state: PlatformState, environ: dict, start_response: Star
         session = state.identity_store.save_auth_session(
             build_auth_session(session_id=str(uuid4()), user_id=user.user_id, expires_at=expires_at)
         )
-        selection = get_active_workspace_for_user(state.workspace_store, user_id=user.user_id)
-        workspace_id = selection.workspace_id if selection is not None else "default"
+        selection = resolve_active_workspace_for_user(state.workspace_store, user_id=user.user_id, now=_now())
+        if selection is None:
+            return json_response(start_response, {"error": "workspace_not_available"}, status="403 Forbidden")
+        workspace_id = selection.workspace_id
         context = RequestSession(user=user, session=session, workspace_id=workspace_id)
         return json_response(
             start_response,

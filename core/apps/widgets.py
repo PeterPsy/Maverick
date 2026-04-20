@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from core.apps.errors import AppHostingError
 from core.apps.models import WidgetDeclaration
 from core.apps.store import AppStore
 from core.apps.surfaces import enabled_workspace_app_bindings, resolve_workspace_app_surface
@@ -58,7 +59,10 @@ def list_workspace_widgets(
     """List enabled widgets available to one workspace."""
     items: list[WidgetRegistryItem] = []
     for binding in enabled_workspace_app_bindings(store, workspace_id=workspace_id):
-        _source_root, parsed = resolve_workspace_app_surface(store, binding=binding, start_path=start_path)
+        try:
+            _source_root, parsed = resolve_workspace_app_surface(store, binding=binding, start_path=start_path)
+        except AppHostingError:
+            continue
         for widget in parsed.contract.widgets:
             if host is not None and widget.host != host:
                 continue
@@ -80,7 +84,10 @@ def resolve_workspace_widget(
     for binding in enabled_workspace_app_bindings(store, workspace_id=workspace_id):
         if binding.app_id != owner_app_id:
             continue
-        source_root, parsed = resolve_workspace_app_surface(store, binding=binding, start_path=start_path)
+        try:
+            source_root, parsed = resolve_workspace_app_surface(store, binding=binding, start_path=start_path)
+        except AppHostingError:
+            return None
         for widget in parsed.contract.widgets:
             if widget.widget_id == widget_id:
                 return ResolvedWidget(owner_app_id=parsed.app_id, widget=widget, source_root=source_root)

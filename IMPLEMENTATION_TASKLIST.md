@@ -198,6 +198,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] supported workspace modes if declared
 - [x] Keep app business data out of the core control-plane database
 - [x] Keep app source or project material separate from installation state and workspace enablement state
+- [x] Make workspace app and widget aggregate registry surfaces skip unavailable app sources instead of failing the whole shell
 
 ## Phase 5: App Contract Execution Layer
 
@@ -248,16 +249,19 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] define structured event types instead of raw transport messages
   - [x] attribute runtime events to `workspace_id`, runtime session, turn, and process when present
   - [x] distinguish runtime-domain events from websocket or transport framing
+  - [x] coalesce adjacent provider output deltas before persistence and live transport while preserving chronology around tool and terminal events
   - [x] persist local bootstrap runtime collections so chat thread history survives logout/login and host restarts
+  - [x] publish saved runtime events to an in-memory runtime event bus for live transports without making persistence polling part of the stream path
 - [x] Implement runtime WebSocket transport
   - [x] expose `WS /ws/runtime/sessions/<session_id>` as the official realtime runtime stream
   - [x] authenticate and authorize workspace/session access during the WebSocket handshake
-  - [x] stream persisted runtime events in order as they are recorded
+  - [x] replay persisted runtime events in order during WebSocket catch-up
+  - [x] stream newly recorded runtime events from the runtime event bus instead of polling the event store
   - [x] support replay from a client-provided last seen event id after reconnect
   - [x] send transport heartbeat or keepalive frames without persisting them as runtime events
   - [x] deliver terminal turn events before closing or idling the stream
   - [x] keep `GET /api/runtime/sessions/<session_id>/events` as HTTP replay and fallback, not as the primary active-turn UI transport
-  - [x] add core tests for handshake denial, ordered delivery, replay, heartbeat framing, and terminal delivery
+  - [x] add core tests for handshake denial, ordered replay, live bus delivery, heartbeat framing, and terminal delivery
 - [x] Implement runtime process abstraction
   - [x] define a local process handle model
   - [x] track stdin or stdout lifecycle, exit code, and crash or timeout outcomes
@@ -301,6 +305,27 @@ without carrying forward legacy structure or backward-compatibility constraints 
 - [x] Implement first provider backend:
   - [x] `Codex`
     - [x] isolate Codex subprocess env building in the provider adapter, not in the runtime domain
+    - [x] prepare a session-local Codex runtime home from a configurable Codex source home
+    - [x] copy Codex auth/config identity without hardcoded host paths
+    - [x] sanitize inherited Codex config so stale MCP server and plugin sections are not imported into every runtime
+- [x] Replace the current stateless Codex execution path with the canonical app-server runtime path:
+  - [x] launch `codex app-server --listen stdio://` for interactive runtime sessions
+  - [x] send `initialize` before creating or resuming provider threads
+  - [x] create provider conversation state with `thread/start`
+  - [x] resume provider conversation state with `thread/resume`
+  - [x] persist the Codex provider thread id as core runtime/provider state, not chat-app state
+  - [x] submit each runtime turn with `turn/start` against the same provider thread id
+  - [x] wire turn interrupt to the app-server turn interrupt method
+  - [x] map app-server item, tool, output, completion, failure, and usage events into generic Maverick runtime events
+  - [x] deduplicate Codex agent-message completion snapshots when the same provider item already streamed output deltas
+  - [x] map known Codex app-server `commandExecution`, `fileChange`, and `webSearch` items as first-class generic tool calls
+  - [x] emit generic runtime events for unknown app-server notifications so provider capabilities such as web search are visible before their exact schema is formally mapped
+  - [x] filter noisy provider telemetry such as account rate-limit updates, token-usage updates, and thread status changes before frontend transport
+  - [x] treat retryable app-server error notifications as streamed step updates, not terminal turn failures
+  - [x] surface terminal app-server error details in the runtime final output instead of reporting empty completion
+  - [x] remove the fixed provider turn timeout so interactive agents may work indefinitely until completion or explicit stop
+  - [x] ensure browser refresh, chat switch, logout/login, and host restart do not silently create a fresh provider conversation when a resumable provider thread exists
+  - [x] keep `codex exec` out of product chat and agent sessions; reserve it only for explicit one-shot operator or test use cases
 - [x] Define extension points for future backends:
   - [x] Claude Code
   - [x] Kimi
@@ -321,6 +346,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] define operator-facing commands separately from agent-safe commands
   - [x] support scriptable and batch-safe platform operations
   - [x] execute app-owned CLI entrypoints through a platform-managed host
+  - [x] expose core-owned per-app lifecycle CLI commands for install, uninstall, and workspace-local remove when available
   - [x] return operational core data when the relevant control-plane stores are available
 - [x] Implement core skills loading model
   - [x] load and index core-owned skills as instructional assets
@@ -477,6 +503,9 @@ without carrying forward legacy structure or backward-compatibility constraints 
 - [x] Decide the minimal built-in app set for first boot
   - [x] `base-shell`
   - [x] `chat`
+  - [x] `agents`
+  - [x] `skills`
+  - [x] `app-store`
 - [x] Define the mounted app model for first hosted deployment:
   - [x] core runs behind `maverick3.versy.ai` as the platform host
   - [x] apps are mounted by the core, not deployed by default as separate public services
@@ -499,7 +528,14 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] Keep HTTP event replay as reconnect and bootstrap fallback in the chat runtime client
   - [x] Add chat frontend tests for WebSocket event projection, reconnect replay, heartbeat ignore, and fallback replay
   - [x] Implement official workspace upload storage and attachment metadata submission through a generic v3 core surface
+  - [x] Materialize uploaded attachment references into runtime provider input so agents receive workspace file links
   - [x] Implement tool-call and structured-content rendering on top of stable generic runtime/widget events
+  - [x] Segment chat `Tool Used` groups by consecutive tool-call events so visible runtime updates split later tool calls into a new group
+  - [x] Keep repeated invocations of the same tool chronologically distinct unless provider events share a stable tool-call id
+  - [x] Preserve runtime event sequence as the primary transcript order so tool groups stay where they appeared even when provider timestamps match
+  - [x] Close active tool indicators when later runtime output or terminal events prove the tool no longer owns the live turn
+  - [x] Treat final runtime output as terminal UI evidence so completed turns cannot leave chat stuck in Thinking/stop state
+  - [x] Show an explicit transcript loader while existing chat history is being loaded
 - [x] Implement `base-shell` as the first mounted frontend shell smoke app
 - [x] Create reusable local Codex skill `maverick-v3-app-porting` for rigorous legacy-to-v3 app porting work
 - [x] Create reusable local Codex skill `maverick-v3-app-creator` for clean-slate v3 app creation work
@@ -667,6 +703,20 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] remove the separate agent instance flow in favor of direct `Use In Runtime`
   - [x] add generic runtime session prompt injection fields: `system_prompt`, `skill_ids`, and `source_app_id`
   - [x] let the Agents frontend open a runtime session from the selected agent type and materialized prompt
+- [x] Implement `skills` as a workspace-owned CRUD app for Codex skills
+  - [x] add `apps/skills/app_contract.json`
+  - [x] implement app-owned JSON and markdown data under `data/skills`
+  - [x] implement install, migrate, and health hooks
+  - [x] implement backend catalog and skill CRUD actions
+  - [x] implement `app.skills.maverick_skills_app` MCP surface
+  - [x] implement `app.skills.skills` CLI surface
+  - [x] implement `skills-ops` skill
+  - [x] implement a React/Vite management frontend
+  - [x] align the Skills frontend with the dark Agents visual theme
+  - [x] include host Codex agent skills in the Skills app catalog
+  - [x] surface installed skill origin and source path without making host-agent skills workspace-owned
+  - [x] let operators edit writable installed agent skill `SKILL.md` files directly from the Skills app
+  - [x] let operators import an installed agent skill as an editable workspace-owned copy
 - [x] Decide whether `memory` is in the first wave or the second wave
   - [x] second wave
 - [x] For each built-in app, enforce:
@@ -685,6 +735,9 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] download remote bundles, verify SHA-256, stage under `apps/_bundles/<app_id>/<version>/`, register `external_bundle` sources, and bind selected workspaces
   - [x] show installed state for selected workspaces and expose authenticated uninstall through core binding removal
   - [x] show catalog apps, installed apps, and workspace-local apps as separate App Store tabs
+  - [x] keep App Store rows visually clean by moving workspace assignment, uninstall, and pin actions into a per-app more-options menu
+  - [x] expose uninstall for installation-level platform apps and workspace-local app projects from App Store management flows
+  - [x] expose complete deletion for workspace-local app projects, removing binding, app data, project source, and project registry records
   - [x] align App Store frontend with the dark base-shell/chat visual theme
   - [x] split App Store UI into installed-app and store-catalog sections, with installed rows opening mounted apps through shell navigation
   - [x] add focused contract, mount, auth, MCP/CLI, and remote install tests
@@ -695,7 +748,20 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] derive file inventory from `storage/uploaded/` and `storage/generated/`
   - [x] protect file preview reads with workspace-storage path validation
   - [x] align Gallery frontend with the dark base-shell/chat/app-store visual theme
+  - [x] redesign Gallery around file cards with modal previews instead of a list/detail layout
+  - [x] support Gallery downloads and safe same-directory file renames
+  - [x] declare and build a Gallery-owned chat widget for inline file previews
+  - [x] support Gallery backend file lookup through `workspace_relative_path` widget payloads
   - [x] add focused contract, mount, backend, MCP/CLI, and path validation tests
+- [x] Port Dynamic Views as a first-class Maverick v3 app:
+  - [x] create `apps/dynamic-views/app_contract.json` with frontend, backend, MCP, CLI, skill, hooks, and chat widget surfaces
+  - [x] persist packages, instances, and package assets under `workspaces/<workspace_id>/data/dynamic-views/`
+  - [x] replace v2 Mongo/FastAPI storage with app-owned JSON entrypoint logic
+  - [x] port sandboxed HTML/CSS/JavaScript package validation and rendering
+  - [x] expose `app.dynamic-views.maverick_dynamic_views` and `app.dynamic-views.dynamic-views`
+  - [x] declare a Dynamic Views-owned chat widget for `dynamic.view.instance`
+  - [x] implement a dark workspace library/editor/preview frontend
+  - [x] add focused contract, mount, backend, MCP/CLI, widget, and security validation tests
 - [ ] Define and implement registry-driven widget mounting:
   - [x] document widget ownership and embedding model in architecture docs
   - [x] Define widget contract model:
@@ -747,6 +813,8 @@ without carrying forward legacy structure or backward-compatibility constraints 
     - [x] call widget registry with `host=chat` and structured content kind
     - [x] embed matching widgets through iframe-mounted widget routes
     - [x] send only explicit widget context
+    - [x] factor chat widget mounting into a generic host frame that is not tied to any widget owner or content kind
+    - [x] synthesize `workspace.file.preview` structured content from ordinary agent links to workspace storage files
     - [ ] route widget mutations to the widget owner's backend/MCP/CLI surfaces
   - [x] Implement chat-owned sidebar widget for `base-shell`:
     - [x] declare `chat-sidebar` in `apps/chat/app_contract.json`
@@ -771,12 +839,22 @@ without carrying forward legacy structure or backward-compatibility constraints 
     - [x] store pinned app ids under `workspaces/<workspace_id>/data/app-store/state.json`
     - [x] remove base-shell local pinned app session state and hardcoded pinned buttons
     - [x] keep the fixed `Apps` button as shell navigation to App Store
+    - [x] make the pinned `New Chat` shortcut send an idempotent one-shot request id
     - [x] add tests for widget declaration, widget registry discovery, widget mount, and App Store-owned pin actions
+  - [x] Prevent empty chat/runtime-session amplification:
+    - [x] keep new empty chat creation in chat-owned thread state until the first user turn
+    - [x] create runtime sessions lazily only when a message is sent or a runtime session is explicitly handed off
+    - [x] consume repeated `new_chat` navigation requests once by request id
+    - [x] initialize new chat threads with the Agents common prompt when the Agents app backend is available
+    - [x] pass the saved chat thread system prompt into runtime session creation on first user turn
+    - [x] drop provider lifecycle noise such as `Reading additional input from stdin...` in runtime normalization before it reaches frontend transport
+    - [x] terminate linked runtime sessions and provider subprocesses when a chat thread is deleted
 
 ## Phase 14: Acceptance Criteria for First Usable v3
 
 - [ ] Fresh install creates `default` workspace correctly
 - [ ] New non-default workspace can be created
+- [x] Non-admin members cannot create workspaces through `/api/workspaces`
 - [x] Core exposes admin-only user CRUD and workspace assignment APIs
 - [x] Core exposes admin-only workspace app installation and enablement APIs
 - [x] Core enforces admin-only access for identity and workspace membership management

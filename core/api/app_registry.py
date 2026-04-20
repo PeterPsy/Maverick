@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from core.api.platform_state import PlatformState
-from core.apps.errors import WorkspaceAppBindingNotFoundError
+from core.apps.errors import AppHostingError, WorkspaceAppBindingNotFoundError
 from core.apps.surfaces import enabled_workspace_app_bindings, resolve_workspace_app_surface
 from core.identity.models import UserRecord
 
@@ -27,7 +27,10 @@ def enabled_app_items(
     """Return enabled app registry items for one workspace."""
     items: list[dict[str, object]] = []
     for binding in enabled_workspace_app_bindings(state.app_store, workspace_id=workspace_id):
-        source_root, parsed = resolve_workspace_app_surface(state.app_store, binding=binding, start_path=start_path)
+        try:
+            source_root, parsed = resolve_workspace_app_surface(state.app_store, binding=binding, start_path=start_path)
+        except AppHostingError:
+            continue
         if not user_can_mount_app(user, parsed.contract.visibility.platform_roles):
             continue
         logo_path = source_root / "frontend" / "dist" / "maverick-icon-compact.png"

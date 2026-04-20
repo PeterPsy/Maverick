@@ -2,10 +2,12 @@ import { createWorkspace, switchWorkspace, WorkspaceItem } from "../api";
 
 export function WorkspaceSwitcher({
   activeWorkspaceId,
+  canCreateWorkspace,
   onChanged,
   workspaces,
 }: {
   activeWorkspaceId: string;
+  canCreateWorkspace: boolean;
   onChanged: () => void;
   workspaces: WorkspaceItem[];
 }) {
@@ -39,9 +41,11 @@ export function WorkspaceSwitcher({
             </option>
           ))}
         </select>
-        <button aria-label="Crea workspace" className="bs-workspace-switcher__create" onClick={handleCreate} type="button">
-          <span aria-hidden="true" className="material-symbols-rounded">add</span>
-        </button>
+        {canCreateWorkspace ? (
+          <button aria-label="Crea workspace" className="bs-workspace-switcher__create" onClick={handleCreate} type="button">
+            <span aria-hidden="true" className="material-symbols-rounded">add</span>
+          </button>
+        ) : null}
       </div>
     </div>
   );

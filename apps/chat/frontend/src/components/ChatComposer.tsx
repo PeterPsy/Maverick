@@ -102,7 +102,7 @@ export function ChatComposer({
         </div>
         {error ? <div className="chat-ui-field__message chat-ui-field__message--error chatapp-composer__error">{error}</div> : null}
         <div className={`chatapp-composer__status ${isSending ? "" : "is-connected"}`} aria-live="polite">
-          {isSending ? "Runtime al lavoro" : "Runtime collegato correttamente"}
+          {isSending ? "Runtime working" : "Runtime connected"}
         </div>
       </form>
     </section>
@@ -122,12 +122,14 @@ function ComposerActions({
 }) {
   return (
     <div className="chatapp-composer__actions">
-      <button aria-label="Ferma turn" className="chatapp-composer__icon-action is-stop" disabled={!canStopTurn} onClick={onStopTurn} title="Ferma" type="button">
-        <span aria-hidden="true" className="material-symbols-rounded">
-          stop
-        </span>
-      </button>
-      <button aria-label="Invia messaggio" className="chatapp-composer__icon-action is-send" disabled={!canSend} title="Invia" type="submit">
+      {canStopTurn ? (
+        <button aria-label="Stop turn" className="chatapp-composer__icon-action is-stop" onClick={onStopTurn} title="Stop" type="button">
+          <span aria-hidden="true" className="material-symbols-rounded">
+            stop
+          </span>
+        </button>
+      ) : null}
+      <button aria-label="Send message" className="chatapp-composer__icon-action is-send" disabled={!canSend || isSending} title="Send" type="submit">
         {isSending ? (
           <span className="chat-ui-button__spinner" />
         ) : (

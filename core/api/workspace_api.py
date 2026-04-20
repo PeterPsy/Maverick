@@ -63,6 +63,8 @@ def handle_workspace_api(
             {"items": _list_user_workspaces(state, context), "active_workspace_id": context.workspace_id},
         )
     if path == "/api/workspaces" and method == "POST":
+        if context.user.platform_role != "admin":
+            return json_response(start_response, {"error": "admin_required"}, status="403 Forbidden")
         body = read_json_body(environ)
         name = str(body.get("name") or "").strip()
         if not name:

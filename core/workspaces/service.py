@@ -8,6 +8,7 @@ import re
 import unicodedata
 
 from core.execution_policy.service import resolve_workspace_execution_profile
+from core.workspaces.errors import WorkspaceNotFoundError
 from core.workspaces.models import (
     ActiveWorkspaceSelection,
     WorkspacePaths,
@@ -233,6 +234,56 @@ def set_active_workspace_for_user(
 def get_active_workspace_for_user(store: WorkspaceStore, *, user_id: str) -> ActiveWorkspaceSelection | None:
     """Return the active workspace selection for one user, if it exists."""
     return store.get_active_workspace(user_id)
+
+
+def resolve_active_workspace_for_user(
+    store: WorkspaceStore,
+    *,
+    user_id: str,
+    now: datetime | None = None,
+) -> ActiveWorkspaceSelection | None:
+    """Resolve an active workspace the user is allowed to enter.
+
+    A missing or stale selection must never fall back to a workspace where the
+    user has no active membership. This is security-sensitive because the
+    default workspace may allow full-access runtime execution.
+    """
+    selected = store.get_active_workspace(user_id)
+    active_memberships = [
+        membership
+        for membership in store.list_memberships_for_user(user_id)
+        if membership.status == "active"
+    ]
+    active_workspace_ids = {membership.workspace_id for membership in active_memberships}
+    if selected is not None and selected.workspace_id in active_workspace_ids:
+        try:
+            store.get_workspace(selected.workspace_id)
+        except WorkspaceNotFoundError:
+            pass
+        else:
+            return selected
+
+    fallback_workspace_id = _fallback_workspace_id(active_workspace_ids)
+    if fallback_workspace_id is None:
+        return None
+    try:
+        store.get_workspace(fallback_workspace_id)
+    except WorkspaceNotFoundError:
+        return None
+    return set_active_workspace_for_user(
+        store,
+        user_id=user_id,
+        workspace_id=fallback_workspace_id,
+        now=now,
+    )
+
+
+def _fallback_workspace_id(active_workspace_ids: set[str]) -> str | None:
+    if not active_workspace_ids:
+        return None
+    if "default" in active_workspace_ids:
+        return "default"
+    return sorted(active_workspace_ids)[0]
 
 
 def workspace_execution_profile(workspace_id: str, requested_mode: str | None = None):

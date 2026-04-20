@@ -59,11 +59,19 @@ def main() -> None:
         _response(200, {"thread": thread, "threads": list_threads(state), "projects": list_projects(state)})
         return
     if action == "threads.delete":
-        if not delete_thread(state, body):
+        deleted_thread = delete_thread(state, body)
+        if deleted_thread is None:
             _response(404, {"error": "thread_not_found"})
             return
         write_state(path, state)
-        _response(200, sidebar_snapshot(state))
+        _response(
+            200,
+            {
+                **sidebar_snapshot(state),
+                "deleted_thread_id": deleted_thread["thread_id"],
+                "deleted_runtime_session_id": deleted_thread["runtime_session_id"],
+            },
+        )
         return
     if action == "projects.list":
         _response(200, {"projects": list_projects(state), "threads": list_threads(state)})

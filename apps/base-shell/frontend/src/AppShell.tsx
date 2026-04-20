@@ -10,6 +10,7 @@ import {
   PlatformSettings,
   PlatformStatus,
   SessionPayload,
+  switchWorkspace,
   WorkspaceItem,
 } from "./api";
 import { preferredActiveApp } from "./navigation";
@@ -79,7 +80,18 @@ export function AppShell() {
     });
   }, [activeAppId, isSidebarOpen]);
 
-  function openApp(appId: string, params: Record<string, string | boolean | null> = {}) {
+  async function openApp(appId: string, params: Record<string, string | boolean | null> = {}) {
+    const requestedWorkspaceId = typeof params.workspace_id === "string" && params.workspace_id.trim() ? params.workspace_id.trim() : null;
+    const activeWorkspaceId = status?.workspace_id || (session?.authenticated ? session.workspace_id : null);
+    if (requestedWorkspaceId && requestedWorkspaceId !== activeWorkspaceId) {
+      try {
+        await switchWorkspace(requestedWorkspaceId);
+        await loadShellState();
+      } catch (switchError) {
+        setError(switchError instanceof Error ? switchError.message : "Unable to switch workspace.");
+        return;
+      }
+    }
     setActiveAppId(appId);
     setActiveAppParams(params);
     setIsSidebarOpen(false);

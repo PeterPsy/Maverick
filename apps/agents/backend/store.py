@@ -5,14 +5,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 import json
 from pathlib import Path
-from uuid import uuid4
-
 from models import (
     AGENT_TYPE_ID_PATTERN,
     DEFAULT_COMMON_PROMPT,
     EXECUTION_MODE_POLICIES,
     EXECUTION_MODES,
-    INSTANCE_ID_PATTERN,
     ROLE_ID_PATTERN,
     TRACE_VERBOSITIES,
 )
@@ -38,10 +35,6 @@ def agent_types_path(data_root: Path) -> Path:
     return data_root / "agent_types.json"
 
 
-def instances_path(data_root: Path) -> Path:
-    return data_root / "agent_instances.json"
-
-
 def ensure_data_root(data_root: Path) -> None:
     data_root.mkdir(parents=True, exist_ok=True)
     roles_root(data_root).mkdir(parents=True, exist_ok=True)
@@ -49,8 +42,6 @@ def ensure_data_root(data_root: Path) -> None:
         common_prompt_path(data_root).write_text(DEFAULT_COMMON_PROMPT, encoding="utf-8")
     if not agent_types_path(data_root).exists():
         write_json(agent_types_path(data_root), {"schema_version": "1", "agent_types": []})
-    if not instances_path(data_root).exists():
-        write_json(instances_path(data_root), {"schema_version": "1", "instances": []})
 
 
 def write_json(path: Path, payload: dict) -> None:
@@ -81,10 +72,6 @@ def validate_role_id(role_id: str) -> str:
 
 def validate_agent_type_id(agent_type_id: str) -> str:
     return validate_slug(agent_type_id, pattern=AGENT_TYPE_ID_PATTERN, field_name="agent_type_id")
-
-
-def validate_instance_id(instance_id: str) -> str:
-    return validate_slug(instance_id, pattern=INSTANCE_ID_PATTERN, field_name="instance_id")
 
 
 def role_file_path(data_root: Path, role_id: str) -> Path:
@@ -253,65 +240,3 @@ def write_common_prompt(data_root: Path, prompt: str) -> str:
     normalized = str(prompt or "").strip() + "\n"
     common_prompt_path(data_root).write_text(normalized, encoding="utf-8")
     return normalized
-
-
-def list_instances(data_root: Path) -> list[dict]:
-    ensure_data_root(data_root)
-    payload = read_json(instances_path(data_root), {"schema_version": "1", "instances": []})
-    return [item for item in payload.get("instances", []) if isinstance(item, dict)]
-
-
-def write_instances(data_root: Path, instances: list[dict]) -> None:
-    write_json(instances_path(data_root), {"schema_version": "1", "instances": instances})
-
-
-def create_instance(data_root: Path, payload: dict) -> dict:
-    agent_type_id = validate_agent_type_id(str(payload.get("agent_type_id") or ""))
-    if get_agent_type(data_root, agent_type_id) is None:
-        raise AgentsValidationError(f"Unknown agent type id: {agent_type_id}")
-    timestamp = now_timestamp()
-    instance = {
-        "id": validate_instance_id(str(payload.get("id") or f"agent-instance-{uuid4().hex[:12]}")),
-        "name": " ".join(str(payload.get("name") or "New agent instance").split()).strip(),
-        "agent_type_id": agent_type_id,
-        "status": "idle",
-        "runtime_session_id": None,
-        "created_at": timestamp,
-        "updated_at": timestamp,
-    }
-    instances = [item for item in list_instances(data_root) if item.get("id") != instance["id"]]
-    instances.append(instance)
-    write_instances(data_root, sorted(instances, key=lambda item: item["name"].casefold()))
-    return instance
-
-
-def update_instance(data_root: Path, payload: dict) -> dict | None:
-    normalized = validate_instance_id(str(payload.get("instance_id") or payload.get("id") or ""))
-    timestamp = now_timestamp()
-    updated: dict | None = None
-    instances: list[dict] = []
-    for instance in list_instances(data_root):
-        if instance.get("id") != normalized:
-            instances.append(instance)
-            continue
-        candidate = dict(instance)
-        if "name" in payload:
-            candidate["name"] = " ".join(str(payload.get("name") or candidate.get("name") or "").split()).strip()
-        if "status" in payload:
-            candidate["status"] = str(payload.get("status") or candidate.get("status") or "idle")
-        if "runtime_session_id" in payload:
-            runtime_session_id = str(payload.get("runtime_session_id") or "").strip()
-            candidate["runtime_session_id"] = runtime_session_id or None
-        candidate["updated_at"] = timestamp
-        updated = candidate
-        instances.append(candidate)
-    write_instances(data_root, sorted(instances, key=lambda item: item["name"].casefold()))
-    return updated
-
-
-def delete_instance(data_root: Path, instance_id: str) -> bool:
-    normalized = validate_instance_id(instance_id)
-    original = list_instances(data_root)
-    remaining = [item for item in original if item.get("id") != normalized]
-    write_instances(data_root, remaining)
-    return len(remaining) != len(original)

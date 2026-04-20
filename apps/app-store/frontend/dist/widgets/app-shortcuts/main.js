@@ -33,7 +33,7 @@ function iconName(appId) {
 }
 
 function openApp(appId) {
-  const params = appId === "chat" ? { new_chat: true } : undefined;
+  const params = appId === "chat" ? { new_chat: true, new_chat_request_id: crypto.randomUUID() } : undefined;
   window.parent?.postMessage({ type: "maverick.widget.open-app", app_id: appId, params }, window.location.origin);
 }
 

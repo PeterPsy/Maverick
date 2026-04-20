@@ -35,11 +35,20 @@ class BaseShellAppMountingTests(unittest.TestCase):
         sidebar_source = (REPO_ROOT / "apps/base-shell/frontend/src/components/Sidebar.tsx").read_text()
         session_source = (REPO_ROOT / "apps/base-shell/frontend/src/session.ts").read_text()
         navigation_source = (REPO_ROOT / "apps/base-shell/frontend/src/navigation.ts").read_text()
+        shortcut_source = (REPO_ROOT / "apps/app-store/frontend/dist/widgets/app-shortcuts/main.js").read_text()
 
         self.assertIn('contentKind="shell.sidebar.apps"', sidebar_source)
         self.assertNotIn("pinnedApps", sidebar_source)
         self.assertNotIn("pinnedAppIds", session_source)
         self.assertNotIn("nextPinnedAppIds", navigation_source)
+        self.assertIn('return "New Chat"', shortcut_source)
+        self.assertIn("new_chat: true", shortcut_source)
+
+    def test_chat_sidebar_does_not_render_duplicate_new_chat_button(self) -> None:
+        widget_source = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/main.tsx").read_text()
+
+        self.assertNotIn('className="bs-sidebar__nav-button"', widget_source)
+        self.assertNotIn('<span className="bs-sidebar__nav-title">New chat</span>', widget_source)
 
     def test_chat_accepts_shell_navigation_without_url_reload(self) -> None:
         chat_source = (REPO_ROOT / "apps/chat/frontend/src/App.tsx").read_text()

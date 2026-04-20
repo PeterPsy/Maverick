@@ -167,23 +167,6 @@ function ChatSidebarWidget() {
 
   return (
     <main className="bs-widget-root">
-      <button
-        className="bs-sidebar__nav-button"
-        disabled={isPending}
-        onClick={() => createChat()}
-        title="Crea una nuova chat"
-        type="button"
-      >
-        <span className="bs-sidebar__nav-leading">
-          <span className="bs-sidebar__nav-icon">
-            <span aria-hidden="true" className="material-symbols-rounded">add_comment</span>
-          </span>
-          <span className="bs-sidebar__nav-copy">
-            <span className="bs-sidebar__nav-title">New chat</span>
-          </span>
-        </span>
-      </button>
-
       {error ? <p className="bs-chat-folder__empty">{error}</p> : null}
 
       <div className="bs-chat-list">

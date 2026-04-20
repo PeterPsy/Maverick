@@ -25,7 +25,7 @@ function appIcon(app) {
 function iconName(appId) {
   const icons = {
     agents: "psychology",
-    chat: "forum",
+    chat: "add_comment",
     gallery: "photo_library",
     "user-admin": "admin_panel_settings",
   };
@@ -33,7 +33,15 @@ function iconName(appId) {
 }
 
 function openApp(appId) {
-  window.parent?.postMessage({ type: "maverick.widget.open-app", app_id: appId }, window.location.origin);
+  const params = appId === "chat" ? { new_chat: true } : undefined;
+  window.parent?.postMessage({ type: "maverick.widget.open-app", app_id: appId, params }, window.location.origin);
+}
+
+function shortcutLabel(app) {
+  if (app.app_id === "chat") {
+    return "New Chat";
+  }
+  return app.name || app.app_id;
 }
 
 function renderEmpty(message) {
@@ -58,7 +66,7 @@ function render(apps) {
 
     const label = document.createElement("span");
     label.className = "app-shortcuts__label";
-    label.textContent = app.name || app.app_id;
+    label.textContent = shortcutLabel(app);
 
     button.append(appIcon(app), label);
     list.append(button);

@@ -433,6 +433,34 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertEqual(status_toggle, 200)
         self.assertEqual(toggled["state"]["pinned_apps"], ["chat", "agents"])
 
+    def test_app_store_install_hook_does_not_reset_pinned_apps_on_bootstrap(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+        cookie = self.login(app)
+
+        self.invoke(
+            app,
+            path="/api/apps/app-store/backend",
+            method="POST",
+            body={"action": "pinned_apps.toggle", "app_id": "agents"},
+            cookie=cookie,
+        )
+
+        restarted_state = bootstrap_platform_state(start_path=repo_root)
+        restarted_app = PlatformHost(restarted_state, start_path=repo_root)
+        restarted_cookie = self.login(restarted_app)
+        status, payload, _headers = self.invoke(
+            restarted_app,
+            path="/api/apps/app-store/backend",
+            method="POST",
+            body={"action": "pinned_apps.list"},
+            cookie=restarted_cookie,
+        )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["pinned_apps"], ["chat", "agents"])
+
     def test_authenticated_install_downloads_verifies_and_enables_remote_app(self) -> None:
         repo_root = self.make_repo_root()
         base_url, _temp_dir = self.start_catalog_server()

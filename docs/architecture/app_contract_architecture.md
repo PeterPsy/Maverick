@@ -48,6 +48,8 @@ Examples:
 - a workspace-local app project may exist under `workspaces/<workspace_id>/apps/` before it becomes an active capability
 - an app may be installed but not enabled in a given workspace
 
+In workspace-facing surfaces, "installed" means the workspace has a binding to an app source and app-owned data may exist under `data/<app_id>/`. "Enabled" means that binding is actively mounted by the core. Disabled installed apps remain manageable by admins but are not shown to workspace users and are not mounted.
+
 The contract describes what the app is and how it behaves.
 
 The core installation system decides where that app is known, installed, enabled, disabled, upgraded, uninstalled, or reattached.

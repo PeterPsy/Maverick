@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from core.api.platform_state import PlatformState
+from core.apps.errors import WorkspaceAppBindingNotFoundError
 from core.apps.surfaces import enabled_workspace_app_bindings, resolve_workspace_app_surface
 from core.identity.models import UserRecord
 
@@ -57,4 +58,8 @@ def enabled_app_items(
 def resolve_app_surface(state: PlatformState, *, workspace_id: str, app_id: str, start_path: Path):
     """Resolve one installed app to binding, source root, and parsed contract."""
     binding = state.app_store.get_workspace_app_binding(workspace_id=workspace_id, app_id=app_id)
+    if binding.status != "enabled":
+        raise WorkspaceAppBindingNotFoundError(
+            f"Workspace app `{app_id}` is not enabled in workspace `{workspace_id}`."
+        )
     return binding, *resolve_workspace_app_surface(state.app_store, binding=binding, start_path=start_path)

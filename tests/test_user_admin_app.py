@@ -205,6 +205,59 @@ class UserAdminApiTestCase(unittest.TestCase):
         self.assertEqual(status_admin_app, 200)
         self.assertIn(b"User Admin", admin_body)
 
+    def test_admin_can_disable_and_enable_workspace_app_visibility(self) -> None:
+        state = bootstrap_platform_state(start_path=self.make_repo_root())
+        app = PlatformHost(state, start_path=state.repository_root)
+        admin_cookie = self.login(app)
+
+        status_list, installed_apps, _list_headers = self.invoke(
+            app,
+            path="/api/admin/workspace-apps",
+            cookie=admin_cookie,
+        )
+        status_disable, disabled, _disable_headers = self.invoke(
+            app,
+            path="/api/admin/workspace-apps/default/chat",
+            method="PATCH",
+            body={"status": "disabled"},
+            cookie=admin_cookie,
+        )
+        status_apps_after_disable, visible_after_disable, _apps_disable_headers = self.invoke(
+            app,
+            path="/api/apps",
+            cookie=admin_cookie,
+        )
+        status_direct_after_disable, direct_after_disable, _direct_disable_headers = self.invoke_raw(
+            app,
+            path="/apps/chat/",
+            cookie=admin_cookie,
+        )
+        status_enable, enabled, _enable_headers = self.invoke(
+            app,
+            path="/api/admin/workspace-apps/default/chat",
+            method="PATCH",
+            body={"status": "enabled"},
+            cookie=admin_cookie,
+        )
+        status_apps_after_enable, visible_after_enable, _apps_enable_headers = self.invoke(
+            app,
+            path="/api/apps",
+            cookie=admin_cookie,
+        )
+
+        self.assertEqual(status_list, 200)
+        self.assertIn(("default", "chat"), {(item["workspace_id"], item["app_id"]) for item in installed_apps["items"]})
+        self.assertEqual(status_disable, 200)
+        self.assertEqual(disabled["status"], "disabled")
+        self.assertEqual(status_apps_after_disable, 200)
+        self.assertNotIn("chat", {item["app_id"] for item in visible_after_disable["items"]})
+        self.assertEqual(status_direct_after_disable, 404)
+        self.assertIn(b"app_not_installed", direct_after_disable)
+        self.assertEqual(status_enable, 200)
+        self.assertEqual(enabled["status"], "enabled")
+        self.assertEqual(status_apps_after_enable, 200)
+        self.assertIn("chat", {item["app_id"] for item in visible_after_enable["items"]})
+
 
 if __name__ == "__main__":
     unittest.main()

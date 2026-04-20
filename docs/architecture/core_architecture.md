@@ -468,6 +468,7 @@ The first shell-facing API slice is intentionally core-generic, not `base-shell`
 
 - `/api/session`, `/api/auth/login`, and `/api/auth/logout` expose the current user session
 - `/api/admin/users` and `/api/admin/workspaces` expose admin-only identity, role, and workspace assignment management
+- `/api/admin/workspace-apps` exposes admin-only workspace app installation and enablement management
 - `/api/workspaces` and `/api/workspaces/active` expose workspace list, creation, and active workspace selection
 - `/api/apps` exposes enabled app registry records for the active workspace
 - `/api/status` exposes platform status for the active workspace
@@ -487,6 +488,10 @@ Admin app visibility is enforced through generic app contract visibility metadat
 
 The core may filter `/api/apps` and mounted app routes according to `visibility.platform_roles`.
 An app that declares `visibility.platform_roles: ["admin"]` is not listed or mounted for member users.
+
+Workspace app installation and enablement are separate control-plane states.
+
+An installed workspace app has a binding in the workspace and can be managed by an admin without deleting its data. A disabled installed app remains attached to the workspace, but it must not be listed in `/api/apps`, mounted through `/apps/<app_id>/`, exposed through `/api/apps/<app_id>/backend`, or exposed through app-owned widgets, CLI, MCP, or skills. Only enabled workspace app bindings are visible to normal workspace users and served by the platform host.
 
 For the local hosted deployment, the bootstrap admin username and password are supplied by `MAVERICK3_ADMIN_USERNAME` and `MAVERICK3_ADMIN_PASSWORD`.
 

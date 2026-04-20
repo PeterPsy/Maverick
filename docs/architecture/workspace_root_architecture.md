@@ -404,6 +404,10 @@ The platform must distinguish clearly between:
 
 These are related, but they are not the same thing.
 
+Admin app management must preserve this separation.
+
+Installed but disabled apps keep their workspace binding and app-owned data, but they are not mounted into the user-facing workspace registry. The core must filter disabled apps out of `/api/apps` and deny direct frontend/backend mount attempts for those apps.
+
 #### Install
 
 When an app is installed in a workspace, Maverick should:

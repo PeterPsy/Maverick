@@ -9,6 +9,7 @@ from uuid import uuid4
 from core.api.app_registry import resolve_app_surface
 from core.api.http import StartResponse, json_response, query_params, read_json_body, status_line, text_response
 from core.api.platform_state import PlatformState
+from core.apps.errors import WorkspaceAppBindingNotFoundError
 from core.providers.service import resolve_provider_for_runtime_session
 from core.runtime.errors import RuntimeSessionNotFoundError
 from core.runtime.service import create_runtime_session, queue_runtime_turn, transition_runtime_session, transition_runtime_turn
@@ -73,12 +74,15 @@ def serve_frontend(
 
 def handle_root_shell(state: PlatformState, *, workspace_id: str, start_path: Path, start_response: StartResponse) -> list[bytes]:
     """Serve the configured root shell app for the active workspace."""
-    _binding, source_root, parsed = resolve_app_surface(
-        state,
-        workspace_id=workspace_id,
-        app_id="base-shell",
-        start_path=start_path,
-    )
+    try:
+        _binding, source_root, parsed = resolve_app_surface(
+            state,
+            workspace_id=workspace_id,
+            app_id="base-shell",
+            start_path=start_path,
+        )
+    except WorkspaceAppBindingNotFoundError:
+        return json_response(start_response, {"error": "shell_not_installed"}, status="404 Not Found")
     return serve_frontend(
         start_response,
         frontend_root=(source_root / parsed.contract.entrypoints.frontend).resolve(),
@@ -97,12 +101,15 @@ def handle_app_frontend(
     start_response: StartResponse,
 ) -> list[bytes]:
     """Serve one mounted app frontend."""
-    _binding, source_root, parsed = resolve_app_surface(
-        state,
-        workspace_id=workspace_id,
-        app_id=app_id,
-        start_path=start_path,
-    )
+    try:
+        _binding, source_root, parsed = resolve_app_surface(
+            state,
+            workspace_id=workspace_id,
+            app_id=app_id,
+            start_path=start_path,
+        )
+    except WorkspaceAppBindingNotFoundError:
+        return json_response(start_response, {"error": "app_not_installed"}, status="404 Not Found")
     allowed_roles = parsed.contract.visibility.platform_roles
     if allowed_roles and (user is None or user.platform_role not in allowed_roles):
         return json_response(start_response, {"error": "app_forbidden"}, status="403 Forbidden")
@@ -124,12 +131,15 @@ def handle_app_backend(
 ) -> list[bytes]:
     """Execute one app backend entrypoint through the platform runtime path."""
     method = environ.get("REQUEST_METHOD", "GET").upper()
-    binding, source_root, parsed = resolve_app_surface(
-        state,
-        workspace_id=workspace_id,
-        app_id=app_id,
-        start_path=start_path,
-    )
+    try:
+        binding, source_root, parsed = resolve_app_surface(
+            state,
+            workspace_id=workspace_id,
+            app_id=app_id,
+            start_path=start_path,
+        )
+    except WorkspaceAppBindingNotFoundError:
+        return json_response(start_response, {"error": "app_not_installed"}, status="404 Not Found")
     allowed_roles = parsed.contract.visibility.platform_roles
     if allowed_roles and (user is None or user.platform_role not in allowed_roles):
         return json_response(start_response, {"error": "app_forbidden"}, status="403 Forbidden")

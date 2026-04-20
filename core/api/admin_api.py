@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from pathlib import Path
 
+from core.api.admin_app_management import handle_admin_app_management_api
 from core.api.http import StartResponse, json_response, read_json_body, status_line
 from core.api.platform_state import PlatformState
 from core.api.session_api import RequestSession, public_user_payload, require_session
@@ -218,7 +219,6 @@ def handle_admin_api(
     start_path: Path,
 ) -> list[bytes] | None:
     """Handle admin routes, returning None when the path is not owned here."""
-    del start_path
     path = environ.get("PATH_INFO", "/")
     method = environ.get("REQUEST_METHOD", "GET").upper()
     if not path.startswith("/api/admin/"):
@@ -228,6 +228,17 @@ def handle_admin_api(
         return context_or_response
     context = context_or_response
     body = read_json_body(environ) if method in {"POST", "PATCH", "PUT"} else {}
+
+    routed = handle_admin_app_management_api(
+        state,
+        context,
+        environ,
+        start_response,
+        body=body,
+        start_path=start_path,
+    )
+    if routed is not None:
+        return routed
 
     if path == "/api/admin/users":
         return _handle_users_collection(state, context, method, body, start_response)

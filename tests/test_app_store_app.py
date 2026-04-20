@@ -1,0 +1,471 @@
+"""Tests for the Maverick v3 App Store app and install API."""
+
+from __future__ import annotations
+
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from io import BytesIO
+import hashlib
+import json
+from pathlib import Path
+import shutil
+import tarfile
+from threading import Thread
+import tempfile
+import unittest
+from unittest.mock import patch
+
+from core.api.platform_host import PlatformHost
+from core.api.platform_state import bootstrap_platform_state
+from core.apps.contracts import parse_app_contract_file
+from core.apps.errors import WorkspaceAppBindingNotFoundError
+from core.apps.service import register_workspace_local_app_project_from_contract
+from core.cli.models import CliInvocationContext
+from core.cli.service import list_core_cli_commands, run_core_cli_command
+from core.mcp.models import McpInvocationContext
+from core.mcp.service import call_mcp_tool, list_mcp_tools
+from core.skills.service import list_visible_platform_skills
+
+
+class AppStoreAppTestCase(unittest.TestCase):
+    """Verify app-store surfaces and authenticated install behavior."""
+
+    def make_repo_root(self) -> Path:
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        repo_root = Path(temp_dir.name) / "maverick-v3"
+        for name in ("core", "apps", "workspaces", "local-skills", "scripts"):
+            (repo_root / name).mkdir(parents=True, exist_ok=True)
+        (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
+        (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
+        (repo_root / "IMPLEMENTATION_TASKLIST.md").write_text("", encoding="utf-8")
+        source_apps_root = Path(__file__).resolve().parents[1] / "apps"
+        for app_id in ("base-shell", "chat", "agents", "app-store"):
+            shutil.copytree(
+                source_apps_root / app_id,
+                repo_root / "apps" / app_id,
+                ignore=shutil.ignore_patterns("node_modules", "__pycache__"),
+            )
+        return repo_root
+
+    def invoke(
+        self,
+        app,
+        *,
+        path: str,
+        method: str = "GET",
+        body: dict | None = None,
+        cookie: str | None = None,
+    ) -> tuple[int, dict | bytes, dict[str, str]]:
+        payload = b"" if body is None else json.dumps(body).encode("utf-8")
+        headers: dict[str, str] = {}
+        environ = {
+            "PATH_INFO": path,
+            "REQUEST_METHOD": method,
+            "CONTENT_LENGTH": str(len(payload)),
+            "CONTENT_TYPE": "application/json",
+            "QUERY_STRING": "",
+            "wsgi.input": BytesIO(payload),
+        }
+        if cookie is not None:
+            environ["HTTP_COOKIE"] = cookie
+
+        def start_response(status: str, response_headers: list[tuple[str, str]]) -> None:
+            headers.update(dict(response_headers))
+            headers["__status__"] = status
+
+        raw = b"".join(app(environ, start_response))
+        status = int(headers["__status__"].split()[0])
+        if "application/json" in headers.get("Content-Type", ""):
+            return status, json.loads(raw.decode("utf-8")), headers
+        return status, raw, headers
+
+    def login(self, app) -> str:
+        status, _payload, headers = self.invoke(
+            app,
+            path="/api/auth/login",
+            method="POST",
+            body={"username": "admin", "password": "maverick3"},
+        )
+        self.assertEqual(status, 200)
+        return headers["Set-Cookie"].split(";", 1)[0]
+
+    def write_remote_app_contract(self, app_root: Path) -> None:
+        contract = {
+            "app_id": "notes",
+            "contract_version": "1.0",
+            "name": "Notes",
+            "version": "1.0.0",
+            "description": "Tiny notes app for app-store install tests.",
+            "publisher": "versy",
+            "minimum_core_version": "0.1.0",
+            "distribution": {"mode": "sealed", "source_access": "none"},
+            "capabilities": {"mcp_tools": [], "cli_commands": [], "skills": [], "views": []},
+            "entrypoints": {"hooks": {}},
+            "storage": {
+                "storage_kind": "json",
+                "data_schema_version": "1",
+                "primary_paths": ["data/notes/state.json"],
+                "indices": None,
+                "supports_export": False,
+                "supports_import": False,
+                "supports_migrations": False,
+            },
+            "compatibility": {"workspace_modes": ["sandbox", "full-access"]},
+            "hook_timeouts": {
+                "install_seconds": 60,
+                "upgrade_seconds": 120,
+                "migrate_seconds": 300,
+                "export_seconds": 120,
+                "import_seconds": 120,
+                "validate_after_import_seconds": 60,
+                "repair_after_import_seconds": 180,
+                "health_check_seconds": 30,
+            },
+            "lifecycle": {
+                "install": False,
+                "upgrade": False,
+                "uninstall": False,
+                "migrate": False,
+                "export": False,
+                "import": False,
+                "validate_after_import": False,
+                "repair_after_import": False,
+                "rebuild": False,
+                "health_check": False,
+            },
+            "health_contract": {"mode": "none", "degraded_on_failure": True},
+            "failure_semantics": {
+                "install_failure": "block_activation",
+                "migrate_failure": "preserve_data_mark_unhealthy",
+                "import_failure": "preserve_payload_mark_failed",
+            },
+            "rollback_support": {"bundle": False, "data": False, "repair_only": False},
+        }
+        app_root.mkdir(parents=True)
+        (app_root / "app_contract.json").write_text(json.dumps(contract, indent=2), encoding="utf-8")
+
+    def write_workspace_local_app_contract(self, app_root: Path) -> None:
+        contract = {
+            "app_id": "local-notes",
+            "contract_version": "1.0",
+            "name": "Local Notes",
+            "version": "0.1.0",
+            "description": "Workspace-local notes app.",
+            "publisher": "workspace",
+            "minimum_core_version": "0.1.0",
+            "distribution": {"mode": "workspace_local", "source_access": "editable"},
+            "capabilities": {"mcp_tools": [], "cli_commands": [], "skills": [], "views": []},
+            "entrypoints": {"hooks": {}},
+            "storage": {
+                "storage_kind": "json",
+                "data_schema_version": "1",
+                "primary_paths": ["data/local-notes/state.json"],
+                "indices": None,
+                "supports_export": False,
+                "supports_import": False,
+                "supports_migrations": False,
+            },
+            "compatibility": {"workspace_modes": ["sandbox", "full-access"]},
+            "hook_timeouts": {
+                "install_seconds": 60,
+                "upgrade_seconds": 120,
+                "migrate_seconds": 300,
+                "export_seconds": 120,
+                "import_seconds": 120,
+                "validate_after_import_seconds": 60,
+                "repair_after_import_seconds": 180,
+                "health_check_seconds": 30,
+            },
+            "lifecycle": {
+                "install": False,
+                "upgrade": False,
+                "uninstall": False,
+                "migrate": False,
+                "export": False,
+                "import": False,
+                "validate_after_import": False,
+                "repair_after_import": False,
+                "rebuild": False,
+                "health_check": False,
+            },
+            "health_contract": {"mode": "none", "degraded_on_failure": True},
+            "failure_semantics": {
+                "install_failure": "block_activation",
+                "migrate_failure": "preserve_data_mark_unhealthy",
+                "import_failure": "preserve_payload_mark_failed",
+            },
+            "rollback_support": {"bundle": False, "data": False, "repair_only": False},
+        }
+        app_root.mkdir(parents=True)
+        (app_root / "app_contract.json").write_text(json.dumps(contract, indent=2), encoding="utf-8")
+
+    def start_catalog_server(self) -> tuple[str, tempfile.TemporaryDirectory]:
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        http_root = Path(temp_dir.name)
+        bundle_source = http_root / "bundle-source" / "notes"
+        self.write_remote_app_contract(bundle_source)
+        artifact_path = http_root / "artifact.tar.gz"
+        with tarfile.open(artifact_path, "w:gz") as archive:
+            archive.add(bundle_source, arcname="notes")
+        checksum = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
+
+        catalog: dict[str, object] = {}
+
+        class CatalogHandler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:
+                if self.path == "/api/apps":
+                    body = json.dumps(catalog).encode("utf-8")
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+                if self.path == "/api/apps/notes/versions/1.0.0/artifact":
+                    body = artifact_path.read_bytes()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/gzip")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+                self.send_response(404)
+                self.end_headers()
+
+            def log_message(self, _format: str, *_args) -> None:
+                return
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), CatalogHandler)
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.shutdown)
+        self.addCleanup(server.server_close)
+        base_url = f"http://127.0.0.1:{server.server_port}"
+
+        catalog.update({
+            "count": 1,
+            "items": [
+                {
+                    "app_id": "notes",
+                    "name": "Notes",
+                    "description": "Tiny notes app for app-store install tests.",
+                    "publisher": "versy",
+                    "latest_version": "1.0.0",
+                    "surfaces": [],
+                    "versions": [
+                        {
+                            "app_id": "notes",
+                            "name": "Notes",
+                            "version": "1.0.0",
+                            "description": "Tiny notes app for app-store install tests.",
+                            "publisher": "versy",
+                            "status": "published",
+                            "sha256": checksum,
+                            "artifact_download_url": f"{base_url}/api/apps/notes/versions/1.0.0/artifact",
+                            "surfaces": [],
+                        }
+                    ],
+                }
+            ],
+        })
+        return base_url, temp_dir
+
+    def test_contract_declares_app_store_surfaces(self) -> None:
+        parsed = parse_app_contract_file(Path(__file__).resolve().parents[1] / "apps" / "app-store")
+
+        self.assertEqual(parsed.app_id, "app-store")
+        self.assertEqual(parsed.contract.entrypoints.frontend, "frontend/dist")
+        self.assertEqual(parsed.contract.entrypoints.backend, "backend/app_backend.py")
+        self.assertEqual(parsed.contract.capabilities.mcp_tools, ["maverick_app_store"])
+        self.assertEqual(parsed.contract.capabilities.cli_commands, ["app-store"])
+        self.assertEqual(parsed.contract.capabilities.skills, ["app-store-ops"])
+
+    def test_bootstrap_installs_app_store_and_exposes_surfaces(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+
+        bindings = state.app_store.list_workspace_app_bindings("default")
+        self.assertIn("app-store", {binding.app_id for binding in bindings})
+        self.assertTrue((repo_root / "workspaces" / "default" / "data" / "app-store" / "state.json").is_file())
+
+        tools = list_mcp_tools(app_store=state.app_store, workspace_id="default", start_path=repo_root)
+        commands = list_core_cli_commands(app_store=state.app_store, workspace_id="default", start_path=repo_root)
+        skills = list_visible_platform_skills(app_store=state.app_store, workspace_id="default", start_path=repo_root)
+
+        self.assertIn("app.app-store.maverick_app_store", [tool.tool_name for tool in tools])
+        self.assertIn("app.app-store.app-store", [command.command_id for command in commands])
+        self.assertIn("app.app-store.app-store-ops", [skill.skill_id for skill in skills])
+
+    def test_frontend_is_mounted_as_an_app(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+
+        status, payload, headers = self.invoke(app, path="/apps/app-store/")
+
+        self.assertEqual(status, 200)
+        self.assertIn("text/html", headers["Content-Type"])
+        self.assertIn(b"App Store", payload)
+        self.assertIn(b"Catalog apps", payload)
+        self.assertIn(b"Installed apps", payload)
+        self.assertIn(b"Local apps", payload)
+
+    def test_catalog_and_install_require_maverick_authentication(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+
+        catalog_status, catalog_payload, _catalog_headers = self.invoke(app, path="/api/app-store/apps")
+        install_status, install_payload, _install_headers = self.invoke(
+            app,
+            path="/api/app-store/install",
+            method="POST",
+            body={"app_id": "notes", "workspace_ids": ["default"]},
+        )
+
+        self.assertEqual(catalog_status, 401)
+        self.assertEqual(catalog_payload["error"], "authentication_required")
+        self.assertEqual(install_status, 401)
+        self.assertEqual(install_payload["error"], "authentication_required")
+
+    def test_installations_api_reports_enabled_builtin_apps(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+        cookie = self.login(app)
+
+        status, payload, _headers = self.invoke(app, path="/api/app-store/installations", cookie=cookie)
+
+        self.assertEqual(status, 200)
+        installed = {(item["workspace_id"], item["app_id"]) for item in payload["items"]}
+        self.assertIn(("default", "agents"), installed)
+        self.assertIn(("default", "app-store"), installed)
+        self.assertIn(("default", "base-shell"), installed)
+        self.assertIn(("default", "chat"), installed)
+
+    def test_installations_api_reports_workspace_local_apps(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        local_app_root = repo_root / "workspaces" / "default" / "apps" / "local-notes"
+        self.write_workspace_local_app_contract(local_app_root)
+        register_workspace_local_app_project_from_contract(
+            state.app_store,
+            workspace_id="default",
+            project_root=str(local_app_root),
+        )
+        app = PlatformHost(state, start_path=repo_root)
+        cookie = self.login(app)
+
+        status, payload, _headers = self.invoke(app, path="/api/app-store/installations", cookie=cookie)
+
+        self.assertEqual(status, 200)
+        self.assertIn("local_apps", payload)
+        local_apps = {(item["workspace_id"], item["app_id"], item["status"]) for item in payload["local_apps"]}
+        self.assertIn(("default", "local-notes", "uninstalled"), local_apps)
+
+    def test_authenticated_install_downloads_verifies_and_enables_remote_app(self) -> None:
+        repo_root = self.make_repo_root()
+        base_url, _temp_dir = self.start_catalog_server()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+        cookie = self.login(app)
+
+        with patch.dict("os.environ", {"MAVERICK_APP_STORE_URL": base_url}):
+            catalog_status, catalog, _catalog_headers = self.invoke(app, path="/api/app-store/apps", cookie=cookie)
+            install_status, install, _install_headers = self.invoke(
+                app,
+                path="/api/app-store/install",
+                method="POST",
+                body={"app_id": "notes", "version": "1.0.0", "workspace_ids": ["default"]},
+                cookie=cookie,
+            )
+
+        binding = state.app_store.get_workspace_app_binding(workspace_id="default", app_id="notes")
+        source = state.app_store.get_app_source("app-store:notes:1.0.0")
+
+        self.assertEqual(catalog_status, 200)
+        self.assertEqual(catalog["items"][0]["app_id"], "notes")
+        self.assertEqual(install_status, 201)
+        self.assertEqual(install["app"]["app_id"], "notes")
+        self.assertEqual(binding.status, "enabled")
+        self.assertEqual(binding.active_version, "1.0.0")
+        self.assertEqual(source.source_kind, "external_bundle")
+        self.assertTrue((repo_root / "apps" / "_bundles" / "notes" / "1.0.0" / "app_contract.json").is_file())
+
+    def test_authenticated_uninstall_removes_selected_workspace_binding(self) -> None:
+        repo_root = self.make_repo_root()
+        base_url, _temp_dir = self.start_catalog_server()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+        cookie = self.login(app)
+
+        with patch.dict("os.environ", {"MAVERICK_APP_STORE_URL": base_url}):
+            self.invoke(
+                app,
+                path="/api/app-store/install",
+                method="POST",
+                body={"app_id": "notes", "version": "1.0.0", "workspace_ids": ["default"]},
+                cookie=cookie,
+            )
+            uninstall_status, uninstall, _headers = self.invoke(
+                app,
+                path="/api/app-store/uninstall",
+                method="POST",
+                body={"app_id": "notes", "workspace_ids": ["default"]},
+                cookie=cookie,
+            )
+            installations_status, installations, _installations_headers = self.invoke(
+                app,
+                path="/api/app-store/installations",
+                cookie=cookie,
+            )
+
+        self.assertEqual(uninstall_status, 200)
+        self.assertEqual(uninstall["status"], "uninstalled")
+        with self.assertRaises(WorkspaceAppBindingNotFoundError):
+            state.app_store.get_workspace_app_binding(workspace_id="default", app_id="notes")
+        self.assertEqual(installations_status, 200)
+        self.assertNotIn("notes", [item["app_id"] for item in installations["items"]])
+
+    def test_mcp_and_cli_can_read_catalog(self) -> None:
+        repo_root = self.make_repo_root()
+        base_url, _temp_dir = self.start_catalog_server()
+        state = bootstrap_platform_state(start_path=repo_root)
+
+        with patch.dict("os.environ", {"MAVERICK_APP_STORE_URL": base_url}):
+            mcp_payload = call_mcp_tool(
+                tool_name="app.app-store.maverick_app_store",
+                context=McpInvocationContext(
+                    caller_kind="sandbox_agent",
+                    workspace_id="default",
+                    agent_id="tester",
+                    effective_mode="sandbox",
+                ),
+                arguments={"action": "catalog"},
+                app_store=state.app_store,
+                workspace_id="default",
+                start_path=repo_root,
+            )
+            cli_payload = run_core_cli_command(
+                command_id="app.app-store.app-store",
+                context=CliInvocationContext(
+                    caller_kind="operator",
+                    workspace_id="default",
+                    agent_id=None,
+                    effective_mode=None,
+                ),
+                arguments={"action": "catalog"},
+                app_store=state.app_store,
+                workspace_id="default",
+                start_path=repo_root,
+            )
+
+        self.assertEqual(mcp_payload["status_code"], 200)
+        self.assertEqual(mcp_payload["items"][0]["app_id"], "notes")
+        self.assertEqual(cli_payload["status_code"], 200)
+        self.assertEqual(cli_payload["items"][0]["app_id"], "notes")
+
+
+if __name__ == "__main__":
+    unittest.main()

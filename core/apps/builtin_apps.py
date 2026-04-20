@@ -10,7 +10,7 @@ from core.apps.service import install_store_app, register_app_source_from_contra
 from core.apps.store import AppStore
 from core.shared.repository import installation_paths
 from core.workspaces.store import WorkspaceStore
-from core.workspaces.service import ensure_default_workspace_record
+from core.workspaces.service import ensure_default_workspace_record, ensure_workspace_layout
 
 
 @dataclass(frozen=True)
@@ -42,7 +42,7 @@ def register_and_install_builtin_apps(
     now: datetime | None = None,
     observability_store=None,
 ) -> list[str]:
-    """Ensure first-boot built-in apps are known and enabled in the default workspace."""
+    """Ensure built-in apps are known and enabled in one workspace."""
     ensure_default_workspace_record(workspace_store, now=now)
     installed: list[str] = []
     for spec in discover_builtin_apps(start_path=start_path):
@@ -65,3 +65,29 @@ def register_and_install_builtin_apps(
         )
         installed.append(source.app_id)
     return installed
+
+
+def register_and_install_builtin_apps_for_active_workspaces(
+    app_store: AppStore,
+    workspace_store: WorkspaceStore,
+    *,
+    start_path: Path | None = None,
+    now: datetime | None = None,
+    observability_store=None,
+) -> dict[str, list[str]]:
+    """Ensure built-in apps are enabled in every active workspace registry record."""
+    ensure_default_workspace_record(workspace_store, now=now)
+    installed_by_workspace: dict[str, list[str]] = {}
+    for workspace in workspace_store.list_workspaces():
+        if workspace.status != "active":
+            continue
+        ensure_workspace_layout(workspace.workspace_id, start_path=start_path)
+        installed_by_workspace[workspace.workspace_id] = register_and_install_builtin_apps(
+            app_store,
+            workspace_store,
+            workspace_id=workspace.workspace_id,
+            start_path=start_path,
+            now=now,
+            observability_store=observability_store,
+        )
+    return installed_by_workspace

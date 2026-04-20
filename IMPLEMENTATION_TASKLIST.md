@@ -734,6 +734,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
 - [x] App contract visibility can hide and deny app mounts by platform role
 - [x] User Admin is installed as a sealed Maverick app for admin-only identity/workspace access management
 - [x] Local hosted bootstrap persists identity and workspace control-plane state under `.maverick/local-state/`
+- [x] Persisted non-default workspaces receive built-in app bindings again after host restart
 - [ ] Non-default workspace agent is sandboxed to workspace root
 - [ ] Default workspace agent can run `full-access`
 - [ ] External app can be installed into one workspace only

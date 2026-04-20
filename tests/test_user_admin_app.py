@@ -60,6 +60,32 @@ class UserAdminApiTestCase(unittest.TestCase):
         body_bytes = b"".join(app(environ, start_response))
         return int(headers["__status__"].split()[0]), json.loads(body_bytes.decode("utf-8")), headers
 
+    def invoke_raw(
+        self,
+        app: PlatformHost,
+        *,
+        path: str,
+        cookie: str | None = None,
+    ) -> tuple[int, bytes, dict[str, str]]:
+        headers: dict[str, str] = {}
+        environ = {
+            "PATH_INFO": path,
+            "REQUEST_METHOD": "GET",
+            "CONTENT_LENGTH": "0",
+            "CONTENT_TYPE": "application/json",
+            "QUERY_STRING": "",
+            "wsgi.input": BytesIO(b""),
+        }
+        if cookie is not None:
+            environ["HTTP_COOKIE"] = cookie
+
+        def start_response(status: str, response_headers: list[tuple[str, str]]) -> None:
+            headers.update(dict(response_headers))
+            headers["__status__"] = status
+
+        body_bytes = b"".join(app(environ, start_response))
+        return int(headers["__status__"].split()[0]), body_bytes, headers
+
     def login(self, app: PlatformHost, username: str = "admin", password: str = "maverick3") -> str:
         status, _payload, headers = self.invoke(
             app,
@@ -153,6 +179,31 @@ class UserAdminApiTestCase(unittest.TestCase):
         self.assertEqual(status_session, 200)
         self.assertTrue(session["authenticated"])
         self.assertEqual(session["user"]["username"], "persistent")
+
+    def test_persisted_active_workspace_gets_builtin_apps_after_restart(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=state.repository_root)
+        admin_cookie = self.login(app)
+        status_workspace, workspace, _headers = self.invoke(
+            app,
+            path="/api/workspaces",
+            method="POST",
+            body={"name": "CEIDA"},
+            cookie=admin_cookie,
+        )
+        self.assertEqual(status_workspace, 201)
+
+        restarted_state = bootstrap_platform_state(start_path=repo_root)
+        restarted_app = PlatformHost(restarted_state, start_path=restarted_state.repository_root)
+        status_apps, apps, _apps_headers = self.invoke(restarted_app, path="/api/apps", cookie=admin_cookie)
+        status_admin_app, admin_body, _admin_headers = self.invoke_raw(restarted_app, path="/apps/user-admin/", cookie=admin_cookie)
+
+        self.assertEqual(status_apps, 200)
+        self.assertEqual(workspace["workspace_id"], "ceida")
+        self.assertIn("user-admin", {item["app_id"] for item in apps["items"]})
+        self.assertEqual(status_admin_app, 200)
+        self.assertIn(b"User Admin", admin_body)
 
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
-from core.apps.builtin_apps import register_and_install_builtin_apps
+from core.apps.builtin_apps import register_and_install_builtin_apps_for_active_workspaces
 from core.apps.store import AppStore
 from core.providers.service import register_builtin_providers
 from core.providers.store import ProviderStore
@@ -35,14 +35,13 @@ def create_application(
         ensure_default_workspace_record(workspace_store, now=now)
     builtin_app_count = 0
     if workspace_store is not None and app_store is not None:
-        builtin_app_count = len(
-            register_and_install_builtin_apps(
-                app_store,
-                workspace_store,
-                start_path=paths.repository_root,
-                now=now,
-            )
+        installed_by_workspace = register_and_install_builtin_apps_for_active_workspaces(
+            app_store,
+            workspace_store,
+            start_path=paths.repository_root,
+            now=now,
         )
+        builtin_app_count = sum(len(app_ids) for app_ids in installed_by_workspace.values())
     if provider_store is not None:
         register_builtin_providers(provider_store)
     core_skill_count = len(list_available_core_skills(start_path=paths.repository_root))

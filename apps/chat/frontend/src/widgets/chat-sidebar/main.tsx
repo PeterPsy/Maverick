@@ -37,12 +37,13 @@ function updateFromSidebarPayload(
 
 function panelPositionFromTrigger(trigger: HTMLElement) {
   const triggerRect = trigger.getBoundingClientRect();
-  const rootRect = document.getElementById("chat-sidebar-root")?.getBoundingClientRect();
-  const rootRight = rootRect?.right ?? window.innerWidth;
-  const rootTop = rootRect?.top ?? 0;
+  const estimatedPanelHeight = 300;
+  const viewportPadding = 8;
+  const preferredTop = triggerRect.bottom + 6;
+  const maxTop = Math.max(viewportPadding, window.innerHeight - estimatedPanelHeight - viewportPadding);
   return {
-    top: Math.max(8, triggerRect.bottom - rootTop + 6),
-    right: Math.max(4, rootRight - triggerRect.right),
+    top: Math.min(Math.max(viewportPadding, preferredTop), maxTop),
+    right: Math.max(4, window.innerWidth - triggerRect.right),
   };
 }
 
@@ -69,6 +70,21 @@ function ChatSidebarWidget() {
 
   useEffect(() => {
     refresh();
+  }, []);
+
+  useEffect(() => {
+    function handleShellMessage(event: MessageEvent) {
+      if (event.origin !== window.location.origin || !event.data || typeof event.data !== "object") {
+        return;
+      }
+      const payload = event.data as { owner_app_id?: string; resource?: string; type?: string };
+      if (payload.type === "maverick.widget.data-changed" && payload.owner_app_id === "chat") {
+        void refresh();
+      }
+    }
+
+    window.addEventListener("message", handleShellMessage);
+    return () => window.removeEventListener("message", handleShellMessage);
   }, []);
 
   async function createChat(projectId: string | null = null) {

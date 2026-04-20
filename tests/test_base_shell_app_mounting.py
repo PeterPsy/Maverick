@@ -51,6 +51,14 @@ class BaseShellAppMountingTests(unittest.TestCase):
         self.assertIn("getThread(requestedThreadId)", chat_source)
         self.assertIn("activeSession || events.length > 0", chat_source)
 
+    def test_chat_sidebar_settings_panel_escapes_scroll_clipping(self) -> None:
+        widget_source = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/main.tsx").read_text()
+        widget_styles = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/styles.css").read_text()
+
+        self.assertIn("window.innerHeight", widget_source)
+        self.assertIn("position: fixed", widget_styles)
+        self.assertIn("z-index: 1000", widget_styles)
+
 
 if __name__ == "__main__":
     unittest.main()

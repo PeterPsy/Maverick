@@ -360,10 +360,10 @@ button {
 }
 
 .bs-instance-menu__menu {
-  position: absolute;
+  position: fixed;
   right: 0.2rem;
   top: 6.9rem;
-  z-index: 60;
+  z-index: 1000;
 }
 
 .bs-sidebar-floating-panel {

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from core.apps.errors import AppContractValidationError
 from core.apps.service import install_store_app, register_app_source_from_contract
 from core.apps.store import AppStore
 from core.shared.repository import installation_paths
@@ -48,12 +49,15 @@ def register_and_install_builtin_apps(
     for spec in discover_builtin_apps(start_path=start_path):
         if not spec.source_path.is_dir():
             continue
-        source = register_app_source_from_contract(
-            app_store,
-            source_kind="platform",
-            source_path=str(spec.source_path),
-            now=now,
-        )
+        try:
+            source = register_app_source_from_contract(
+                app_store,
+                source_kind="platform",
+                source_path=str(spec.source_path),
+                now=now,
+            )
+        except AppContractValidationError:
+            continue
         install_store_app(
             app_store,
             source_id=source.source_id,

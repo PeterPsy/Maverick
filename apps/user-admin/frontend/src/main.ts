@@ -188,14 +188,17 @@ function workspaceAppHtml() {
   return workspaces
     .map((workspace) => {
       const rows = workspaceApps.filter((app) => app.workspace_id === workspace.workspace_id);
-      return `<article class="ua-app-workspace">
-        <div class="ua-app-workspace-heading">
-          <span class="material-symbols-rounded" aria-hidden="true">deployed_code</span>
-          <div>
+      const enabledCount = rows.filter((app) => app.status === 'enabled').length;
+      const installedCount = rows.filter((app) => app.installed).length;
+      return `<details class="ua-app-workspace">
+        <summary class="ua-app-workspace-heading">
+          <span class="ua-summary-caret material-symbols-rounded" aria-hidden="true">chevron_right</span>
+          <span class="ua-app-workspace-icon material-symbols-rounded" aria-hidden="true">deployed_code</span>
+          <span>
             <strong>${workspace.name}</strong>
-            <small>${workspace.workspace_id}</small>
-          </div>
-        </div>
+            <small>${workspace.workspace_id} · ${enabledCount}/${installedCount} abilitate</small>
+          </span>
+        </summary>
         <div class="ua-apps">
           ${rows
             .map((app) => {
@@ -227,7 +230,7 @@ function workspaceAppHtml() {
             })
             .join('')}
         </div>
-      </article>`;
+      </details>`;
     })
     .join('');
 }
@@ -305,16 +308,17 @@ function render() {
             </div>
             <div class="ua-memberships">${membershipHtml(user)}</div>
           </section>
-          <section class="ua-card">
-            <div class="ua-heading">
+          <details class="ua-card ua-collapsible" open>
+            <summary class="ua-heading ua-collapsible-heading">
               <div>
                 <p class="ua-kicker">App per workspace</p>
                 <h2>Installazione e visibilità</h2>
               </div>
-            </div>
+              <span class="ua-summary-caret material-symbols-rounded" aria-hidden="true">chevron_right</span>
+            </summary>
             <p class="ua-card-copy">Installata significa montata nel workspace. Solo le app abilitate sono visibili agli utenti e servite dal core.</p>
             <div class="ua-app-workspaces">${workspaceAppHtml()}</div>
-          </section>`
+          </details>`
           : '<section class="ua-card"><h2>Nessun utente</h2></section>'
       }
     </section>

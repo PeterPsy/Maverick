@@ -186,6 +186,30 @@ h2 {
   padding: 16px;
 }
 
+.ua-collapsible {
+  align-content: start;
+}
+
+.ua-collapsible-heading,
+.ua-app-workspace-heading {
+  cursor: pointer;
+  list-style: none;
+}
+
+.ua-collapsible-heading::-webkit-details-marker,
+.ua-app-workspace-heading::-webkit-details-marker {
+  display: none;
+}
+
+.ua-summary-caret {
+  transition: transform 160ms ease;
+}
+
+.ua-collapsible[open] > .ua-collapsible-heading .ua-summary-caret,
+.ua-app-workspace[open] > .ua-app-workspace-heading .ua-summary-caret {
+  transform: rotate(90deg);
+}
+
 .ua-card-copy {
   color: var(--ua-muted);
   font-size: 0.82rem;
@@ -345,7 +369,11 @@ button:not(.ua-user):hover {
   gap: 12px;
 }
 
-.ua-app-workspace-heading > .material-symbols-rounded,
+.ua-app-workspace-heading {
+  min-height: 2.25rem;
+}
+
+.ua-app-workspace-icon,
 .ua-app-icon {
   width: 2rem;
   height: 2rem;
@@ -354,7 +382,7 @@ button:not(.ua-user):hover {
   color: var(--ua-muted);
 }
 
-.ua-app-workspace-heading div,
+.ua-app-workspace-heading span:not(.material-symbols-rounded),
 .ua-app-copy {
   display: grid;
   min-width: 0;
@@ -366,6 +394,10 @@ button:not(.ua-user):hover {
 .ua-app-copy small {
   color: var(--ua-muted);
   font-size: 0.74rem;
+}
+
+.ua-apps {
+  padding-top: 2px;
 }
 
 .ua-app-row {

@@ -5,21 +5,19 @@ import { AppsPanel } from "./AppsPanel";
 export function WorkspaceView({
   activeApp,
   activeAppParams,
+  activeWorkspaceId,
   apps,
   error,
   isLoading,
   onOpenApp,
-  onTogglePinnedApp,
-  pinnedAppIds,
 }: {
   activeApp: AppRegistryItem | null;
   activeAppParams: Record<string, string | boolean | null>;
+  activeWorkspaceId: string;
   apps: AppRegistryItem[];
   error: string | null;
   isLoading: boolean;
-  onOpenApp: (appId: string) => void;
-  onTogglePinnedApp: (appId: string) => void;
-  pinnedAppIds: string[];
+  onOpenApp: (appId: string, params?: Record<string, string | boolean | null>) => void;
 }) {
   if (!activeApp) {
     return (
@@ -28,10 +26,8 @@ export function WorkspaceView({
         error={error}
         isLoading={isLoading}
         onOpenApp={onOpenApp}
-        onTogglePinnedApp={onTogglePinnedApp}
-        pinnedAppIds={pinnedAppIds}
       />
     );
   }
-  return <AppFrameHost activeApp={activeApp} activeAppParams={activeAppParams} />;
+  return <AppFrameHost activeApp={activeApp} activeAppParams={activeAppParams} activeWorkspaceId={activeWorkspaceId} onOpenApp={onOpenApp} />;
 }

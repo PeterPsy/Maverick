@@ -55,6 +55,7 @@ class AppStoreAppTestCase(unittest.TestCase):
         method: str = "GET",
         body: dict | None = None,
         cookie: str | None = None,
+        query_string: str = "",
     ) -> tuple[int, dict | bytes, dict[str, str]]:
         payload = b"" if body is None else json.dumps(body).encode("utf-8")
         headers: dict[str, str] = {}
@@ -63,7 +64,7 @@ class AppStoreAppTestCase(unittest.TestCase):
             "REQUEST_METHOD": method,
             "CONTENT_LENGTH": str(len(payload)),
             "CONTENT_TYPE": "application/json",
-            "QUERY_STRING": "",
+            "QUERY_STRING": query_string,
             "wsgi.input": BytesIO(payload),
         }
         if cookie is not None:
@@ -280,6 +281,13 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertEqual(parsed.contract.capabilities.mcp_tools, ["maverick_app_store"])
         self.assertEqual(parsed.contract.capabilities.cli_commands, ["app-store"])
         self.assertEqual(parsed.contract.capabilities.skills, ["app-store-ops"])
+        widgets = {widget.widget_id: widget for widget in parsed.contract.widgets}
+        self.assertEqual(widgets["app-shortcuts"].host, "base-shell")
+        self.assertEqual(widgets["app-shortcuts"].content_kinds, ["shell.sidebar.apps"])
+        self.assertEqual(widgets["app-shortcuts"].frontend.mount, "frontend/dist/widgets/app-shortcuts")
+        self.assertTrue(
+            (Path(__file__).resolve().parents[1] / "apps" / "app-store" / "frontend" / "dist" / "widgets" / "app-shortcuts" / "index.html").is_file()
+        )
 
     def test_bootstrap_installs_app_store_and_exposes_surfaces(self) -> None:
         repo_root = self.make_repo_root()
@@ -310,6 +318,41 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertIn(b"Catalog apps", payload)
         self.assertIn(b"Installed apps", payload)
         self.assertIn(b"Local apps", payload)
+
+    def test_sidebar_app_shortcuts_widget_is_discoverable_and_mounted(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+        cookie = self.login(app)
+
+        status, payload, _headers = self.invoke(
+            app,
+            path="/api/apps/widgets",
+            cookie=cookie,
+        )
+        self.assertEqual(status, 200)
+
+        status_filtered, filtered, _filtered_headers = self.invoke(
+            app,
+            path="/api/apps/widgets",
+            query_string="host=base-shell&content_kind=shell.sidebar.apps",
+            cookie=cookie,
+        )
+        if isinstance(filtered, bytes):
+            filtered = json.loads(filtered.decode("utf-8"))
+        status_widget, widget_body, widget_headers = self.invoke(
+            app,
+            path="/api/apps/widgets/app-store/app-shortcuts/frontend/",
+            cookie=cookie,
+        )
+
+        self.assertEqual(status_filtered, 200)
+        self.assertEqual(filtered["items"][0]["owner_app_id"], "app-store")
+        self.assertEqual(filtered["items"][0]["widget_id"], "app-shortcuts")
+        self.assertEqual(filtered["items"][0]["frontend_mount"], "/api/apps/widgets/app-store/app-shortcuts/frontend/")
+        self.assertEqual(status_widget, 200)
+        self.assertIn("text/html", widget_headers["Content-Type"])
+        self.assertIn(b"App shortcuts", widget_body)
 
     def test_catalog_and_install_require_maverick_authentication(self) -> None:
         repo_root = self.make_repo_root()
@@ -363,6 +406,32 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertIn("local_apps", payload)
         local_apps = {(item["workspace_id"], item["app_id"], item["status"]) for item in payload["local_apps"]}
         self.assertIn(("default", "local-notes", "uninstalled"), local_apps)
+
+    def test_app_store_backend_owns_pinned_sidebar_apps(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+        cookie = self.login(app)
+
+        status_initial, initial, _initial_headers = self.invoke(
+            app,
+            path="/api/apps/app-store/backend",
+            method="POST",
+            body={"action": "pinned_apps.list"},
+            cookie=cookie,
+        )
+        status_toggle, toggled, _toggle_headers = self.invoke(
+            app,
+            path="/api/apps/app-store/backend",
+            method="POST",
+            body={"action": "pinned_apps.toggle", "app_id": "agents"},
+            cookie=cookie,
+        )
+
+        self.assertEqual(status_initial, 200)
+        self.assertEqual(initial["pinned_apps"], ["chat"])
+        self.assertEqual(status_toggle, 200)
+        self.assertEqual(toggled["state"]["pinned_apps"], ["chat", "agents"])
 
     def test_authenticated_install_downloads_verifies_and_enables_remote_app(self) -> None:
         repo_root = self.make_repo_root()

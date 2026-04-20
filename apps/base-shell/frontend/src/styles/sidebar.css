@@ -148,6 +148,17 @@
   overflow: hidden;
 }
 
+.bs-widget-slot--compact {
+  flex: none;
+  min-height: 3rem;
+  max-height: 12rem;
+  margin-bottom: 0.4rem;
+}
+
+.bs-widget-slot--fill {
+  flex: 1;
+}
+
 .bs-widget-slot__frame {
   display: block;
   width: 100%;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AppRegistryItem } from "../src/api";
-import { nextPinnedAppIds, pinnedApps, preferredActiveApp, shellVisibleApps } from "../src/navigation";
+import { preferredActiveApp, shellVisibleApps } from "../src/navigation";
 
 function app(app_id: string, frontend_mount: string): AppRegistryItem {
   return {
@@ -30,15 +30,5 @@ describe("base-shell navigation", () => {
     expect(preferredActiveApp(registry, "docs")?.app_id).toBe("docs");
     expect(preferredActiveApp(registry, "missing")?.app_id).toBe("chat");
     expect(preferredActiveApp([app("docs", "/apps/docs/")], null)?.app_id).toBe("docs");
-  });
-
-  it("uses pinned registry apps and ignores stale pin ids", () => {
-    expect(pinnedApps(registry, ["missing", "docs"]).map((item) => item.app_id)).toEqual(["docs"]);
-  });
-
-  it("toggles pinned apps without duplicates", () => {
-    expect(nextPinnedAppIds(["chat"], "docs")).toEqual(["chat", "docs"]);
-    expect(nextPinnedAppIds(["chat", "docs"], "chat")).toEqual(["docs"]);
-    expect(nextPinnedAppIds(["chat"], "  ")).toEqual(["chat"]);
   });
 });

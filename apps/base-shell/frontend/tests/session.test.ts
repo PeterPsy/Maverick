@@ -12,7 +12,6 @@ describe("base-shell session", () => {
     expect(readShellSession()).toEqual({
       activeAppId: "chat",
       isSidebarOpen: true,
-      pinnedAppIds: ["chat"],
     });
   });
 
@@ -23,7 +22,6 @@ describe("base-shell session", () => {
           JSON.stringify({
             activeAppId: " docs ",
             isSidebarOpen: false,
-            pinnedAppIds: ["chat", "chat", "", "docs"],
           }),
         ),
         setItem: vi.fn(),
@@ -33,7 +31,6 @@ describe("base-shell session", () => {
     expect(readShellSession()).toEqual({
       activeAppId: "docs",
       isSidebarOpen: false,
-      pinnedAppIds: ["chat", "docs"],
     });
   });
 
@@ -46,11 +43,11 @@ describe("base-shell session", () => {
       },
     });
 
-    writeShellSession({ activeAppId: "chat", isSidebarOpen: false, pinnedAppIds: ["chat"] });
+    writeShellSession({ activeAppId: "chat", isSidebarOpen: false });
 
     expect(setItem).toHaveBeenCalledWith(
       "maverick3:base-shell:session",
-      JSON.stringify({ activeAppId: "chat", isSidebarOpen: false, pinnedAppIds: ["chat"] }),
+      JSON.stringify({ activeAppId: "chat", isSidebarOpen: false }),
     );
   });
 });

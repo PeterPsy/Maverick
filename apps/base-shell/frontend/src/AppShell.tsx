@@ -12,7 +12,7 @@ import {
   SessionPayload,
   WorkspaceItem,
 } from "./api";
-import { nextPinnedAppIds, preferredActiveApp } from "./navigation";
+import { preferredActiveApp } from "./navigation";
 import { readShellSession, writeShellSession } from "./session";
 import { useMobileLayout } from "./hooks/useMobileLayout";
 import { LoginScreen } from "./components/LoginScreen";
@@ -30,7 +30,6 @@ export function AppShell() {
   const [activeAppId, setActiveAppId] = useState<string | null>(initialSession.activeAppId);
   const [activeAppParams, setActiveAppParams] = useState<Record<string, string | boolean | null>>({});
   const [isSidebarOpen, setIsSidebarOpen] = useState(initialSession.isSidebarOpen);
-  const [pinnedAppIds, setPinnedAppIds] = useState(initialSession.pinnedAppIds);
   const [activeDialog, setActiveDialog] = useState<ShellDialog>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -77,9 +76,8 @@ export function AppShell() {
     writeShellSession({
       activeAppId,
       isSidebarOpen,
-      pinnedAppIds,
     });
-  }, [activeAppId, isSidebarOpen, pinnedAppIds]);
+  }, [activeAppId, isSidebarOpen]);
 
   function openApp(appId: string, params: Record<string, string | boolean | null> = {}) {
     setActiveAppId(appId);
@@ -88,13 +86,10 @@ export function AppShell() {
   }
 
   function openApps() {
-    setActiveAppId(null);
+    const appStore = apps.find((app) => app.app_id === "app-store" && app.frontend_mount);
+    setActiveAppId(appStore ? appStore.app_id : null);
     setActiveAppParams({});
     setIsSidebarOpen(false);
-  }
-
-  function togglePinnedApp(appId: string) {
-    setPinnedAppIds((current) => nextPinnedAppIds(current, appId));
   }
 
   async function handleLogout() {
@@ -114,24 +109,25 @@ export function AppShell() {
     }} />;
   }
 
+  const activeWorkspaceId = status?.workspace_id || session.workspace_id;
+
   return (
     <main className={`bs-shell ${isSidebarOpen ? "is-sidebar-open" : ""} ${isMobileLayout ? "is-mobile-layout" : ""}`}>
       <div className="bs-workspace-view-shell">
         <WorkspaceView
           activeApp={activeApp}
           activeAppParams={activeAppParams}
+          activeWorkspaceId={activeWorkspaceId}
           apps={apps}
           error={error}
           isLoading={isLoading}
           onOpenApp={openApp}
-          onTogglePinnedApp={togglePinnedApp}
-          pinnedAppIds={pinnedAppIds}
         />
       </div>
       <button aria-label="Chiudi menu" className="bs-shell__backdrop" onClick={() => setIsSidebarOpen(false)} type="button" />
       <Sidebar
         activeAppId={activeApp?.app_id ?? activeAppId}
-        activeWorkspaceId={status?.workspace_id || session.workspace_id}
+        activeWorkspaceId={activeWorkspaceId}
         apps={apps}
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
@@ -140,7 +136,6 @@ export function AppShell() {
         onOpenSettings={() => setActiveDialog("settings")}
         onOpenTutorial={() => setActiveDialog("tutorial")}
         onWorkspaceChanged={loadShellState}
-        pinnedAppIds={pinnedAppIds}
         user={session.user}
         workspaces={workspaces}
       />

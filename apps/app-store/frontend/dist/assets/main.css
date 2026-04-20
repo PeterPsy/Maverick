@@ -138,6 +138,16 @@ h3 {
   color: var(--app-text);
 }
 
+.app-row-action--secondary {
+  border: 1px solid var(--app-border-strong);
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--app-text-muted);
+}
+
+.app-row-action--secondary:hover:not(:disabled) {
+  color: var(--app-text);
+}
+
 .app-row-action:disabled {
   cursor: not-allowed;
   opacity: 0.46;

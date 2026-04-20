@@ -88,5 +88,24 @@
     "bundle": false,
     "data": false,
     "repair_only": false
-  }
+  },
+  "widgets": [
+    {
+      "widget_id": "app-shortcuts",
+      "host": "base-shell",
+      "content_kinds": [
+        "shell.sidebar.apps"
+      ],
+      "frontend": {
+        "kind": "iframe",
+        "mount": "frontend/dist/widgets/app-shortcuts",
+        "spa_fallback": true
+      },
+      "actions": {
+        "backend": true,
+        "mcp": false,
+        "cli": false
+      }
+    }
+  ]
 }

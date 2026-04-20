@@ -8,15 +8,11 @@ export function AppsPanel({
   error,
   isLoading,
   onOpenApp,
-  onTogglePinnedApp,
-  pinnedAppIds,
 }: {
   apps: AppRegistryItem[];
   error: string | null;
   isLoading: boolean;
   onOpenApp: (appId: string) => void;
-  onTogglePinnedApp: (appId: string) => void;
-  pinnedAppIds: string[];
 }) {
   const visibleApps = shellVisibleApps(apps);
   if (isLoading) {
@@ -52,9 +48,6 @@ export function AppsPanel({
             <div className="bs-app-card__actions">
               <Button onClick={() => onOpenApp(app.app_id)} size="sm" variant="primary">
                 Apri
-              </Button>
-              <Button onClick={() => onTogglePinnedApp(app.app_id)} size="sm" variant="ghost">
-                {pinnedAppIds.includes(app.app_id) ? "Rimuovi pin" : "Fissa"}
               </Button>
             </div>
           </article>

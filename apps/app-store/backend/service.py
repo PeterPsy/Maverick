@@ -9,7 +9,7 @@ from typing import Any
 from urllib.parse import urljoin
 from urllib.request import urlopen
 
-from store import load_state, remember_install
+from store import load_state, pinned_apps, remember_install, set_pinned_apps, toggle_pinned_app
 
 
 DEFAULT_CATALOG_URL = "https://maverick-app-store.versy.ai"
@@ -38,6 +38,17 @@ def handle_action(data_root: Path, body: dict[str, Any]) -> tuple[int, dict[str,
         return 200, {"state": load_state(data_root), "catalog_url": catalog_url()}
     if action == "catalog":
         return 200, fetch_catalog()
+    if action == "pinned_apps.list":
+        return 200, {"pinned_apps": pinned_apps(data_root)}
+    if action == "pinned_apps.set":
+        raw_app_ids = body.get("app_ids")
+        app_ids = [str(item).strip() for item in raw_app_ids] if isinstance(raw_app_ids, list) else []
+        return 200, {"state": set_pinned_apps(data_root, app_ids)}
+    if action == "pinned_apps.toggle":
+        app_id = str(body.get("app_id") or "").strip()
+        if not app_id:
+            raise AppStoreValidationError("app_id is required.")
+        return 200, {"state": toggle_pinned_app(data_root, app_id)}
     if action == "remember_install":
         app_id = str(body.get("app_id") or "").strip()
         version = str(body.get("version") or "").strip()

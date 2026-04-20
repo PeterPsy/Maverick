@@ -2,6 +2,7 @@ const state = {
   apps: [],
   installations: [],
   localApps: [],
+  pinnedApps: [],
   workspaces: [],
   selectedWorkspaces: new Set(),
   pending: new Set(),
@@ -68,6 +69,10 @@ function selectedInstallState(appId) {
   };
 }
 
+function isPinned(appId) {
+  return state.pinnedApps.includes(appId);
+}
+
 function appById(appId) {
   return state.apps.find((app) => app.app_id === appId) || null;
 }
@@ -127,6 +132,17 @@ function openApp(appId) {
   window.parent?.postMessage({ type: "maverick.app.open-app", app_id: appId }, window.location.origin);
 }
 
+function notifyPinnedAppsChanged() {
+  window.parent?.postMessage(
+    {
+      type: "maverick.app.data-changed",
+      owner_app_id: "app-store",
+      resource: "pinned-apps",
+    },
+    window.location.origin,
+  );
+}
+
 function renderWorkspaces() {
   workspaceList.replaceChildren();
   state.workspaces.forEach((workspace) => {
@@ -173,6 +189,20 @@ function renderActionButton(app, version, installState) {
     } else {
       installApp(app, version);
     }
+  });
+  return button;
+}
+
+function renderPinButton(app, installState) {
+  const button = document.createElement("button");
+  button.className = "app-row-action app-row-action--secondary";
+  button.type = "button";
+  button.disabled = installState.installedCount === 0 || isAppPending(app.app_id);
+  button.textContent = isPinned(app.app_id) ? "Unpin" : "Pin";
+  button.dataset.action = "pin";
+  button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    togglePinnedApp(app);
   });
   return button;
 }
@@ -271,6 +301,7 @@ function renderRow(app, mode) {
 
   const actionWrap = document.createElement("div");
   actionWrap.className = "app-row-actions";
+  actionWrap.append(renderPinButton(app, installState));
   actionWrap.append(mode === "local" ? renderLocalActionButton(app, installState) : renderActionButton(app, version, installState));
   const chevron = document.createElement("button");
   chevron.className = "app-row-chevron";
@@ -428,17 +459,51 @@ async function refreshInstallations() {
   state.localApps = payload.local_apps || [];
 }
 
+async function refreshPinnedApps() {
+  const payload = await requestJson("/api/apps/app-store/backend", {
+    method: "POST",
+    body: JSON.stringify({ action: "pinned_apps.list" }),
+  });
+  state.pinnedApps = payload.pinned_apps || [];
+}
+
+async function togglePinnedApp(app) {
+  const pendingKey = `${app.app_id}:pin`;
+  state.pending.add(pendingKey);
+  render();
+  setStatus(`${isPinned(app.app_id) ? "Removing" : "Pinning"} ${app.name}`, "busy");
+  try {
+    const payload = await requestJson("/api/apps/app-store/backend", {
+      method: "POST",
+      body: JSON.stringify({ action: "pinned_apps.toggle", app_id: app.app_id }),
+    });
+    state.pinnedApps = payload.state?.pinned_apps || [];
+    notifyPinnedAppsChanged();
+    setStatus(`${app.name} shortcut updated`, "ok");
+  } catch (error) {
+    setStatus(error.message, "error");
+  } finally {
+    state.pending.delete(pendingKey);
+    render();
+  }
+}
+
 async function load() {
   setStatus("Loading", "busy");
-  const [workspaces, catalog, installations] = await Promise.all([
+  const [workspaces, catalog, installations, pinned] = await Promise.all([
     requestJson("/api/workspaces"),
     requestJson("/api/app-store/apps"),
     requestJson("/api/app-store/installations"),
+    requestJson("/api/apps/app-store/backend", {
+      method: "POST",
+      body: JSON.stringify({ action: "pinned_apps.list" }),
+    }),
   ]);
   state.workspaces = workspaces.items || [];
   state.apps = catalog.items || [];
   state.installations = installations.items || [];
   state.localApps = installations.local_apps || [];
+  state.pinnedApps = pinned.pinned_apps || [];
   state.selectedWorkspaces = new Set([workspaces.active_workspace_id || state.workspaces[0]?.workspace_id].filter(Boolean));
   renderWorkspaces();
   render();

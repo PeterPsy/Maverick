@@ -19,6 +19,28 @@ class BaseShellAppMountingTests(unittest.TestCase):
         self.assertNotIn("URLSearchParams", workspace_source)
         self.assertNotIn("buildAppFrameSrc", workspace_source)
 
+    def test_base_shell_remounts_app_frames_and_widgets_by_workspace(self) -> None:
+        host_source = (REPO_ROOT / "apps/base-shell/frontend/src/components/AppFrameHost.tsx").read_text()
+        sidebar_source = (REPO_ROOT / "apps/base-shell/frontend/src/components/Sidebar.tsx").read_text()
+        widget_source = (REPO_ROOT / "apps/base-shell/frontend/src/components/WidgetSlot.tsx").read_text()
+
+        self.assertIn("mountKey: `${activeWorkspaceId}:${activeApp.app_id}`", host_source)
+        self.assertIn("activeWorkspaceId={activeWorkspaceId}", sidebar_source)
+        self.assertIn("activeWorkspaceId: string", widget_source)
+        self.assertIn("message_id: `${activeWorkspaceId}:${hostAppId}:${contentKind}`", widget_source)
+        self.assertIn("workspace_id: activeWorkspaceId", widget_source)
+        self.assertIn("key={`${activeWorkspaceId}:${widget.owner_app_id}:${widget.widget_id}:${contextToken}`}", widget_source)
+
+    def test_sidebar_uses_app_store_widget_instead_of_local_pins(self) -> None:
+        sidebar_source = (REPO_ROOT / "apps/base-shell/frontend/src/components/Sidebar.tsx").read_text()
+        session_source = (REPO_ROOT / "apps/base-shell/frontend/src/session.ts").read_text()
+        navigation_source = (REPO_ROOT / "apps/base-shell/frontend/src/navigation.ts").read_text()
+
+        self.assertIn('contentKind="shell.sidebar.apps"', sidebar_source)
+        self.assertNotIn("pinnedApps", sidebar_source)
+        self.assertNotIn("pinnedAppIds", session_source)
+        self.assertNotIn("nextPinnedAppIds", navigation_source)
+
     def test_chat_accepts_shell_navigation_without_url_reload(self) -> None:
         chat_source = (REPO_ROOT / "apps/chat/frontend/src/App.tsx").read_text()
 

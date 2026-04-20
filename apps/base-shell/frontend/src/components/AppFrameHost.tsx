@@ -4,17 +4,24 @@ import { AppRegistryItem } from "../api";
 type AppFrameParams = Record<string, string | boolean | null>;
 type AppReadyMessage = {
   app_id?: string;
+  params?: Record<string, string | boolean | null>;
   type?: string;
 };
 
 export function AppFrameHost({
   activeApp,
   activeAppParams,
+  activeWorkspaceId,
+  onOpenApp,
 }: {
   activeApp: AppRegistryItem;
   activeAppParams: AppFrameParams;
+  activeWorkspaceId: string;
+  onOpenApp: (appId: string, params?: AppFrameParams) => void;
 }) {
-  const [mountedApps, setMountedApps] = useState<AppRegistryItem[]>([activeApp]);
+  const [mountedApps, setMountedApps] = useState<Array<{ app: AppRegistryItem; mountKey: string }>>([
+    { app: activeApp, mountKey: `${activeWorkspaceId}:${activeApp.app_id}` },
+  ]);
   const frameRefs = useRef<Record<string, HTMLIFrameElement | null>>({});
   const latestNavigationRef = useRef<{ appId: string; params: AppFrameParams }>({
     appId: activeApp.app_id,
@@ -24,12 +31,14 @@ export function AppFrameHost({
 
   useEffect(() => {
     setMountedApps((current) => {
-      if (current.some((app) => app.app_id === activeApp.app_id)) {
-        return current;
+      const nextKey = `${activeWorkspaceId}:${activeApp.app_id}`;
+      const workspaceMountedApps = current.filter((item) => item.mountKey.startsWith(`${activeWorkspaceId}:`));
+      if (workspaceMountedApps.some((item) => item.mountKey === nextKey)) {
+        return workspaceMountedApps;
       }
-      return [...current, activeApp];
+      return [...workspaceMountedApps, { app: activeApp, mountKey: nextKey }];
     });
-  }, [activeApp]);
+  }, [activeApp, activeWorkspaceId]);
 
   useEffect(() => {
     latestNavigationRef.current = { appId: activeApp.app_id, params: activeAppParams };
@@ -37,38 +46,47 @@ export function AppFrameHost({
   }, [activeApp.app_id, paramsSignature]);
 
   useEffect(() => {
-    function handleAppReady(event: MessageEvent) {
+    function handleAppMessage(event: MessageEvent) {
       if (event.origin !== window.location.origin || !event.data || typeof event.data !== "object") {
         return;
       }
       const payload = event.data as AppReadyMessage;
-      if (payload.type !== "maverick.app.ready" || !payload.app_id) {
+      if (!payload.type || !payload.app_id) {
         return;
       }
-      const frame = frameRefs.current[payload.app_id];
-      if (!frame || event.source !== frame.contentWindow) {
+      const senderIsMountedApp = Object.values(frameRefs.current).some((frame) => frame?.contentWindow === event.source);
+      if (!senderIsMountedApp) {
         return;
       }
-      const latestNavigation = latestNavigationRef.current;
-      if (latestNavigation.appId === payload.app_id) {
-        postNavigation(frame, payload.app_id, latestNavigation.params);
+      if (payload.type === "maverick.app.ready") {
+        const frame = frameRefs.current[payload.app_id];
+        if (!frame || event.source !== frame.contentWindow) {
+          return;
+        }
+        const latestNavigation = latestNavigationRef.current;
+        if (latestNavigation.appId === payload.app_id) {
+          postNavigation(frame, payload.app_id, latestNavigation.params);
+        }
+      }
+      if (payload.type === "maverick.app.open-app") {
+        onOpenApp(payload.app_id, payload.params || {});
       }
     }
 
-    window.addEventListener("message", handleAppReady);
-    return () => window.removeEventListener("message", handleAppReady);
-  }, []);
+    window.addEventListener("message", handleAppMessage);
+    return () => window.removeEventListener("message", handleAppMessage);
+  }, [onOpenApp]);
 
   return (
     <section className="bs-workspace-app-panel" aria-label={`${activeApp.name} app`}>
       <div className="bs-workspace-app-surface">
-        {mountedApps.map((app) => {
+        {mountedApps.map(({ app, mountKey }) => {
           const isActive = app.app_id === activeApp.app_id;
           return (
             <iframe
               aria-hidden={!isActive}
               className={`bs-workspace-app-frame ${isActive ? "is-active" : "is-hidden"}`}
-              key={app.app_id}
+              key={mountKey}
               onLoad={(event) => {
                 if (app.app_id === activeApp.app_id) {
                   postNavigation(event.currentTarget, app.app_id, activeAppParams);

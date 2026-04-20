@@ -140,7 +140,7 @@ function App() {
   async function deleteSelectedSkill() {
     if (!selectedSkill) return;
     if (!selectedSkill.deletable) {
-      setError('Installed agent skills cannot be deleted from this workspace.');
+      setError('This skill cannot be deleted.');
       return;
     }
     const confirmed = window.confirm(`Delete ${selectedSkill.name}?`);
@@ -152,25 +152,6 @@ function App() {
       await refresh();
     } catch (err) {
       setError((err as Error).message);
-    }
-  }
-
-  async function importInstalledSkill() {
-    if (!selectedSkill) return;
-    setSaving(true);
-    setError('');
-    try {
-      const payload = await callBackend<{ skill: SkillDetail }>({
-        action: 'import_installed_skill',
-        skill_id: selectedSkill.id
-      });
-      setSelectedSkill(payload.skill);
-      setQuery('');
-      await refresh(payload.skill.id);
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setSaving(false);
     }
   }
 
@@ -223,23 +204,14 @@ function App() {
                 <p>{selectedSkill.description || 'No description set.'}</p>
               </div>
               <div className="action-group">
-                {selectedSkill.editable ? (
-                  <>
-                    <button className="danger-action" onClick={deleteSelectedSkill} disabled={!selectedSkill.deletable}>
-                      <span className="material-symbols-rounded" aria-hidden="true">delete</span>
-                      Delete Skill
-                    </button>
-                    <button className="primary-action" onClick={saveSkill} disabled={saving}>
-                      <span className="material-symbols-rounded" aria-hidden="true">{saving ? 'progress_activity' : 'save'}</span>
-                      {saving ? 'Saving' : 'Save Skill'}
-                    </button>
-                  </>
-                ) : (
-                  <button className="primary-action" onClick={importInstalledSkill} disabled={saving}>
-                    <span className="material-symbols-rounded" aria-hidden="true">{saving ? 'progress_activity' : 'download'}</span>
-                    {saving ? 'Importing' : 'Import Skill'}
-                  </button>
-                )}
+                <button className="danger-action" onClick={deleteSelectedSkill} disabled={!selectedSkill.deletable}>
+                  <span className="material-symbols-rounded" aria-hidden="true">delete</span>
+                  Delete Skill
+                </button>
+                <button className="primary-action" onClick={saveSkill} disabled={saving}>
+                  <span className="material-symbols-rounded" aria-hidden="true">{saving ? 'progress_activity' : 'save'}</span>
+                  {saving ? 'Saving' : 'Save Skill'}
+                </button>
               </div>
             </header>
 

@@ -51,7 +51,6 @@ class WorkspaceBootstrapTestCase(unittest.TestCase):
         (repo_root / "apps").mkdir()
         (repo_root / "workspaces").mkdir()
         (repo_root / "docs" / "architecture").mkdir(parents=True)
-        (repo_root / "local-skills").mkdir()
         (repo_root / "scripts").mkdir()
         (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
         (repo_root / "IMPLEMENTATION_TASKLIST.md").write_text("", encoding="utf-8")

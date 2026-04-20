@@ -26,7 +26,7 @@ from core.apps.service import install_workspace_local_app, register_workspace_lo
 from core.cli.service import list_core_cli_commands
 from core.mcp.service import list_mcp_tools
 from core.runtime.service import create_runtime_session, queue_runtime_turn, transition_runtime_session, transition_runtime_turn
-from core.skills.service import list_visible_platform_skills
+from core.skills.service import list_available_workspace_skills
 from core.workspaces.service import create_workspace, ensure_workspace_layout
 
 
@@ -37,7 +37,7 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
         repo_root = Path(temp_dir.name) / "maverick-v3"
-        for name in ("core", "apps", "workspaces", "local-skills", "scripts"):
+        for name in ("core", "apps", "workspaces", "scripts"):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
         (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
@@ -125,6 +125,7 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
         self.assertTrue((repo_root / "workspaces" / "ceida" / "data" / "chat" / "threads.json").is_file())
         self.assertTrue((repo_root / "workspaces" / "ceida" / "data" / "agents" / "agent_types.json").is_file())
         self.assertTrue((repo_root / "workspaces" / "ceida" / "data" / "skills" / "state.json").is_file())
+        self.assertTrue((repo_root / "workspaces" / "ceida" / "data" / "skills" / "skills" / "skills-ops" / "SKILL.md").is_file())
 
     def test_bootstrap_queues_resume_turn_for_running_session_interrupted_by_backend_restart(self) -> None:
         repo_root = self.make_repo_root()
@@ -400,11 +401,11 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
 
         tools = list_mcp_tools(app_store=state.app_store, workspace_id="default", start_path=repo_root)
         commands = list_core_cli_commands(app_store=state.app_store, workspace_id="default", start_path=repo_root)
-        skills = list_visible_platform_skills(app_store=state.app_store, workspace_id="default", start_path=repo_root)
+        skills = list_available_workspace_skills(workspace_id="default", start_path=repo_root)
 
         self.assertIn("app.chat.threads.list", [tool.tool_name for tool in tools])
         self.assertIn("app.chat.chat", [command.command_id for command in commands])
-        self.assertIn("app.chat.chat-ops", [skill.skill_id for skill in skills])
+        self.assertIn("chat-ops", [skill.skill_id for skill in skills])
 
     def test_chat_declares_base_shell_sidebar_widget(self) -> None:
         repo_root = self.make_repo_root()

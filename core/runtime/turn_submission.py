@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from core.providers.service import build_runtime_backend_launch_spec
+from core.providers.service import prepare_runtime_skills
 from core.providers.service import resolve_provider_for_runtime_session
 from core.runtime.attachments import input_text_with_attachment_links
 from core.runtime.execution import execute_runtime_turn
@@ -17,6 +18,7 @@ from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.service import queue_runtime_turn, record_runtime_event, transition_runtime_turn
+from core.skills.service import list_available_workspace_skills, resolve_runtime_skills
 
 if TYPE_CHECKING:
     from core.api.platform_state import PlatformState
@@ -194,12 +196,20 @@ def _build_launch_spec_for_execution(state: PlatformState, *, session: RuntimeSe
         return None
     if provider_id != "codex":
         return None
-    return build_runtime_backend_launch_spec(
+    spec = build_runtime_backend_launch_spec(
         state.provider_store,
         session=session,
         secret_store=state.secret_store,
         observability_store=state.observability_store,
     )
+    skills = (
+        resolve_runtime_skills(session, start_path=state.repository_root)
+        if session.skill_ids
+        else list_available_workspace_skills(workspace_id=session.workspace_id, start_path=state.repository_root)
+    )
+    if skills:
+        prepare_runtime_skills(state.provider_store, session=session, skills=skills)
+    return spec
 
 
 def _record_execution_event(

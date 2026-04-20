@@ -1,5 +1,6 @@
 import os
 import json
+from pathlib import Path
 import queue
 import tempfile
 import unittest
@@ -63,6 +64,27 @@ class RuntimeExecutionCommandTest(unittest.TestCase):
         self.assertEqual([event.event_type for event in emitted], ["runtime.output.delta"])
         self.assertEqual(emitted[0].payload["text"], "hello")
         self.assertEqual(FakeCodexProcess.requests[-3:], ["initialize", "thread/start", "turn/start"])
+
+    def test_codex_execution_removes_provider_generated_system_skills_before_thread_start(self) -> None:
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        session = _session("sandbox", root=temp_dir.name, session_id="session-system-skills")
+        launch_spec = _launch_spec(session)
+        codex_home = Path(temp_dir.name) / "workspace" / "runtime" / "session-system-skills" / "codex-home"
+        launch_spec.env_overrides["CODEX_HOME"] = str(codex_home)
+
+        result = execute_runtime_turn(
+            session=session,
+            provider=build_codex_definition(),
+            input_text="hello",
+            launch_spec=launch_spec,
+            command_runner=FakeCodexProcess,
+            timeout_seconds=2,
+        )
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertFalse((codex_home / "skills" / ".system").exists())
+        self.assertFalse(FakeCodexProcess.system_skills_present_at_thread_start)
 
     def test_codex_completed_agent_message_without_delta_is_emitted(self) -> None:
         temp_dir = tempfile.TemporaryDirectory()
@@ -226,8 +248,14 @@ class FakeStdin:
         FakeCodexProcess.requests.append(method)
         request_id = payload["id"]
         if method == "initialize":
+            if FakeCodexProcess.codex_home:
+                system_root = Path(FakeCodexProcess.codex_home) / "skills" / ".system" / "imagegen"
+                system_root.mkdir(parents=True, exist_ok=True)
+                (system_root / "SKILL.md").write_text("# Imagegen\n", encoding="utf-8")
             self.stdout.put({"jsonrpc": "2.0", "id": request_id, "result": {}})
         elif method == "thread/start":
+            if FakeCodexProcess.codex_home:
+                FakeCodexProcess.system_skills_present_at_thread_start = (Path(FakeCodexProcess.codex_home) / "skills" / ".system").exists()
             self.stdout.put({"jsonrpc": "2.0", "id": request_id, "result": {"thread": {"id": "thread-1"}}})
         elif method == "turn/start":
             self.stdout.put({"jsonrpc": "2.0", "id": request_id, "result": {"turn": {"id": "turn-1"}}})
@@ -242,9 +270,13 @@ class FakeStdin:
 
 class FakeCodexProcess:
     requests: list[str] = []
+    codex_home: str | None = None
+    system_skills_present_at_thread_start = False
 
     def __init__(self, *args, **kwargs) -> None:
         FakeCodexProcess.requests = []
+        FakeCodexProcess.codex_home = str(kwargs.get("env", {}).get("CODEX_HOME") or "").strip() or None
+        FakeCodexProcess.system_skills_present_at_thread_start = False
         self.stdout = FakeStdout()
         self.stdin = FakeStdin(self.stdout)
         self.pid = 999999

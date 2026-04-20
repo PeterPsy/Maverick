@@ -1,3 +1,8 @@
+---
+name: chat-ops
+description: Use the Chat app surfaces for workspace conversation threads and runtime turn operations.
+---
+
 # Chat Ops
 
 Use the `chat` app surfaces for workspace conversation operations.

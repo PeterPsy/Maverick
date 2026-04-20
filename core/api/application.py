@@ -10,7 +10,6 @@ from core.apps.store import AppStore
 from core.providers.service import register_builtin_providers
 from core.providers.store import ProviderStore
 from core.shared.repository import installation_paths
-from core.skills.service import list_available_core_skills
 from core.workspaces.service import ensure_default_workspace, ensure_default_workspace_record
 from core.workspaces.store import WorkspaceStore
 
@@ -44,12 +43,11 @@ def create_application(
         builtin_app_count = sum(len(app_ids) for app_ids in installed_by_workspace.values())
     if provider_store is not None:
         register_builtin_providers(provider_store)
-    core_skill_count = len(list_available_core_skills(start_path=paths.repository_root))
     return {
         "name": "maverick-core",
         "status": "initialized",
         "repository_root": str(paths.repository_root),
         "default_workspace_id": "default",
-        "core_skill_count": str(core_skill_count),
+        "core_skill_count": "0",
         "builtin_app_count": str(builtin_app_count),
     }

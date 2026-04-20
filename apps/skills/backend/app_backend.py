@@ -18,9 +18,8 @@ def main() -> None:
     payload = json.loads(sys.stdin.read() or "{}")
     body = payload.get("body") if isinstance(payload.get("body"), dict) else {}
     data_root = Path(payload["data_root"])
-    agent_skill_roots = payload.get("agent_skill_roots") if isinstance(payload.get("agent_skill_roots"), list) else None
     try:
-        status_code, result = handle_action(data_root, body, agent_skill_roots=agent_skill_roots)
+        status_code, result = handle_action(data_root, body)
     except SkillsValidationError as error:
         _response(400, {"error": "validation_error", "detail": str(error)})
         return

@@ -146,7 +146,7 @@ class Phase10SecretsAndRecoveryTestCase(unittest.TestCase):
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
         repo_root = Path(temp_dir.name) / "maverick-v3"
-        for name in ("core", "apps", "workspaces", "docs", "local-skills", "scripts"):
+        for name in ("core", "apps", "workspaces", "docs", "scripts"):
             target = repo_root / name
             if name == "docs":
                 (target / "architecture").mkdir(parents=True, exist_ok=True)

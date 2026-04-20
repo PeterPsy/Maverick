@@ -18,7 +18,7 @@ from core.cli.models import CliInvocationContext
 from core.cli.service import list_core_cli_commands, run_core_cli_command
 from core.mcp.models import McpInvocationContext
 from core.mcp.service import call_mcp_tool, list_mcp_tools
-from core.skills.service import list_visible_platform_skills
+from core.skills.service import list_available_workspace_skills
 
 
 SKILLS_BACKEND = Path(__file__).resolve().parents[1] / "apps" / "skills" / "backend"
@@ -27,7 +27,7 @@ SKILLS_BACKEND = Path(__file__).resolve().parents[1] / "apps" / "skills" / "back
 def load_skills_backend_modules():
     """Load app backend modules despite generic app-local module names."""
     sys.path.insert(0, str(SKILLS_BACKEND))
-    for module_name in ("models", "store", "installed_skills", "service"):
+    for module_name in ("models", "store", "seeds", "service"):
         sys.modules.pop(module_name, None)
     store = importlib.import_module("store")
     service = importlib.import_module("service")
@@ -39,7 +39,7 @@ class SkillsAppTestCase(unittest.TestCase):
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
         repo_root = Path(temp_dir.name) / "maverick-v3"
-        for name in ("core", "apps", "workspaces", "local-skills", "scripts"):
+        for name in ("core", "apps", "workspaces", "scripts"):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
         (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
@@ -83,7 +83,7 @@ class SkillsAppTestCase(unittest.TestCase):
         self.assertEqual(parsed.contract.entrypoints.frontend, "frontend/dist")
         self.assertEqual(parsed.contract.capabilities.mcp_tools, ["maverick_skills_app"])
         self.assertEqual(parsed.contract.capabilities.cli_commands, ["skills"])
-        self.assertEqual(parsed.contract.capabilities.skills, ["skills-ops"])
+        self.assertEqual(parsed.contract.capabilities.skills, [])
 
     def test_service_creates_updates_and_deletes_skill(self) -> None:
         service, _store = load_skills_backend_modules()
@@ -129,14 +129,14 @@ class SkillsAppTestCase(unittest.TestCase):
             with self.assertRaises(store.SkillsValidationError):
                 service.handle_action(Path(temp) / "skills", {"action": "get_skill", "skill_id": "../escape"})
 
-    def test_service_catalog_includes_and_updates_installed_agent_skills(self) -> None:
-        service, _store = load_skills_backend_modules()
+    def test_service_catalog_only_uses_workspace_skills_data(self) -> None:
+        service, store = load_skills_backend_modules()
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             data_root = root / "workspace" / "data" / "skills"
-            agent_skill = root / "codex" / "skills" / "agent-helper"
-            agent_skill.mkdir(parents=True)
-            agent_skill.joinpath("SKILL.md").write_text(
+            external_skill = root / "codex" / "skills" / "agent-helper"
+            external_skill.mkdir(parents=True)
+            external_skill.joinpath("SKILL.md").write_text(
                 "---\n"
                 "name: Agent Helper\n"
                 "description: Use when the installed agent needs helper instructions.\n"
@@ -145,45 +145,26 @@ class SkillsAppTestCase(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            status, payload = service.handle_action(
-                data_root,
-                {"action": "catalog"},
-                agent_skill_roots=[str(root / "codex" / "skills")],
-            )
-            detail_status, detail_payload = service.handle_action(
-                data_root,
-                {"action": "get_skill", "skill_id": "codex-installed-agent-helper"},
-                agent_skill_roots=[str(root / "codex" / "skills")],
-            )
-            update_status, update_payload = service.handle_action(
+            create_status, create_payload = service.handle_action(
                 data_root,
                 {
-                    "action": "update_skill",
-                    "id": "codex-installed-agent-helper",
-                    "name": "Changed Helper",
-                    "description": "Updated installed skill.",
-                    "content": "Updated installed skill content.",
+                    "action": "create_skill",
+                    "id": "agent-helper",
+                    "name": "Agent Helper",
+                    "description": "Workspace-owned copy.",
                 },
-                agent_skill_roots=[str(root / "codex" / "skills")],
             )
-            import_status, import_payload = service.handle_action(
-                data_root,
-                {"action": "import_installed_skill", "skill_id": "codex-installed-agent-helper"},
-                agent_skill_roots=[str(root / "codex" / "skills")],
-            )
+            status, payload = service.handle_action(data_root, {"action": "catalog"})
 
+            self.assertEqual(create_status, 200)
+            self.assertEqual(create_payload["skill"]["origin"], "workspace")
             self.assertEqual(status, 200)
-            self.assertEqual(payload["skills"][0]["id"], "codex-installed-agent-helper")
-            self.assertEqual(payload["skills"][0]["origin"], "codex-installed")
+            self.assertEqual(payload["skills"][0]["id"], "agent-helper")
+            self.assertEqual(payload["skills"][0]["origin"], "workspace")
             self.assertTrue(payload["skills"][0]["editable"])
-            self.assertEqual(detail_status, 200)
-            self.assertIn("Installed skill.", detail_payload["skill"]["content"])
-            self.assertEqual(update_status, 200)
-            self.assertEqual(update_payload["skill"]["name"], "Changed Helper")
-            self.assertIn("Updated installed skill content.", agent_skill.joinpath("SKILL.md").read_text(encoding="utf-8"))
-            self.assertEqual(import_status, 200)
-            self.assertEqual(import_payload["skill"]["id"], "agent-helper")
-            self.assertTrue(import_payload["skill"]["editable"])
+            detail_status, detail_payload = service.handle_action(data_root, {"action": "get_skill", "skill_id": "external-agent-helper"})
+            self.assertEqual(detail_status, 404)
+            self.assertEqual(detail_payload["error"], "skill_not_found")
 
     def test_bootstrap_installs_skills_and_exposes_surfaces(self) -> None:
         repo_root = self.make_repo_root()
@@ -192,14 +173,15 @@ class SkillsAppTestCase(unittest.TestCase):
         bindings = state.app_store.list_workspace_app_bindings("default")
         self.assertIn("skills", {binding.app_id for binding in bindings})
         self.assertTrue((repo_root / "workspaces" / "default" / "data" / "skills" / "state.json").is_file())
+        self.assertTrue((repo_root / "workspaces" / "default" / "data" / "skills" / "skills" / "skills-ops" / "SKILL.md").is_file())
 
         tools = list_mcp_tools(app_store=state.app_store, workspace_id="default", start_path=repo_root)
         commands = list_core_cli_commands(app_store=state.app_store, workspace_id="default", start_path=repo_root)
-        skills = list_visible_platform_skills(app_store=state.app_store, workspace_id="default", start_path=repo_root)
+        skills = list_available_workspace_skills(workspace_id="default", start_path=repo_root)
 
         self.assertIn("app.skills.maverick_skills_app", [tool.tool_name for tool in tools])
         self.assertIn("app.skills.skills", [command.command_id for command in commands])
-        self.assertIn("app.skills.skills-ops", [skill.skill_id for skill in skills])
+        self.assertIn("skills-ops", [skill.skill_id for skill in skills])
 
     def test_platform_backend_mount_returns_skills_catalog(self) -> None:
         repo_root = self.make_repo_root()
@@ -217,7 +199,7 @@ class SkillsAppTestCase(unittest.TestCase):
         self.assertEqual(create_status, 200)
         self.assertEqual(create_payload["skill"]["id"], "sales-call")
         self.assertEqual(catalog_status, 200)
-        self.assertEqual(catalog_payload["skills"][0]["id"], "sales-call")
+        self.assertIn("sales-call", [skill["id"] for skill in catalog_payload["skills"]])
 
     def test_mcp_and_cli_call_catalog(self) -> None:
         repo_root = self.make_repo_root()

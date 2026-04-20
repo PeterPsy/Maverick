@@ -27,7 +27,7 @@ from core.providers.service import prepare_runtime_skills, register_builtin_prov
 from core.providers.store import MongoProviderStore, ProviderCollections
 from core.runtime.service import create_runtime_session
 from core.runtime.store import MongoRuntimeStore, RuntimeCollections
-from core.skills.service import list_visible_platform_skills
+from core.skills.service import list_available_workspace_skills, resolve_runtime_skills
 from core.workspaces.store import MongoWorkspaceStore, WorkspaceCollections
 from core.workspaces.service import ensure_default_workspace_record
 
@@ -110,13 +110,11 @@ class Phase9SurfacesBase(unittest.TestCase):
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
         repo_root = Path(temp_dir.name) / "maverick-v3"
-        for name in ("core", "apps", "workspaces", "local-skills", "scripts"):
+        for name in ("core", "apps", "workspaces", "scripts"):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
         (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
         (repo_root / "IMPLEMENTATION_TASKLIST.md").write_text("", encoding="utf-8")
-        (repo_root / "local-skills" / "core-ops").mkdir(parents=True, exist_ok=True)
-        (repo_root / "local-skills" / "core-ops" / "SKILL.md").write_text("# Core Ops\n", encoding="utf-8")
         return repo_root
 
     def write_app_contract(self, app_root: Path, *, skill_id: str = "task-helper") -> None:

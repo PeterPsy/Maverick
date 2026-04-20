@@ -91,7 +91,7 @@ class Phase7ProvidersTestCase(unittest.TestCase):
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
         repo_root = Path(temp_dir.name) / "maverick-v3"
-        for name in ("core", "apps", "workspaces", "docs", "local-skills", "scripts"):
+        for name in ("core", "apps", "workspaces", "docs", "scripts"):
             target = repo_root / name
             if name == "docs":
                 (target / "architecture").mkdir(parents=True, exist_ok=True)
@@ -224,7 +224,7 @@ class Phase7ProvidersTestCase(unittest.TestCase):
         self.assertIn("--workspace-root", launch_spec.command)
         self.assertIn(str(repo_root / "workspaces" / "acme"), launch_spec.command)
         self.assertIn("--runtime-root", launch_spec.command)
-        self.assertIn(str(repo_root / "workspaces" / "acme" / "runtime"), launch_spec.command)
+        self.assertIn(str(repo_root / "workspaces" / "acme" / "runtime" / "sessions" / "sess-1"), launch_spec.command)
         separator_index = launch_spec.command.index("--")
         self.assertEqual(
             launch_spec.command[separator_index + 1 : separator_index + 6],
@@ -238,7 +238,7 @@ class Phase7ProvidersTestCase(unittest.TestCase):
         self.assertEqual(launch_spec.writable_roots, [str(repo_root / "workspaces" / "acme")])
         self.assertIn("CODEX_HOME", launch_spec.env_overrides)
         self.assertEqual(launch_spec.env_overrides["MAVERICK_WORKSPACE_ROOT"], str(repo_root / "workspaces" / "acme"))
-        self.assertEqual(launch_spec.env_overrides["TMPDIR"], str(repo_root / "workspaces" / "acme" / "runtime"))
+        self.assertEqual(launch_spec.env_overrides["TMPDIR"], str(repo_root / "workspaces" / "acme" / "runtime" / "sessions" / "sess-1"))
         self.assertEqual(launch_spec.env_overrides["HOME"], launch_spec.env_overrides["CODEX_HOME"])
         self.assertIn(str(Path(__file__).resolve().parents[1]), launch_spec.env_overrides["PYTHONPATH"])
         self.assertTrue((Path(launch_spec.env_overrides["CODEX_HOME"])).is_dir())
@@ -337,7 +337,7 @@ class Phase7ProvidersTestCase(unittest.TestCase):
             agent_id="agent-1",
             start_path=repo_root,
         )
-        stale_runtime_home = repo_root / "workspaces" / "default" / "runtime" / "codex-home"
+        stale_runtime_home = repo_root / "workspaces" / "default" / "runtime" / "sessions" / "sess-codex-home" / "codex-home"
         (stale_runtime_home / "plugins").mkdir(parents=True)
         (stale_runtime_home / "cache" / "codex_apps_tools").mkdir(parents=True)
         (stale_runtime_home / ".tmp" / "plugins").mkdir(parents=True)
@@ -350,12 +350,11 @@ class Phase7ProvidersTestCase(unittest.TestCase):
         runtime_home = Path(spec.env_overrides["CODEX_HOME"])
         separator_index = spec.command.index("--")
         self.assertEqual(spec.command[separator_index + 1 : separator_index + 6], ["/bin/echo", "--disable", "apps", "--disable", "plugins"])
-        self.assertEqual(runtime_home, repo_root / "workspaces" / "default" / "runtime" / "codex-home")
+        self.assertEqual(runtime_home, repo_root / "workspaces" / "default" / "runtime" / "sessions" / "sess-codex-home" / "codex-home")
         self.assertEqual((runtime_home / "auth.json").read_text(encoding="utf-8"), '{"tokens": "test"}\n')
         self.assertTrue((runtime_home / "rules" / "base.md").exists())
         self.assertFalse((runtime_home / "rules").is_symlink())
-        self.assertTrue((runtime_home / "skills" / ".system" / "SKILL.md").exists())
-        self.assertFalse((runtime_home / "skills" / ".system").is_symlink())
+        self.assertFalse((runtime_home / "skills" / ".system" / "SKILL.md").exists())
         runtime_config = (runtime_home / "config.toml").read_text(encoding="utf-8")
         self.assertIn('model = "gpt-5.4"', runtime_config)
         self.assertIn("[profiles.default]", runtime_config)

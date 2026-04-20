@@ -18,7 +18,7 @@ Also use `maverick3-code-skill` for any task that touches `/home/ubuntu/maverick
 Before proposing an app plan or changing files, read:
 
 1. `/home/ubuntu/maverick-v3/AGENTS.md`
-2. `/home/ubuntu/maverick-v3/local-skills/maverick3-code-skill/SKILL.md`
+2. `/home/ubuntu/maverick-v3/apps/skills/skills/maverick3-code-skill/SKILL.md`
 3. `/home/ubuntu/maverick-v3/IMPLEMENTATION_TASKLIST.md`
 4. `/home/ubuntu/maverick-v3/docs/architecture/core_architecture.md`
 5. `/home/ubuntu/maverick-v3/docs/architecture/app_contract_architecture.md`

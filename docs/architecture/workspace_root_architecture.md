@@ -183,11 +183,19 @@ Runtime-owned temporary state remains inside:
 ```
 
 This runtime directory is for ephemeral provider state, logs, process metadata, and temporary files.
+Runtime session provider state must be partitioned below that root by runtime session:
+
+```text
+/workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/
+```
+
+Provider-specific homes such as Codex `CODEX_HOME`, runtime-local `TMPDIR`, copied runtime skills, and transient provider binaries live under the session runtime root. The workspace may contain hundreds or thousands of runtime session roots over time, but active provider state must not be shared between concurrent agents unless a provider adapter documents an explicit immutable cache.
 
 So the distinction is:
 
 - `workspace_root` = the writable sandbox boundary for the workspace
 - `runtime/` = runtime-local temporary and operational state, not the provider process cwd
+- `runtime/sessions/<runtime_session_id>/` = one agent session's mutable provider state
 
 Provider processes that operate on workspace files should start in the workspace root.
 
@@ -299,22 +307,24 @@ An app may also ship:
 
 - `skills/`
 
-`skills/` is not an executable interface in the same sense as MCP or CLI.
+`skills/` is bundled template content, not an executable interface in the same sense as MCP or CLI.
 
-It is an instructional layer that helps an agent or operator use the app correctly.
+It is an instructional layer that can be copied by the Skills app into workspace-owned editable skill data.
 
-If skill content is synchronized into a runtime home or other runtime-adjacent location, that synchronization does not make `skills/` an executable boundary.
+Runtime agents do not load app source `skills/` directories directly. Base runtime sessions can use all enabled skill copies under `workspaces/<workspace_id>/data/skills/skills/`; agent-type sessions can narrow that set with explicit workspace skill ids.
+
+If skill content is synchronized into a runtime home or other runtime-adjacent location, that synchronization does not make app source `skills/` an executable boundary.
 
 The executable surfaces remain MCP, CLI, and backend-controlled service interfaces.
 
-The platform host should be able to expose app-contributed MCP, CLI, and skills surfaces once the app is installed and enabled for that workspace.
+The platform host should be able to expose app-contributed MCP and CLI surfaces once the app is installed and enabled for that workspace.
 
 The app declares those surfaces through its contract and source layout, but the core remains responsible for validating them, mounting them, and enforcing workspace boundaries.
 
 That includes:
 
 - enforcing invocation policy for shared MCP and CLI hosts
-- applying platform-level namespacing where needed to avoid collisions between app-owned and core-owned surfaces
+- applying platform-level namespacing where needed to avoid collisions between app-owned and core-owned executable surfaces
 
 Apps may also declare embeddable frontend widgets.
 
@@ -391,7 +401,7 @@ Each app may also ship its own operational surfaces alongside its data model:
 
 - `mcp/` for structured tool access
 - `cli/` for command-oriented local operations
-- `skills/` for procedural guidance on how to use the app correctly
+- `skills/` for procedural skill templates that the Skills app may copy into workspace data
 
 ### App lifecycle in workspaces
 
@@ -1420,7 +1430,7 @@ This directory exists for implementation convenience, not as a separate conceptu
 
 Typical examples of valid content here are:
 
-- runtime session state
+- session-partitioned runtime state
 - active turn state
 - watchdog or recovery markers
 - local runtime process artifacts that are not app-owned data
@@ -1466,7 +1476,7 @@ For the first local runtime implementation, this should also mean:
 
 - the runtime resolves `workspace_id` from trusted runtime ownership, not from arbitrary client-provided path selection
 - child runtime sessions inherit the same workspace root unless a trusted control-plane action explicitly changes scope
-- runtime-local ephemeral state stays under `workspaces/<workspace_id>/runtime/`
+- runtime-local ephemeral state stays under `workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/`
 - `storage/` and `data/` remain separate from runtime process state
 
 ### Default workspace exception

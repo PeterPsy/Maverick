@@ -327,6 +327,53 @@ h3 {
   padding: 16px;
 }
 
+.skill-count {
+  color: var(--agent-muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.skill-picker {
+  display: grid;
+  gap: 8px;
+}
+
+.skill-choice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.72rem;
+  min-height: 3.2rem;
+  border: 1px solid var(--agent-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.045);
+  padding: 0.68rem 0.78rem;
+}
+
+.skill-choice input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--agent-primary);
+}
+
+.skill-choice span {
+  display: grid;
+  gap: 0.24rem;
+  min-width: 0;
+}
+
+.skill-choice strong,
+.skill-choice small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-choice small {
+  color: var(--agent-muted);
+  font-size: 0.76rem;
+}
+
 textarea {
   min-height: 120px;
   resize: vertical;

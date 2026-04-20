@@ -117,7 +117,7 @@ The recommended distribution modes are:
 
 `sealed` apps are installed as non-editable artifacts.
 
-They may expose frontend, backend, MCP, CLI, and skills surfaces, but their app source is not workspace-editable.
+They may expose frontend, backend, MCP, and CLI surfaces, plus bundled skill templates, but their app source is not workspace-editable.
 
 This is the correct mode for commercial closed-source apps, signed vendor bundles, and apps distributed only as runtime artifacts.
 
@@ -374,13 +374,14 @@ The recommended mental model is:
 
 - `mcp/` = structured tool surface
 - `cli/` = command-oriented local surface
-- `skills/` = procedural guidance for using the app's MCP and CLI correctly
+- `skills/` = procedural skill templates that the Skills app can copy into workspace data
 
 Important distinction:
 
 - `mcp/` and `cli/` are executable capability surfaces
 - `skills/` is an instructional asset layer
 - `skills/` is not a runtime interface, security boundary, or governance surface by itself
+- runtime agents may use only workspace-owned skill copies under `data/skills/skills/`
 
 ## Mounted App Model
 
@@ -424,7 +425,7 @@ The rule is:
 
 Examples:
 
-- `chat` may expose a frontend for the user, a backend for app-specific server logic, MCP tools for agents, CLI commands for operators or agents, and skills for procedural guidance
+- `chat` may expose a frontend for the user, a backend for app-specific server logic, MCP tools for agents, CLI commands for operators or agents, and bundled skill templates that the Skills app can copy into workspace data
 - `base-shell` may expose a frontend shell that hosts the frontend of other apps while still being itself only another app mounted by the core
 
 The core remains responsible for:
@@ -480,7 +481,7 @@ The intended split is:
 - `frontend/` for human-facing visual interaction
 - `backend/` for app-specific server logic
 - `mcp/` and `cli/` for agent and operator execution surfaces
-- `skills/` for agent guidance
+- `skills/` for skill templates owned by the app source but copied into workspace Skills app data before runtime use
 
 This is a core design principle.
 
@@ -1052,9 +1053,9 @@ Agents may use:
 
 - chat MCP tools
 - chat CLI commands
-- chat skills
+- workspace-owned skill copies seeded from chat skill templates
 
-The core decides whether those surfaces are available in the current workspace.
+The core decides whether executable MCP and CLI surfaces are available in the current workspace. Runtime skills are selected from the workspace Skills app catalog.
 
 The `base-shell` app may visually host the `chat` frontend.
 
@@ -1161,10 +1162,7 @@ The following example shows the kind of app contract Maverick should expect at p
       "reservations",
       "health"
     ],
-    "skills": [
-      "restaurant-operations",
-      "reservation-repair"
-    ],
+    "skills": [],
     "views": [
       "floor_map",
       "reservation_board"
@@ -1191,7 +1189,6 @@ The following example shows the kind of app contract Maverick should expect at p
     "backend": "backend/app_backend.py",
     "mcp": "backend/mcp/server.py",
     "cli": "backend/cli/app_cli.py",
-    "skills_root": "backend/skills/",
     "hooks": {
       "install": "backend/lifecycle/install.py",
       "migrate": "backend/lifecycle/migrate.py",
@@ -1272,10 +1269,11 @@ Only `mcp/` and `cli/` are executable surfaces.
 The contract declares which surfaces the app exposes, but the platform still decides how they are hosted:
 
 - MCP and CLI are mounted through core-managed platform hosts
-- skills are cataloged by the core as instructional assets
-- provider-specific runtime installation of skill assets is handled by the selected provider adapter
+- app source skills are templates, not directly visible runtime skills
+- the Skills app copies bundled skill templates into workspace-owned editable skill data
+- provider-specific runtime installation of enabled workspace skill assets, optionally narrowed by explicit session skill ids, is handled by the selected provider adapter
 
-When app-owned MCP tools and skills are surfaced through the platform, the host may apply namespacing to avoid collisions with core-owned assets or assets from other apps.
+When app-owned MCP tools are surfaced through the platform, the host may apply namespacing to avoid collisions with core-owned assets or assets from other apps.
 
 ## Core Boundary Rule
 

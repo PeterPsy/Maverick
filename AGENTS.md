@@ -92,11 +92,15 @@ Rules:
 - do not postpone checklist updates until the end of the session when the task has already been closed
 - do not leave TODO notes as a substitute for updating documentation
 
-## Local Skills
+## Skills
 
-- repository-local Codex skills should live under `local-skills/`
-- keep the versioned source of a Maverick v3 skill in this repository, not only in `~/.codex/skills`
-- when a local skill should be available to Codex automatically, install it in `~/.codex/skills` with a symlink to the versioned repo path
+- Maverick product skills are app-owned extension data, not core assets.
+- the versioned source for bundled Maverick skills lives under `apps/skills/skills/`
+- the Skills app copies those bundled skill templates into each workspace under `workspaces/<workspace_id>/data/skills/skills/`
+- base runtime sessions may use every enabled workspace-owned skill copy from the workspace Skills app
+- agent-type runtime sessions may narrow that set with the agent type's selected workspace skill ids
+- do not rely on `~/.codex/skills`, plugin skills, or repository `local-skills/` as Maverick runtime skill sources
+- Codex provider-generated system skills under `CODEX_HOME/skills/.system` are not Maverick product skills and must be removed from Maverick-managed runtime homes
 
 ## Testing And Verification
 

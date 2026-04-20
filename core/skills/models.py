@@ -1,4 +1,4 @@
-"""Models for core-owned and app-contributed skill assets."""
+"""Models for workspace-owned runtime skill assets."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 
-SkillOwnerKind = Literal["core", "app"]
+SkillOwnerKind = Literal["workspace"]
 SkillStatus = Literal["available", "disabled"]
 SkillMaterializationStrategy = Literal["symlink", "copy"]
 

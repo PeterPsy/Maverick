@@ -18,7 +18,6 @@ from core.cli.service import list_core_cli_commands, run_core_cli_command
 from core.mcp.models import McpInvocationContext
 from core.mcp.service import call_mcp_tool, list_mcp_tools
 from core.shared.entrypoints import run_json_entrypoint
-from core.skills.service import list_visible_platform_skills
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -30,7 +29,7 @@ class GalleryAppTestCase(unittest.TestCase):
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
         repo_root = Path(temp_dir.name) / "maverick-v3"
-        for name in ("core", "apps", "workspaces", "local-skills", "scripts"):
+        for name in ("core", "apps", "workspaces", "scripts"):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
         (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
@@ -97,7 +96,7 @@ class GalleryAppTestCase(unittest.TestCase):
         self.assertEqual(parsed.contract.entrypoints.frontend, "frontend/dist")
         self.assertEqual(parsed.contract.capabilities.mcp_tools, ["maverick_gallery"])
         self.assertEqual(parsed.contract.capabilities.cli_commands, ["gallery"])
-        self.assertEqual(parsed.contract.capabilities.skills, ["gallery-ops"])
+        self.assertEqual(parsed.contract.capabilities.skills, [])
         self.assertEqual(len(parsed.contract.widgets), 1)
         widget = parsed.contract.widgets[0]
         self.assertEqual(widget.widget_id, "file-preview")
@@ -279,11 +278,9 @@ class GalleryAppTestCase(unittest.TestCase):
 
         tools = list_mcp_tools(app_store=state.app_store, workspace_id="default", start_path=repo_root)
         commands = list_core_cli_commands(app_store=state.app_store, workspace_id="default", start_path=repo_root)
-        skills = list_visible_platform_skills(app_store=state.app_store, workspace_id="default", start_path=repo_root)
 
         self.assertIn("app.gallery.maverick_gallery", [tool.tool_name for tool in tools])
         self.assertIn("app.gallery.gallery", [command.command_id for command in commands])
-        self.assertIn("app.gallery.gallery-ops", [skill.skill_id for skill in skills])
 
     def test_platform_backend_and_frontend_mount_gallery(self) -> None:
         repo_root = self.make_repo_root()

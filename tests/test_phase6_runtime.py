@@ -81,7 +81,6 @@ class Phase6RuntimeTestCase(unittest.TestCase):
         (repo_root / "apps").mkdir()
         (repo_root / "workspaces").mkdir()
         (repo_root / "docs" / "architecture").mkdir(parents=True)
-        (repo_root / "local-skills").mkdir()
         (repo_root / "scripts").mkdir()
         (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
         (repo_root / "IMPLEMENTATION_TASKLIST.md").write_text("", encoding="utf-8")
@@ -98,7 +97,7 @@ class Phase6RuntimeTestCase(unittest.TestCase):
             workspace_id="acme",
             agent_id="agent-1",
             system_prompt="You are a focused test agent.",
-            skill_ids=["app.agents.agents-ops"],
+            skill_ids=["agents-ops"],
             source_app_id="agents",
             now=now,
             start_path=repo_root,
@@ -109,9 +108,9 @@ class Phase6RuntimeTestCase(unittest.TestCase):
         self.assertEqual(session.effective_mode, "sandbox")
         self.assertEqual(Path(session.workspace_root), repo_root / "workspaces" / "acme")
         self.assertEqual(Path(session.workdir), repo_root / "workspaces" / "acme")
-        self.assertEqual(Path(session.runtime_root), repo_root / "workspaces" / "acme" / "runtime")
+        self.assertEqual(Path(session.runtime_root), repo_root / "workspaces" / "acme" / "runtime" / "sessions" / "sess-1")
         self.assertEqual(session.system_prompt, "You are a focused test agent.")
-        self.assertEqual(session.skill_ids, ["app.agents.agents-ops"])
+        self.assertEqual(session.skill_ids, ["agents-ops"])
         self.assertEqual(session.source_app_id, "agents")
         self.assertIsNone(session.provider_thread_id)
         self.assertEqual(store.get_state("sess-1").session_status, "created")
@@ -252,12 +251,14 @@ class Phase6RuntimeTestCase(unittest.TestCase):
     def test_workspace_aware_routing_enforces_sandbox_and_full_access(self) -> None:
         repo_root = self.make_repo_root()
         sandbox_route = build_runtime_routing(
+            session_id="sess-sandbox",
             workspace_id="acme",
             agent_id="agent-1",
             requested_mode="full-access",
             start_path=repo_root,
         )
         full_access_route = build_runtime_routing(
+            session_id="sess-full-access",
             workspace_id="default",
             agent_id="agent-ops",
             requested_mode="full-access",
@@ -266,6 +267,7 @@ class Phase6RuntimeTestCase(unittest.TestCase):
             start_path=repo_root,
         )
         default_route = build_runtime_routing(
+            session_id="sess-default",
             workspace_id="default",
             agent_id="agent-ops",
             governance=default_workspace_governance("default"),
@@ -273,6 +275,7 @@ class Phase6RuntimeTestCase(unittest.TestCase):
             start_path=repo_root,
         )
         explicit_sandbox_route = build_runtime_routing(
+            session_id="sess-explicit-sandbox",
             workspace_id="default",
             agent_id="agent-ops",
             requested_mode="sandbox",
@@ -284,6 +287,7 @@ class Phase6RuntimeTestCase(unittest.TestCase):
         self.assertEqual(sandbox_route.effective_mode, "sandbox")
         self.assertEqual(sandbox_route.readable_roots, [str(repo_root / "workspaces" / "acme")])
         self.assertEqual(sandbox_route.writable_roots, [str(repo_root / "workspaces" / "acme")])
+        self.assertEqual(sandbox_route.runtime_root, str(repo_root / "workspaces" / "acme" / "runtime" / "sessions" / "sess-sandbox"))
         self.assertFalse(sandbox_route.allows_outside_workspace_root)
         self.assertEqual(full_access_route.effective_mode, "full-access")
         self.assertEqual(full_access_route.readable_roots, ["/"])
@@ -319,7 +323,8 @@ class Phase6RuntimeTestCase(unittest.TestCase):
         self.assertEqual(child.workspace_id, parent.workspace_id)
         self.assertEqual(child.workspace_root, parent.workspace_root)
         self.assertEqual(child.workdir, parent.workdir)
-        self.assertEqual(child.runtime_root, parent.runtime_root)
+        self.assertEqual(Path(child.runtime_root), Path(parent.runtime_root).parent / "child")
+        self.assertNotEqual(child.runtime_root, parent.runtime_root)
         self.assertEqual(child.effective_mode, parent.effective_mode)
 
     def test_runtime_session_transition_updates_state(self) -> None:

@@ -25,11 +25,9 @@ class TestPhase9SurfaceLifecycle(Phase9SurfacesBase):
 
         tools = list_mcp_tools(app_store=store, workspace_id="default", start_path=repo_root)
         commands = list_core_cli_commands(app_store=store, workspace_id="default", start_path=repo_root)
-        skills = list_visible_platform_skills(app_store=store, workspace_id="default", start_path=repo_root)
 
         self.assertNotIn("app.checklists.checklists.list", [tool.tool_name for tool in tools])
         self.assertNotIn("app.checklists.checklists", [command.command_id for command in commands])
-        self.assertNotIn("app.checklists.task-helper", [skill.skill_id for skill in skills if skill.owner_kind == "app"])
 
     def test_app_tool_names_are_namespaced_to_avoid_cross_app_collisions(self) -> None:
         store = self.make_app_store()

@@ -1,3 +1,0 @@
-display_name: Maverick v3 App Creator
-short_description: Create clean-slate Maverick v3 apps from scratch.
-default_prompt: "Create a new Maverick v3 app from scratch with a contract-first plan, app-owned data layout, declared surfaces, implementation, tests, docs, tasklist updates, and verification."

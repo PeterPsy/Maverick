@@ -17,7 +17,6 @@ from core.cli.models import CliInvocationContext
 from core.cli.service import list_core_cli_commands, run_core_cli_command
 from core.mcp.models import McpInvocationContext
 from core.mcp.service import call_mcp_tool, list_mcp_tools
-from core.skills.service import list_visible_platform_skills
 
 
 AGENTS_BACKEND = Path(__file__).resolve().parents[1] / "apps" / "agents" / "backend"
@@ -33,7 +32,7 @@ class AgentsAppTestCase(unittest.TestCase):
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
         repo_root = Path(temp_dir.name) / "maverick-v3"
-        for name in ("core", "apps", "workspaces", "local-skills", "scripts"):
+        for name in ("core", "apps", "workspaces", "scripts"):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
         (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
@@ -77,7 +76,7 @@ class AgentsAppTestCase(unittest.TestCase):
         self.assertEqual(parsed.contract.entrypoints.frontend, "frontend/dist")
         self.assertEqual(parsed.contract.capabilities.mcp_tools, ["maverick_agents_app"])
         self.assertEqual(parsed.contract.capabilities.cli_commands, ["agents"])
-        self.assertEqual(parsed.contract.capabilities.skills, ["agents-ops"])
+        self.assertEqual(parsed.contract.capabilities.skills, [])
 
     def test_seed_defaults_create_all_roles_and_agent_types(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -152,11 +151,9 @@ class AgentsAppTestCase(unittest.TestCase):
 
         tools = list_mcp_tools(app_store=state.app_store, workspace_id="default", start_path=repo_root)
         commands = list_core_cli_commands(app_store=state.app_store, workspace_id="default", start_path=repo_root)
-        skills = list_visible_platform_skills(app_store=state.app_store, workspace_id="default", start_path=repo_root)
 
         self.assertIn("app.agents.maverick_agents_app", [tool.tool_name for tool in tools])
         self.assertIn("app.agents.agents", [command.command_id for command in commands])
-        self.assertIn("app.agents.agents-ops", [skill.skill_id for skill in skills])
 
     def test_platform_backend_mount_returns_agents_catalog(self) -> None:
         repo_root = self.make_repo_root()

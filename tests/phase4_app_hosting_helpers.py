@@ -95,7 +95,7 @@ class Phase4AppHostingBase(unittest.TestCase):
             '[project]\nname = "maverick-v3"\nversion = "0.1.0"\n',
             encoding="utf-8",
         )
-        for name in ("core", "apps", "workspaces", "docs", "local-skills", "scripts", "tests"):
+        for name in ("core", "apps", "workspaces", "docs", "scripts", "tests"):
             (root / name).mkdir(parents=True, exist_ok=True)
         return root
 

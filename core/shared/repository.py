@@ -19,7 +19,6 @@ class InstallationPaths:
     runtime_logs_root: Path
     docs_root: Path
     architecture_docs_root: Path
-    local_skills_root: Path
     scripts_root: Path
 
 
@@ -53,6 +52,5 @@ def installation_paths(start_path: Path | None = None) -> InstallationPaths:
         runtime_logs_root=logs_root / "runtime",
         docs_root=docs_root,
         architecture_docs_root=docs_root / "architecture",
-        local_skills_root=repository_root / "local-skills",
         scripts_root=repository_root / "scripts",
     )

@@ -1,103 +1,112 @@
-"""Catalog builders for core-owned and app-contributed skill assets."""
+"""Catalog builders for workspace-owned runtime skill assets."""
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
-from core.apps.surfaces import enabled_workspace_app_bindings, resolve_workspace_app_surface
-from core.apps.store import AppStore
-from core.shared.repository import installation_paths
 from core.skills.models import SkillDefinition
+from core.apps.paths import workspace_app_data_root
 
 
-def _iter_skill_roots(parent: Path) -> list[Path]:
-    if not parent.exists():
+def workspace_skills_data_root(workspace_id: str, start_path: Path | None = None) -> Path:
+    """Return the Skills app data root for one workspace."""
+    return workspace_app_data_root(workspace_id=workspace_id, app_id="skills", start_path=start_path)
+
+
+def workspace_skills_root(workspace_id: str, start_path: Path | None = None) -> Path:
+    """Return the workspace-owned skill directory for one workspace."""
+    return workspace_skills_data_root(workspace_id=workspace_id, start_path=start_path) / "skills"
+
+
+def list_workspace_skills(*, workspace_id: str, start_path: Path | None = None) -> list[SkillDefinition]:
+    """List enabled workspace-owned skills available to Codex runtimes."""
+    root = workspace_skills_root(workspace_id=workspace_id, start_path=start_path)
+    if not root.exists():
         return []
-    return sorted(
-        [path for path in parent.iterdir() if path.is_dir() and (path / "SKILL.md").is_file()],
-        key=lambda item: item.name,
-    )
-
-
-def list_core_skills(*, start_path: Path | None = None) -> list[SkillDefinition]:
-    """List repository-local core-owned skills."""
-    paths = installation_paths(start_path=start_path)
+    metadata = _workspace_skill_metadata(workspace_id=workspace_id, start_path=start_path)
     skills: list[SkillDefinition] = []
-    for skill_root in _iter_skill_roots(paths.local_skills_root):
+    for skill_root in sorted((path for path in root.iterdir() if path.is_dir()), key=lambda item: item.name):
+        skill_file = skill_root / "SKILL.md"
+        if not skill_file.is_file():
+            continue
+        item_metadata = metadata.get(skill_root.name, {})
+        if item_metadata and not bool(item_metadata.get("enabled", True)):
+            continue
+        frontmatter = _read_skill_frontmatter(skill_file)
         skills.append(
             SkillDefinition(
-                skill_id=f"core.{skill_root.name}",
+                skill_id=skill_root.name,
                 local_skill_id=skill_root.name,
-                name=skill_root.name,
-                description=f"Core skill `{skill_root.name}`.",
+                name=str(item_metadata.get("name") or frontmatter.get("name") or skill_root.name),
+                description=str(
+                    item_metadata.get("description")
+                    or frontmatter.get("description")
+                    or f"Workspace skill `{skill_root.name}`."
+                ),
                 source_root=str(skill_root.resolve()),
-                owner_kind="core",
-                owner_id="core",
-                workspace_id=None,
+                owner_kind="workspace",
+                owner_id=workspace_id,
+                workspace_id=workspace_id,
                 status="available",
             )
         )
     return skills
 
 
-def list_workspace_app_skills(
-    store: AppStore,
+def resolve_workspace_skills(
     *,
     workspace_id: str,
+    skill_ids: list[str],
     start_path: Path | None = None,
 ) -> list[SkillDefinition]:
-    """List visible app-contributed skill assets for one workspace."""
-    skills: list[SkillDefinition] = []
-    for binding in enabled_workspace_app_bindings(store, workspace_id=workspace_id):
-        source_root, parsed = resolve_workspace_app_surface(store, binding=binding, start_path=start_path)
-        if not parsed.contract.capabilities.skills:
-            continue
-        if parsed.contract.entrypoints.skills_root is None:
-            raise ValueError(
-                f"App `{parsed.app_id}` declares skills but no skills root in its contract."
-            )
-        skills_root = (source_root / parsed.contract.entrypoints.skills_root).resolve()
-        if not skills_root.is_dir():
-            raise ValueError(f"App `{parsed.app_id}` skills root `{skills_root}` does not exist.")
-        for skill_id in parsed.contract.capabilities.skills:
-            candidate_root = skills_root / skill_id
-            if (candidate_root / "SKILL.md").is_file():
-                resolved_root = candidate_root
-            elif len(parsed.contract.capabilities.skills) == 1 and (skills_root / "SKILL.md").is_file():
-                resolved_root = skills_root
-            else:
-                raise ValueError(
-                    f"App `{parsed.app_id}` skill `{skill_id}` was declared but no matching SKILL.md was found."
-                )
-            skills.append(
-                SkillDefinition(
-                    skill_id=f"app.{parsed.app_id}.{skill_id}",
-                    local_skill_id=skill_id,
-                    name=skill_id,
-                    description=f"App skill `{skill_id}` from `{parsed.app_id}`.",
-                    source_root=str(resolved_root),
-                    owner_kind="app",
-                    owner_id=parsed.app_id,
-                    workspace_id=workspace_id,
-                    status="available",
-                )
-            )
-    return skills
-
-
-def list_visible_skills(
-    *,
-    app_store: AppStore | None = None,
-    workspace_id: str | None = None,
-    start_path: Path | None = None,
-) -> list[SkillDefinition]:
-    """List all visible skills for the requested workspace context."""
-    skills = list_core_skills(start_path=start_path)
-    if app_store is not None and workspace_id is not None:
-        skills.extend(list_workspace_app_skills(app_store, workspace_id=workspace_id, start_path=start_path))
+    """Resolve explicit skill ids from the workspace-owned skill catalog."""
+    requested: list[str] = []
     seen: set[str] = set()
-    for skill in skills:
-        if skill.skill_id in seen:
-            raise ValueError(f"Skill `{skill.skill_id}` is registered more than once.")
-        seen.add(skill.skill_id)
-    return sorted(skills, key=lambda item: (item.owner_kind, item.skill_id))
+    for skill_id in skill_ids:
+        normalized = str(skill_id or "").strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        requested.append(normalized)
+    available = {skill.skill_id: skill for skill in list_workspace_skills(workspace_id=workspace_id, start_path=start_path)}
+    missing = [skill_id for skill_id in requested if skill_id not in available]
+    if missing:
+        raise ValueError(f"Unknown workspace skill ids for workspace `{workspace_id}`: {', '.join(missing)}")
+    return [available[skill_id] for skill_id in requested]
+
+
+def _workspace_skill_metadata(*, workspace_id: str, start_path: Path | None = None) -> dict[str, dict]:
+    state_path = workspace_skills_data_root(workspace_id=workspace_id, start_path=start_path) / "state.json"
+    if not state_path.is_file():
+        return {}
+    try:
+        payload = json.loads(state_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    skills = payload.get("skills") if isinstance(payload, dict) else None
+    if not isinstance(skills, list):
+        return {}
+    metadata: dict[str, dict] = {}
+    for item in skills:
+        if isinstance(item, dict) and isinstance(item.get("id"), str):
+            metadata[item["id"]] = item
+    return metadata
+
+
+def _read_skill_frontmatter(skill_file: Path) -> dict[str, str]:
+    raw = skill_file.read_text(encoding="utf-8")
+    if not raw.startswith("---\n"):
+        return {}
+    try:
+        _prefix, remainder = raw.split("---\n", 1)
+        header, _body = remainder.split("\n---\n", 1)
+    except ValueError:
+        return {}
+    fields: dict[str, str] = {}
+    for line in header.splitlines():
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        fields[key.strip()] = value.strip().strip('"')
+    return fields

@@ -17,9 +17,7 @@
     "cli_commands": [
       "skills"
     ],
-    "skills": [
-      "skills-ops"
-    ],
+    "skills": [],
     "views": [
       "skills"
     ]

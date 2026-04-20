@@ -23,7 +23,6 @@ from core.cli.models import CliInvocationContext
 from core.cli.service import list_core_cli_commands, run_core_cli_command
 from core.mcp.models import McpInvocationContext
 from core.mcp.service import call_mcp_tool, list_mcp_tools
-from core.skills.service import list_visible_platform_skills
 
 
 class AppStoreAppTestCase(unittest.TestCase):
@@ -33,7 +32,7 @@ class AppStoreAppTestCase(unittest.TestCase):
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
         repo_root = Path(temp_dir.name) / "maverick-v3"
-        for name in ("core", "apps", "workspaces", "local-skills", "scripts"):
+        for name in ("core", "apps", "workspaces", "scripts"):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
         (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
@@ -310,7 +309,7 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertEqual(parsed.contract.entrypoints.backend, "backend/app_backend.py")
         self.assertEqual(parsed.contract.capabilities.mcp_tools, ["maverick_app_store"])
         self.assertEqual(parsed.contract.capabilities.cli_commands, ["app-store"])
-        self.assertEqual(parsed.contract.capabilities.skills, ["app-store-ops"])
+        self.assertEqual(parsed.contract.capabilities.skills, [])
         widgets = {widget.widget_id: widget for widget in parsed.contract.widgets}
         self.assertEqual(widgets["app-shortcuts"].host, "base-shell")
         self.assertEqual(widgets["app-shortcuts"].content_kinds, ["shell.sidebar.apps"])
@@ -329,11 +328,9 @@ class AppStoreAppTestCase(unittest.TestCase):
 
         tools = list_mcp_tools(app_store=state.app_store, workspace_id="default", start_path=repo_root)
         commands = list_core_cli_commands(app_store=state.app_store, workspace_id="default", start_path=repo_root)
-        skills = list_visible_platform_skills(app_store=state.app_store, workspace_id="default", start_path=repo_root)
 
         self.assertIn("app.app-store.maverick_app_store", [tool.tool_name for tool in tools])
         self.assertIn("app.app-store.app-store", [command.command_id for command in commands])
-        self.assertIn("app.app-store.app-store-ops", [skill.skill_id for skill in skills])
 
     def test_frontend_is_mounted_as_an_app(self) -> None:
         repo_root = self.make_repo_root()

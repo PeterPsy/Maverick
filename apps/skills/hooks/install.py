@@ -8,8 +8,9 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
-from store import ensure_data_root
+from seeds import seed_default_skills
 
 
 payload = json.loads(sys.stdin.read() or "{}")
-ensure_data_root(Path(payload["data_root"]))
+repository_root = Path(__file__).resolve().parents[3]
+seed_default_skills(Path(payload["data_root"]), repository_root=repository_root)

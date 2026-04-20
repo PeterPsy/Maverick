@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import mimetypes
-import os
 from pathlib import Path
 from uuid import uuid4
 
@@ -177,7 +176,6 @@ def handle_app_backend(
                 "data_root": binding.data_root,
                 "uploaded_storage_root": str(paths.uploaded_storage),
                 "generated_storage_root": str(paths.generated_storage),
-                "agent_skill_roots": _agent_skill_roots(),
                 "route_path": environ.get("PATH_INFO", ""),
                 "method": method,
                 "query": query_params(environ),
@@ -213,11 +211,6 @@ def handle_app_backend(
     if "body" in result:
         return text_response(start_response, str(result["body"]), status=status_line(status_code))
     return json_response(start_response, result, status=status_line(status_code))
-
-
-def _agent_skill_roots() -> list[str]:
-    codex_home = Path(os.environ.get("CODEX_HOME") or (Path.home() / ".codex"))
-    return [str(codex_home / "skills"), str(codex_home / "plugins" / "cache")]
 
 
 def _handle_app_backend_side_effects(

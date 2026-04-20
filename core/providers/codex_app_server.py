@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import json
+from pathlib import Path
 import queue
 import subprocess
 import threading
 from typing import Any, Callable
 
 from core.providers.models import RuntimeBackendLaunchSpec
+from core.providers.provider_codex import remove_codex_system_skills
 from core.runtime.execution_events import RuntimeExecutionEvent, RuntimeExecutionEventSink, parse_provider_json_event
 from core.runtime.process_control import register_runtime_process, unregister_runtime_process
 from core.runtime.runtime_session import RuntimeSessionRecord
@@ -60,6 +62,7 @@ def execute_codex_app_server_turn(
 ) -> CodexAppServerTurnResult:
     """Execute one turn against a persistent Codex app-server thread."""
     runtime = _ensure_runtime(session=session, launch_spec=launch_spec, command_runner=command_runner)
+    _remove_generated_system_skills(launch_spec=launch_spec, session=session)
     provider_thread_id = _ensure_provider_thread(runtime=runtime, session=session, launch_spec=launch_spec, on_provider_thread_id=on_provider_thread_id)
     with runtime.event_lock:
         runtime.current_event_sink = event_sink
@@ -166,6 +169,7 @@ def _ensure_runtime(
         runtime.reader_thread.start()
 
     _send_request(runtime, "initialize", {"clientInfo": {"name": "maverick-v3", "version": "3.0.0"}}, timeout=10.0)
+    _remove_generated_system_skills(launch_spec=launch_spec, session=session)
     return runtime
 
 
@@ -205,6 +209,12 @@ def _thread_params(*, session: RuntimeSessionRecord, launch_spec: RuntimeBackend
         "developerInstructions": session.system_prompt or "",
         "config": {"mcp_servers": {}},
     }
+
+
+def _remove_generated_system_skills(*, launch_spec: RuntimeBackendLaunchSpec, session: RuntimeSessionRecord) -> None:
+    raw_runtime_home = str(launch_spec.env_overrides.get("CODEX_HOME") or "").strip()
+    runtime_home = raw_runtime_home or f"{session.runtime_root}/codex-home"
+    remove_codex_system_skills(Path(runtime_home))
 
 
 def _turn_sandbox_policy(launch_spec: RuntimeBackendLaunchSpec) -> dict[str, Any]:

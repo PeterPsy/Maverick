@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 
 CODEX_RUNTIME_HOME_FILES = ("auth.json", "version.json", ".personality_migration", "installation_id")
 CODEX_DISABLED_RUNTIME_FEATURES = ("apps", "plugins")
+CODEX_SYSTEM_SKILLS_ROOT = ".system"
 CODEX_MANAGED_RUNTIME_FEATURES = {
     "apps": False,
     "plugins": False,
@@ -259,8 +260,8 @@ class CodexProviderAdapter:
             execution_mode=session.effective_mode,
         )
         self._link_or_copy_if_present(source_home / "rules", runtime_home / "rules")
-        self._link_or_copy_if_present(source_home / "skills" / ".system", runtime_home / "skills" / ".system")
         self._remove_disabled_runtime_material(runtime_home)
+        remove_codex_system_skills(runtime_home)
         return runtime_home
 
     def _source_codex_home(self) -> Path:
@@ -339,6 +340,7 @@ class CodexProviderAdapter:
     def _remove_disabled_runtime_material(self, runtime_home: Path) -> None:
         for path in (
             runtime_home / "plugins",
+            runtime_home / "skills" / CODEX_SYSTEM_SKILLS_ROOT,
             runtime_home / "cache" / "codex_apps_tools",
             runtime_home / ".tmp" / "plugins",
             runtime_home / ".tmp" / "plugins.sha",
@@ -447,3 +449,13 @@ class CodexProviderAdapter:
             seen.add(entry)
             unique.append(entry)
         return os.pathsep.join(unique)
+
+
+def remove_codex_system_skills(runtime_home: Path) -> None:
+    """Remove Codex-generated system skills from a Maverick-managed runtime home."""
+    system_root = Path(runtime_home) / "skills" / CODEX_SYSTEM_SKILLS_ROOT
+    if system_root.is_symlink() or system_root.is_file():
+        system_root.unlink(missing_ok=True)
+        return
+    if system_root.is_dir():
+        shutil.rmtree(system_root, ignore_errors=True)

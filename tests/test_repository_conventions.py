@@ -18,9 +18,7 @@ class RepositoryConventionsTestCase(unittest.TestCase):
         self.assertEqual(paths.apps_root, paths.repository_root / "apps")
         self.assertEqual(paths.workspaces_root, paths.repository_root / "workspaces")
         self.assertEqual(paths.architecture_docs_root, paths.repository_root / "docs" / "architecture")
-        self.assertEqual(paths.local_skills_root, paths.repository_root / "local-skills")
 
 
 if __name__ == "__main__":
     unittest.main()
-

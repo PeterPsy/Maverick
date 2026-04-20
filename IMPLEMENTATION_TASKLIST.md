@@ -278,6 +278,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] express sandbox `readable_roots` in runtime routing and provider launch specs
   - [x] launch workspace runtime providers from the workspace root instead of a runtime-only working directory
   - [x] keep `runtime/` ephemeral and separate from `storage/` and `data/`
+  - [x] partition runtime provider state by runtime session under `runtime/sessions/<runtime_session_id>/`
 - [x] Implement `full-access` execution mode
   - [x] keep it operator-only and policy-gated
   - [x] do not require remote-node or distributed-runtime support for the first local implementation
@@ -312,8 +313,9 @@ without carrying forward legacy structure or backward-compatibility constraints 
     - [x] sanitize inherited Codex config so stale MCP server and plugin sections are not imported into every runtime
     - [x] disable Codex apps/plugins for Maverick-managed runtime sessions and remove runtime-home plugin residue before launch
     - [x] write managed Codex runtime feature flags that disable apps, plugins, and skill MCP dependency installation
+    - [x] remove Codex provider-generated `skills/.system` entries before Maverick starts or resumes provider threads
     - [x] strip sandboxed Codex project trust entries that point outside the active workspace
-    - [x] copy runtime rules and selected skills into the session-local runtime home instead of symlinking outside the workspace
+    - [x] copy runtime rules and enabled workspace skills into the session-local runtime home instead of symlinking outside the workspace
     - [x] wrap sandbox app-server launches in a workspace-only OS sandbox and fail closed if read/write confinement is unavailable
     - [x] mount host DNS resolver metadata read-only when required by sandboxed Codex app-server networking
     - [x] send Codex app-server `readOnlyAccess` policy so sandboxed turns cannot read arbitrary host paths
@@ -358,12 +360,14 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] execute app-owned CLI entrypoints through a platform-managed host
   - [x] expose core-owned per-app lifecycle CLI commands for install, uninstall, and workspace-local remove when available
   - [x] return operational core data when the relevant control-plane stores are available
-- [x] Implement core skills loading model
-  - [x] load and index core-owned skills as instructional assets
+- [x] Implement workspace-owned skills loading model
+  - [x] keep core free of preinstalled runtime skills
+  - [x] load and index only Skills app workspace-owned skill copies for runtime assignment
+  - [x] seed bundled app skill templates into workspace Skills app data during install and migration
   - [x] allow controlled runtime materialization or synchronization of skill content when needed
   - [x] keep skill loading separate from runtime session lifecycle
   - [x] delegate runtime skill installation strategy to the selected provider adapter
-  - [x] namespace visible skill ids to avoid core-app and app-app collisions
+  - [x] keep runtime skill ids scoped to the workspace Skills app catalog
 - [x] Define which core operations are exposed:
   - [x] MCP only
   - [x] CLI only
@@ -726,10 +730,9 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] implement `skills-ops` skill
   - [x] implement a React/Vite management frontend
   - [x] align the Skills frontend with the dark Agents visual theme
-  - [x] include host Codex agent skills in the Skills app catalog
-  - [x] surface installed skill origin and source path without making host-agent skills workspace-owned
-  - [x] let operators edit writable installed agent skill `SKILL.md` files directly from the Skills app
-  - [x] let operators import an installed agent skill as an editable workspace-owned copy
+  - [x] copy bundled skill templates into each workspace as editable Skills app data
+  - [x] remove host Codex agent skill discovery from the Skills app catalog
+  - [x] install all enabled workspace skills for base Codex sessions and allow agent types to narrow that set with selected skill ids
 - [x] Decide whether `memory` is in the first wave or the second wave
   - [x] second wave
 - [x] For each built-in app, enforce:

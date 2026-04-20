@@ -21,6 +21,13 @@ type AgentType = {
   enabled: boolean;
 };
 
+type SkillSummary = {
+  id: string;
+  name: string;
+  description: string;
+  enabled: boolean;
+};
+
 type Catalog = {
   common_prompt: string;
   roles: Role[];
@@ -67,18 +74,36 @@ async function callBackend<T>(body: Record<string, unknown>): Promise<T> {
   return payload as T;
 }
 
+async function callSkillsBackend<T>(body: Record<string, unknown>): Promise<T> {
+  const response = await fetch('/api/apps/skills/backend', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const payload = await response.json();
+  if (!response.ok) {
+    throw new Error(payload.detail || payload.error || 'Skills request failed');
+  }
+  return payload as T;
+}
+
 function App() {
   const [catalog, setCatalog] = useState<Catalog>(emptyCatalog);
   const [selectedAgentTypeId, setSelectedAgentTypeId] = useState('');
   const [query, setQuery] = useState('');
   const [preview, setPreview] = useState('');
+  const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [error, setError] = useState('');
   const [runtimeSessionId, setRuntimeSessionId] = useState('');
   const [savingPrompt, setSavingPrompt] = useState(false);
 
   async function refresh(preferredAgentTypeId?: string) {
-    const next = await callBackend<Catalog>({ action: 'catalog' });
+    const [next, skillCatalog] = await Promise.all([
+      callBackend<Catalog>({ action: 'catalog' }),
+      callSkillsBackend<{ skills: SkillSummary[] }>({ action: 'catalog' })
+    ]);
     setCatalog(next);
+    setSkills(skillCatalog.skills.filter((skill) => skill.enabled));
     setSelectedAgentTypeId((current) => {
       if (preferredAgentTypeId && next.agent_types.some((item) => item.id === preferredAgentTypeId)) {
         return preferredAgentTypeId;
@@ -136,13 +161,16 @@ function App() {
       const name = (document.getElementById('agent-type-name') as HTMLInputElement | null)?.value || selectedAgentType.name;
       const description =
         (document.getElementById('agent-type-description') as HTMLTextAreaElement | null)?.value || selectedAgentType.description;
+      const selectedSkillIds = Array.from(document.querySelectorAll<HTMLInputElement>('input[name="agent-skill"]:checked')).map(
+        (input) => input.value
+      );
       await callBackend({
         action: 'update_agent_type',
         id: selectedAgentType.id,
         role_id: selectedAgentType.role_id,
         name,
         description,
-        codex_skill_ids: selectedAgentType.codex_skill_ids,
+        codex_skill_ids: selectedSkillIds,
         execution_mode_policy: selectedAgentType.execution_mode_policy,
         default_execution_mode: selectedAgentType.default_execution_mode,
         trace_verbosity: selectedAgentType.trace_verbosity,
@@ -320,6 +348,37 @@ function App() {
                 key={`${selectedAgentType.id}-description`}
                 defaultValue={selectedAgentType.description}
               />
+            </section>
+
+            <section className="editor-band">
+              <div className="band-heading">
+                <h3>Skills</h3>
+                <span className="skill-count">{selectedAgentType.codex_skill_ids.length || skills.length} installed</span>
+              </div>
+              <div className="skill-picker">
+                {skills.length ? (
+                  skills.map((skill) => (
+                    <label className="skill-choice" key={`${selectedAgentType.id}-${skill.id}`}>
+                      <input
+                        type="checkbox"
+                        name="agent-skill"
+                        value={skill.id}
+                        defaultChecked={
+                          selectedAgentType.codex_skill_ids.length
+                            ? selectedAgentType.codex_skill_ids.includes(skill.id)
+                            : true
+                        }
+                      />
+                      <span>
+                        <strong>{skill.name}</strong>
+                        <small>{skill.description || skill.id}</small>
+                      </span>
+                    </label>
+                  ))
+                ) : (
+                  <div className="empty-state">No workspace skills available.</div>
+                )}
+              </div>
             </section>
 
             <section className="editor-band">

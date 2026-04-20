@@ -4,37 +4,21 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from core.apps.store import AppStore
 from core.providers.provider_registry import ProviderRegistry
 from core.runtime.runtime_session import RuntimeSessionRecord
-from core.skills.catalog import list_core_skills, list_visible_skills, list_workspace_app_skills
+from core.skills.catalog import list_workspace_skills, resolve_workspace_skills
 from core.skills.materializer import materialize_skills_for_provider
 from core.skills.models import SkillDefinition, SkillMaterialization
 
 
-def list_available_core_skills(*, start_path: Path | None = None) -> list[SkillDefinition]:
-    """List repository-local core skills."""
-    return list_core_skills(start_path=start_path)
+def list_available_workspace_skills(*, workspace_id: str, start_path: Path | None = None) -> list[SkillDefinition]:
+    """List workspace-owned skills available for runtime assignment."""
+    return list_workspace_skills(workspace_id=workspace_id, start_path=start_path)
 
 
-def list_available_workspace_skills(
-    store: AppStore,
-    *,
-    workspace_id: str,
-    start_path: Path | None = None,
-) -> list[SkillDefinition]:
-    """List app-contributed skills visible in one workspace."""
-    return list_workspace_app_skills(store, workspace_id=workspace_id, start_path=start_path)
-
-
-def list_visible_platform_skills(
-    *,
-    app_store: AppStore | None = None,
-    workspace_id: str | None = None,
-    start_path: Path | None = None,
-) -> list[SkillDefinition]:
-    """List all visible skills for the requested workspace context."""
-    return list_visible_skills(app_store=app_store, workspace_id=workspace_id, start_path=start_path)
+def resolve_runtime_skills(session: RuntimeSessionRecord, *, start_path: Path | None = None) -> list[SkillDefinition]:
+    """Resolve explicit workspace-owned skill ids for validation and diagnostics."""
+    return resolve_workspace_skills(workspace_id=session.workspace_id, skill_ids=session.skill_ids, start_path=start_path)
 
 
 def prepare_runtime_skills(

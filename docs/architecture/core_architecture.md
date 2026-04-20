@@ -234,7 +234,7 @@ This includes:
 - orchestration of tool execution
 - process lifecycle
 - runtime sessions that can carry an app-provided materialized `system_prompt`
-- runtime sessions that can carry selected `skill_ids`
+- runtime sessions that can carry selected `skill_ids` when an agent type narrows the workspace default
 - runtime sessions that can identify the app surface that created them with `source_app_id`
 
 These fields are generic runtime configuration. They are not an Agents app dependency.
@@ -284,9 +284,9 @@ The Codex adapter should own the provider-specific protocol:
 - initialize the app-server process
 - prepare a session-local `CODEX_HOME` under the runtime root before launch
 - populate that runtime home from a configurable operator Codex home, using `MAVERICK3_CODEX_HOME`, `CODEX_HOME`, or the current user's default Codex home
-- copy only required identity and configuration material into the runtime home, such as Codex auth, version, installation identity, sanitized config, rules, and system skills
+- copy only required identity and configuration material into the runtime home, such as Codex auth, version, installation identity, sanitized config, and rules
 - avoid hardcoded host paths for Codex identity or configuration
-- keep app-selected skills materialized separately through the v3 skills surface rather than loading arbitrary user-global skills into every runtime
+- keep runtime skills materialized separately through the workspace Skills app data rather than loading user-global or core-bundled skills into every runtime
 - create a persistent Codex thread with `thread/start` when no provider thread exists
 - resume the existing Codex thread with `thread/resume` when a runtime session already has a provider thread id
 - submit each user turn with `turn/start` against the same provider thread id
@@ -1069,6 +1069,7 @@ Before launching the Codex process, the adapter must prepare a runtime-scoped `C
 This home is operational provider state for one Maverick runtime session.
 
 It must live below the session runtime root, not in the workspace data plane and not inside the source repository.
+The session runtime root is `workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/`, so concurrent agents in the same workspace receive separate provider homes, temporary directories, copied runtime skills, and transient provider binaries.
 
 The source of Codex identity/configuration is configurable and path-agnostic:
 
@@ -1076,11 +1077,13 @@ The source of Codex identity/configuration is configurable and path-agnostic:
 2. `CODEX_HOME`
 3. the current operating-system user's default Codex home
 
-The adapter may copy required files such as auth, version, installation identity, sanitized config, rules, and system skills.
+The adapter may copy required files such as auth, version, installation identity, sanitized config, and rules.
 
 The sanitized runtime config must remove inherited MCP server and plugin sections from the operator Codex home. Maverick runtime sessions should not automatically expose user-global Codex connector apps such as GitHub, Gmail, Photoshop, AllTrails, or Notion unless Maverick explicitly materializes an allowed tool surface for that runtime.
 
 The Codex app-server command for Maverick-managed runtimes must also disable Codex's built-in `apps` and `plugins` features. Runtime config preparation must write a managed Codex `[features]` section with `apps`, `plugins`, and `skill_mcp_dependency_install` disabled, instead of inheriting those feature switches from the operator home. Runtime-home preparation must remove plugin/app connector residue such as `plugins/`, `cache/codex_apps_tools/`, `.tmp/plugins/`, `.tmp/plugins.sha`, and `.tmp/app-server-remote-plugin-sync-v1` before launch so Codex does not attempt to start the `codex_apps` MCP bridge.
+
+Codex may also generate provider-bundled system skills under `CODEX_HOME/skills/.system` when app-server starts. Maverick-managed Codex runtimes must remove that provider-generated `.system` tree during runtime-home preparation and again after app-server initialization before starting or resuming a provider thread. The only runtime skills visible to Maverick agents are workspace Skills app copies materialized by Maverick.
 
 For sandboxed Codex sessions, sanitized runtime config must also drop inherited Codex `[projects.*]` trust entries that point outside the workspace root. This is provider-specific defense in depth: the generic Maverick runtime policy remains provider-agnostic, while the Codex adapter prevents Codex-specific trust configuration from weakening a Maverick sandbox.
 
@@ -1098,11 +1101,13 @@ Codex turn sandbox policy must keep writable roots and read-only roots constrain
 
 If the host cannot create that read/write confinement, sandbox runtime launch must fail closed. It must not fall back to Codex `workspace-write`, legacy Landlock flags, or any mode that still permits raw reads outside the workspace.
 
-It must not copy every user-global skill into the runtime home by default.
+It must not copy user-global, plugin-provided, or repository-local skills into the runtime home by default.
 
-App-selected and core-selected skills are materialized through the Maverick v3 skills surface so each runtime receives only the skills its app/agent context declares.
+Maverick core has no preinstalled runtime skills. Skills are extension data owned by the workspace Skills app. The Skills app seeds bundled skill templates from `apps/*/skills/` into `workspaces/<workspace_id>/data/skills/skills/` during install and migration. Operators enable or disable workspace skill copies from that editable workspace data.
 
-Materialized runtime skills, rules, and system skill assets must be copied into the session-local runtime home for sandbox sessions, not symlinked to source repository or operator home paths outside the workspace boundary.
+At turn launch, the runtime materializes skills from the workspace-owned Skills app catalog. A base session with no explicit `skill_ids` receives every enabled workspace skill. A session created from an agent type may pass `skill_ids` to narrow that set to the agent type's selected skills.
+
+Materialized runtime skills and rules must be copied into the session-local runtime home for sandbox sessions, not symlinked to source repository or operator home paths outside the workspace boundary.
 
 Codex app-server retry notifications must be streamed as runtime step updates without prematurely closing the Maverick turn.
 
@@ -1697,36 +1702,21 @@ Runtime authority and policy enforcement must continue to live in MCP, CLI, prov
 
 The skill catalog is platform-managed and may include:
 
-- core-owned skills
-- app-contributed skills from enabled workspace apps
-- skills already installed in the host Codex agent environment
+Enabled workspace-owned skills from the Skills app catalog, optionally narrowed by explicit session `skill_ids`.
 
 How those skill assets are installed into a runtime home is provider-specific.
 
 That installation strategy belongs to the selected provider adapter, because different backends such as Codex, Claude Code, or Gemini CLI may require different runtime-home layouts or sync behavior.
 
-Visible skill ids should be namespaced in the platform catalog, for example:
+Visible runtime skill ids are plain workspace skill ids, for example `maverick3-code-skill` or `chat-ops`. They are intentionally not namespaced by core or source app, because the workspace Skills app is the single owner of the editable runtime catalog and must prevent or resolve name collisions before saving a skill.
 
-- `core.<skill_id>`
-- `app.<app_id>.<skill_id>`
+The workspace app named `Skills` is the authoritative operator view for runtime skills.
 
-This avoids collisions between core-owned and app-contributed skill assets.
+It owns editable workspace skills under `workspaces/<workspace_id>/data/skills/skills/`.
 
-The separate workspace app named `Skills` may expose a broader operator view than the runtime materialization catalog.
+It does not discover `~/.codex/skills`, plugin skills, system skills, or any other host Codex skill directories.
 
-It owns editable workspace skills under `workspaces/<workspace_id>/data/skills/`, and it may also discover installed Codex agent skills from the host Codex home so operators can inspect the same instruction assets Codex sees from the terminal.
-
-Installed host-agent skills are not workspace-owned just because they are visible in that app.
-
-The Skills app may still edit their `SKILL.md` files directly when the platform host can write to the source file.
-
-Those edits intentionally modify the real skill used by the host Codex agent, including normal Codex skills, system skills, symlinked local skills, and plugin-provided skills.
-
-The app must retain source metadata that identifies where the skill came from and which path is being edited.
-
-If a source skill is not writable in the current deployment, the app may offer import as a fallback.
-
-Import creates a workspace-owned copy under `data/skills/` with normal workspace skill semantics.
+Bundled product skill templates may live under app source directories such as `apps/skills/skills/` and `apps/chat/skills/`, but runtime agents never read those source paths directly. Install and migration hooks copy missing templates into workspace data, and all subsequent edits happen on the workspace copy.
 
 ## Naming Conventions
 
@@ -2018,7 +2008,7 @@ It should own:
 - recovery
 - MCP surface
 - CLI surface
-- core-owned skills
+- workspace Skills app catalog resolution
 
 It should not own:
 

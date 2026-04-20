@@ -17,9 +17,7 @@
     "cli_commands": [
       "agents"
     ],
-    "skills": [
-      "agents-ops"
-    ],
+    "skills": [],
     "views": [
       "agents"
     ]

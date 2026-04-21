@@ -780,7 +780,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] redesign Gallery around file cards with modal previews instead of a list/detail layout
   - [x] support Gallery downloads and safe same-directory file renames
   - [x] support Gallery file deletion through validated workspace storage references
-  - [x] render Gallery grid-card previews for browser-previewable workspace files and extracted DOCX/PPTX/XLSX text
+  - [x] render Gallery grid-card and modal previews for browser-previewable files plus DOCX/PPTX/XLSX converted to PDF through app-owned preview cache
   - [x] declare and build a Gallery-owned chat widget for inline file previews
   - [x] support Gallery backend file lookup through `workspace_relative_path` widget payloads
   - [x] add focused contract, mount, backend, MCP/CLI, and path validation tests

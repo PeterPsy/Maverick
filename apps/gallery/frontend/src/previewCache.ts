@@ -1,4 +1,4 @@
-import { decodeBase64, readFile, readPreviewText } from './galleryApi';
+import { decodeBase64, readFile, readPreviewText, renderPreview, renderThumbnail } from './galleryApi';
 import type { GalleryFile } from './types';
 
 const MAX_CACHE_ENTRIES = 80;
@@ -23,6 +23,10 @@ const cache = new Map<string, CacheEntry>();
 
 function canInlinePreview(file: GalleryFile) {
   return ['image', 'video', 'audio', 'text', 'markdown', 'pdf'].includes(file.preview_kind);
+}
+
+function canRenderedPreview(file: GalleryFile) {
+  return ['pdf', 'document', 'presentation', 'spreadsheet'].includes(file.preview_kind);
 }
 
 function previewKey(file: GalleryFile, scope: 'card' | 'full') {
@@ -65,11 +69,27 @@ function blobPreview(file: GalleryFile, maxBytes: number, textLimit: number) {
   });
 }
 
+function renderedDocumentPreview(file: GalleryFile, scope: 'card' | 'full') {
+  const renderer = scope === 'card' && ['document', 'presentation', 'spreadsheet'].includes(file.preview_kind)
+    ? renderThumbnail
+    : renderPreview;
+  return renderer(file).then((payload) => {
+    const blob = decodeBase64(payload.content_base64, payload.content_type);
+    return { text: '', url: URL.createObjectURL(blob) };
+  }).catch((error) => {
+    if (['document', 'presentation', 'spreadsheet'].includes(file.preview_kind)) {
+      return readPreviewText(file, FULL_TEXT_CHARS).then((payload) => ({ text: payload.preview_text, url: '' }));
+    }
+    throw error;
+  });
+}
+
 export function loadCardPreview(file: GalleryFile) {
   const key = previewKey(file, 'card');
   const cached = getCachedPreview(key);
   if (cached) return cached;
   if (file.preview_kind === 'audio') return remember(key, Promise.resolve({ text: '', url: '' }));
+  if (canRenderedPreview(file)) return remember(key, renderedDocumentPreview(file, 'card'));
   if (canInlinePreview(file)) return remember(key, blobPreview(file, CARD_PREVIEW_BYTES, TEXT_CARD_CHARS));
   return remember(key, readPreviewText(file, DOCUMENT_CARD_CHARS).then((payload) => ({ text: payload.preview_text, url: '' })));
 }
@@ -78,6 +98,7 @@ export function loadFullPreview(file: GalleryFile) {
   const key = previewKey(file, 'full');
   const cached = getCachedPreview(key);
   if (cached) return cached;
+  if (canRenderedPreview(file)) return remember(key, renderedDocumentPreview(file, 'full'));
   if (canInlinePreview(file)) return remember(key, blobPreview(file, FULL_PREVIEW_BYTES, FULL_TEXT_CHARS));
   return remember(key, readPreviewText(file, FULL_TEXT_CHARS).then((payload) => ({ text: payload.preview_text, url: '' })));
 }

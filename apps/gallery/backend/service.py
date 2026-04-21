@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from errors import GalleryValidationError
+from render_preview import rendered_preview_payload, rendered_thumbnail_payload
 from store import (
     MAX_PREVIEW_BYTES,
     delete_file_payload,
@@ -104,6 +105,50 @@ def handle_action(data_root: Path, uploaded_root: Path, generated_root: Path, bo
             data_root=data_root,
             max_chars=max_chars,
         )
+    if action == "render_preview":
+        role, relative_path = reference_from_payload(
+            role=str(body.get("role") or ""),
+            relative_path=str(body.get("relative_path") or ""),
+            workspace_relative_path=str(body.get("workspace_relative_path") or ""),
+        )
+        file_payload = file_info_payload(
+            role=role,
+            relative_path=relative_path,
+            uploaded_root=uploaded_root,
+            generated_root=generated_root,
+        )
+        root = uploaded_root.resolve() if role == "uploaded" else generated_root.resolve()
+        path = (root / relative_path).resolve()
+        if root not in path.parents:
+            raise GalleryValidationError("File path escapes the selected storage root.")
+        return 200, rendered_preview_payload(
+            path=path,
+            root=root,
+            role=role,
+            data_root=data_root,
+        ) | {"file": file_payload["file"]}
+    if action == "render_thumbnail":
+        role, relative_path = reference_from_payload(
+            role=str(body.get("role") or ""),
+            relative_path=str(body.get("relative_path") or ""),
+            workspace_relative_path=str(body.get("workspace_relative_path") or ""),
+        )
+        file_payload = file_info_payload(
+            role=role,
+            relative_path=relative_path,
+            uploaded_root=uploaded_root,
+            generated_root=generated_root,
+        )
+        root = uploaded_root.resolve() if role == "uploaded" else generated_root.resolve()
+        path = (root / relative_path).resolve()
+        if root not in path.parents:
+            raise GalleryValidationError("File path escapes the selected storage root.")
+        return 200, rendered_thumbnail_payload(
+            path=path,
+            root=root,
+            role=role,
+            data_root=data_root,
+        ) | {"file": file_payload["file"]}
     if action == "file_info":
         role, relative_path = reference_from_payload(
             role=str(body.get("role") or ""),

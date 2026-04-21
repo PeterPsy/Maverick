@@ -62,3 +62,12 @@ export type PreviewTextPayload = {
   preview_text: string;
   cache_hit?: boolean;
 };
+
+export type RenderPreviewPayload = {
+  file: GalleryFile;
+  content_base64: string;
+  content_type: 'application/pdf' | 'image/png';
+  preview_kind: 'pdf' | 'image';
+  renderer: 'native' | 'libreoffice';
+  cache_hit?: boolean;
+};

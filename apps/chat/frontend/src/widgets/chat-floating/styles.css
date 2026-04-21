@@ -28,6 +28,11 @@ body {
   box-shadow: 0 22px 70px rgba(0, 0, 0, 0.42);
 }
 
+.chat-floating-widget-shell.is-hidden,
+.chat-floating-widget-launcher.is-hidden {
+  display: none;
+}
+
 .chat-floating-widget-shell__bar {
   display: flex;
   align-items: center;
@@ -49,49 +54,6 @@ body {
   flex: 1 1 12rem;
 }
 
-.chat-floating-widget-shell__thread-picker {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  max-width: 11.5rem;
-  flex: 1 1 auto;
-}
-
-.chat-floating-widget-shell__thread-picker select {
-  width: 100%;
-  min-width: 0;
-  height: 2.08rem;
-  padding: 0 2rem 0 0.8rem;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 999px;
-  background:
-    linear-gradient(45deg, transparent 50%, rgba(236, 236, 236, 0.7) 50%) calc(100% - 0.84rem) 0.9rem / 0.34rem 0.34rem no-repeat,
-    linear-gradient(135deg, rgba(236, 236, 236, 0.7) 50%, transparent 50%) calc(100% - 0.62rem) 0.9rem / 0.34rem 0.34rem no-repeat,
-    linear-gradient(135deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.035)),
-    rgba(18, 18, 18, 0.96);
-  color: var(--maverick-text);
-  font: inherit;
-  font-size: 0.82rem;
-  font-weight: 700;
-  outline: none;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.1),
-    0 10px 26px rgba(0, 0, 0, 0.22);
-  appearance: none;
-}
-
-.chat-floating-widget-shell__thread-picker select:focus {
-  border-color: rgba(248, 75, 120, 0.48);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.13),
-    0 0 0 3px rgba(215, 36, 81, 0.18),
-    0 12px 30px rgba(0, 0, 0, 0.28);
-}
-
-.chat-floating-widget-shell__thread-picker select:disabled {
-  opacity: 0.55;
-}
-
 .chat-floating-widget-shell__runtime-tools {
   display: flex;
   align-items: center;
@@ -99,6 +61,177 @@ body {
   gap: 0.38rem;
   min-width: 0;
   flex: 0 0 auto;
+}
+
+.chat-floating-thread-menu {
+  position: relative;
+  min-width: 0;
+  max-width: 12rem;
+  flex: 1 1 auto;
+}
+
+.chat-floating-thread-menu__trigger {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.38rem;
+  width: 100%;
+  min-width: 0;
+  height: 2.08rem;
+  padding: 0 0.46rem 0 0.72rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.035)),
+    rgba(18, 18, 18, 0.96);
+  color: var(--maverick-text);
+  cursor: pointer;
+  font: inherit;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 10px 26px rgba(0, 0, 0, 0.22);
+}
+
+.chat-floating-thread-menu__trigger.is-busy {
+  border-color: transparent;
+  background:
+    linear-gradient(rgba(24, 24, 24, 0.95), rgba(24, 24, 24, 0.95)) padding-box,
+    linear-gradient(120deg, rgba(88, 184, 255, 0.95), rgba(215, 36, 81, 0.82), rgba(255, 211, 107, 0.85), rgba(88, 184, 255, 0.95)) border-box;
+  background-size: 100% 100%, 260% 260%;
+  animation: chat-floating-working-border 4.8s linear infinite;
+}
+
+.chat-floating-thread-menu__trigger:focus-visible {
+  outline: none;
+  border-color: rgba(248, 75, 120, 0.48);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.13),
+    0 0 0 3px rgba(215, 36, 81, 0.18),
+    0 12px 30px rgba(0, 0, 0, 0.28);
+}
+
+.chat-floating-thread-menu__trigger:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.chat-floating-thread-menu__trigger-title {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.82rem;
+  font-weight: 750;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-floating-thread-menu__chevron {
+  color: var(--maverick-text-muted);
+  font-size: 1rem;
+}
+
+.chat-floating-thread-menu__panel {
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  left: 0;
+  z-index: 20;
+  display: grid;
+  gap: 0.35rem;
+  width: min(20rem, calc(100vw - 2rem));
+  max-height: min(20rem, calc(100dvh - 7rem));
+  overflow-y: auto;
+  padding: 0.45rem;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 16px;
+  background: rgba(18, 18, 18, 0.97);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42);
+}
+
+.chat-floating-thread-menu__item {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.35rem;
+  padding: 0 0.58rem 0 0.72rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--maverick-text);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.chat-floating-thread-menu__item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.chat-floating-thread-menu__item.is-active {
+  border-color: rgba(215, 36, 81, 0.18);
+  background: rgba(215, 36, 81, 0.12);
+}
+
+.chat-floating-thread-menu__item.is-active::before {
+  content: "";
+  position: absolute;
+  top: 7px;
+  bottom: 7px;
+  left: 5px;
+  width: 3px;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(215, 36, 81, 0.18);
+}
+
+.chat-floating-thread-menu__item.is-busy {
+  border-color: transparent;
+  background:
+    linear-gradient(rgba(24, 24, 24, 0.95), rgba(24, 24, 24, 0.95)) padding-box,
+    linear-gradient(120deg, rgba(88, 184, 255, 0.95), rgba(215, 36, 81, 0.82), rgba(255, 211, 107, 0.85), rgba(88, 184, 255, 0.95)) border-box;
+  background-size: 100% 100%, 260% 260%;
+  animation: chat-floating-working-border 4.8s linear infinite;
+}
+
+.chat-floating-thread-menu__item-copy,
+.chat-floating-thread-menu__item-title {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.chat-floating-thread-menu__item-title {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 750;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-floating-thread-menu__presence {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: #58b8ff;
+  box-shadow: 0 0 0 4px rgba(88, 184, 255, 0.13);
+}
+
+@keyframes chat-floating-working-border {
+  0% {
+    background-position: 0 0, 0% 50%;
+  }
+  100% {
+    background-position: 0 0, 260% 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-floating-thread-menu__trigger.is-busy,
+  .chat-floating-thread-menu__item.is-busy {
+    animation: none;
+  }
 }
 
 .chat-floating-widget-shell__runtime-tools .chatapp-provider-selector {

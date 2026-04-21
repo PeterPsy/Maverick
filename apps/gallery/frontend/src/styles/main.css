@@ -322,7 +322,12 @@ h2 {
 }
 
 .gallery-card-preview iframe {
+  background: #fff;
   pointer-events: none;
+}
+
+.gallery-card-preview .document-card-frame {
+  background: #fff;
 }
 
 .gallery-card-preview pre {
@@ -477,6 +482,10 @@ h2 {
   min-height: 420px;
   border: 0;
   object-fit: contain;
+}
+
+.modal-body .document-render-frame {
+  background: #fff;
 }
 
 .modal-body audio {

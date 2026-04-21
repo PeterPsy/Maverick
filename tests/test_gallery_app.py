@@ -368,6 +368,72 @@ class GalleryAppTestCase(unittest.TestCase):
             self.assertFalse(preview["json"]["cache_hit"])
             self.assertTrue(cached_preview["json"]["cache_hit"])
 
+    @unittest.skipUnless(shutil.which("libreoffice") or shutil.which("soffice"), "LibreOffice is required for rendered Office previews")
+    def test_backend_renders_office_preview_as_pdf(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            generated_root = root / "storage" / "generated"
+            generated_root.mkdir(parents=True)
+            docx = generated_root / "brief.docx"
+            with zipfile.ZipFile(docx, "w") as archive:
+                archive.writestr(
+                    "[Content_Types].xml",
+                    """<?xml version="1.0" encoding="UTF-8"?>
+                    <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+                      <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+                      <Default Extension="xml" ContentType="application/xml"/>
+                      <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+                    </Types>""",
+                )
+                archive.writestr(
+                    "_rels/.rels",
+                    """<?xml version="1.0" encoding="UTF-8"?>
+                    <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+                      <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+                    </Relationships>""",
+                )
+                archive.writestr(
+                    "word/document.xml",
+                    """<?xml version="1.0" encoding="UTF-8"?>
+                    <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+                      <w:body><w:p><w:r><w:t>Quarterly brief</w:t></w:r></w:p></w:body>
+                    </w:document>""",
+                )
+
+            preview = self.run_backend(
+                data_root=root / "data" / "gallery",
+                uploaded_root=root / "storage" / "uploaded",
+                generated_root=generated_root,
+                body={"action": "render_preview", "workspace_relative_path": "storage/generated/brief.docx"},
+            )
+            cached_preview = self.run_backend(
+                data_root=root / "data" / "gallery",
+                uploaded_root=root / "storage" / "uploaded",
+                generated_root=generated_root,
+                body={"action": "render_preview", "workspace_relative_path": "storage/generated/brief.docx"},
+            )
+
+            self.assertEqual(preview["status_code"], 200)
+            self.assertEqual(preview["json"]["content_type"], "application/pdf")
+            self.assertEqual(preview["json"]["preview_kind"], "pdf")
+            self.assertEqual(preview["json"]["renderer"], "libreoffice")
+            self.assertFalse(preview["json"]["cache_hit"])
+            self.assertTrue(cached_preview["json"]["cache_hit"])
+            self.assertTrue(preview["json"]["content_base64"])
+
+            thumbnail = self.run_backend(
+                data_root=root / "data" / "gallery",
+                uploaded_root=root / "storage" / "uploaded",
+                generated_root=generated_root,
+                body={"action": "render_thumbnail", "workspace_relative_path": "storage/generated/brief.docx"},
+            )
+
+            self.assertEqual(thumbnail["status_code"], 200)
+            self.assertEqual(thumbnail["json"]["content_type"], "image/png")
+            self.assertEqual(thumbnail["json"]["preview_kind"], "image")
+            self.assertEqual(thumbnail["json"]["renderer"], "libreoffice")
+            self.assertTrue(thumbnail["json"]["content_base64"])
+
     def test_bootstrap_installs_gallery_and_exposes_surfaces(self) -> None:
         repo_root = self.make_repo_root()
         state = bootstrap_platform_state(start_path=repo_root)

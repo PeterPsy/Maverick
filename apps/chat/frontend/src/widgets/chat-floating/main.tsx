@@ -1,9 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "../../App";
 import type { ChatThread, ProviderItem } from "../../api/client";
 import { getRuntimeSession, listProviders, listThreads, selectProvider } from "../../api/client";
 import { ProviderSelector } from "../../components/ProviderSelector";
+import { withRuntimeAvailability } from "../chat-sidebar/runtimeStatus";
+import { isThreadBusy } from "../chat-sidebar/sections";
 import "../../styles/main.css";
 import "./styles.css";
 
@@ -34,9 +36,12 @@ function ChatFloatingMount() {
   const [activeThreadId, setActiveThreadId] = useState("");
   const [activeProviderId, setActiveProviderId] = useState("codex");
   const [executionMode, setExecutionMode] = useState("runtime");
+  const [isThreadMenuOpen, setIsThreadMenuOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [providers, setProviders] = useState<ProviderItem[]>([]);
   const [threads, setThreads] = useState<ChatThread[]>([]);
+  const threadMenuRef = useRef<HTMLDivElement | null>(null);
+  const activeThread = threads.find((thread) => thread.thread_id === activeThreadId) || null;
 
   useEffect(() => {
     postWidgetSize(isCollapsed);
@@ -66,14 +71,39 @@ function ChatFloatingMount() {
     return () => window.removeEventListener("message", handleWidgetMessage);
   }, []);
 
+  useEffect(() => {
+    if (!isThreadMenuOpen) {
+      return;
+    }
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target as Node | null;
+      if (!target || threadMenuRef.current?.contains(target)) {
+        return;
+      }
+      setIsThreadMenuOpen(false);
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsThreadMenuOpen(false);
+      }
+    }
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isThreadMenuOpen]);
+
   async function refreshThreads(preferredThreadId = "") {
     try {
       const payload = await listThreads();
+      const hydratedThreads = await withRuntimeAvailability(payload.threads || []);
       const selectedThreadId =
-        preferredThreadId || (activeThreadId && payload.threads.some((thread) => thread.thread_id === activeThreadId) ? activeThreadId : payload.threads[0]?.thread_id || "");
-      setThreads(payload.threads);
+        preferredThreadId || (activeThreadId && hydratedThreads.some((thread) => thread.thread_id === activeThreadId) ? activeThreadId : hydratedThreads[0]?.thread_id || "");
+      setThreads(hydratedThreads);
       setActiveThreadId(selectedThreadId);
-      void refreshExecutionMode(payload.threads.find((thread) => thread.thread_id === selectedThreadId) || null);
+      void refreshExecutionMode(hydratedThreads.find((thread) => thread.thread_id === selectedThreadId) || null);
     } catch {
       setThreads([]);
       setActiveThreadId("");
@@ -108,9 +138,9 @@ function ChatFloatingMount() {
     window.postMessage({ type: "maverick.app.navigate", app_id: "chat", params }, window.location.origin);
   }
 
-  function handleThreadChange(event: React.ChangeEvent<HTMLSelectElement>) {
-    const threadId = event.target.value;
+  function selectThread(threadId: string) {
     setActiveThreadId(threadId);
+    setIsThreadMenuOpen(false);
     if (threadId) {
       void refreshExecutionMode(threads.find((thread) => thread.thread_id === threadId) || null);
       navigateChat({ thread_id: threadId });
@@ -131,30 +161,59 @@ function ChatFloatingMount() {
     navigateChat({ new_chat: true, new_chat_request_id: crypto.randomUUID() });
   }
 
-  if (isCollapsed) {
-    return (
-      <button aria-label="Apri chat" className="chat-floating-widget-launcher" onClick={() => setIsCollapsed(false)} type="button">
+  return (
+    <>
+      <button
+        aria-label="Apri chat"
+        className={`chat-floating-widget-launcher ${isCollapsed ? "" : "is-hidden"}`}
+        onClick={() => setIsCollapsed(false)}
+        type="button"
+      >
         <span aria-hidden="true" className="material-symbols-rounded">
           forum
         </span>
       </button>
-    );
-  }
-
-  return (
-    <section className="chat-floating-widget-shell" aria-label="Chat">
+      <section className={`chat-floating-widget-shell ${isCollapsed ? "is-hidden" : ""}`} aria-label="Chat">
       <header className="chat-floating-widget-shell__bar">
         <div className="chat-floating-widget-shell__thread-tools">
-          <label className="chat-floating-widget-shell__thread-picker">
-            <select aria-label="Scegli chat" disabled={threads.length === 0} onChange={handleThreadChange} value={activeThreadId}>
-              {threads.length === 0 ? <option value="">New chat</option> : null}
-              {threads.map((thread) => (
-                <option key={thread.thread_id} value={thread.thread_id}>
-                  {thread.title || "New chat"}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="chat-floating-thread-menu" ref={threadMenuRef}>
+            <button
+              aria-expanded={isThreadMenuOpen}
+              aria-haspopup="menu"
+              aria-label="Scegli chat"
+              className={`chat-floating-thread-menu__trigger ${activeThread && isThreadBusy(activeThread) ? "is-busy" : ""}`}
+              disabled={threads.length === 0}
+              onClick={() => setIsThreadMenuOpen((current) => !current)}
+              type="button"
+            >
+              <span className="chat-floating-thread-menu__trigger-title">{activeThread?.title || "New chat"}</span>
+              {activeThread && isThreadBusy(activeThread) ? <span aria-label="Chat in lavoro" className="chat-floating-thread-menu__presence" title="Chat in lavoro" /> : null}
+              <span aria-hidden="true" className="material-symbols-rounded chat-floating-thread-menu__chevron">
+                expand_more
+              </span>
+            </button>
+            {isThreadMenuOpen ? (
+              <div className="chat-floating-thread-menu__panel" role="menu">
+                {threads.map((thread) => {
+                  const isBusy = isThreadBusy(thread);
+                  return (
+                    <button
+                      className={`chat-floating-thread-menu__item ${activeThreadId === thread.thread_id ? "is-active" : ""} ${isBusy ? "is-busy" : ""}`}
+                      key={thread.thread_id}
+                      onClick={() => selectThread(thread.thread_id)}
+                      role="menuitem"
+                      type="button"
+                    >
+                      <span className="chat-floating-thread-menu__item-copy">
+                        <span className="chat-floating-thread-menu__item-title">{thread.title || "New chat"}</span>
+                      </span>
+                      {isBusy ? <span aria-label="Chat in lavoro" className="chat-floating-thread-menu__presence is-busy" title="Chat in lavoro" /> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
           <button aria-label="Nuova chat" className="chat-floating-widget-shell__button" onClick={handleNewChat} type="button">
             <span aria-hidden="true" className="material-symbols-rounded">
               add
@@ -183,7 +242,8 @@ function ChatFloatingMount() {
       <div className="chat-floating-widget-shell__body">
         <App enablePageCapture />
       </div>
-    </section>
+      </section>
+    </>
   );
 }
 

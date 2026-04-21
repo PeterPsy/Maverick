@@ -4,11 +4,11 @@ import { loadCardPreview } from './previewCache';
 import type { GalleryFile } from './types';
 
 export function canTextPreview(file: GalleryFile) {
-  return ['text', 'markdown', 'document', 'presentation', 'spreadsheet'].includes(file.preview_kind);
+  return ['text', 'markdown'].includes(file.preview_kind);
 }
 
 export function canInlinePreview(file: GalleryFile) {
-  return ['image', 'video', 'audio', 'text', 'markdown', 'pdf'].includes(file.preview_kind);
+  return ['image', 'video', 'audio', 'text', 'markdown', 'pdf', 'document', 'presentation', 'spreadsheet'].includes(file.preview_kind);
 }
 
 function FileTypeFallback({ file }: { file: GalleryFile }) {
@@ -24,7 +24,9 @@ export function GalleryPreview({ file, previewUrl, previewText }: { file: Galler
   if (file.preview_kind === 'image' && previewUrl) return <img src={previewUrl} alt={file.name} />;
   if (file.preview_kind === 'video' && previewUrl) return <video src={previewUrl} controls />;
   if (file.preview_kind === 'audio' && previewUrl) return <audio src={previewUrl} controls />;
-  if (file.preview_kind === 'pdf' && previewUrl) return <iframe src={previewUrl} title={file.name} />;
+  if (['pdf', 'document', 'presentation', 'spreadsheet'].includes(file.preview_kind) && previewUrl) {
+    return <iframe className="document-render-frame" src={previewUrl} title={file.name} />;
+  }
   if (['text', 'markdown'].includes(file.preview_kind)) return <pre>{previewText || 'Loading preview...'}</pre>;
   if (['document', 'presentation', 'spreadsheet'].includes(file.preview_kind) && previewText) return <pre>{previewText}</pre>;
   return (
@@ -74,11 +76,17 @@ export function FileCardPreview({ file }: { file: GalleryFile }) {
   if (file.preview_kind === 'audio' && previewUrl) {
     return <FileTypeFallback file={file} />;
   }
-  if (file.preview_kind === 'pdf' && previewUrl) {
-    return <iframe src={previewUrl} title={`${file.name} preview`} tabIndex={-1} />;
+  if (['pdf', 'document', 'presentation', 'spreadsheet'].includes(file.preview_kind) && previewUrl) {
+    if (['document', 'presentation', 'spreadsheet'].includes(file.preview_kind)) {
+      return <img className="document-card-image" src={previewUrl} alt="" loading="lazy" />;
+    }
+    return <iframe className="document-card-frame" src={`${previewUrl}#toolbar=0&navpanes=0&scrollbar=0`} title={`${file.name} preview`} tabIndex={-1} />;
   }
-  if (['text', 'markdown', 'document', 'presentation', 'spreadsheet'].includes(file.preview_kind)) {
+  if (['text', 'markdown'].includes(file.preview_kind)) {
     return previewText ? <pre>{previewText}</pre> : <FileTypeFallback file={file} />;
+  }
+  if (['document', 'presentation', 'spreadsheet'].includes(file.preview_kind) && previewText) {
+    return <pre>{previewText}</pre>;
   }
   return <FileTypeFallback file={file} />;
 }

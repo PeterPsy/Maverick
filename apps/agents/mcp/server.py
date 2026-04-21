@@ -14,7 +14,13 @@ from store import AgentsValidationError
 
 payload = json.loads(sys.stdin.read() or "{}")
 arguments = payload.get("arguments") if isinstance(payload.get("arguments"), dict) else {}
-body = {"action": arguments.get("action") or "catalog", **arguments}
+tool_actions = {
+    "agents_reference_manifest": "references.manifest",
+    "agents_reference_search": "references.search",
+    "agents_reference_resolve": "references.resolve",
+    "agents_reference_summarize": "references.summarize",
+}
+body = {"action": tool_actions.get(str(payload.get("tool_name") or ""), arguments.get("action") or "catalog"), **arguments}
 try:
     status_code, result = handle_action(Path(payload["data_root"]), body)
 except AgentsValidationError as error:

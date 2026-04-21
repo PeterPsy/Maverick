@@ -1,0 +1,13 @@
+[Unit]
+Description=Maverick v3 backend downtime watchdog
+After=network.target maverick3-rescue.service
+Wants=maverick3-rescue.service
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/maverick-v3
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 scripts/rescue_backend_watchdog.py
+TimeoutStartSec=infinity

@@ -14,7 +14,13 @@ from store import SkillsValidationError
 
 payload = json.loads(sys.stdin.read() or "{}")
 arguments = payload.get("arguments") if isinstance(payload.get("arguments"), dict) else {}
-body = {"action": arguments.get("action") or "catalog", **arguments}
+tool_actions = {
+    "skills_reference_manifest": "references.manifest",
+    "skills_reference_search": "references.search",
+    "skills_reference_resolve": "references.resolve",
+    "skills_reference_summarize": "references.summarize",
+}
+body = {"action": tool_actions.get(str(payload.get("tool_name") or ""), arguments.get("action") or "catalog"), **arguments}
 try:
     status_code, result = handle_action(Path(payload["data_root"]), body)
 except SkillsValidationError as error:

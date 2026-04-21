@@ -25,6 +25,26 @@ describe("runtime event transcript projection", () => {
     expect(messages).toMatchObject([{ id: "client-message-1", role: "human", content: "hello", status: "complete" }]);
   });
 
+  it("preserves structured app references on human messages", () => {
+    const messages = eventsToMessages([
+      event({
+        event_type: "runtime.turn.queued",
+        payload: {
+          input_text: "controlla @Chat",
+          app_references: [{ type: "app", app_id: "chat", label: "Chat" }],
+        },
+      }),
+    ]);
+
+    expect(messages).toMatchObject([
+      {
+        role: "human",
+        content: "controlla @Chat",
+        appReferences: [{ type: "app", app_id: "chat", label: "Chat" }],
+      },
+    ]);
+  });
+
   it("projects final provider output as an agent message", () => {
     const messages = eventsToMessages([
       event({
@@ -45,6 +65,20 @@ describe("runtime event transcript projection", () => {
     expect(messages).toMatchObject([
       { role: "structured", structuredContent: { kind: "checklist.design", payload: { title: "Design" } } },
       { role: "agent", content: "Checklist ready", status: "complete" },
+    ]);
+  });
+
+  it("projects generic structured runtime output events", () => {
+    const messages = eventsToMessages([
+      event({
+        event_id: "structured-1",
+        event_type: "runtime.output.structured",
+        payload: { structured_content: { kind: "dynamic.view.instance", payload: { id: "view_1" } } },
+      }),
+    ]);
+
+    expect(messages).toMatchObject([
+      { role: "structured", structuredContent: { kind: "dynamic.view.instance", payload: { id: "view_1" } } },
     ]);
   });
 
@@ -143,7 +177,7 @@ describe("runtime event transcript projection", () => {
     ]);
   });
 
-  it("projects skills changed runtime updates as tool-used metadata", () => {
+  it("filters skills changed runtime updates from tool-used metadata", () => {
     const messages = eventsToMessages([
       event({
         event_id: "skills-1",
@@ -156,25 +190,7 @@ describe("runtime event transcript projection", () => {
       }),
     ]);
 
-    expect(messages).toMatchObject([
-      {
-        id: "turn-1:tools:0",
-        role: "tool",
-        content: "Tool Used",
-        toolCalls: [
-          {
-            id: "skills-1",
-            name: "skills",
-            status: "completed",
-            detail: {
-              tool_kind: "skill_change",
-              provider_event_type: "skills.changed",
-              skill_ids: ["generated-file-persistence"],
-            },
-          },
-        ],
-      },
-    ]);
+    expect(messages).toEqual([]);
   });
 
   it("starts a new tool-used group after a visible runtime update", () => {

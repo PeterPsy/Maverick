@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Memory</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+        background: #0e1114;
+        color: #eef3f5;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; background: #0e1114; overflow: hidden; }
+      main { display: grid; grid-template-columns: 300px minmax(0, 1fr) 360px; height: 100vh; }
+      aside, section { border-right: 1px solid #26313a; padding: 18px; min-width: 0; }
+      section:last-child { border-right: 0; border-left: 1px solid #26313a; }
+      h1, h2 { margin: 0; font-size: 20px; line-height: 1.2; }
+      h2 { font-size: 13px; color: #aab8bf; text-transform: uppercase; letter-spacing: .08em; }
+      input, textarea, button, select {
+        width: 100%;
+        border: 1px solid #33414b;
+        background: #151b20;
+        color: #eef3f5;
+        border-radius: 6px;
+        padding: 10px 12px;
+        font: inherit;
+      }
+      textarea { min-height: 118px; resize: vertical; }
+      button { cursor: pointer; background: #d8f06e; color: #111; border: 0; font-weight: 800; }
+      button.secondary { background: #1f2930; color: #dce7eb; border: 1px solid #34424d; }
+      .stack { display: grid; gap: 12px; }
+      .toolbar { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+      .toolbar button { width: auto; min-width: 76px; }
+      .item {
+        text-align: left;
+        border: 1px solid #2e3a43;
+        border-radius: 6px;
+        padding: 12px;
+        background: #141b20;
+        color: #eef3f5;
+      }
+      .item strong { display: block; margin-bottom: 5px; }
+      .item.active { border-color: #d8f06e; box-shadow: 0 0 0 1px #d8f06e inset; }
+      .muted { color: #91a1aa; font-size: 13px; }
+      .meta { display: flex; flex-wrap: wrap; gap: 8px; }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        min-height: 24px;
+        border-radius: 999px;
+        padding: 3px 9px;
+        background: #202a31;
+        color: #bdcbd1;
+        font-size: 12px;
+      }
+      .swatch { width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+      .graph-shell { position: relative; min-width: 0; height: 100vh; overflow: hidden; background: #0c1013; }
+      canvas { width: 100%; height: 100%; display: block; cursor: grab; }
+      canvas:active { cursor: grabbing; }
+      .graph-topbar {
+        position: absolute;
+        inset: 16px 16px auto 16px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        pointer-events: none;
+      }
+      .graph-topbar > * { pointer-events: auto; }
+      .stats {
+        display: flex;
+        gap: 8px;
+        padding: 8px;
+        border: 1px solid #2e3a43;
+        background: rgba(14, 17, 20, .86);
+        border-radius: 6px;
+        backdrop-filter: blur(10px);
+      }
+      .legend {
+        position: absolute;
+        left: 16px;
+        bottom: 16px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        max-width: calc(100% - 32px);
+        pointer-events: none;
+      }
+      .legend .pill { background: rgba(22, 29, 34, .88); border: 1px solid #2e3a43; }
+      .empty {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        color: #8ea0a8;
+        pointer-events: none;
+      }
+      pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+        background: #0b0f12;
+        border: 1px solid #27313a;
+        border-radius: 6px;
+        padding: 12px;
+        max-height: 220px;
+        overflow: auto;
+      }
+      .relationships { display: grid; gap: 8px; max-height: 210px; overflow: auto; }
+      .rel {
+        border: 1px solid #2d3941;
+        border-radius: 6px;
+        padding: 10px;
+        background: #11171b;
+      }
+      @media (max-width: 1100px) {
+        body { overflow: auto; }
+        main { grid-template-columns: 1fr; height: auto; min-height: 100vh; }
+        aside, section { border-right: 0; border-bottom: 1px solid #26313a; }
+        section:last-child { border-left: 0; }
+        .graph-shell { height: 62vh; min-height: 460px; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <aside>
+        <div class="stack">
+          <div>
+            <h1>Memory</h1>
+            <div class="muted">Workspace knowledge graph</div>
+          </div>
+          <div class="toolbar">
+            <input id="query" placeholder="Search memory" />
+            <button id="search">Search</button>
+          </div>
+          <button id="refresh" class="secondary">Refresh graph</button>
+          <div class="stack">
+            <h2>Matches</h2>
+            <div id="results" class="stack"></div>
+          </div>
+          <div class="stack">
+            <h2>Remember</h2>
+            <input id="title" placeholder="Title" />
+            <select id="node-type">
+              <option value="note">Note</option>
+              <option value="fact">Fact</option>
+              <option value="decision">Decision</option>
+              <option value="file_ref">File reference</option>
+              <option value="app_entity_ref">App entity</option>
+              <option value="person_ref">Person</option>
+              <option value="company_ref">Company</option>
+              <option value="project_ref">Project</option>
+              <option value="topic">Topic</option>
+              <option value="question">Question</option>
+            </select>
+            <textarea id="body" placeholder="Durable note, fact, decision, or context"></textarea>
+            <button id="remember">Remember</button>
+          </div>
+        </div>
+      </aside>
+      <div class="graph-shell">
+        <canvas id="graph"></canvas>
+        <div class="graph-topbar">
+          <div class="stats">
+            <span class="pill" id="node-count">0 nodes</span>
+            <span class="pill" id="edge-count">0 links</span>
+          </div>
+          <button id="fit" class="secondary">Fit</button>
+        </div>
+        <div id="empty" class="empty">No memory nodes yet</div>
+        <div id="legend" class="legend"></div>
+      </div>
+      <section>
+        <div class="stack">
+          <div>
+            <h2>Selected</h2>
+            <pre id="selected">Select a node in the graph.</pre>
+          </div>
+          <div>
+            <h2>Relationships</h2>
+            <div id="relationships" class="relationships"></div>
+          </div>
+          <div>
+            <h2>Context Preview</h2>
+            <button id="context">Preview Context</button>
+            <pre id="context-output">Run a query to preview agent context.</pre>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script>
+      const canvas = document.getElementById('graph');
+      const ctx = canvas.getContext('2d');
+      const state = {
+        nodes: [],
+        edges: [],
+        selectedId: null,
+        hoverId: null,
+        query: '',
+        scale: 1,
+        offsetX: 0,
+        offsetY: 0,
+        dragging: null,
+        panning: false,
+        lastX: 0,
+        lastY: 0,
+        animation: null
+      };
+      const colors = {
+        note: '#d8f06e',
+        fact: '#67d5ff',
+        decision: '#ffce73',
+        file_ref: '#a68cff',
+        app_entity_ref: '#ff8da1',
+        person_ref: '#7cf0c6',
+        company_ref: '#f4a261',
+        project_ref: '#8fd3ff',
+        topic: '#b8f48f',
+        question: '#f497d1'
+      };
+      async function callMemory(body) {
+        const response = await fetch('/api/apps/memory/backend', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const payload = await response.json();
+        return payload.json || payload;
+      }
+      function resizeCanvas() {
+        const rect = canvas.getBoundingClientRect();
+        const ratio = window.devicePixelRatio || 1;
+        canvas.width = Math.max(1, Math.floor(rect.width * ratio));
+        canvas.height = Math.max(1, Math.floor(rect.height * ratio));
+        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      }
+      function graphCenter() {
+        const rect = canvas.getBoundingClientRect();
+        return { x: rect.width / 2, y: rect.height / 2 };
+      }
+      function hydrateGraph(payload) {
+        const center = graphCenter();
+        const existing = new Map(state.nodes.map((node) => [node.id, node]));
+        state.nodes = (payload.nodes || []).map((node, index, all) => {
+          const cached = existing.get(node.id);
+          const angle = (index / Math.max(1, all.length)) * Math.PI * 2;
+          const radius = 90 + Math.min(260, all.length * 10);
+          return {
+            ...node,
+            x: cached?.x ?? center.x + Math.cos(angle) * radius,
+            y: cached?.y ?? center.y + Math.sin(angle) * radius,
+            vx: cached?.vx ?? 0,
+            vy: cached?.vy ?? 0,
+            radius: 12 + Math.min(12, Number(node.importance || 0.5) * 14)
+          };
+        });
+        state.edges = payload.edges || [];
+        document.getElementById('node-count').textContent = `${state.nodes.length} nodes`;
+        document.getElementById('edge-count').textContent = `${state.edges.length} links`;
+        document.getElementById('empty').style.display = state.nodes.length ? 'none' : 'grid';
+        renderLegend();
+        renderResults(state.nodes);
+        tick(80);
+        draw();
+      }
+      function renderLegend() {
+        const root = document.getElementById('legend');
+        const types = [...new Set(state.nodes.map((node) => node.type))].sort();
+        root.innerHTML = '';
+        types.forEach((type) => {
+          const item = document.createElement('span');
+          item.className = 'pill';
+          item.innerHTML = `<span class="swatch" style="background:${colors[type] || '#ccd6dd'}"></span>${type}`;
+          root.appendChild(item);
+        });
+      }
+      function renderResults(items) {
+        const root = document.getElementById('results');
+        root.innerHTML = '';
+        items.slice(0, 20).forEach((item) => {
+          const node = document.createElement('button');
+          node.className = `item${item.id === state.selectedId ? ' active' : ''}`;
+          node.innerHTML = `<strong>${escapeHtml(item.title)}</strong><div class="muted">${escapeHtml(item.type || '')}</div>`;
+          node.onclick = () => selectNode(item.id);
+          root.appendChild(node);
+        });
+      }
+      function escapeHtml(value) {
+        return String(value || '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+      }
+      function tick(iterations = 1) {
+        const center = graphCenter();
+        const nodeById = new Map(state.nodes.map((node) => [node.id, node]));
+        for (let step = 0; step < iterations; step++) {
+          for (let i = 0; i < state.nodes.length; i++) {
+            for (let j = i + 1; j < state.nodes.length; j++) {
+              const a = state.nodes[i];
+              const b = state.nodes[j];
+              const dx = b.x - a.x || 0.01;
+              const dy = b.y - a.y || 0.01;
+              const distance = Math.max(18, Math.hypot(dx, dy));
+              const force = 900 / (distance * distance);
+              const fx = (dx / distance) * force;
+              const fy = (dy / distance) * force;
+              a.vx -= fx; a.vy -= fy; b.vx += fx; b.vy += fy;
+            }
+          }
+          state.edges.forEach((edge) => {
+            const source = nodeById.get(edge.source);
+            const target = nodeById.get(edge.target);
+            if (!source || !target) return;
+            const dx = target.x - source.x;
+            const dy = target.y - source.y;
+            const distance = Math.max(1, Math.hypot(dx, dy));
+            const desired = 105 + (1 - Number(edge.weight || 0.5)) * 70;
+            const force = (distance - desired) * 0.004;
+            const fx = (dx / distance) * force;
+            const fy = (dy / distance) * force;
+            source.vx += fx; source.vy += fy; target.vx -= fx; target.vy -= fy;
+          });
+          state.nodes.forEach((node) => {
+            node.vx += (center.x - node.x) * 0.0009;
+            node.vy += (center.y - node.y) * 0.0009;
+            node.vx *= 0.84;
+            node.vy *= 0.84;
+            if (state.dragging !== node.id) {
+              node.x += node.vx;
+              node.y += node.vy;
+            }
+          });
+        }
+      }
+      function draw() {
+        resizeCanvas();
+        const rect = canvas.getBoundingClientRect();
+        ctx.clearRect(0, 0, rect.width, rect.height);
+        ctx.save();
+        ctx.translate(state.offsetX, state.offsetY);
+        ctx.scale(state.scale, state.scale);
+        const nodeById = new Map(state.nodes.map((node) => [node.id, node]));
+        state.edges.forEach((edge) => {
+          const source = nodeById.get(edge.source);
+          const target = nodeById.get(edge.target);
+          if (!source || !target) return;
+          const active = state.selectedId && (edge.source === state.selectedId || edge.target === state.selectedId);
+          ctx.strokeStyle = active ? 'rgba(216,240,110,.82)' : 'rgba(130,150,160,.26)';
+          ctx.lineWidth = active ? 2.6 : 0.8 + Number(edge.weight || 0.5) * 1.8;
+          ctx.beginPath();
+          ctx.moveTo(source.x, source.y);
+          ctx.lineTo(target.x, target.y);
+          ctx.stroke();
+        });
+        state.nodes.forEach((node) => {
+          const active = node.id === state.selectedId;
+          const hovered = node.id === state.hoverId;
+          const color = colors[node.type] || '#ccd6dd';
+          ctx.beginPath();
+          ctx.arc(node.x, node.y, node.radius + (active ? 7 : hovered ? 4 : 0), 0, Math.PI * 2);
+          ctx.fillStyle = active ? 'rgba(216,240,110,.18)' : hovered ? 'rgba(255,255,255,.10)' : 'rgba(255,255,255,.04)';
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
+          ctx.fillStyle = color;
+          ctx.fill();
+          ctx.lineWidth = active ? 3 : 1.4;
+          ctx.strokeStyle = active ? '#ffffff' : '#0b0f12';
+          ctx.stroke();
+          if (active || hovered || state.nodes.length < 36) {
+            ctx.font = '12px Inter, system-ui, sans-serif';
+            ctx.fillStyle = '#edf4f6';
+            ctx.textAlign = 'center';
+            ctx.fillText(truncate(node.title, 28), node.x, node.y + node.radius + 18);
+          }
+        });
+        ctx.restore();
+      }
+      function truncate(value, max) {
+        const text = String(value || '');
+        return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+      }
+      function screenToWorld(clientX, clientY) {
+        const rect = canvas.getBoundingClientRect();
+        return {
+          x: (clientX - rect.left - state.offsetX) / state.scale,
+          y: (clientY - rect.top - state.offsetY) / state.scale
+        };
+      }
+      function nodeAt(clientX, clientY) {
+        const point = screenToWorld(clientX, clientY);
+        for (let i = state.nodes.length - 1; i >= 0; i--) {
+          const node = state.nodes[i];
+          if (Math.hypot(point.x - node.x, point.y - node.y) <= node.radius + 8) return node;
+        }
+        return null;
+      }
+      function selectNode(id) {
+        state.selectedId = id;
+        const node = state.nodes.find((item) => item.id === id);
+        document.getElementById('selected').textContent = node ? JSON.stringify(node, null, 2) : 'Select a node in the graph.';
+        renderRelationships(id);
+        renderResults(state.nodes);
+        draw();
+      }
+      function renderRelationships(id) {
+        const root = document.getElementById('relationships');
+        root.innerHTML = '';
+        if (!id) return;
+        const nodeById = new Map(state.nodes.map((node) => [node.id, node]));
+        state.edges
+          .filter((edge) => edge.source === id || edge.target === id)
+          .forEach((edge) => {
+            const otherId = edge.source === id ? edge.target : edge.source;
+            const other = nodeById.get(otherId);
+            const row = document.createElement('button');
+            row.className = 'rel';
+            row.innerHTML = `<strong>${escapeHtml(edge.kind)}</strong><div class="muted">${escapeHtml(other?.title || otherId)}</div><div class="muted">${escapeHtml(edge.reason || '')}</div>`;
+            row.onclick = () => selectNode(otherId);
+            root.appendChild(row);
+          });
+        if (!root.children.length) root.innerHTML = '<div class="muted">No direct relationships.</div>';
+      }
+      function animate() {
+        tick(1);
+        draw();
+        state.animation = requestAnimationFrame(animate);
+      }
+      async function refreshGraph() {
+        state.query = document.getElementById('query').value;
+        const payload = await callMemory({ action: 'graph', query: state.query, limit: 220 });
+        hydrateGraph(payload);
+      }
+      document.getElementById('search').onclick = async () => {
+        const query = document.getElementById('query').value;
+        const payload = await callMemory({ action: 'search', query, limit: 50 });
+        renderResults(payload.results || []);
+        await refreshGraph();
+      };
+      document.getElementById('refresh').onclick = refreshGraph;
+      document.getElementById('fit').onclick = () => {
+        state.scale = 1;
+        state.offsetX = 0;
+        state.offsetY = 0;
+        tick(100);
+        draw();
+      };
+      document.getElementById('remember').onclick = async () => {
+        const payload = await callMemory({
+          action: 'remember',
+          title: document.getElementById('title').value,
+          body: document.getElementById('body').value,
+          type: document.getElementById('node-type').value
+        });
+        document.getElementById('title').value = '';
+        document.getElementById('body').value = '';
+        await refreshGraph();
+        if (payload.node?.id) selectNode(payload.node.id);
+      };
+      document.getElementById('context').onclick = async () => {
+        const query = document.getElementById('query').value;
+        const payload = await callMemory({ action: 'context', query });
+        document.getElementById('context-output').textContent = JSON.stringify(payload, null, 2);
+      };
+      canvas.addEventListener('mousedown', (event) => {
+        const node = nodeAt(event.clientX, event.clientY);
+        state.lastX = event.clientX;
+        state.lastY = event.clientY;
+        if (node) {
+          state.dragging = node.id;
+          selectNode(node.id);
+        } else {
+          state.panning = true;
+        }
+      });
+      window.addEventListener('mousemove', (event) => {
+        const node = nodeAt(event.clientX, event.clientY);
+        state.hoverId = node?.id || null;
+        if (state.dragging) {
+          const dragged = state.nodes.find((item) => item.id === state.dragging);
+          const point = screenToWorld(event.clientX, event.clientY);
+          if (dragged) { dragged.x = point.x; dragged.y = point.y; dragged.vx = 0; dragged.vy = 0; }
+        } else if (state.panning) {
+          state.offsetX += event.clientX - state.lastX;
+          state.offsetY += event.clientY - state.lastY;
+        }
+        state.lastX = event.clientX;
+        state.lastY = event.clientY;
+        draw();
+      });
+      window.addEventListener('mouseup', () => { state.dragging = null; state.panning = false; });
+      canvas.addEventListener('wheel', (event) => {
+        event.preventDefault();
+        const before = screenToWorld(event.clientX, event.clientY);
+        const factor = event.deltaY > 0 ? 0.92 : 1.08;
+        state.scale = Math.max(0.45, Math.min(2.2, state.scale * factor));
+        const rect = canvas.getBoundingClientRect();
+        state.offsetX = event.clientX - rect.left - before.x * state.scale;
+        state.offsetY = event.clientY - rect.top - before.y * state.scale;
+        draw();
+      }, { passive: false });
+      window.addEventListener('resize', draw);
+      refreshGraph();
+      animate();
+    </script>
+  </body>
+</html>

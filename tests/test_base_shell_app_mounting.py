@@ -76,11 +76,11 @@ class BaseShellAppMountingTests(unittest.TestCase):
     def test_empty_chat_creation_does_not_start_runtime_session(self) -> None:
         chat_source = (REPO_ROOT / "apps/chat/frontend/src/App.tsx").read_text()
 
-        create_chat_start = chat_source.index("async function createChat()")
+        create_chat_start = chat_source.index("async function createChat(")
         create_chat_end = chat_source.index("async function handleSelectThread(", create_chat_start)
         create_chat_source = chat_source[create_chat_start:create_chat_end]
 
-        self.assertIn('createThread("", null, { system_prompt: systemPrompt })', create_chat_source)
+        self.assertIn('createThread("", projectId, { system_prompt: systemPrompt })', create_chat_source)
         self.assertIn("setActiveSession(null)", create_chat_source)
         self.assertNotIn("createRuntimeSession()", create_chat_source)
         self.assertIn("if (!thread.runtime_session_id)", chat_source)

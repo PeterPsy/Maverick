@@ -94,9 +94,11 @@ class GalleryAppTestCase(unittest.TestCase):
         self.assertEqual(parsed.app_id, "gallery")
         self.assertEqual(parsed.contract.entrypoints.backend, "backend/app_backend.py")
         self.assertEqual(parsed.contract.entrypoints.frontend, "frontend/dist")
-        self.assertEqual(parsed.contract.capabilities.mcp_tools, ["maverick_gallery"])
+        self.assertIn("maverick_gallery", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("gallery_reference_manifest", parsed.contract.capabilities.mcp_tools)
         self.assertEqual(parsed.contract.capabilities.cli_commands, ["gallery"])
         self.assertEqual(parsed.contract.capabilities.skills, [])
+        self.assertIn("file", {item.entity_type for item in parsed.contract.capabilities.reference_entities})
         self.assertEqual(len(parsed.contract.widgets), 1)
         widget = parsed.contract.widgets[0]
         self.assertEqual(widget.widget_id, "file-preview")

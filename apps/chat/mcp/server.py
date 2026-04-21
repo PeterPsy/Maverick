@@ -6,23 +6,60 @@ import json
 from pathlib import Path
 import sys
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
-def _read_state(data_root: Path) -> dict:
-    path = data_root / "threads.json"
-    if not path.is_file():
-        return {"threads": []}
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return {"threads": []}
-    return payload if isinstance(payload, dict) else {"threads": []}
+from chat_state import find_thread, list_projects, list_threads, read_state, threads_path
+
+REFERENCE_MANIFEST = {
+    "app_id": "chat",
+    "schema_version": "1",
+    "entity_types": [
+        {"entity_type": "thread", "display_name": "Chat Thread", "id_stability": "stable", "searchable": True, "resolvable": True, "summarizable": True, "deep_link_supported": True},
+        {"entity_type": "project", "display_name": "Chat Project", "id_stability": "stable", "searchable": True, "resolvable": True, "summarizable": True, "deep_link_supported": True},
+    ],
+}
+
+
+def reference_items(state: dict, entity_type: str) -> list[dict]:
+    if entity_type == "thread":
+        return [
+            {"app_id": "chat", "entity_type": "thread", "entity_id": item["thread_id"], "title": item["title"], "subtitle": item.get("agent_label") or "Chat thread", "summary": item.get("system_prompt", "")[:300], "confidence": 1.0, "deep_link": f"/apps/chat/threads/{item['thread_id']}"}
+            for item in list_threads(state)
+        ]
+    if entity_type == "project":
+        return [
+            {"app_id": "chat", "entity_type": "project", "entity_id": item["project_id"], "title": item["name"], "subtitle": "Chat project", "summary": "", "confidence": 1.0, "deep_link": f"/apps/chat/projects/{item['project_id']}"}
+            for item in list_projects(state)
+        ]
+    return []
 
 
 payload = json.loads(sys.stdin.read() or "{}")
-state = _read_state(Path(payload["data_root"]))
+arguments = payload.get("arguments") if isinstance(payload.get("arguments"), dict) else {}
+state = read_state(threads_path(Path(payload["data_root"])))
 tool_name = str(payload.get("tool_name") or "")
 
-if tool_name == "threads.list":
+if tool_name == "chat_reference_manifest":
+    result = REFERENCE_MANIFEST
+elif tool_name == "chat_reference_search":
+    entity_type = str(arguments.get("entity_type") or arguments.get("type") or "").strip()
+    query = str(arguments.get("query") or "").casefold()
+    items = reference_items(state, entity_type)
+    if query:
+        items = [item for item in items if query in item["title"].casefold() or query in item["summary"].casefold()]
+    result = {"results": items[: max(1, min(int(arguments.get("limit") or 10), 50))]}
+elif tool_name == "chat_reference_resolve":
+    entity_type = str(arguments.get("entity_type") or arguments.get("type") or "").strip()
+    entity_id = str(arguments.get("entity_id") or "").strip()
+    item = next((candidate for candidate in reference_items(state, entity_type) if candidate["entity_id"] == entity_id), None)
+    result = {"exists": False, "app_id": "chat", "entity_type": entity_type, "entity_id": entity_id} if item is None else {"exists": True, **item}
+elif tool_name == "chat_reference_summarize":
+    entity_type = str(arguments.get("entity_type") or arguments.get("type") or "").strip()
+    entity_id = str(arguments.get("entity_id") or "").strip()
+    thread = find_thread(state, entity_id) if entity_type == "thread" else None
+    item = next((candidate for candidate in reference_items(state, entity_type) if candidate["entity_id"] == entity_id), None)
+    result = {"summary": (thread or {}).get("system_prompt") or (item or {}).get("summary", ""), "safe_fields": {"title": (item or {}).get("title", ""), "entity_type": entity_type}, "source_updated_at": (thread or {}).get("updated_at", "")}
+elif tool_name == "threads.list":
     result = {"threads": state.get("threads", [])}
 elif tool_name == "message.send":
     result = {

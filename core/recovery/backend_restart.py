@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
+from core.runtime.errors import RuntimeTurnNotFoundError
 from core.runtime.service import record_runtime_event, transition_runtime_turn
 from core.runtime.turn_submission import submit_runtime_turn_async
 
@@ -15,6 +16,17 @@ if TYPE_CHECKING:
 
 RESUME_INPUT_TEXT = "resume"
 NON_TERMINAL_TURN_STATUSES = {"queued", "active"}
+NON_TERMINAL_TURN_EVENTS = {
+    "runtime.turn.queued": "cancelled",
+    "runtime.turn.started": "failed",
+}
+TERMINAL_TURN_EVENTS = {
+    "runtime.turn.cancelled",
+    "runtime.turn.completed",
+    "runtime.turn.failed",
+    "runtime.turn.timed-out",
+    "runtime.output.final",
+}
 
 
 @dataclass(frozen=True)
@@ -41,6 +53,7 @@ def recover_interrupted_runtime_turns_after_backend_restart(
         if session.status != "running":
             continue
         inspected += 1
+        closed_turns += _close_orphan_non_terminal_turn_events(state, session_id=session.session_id)
         interrupted_turns = [
             turn
             for turn in state.runtime_store.list_turns(session.session_id)
@@ -95,3 +108,40 @@ def recover_interrupted_runtime_turns_after_backend_restart(
         closed_turns=closed_turns,
         queued_resume_turns=queued_resumes,
     )
+
+
+def _close_orphan_non_terminal_turn_events(state: "PlatformState", *, session_id: str) -> int:
+    """Close non-terminal turn events whose canonical turn record is missing."""
+    terminal_turn_ids = {
+        event.turn_id
+        for event in state.runtime_store.list_events(session_id)
+        if event.turn_id and event.event_type in TERMINAL_TURN_EVENTS
+    }
+    orphan_status_by_turn_id: dict[str, str] = {}
+    for event in state.runtime_store.list_events(session_id):
+        if not event.turn_id or event.turn_id in terminal_turn_ids:
+            continue
+        target_status = NON_TERMINAL_TURN_EVENTS.get(event.event_type)
+        if not target_status:
+            continue
+        try:
+            state.runtime_store.get_turn(event.turn_id)
+        except RuntimeTurnNotFoundError:
+            orphan_status_by_turn_id[event.turn_id] = target_status
+    closed = 0
+    for turn_id, target_status in orphan_status_by_turn_id.items():
+        record_runtime_event(
+            state.runtime_store,
+            event_id=str(uuid4()),
+            session_id=session_id,
+            turn_id=turn_id,
+            plane="turn",
+            event_type=f"runtime.turn.{target_status}",
+            payload={
+                "reason": "backend_restart_orphan_turn_event",
+                "detail": "Closed non-terminal runtime event whose turn record was missing.",
+            },
+            event_bus=state.runtime_event_bus,
+        )
+        closed += 1
+    return closed

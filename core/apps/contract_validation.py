@@ -14,6 +14,7 @@ APP_CONTRACT_FILENAME = "app_contract.json"
 APP_ID_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 WIDGET_ID_PATTERN = APP_ID_PATTERN
 CONTENT_KIND_PATTERN = re.compile(r"^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9]*)+$")
+ENTITY_TYPE_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
 def _expect_mapping(payload: Any, *, label: str) -> dict[str, Any]:
     if not isinstance(payload, dict):
@@ -50,6 +51,12 @@ def _expect_slug(payload: dict[str, Any], key: str) -> str:
     value = _expect_string(payload, key)
     if not WIDGET_ID_PATTERN.fullmatch(value):
         raise AppContractValidationError(f"`{key}` must use lowercase kebab-case, got `{value}`.")
+    return value
+
+def _expect_entity_type(payload: dict[str, Any], key: str) -> str:
+    value = _expect_string(payload, key)
+    if not ENTITY_TYPE_PATTERN.fullmatch(value):
+        raise AppContractValidationError(f"`{key}` must use lowercase snake_case, got `{value}`.")
     return value
 
 def _expect_content_kind_list(payload: dict[str, Any], key: str) -> list[str]:

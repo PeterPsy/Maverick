@@ -41,6 +41,7 @@ export function isNoisyRuntimeLabel(label: string): boolean {
     normalized === "turn started" ||
     normalized === "turn completed" ||
     normalized === "turn diff updated" ||
+    normalized === "skills changed" ||
     normalized === "item started" ||
     normalized === "item completed" ||
     isNoisyProviderTelemetry

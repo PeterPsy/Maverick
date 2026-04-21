@@ -184,6 +184,28 @@ class RuntimeExecutionCommandTest(unittest.TestCase):
         self.assertEqual(tool_events[0].payload["provider_event_type"], "web_search.started")
         self.assertEqual(tool_events[0].payload["raw"]["item"]["query"], "eventi domani pisa")
 
+    def test_codex_app_cli_chat_render_output_is_emitted_as_structured_runtime_output(self) -> None:
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        session = _session("sandbox", root=temp_dir.name, session_id="session-chat-render")
+        emitted = []
+
+        result = execute_runtime_turn(
+            session=session,
+            provider=build_codex_definition(),
+            input_text="create a dynamic view",
+            launch_spec=_launch_spec(session),
+            event_sink=emitted.append,
+            command_runner=FakeCodexChatRenderCliProcess,
+            timeout_seconds=2,
+        )
+
+        structured_events = [event for event in emitted if event.event_type == "runtime.output.structured"]
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(len(structured_events), 1)
+        self.assertEqual(structured_events[0].payload["structured_content"]["kind"], "dynamic.view.instance")
+        self.assertEqual(structured_events[0].payload["structured_content"]["payload"]["id"], "view_1")
+
 
 def _session(effective_mode: str, *, root: str = "/tmp", session_id: str = "session-1") -> RuntimeSessionRecord:
     now = datetime(2026, 4, 19, tzinfo=timezone.utc)
@@ -391,6 +413,51 @@ class FakeCodexSearchProcess(FakeCodexProcess):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.stdin = FakeCodexSearchStdin(self.stdout)
+
+
+class FakeCodexChatRenderCliStdin(FakeStdin):
+    def write(self, raw: str) -> None:
+        payload = json.loads(raw)
+        method = payload["method"]
+        request_id = payload["id"]
+        if method == "initialize":
+            self.stdout.put({"jsonrpc": "2.0", "id": request_id, "result": {}})
+        elif method == "thread/start":
+            self.stdout.put({"jsonrpc": "2.0", "id": request_id, "result": {"thread": {"id": "thread-chat-render"}}})
+        elif method == "turn/start":
+            cli_output = json.dumps(
+                {
+                    "status_code": 200,
+                    "chat_render": {
+                        "kind": "dynamic.view.instance",
+                        "payload": {"id": "view_1", "title": "Storage chart"},
+                    },
+                }
+            )
+            self.stdout.put({"jsonrpc": "2.0", "id": request_id, "result": {"turn": {"id": "turn-chat-render"}}})
+            self.stdout.put(
+                {
+                    "jsonrpc": "2.0",
+                    "method": "item/completed",
+                    "params": {
+                        "item": {
+                            "id": "cmd_1",
+                            "type": "commandExecution",
+                            "command": "app.dynamic-views.dynamic-views",
+                            "exitCode": 0,
+                            "aggregatedOutput": cli_output,
+                        }
+                    },
+                }
+            )
+            self.stdout.put({"jsonrpc": "2.0", "method": "item/agentMessage/delta", "params": {"delta": cli_output}})
+            self.stdout.put({"jsonrpc": "2.0", "method": "turn/completed", "params": {"turn": {"status": "completed"}}})
+
+
+class FakeCodexChatRenderCliProcess(FakeCodexProcess):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.stdin = FakeCodexChatRenderCliStdin(self.stdout)
 
 
 if __name__ == "__main__":

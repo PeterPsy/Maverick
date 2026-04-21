@@ -16,6 +16,7 @@ from core.apps.models import (
     AppHealthContract,
     AppHookTimeouts,
     AppLifecycleDeclaration,
+    AppReferenceEntityDeclaration,
     AppRollbackSupport,
     AppStorageDeclaration,
     AppStorageIndices,
@@ -74,6 +75,7 @@ def build_app_capabilities(
     cli_commands: list[str] | None = None,
     skills: list[str] | None = None,
     views: list[str] | None = None,
+    reference_entities: list[AppReferenceEntityDeclaration] | None = None,
 ) -> AppCapabilities:
     """Build one capability declaration."""
     return AppCapabilities(
@@ -81,6 +83,26 @@ def build_app_capabilities(
         cli_commands=cli_commands or [],
         skills=skills or [],
         views=views or [],
+        reference_entities=reference_entities or [],
+    )
+
+def build_reference_entity_declaration(
+    *,
+    entity_type: str,
+    display_name: str,
+    searchable: bool = True,
+    resolvable: bool = True,
+    summarizable: bool = True,
+    deep_link_supported: bool = True,
+) -> AppReferenceEntityDeclaration:
+    """Build one referenceable entity capability declaration."""
+    return AppReferenceEntityDeclaration(
+        entity_type=entity_type,
+        display_name=display_name,
+        searchable=searchable,
+        resolvable=resolvable,
+        summarizable=summarizable,
+        deep_link_supported=deep_link_supported,
     )
 
 def build_app_distribution(

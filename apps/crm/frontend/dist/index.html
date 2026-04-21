@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CRM</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #17211d;
+        --muted: #66736d;
+        --line: #d9ded8;
+        --surface: #ffffff;
+        --band: #f4f6f2;
+        --accent: #1d6f5f;
+        --accent-2: #9b5221;
+        --danger: #9f2d26;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: var(--ink);
+        background: var(--band);
+      }
+      button, input, textarea, select { font: inherit; }
+      button {
+        border: 0;
+        border-radius: 7px;
+        background: var(--accent);
+        color: #fff;
+        min-height: 38px;
+        padding: 0 13px;
+        cursor: pointer;
+      }
+      button.secondary { background: #e7ece8; color: var(--ink); }
+      button.icon { width: 38px; padding: 0; }
+      input, textarea, select {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: #fff;
+        color: var(--ink);
+        padding: 10px 11px;
+      }
+      textarea { min-height: 84px; resize: vertical; }
+      .app {
+        display: grid;
+        grid-template-columns: 280px minmax(0, 1fr) 360px;
+        min-height: 100vh;
+      }
+      .sidebar, .detail {
+        background: var(--surface);
+        border-color: var(--line);
+        min-width: 0;
+      }
+      .sidebar { border-right: 1px solid var(--line); padding: 18px; }
+      .detail { border-left: 1px solid var(--line); padding: 18px; overflow: auto; }
+      .main { padding: 18px; min-width: 0; }
+      .brand { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+      h1 { font-size: 24px; line-height: 1.1; margin: 0; letter-spacing: 0; }
+      h2 { font-size: 16px; margin: 0 0 10px; letter-spacing: 0; }
+      h3 { font-size: 14px; margin: 0 0 8px; letter-spacing: 0; }
+      .muted { color: var(--muted); font-size: 13px; }
+      .tabs { display: grid; gap: 7px; margin: 18px 0; }
+      .tab {
+        background: transparent;
+        color: var(--ink);
+        border: 1px solid transparent;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .tab.active { border-color: var(--accent); background: #e9f3f0; }
+      .toolbar {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 16px;
+      }
+      .grid { display: grid; gap: 10px; }
+      .record {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 13px;
+        cursor: pointer;
+      }
+      .record:hover { border-color: var(--accent); }
+      .record.selected { outline: 2px solid var(--accent); outline-offset: 1px; }
+      .record-title { font-weight: 700; margin-bottom: 5px; overflow-wrap: anywhere; }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        min-height: 24px;
+        padding: 0 8px;
+        border-radius: 999px;
+        background: #edf0eb;
+        color: var(--muted);
+        font-size: 12px;
+        margin: 5px 5px 0 0;
+      }
+      .pipeline {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(180px, 1fr));
+        gap: 12px;
+        overflow-x: auto;
+        padding-bottom: 8px;
+      }
+      .stage {
+        min-height: 420px;
+        background: #eef2ed;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 10px;
+      }
+      .stage h3 { display: flex; justify-content: space-between; align-items: center; }
+      .form { display: grid; gap: 9px; }
+      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+      .detail-block { border-top: 1px solid var(--line); padding-top: 13px; margin-top: 13px; }
+      pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+        background: #f6f7f5;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 10px;
+        max-height: 320px;
+        overflow: auto;
+      }
+      @media (max-width: 1040px) {
+        .app { grid-template-columns: 1fr; }
+        .sidebar, .detail { border: 0; border-bottom: 1px solid var(--line); }
+        .detail { border-top: 1px solid var(--line); }
+        .pipeline { grid-template-columns: repeat(4, 230px); }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="brand">
+          <div>
+            <h1>CRM</h1>
+            <div class="muted">Accounts, contacts, deals, activities</div>
+          </div>
+          <button id="refresh" class="icon secondary" title="Refresh">↻</button>
+        </div>
+        <input id="search" placeholder="Search CRM" />
+        <div class="tabs">
+          <button class="tab active" data-view="accounts">Accounts <span id="count-accounts">0</span></button>
+          <button class="tab" data-view="contacts">Contacts <span id="count-contacts">0</span></button>
+          <button class="tab" data-view="deals">Deals <span id="count-deals">0</span></button>
+          <button class="tab" data-view="activities">Activities <span id="count-activities">0</span></button>
+          <button class="tab" data-view="pipeline">Pipeline <span>↦</span></button>
+        </div>
+        <div class="form">
+          <h2>Quick Create</h2>
+          <select id="create-kind">
+            <option value="account">Account</option>
+            <option value="contact">Contact</option>
+            <option value="deal">Deal</option>
+            <option value="activity">Activity</option>
+          </select>
+          <input id="create-title" placeholder="Name or subject" />
+          <textarea id="create-body" placeholder="Summary, role, stage, or note"></textarea>
+          <button id="create">Create</button>
+        </div>
+      </aside>
+      <main class="main">
+        <div class="toolbar">
+          <div>
+            <h2 id="view-title">Accounts</h2>
+            <div class="muted" id="view-subtitle">Structured business entities for agents and Memory.</div>
+          </div>
+          <button id="seed" class="secondary">Seed Demo</button>
+          <button id="clear-selection" class="secondary">Clear</button>
+        </div>
+        <section id="list" class="grid"></section>
+        <section id="pipeline" class="pipeline" hidden></section>
+      </main>
+      <aside class="detail">
+        <h2>Record</h2>
+        <div id="detail" class="muted">Select a CRM record.</div>
+        <div class="detail-block">
+          <h2>Reference Preview</h2>
+          <pre id="reference-preview">No record selected.</pre>
+        </div>
+      </aside>
+    </div>
+    <script>
+      const state = { view: 'accounts', recent: null, selected: null, search: '' };
+      const plural = { account: 'accounts', contact: 'contacts', deal: 'deals', activity: 'activities' };
+      const singular = { accounts: 'account', contacts: 'contact', deals: 'deal', activities: 'activity' };
+      const stages = ['lead', 'qualification', 'proposal', 'won'];
+
+      async function callCrm(body) {
+        const response = await fetch('/api/apps/crm/backend', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const payload = await response.json();
+        if (payload.error) throw new Error(payload.detail || payload.error);
+        return payload;
+      }
+
+      function titleFor(type, item) {
+        if (type === 'account') return item.name;
+        if (type === 'contact') return item.display_name;
+        if (type === 'deal') return item.name;
+        return item.subject;
+      }
+
+      function metaFor(type, item) {
+        if (type === 'account') return [item.status, item.industry, item.domain].filter(Boolean);
+        if (type === 'contact') return [item.role, item.email].filter(Boolean);
+        if (type === 'deal') return [item.stage, `${item.value || 0} ${item.currency || ''}`.trim(), item.close_date].filter(Boolean);
+        return [item.activity_type, item.occurred_at].filter(Boolean);
+      }
+
+      function renderRecord(type, item) {
+        const div = document.createElement('article');
+        div.className = `record ${state.selected && state.selected.id === item.id ? 'selected' : ''}`;
+        div.onclick = () => selectRecord(type, item.id);
+        div.innerHTML = `<div class="record-title"></div><div class="muted"></div><div></div>`;
+        div.children[0].textContent = titleFor(type, item);
+        div.children[1].textContent = item.summary || item.body || '';
+        metaFor(type, item).forEach((value) => {
+          const pill = document.createElement('span');
+          pill.className = 'pill';
+          pill.textContent = value;
+          div.children[2].appendChild(pill);
+        });
+        return div;
+      }
+
+      function renderList() {
+        const list = document.getElementById('list');
+        const pipeline = document.getElementById('pipeline');
+        list.hidden = state.view === 'pipeline';
+        pipeline.hidden = state.view !== 'pipeline';
+        list.innerHTML = '';
+        if (!state.recent) return;
+        if (state.view === 'pipeline') return renderPipeline();
+        const type = singular[state.view];
+        const items = state.recent[state.view] || [];
+        document.getElementById('view-title').textContent = state.view[0].toUpperCase() + state.view.slice(1);
+        items.forEach((item) => list.appendChild(renderRecord(type, item)));
+      }
+
+      function renderPipeline() {
+        const pipeline = document.getElementById('pipeline');
+        pipeline.innerHTML = '';
+        document.getElementById('view-title').textContent = 'Pipeline';
+        const deals = state.recent?.deals || [];
+        stages.forEach((stage) => {
+          const column = document.createElement('section');
+          column.className = 'stage';
+          const matches = deals.filter((deal) => deal.stage === stage);
+          column.innerHTML = `<h3>${stage}<span class="pill">${matches.length}</span></h3>`;
+          matches.forEach((deal) => column.appendChild(renderRecord('deal', deal)));
+          pipeline.appendChild(column);
+        });
+      }
+
+      async function refresh() {
+        const payload = await callCrm({ action: 'list_recent', limit: 80 });
+        state.recent = payload;
+        ['accounts', 'contacts', 'deals', 'activities'].forEach((key) => {
+          document.getElementById(`count-${key}`).textContent = payload[key]?.length || 0;
+        });
+        renderList();
+      }
+
+      async function selectRecord(type, id) {
+        const payload = await callCrm({ action: 'get', entity_type: type, entity_id: id });
+        state.selected = { type, ...payload.entity };
+        document.getElementById('detail').innerHTML = `<h3>${titleFor(type, payload.entity)}</h3><pre>${JSON.stringify(payload.entity, null, 2)}</pre>`;
+        const ref = await callCrm({ action: 'references.summarize', entity_type: type, entity_id: id });
+        document.getElementById('reference-preview').textContent = JSON.stringify(ref, null, 2);
+        renderList();
+      }
+
+      async function createQuick() {
+        const kind = document.getElementById('create-kind').value;
+        const title = document.getElementById('create-title').value.trim();
+        const body = document.getElementById('create-body').value.trim();
+        if (!title) return;
+        const actions = {
+          account: { action: 'create_account', name: title, summary: body },
+          contact: { action: 'create_contact', display_name: title, role: body },
+          deal: { action: 'create_deal', name: title, stage: body || 'lead' },
+          activity: { action: 'add_activity', subject: title, body, activity_type: 'note' },
+        };
+        await callCrm(actions[kind]);
+        document.getElementById('create-title').value = '';
+        document.getElementById('create-body').value = '';
+        await refresh();
+      }
+
+      async function seedDemo() {
+        const account = await callCrm({ action: 'create_account', name: 'Acme Spa', domain: 'acme.example', industry: 'Manufacturing', status: 'customer' });
+        const contact = await callCrm({ action: 'create_contact', account_id: account.account.id, first_name: 'Mario', last_name: 'Rossi', email: 'mario.rossi@acme.example', role: 'Referente tecnico' });
+        const deal = await callCrm({ action: 'create_deal', account_id: account.account.id, name: 'Bando X', stage: 'qualification', value: 25000, currency: 'EUR', close_date: '2026-05-15' });
+        await callCrm({ action: 'add_activity', account_id: account.account.id, contact_id: contact.contact.id, deal_id: deal.deal.id, activity_type: 'meeting', subject: 'Allineamento tecnico bando X', body: 'Mario Rossi conferma che mancano gli allegati economici.' });
+        await callCrm({ action: 'link_entities', source_type: 'contact', source_id: contact.contact.id, target_type: 'deal', target_id: deal.deal.id, kind: 'influences', strength: 0.8, reason: 'Mario Rossi guida la validazione tecnica.' });
+        await refresh();
+      }
+
+      document.querySelectorAll('.tab').forEach((button) => {
+        button.onclick = () => {
+          document.querySelectorAll('.tab').forEach((item) => item.classList.remove('active'));
+          button.classList.add('active');
+          state.view = button.dataset.view;
+          renderList();
+        };
+      });
+      document.getElementById('refresh').onclick = refresh;
+      document.getElementById('create').onclick = createQuick;
+      document.getElementById('seed').onclick = seedDemo;
+      document.getElementById('clear-selection').onclick = () => {
+        state.selected = null;
+        document.getElementById('detail').textContent = 'Select a CRM record.';
+        document.getElementById('reference-preview').textContent = 'No record selected.';
+        renderList();
+      };
+      document.getElementById('search').oninput = async (event) => {
+        const query = event.target.value.trim();
+        if (!query) return refresh();
+        const payload = await callCrm({ action: 'search', query, limit: 40 });
+        state.view = 'accounts';
+        state.recent = { accounts: [], contacts: [], deals: [], activities: [] };
+        payload.results.forEach((item) => state.recent[plural[item.entity_type]].push({ id: item.entity_id, name: item.title, display_name: item.title, subject: item.title, summary: item.summary, updated_at: item.updated_at }));
+        renderList();
+      };
+      refresh();
+    </script>
+  </body>
+</html>

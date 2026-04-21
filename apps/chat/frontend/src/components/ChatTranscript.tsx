@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import type { ChatMessage, ChatThread } from "../api/client";
+import type { ReactNode } from "react";
+import type { AppReference, ChatMessage, ChatThread } from "../api/client";
 import { formatFileSize } from "../lib/attachments";
+import { findMentionTokens } from "../lib/mentions";
+import type { MentionItem } from "../lib/mentions";
 import { MarkdownMessage } from "./MarkdownMessage";
 import { RuntimeStepMessage } from "./RuntimeStepMessage";
 import { StructuredContentMessage } from "./StructuredContentMessage";
@@ -23,12 +26,14 @@ export function ChatTranscript({
   error,
   isLoading,
   loadingLabel,
+  mentionItems,
   messages,
 }: {
   activeThread: ChatThread | null;
   error: string | null;
   isLoading: boolean;
   loadingLabel: string;
+  mentionItems: MentionItem[];
   messages: ChatMessage[];
 }) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -90,6 +95,11 @@ export function ChatTranscript({
     }
   }, [messages.length, isLoading, error]);
 
+  const latestToolMessageId =
+    [...messages]
+      .reverse()
+      .find((message) => message.role === "tool" && (message.toolCalls?.length || message.toolCall))?.id || null;
+
   if (!messages.length && isLoading && !error) {
     return (
       <section className="chatapp-chat-scroll" aria-busy="true" aria-live="polite">
@@ -133,7 +143,9 @@ export function ChatTranscript({
             <article className={`chatapp-bubble ${bubbleClass(message)} ${message.status === "failed" ? "is-error" : ""}`} key={message.id}>
               {message.role === "human" ? (
                 <div className="chatapp-human-message">
-                  <div className="chatapp-human-message__text">{message.content}</div>
+                  <div className="chatapp-human-message__text">
+                    {renderHumanMessageContent(message.content, message.appReferences || [], mentionItems)}
+                  </div>
                   {message.content ? (
                     <button
                       aria-label="Copia messaggio"
@@ -156,7 +168,7 @@ export function ChatTranscript({
                           }`}
                           key={attachment.id}
                         >
-                          {attachment.objectUrl ? (
+                          {attachment.objectUrl && message.status === "pending" ? (
                             <img alt="" className="chatapp-attachment-card__preview" src={attachment.objectUrl} />
                           ) : (
                             <span className="chatapp-attachment-card__icon" aria-hidden="true">
@@ -180,7 +192,10 @@ export function ChatTranscript({
                   <span className="chatapp-system-update__label">{message.content}</span>
                 </div>
               ) : message.role === "tool" && (message.toolCalls?.length || message.toolCall) ? (
-                <ToolCallInlineMessage toolCalls={message.toolCalls?.length ? message.toolCalls : [message.toolCall!]} />
+                <ToolCallInlineMessage
+                  defaultExpanded={message.id === latestToolMessageId}
+                  toolCalls={message.toolCalls?.length ? message.toolCalls : [message.toolCall!]}
+                />
               ) : message.role === "step" && message.step ? (
                 <RuntimeStepMessage step={message.step} />
               ) : message.role === "structured" && message.structuredContent ? (
@@ -249,6 +264,82 @@ export function ChatTranscript({
         </button>
       ) : null}
     </section>
+  );
+}
+
+function renderHumanMessageContent(content: string, appReferences: AppReference[], mentionItems: MentionItem[]) {
+  const tokenMatches = findMentionTokens(content, mentionItems).map((token) => ({
+    kind: token.item.kind,
+    id: token.item.id,
+    label: token.item.label,
+    start: token.start,
+    end: token.end,
+  }));
+  const fallbackAppMatches = appReferences
+    .flatMap((reference) => fallbackMatchesForAppReference(content, reference))
+    .filter((match) => !tokenMatches.some((token) => rangesOverlap(token, match)));
+  const matches = [...tokenMatches, ...fallbackAppMatches]
+    .sort((left, right) => left.start - right.start)
+    .filter((match, index, sorted) => index === 0 || match.start >= sorted[index - 1].end);
+  if (!matches.length) {
+    return content;
+  }
+  const segments: ReactNode[] = [];
+  let cursor = 0;
+  matches.forEach((match) => {
+    if (match.start > cursor) {
+      segments.push(content.slice(cursor, match.start));
+    }
+    segments.push(<MentionReferenceChip key={`${match.kind}:${match.id}:${match.start}`} match={match} />);
+    cursor = match.end;
+  });
+  if (cursor < content.length) {
+    segments.push(content.slice(cursor));
+  }
+  return segments;
+}
+
+type MessageMentionMatch = {
+  kind: MentionItem["kind"];
+  id: string;
+  label: string;
+  start: number;
+  end: number;
+};
+
+function fallbackMatchesForAppReference(content: string, reference: AppReference): MessageMentionMatch[] {
+  const label = reference.label?.trim();
+  const candidates = [`@${reference.app_id}`, label ? `@${label}` : ""].filter(Boolean);
+  return candidates
+    .map((candidate): MessageMentionMatch | null => {
+      const start = content.indexOf(candidate);
+      return start >= 0
+        ? {
+            kind: "app" as const,
+            id: reference.app_id,
+            label: reference.label || reference.app_id,
+            start,
+            end: start + candidate.length,
+          }
+        : null;
+    })
+    .filter((match): match is MessageMentionMatch => Boolean(match));
+}
+
+function rangesOverlap(left: Pick<MessageMentionMatch, "start" | "end">, right: Pick<MessageMentionMatch, "start" | "end">): boolean {
+  return left.start < right.end && right.start < left.end;
+}
+
+function MentionReferenceChip({ match }: { match: MessageMentionMatch }) {
+  return (
+    <span
+      className={`chatapp-message-reference-chip is-${match.kind}`}
+      data-reference-id={match.id}
+      title={`${match.kind === "app" ? "app_id" : "skill_id"}: ${match.id}`}
+    >
+      <span className="chatapp-message-reference-chip__kind">{match.kind === "app" ? "App" : "Skill"}</span>
+      <span className="chatapp-message-reference-chip__label">{match.label}</span>
+    </span>
   );
 }
 

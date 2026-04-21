@@ -36,7 +36,7 @@ class ShellCoreApiTestCase(unittest.TestCase):
             repo_root / "apps" / "base-shell",
             ignore=shutil.ignore_patterns("node_modules"),
         )
-        shutil.copytree(source_apps_root / "chat", repo_root / "apps" / "chat")
+        shutil.copytree(source_apps_root / "chat", repo_root / "apps" / "chat", ignore=shutil.ignore_patterns("node_modules"))
         shutil.copytree(source_apps_root / "agents", repo_root / "apps" / "agents", ignore=shutil.ignore_patterns("node_modules"))
         return repo_root
 
@@ -48,6 +48,7 @@ class ShellCoreApiTestCase(unittest.TestCase):
         method: str = "GET",
         body: dict | None = None,
         cookie: str | None = None,
+        query_string: str = "",
     ) -> tuple[int, dict, dict[str, str]]:
         payload = b""
         if body is not None:
@@ -58,7 +59,7 @@ class ShellCoreApiTestCase(unittest.TestCase):
             "REQUEST_METHOD": method,
             "CONTENT_LENGTH": str(len(payload)),
             "CONTENT_TYPE": "application/json",
-            "QUERY_STRING": "",
+            "QUERY_STRING": query_string,
             "wsgi.input": BytesIO(payload),
         }
         if cookie is not None:
@@ -206,6 +207,22 @@ class ShellCoreApiTestCase(unittest.TestCase):
         self.assertEqual(runtime_session["workspace_id"], "ceida")
         self.assertEqual(runtime_session["effective_mode"], "sandbox")
 
+    def test_runtime_session_creation_requires_explicit_agent_id(self) -> None:
+        state = bootstrap_platform_state(start_path=self.make_repo_root())
+        app = PlatformHost(state, start_path=state.repository_root)
+        cookie = self.login(app)
+
+        status_runtime, runtime_payload, _runtime_headers = self.invoke(
+            app,
+            path="/api/runtime/sessions",
+            method="POST",
+            body={},
+            cookie=cookie,
+        )
+
+        self.assertEqual(status_runtime, 400)
+        self.assertEqual(runtime_payload["error"], "agent_id_required")
+
     def test_member_cannot_create_workspace(self) -> None:
         repo_root = self.make_repo_root()
         state = bootstrap_platform_state(start_path=repo_root)
@@ -319,6 +336,37 @@ class ShellCoreApiTestCase(unittest.TestCase):
         self.assertEqual(turn_payload["events"][0]["payload"]["client_message_id"], "client-message-1")
         final_event = next(event for event in events["items"] if event["event_type"] == "runtime.output.final")
         self.assertEqual(final_event["payload"]["text"], "hello from codex")
+
+    def test_runtime_events_api_can_limit_recent_events(self) -> None:
+        state = bootstrap_platform_state(start_path=self.make_repo_root())
+        app = PlatformHost(state, start_path=state.repository_root)
+        cookie = self.login(app)
+
+        with patch.dict("os.environ", {"MAVERICK3_RUNTIME_FAKE_RESPONSE": "hello from codex"}):
+            _status_session, session, _session_headers = self.invoke(
+                app,
+                path="/api/runtime/sessions",
+                method="POST",
+                body={"agent_id": "chat"},
+                cookie=cookie,
+            )
+            self.invoke(
+                app,
+                path=f"/api/runtime/sessions/{session['session_id']}/turns",
+                method="POST",
+                body={"input_text": "hello", "client_message_id": "client-message-1"},
+                cookie=cookie,
+            )
+            status_events, events, _events_headers = self.invoke(
+                app,
+                path=f"/api/runtime/sessions/{session['session_id']}/events",
+                query_string="limit=2",
+                cookie=cookie,
+            )
+
+        self.assertEqual(status_events, 200)
+        self.assertEqual(len(events["items"]), 2)
+        self.assertEqual(events["items"][-1]["event_type"], "runtime.turn.completed")
 
     def test_runtime_turn_api_can_queue_async_turn_and_complete(self) -> None:
         state = bootstrap_platform_state(start_path=self.make_repo_root())

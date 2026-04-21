@@ -1,4 +1,4 @@
-import type { ChatMessageAttachment } from "../api/client";
+import type { AppReference, ChatMessageAttachment } from "../api/client";
 import { uploadWorkspaceFile } from "../api/client";
 import type { ComposerAttachment } from "./attachments";
 
@@ -7,12 +7,14 @@ export type PendingMessage = {
   content: string;
   createdAt: string;
   attachments: ChatMessageAttachment[];
+  appReferences: AppReference[];
 };
 
 export type QueuedMessage = {
   clientMessageId: string;
   content: string;
   attachments: ChatMessageAttachment[];
+  appReferences: AppReference[];
 };
 
 export function attachmentToMessageAttachment(attachment: ComposerAttachment): ChatMessageAttachment {

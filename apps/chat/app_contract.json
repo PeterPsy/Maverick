@@ -15,7 +15,11 @@
       "threads.list",
       "threads.create",
       "message.send",
-      "turn.stop"
+      "turn.stop",
+      "chat_reference_manifest",
+      "chat_reference_search",
+      "chat_reference_resolve",
+      "chat_reference_summarize"
     ],
     "cli_commands": [
       "chat"
@@ -23,6 +27,24 @@
     "skills": [],
     "views": [
       "chat"
+    ],
+    "reference_entities": [
+      {
+        "entity_type": "thread",
+        "display_name": "Chat Thread",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      },
+      {
+        "entity_type": "project",
+        "display_name": "Chat Project",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      }
     ]
   },
   "entrypoints": {

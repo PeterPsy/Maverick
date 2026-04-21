@@ -39,6 +39,7 @@ class PlatformState:
     secret_store: MongoSecretStore
     recovery_store: MongoRecoveryStore
     observability_store: MongoObservabilityStore
+    root_shell_app_id: str
 
 
 def bootstrap_platform_state(*, start_path: Path | None = None, now: datetime | None = None) -> PlatformState:
@@ -83,7 +84,7 @@ def bootstrap_platform_state(*, start_path: Path | None = None, now: datetime | 
         RuntimeCollections(
             sessions=JsonFileCollection(runtime_state_root / "sessions.json"),
             turns=JsonFileCollection(runtime_state_root / "turns.json"),
-            events=JsonFileCollection(runtime_state_root / "events.json"),
+            events=JsonFileCollection(runtime_state_root / "events.json", append_only_upserts=True),
             processes=JsonFileCollection(runtime_state_root / "processes.json"),
             states=JsonFileCollection(runtime_state_root / "states.json"),
         )
@@ -142,6 +143,7 @@ def bootstrap_platform_state(*, start_path: Path | None = None, now: datetime | 
         secret_store=secret_store,
         recovery_store=recovery_store,
         observability_store=observability_store,
+        root_shell_app_id=os.environ.get("MAVERICK3_ROOT_SHELL_APP_ID", "base-shell").strip() or "base-shell",
     )
     recover_interrupted_runtime_turns_after_backend_restart(state)
     return state

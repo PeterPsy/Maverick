@@ -216,6 +216,9 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] `failure_semantics`
   - [x] `health_contract`
   - [x] `rollback_support`
+- [x] Define and implement optional `capabilities.reference_entities` metadata for apps that expose referenceable records
+- [x] Define shared CLI/MCP reference tool conventions: manifest, search, resolve, and summarize
+- [x] Add parser and contract tests for referenceable entity metadata before app contracts declare it
 - [x] Implement lifecycle import-recovery support declarations:
   - [x] `validate_after_import`
   - [x] `repair_after_import`
@@ -251,6 +254,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] distinguish runtime-domain events from websocket or transport framing
   - [x] coalesce adjacent provider output deltas before persistence and live transport while preserving chronology around tool and terminal events
   - [x] persist local bootstrap runtime collections so chat thread history survives logout/login and host restarts
+  - [x] append local bootstrap runtime events without rewriting the full event history file per event
   - [x] publish saved runtime events to an in-memory runtime event bus for live transports without making persistence polling part of the stream path
 - [x] Implement runtime WebSocket transport
   - [x] expose `WS /ws/runtime/sessions/<session_id>` as the official realtime runtime stream
@@ -553,6 +557,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] Treat final runtime output as terminal UI evidence so completed turns cannot leave chat stuck in Thinking/stop state
   - [x] Scope live Thinking labels to the active turn and clear busy state on session-level terminal events
   - [x] Show an explicit transcript loader while existing chat history is being loaded
+  - [x] Make Chat usable on phone-width viewports with contained transcript, composer, tools, widgets, and attachment controls
 - [x] Implement `base-shell` as the first mounted frontend shell smoke app
 - [x] Create reusable local Codex skill `maverick-v3-app-porting` for rigorous legacy-to-v3 app porting work
 - [x] Create reusable local Codex skill `maverick-v3-app-creator` for clean-slate v3 app creation work
@@ -703,7 +708,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
 - [ ] Remove remaining product assumptions from core/base-shell boundaries:
   - [x] replace hardcoded built-in app id list in core bootstrap with contract-driven built-in discovery
   - [x] rebuild built-in app bindings for every active persisted workspace during local hosted bootstrap
-  - [ ] replace hardcoded root shell app id with configurable root-shell app selection
+  - [x] replace hardcoded root shell app id with configurable root-shell app selection
   - [x] move base-shell pinned app shortcuts into App Store-owned workspace state and a registry-mounted widget
   - [ ] replace base-shell's hardcoded `chat` initial preference with registry/workspace preference metadata
 - [x] Implement `agents` as an app on top of core runtime/provider system
@@ -742,6 +747,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
 - [x] Define first-wave deployment wiring for hosted v3:
   - [x] main core `systemd` service
   - [x] independent `rescue` `systemd` service
+  - [x] backend watchdog `systemd` timer that escalates sustained main-backend downtime to an autonomous rescue Codex agent
   - [x] `nginx` routing for mounted app frontend/backend paths
 - [x] Implement App Store as a first-class Maverick app:
   - [x] create `apps/app-store/app_contract.json`
@@ -834,6 +840,8 @@ without carrying forward legacy structure or backward-compatibility constraints 
     - [x] send only explicit widget context
     - [x] factor chat widget mounting into a generic host frame that is not tied to any widget owner or content kind
     - [x] synthesize `workspace.file.preview` structured content from ordinary agent links to workspace storage files
+    - [x] promote app-owned `chat_render` results from CLI/MCP/backend surfaces into generic structured runtime output for registry-backed widget rendering
+    - [x] suppress duplicate final assistant output at the runtime boundary when the same text was already streamed as deltas
     - [ ] route widget mutations to the widget owner's backend/MCP/CLI surfaces
   - [x] Implement chat-owned sidebar widget for `base-shell`:
     - [x] declare `chat-sidebar` in `apps/chat/app_contract.json`
@@ -863,11 +871,13 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] Prevent empty chat/runtime-session amplification:
     - [x] keep new empty chat creation in chat-owned thread state until the first user turn
     - [x] create runtime sessions lazily only when a message is sent or a runtime session is explicitly handed off
+    - [x] require explicit `agent_id` for runtime session creation instead of defaulting missing ownership to Chat
+    - [x] keep mounted app backend polling and CRUD calls from creating runtime turns or runtime events
     - [x] consume repeated `new_chat` navigation requests once by request id
     - [x] initialize new chat threads with the Agents common prompt when the Agents app backend is available
     - [x] pass the saved chat thread system prompt into runtime session creation on first user turn
     - [x] drop provider lifecycle noise such as `Reading additional input from stdin...` in runtime normalization before it reaches frontend transport
-    - [x] terminate linked runtime sessions and provider subprocesses when a chat thread is deleted
+    - [x] terminate linked runtime sessions and provider subprocesses through the generic runtime termination API after a chat thread is deleted
 
 ## Phase 14: Acceptance Criteria for First Usable v3
 
@@ -898,6 +908,53 @@ without carrying forward legacy structure or backward-compatibility constraints 
 - [x] Hosted v3 is reachable at `maverick3.versy.ai`
 - [x] Base shell app discovers and mounts enabled app frontends through the core host
 - [ ] Export/import works for one workspace without legacy assumptions
+
+## Phase 15: Workspace Memory App
+
+- [x] Define Memory app as a built-in app under `apps/memory`
+- [x] Store Memory data under `workspaces/<workspace_id>/data/memory`
+- [x] Implement SQLite-backed Memory schema with nodes, edges, refs, chunks, audit events, retrieval feedback, and index jobs
+- [x] Implement idempotent install, migrate, and health-check hooks
+- [x] Implement Memory backend actions for remember, update, soft delete, link, unlink, attach file, attach app entity, inspect, search, context, audit, and health
+- [x] Implement Memory CLI surface
+- [x] Implement Memory MCP surface
+- [x] Implement Memory skill template under `apps/memory/skills/memory-ops`
+- [x] Implement initial Memory operator frontend under `apps/memory/frontend/dist`
+- [x] Add deterministic FTS-backed retrieval with graph expansion and provenance in context output
+- [x] Add Memory app tests for contract parsing, lifecycle hooks, backend behavior, CLI/MCP entrypoints, and core-mounted end-to-end usage
+- [x] Defer embeddings and vector search until after the stable local retrieval contract is in place
+
+## Phase 16: Cross-App Reference Tools
+
+- [x] Document referenceable entity architecture in app contract architecture
+- [x] Document core boundary for app-owned reference tools in core architecture
+- [x] Add optional `capabilities.reference_entities` contract metadata
+- [x] Add parser and serializer support for referenceable entity metadata
+- [x] Add parser tests for referenceable entity metadata
+- [x] Add common CLI/MCP reference tool convention: manifest, search, resolve, and summarize
+- [x] Add reference manifests and reference tools to `agents`
+- [x] Add reference manifests and reference tools to `app-store`
+- [x] Add empty reference manifests and unsupported reference operations to `base-shell`
+- [x] Add reference manifests and reference tools to `chat`
+- [x] Add reference manifests and reference tools to `dynamic-views`
+- [x] Add reference manifests and reference tools to `gallery`
+- [x] Add reference manifests and reference tools to `skills`
+- [x] Add empty reference manifests and unsupported reference operations to `user-admin`
+- [x] Add reference tool contract tests for existing app MCP and CLI manifests
+
+## Phase 17: Forkable CRM App
+
+- [x] Define CRM app as a source-available, forkable built-in app under `apps/crm`
+- [x] Store CRM data under `workspaces/<workspace_id>/data/crm`
+- [x] Implement SQLite-backed CRM schema for accounts, contacts, deals, activities, relationships, events, and FTS search
+- [x] Implement idempotent install, migrate, and health-check hooks
+- [x] Implement CRM backend actions for account/contact/deal/activity creation, entity inspection, search, recent lists, deal lists, relationships, and health
+- [x] Implement CRM CLI surface for compact agent operations
+- [x] Implement CRM MCP surface with shared service behavior
+- [x] Implement CRM reference manifest, search, resolve, and summarize tools for Memory links
+- [x] Implement CRM skill template under `apps/crm/skills/crm-ops`
+- [x] Implement initial CRM operator frontend under `apps/crm/frontend/dist`
+- [x] Add CRM app tests for contract parsing, lifecycle hooks, backend behavior, CLI/MCP entrypoints, and core-mounted end-to-end usage
 
 ## Phase 8: Inter-Agent Communication
 

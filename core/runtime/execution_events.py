@@ -112,6 +112,8 @@ def _tool_payload(*, event_type: str, payload: dict[str, Any], item: dict[str, A
 
 def _codex_item_tool_payload(*, event_type: str, payload: dict[str, Any], item: dict[str, Any]) -> RuntimeExecutionEvent | None:
     item_type = str(item.get("type") or "").strip()
+    if event_type == "item.fileChange.outputDelta":
+        return _codex_file_change_output_delta_payload(event_type=event_type, payload=payload, item=item)
     if item_type == "commandExecution":
         return _codex_command_execution_payload(event_type=event_type, payload=payload, item=item)
     if item_type == "fileChange":
@@ -162,6 +164,23 @@ def _codex_file_change_payload(*, event_type: str, payload: dict[str, Any], item
             "summary": summary,
             "changes": changes,
             "patch": _file_change_patch(changes),
+            "raw": _compact_raw(payload),
+        },
+    )
+
+
+def _codex_file_change_output_delta_payload(*, event_type: str, payload: dict[str, Any], item: dict[str, Any]) -> RuntimeExecutionEvent:
+    output = _text_from_payload(payload, item)
+    return RuntimeExecutionEvent(
+        event_type="runtime.tool_call.updated",
+        payload={
+            "name": "file_change",
+            "tool_kind": "file_change",
+            "status": "updated",
+            "tool_call_id": _tool_call_id(payload, item),
+            "provider_event_type": event_type,
+            "summary": "File changes updated",
+            "output": output or None,
             "raw": _compact_raw(payload),
         },
     )

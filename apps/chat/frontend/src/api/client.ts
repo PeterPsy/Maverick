@@ -41,6 +41,19 @@ export type ChatSidebarPayload = {
   preferences?: Record<string, unknown>;
 };
 
+export type RuntimeTermination = {
+  session_id: string;
+  found: boolean;
+  terminated_processes: number;
+  cancelled_turns: number;
+};
+
+export type DeleteThreadPayload = ChatSidebarPayload & {
+  deleted_thread_id?: string;
+  deleted_runtime_session_id?: string;
+  runtime_termination?: RuntimeTermination;
+};
+
 export type RuntimeSession = {
   session_id: string;
   workspace_id: string;
@@ -82,10 +95,17 @@ export type ChatMessage = {
   createdAt: string;
   status?: "pending" | "failed" | "complete";
   attachments?: ChatMessageAttachment[];
+  appReferences?: AppReference[];
   structuredContent?: StructuredContent;
   toolCall?: ToolCallMessage;
   toolCalls?: ToolCallMessage[];
   step?: RuntimeStepMessage;
+};
+
+export type AppReference = {
+  type: "app";
+  app_id: string;
+  label?: string;
 };
 
 export type ChatMessageAttachment = {
@@ -147,6 +167,22 @@ export type WidgetContextPayload = {
   context: Record<string, unknown>;
 };
 
+export type AppRegistryItem = {
+  app_id: string;
+  name: string;
+  description: string;
+  status: string;
+  frontend_mount: string;
+  backend_mount: string;
+};
+
+export type SkillSummary = {
+  id: string;
+  name: string;
+  description: string;
+  enabled: boolean;
+};
+
 export type RuntimeSessionOptions = {
   system_prompt?: string;
   source_app_id?: string;
@@ -174,6 +210,37 @@ async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> 
 
 export function listProviders(): Promise<ProviderPayload> {
   return requestJson<ProviderPayload>("/api/providers");
+}
+
+function stringField(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+export async function listApps(): Promise<AppRegistryItem[]> {
+  const payload = await requestJson<{ items?: unknown[] }>("/api/apps");
+  return (payload.items || [])
+    .map((value) => {
+      const item = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+      const appId = stringField(item.app_id);
+      return {
+        app_id: appId,
+        name: stringField(item.name, appId || "Unnamed app"),
+        description: stringField(item.description),
+        status: stringField(item.status, "unknown"),
+        frontend_mount: stringField(item.frontend_mount),
+        backend_mount: stringField(item.backend_mount),
+      };
+    })
+    .filter((item) => item.app_id && item.status === "enabled");
+}
+
+export async function listSkills(): Promise<SkillSummary[]> {
+  const payload = await requestJson<{ skills?: SkillSummary[] }>("/api/apps/skills/backend", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "catalog" }),
+  });
+  return (payload.skills || []).filter((skill) => skill.enabled);
 }
 
 export function selectProvider(provider_id: string): Promise<ProviderPayload> {
@@ -210,8 +277,25 @@ export function getRuntimeSession(sessionId: string): Promise<RuntimeSession> {
   return requestJson<RuntimeSession>(`/api/runtime/sessions/${encodeURIComponent(sessionId)}`);
 }
 
-export function listRuntimeEvents(sessionId: string): Promise<{ items: RuntimeEvent[] }> {
-  return requestJson<{ items: RuntimeEvent[] }>(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/events`);
+export function terminateRuntimeSession(sessionId: string, reason = "runtime_session_terminated"): Promise<RuntimeTermination> {
+  return requestJson<RuntimeTermination>(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/terminate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export function listRuntimeEvents(sessionId: string, options: { limit?: number } = {}): Promise<{ items: RuntimeEvent[] }> {
+  const query = new URLSearchParams();
+  if (options.limit && options.limit > 0) {
+    query.set("limit", String(options.limit));
+  }
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return requestJson<{ items: RuntimeEvent[] }>(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/events${suffix}`);
+}
+
+export function listRuntimeTurns(sessionId: string): Promise<{ items: RuntimeTurn[] }> {
+  return requestJson<{ items: RuntimeTurn[] }>(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/turns`);
 }
 
 export function runtimeWebSocketUrl(sessionId: string, lastEventId?: string | null): string {
@@ -232,15 +316,26 @@ export function sendRuntimeTurn(
   inputText: string,
   clientMessageId?: string,
   attachments: ChatMessageAttachment[] = [],
+  appReferences: AppReference[] = [],
 ): Promise<{
   session: RuntimeSession;
   turn: RuntimeTurn;
   events: RuntimeEvent[];
 }> {
+  const serializableAttachments = attachments.map(({ objectUrl: _objectUrl, ...attachment }) => attachment);
+  const body: Record<string, unknown> = {
+    input_text: inputText,
+    client_message_id: clientMessageId,
+    attachments: serializableAttachments,
+    async: true,
+  };
+  if (appReferences.length) {
+    body.app_references = appReferences;
+  }
   return requestJson(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/turns`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ input_text: inputText, client_message_id: clientMessageId, attachments, async: true }),
+    body: JSON.stringify(body),
   });
 }
 
@@ -336,12 +431,16 @@ export function updateThread(payload: {
   });
 }
 
-export function deleteThread(threadId: string): Promise<ChatSidebarPayload> {
-  return requestJson<ChatSidebarPayload>("/api/apps/chat/backend", {
+export async function deleteThread(threadId: string): Promise<ChatSidebarPayload> {
+  const payload = await requestJson<DeleteThreadPayload>("/api/apps/chat/backend", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action: "threads.delete", thread_id: threadId }),
   });
+  if (payload.deleted_runtime_session_id) {
+    payload.runtime_termination = await terminateRuntimeSession(payload.deleted_runtime_session_id, "chat_thread_deleted");
+  }
+  return payload;
 }
 
 export function createProject(name: string): Promise<{ project: ChatProject } & ChatSidebarPayload> {

@@ -229,8 +229,8 @@ button {
   align-items: center;
   gap: 0.25rem;
   min-width: 0;
-  min-height: 34px;
-  padding: 0.24rem 0.32rem 0.24rem 0.4rem;
+  min-height: 32px;
+  padding: 0.2rem 0.3rem 0.2rem 0.4rem;
   border: 1px solid transparent;
   border-radius: 14px;
   background: transparent;
@@ -253,9 +253,55 @@ button {
   background: rgba(215, 36, 81, 0.12);
 }
 
+.bs-chat-list__item.is-active::before {
+  content: "";
+  position: absolute;
+  top: 7px;
+  bottom: 7px;
+  left: 5px;
+  z-index: 1;
+  width: 3px;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(215, 36, 81, 0.18);
+}
+
 .bs-chat-list__item.is-busy {
-  border-color: rgba(88, 184, 255, 0.16);
-  background: linear-gradient(180deg, rgba(88, 184, 255, 0.06), rgba(255, 255, 255, 0.03));
+  border-color: transparent;
+  background:
+    linear-gradient(rgba(24, 24, 24, 0.95), rgba(24, 24, 24, 0.95)) padding-box,
+    linear-gradient(120deg, rgba(88, 184, 255, 0.95), rgba(215, 36, 81, 0.82), rgba(255, 211, 107, 0.85), rgba(88, 184, 255, 0.95)) border-box;
+  background-size: 100% 100%, 260% 260%;
+  animation: bs-chat-working-border 4.8s linear infinite;
+}
+
+.bs-chat-list__item.is-busy.is-active {
+  background:
+    linear-gradient(rgba(45, 22, 29, 0.96), rgba(45, 22, 29, 0.96)) padding-box,
+    linear-gradient(120deg, rgba(88, 184, 255, 0.95), rgba(215, 36, 81, 0.9), rgba(255, 211, 107, 0.88), rgba(88, 184, 255, 0.95)) border-box;
+  background-size: 100% 100%, 260% 260%;
+}
+
+.bs-chat-list__item.is-busy.is-active::before {
+  background: #ffffff;
+  box-shadow:
+    0 0 0 3px rgba(215, 36, 81, 0.22),
+    0 0 16px rgba(88, 184, 255, 0.35);
+}
+
+@keyframes bs-chat-working-border {
+  0% {
+    background-position: 0 0, 0% 50%;
+  }
+  100% {
+    background-position: 0 0, 260% 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bs-chat-list__item.is-busy {
+    animation: none;
+  }
 }
 
 .bs-chat-list__row {
@@ -279,7 +325,7 @@ button {
 .bs-chat-list__select {
   width: 100%;
   min-width: 0;
-  padding: 0;
+  padding: 0 0 0 0.35rem;
   background: transparent;
   overflow: hidden;
   text-align: left;
@@ -291,22 +337,10 @@ button {
   width: 100%;
   min-width: 0;
   overflow: hidden;
-  font-size: 0.8rem;
+  font-size: 0.76rem;
   font-weight: 700;
-  letter-spacing: -0.02em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.bs-chat-list__subtitle {
-  display: block;
-  margin: 0.08rem 0 0;
-  width: 100%;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--maverick-text-muted);
-  font-size: 0.64rem;
-  line-height: 1.6;
+  letter-spacing: 0;
+  line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

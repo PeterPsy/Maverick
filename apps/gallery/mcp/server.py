@@ -14,7 +14,13 @@ from service import handle_action
 
 payload = json.loads(sys.stdin.read() or "{}")
 arguments = payload.get("arguments") if isinstance(payload.get("arguments"), dict) else {}
-body = {"action": arguments.get("action") or "catalog", **arguments}
+tool_actions = {
+    "gallery_reference_manifest": "references.manifest",
+    "gallery_reference_search": "references.search",
+    "gallery_reference_resolve": "references.resolve",
+    "gallery_reference_summarize": "references.summarize",
+}
+body = {"action": tool_actions.get(str(payload.get("tool_name") or ""), arguments.get("action") or "catalog"), **arguments}
 try:
     status_code, result = handle_action(
         Path(payload["data_root"]),

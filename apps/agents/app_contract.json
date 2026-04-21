@@ -12,7 +12,11 @@
   },
   "capabilities": {
     "mcp_tools": [
-      "maverick_agents_app"
+      "maverick_agents_app",
+      "agents_reference_manifest",
+      "agents_reference_search",
+      "agents_reference_resolve",
+      "agents_reference_summarize"
     ],
     "cli_commands": [
       "agents"
@@ -20,6 +24,24 @@
     "skills": [],
     "views": [
       "agents"
+    ],
+    "reference_entities": [
+      {
+        "entity_type": "agent_type",
+        "display_name": "Agent Type",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      },
+      {
+        "entity_type": "role_prompt",
+        "display_name": "Role Prompt",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      }
     ]
   },
   "entrypoints": {

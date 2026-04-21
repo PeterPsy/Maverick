@@ -74,9 +74,11 @@ class AgentsAppTestCase(unittest.TestCase):
         self.assertEqual(parsed.app_id, "agents")
         self.assertEqual(parsed.contract.entrypoints.backend, "backend/app_backend.py")
         self.assertEqual(parsed.contract.entrypoints.frontend, "frontend/dist")
-        self.assertEqual(parsed.contract.capabilities.mcp_tools, ["maverick_agents_app"])
+        self.assertIn("maverick_agents_app", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("agents_reference_manifest", parsed.contract.capabilities.mcp_tools)
         self.assertEqual(parsed.contract.capabilities.cli_commands, ["agents"])
         self.assertEqual(parsed.contract.capabilities.skills, [])
+        self.assertIn("agent_type", {item.entity_type for item in parsed.contract.capabilities.reference_entities})
 
     def test_seed_defaults_create_all_roles_and_agent_types(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

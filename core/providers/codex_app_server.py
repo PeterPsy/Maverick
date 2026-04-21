@@ -383,10 +383,59 @@ def _handle_item_event(runtime: _CodexAppServerRuntime, *, provider_type: str, i
     event = parse_provider_json_event(json.dumps({"type": provider_type, "item": item}))
     if event is not None:
         _emit(runtime, event)
+    structured = _structured_content_from_completed_item(provider_type=provider_type, item=item)
+    if structured is not None:
+        _emit(
+            runtime,
+            RuntimeExecutionEvent(
+                event_type="runtime.output.structured",
+                payload={
+                    "structured_content": structured,
+                    "provider_event_type": provider_type,
+                    "tool_call_id": _item_id(item) or None,
+                },
+            ),
+        )
 
 
 def _is_agent_message_item(item: dict[str, Any]) -> bool:
     return str(item.get("type") or "").strip() in {"agentMessage", "agent_message"}
+
+
+def _structured_content_from_completed_item(*, provider_type: str, item: dict[str, Any]) -> dict[str, Any] | None:
+    if not provider_type.endswith("completed"):
+        return None
+    if str(item.get("type") or "").strip() != "commandExecution":
+        return None
+    output = str(item.get("aggregatedOutput") or item.get("aggregated_output") or item.get("stdout") or "").strip()
+    if not output:
+        return None
+    payload = _decode_json_object(output)
+    if payload is None:
+        return None
+    chat_render = payload.get("chat_render")
+    if not isinstance(chat_render, dict):
+        return None
+    kind = str(chat_render.get("kind") or "").strip()
+    if not kind:
+        return None
+    content_payload = chat_render.get("payload") if isinstance(chat_render.get("payload"), dict) else chat_render
+    return {"kind": kind, "payload": content_payload}
+
+
+def _decode_json_object(value: str) -> dict[str, Any] | None:
+    try:
+        payload = json.loads(value)
+    except json.JSONDecodeError:
+        start = value.find("{")
+        end = value.rfind("}")
+        if start < 0 or end <= start:
+            return None
+        try:
+            payload = json.loads(value[start : end + 1])
+        except json.JSONDecodeError:
+            return None
+    return payload if isinstance(payload, dict) else None
 
 
 def _item_id(item: dict[str, Any]) -> str:

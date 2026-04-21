@@ -8,6 +8,14 @@ from typing import Any
 from errors import DynamicViewsValidationError
 from store import chat_render, create_instance, load_state, normalize_instance, save_state, seed_state
 
+REFERENCE_MANIFEST = {
+    "app_id": "dynamic-views",
+    "schema_version": "1",
+    "entity_types": [
+        {"entity_type": "view", "display_name": "Dynamic View", "id_stability": "stable", "searchable": True, "resolvable": True, "summarizable": True, "deep_link_supported": True}
+    ],
+}
+
 
 def _owner_user_id(body: dict[str, Any], source_instance_id: str | None) -> str:
     owner = str(body.get("owner_user_id") or "").strip()
@@ -28,6 +36,19 @@ def _hydrate_all(state: dict) -> list[dict]:
         if package is not None:
             items.append(normalize_instance(instance, package))
     return sorted(items, key=lambda item: item["updated_at"], reverse=True)
+
+
+def _view_reference(item: dict) -> dict:
+    return {
+        "app_id": "dynamic-views",
+        "entity_type": "view",
+        "entity_id": item["id"],
+        "title": item["title"],
+        "subtitle": item.get("status") or "ready",
+        "summary": item.get("summary") or "",
+        "confidence": 1.0,
+        "deep_link": f"/apps/dynamic-views/{item['id']}",
+    }
 
 
 def _read_instance(data_root: Path, instance_id: str) -> dict:
@@ -84,5 +105,24 @@ def handle_action(
     if action == "health.check":
         state = seed_state(data_root)
         return 200, {"status": "ok", "package_count": len(state["packages"]), "instance_count": len(state["instances"])}
+    if action == "references.manifest":
+        return 200, REFERENCE_MANIFEST
+    if action == "references.search":
+        query = str(body.get("query") or "").casefold()
+        items = [_view_reference(item) for item in _hydrate_all(load_state(data_root))]
+        if query:
+            items = [item for item in items if query in item["title"].casefold() or query in item["summary"].casefold() or query in item["entity_id"].casefold()]
+        return 200, {"results": items[: max(1, min(int(body.get("limit") or 10), 50))]}
+    if action == "references.resolve":
+        entity_id = str(body.get("entity_id") or "").strip()
+        item = next((candidate for candidate in _hydrate_all(load_state(data_root)) if candidate["id"] == entity_id), None)
+        return 200, {"exists": False, "app_id": "dynamic-views", "entity_type": "view", "entity_id": entity_id} if item is None else {"exists": True, **_view_reference(item)}
+    if action == "references.summarize":
+        entity_id = str(body.get("entity_id") or "").strip()
+        item = next((candidate for candidate in _hydrate_all(load_state(data_root)) if candidate["id"] == entity_id), None)
+        return 200, {"summary": "", "safe_fields": {}, "source_updated_at": ""} if item is None else {
+            "summary": item.get("summary") or item.get("title") or "",
+            "safe_fields": {"title": item.get("title"), "status": item.get("status")},
+            "source_updated_at": item.get("updated_at", ""),
+        }
     raise DynamicViewsValidationError(f"Unsupported dynamic view action: {action}")
-

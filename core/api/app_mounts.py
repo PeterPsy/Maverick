@@ -4,47 +4,15 @@ from __future__ import annotations
 
 import mimetypes
 from pathlib import Path
-from uuid import uuid4
 
 from core.api.app_registry import resolve_app_surface
 from core.api.http import StartResponse, json_response, query_params, read_json_body, status_line, text_response
 from core.api.platform_state import PlatformState
 from core.apps.errors import AppHostingError, WorkspaceAppBindingNotFoundError
-from core.providers.service import resolve_provider_for_runtime_session
-from core.runtime.errors import RuntimeSessionNotFoundError
-from core.runtime.session_termination import terminate_runtime_session
-from core.runtime.service import create_runtime_session, queue_runtime_turn, transition_runtime_session, transition_runtime_turn
+from core.providers.service import resolve_provider_for_workspace
 from core.shared.entrypoints import run_json_entrypoint
 from core.workspaces.paths import workspace_paths
 from core.identity.models import UserRecord
-
-
-def ensure_runtime_session(state: PlatformState, *, workspace_id: str, app_id: str, start_path: Path):
-    """Ensure one UI-owned runtime session exists and is running for an app."""
-    session_id = f"{workspace_id}:{app_id}:ui"
-    try:
-        session = state.runtime_store.get_session(session_id)
-    except RuntimeSessionNotFoundError:
-        governance = state.workspace_store.get_governance(workspace_id)
-        session = create_runtime_session(
-            state.runtime_store,
-            session_id=session_id,
-            workspace_id=workspace_id,
-            agent_id=f"app-{app_id}",
-            governance=governance,
-            platform_allows_full_access=False,
-            start_path=start_path,
-            observability_store=state.observability_store,
-        )
-    if session.status != "running":
-        session = transition_runtime_session(
-            state.runtime_store,
-            session_id=session.session_id,
-            target_status="running",
-            observability_store=state.observability_store,
-            start_path=start_path,
-        )
-    return session
 
 
 def serve_frontend(
@@ -73,13 +41,20 @@ def serve_frontend(
     return [body]
 
 
-def handle_root_shell(state: PlatformState, *, workspace_id: str, start_path: Path, start_response: StartResponse) -> list[bytes]:
+def handle_root_shell(
+    state: PlatformState,
+    *,
+    workspace_id: str,
+    root_shell_app_id: str,
+    start_path: Path,
+    start_response: StartResponse,
+) -> list[bytes]:
     """Serve the configured root shell app for the active workspace."""
     try:
         _binding, source_root, parsed = resolve_app_surface(
             state,
             workspace_id=workspace_id,
-            app_id="base-shell",
+            app_id=root_shell_app_id,
             start_path=start_path,
         )
     except WorkspaceAppBindingNotFoundError:
@@ -134,7 +109,7 @@ def handle_app_backend(
     start_path: Path,
     start_response: StartResponse,
 ) -> list[bytes]:
-    """Execute one app backend entrypoint through the platform runtime path."""
+    """Execute one app backend entrypoint through the platform host."""
     method = environ.get("REQUEST_METHOD", "GET").upper()
     try:
         binding, source_root, parsed = resolve_app_surface(
@@ -154,16 +129,7 @@ def handle_app_backend(
     if backend is None:
         return text_response(start_response, "App backend not found", status="404 Not Found")
     body = read_json_body(environ)
-    session = ensure_runtime_session(state, workspace_id=workspace_id, app_id=app_id, start_path=start_path)
-    turn_id = f"{session.session_id}:{uuid4().hex[:8]}"
-    queue_runtime_turn(
-        state.runtime_store,
-        turn_id=turn_id,
-        session_id=session.session_id,
-        input_text=str(body.get("message") or body.get("action") or ""),
-    )
-    transition_runtime_turn(state.runtime_store, turn_id=turn_id, target_status="active")
-    provider, _selection = resolve_provider_for_runtime_session(state.provider_store, session=session)
+    provider, _selection = resolve_provider_for_workspace(state.provider_store, workspace_id=workspace_id)
     paths = workspace_paths(workspace_id, start_path=start_path)
     try:
         result = run_json_entrypoint(
@@ -182,55 +148,17 @@ def handle_app_backend(
                 "headers": {"content_type": environ.get("CONTENT_TYPE", "")},
                 "body": body,
                 "provider_id": provider.provider_id,
-                "runtime_session_id": session.session_id,
-                "turn_id": turn_id,
+                "runtime_session_id": "",
+                "turn_id": "",
             },
             cwd=source_root,
         )
-        transition_runtime_turn(state.runtime_store, turn_id=turn_id, target_status="completed")
     except Exception as error:
-        transition_runtime_turn(
-            state.runtime_store,
-            turn_id=turn_id,
-            target_status="failed",
-            failure_reason=str(error),
-        )
         return json_response(start_response, {"error": str(error)}, status=status_line(500))
     status_code = int(result.get("status_code", 200))
     if "json" in result:
         response_json = result["json"]
-        if isinstance(response_json, dict):
-            _handle_app_backend_side_effects(
-                state,
-                app_id=app_id,
-                request_body=body,
-                response_json=response_json,
-                start_path=start_path,
-            )
         return json_response(start_response, response_json, status=status_line(status_code))
     if "body" in result:
         return text_response(start_response, str(result["body"]), status=status_line(status_code))
     return json_response(start_response, result, status=status_line(status_code))
-
-
-def _handle_app_backend_side_effects(
-    state: PlatformState,
-    *,
-    app_id: str,
-    request_body: dict,
-    response_json: dict,
-    start_path: Path,
-) -> None:
-    if app_id != "chat" or request_body.get("action") != "threads.delete":
-        return
-    runtime_session_id = str(response_json.get("deleted_runtime_session_id") or "").strip()
-    if not runtime_session_id:
-        return
-    response_json["runtime_termination"] = terminate_runtime_session(
-        state.runtime_store,
-        session_id=runtime_session_id,
-        reason="chat_deleted",
-        event_bus=state.runtime_event_bus,
-        observability_store=state.observability_store,
-        start_path=start_path,
-    )

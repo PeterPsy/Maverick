@@ -12,7 +12,11 @@
   },
   "capabilities": {
     "mcp_tools": [
-      "maverick_app_store"
+      "maverick_app_store",
+      "app_store_reference_manifest",
+      "app_store_reference_search",
+      "app_store_reference_resolve",
+      "app_store_reference_summarize"
     ],
     "cli_commands": [
       "app-store"
@@ -20,6 +24,16 @@
     "skills": [],
     "views": [
       "app-store"
+    ],
+    "reference_entities": [
+      {
+        "entity_type": "installed_app",
+        "display_name": "Installed App",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      }
     ]
   },
   "entrypoints": {

@@ -16,16 +16,24 @@
     ]
   },
   "capabilities": {
-    "mcp_tools": [],
-    "cli_commands": [],
+    "mcp_tools": [
+      "user_admin_reference_manifest",
+      "user_admin_reference_search",
+      "user_admin_reference_resolve",
+      "user_admin_reference_summarize"
+    ],
+    "cli_commands": [
+      "user-admin"
+    ],
     "skills": [],
     "views": [
       "admin"
-    ]
+    ],
+    "reference_entities": []
   },
   "entrypoints": {
-    "mcp": null,
-    "cli": null,
+    "mcp": "mcp/server.py",
+    "cli": "cli/app_cli.py",
     "backend": null,
     "frontend": "frontend/dist",
     "skills_root": null,

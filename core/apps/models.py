@@ -17,7 +17,7 @@ HealthMode = Literal["none", "hook"]
 InstallFailureMode = Literal["block_activation", "mark_failed"]
 MigrateFailureMode = Literal["preserve_data_mark_unhealthy", "block_activation"]
 ImportFailureMode = Literal["preserve_payload_mark_failed", "block_activation"]
-StorageKind = Literal["sqlite", "duckdb", "json", "jsonl", "mixed"]
+StorageKind = Literal["sqlite", "sqlite+files", "duckdb", "json", "jsonl", "mixed"]
 StorageIndexKind = Literal["embedded", "file_based"]
 WidgetFrontendKind = Literal["iframe"]
 
@@ -59,6 +59,19 @@ class AppCapabilities:
     cli_commands: list[str]
     skills: list[str]
     views: list[str]
+    reference_entities: list["AppReferenceEntityDeclaration"]
+
+
+@dataclass(frozen=True)
+class AppReferenceEntityDeclaration:
+    """Describe one app-owned entity type that other apps may reference."""
+
+    entity_type: str
+    display_name: str
+    searchable: bool
+    resolvable: bool
+    summarizable: bool
+    deep_link_supported: bool
 
 
 @dataclass(frozen=True)

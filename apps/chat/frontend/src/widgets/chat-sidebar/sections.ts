@@ -34,5 +34,5 @@ export function buildSections(projects: ChatProject[], threads: ChatThread[]): F
 }
 
 export function isThreadBusy(thread: ChatThread): boolean {
-  return thread.availability === "busy";
+  return thread.availability === "busy" || thread.availability === "queued" || thread.availability === "active";
 }

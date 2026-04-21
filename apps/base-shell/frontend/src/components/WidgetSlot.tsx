@@ -74,6 +74,7 @@ export function WidgetSlot({
         return;
       }
       const payload = event.data as {
+        active_thread_id?: string;
         app_id?: string;
         owner_app_id?: string;
         params?: Record<string, string | boolean | null>;
@@ -87,6 +88,7 @@ export function WidgetSlot({
         widgetFrameRef.current?.contentWindow?.postMessage(
           {
             type: "maverick.widget.data-changed",
+            active_thread_id: typeof payload.active_thread_id === "string" ? payload.active_thread_id : "",
             owner_app_id: payload.owner_app_id,
             resource: payload.resource || "",
           },

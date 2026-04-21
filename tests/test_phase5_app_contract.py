@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
 from tempfile import TemporaryDirectory
 import unittest
 
@@ -15,6 +16,7 @@ from core.apps.contracts import (
     build_app_entrypoints,
     build_app_hook_timeouts,
     build_app_lifecycle,
+    build_reference_entity_declaration,
     build_app_storage,
     build_parsed_app_contract,
     build_widget_actions,
@@ -62,6 +64,12 @@ class Phase5AppContractTestCase(unittest.TestCase):
                         cli_commands=["tables"],
                         skills=["restaurant-operations"],
                         views=["floor_map"],
+                        reference_entities=[
+                            build_reference_entity_declaration(
+                                entity_type="reservation",
+                                display_name="Reservation",
+                            )
+                        ],
                     ),
                     lifecycle=build_app_lifecycle(
                         migrate=True,
@@ -95,6 +103,8 @@ class Phase5AppContractTestCase(unittest.TestCase):
             self.assertEqual(loaded.contract.storage.storage_kind, "sqlite")
             self.assertEqual(loaded.contract.storage.indices.kind, "embedded")
             self.assertEqual(loaded.contract.capabilities.views, ["floor_map"])
+            self.assertEqual(loaded.contract.capabilities.reference_entities[0].entity_type, "reservation")
+            self.assertTrue(loaded.contract.capabilities.reference_entities[0].searchable)
             self.assertEqual(loaded.contract.distribution.mode, "sealed")
             self.assertEqual(loaded.contract.distribution.source_access, "none")
             self.assertTrue(loaded.contract.lifecycle.validate_after_import)
@@ -102,6 +112,27 @@ class Phase5AppContractTestCase(unittest.TestCase):
             self.assertEqual(loaded.contract.hook_timeouts.upgrade_seconds, 180)
             self.assertEqual(loaded.contract.hook_timeouts.validate_after_import_seconds, 45)
             self.assertEqual(loaded.contract.entrypoints.skills_root, "backend/skills")
+
+    def test_parse_contract_rejects_invalid_reference_entity_metadata(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            app_root = Path(temp_dir) / "apps" / "crm"
+            parsed = build_parsed_app_contract(
+                app_id="crm",
+                name="CRM",
+                version="1.0.0",
+                description="Customer records.",
+                publisher="vendor",
+            )
+            write_app_contract_file(app_root, parsed)
+            contract_path = app_contract_path(app_root)
+            payload = json.loads(contract_path.read_text(encoding="utf-8"))
+            payload["capabilities"]["reference_entities"] = [
+                {"entity_type": "Bad-Type", "display_name": "Bad"}
+            ]
+            contract_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+            with self.assertRaises(AppContractValidationError):
+                parse_app_contract_file(app_root)
 
     def test_parse_contract_supports_source_available_distribution(self) -> None:
         with TemporaryDirectory() as temp_dir:

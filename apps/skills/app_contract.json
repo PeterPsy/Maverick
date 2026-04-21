@@ -12,7 +12,11 @@
   },
   "capabilities": {
     "mcp_tools": [
-      "maverick_skills_app"
+      "maverick_skills_app",
+      "skills_reference_manifest",
+      "skills_reference_search",
+      "skills_reference_resolve",
+      "skills_reference_summarize"
     ],
     "cli_commands": [
       "skills"
@@ -20,6 +24,16 @@
     "skills": [],
     "views": [
       "skills"
+    ],
+    "reference_entities": [
+      {
+        "entity_type": "skill",
+        "display_name": "Skill",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      }
     ]
   },
   "entrypoints": {

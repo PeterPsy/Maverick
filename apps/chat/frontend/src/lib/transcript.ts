@@ -1,4 +1,4 @@
-import type { ChatMessage, RuntimeEvent, RuntimeStepMessage, StructuredContent, ToolCallMessage } from "../api/client";
+import type { AppReference, ChatMessage, RuntimeEvent, RuntimeStepMessage, StructuredContent, ToolCallMessage } from "../api/client";
 import type { ChatMessageAttachment } from "../api/client";
 import { structuredContentFromAgentLinks } from "./linkPreviews";
 import { runtimeStepLabel } from "./runtimeStepLabels";
@@ -24,6 +24,10 @@ function structuredPayload(value: unknown): StructuredContent | null {
   }
   const payload = record.payload && typeof record.payload === "object" ? (record.payload as Record<string, unknown>) : record;
   return { kind, payload };
+}
+
+function structuredPayloadKey(turnId: string, structured: StructuredContent): string {
+  return `${turnId}:${JSON.stringify(structured)}`;
 }
 
 function toolCallPayload(event: RuntimeEvent): ToolCallMessage | null {
@@ -53,29 +57,6 @@ function normalizedRuntimeLabel(value: string): string {
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase();
-}
-
-function skillChangeToolCallPayload(event: RuntimeEvent): ToolCallMessage | null {
-  if (event.event_type !== "runtime.step.updated") {
-    return null;
-  }
-  const label = String(event.payload.label || event.payload.message || event.payload.provider_event_type || "");
-  if (normalizedRuntimeLabel(label) !== "skills changed") {
-    return null;
-  }
-  return {
-    id: event.event_id,
-    name: "skills",
-    status: "completed",
-    detail: {
-      ...event.payload,
-      name: "skills",
-      tool_kind: "skill_change",
-      status: "completed",
-      summary: "Skills changed",
-    },
-    createdAt: event.created_at,
-  };
 }
 
 function toolCallKey(toolCall: ToolCallMessage): string {
@@ -120,6 +101,20 @@ function readableSystemText(value: unknown, fallback: string): string {
   return text.replace(/_/g, " ");
 }
 
+function appReferencesPayload(value: unknown): AppReference[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
+    .map((item) => ({
+      type: "app" as const,
+      app_id: typeof item.app_id === "string" ? item.app_id : "",
+      label: typeof item.label === "string" ? item.label : undefined,
+    }))
+    .filter((item) => item.app_id);
+}
+
 export function eventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
   const orderedMessages: Array<{ order: number; sequence: number; message: ChatMessage }> = [];
   let messageSequence = 0;
@@ -130,6 +125,7 @@ export function eventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
   const renderedOutputByTurn = new Map<string, string>();
   const toolSegmentsByTurn = new Map<string, { createdAt: string; itemsByKey: Map<string, ToolCallMessage>; index: number; order: number }>();
   const nextToolSegmentIndexByTurn = new Map<string, number>();
+  const renderedStructuredOutput = new Set<string>();
 
   function pushMessage(message: ChatMessage, order: number) {
     orderedMessages.push({ order, sequence: messageSequence, message });
@@ -189,6 +185,7 @@ export function eventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
       const attachments = Array.isArray(event.payload.attachments)
         ? (event.payload.attachments.filter((item) => item && typeof item === "object") as ChatMessageAttachment[])
         : [];
+      const appReferences = appReferencesPayload(event.payload.app_references);
       if (typeof input === "string" && input.trim()) {
         seenUserTurns.add(turnId);
         pushMessage({
@@ -198,6 +195,7 @@ export function eventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
           createdAt: event.created_at,
           status: "complete",
           attachments,
+          appReferences,
         }, eventIndex);
       }
     }
@@ -218,13 +216,33 @@ export function eventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
         });
       }
     }
+    if (event.event_type === "runtime.output.structured") {
+      flushToolSegment(turnId, true);
+      flushOutputSegment(turnId, finalTurnIds.has(turnId));
+      const structured = structuredPayload(event.payload.structured_content || event.payload.structuredContent || event.payload.content);
+      if (structured) {
+        renderedStructuredOutput.add(structuredPayloadKey(turnId, structured));
+        pushMessage({
+          id: `${turnId}:structured:${event.event_id}`,
+          role: "structured",
+          content: structured.kind,
+          createdAt: event.created_at,
+          status: "complete",
+          structuredContent: structured,
+        }, eventIndex);
+      }
+    }
     if (event.event_type === "runtime.output.final") {
       flushToolSegment(turnId, true);
       flushOutputSegment(turnId, true);
-      const structured = structuredPayload(event.payload.structured_content || event.payload.structuredContent || event.payload.content);
       const finalText = textPayload(event);
+      const structured = structuredPayload(event.payload.structured_content || event.payload.structuredContent || event.payload.content);
       const text = finalTextRemainder(finalText, renderedOutputByTurn.get(turnId) || "");
-      if (structured) {
+      const structuredKey = structured ? structuredPayloadKey(turnId, structured) : "";
+      const structuredAlreadyRendered = Boolean(structuredKey) && renderedStructuredOutput.has(structuredKey);
+      const shouldPushStructured = Boolean(structured) && !structuredAlreadyRendered;
+      if (structured && shouldPushStructured) {
+        renderedStructuredOutput.add(structuredKey);
         pushMessage({
           id: `${turnId}:structured:${event.event_id}`,
           role: "structured",
@@ -254,7 +272,7 @@ export function eventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
         }, eventIndex);
       });
     }
-    const toolCall = toolCallPayload(event) || skillChangeToolCallPayload(event);
+    const toolCall = toolCallPayload(event);
     if (toolCall) {
       flushOutputSegment(turnId, finalTurnIds.has(turnId));
       const current = toolSegmentsByTurn.get(turnId);

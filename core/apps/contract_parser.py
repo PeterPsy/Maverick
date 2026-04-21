@@ -16,6 +16,7 @@ from core.apps.models import (
     AppHealthContract,
     AppHookTimeouts,
     AppLifecycleDeclaration,
+    AppReferenceEntityDeclaration,
     AppRollbackSupport,
     AppStorageDeclaration,
     AppStorageIndices,
@@ -33,6 +34,7 @@ from core.apps.contract_common import app_contract_path
 from core.apps.contract_validation import (
     _expect_app_id,
     _expect_bool,
+    _expect_entity_type,
     _expect_mapping,
     _expect_relative_contract_path,
     _expect_string,
@@ -101,11 +103,47 @@ def parse_app_contract_file(source_root: Path) -> ParsedAppContract:
         supports_migrations=_expect_bool(storage_payload, "supports_migrations", default=False),
     )
 
+    reference_entities_payload = capabilities_payload.get("reference_entities", [])
+    if not isinstance(reference_entities_payload, list):
+        raise AppContractValidationError("`capabilities.reference_entities` must be a list.")
+    reference_entities: list[AppReferenceEntityDeclaration] = []
+    seen_reference_entity_types: set[str] = set()
+    for index, item in enumerate(reference_entities_payload):
+        item_payload = _expect_mapping(item, label=f"capabilities.reference_entities[{index}]")
+        entity_type = _expect_entity_type(item_payload, "entity_type")
+        if entity_type in seen_reference_entity_types:
+            raise AppContractValidationError("`capabilities.reference_entities` entries must use unique entity_type values.")
+        seen_reference_entity_types.add(entity_type)
+        unexpected_keys = set(item_payload) - {
+            "entity_type",
+            "display_name",
+            "searchable",
+            "resolvable",
+            "summarizable",
+            "deep_link_supported",
+        }
+        if unexpected_keys:
+            unexpected = ", ".join(sorted(unexpected_keys))
+            raise AppContractValidationError(
+                f"Unsupported capabilities.reference_entities[{index}] field(s): {unexpected}."
+            )
+        reference_entities.append(
+            AppReferenceEntityDeclaration(
+                entity_type=entity_type,
+                display_name=_expect_string(item_payload, "display_name"),
+                searchable=_expect_bool(item_payload, "searchable", default=False),
+                resolvable=_expect_bool(item_payload, "resolvable", default=False),
+                summarizable=_expect_bool(item_payload, "summarizable", default=False),
+                deep_link_supported=_expect_bool(item_payload, "deep_link_supported", default=False),
+            )
+        )
+
     capabilities = AppCapabilities(
         mcp_tools=_expect_string_list(capabilities_payload, "mcp_tools"),
         cli_commands=_expect_string_list(capabilities_payload, "cli_commands"),
         skills=_expect_string_list(capabilities_payload, "skills"),
         views=_expect_string_list(capabilities_payload, "views"),
+        reference_entities=reference_entities,
     )
 
     distribution = AppDistributionDeclaration(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from urllib.parse import parse_qs
 from uuid import uuid4
 
 from core.api.http import StartResponse, json_response, read_json_body, status_line
@@ -21,6 +22,7 @@ from core.runtime.service import (
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
+from core.runtime.session_termination import terminate_runtime_session
 from core.runtime.turn_submission import submit_runtime_turn, submit_runtime_turn_async
 
 
@@ -55,12 +57,12 @@ def _list_session_payloads(state: PlatformState, *, workspace_id: str, start_pat
     return [_session_payload(session, provider_id=resolve_provider_for_runtime_session(state.provider_store, session=session)[0].provider_id) for session in reconciled]
 
 
-def _create_session(state: PlatformState, context: RequestSession, body: dict, *, start_path) -> RuntimeSessionRecord:
+def _create_session(state: PlatformState, context: RequestSession, body: dict, *, agent_id: str, start_path) -> RuntimeSessionRecord:
     session = create_runtime_session(
         state.runtime_store,
         session_id=str(uuid4()),
         workspace_id=context.workspace_id,
-        agent_id=str(body.get("agent_id") or "chat"),
+        agent_id=agent_id,
         requested_mode=body.get("requested_mode"),
         system_prompt=str(body.get("system_prompt") or "").strip() or None,
         skill_ids=body.get("skill_ids") if isinstance(body.get("skill_ids"), list) else [],
@@ -83,7 +85,10 @@ def _handle_session_collection(state: PlatformState, context: RequestSession, me
     if method == "GET":
         return json_response(start_response, {"items": _list_session_payloads(state, workspace_id=context.workspace_id, start_path=start_path)})
     if method == "POST":
-        session = _create_session(state, context, body, start_path=start_path)
+        agent_id = str(body.get("agent_id") or "").strip()
+        if not agent_id:
+            return json_response(start_response, {"error": "agent_id_required"}, status="400 Bad Request")
+        session = _create_session(state, context, body, agent_id=agent_id, start_path=start_path)
         provider, _selection = resolve_provider_for_runtime_session(state.provider_store, session=session)
         return json_response(start_response, _session_payload(session, provider_id=provider.provider_id), status="201 Created")
     return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")
@@ -101,7 +106,19 @@ def _handle_session_item(state: PlatformState, context: RequestSession, session_
     return json_response(start_response, _session_payload(session, provider_id=provider.provider_id))
 
 
-def _handle_session_events(state: PlatformState, context: RequestSession, session_id: str, start_response: StartResponse, *, start_path):
+def _bounded_positive_int(value: str | None, *, maximum: int) -> int | None:
+    if value is None:
+        return None
+    try:
+        parsed = int(value)
+    except ValueError:
+        return None
+    if parsed <= 0:
+        return None
+    return min(parsed, maximum)
+
+
+def _handle_session_events(state: PlatformState, context: RequestSession, session_id: str, start_response: StartResponse, *, start_path, query_string: str = ""):
     try:
         session = state.runtime_store.get_session(session_id)
     except RuntimeSessionNotFoundError:
@@ -109,9 +126,14 @@ def _handle_session_events(state: PlatformState, context: RequestSession, sessio
     if session.workspace_id != context.workspace_id:
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
     _reconciled_session(state, session, start_path=start_path)
+    events = state.runtime_store.list_events(session_id)
+    query = parse_qs(query_string, keep_blank_values=False)
+    limit = _bounded_positive_int(query.get("limit", [None])[0], maximum=5000)
+    if limit is not None:
+        events = events[-limit:]
     return json_response(
         start_response,
-        {"items": [_event_payload(event) for event in state.runtime_store.list_events(session_id)]},
+        {"items": [_event_payload(event) for event in events]},
     )
 
 
@@ -130,6 +152,14 @@ def _handle_session_turns(state: PlatformState, context: RequestSession, session
     client_message_id = str(body.get("client_message_id") or "").strip() or None
     attachments = body.get("attachments") if isinstance(body.get("attachments"), list) else []
     attachment_items = [item for item in attachments if isinstance(item, dict)]
+    app_references = body.get("app_references") if isinstance(body.get("app_references"), list) else []
+    app_reference_items = [
+        reference
+        for item in app_references
+        if isinstance(item, dict)
+        for reference in [_app_reference_payload(item)]
+        if reference["app_id"]
+    ]
     input_text = str(body.get("input_text") or body.get("message") or "").strip()
     if not input_text and not attachment_items:
         return json_response(start_response, {"error": "empty_runtime_input"}, status="400 Bad Request")
@@ -141,6 +171,7 @@ def _handle_session_turns(state: PlatformState, context: RequestSession, session
             input_text=input_text,
             client_message_id=client_message_id,
             attachments=attachment_items,
+            app_references=app_reference_items,
         )
         status = "202 Accepted"
     else:
@@ -150,6 +181,7 @@ def _handle_session_turns(state: PlatformState, context: RequestSession, session
             input_text=input_text,
             client_message_id=client_message_id,
             attachments=attachment_items,
+            app_references=app_reference_items,
         )
         status = status_line(201)
     return json_response(
@@ -161,6 +193,45 @@ def _handle_session_turns(state: PlatformState, context: RequestSession, session
         },
         status=status,
     )
+
+
+def _app_reference_payload(item: dict) -> dict[str, str]:
+    app_id = str(item.get("app_id") or "").strip()
+    label = str(item.get("label") or "").strip()
+    payload = {"type": "app", "app_id": app_id}
+    if label:
+        payload["label"] = label
+    return payload
+
+
+def _handle_session_terminate(
+    state: PlatformState,
+    context: RequestSession,
+    session_id: str,
+    method: str,
+    body: dict,
+    start_response: StartResponse,
+    *,
+    start_path,
+):
+    if method != "POST":
+        return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")
+    try:
+        session = state.runtime_store.get_session(session_id)
+    except RuntimeSessionNotFoundError:
+        return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
+    if session.workspace_id != context.workspace_id:
+        return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
+    reason = str(body.get("reason") or "").strip() or "runtime_session_terminated"
+    result = terminate_runtime_session(
+        state.runtime_store,
+        session_id=session_id,
+        reason=reason,
+        event_bus=state.runtime_event_bus,
+        observability_store=state.observability_store,
+        start_path=start_path,
+    )
+    return json_response(start_response, result)
 
 
 def _handle_turn_item(state: PlatformState, context: RequestSession, turn_id: str, start_response: StartResponse):
@@ -207,6 +278,7 @@ def handle_runtime_api(state: PlatformState, environ: dict, start_response: Star
         return context_or_response
     context = context_or_response
     method = environ.get("REQUEST_METHOD", "GET").upper()
+    query_string = environ.get("QUERY_STRING", "")
     body = read_json_body(environ) if method in {"POST", "PATCH", "PUT"} else {}
 
     if path == "/api/runtime/sessions":
@@ -216,9 +288,11 @@ def handle_runtime_api(state: PlatformState, environ: dict, start_response: Star
     if len(parts) == 2 and parts[0] == "sessions" and method == "GET":
         return _handle_session_item(state, context, parts[1], start_response, start_path=start_path)
     if len(parts) == 3 and parts[0] == "sessions" and parts[2] == "events" and method == "GET":
-        return _handle_session_events(state, context, parts[1], start_response, start_path=start_path)
+        return _handle_session_events(state, context, parts[1], start_response, start_path=start_path, query_string=query_string)
     if len(parts) == 3 and parts[0] == "sessions" and parts[2] == "turns":
         return _handle_session_turns(state, context, parts[1], method, body, start_response, start_path=start_path)
+    if len(parts) == 3 and parts[0] == "sessions" and parts[2] == "terminate":
+        return _handle_session_terminate(state, context, parts[1], method, body, start_response, start_path=start_path)
     if len(parts) == 2 and parts[0] == "turns" and method == "GET":
         return _handle_turn_item(state, context, parts[1], start_response)
     if len(parts) == 3 and parts[0] == "turns" and parts[2] == "interrupt" and method == "POST":

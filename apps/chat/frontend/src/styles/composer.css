@@ -38,8 +38,8 @@
   flex-shrink: 0;
   width: 100%;
   margin: 0;
-  padding: 0.62rem 0.9rem 0.72rem;
-  border-radius: 28px;
+  padding: 0.5rem 0.75rem;
+  border-radius: 16px;
   background: #2c2c2c;
   border: 1px solid rgba(255, 255, 255, 0.07);
   box-shadow: none;
@@ -61,7 +61,7 @@
 
 .chatapp-composer .chatapp-form-stack {
   display: grid;
-  gap: 0.45rem;
+  gap: 0.38rem;
 }
 
 .chatapp-periodic-task-panel .chatapp-form-stack {
@@ -111,15 +111,16 @@
 }
 
 .chatapp-composer .chat-ui-input--textarea {
-  min-height: 44px;
-  max-height: 132px;
-  padding: 0.42rem 0 0.28rem;
+  min-height: 36px;
+  max-height: 330px;
+  padding: 0.29rem 0;
   line-height: 1.45;
   resize: none;
   overflow-y: auto;
 }
 
 .chatapp-composer__row {
+  position: relative;
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr) auto;
   align-items: end;
@@ -139,7 +140,7 @@
   flex-direction: row;
   align-self: end;
   flex-shrink: 0;
-  padding-bottom: 0.1rem;
+  padding-bottom: 0;
 }
 
 .chatapp-composer__icon-action {
@@ -204,15 +205,158 @@
   min-width: 0;
 }
 
-.chatapp-composer__status {
-  padding-left: calc(22px + 0.9rem);
-  color: var(--maverick-text-soft);
-  font-size: 0.77rem;
-  line-height: 1.3;
+.chatapp-composer__editor {
+  white-space: pre-wrap;
+  word-break: break-word;
+  outline: none;
 }
 
-.chatapp-composer__status.is-connected {
-  color: #b8f2c0;
+.chatapp-composer__editor.is-empty::before {
+  content: attr(data-placeholder);
+  color: var(--maverick-text-soft);
+  pointer-events: none;
+}
+
+.chatapp-mention-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  max-width: min(100%, 18rem);
+  min-height: 1.65rem;
+  margin: 0 0.16rem;
+  padding: 0.16rem 0.22rem 0.16rem 0.46rem;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  font-size: 0.76rem;
+  line-height: 1.2;
+  vertical-align: baseline;
+}
+
+.chatapp-mention-chip.is-app {
+  border-color: rgba(125, 211, 252, 0.3);
+  background: rgba(14, 116, 144, 0.24);
+  color: #d8f3ff;
+}
+
+.chatapp-mention-chip.is-skill {
+  border-color: rgba(244, 114, 182, 0.32);
+  background: rgba(190, 24, 93, 0.22);
+  color: #ffe1ef;
+}
+
+.chatapp-mention-chip__kind {
+  flex: 0 0 auto;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.chatapp-mention-chip__label {
+  overflow: hidden;
+  min-width: 0;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chatapp-mention-chip__remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 1.22rem;
+  height: 1.22rem;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.1);
+  color: currentColor;
+  cursor: pointer;
+}
+
+.chatapp-mention-chip__remove:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.chatapp-mention-chip__remove:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.chatapp-mention-chip__remove .material-symbols-rounded {
+  font-size: 0.92rem;
+}
+
+.chatapp-mention-panel {
+  position: absolute;
+  left: calc(22px + 0.9rem);
+  right: 3.25rem;
+  bottom: calc(100% + 0.55rem);
+  z-index: 12;
+  display: grid;
+  max-height: min(18rem, 46vh);
+  overflow-y: auto;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  background: #252525;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.34);
+}
+
+.chatapp-mention-panel__header {
+  padding: 0.58rem 0.72rem 0.42rem;
+  color: var(--maverick-text-soft);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.chatapp-mention-panel__item {
+  display: grid;
+  gap: 0.18rem;
+  width: 100%;
+  padding: 0.62rem 0.72rem;
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: transparent;
+  color: var(--maverick-text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.chatapp-mention-panel__item:hover,
+.chatapp-mention-panel__item.is-active {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.chatapp-mention-panel__name {
+  overflow: hidden;
+  font-size: 0.92rem;
+  font-weight: 700;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chatapp-mention-panel__description,
+.chatapp-mention-panel__empty {
+  color: var(--maverick-text-soft);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.chatapp-mention-panel__description {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.chatapp-mention-panel__empty {
+  padding: 0.7rem 0.72rem 0.78rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .chatapp-periodic-task-panel__intro {

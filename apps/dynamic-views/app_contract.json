@@ -12,7 +12,11 @@
   },
   "capabilities": {
     "mcp_tools": [
-      "maverick_dynamic_views"
+      "maverick_dynamic_views",
+      "dynamic_views_reference_manifest",
+      "dynamic_views_reference_search",
+      "dynamic_views_reference_resolve",
+      "dynamic_views_reference_summarize"
     ],
     "cli_commands": [
       "dynamic-views"
@@ -20,6 +24,16 @@
     "skills": [],
     "views": [
       "dynamic-views"
+    ],
+    "reference_entities": [
+      {
+        "entity_type": "view",
+        "display_name": "Dynamic View",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      }
     ]
   },
   "entrypoints": {
@@ -103,7 +117,7 @@
       "actions": {
         "backend": true,
         "mcp": false,
-        "cli": false
+        "cli": true
       }
     }
   ]

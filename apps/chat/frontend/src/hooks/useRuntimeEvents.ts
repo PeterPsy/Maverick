@@ -21,6 +21,8 @@ type RuntimeEventsArgs = {
   setPendingUserMessages: Dispatch<SetStateAction<PendingMessage[]>>;
 };
 
+const RUNTIME_EVENT_REPLAY_LIMIT = 1000;
+
 function terminalStatus(eventType: string): RuntimeTurn["status"] | null {
   if (eventType === "runtime.turn.completed") {
     return "completed";
@@ -96,7 +98,7 @@ export function useRuntimeEvents({
 
     async function refreshFromHttpReplay() {
       try {
-        const runtimeEvents = await listRuntimeEvents(currentSessionId);
+        const runtimeEvents = await listRuntimeEvents(currentSessionId, { limit: RUNTIME_EVENT_REPLAY_LIMIT });
         applyIncomingEvents(runtimeEvents.items);
         setError(null);
       } catch (pollError) {

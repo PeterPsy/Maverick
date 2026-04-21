@@ -86,6 +86,7 @@ class PlatformHost:
             return handle_root_shell(
                 self.state,
                 workspace_id=workspace_id,
+                root_shell_app_id=self.state.root_shell_app_id,
                 start_path=self.start_path,
                 start_response=start_response,
             )

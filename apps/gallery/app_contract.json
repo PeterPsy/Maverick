@@ -12,7 +12,11 @@
   },
   "capabilities": {
     "mcp_tools": [
-      "maverick_gallery"
+      "maverick_gallery",
+      "gallery_reference_manifest",
+      "gallery_reference_search",
+      "gallery_reference_resolve",
+      "gallery_reference_summarize"
     ],
     "cli_commands": [
       "gallery"
@@ -20,6 +24,16 @@
     "skills": [],
     "views": [
       "gallery"
+    ],
+    "reference_entities": [
+      {
+        "entity_type": "file",
+        "display_name": "Workspace File",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      }
     ]
   },
   "entrypoints": {

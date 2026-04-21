@@ -1,0 +1,31 @@
+---
+name: crm-ops
+description: "Use the CRM app to retrieve and maintain workspace accounts, contacts, deals, activities, and CRM reference entities."
+---
+
+# CRM Ops
+
+Use this skill when a task needs structured business context about companies, people, opportunities, or interactions.
+
+Prefer the CRM CLI for compact, low-context operations:
+
+```bash
+maverick app cli crm --action search --query "Acme Mario Rossi"
+maverick app cli crm --action list_deals
+maverick app cli crm --action create_account --name "Acme Spa"
+```
+
+Use MCP tools when the runtime already has the CRM server mounted or when a richer tool interface is preferable:
+
+- `crm_search`
+- `crm_get`
+- `crm_create_account`
+- `crm_create_contact`
+- `crm_create_deal`
+- `crm_add_activity`
+- `crm_link_entities`
+- `crm_reference_search`
+- `crm_reference_resolve`
+- `crm_reference_summarize`
+
+CRM is the structured source of truth for accounts, contacts, deals, and activities. Memory may link to CRM records, but it should not duplicate the full CRM record when a reference is enough.

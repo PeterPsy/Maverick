@@ -19,6 +19,7 @@ from core.runtime.service import (
     transition_runtime_turn,
 )
 from core.runtime.store import MongoRuntimeStore, RuntimeCollections
+from core.runtime.turn_submission import _missing_final_suffix
 from core.shared.json_file_collection import JsonFileCollection
 from core.workspaces.service import default_workspace_governance
 
@@ -165,6 +166,15 @@ class Phase6RuntimeTestCase(unittest.TestCase):
         self.assertEqual(event.workspace_id, "acme")
         self.assertEqual(event.plane, "turn")
         self.assertEqual(store.list_events("sess-1")[0].event_type, "turn.started")
+
+    def test_runtime_final_output_is_empty_when_stream_already_emitted_everything(self) -> None:
+        self.assertEqual(_missing_final_suffix("hello from codex", "hello from codex"), "")
+
+    def test_runtime_final_output_keeps_only_missing_stream_suffix(self) -> None:
+        self.assertEqual(_missing_final_suffix("hello from codex", "hello"), "from codex")
+
+    def test_runtime_final_output_deduplicates_whitespace_only_stream_difference(self) -> None:
+        self.assertEqual(_missing_final_suffix("hello\n\nfrom codex", "hello from codex"), "")
 
     def test_json_runtime_store_keeps_history_across_bootstrap_instances(self) -> None:
         repo_root = self.make_repo_root()

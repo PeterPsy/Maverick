@@ -1,8 +1,232 @@
-import { DragEvent, FormEvent, useEffect, useState } from "react";
+import { DragEvent, FormEvent, KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ComposerAttachment } from "../lib/attachments";
 import { hasInvalidAttachments } from "../lib/attachments";
+import { activeMentionAt, applyMention, filterMentionItems, findMentionTokens, mentionText, removeMentionToken } from "../lib/mentions";
+import type { MentionItem, MentionToken } from "../lib/mentions";
 import { AttachmentMenu } from "./AttachmentMenu";
 import { AttachmentPreviewStrip } from "./AttachmentPreviewStrip";
+
+type ComposerNode = ChildNode & {
+  dataset?: {
+    mentionText?: string;
+  };
+};
+
+function isElementNode(node: ChildNode): node is HTMLElement {
+  return node.nodeType === Node.ELEMENT_NODE;
+}
+
+function childNodes(node: Node): ComposerNode[] {
+  return Array.from(node.childNodes) as ComposerNode[];
+}
+
+function nodeMentionText(node: ChildNode): string | null {
+  return isElementNode(node) ? node.dataset.mentionText || null : null;
+}
+
+function textFromComposerNode(node: ChildNode): string {
+  const tokenText = nodeMentionText(node);
+  if (tokenText !== null) {
+    return tokenText;
+  }
+  if (node.nodeType === Node.TEXT_NODE) {
+    return node.textContent || "";
+  }
+  if (isElementNode(node) && node.tagName === "BR") {
+    return "\n";
+  }
+  return childNodes(node)
+    .map((child) => textFromComposerNode(child))
+    .join("");
+}
+
+function composerText(root: HTMLElement): string {
+  return childNodes(root)
+    .map((node) => textFromComposerNode(node))
+    .join("");
+}
+
+function caretOffsetInNode(root: HTMLElement, target: Node, targetOffset: number): number {
+  let offset = 0;
+  let found = false;
+
+  function visit(node: ChildNode): void {
+    if (found) {
+      return;
+    }
+    const tokenText = nodeMentionText(node);
+    if (tokenText !== null) {
+      if (node === target || node.contains(target)) {
+        offset += tokenText.length;
+        found = true;
+        return;
+      }
+      offset += tokenText.length;
+      return;
+    }
+    if (node.nodeType === Node.TEXT_NODE) {
+      if (node === target) {
+        offset += targetOffset;
+        found = true;
+        return;
+      }
+      offset += (node.textContent || "").length;
+      return;
+    }
+    if (isElementNode(node) && node.tagName === "BR") {
+      offset += 1;
+      return;
+    }
+    const children = childNodes(node);
+    if (node === target) {
+      for (let index = 0; index < Math.min(targetOffset, children.length); index += 1) {
+        offset += textFromComposerNode(children[index]).length;
+      }
+      found = true;
+      return;
+    }
+    children.forEach(visit);
+  }
+
+  childNodes(root).forEach(visit);
+  return offset;
+}
+
+function composerCaretOffset(root: HTMLElement): number {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0 || !selection.anchorNode || !root.contains(selection.anchorNode)) {
+    return composerText(root).length;
+  }
+  return caretOffsetInNode(root, selection.anchorNode, selection.anchorOffset);
+}
+
+function setComposerCaret(root: HTMLElement, offset: number): void {
+  const range = document.createRange();
+  const selection = window.getSelection();
+  let remaining = Math.max(0, offset);
+  let placed = false;
+
+  function placeBefore(node: ChildNode) {
+    range.setStartBefore(node);
+    range.collapse(true);
+    placed = true;
+  }
+
+  function placeAfter(node: ChildNode) {
+    range.setStartAfter(node);
+    range.collapse(true);
+    placed = true;
+  }
+
+  function visit(node: ChildNode): void {
+    if (placed) {
+      return;
+    }
+    const tokenText = nodeMentionText(node);
+    if (tokenText !== null) {
+      if (remaining <= 0) {
+        placeBefore(node);
+        return;
+      }
+      if (remaining <= tokenText.length) {
+        placeAfter(node);
+        return;
+      }
+      remaining -= tokenText.length;
+      return;
+    }
+    if (node.nodeType === Node.TEXT_NODE) {
+      const textLength = (node.textContent || "").length;
+      if (remaining <= textLength) {
+        range.setStart(node, remaining);
+        range.collapse(true);
+        placed = true;
+        return;
+      }
+      remaining -= textLength;
+      return;
+    }
+    if (isElementNode(node) && node.tagName === "BR") {
+      if (remaining <= 0) {
+        placeBefore(node);
+        return;
+      }
+      remaining -= 1;
+      return;
+    }
+    childNodes(node).forEach(visit);
+  }
+
+  childNodes(root).forEach(visit);
+  if (!placed) {
+    range.selectNodeContents(root);
+    range.collapse(false);
+  }
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+}
+
+function appendTextSegment(fragment: DocumentFragment, text: string): void {
+  const parts = text.split("\n");
+  parts.forEach((part, index) => {
+    if (part) {
+      fragment.append(document.createTextNode(part));
+    }
+    if (index < parts.length - 1) {
+      fragment.append(document.createElement("br"));
+    }
+  });
+}
+
+function mentionChipElement(token: MentionToken, disabled: boolean, onRemove: (token: MentionToken) => void): HTMLElement {
+  const chip = document.createElement("span");
+  chip.className = `chatapp-mention-chip is-${token.item.kind}`;
+  chip.contentEditable = "false";
+  chip.dataset.mentionText = mentionText(token.item);
+
+  const kind = document.createElement("span");
+  kind.className = "chatapp-mention-chip__kind";
+  kind.textContent = token.item.kind === "app" ? "App" : "Skill";
+
+  const label = document.createElement("span");
+  label.className = "chatapp-mention-chip__label";
+  label.textContent = token.item.label;
+
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.className = "chatapp-mention-chip__remove";
+  remove.setAttribute("aria-label", `Rimuovi ${token.item.label}`);
+  remove.disabled = disabled;
+  remove.addEventListener("click", (event) => {
+    event.preventDefault();
+    onRemove(token);
+  });
+
+  const icon = document.createElement("span");
+  icon.className = "material-symbols-rounded";
+  icon.setAttribute("aria-hidden", "true");
+  icon.textContent = "close";
+  remove.append(icon);
+
+  chip.append(kind, label, remove);
+  return chip;
+}
+
+function renderComposerContent(root: HTMLElement, text: string, tokens: MentionToken[], disabled: boolean, onRemove: (token: MentionToken) => void): void {
+  const fragment = document.createDocumentFragment();
+  let cursor = 0;
+  tokens.forEach((token) => {
+    if (token.start > cursor) {
+      appendTextSegment(fragment, text.slice(cursor, token.start));
+    }
+    fragment.append(mentionChipElement(token, disabled, onRemove));
+    cursor = token.end;
+  });
+  if (cursor < text.length || !tokens.length) {
+    appendTextSegment(fragment, text.slice(cursor));
+  }
+  root.replaceChildren(fragment);
+}
 
 export function ChatComposer({
   attachments,
@@ -10,6 +234,7 @@ export function ChatComposer({
   disabled,
   error,
   isSending,
+  mentionItems,
   onAddAttachments,
   onChange,
   onRemoveAttachment,
@@ -24,6 +249,7 @@ export function ChatComposer({
   disabled: boolean;
   error: string | null;
   isSending: boolean;
+  mentionItems: MentionItem[];
   onAddAttachments: (files: File[]) => void;
   onChange: (value: string) => void;
   onRemoveAttachment: (attachmentId: string) => void;
@@ -34,13 +260,139 @@ export function ChatComposer({
   value: string;
 }) {
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  const [caretIndex, setCaretIndex] = useState(value.length);
+  const [dismissedMentionStart, setDismissedMentionStart] = useState<number | null>(null);
+  const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
+  const editorRef = useRef<HTMLDivElement | null>(null);
+  const pendingCaretIndexRef = useRef<number | null>(null);
+  const mentionTokens = useMemo(() => findMentionTokens(value, mentionItems), [mentionItems, value]);
+  const activeMentionCandidate = useMemo(() => activeMentionAt(value, caretIndex), [caretIndex, value]);
+  const activeMentionComplete = activeMentionCandidate
+    ? mentionTokens.some((token) => token.start === activeMentionCandidate.start && caretIndex >= token.end)
+    : false;
+  const activeMention = activeMentionCandidate?.start === dismissedMentionStart || activeMentionComplete ? null : activeMentionCandidate;
+  const filteredMentionItems = useMemo(() => {
+    if (!activeMention) {
+      return [];
+    }
+    return filterMentionItems(
+      mentionItems.filter((item) => item.kind === activeMention.kind),
+      activeMention.query,
+    );
+  }, [activeMention, mentionItems]);
+  const isMentionPanelOpen = Boolean(activeMention);
+
+  useLayoutEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) {
+      return;
+    }
+    const wasFocused = document.activeElement === editor;
+    const nextCaretIndex = pendingCaretIndexRef.current ?? Math.min(caretIndex, value.length);
+    pendingCaretIndexRef.current = null;
+    renderComposerContent(editor, value, mentionTokens, disabled, removeMention);
+    if (wasFocused) {
+      setComposerCaret(editor, nextCaretIndex);
+    }
+  }, [caretIndex, disabled, mentionTokens, value]);
+
+  useEffect(() => {
+    setSelectedMentionIndex(0);
+  }, [activeMention?.kind, activeMention?.query]);
+
+  useEffect(() => {
+    if (dismissedMentionStart === null) {
+      return;
+    }
+    const dismissedTrigger = value[dismissedMentionStart];
+    if (dismissedTrigger !== "@" && dismissedTrigger !== "$") {
+      setDismissedMentionStart(null);
+    }
+  }, [dismissedMentionStart, value]);
 
   function submit(event: FormEvent) {
     event.preventDefault();
     onSubmit();
   }
 
-  function onDragOver(event: DragEvent<HTMLTextAreaElement>) {
+  function syncCaret(editor: HTMLDivElement) {
+    setCaretIndex(composerCaretOffset(editor));
+  }
+
+  function updateComposerFromEditor(editor: HTMLDivElement) {
+    const nextValue = composerText(editor);
+    const nextCaret = composerCaretOffset(editor);
+    pendingCaretIndexRef.current = nextCaret;
+    onChange(nextValue);
+    setCaretIndex(nextCaret);
+  }
+
+  function insertMention(item: MentionItem) {
+    if (!activeMention) {
+      return;
+    }
+    const next = applyMention(value, activeMention, item);
+    pendingCaretIndexRef.current = next.cursor;
+    onChange(next.value);
+    setCaretIndex(next.cursor);
+    setDismissedMentionStart(activeMention.start);
+    requestAnimationFrame(() => {
+      const editor = editorRef.current;
+      if (!editor) {
+        return;
+      }
+      editor.focus();
+      setComposerCaret(editor, next.cursor);
+    });
+  }
+
+  function removeMention(token: MentionToken) {
+    const next = removeMentionToken(value, token);
+    pendingCaretIndexRef.current = next.cursor;
+    onChange(next.value);
+    setCaretIndex(next.cursor);
+    requestAnimationFrame(() => {
+      const editor = editorRef.current;
+      if (!editor) {
+        return;
+      }
+      editor.focus();
+      setComposerCaret(editor, next.cursor);
+    });
+  }
+
+  function onComposerKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (isMentionPanelOpen) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setDismissedMentionStart(activeMention?.start ?? null);
+        return;
+      }
+      if (filteredMentionItems.length) {
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          setSelectedMentionIndex((current) => (current + 1) % filteredMentionItems.length);
+          return;
+        }
+        if (event.key === "ArrowUp") {
+          event.preventDefault();
+          setSelectedMentionIndex((current) => (current - 1 + filteredMentionItems.length) % filteredMentionItems.length);
+          return;
+        }
+        if (event.key === "Enter" || event.key === "Tab") {
+          event.preventDefault();
+          insertMention(filteredMentionItems[selectedMentionIndex] || filteredMentionItems[0]);
+          return;
+        }
+      }
+    }
+    if (event.key === "Enter" && !event.shiftKey && !event.altKey) {
+      event.preventDefault();
+      onSubmit();
+    }
+  }
+
+  function onDragOver(event: DragEvent<HTMLDivElement>) {
     if (!event.dataTransfer.types.includes("Files")) {
       return;
     }
@@ -48,7 +400,7 @@ export function ChatComposer({
     setIsDraggingFiles(true);
   }
 
-  function onDrop(event: DragEvent<HTMLTextAreaElement>) {
+  function onDrop(event: DragEvent<HTMLDivElement>) {
     if (!event.dataTransfer.files.length) {
       return;
     }
@@ -76,23 +428,33 @@ export function ChatComposer({
         <QueuedMessageNotice queuedCount={queuedCount} queuedPreview={queuedPreview} />
         <div className={`chatapp-composer__row ${isSending ? "is-busy" : "is-idle"}`}>
           <AttachmentMenu attachments={attachments} disabled={disabled} onAddAttachments={onAddAttachments} />
-          <textarea
-            className="chat-ui-input chat-ui-input--textarea chatapp-composer__field"
-            disabled={disabled}
-            onChange={(event) => onChange(event.target.value)}
+          <div
+            aria-disabled={disabled}
+            className={`chat-ui-input chat-ui-input--textarea chatapp-composer__field chatapp-composer__editor ${value ? "" : "is-empty"}`}
+            contentEditable={!disabled}
+            data-placeholder="Fai una domanda"
+            onClick={(event) => syncCaret(event.currentTarget)}
             onDragLeave={() => setIsDraggingFiles(false)}
             onDragOver={onDragOver}
             onDrop={onDrop}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey && !event.altKey) {
-                event.preventDefault();
-                onSubmit();
-              }
-            }}
-            placeholder="Fai una domanda"
-            rows={3}
-            value={value}
+            onInput={(event) => updateComposerFromEditor(event.currentTarget)}
+            onKeyDown={onComposerKeyDown}
+            onKeyUp={(event) => syncCaret(event.currentTarget)}
+            onMouseUp={(event) => syncCaret(event.currentTarget)}
+            ref={editorRef}
+            role="textbox"
+            suppressContentEditableWarning
+            tabIndex={disabled ? -1 : 0}
           />
+          {activeMention ? (
+            <MentionPanel
+              activeIndex={Math.min(selectedMentionIndex, Math.max(filteredMentionItems.length - 1, 0))}
+              items={filteredMentionItems}
+              kind={activeMention.kind}
+              onSelect={insertMention}
+              query={activeMention.query}
+            />
+          ) : null}
           <ComposerActions
             canSend={!disabled && !hasInvalidAttachments(attachments) && Boolean(value.trim() || attachments.length)}
             canStopTurn={canStopTurn}
@@ -101,11 +463,58 @@ export function ChatComposer({
           />
         </div>
         {error ? <div className="chat-ui-field__message chat-ui-field__message--error chatapp-composer__error">{error}</div> : null}
-        <div className={`chatapp-composer__status ${isSending ? "" : "is-connected"}`} aria-live="polite">
-          {isSending ? "Runtime working" : "Runtime connected"}
-        </div>
       </form>
     </section>
+  );
+}
+
+function MentionPanel({
+  activeIndex,
+  items,
+  kind,
+  onSelect,
+  query,
+}: {
+  activeIndex: number;
+  items: MentionItem[];
+  kind: "app" | "skill";
+  onSelect: (item: MentionItem) => void;
+  query: string;
+}) {
+  const activeItemRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    activeItemRef.current?.scrollIntoView({ block: "nearest" });
+  }, [activeIndex]);
+
+  return (
+    <div className="chatapp-mention-panel" role="listbox" aria-label={kind === "app" ? "App suggestions" : "Skill suggestions"}>
+      <div className="chatapp-mention-panel__header">{kind === "app" ? "App" : "Skill"}</div>
+      {items.length ? (
+        items.map((item, index) => (
+          <button
+            aria-selected={index === activeIndex}
+            className={`chatapp-mention-panel__item ${index === activeIndex ? "is-active" : ""}`}
+            key={`${item.kind}:${item.id}`}
+            onMouseDown={(event) => {
+              event.preventDefault();
+              onSelect(item);
+            }}
+            ref={index === activeIndex ? activeItemRef : null}
+            role="option"
+            type="button"
+          >
+            <span className="chatapp-mention-panel__name">
+              {item.kind === "app" ? "@" : "$"}
+              {item.label}
+            </span>
+            {item.description ? <span className="chatapp-mention-panel__description">{item.description}</span> : null}
+          </button>
+        ))
+      ) : (
+        <div className="chatapp-mention-panel__empty">Nessun risultato per {query.trim() || "questo riferimento"}</div>
+      )}
+    </div>
   );
 }
 
@@ -129,14 +538,16 @@ function ComposerActions({
           </span>
         </button>
       ) : null}
-      <button aria-label="Send message" className="chatapp-composer__icon-action is-send" disabled={!canSend || isSending} title="Send" type="submit">
-        {isSending ? (
-          <span className="chat-ui-button__spinner" />
-        ) : (
-          <span aria-hidden="true" className="material-symbols-rounded">
-            send
-          </span>
-        )}
+      <button
+        aria-label={isSending ? "Queue message" : "Send message"}
+        className="chatapp-composer__icon-action is-send"
+        disabled={!canSend}
+        title={isSending ? "Queue message" : "Send"}
+        type="submit"
+      >
+        <span aria-hidden="true" className="material-symbols-rounded">
+          send
+        </span>
       </button>
     </div>
   );

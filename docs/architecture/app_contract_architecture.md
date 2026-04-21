@@ -383,6 +383,80 @@ Important distinction:
 - `skills/` is not a runtime interface, security boundary, or governance surface by itself
 - runtime agents may use only workspace-owned skill copies under `data/skills/skills/`
 
+### Referenceable Entity Declaration
+
+Some apps own business objects that other apps may need to reference without taking ownership of their data.
+
+Examples:
+
+- Gallery owns uploaded files and generated artifacts.
+- Chat owns threads, projects, and transcript records.
+- Agents owns agent types, agent instances, and prompt material.
+- The CRM app owns accounts, contacts, deals, activities, and CRM relationships.
+- Memory may link these records into a workspace knowledge graph.
+
+The app contract may declare referenceable entity metadata under `capabilities`. The supported optional shape is:
+
+```json
+"capabilities": {
+  "mcp_tools": [
+    "crm_reference_manifest",
+    "crm_reference_search",
+    "crm_reference_resolve",
+    "crm_reference_summarize"
+  ],
+  "cli_commands": [
+    "crm"
+  ],
+  "reference_entities": [
+    {
+      "entity_type": "contact",
+      "display_name": "Contact",
+      "searchable": true,
+      "resolvable": true,
+      "summarizable": true,
+      "deep_link_supported": true
+    }
+  ]
+}
+```
+
+This declaration is metadata, not data access.
+
+Rules:
+
+- the owning app remains the source of truth for the entity
+- the referencing app stores only stable references and derived context it owns
+- the core must not read app-private data to resolve references
+- the core must not implement app-specific reference logic
+- referenceable entities must have stable `app_id`, `entity_type`, and `entity_id` identity
+- safe summaries must omit private fields the owning app does not intend to expose
+- authorization remains governed by the core and by the owning app surface being called
+
+Reference lookup behavior belongs to the owning app's CLI and MCP surfaces. A common convention should be used so apps such as Memory can consume references without app-specific integrations:
+
+```text
+<app_id>_reference_manifest
+<app_id>_reference_search
+<app_id>_reference_resolve
+<app_id>_reference_summarize
+```
+
+CLI commands should mirror the same behavior for lightweight, low-context local access:
+
+```text
+<app_id> references manifest
+<app_id> references search --type <entity_type> --query "..."
+<app_id> references resolve --type <entity_type> --id <entity_id>
+<app_id> references summarize --type <entity_type> --id <entity_id> --purpose memory_retrieval
+```
+
+The CLI surface is useful for runtime agents because it can be faster and avoids loading large MCP tool descriptions into context. MCP remains the structured tool surface and should expose equivalent behavior when the app supports references.
+
+Every app should expose at least a reference manifest through CLI and MCP. Apps with no referenceable entities should return an empty `entity_types` list. Search, resolve, and summarize may return a structured unsupported response when the manifest is empty. Apps with real workspace objects should implement all four reference operations.
+
+Apps that declare `reference_entities` must expose matching CLI or MCP reference behavior through the manifest, search, resolve, and summarize convention. The CRM app is the canonical source-available example: Memory may store a durable reference to a CRM contact or deal, while CRM remains the owner of the structured business record.
+
 ## Mounted App Model
 
 In Maverick v3, everything above the core should be treated as an app.
@@ -462,6 +536,10 @@ The app backend is not the core.
 The app frontend is not the core.
 
 But both live under the governance and routing model of the core.
+
+Mounted app backend requests are app-domain calls, not runtime turns.
+
+The platform host may provide workspace, data-root, request, and active-provider context to the backend entrypoint, but ordinary backend polling, CRUD, settings, and widget actions must not create runtime sessions, runtime turns, or runtime events. Runtime records are reserved for explicit runtime execution through the generic runtime APIs.
 
 For the first v3 deployment model, the simplest canonical shape is:
 
@@ -773,6 +851,8 @@ The first known case is chat structured content:
 - an installed app declares that it can render that `kind`
 - the chat app renders the matching app-owned widget surface
 
+App-owned surfaces may return a generic `chat_render` object when they create or recall content meant for chat. The runtime bridge treats that as structured output by copying `chat_render.kind` and `chat_render.payload` into provider-agnostic structured content. Host apps still discover renderers through the widget registry; `chat_render` is not permission for Chat to special-case the producing app.
+
 This is an app surface model, not app-to-app communication.
 
 The embedding app does not import source code from the widget owner.
@@ -1043,6 +1123,9 @@ In this example:
 - both are apps
 - neither is the core
 
+The hosted platform route `/` may be configured to serve a root shell app.
+The local hosted default is `base-shell`, but that is a platform configuration value, not a special app identity in the app contract model.
+
 The user may reach:
 
 - `/apps/base-shell/` to load the shell frontend
@@ -1155,17 +1238,32 @@ The following example shows the kind of app contract Maverick should expect at p
       "tables.list",
       "tables.update",
       "reservations.create",
-      "reservations.update"
+      "reservations.update",
+      "restaurant_manager_reference_manifest",
+      "restaurant_manager_reference_search",
+      "restaurant_manager_reference_resolve",
+      "restaurant_manager_reference_summarize"
     ],
     "cli_commands": [
       "tables",
       "reservations",
-      "health"
+      "health",
+      "restaurant-manager"
     ],
     "skills": [],
     "views": [
       "floor_map",
       "reservation_board"
+    ],
+    "reference_entities": [
+      {
+        "entity_type": "reservation",
+        "display_name": "Reservation",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      }
     ]
   },
   "widgets": [

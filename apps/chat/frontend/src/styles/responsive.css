@@ -396,6 +396,74 @@
 }
 
 @media (max-width: 640px) {
+  html,
+  body,
+  #root {
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .chatapp-root {
+    width: 100%;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .chatapp-chat-panel {
+    gap: 0;
+    padding: 0;
+  }
+
+  .chatapp-chat-workspace {
+    flex: 1;
+    padding-inline: 0.45rem;
+    padding-bottom: max(0.95rem, env(safe-area-inset-bottom, 0px));
+  }
+
+  .chatapp-chat-main {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .chatapp-chat-panel__meta {
+    padding: max(0.45rem, env(safe-area-inset-top, 0px)) 0.55rem 0.45rem;
+  }
+
+  .chatapp-chat-panel__meta-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+    margin-left: 0;
+  }
+
+  .chatapp-provider-selector,
+  .chatapp-provider-selector__control,
+  .chatapp-provider-selector select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .chatapp-provider-selector select {
+    max-width: 100%;
+  }
+
+  .chatapp-badge-row {
+    justify-content: flex-end;
+    min-width: 0;
+  }
+
+  .chatapp-execution-chip {
+    min-width: 2.35rem;
+    padding-inline: 0.62rem;
+    white-space: nowrap;
+  }
+
   .chatapp-app-topbar__cta {
     padding-inline: 0.8rem;
   }
@@ -425,7 +493,7 @@
   .chatapp-chat-scroll,
   .chat-ui-surface,
   .chat-ui-dialog__panel {
-    border-radius: 18px;
+    border-radius: 16px;
   }
 
   .chatapp-chat-scroll__inner,
@@ -437,12 +505,235 @@
     padding: 0.7rem 0.85rem;
   }
 
-  .chatapp-composer {
-    padding: 0.35rem 0.55rem;
+  .chatapp-chat-panel__meta {
+    padding: max(0.45rem, env(safe-area-inset-top, 0px)) 0.55rem 0.45rem;
+  }
+
+  .chatapp-chat-scroll {
+    min-height: 0;
   }
 
   .chatapp-chat-scroll__inner {
-    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);
+    padding: 0.72rem 0.45rem 0.85rem;
+  }
+
+  .chatapp-composer {
+    border-radius: 14px;
+    padding: 0.34rem 0.5rem;
+  }
+
+  .chatapp-chat-scroll__inner {
+    padding-bottom: 0.85rem;
+  }
+
+  .chatapp-composer .chatapp-form-stack {
+    gap: 0.28rem;
+  }
+
+  .chatapp-composer__row {
+    grid-template-columns: 30px minmax(0, 1fr) auto;
+    gap: 0.45rem;
+  }
+
+  .chatapp-mention-panel {
+    left: calc(30px + 0.45rem);
+    right: 2.7rem;
+    max-height: min(16rem, 42vh);
+    border-radius: 12px;
+  }
+
+  .chatapp-mention-panel__item {
+    padding: 0.58rem 0.66rem;
+  }
+
+  .chatapp-attachment-picker {
+    width: 30px;
+    min-width: 30px;
+    padding-bottom: 0.28rem;
+  }
+
+  .chatapp-attachment-picker__trigger {
+    width: 30px;
+    min-width: 30px;
+    min-height: 30px;
+  }
+
+  .chatapp-attachment-picker__trigger .material-symbols-rounded {
+    font-size: 1.45rem;
+  }
+
+  .chatapp-composer .chat-ui-input--textarea {
+    min-height: 34px;
+    max-height: 290px;
+    padding-block: 0.24rem;
+    font-size: 1rem;
+  }
+
+  .chatapp-mention-chip {
+    max-width: 100%;
+    min-height: 1.58rem;
+    border-radius: 8px;
+  }
+
+  .chatapp-composer__actions {
+    gap: 0.35rem;
+    min-width: 38px;
+  }
+
+  .chatapp-composer__icon-action {
+    width: 38px;
+    min-width: 38px;
+    min-height: 38px;
+  }
+
+  .chatapp-composer-queue {
+    padding: 0.5rem 0.58rem;
+  }
+
+  .chatapp-composer-queue__eyebrow {
+    gap: 0.35rem;
+  }
+
+  .chatapp-composer-queue__eyebrow strong,
+  .chatapp-composer-queue__eyebrow span {
+    font-size: 0.7rem;
+  }
+
+  .chatapp-attachment-strip {
+    gap: 0.42rem;
+    margin-inline: -0.08rem;
+    padding-inline: 0.08rem;
+  }
+
+  .chatapp-attachment-card {
+    grid-template-columns: 2.55rem minmax(0, 1fr) 1.8rem;
+    min-width: min(16rem, calc(100vw - 1.7rem));
+    max-width: calc(100vw - 1.7rem);
+    gap: 0.48rem;
+    padding: 0.42rem;
+    border-radius: 13px;
+  }
+
+  .chatapp-attachment-card__preview,
+  .chatapp-attachment-card__icon {
+    width: 2.55rem;
+    height: 2.55rem;
+    border-radius: 10px;
+  }
+
+  .chatapp-attachment-card__remove {
+    width: 1.8rem;
+    height: 1.8rem;
+  }
+
+  .chatapp-attachment-picker__menu {
+    width: min(300px, calc(100vw - 1.5rem));
+    min-width: 0;
+  }
+
+  .chatapp-attachment-picker__item {
+    gap: 0.62rem;
+    padding: 0.62rem;
+  }
+
+  .chatapp-human-message__text,
+  .chatapp-agent-block__body,
+  .chatapp-system-update__label,
+  .chatapp-error__label {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .chatapp-bubble {
+    padding-block: 0.34rem;
+  }
+
+  .chatapp-bubble + .chatapp-bubble {
+    margin-top: 0.72rem;
+  }
+
+  .chatapp-bubble.is-human,
+  .chatapp-bubble.is-inter-agent {
+    width: fit-content;
+    max-width: calc(100vw - 1.4rem);
+    padding: 0.68rem 0.78rem;
+    border-radius: 16px;
+  }
+
+  .chatapp-bubble__meta {
+    margin-top: 0.25rem;
+  }
+
+  .chatapp-message-action--copy {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .chatapp-agent-block__body ul,
+  .chatapp-agent-block__body ol {
+    padding-left: 1rem;
+  }
+
+  .chatapp-agent-block__body pre {
+    border-radius: 12px;
+    padding: 0.72rem;
+  }
+
+  .chatapp-structured-card {
+    gap: 0.55rem;
+    padding: 0.7rem;
+    border-radius: 14px;
+  }
+
+  .chatapp-structured-widget {
+    width: 100%;
+    min-height: min(360px, 62dvh);
+    border-radius: 14px;
+  }
+
+  .chatapp-tool-inline,
+  .chatapp-delegation-status {
+    max-width: 100%;
+  }
+
+  .chatapp-tool-inline__row,
+  .chatapp-delegation-status__toggle,
+  .chatapp-system-update.chatapp-system-update--delegation {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .chatapp-tool-call-panel {
+    inset: auto 0.5rem max(0.5rem, env(safe-area-inset-bottom, 0px));
+    top: auto;
+    left: auto;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    max-height: min(70dvh, 34rem);
+    resize: none;
+    border-radius: 18px;
+  }
+
+  .chatapp-tool-call-panel__header {
+    gap: 0.7rem;
+    padding: 0.78rem 0.82rem 0.68rem;
+  }
+
+  .chatapp-tool-call-panel__content {
+    padding: 0.72rem;
+  }
+
+  .chatapp-tool-call-panel__pre {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  .chatapp-chat-scroll-jump {
+    right: 0.85rem;
+    bottom: 5.65rem;
+    width: 2.35rem;
+    height: 2.35rem;
   }
 
   .chatapp-periodic-task-panel {
@@ -518,13 +809,6 @@
     min-width: 0;
     padding: 0.38rem 0.55rem;
     font-size: 0.72rem;
-  }
-
-  .chatapp-chat-scroll-jump {
-    right: 0.9rem;
-    bottom: 6.8rem;
-    width: 2.5rem;
-    height: 2.5rem;
   }
 
   .chatapp-bubble ul,

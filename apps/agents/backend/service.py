@@ -19,6 +19,15 @@ from store import (
     write_common_prompt,
 )
 
+REFERENCE_MANIFEST = {
+    "app_id": "agents",
+    "schema_version": "1",
+    "entity_types": [
+        {"entity_type": "agent_type", "display_name": "Agent Type", "id_stability": "stable", "searchable": True, "resolvable": True, "summarizable": True, "deep_link_supported": True},
+        {"entity_type": "role_prompt", "display_name": "Role Prompt", "id_stability": "stable", "searchable": True, "resolvable": True, "summarizable": True, "deep_link_supported": True},
+    ],
+}
+
 
 def catalog(data_root: Path) -> dict:
     seed_defaults(data_root)
@@ -56,6 +65,71 @@ def prompt_preview(data_root: Path, body: dict) -> dict:
     return {"sections": sections, "rendered": rendered}
 
 
+def _reference_items(data_root: Path, entity_type: str) -> list[dict]:
+    if entity_type == "agent_type":
+        return [
+            {
+                "app_id": "agents",
+                "entity_type": "agent_type",
+                "entity_id": item["id"],
+                "title": item["name"],
+                "subtitle": item.get("role_id", ""),
+                "summary": item.get("description", ""),
+                "confidence": 1.0,
+                "deep_link": f"/apps/agents/agent-types/{item['id']}",
+            }
+            for item in list_agent_types(data_root)
+        ]
+    if entity_type == "role_prompt":
+        return [
+            {
+                "app_id": "agents",
+                "entity_type": "role_prompt",
+                "entity_id": item["id"],
+                "title": item["name"],
+                "subtitle": "Role prompt",
+                "summary": item.get("description", ""),
+                "confidence": 1.0,
+                "deep_link": f"/apps/agents/roles/{item['id']}",
+            }
+            for item in list_roles(data_root)
+        ]
+    raise AgentsValidationError(f"Unsupported reference entity type: {entity_type}")
+
+
+def reference_search(data_root: Path, body: dict) -> dict:
+    entity_type = str(body.get("entity_type") or body.get("type") or "").strip()
+    query = str(body.get("query") or "").strip().casefold()
+    limit = max(1, min(int(body.get("limit") or 10), 50))
+    items = _reference_items(data_root, entity_type)
+    if query:
+        items = [
+            item for item in items
+            if query in item["title"].casefold() or query in item["summary"].casefold() or query in item["entity_id"].casefold()
+        ]
+    return {"results": items[:limit]}
+
+
+def reference_resolve(data_root: Path, body: dict) -> dict:
+    entity_type = str(body.get("entity_type") or body.get("type") or "").strip()
+    entity_id = str(body.get("entity_id") or "").strip()
+    item = next((candidate for candidate in _reference_items(data_root, entity_type) if candidate["entity_id"] == entity_id), None)
+    if item is None:
+        return {"exists": False, "app_id": "agents", "entity_type": entity_type, "entity_id": entity_id}
+    return {"exists": True, **item}
+
+
+def reference_summarize(data_root: Path, body: dict) -> dict:
+    resolved = reference_resolve(data_root, body)
+    if not resolved.get("exists"):
+        return {"summary": "", "safe_fields": {}, "source_updated_at": ""}
+    return {
+        "summary": resolved.get("summary") or resolved.get("title") or "",
+        "safe_fields": {"title": resolved.get("title"), "subtitle": resolved.get("subtitle")},
+        "source_updated_at": "",
+    }
+
+
 def handle_action(data_root: Path, body: dict) -> tuple[int, dict]:
     action = str(body.get("action") or "catalog")
     seed_defaults(data_root)
@@ -89,4 +163,12 @@ def handle_action(data_root: Path, body: dict) -> tuple[int, dict]:
         return 200, prompt_preview(data_root, body)
     if action == "health.check":
         return 200, {"status": "ok", "data_root": str(data_root)}
+    if action == "references.manifest":
+        return 200, REFERENCE_MANIFEST
+    if action == "references.search":
+        return 200, reference_search(data_root, body)
+    if action == "references.resolve":
+        return 200, reference_resolve(data_root, body)
+    if action == "references.summarize":
+        return 200, reference_summarize(data_root, body)
     return 400, {"error": "unsupported_action", "action": action}

@@ -25,7 +25,13 @@ from core.apps.contracts import (
 from core.apps.service import install_workspace_local_app, register_workspace_local_app_project_from_contract
 from core.cli.service import list_core_cli_commands
 from core.mcp.service import list_mcp_tools
-from core.runtime.service import create_runtime_session, queue_runtime_turn, transition_runtime_session, transition_runtime_turn
+from core.runtime.service import (
+    create_runtime_session,
+    queue_runtime_turn,
+    record_runtime_event,
+    transition_runtime_session,
+    transition_runtime_turn,
+)
 from core.skills.service import list_available_workspace_skills
 from core.workspaces.service import create_workspace, ensure_workspace_layout
 
@@ -48,7 +54,7 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
             repo_root / "apps" / "base-shell",
             ignore=shutil.ignore_patterns("node_modules"),
         )
-        shutil.copytree(source_apps_root / "chat", repo_root / "apps" / "chat")
+        shutil.copytree(source_apps_root / "chat", repo_root / "apps" / "chat", ignore=shutil.ignore_patterns("node_modules"))
         shutil.copytree(source_apps_root / "agents", repo_root / "apps" / "agents", ignore=shutil.ignore_patterns("node_modules"))
         shutil.copytree(source_apps_root / "skills", repo_root / "apps" / "skills", ignore=shutil.ignore_patterns("node_modules"))
         return repo_root
@@ -145,7 +151,7 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
 
         with patch.dict("os.environ", {"MAVERICK3_RUNTIME_FAKE_RESPONSE": "resumed after restart"}):
             restarted_state = bootstrap_platform_state(start_path=repo_root)
-            for _attempt in range(20):
+            for _attempt in range(100):
                 turns = restarted_state.runtime_store.list_turns(session.session_id)
                 if any(item.input_text == "resume" and item.status == "completed" for item in turns):
                     break
@@ -161,6 +167,37 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
         self.assertEqual(resume_turns[0].status, "completed")
         self.assertIn("runtime.recovery.resume_queued", event_types)
         self.assertIn("runtime.turn.failed", event_types)
+
+    def test_bootstrap_closes_orphan_non_terminal_turn_events_after_backend_restart(self) -> None:
+        repo_root = self.make_repo_root()
+        initial_state = bootstrap_platform_state(start_path=repo_root)
+        session = create_runtime_session(
+            initial_state.runtime_store,
+            session_id="runtime-orphan-event",
+            workspace_id="default",
+            agent_id="chat",
+            governance=initial_state.workspace_store.get_governance("default"),
+            platform_allows_full_access=True,
+            start_path=repo_root,
+        )
+        transition_runtime_session(initial_state.runtime_store, session_id=session.session_id, target_status="running")
+        record_runtime_event(
+            initial_state.runtime_store,
+            event_id="orphan-queued-event",
+            session_id=session.session_id,
+            turn_id="missing-turn",
+            plane="turn",
+            event_type="runtime.turn.queued",
+            payload={"input_text": "resume"},
+            event_bus=initial_state.runtime_event_bus,
+        )
+
+        restarted_state = bootstrap_platform_state(start_path=repo_root)
+
+        event_types = [event.event_type for event in restarted_state.runtime_store.list_events(session.session_id)]
+        self.assertIn("runtime.turn.queued", event_types)
+        self.assertIn("runtime.turn.cancelled", event_types)
+        self.assertEqual(restarted_state.runtime_store.list_turns(session.session_id), [])
 
     def test_platform_host_mounts_root_shell_and_chat_frontend(self) -> None:
         repo_root = self.make_repo_root()
@@ -178,6 +215,36 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
         self.assertNotIn(b'src="/apps/chat/"', body_root)
         self.assertIn(b'id="root"', body_chat)
         self.assertIn(b"/apps/chat/assets/app-", body_chat)
+
+    def test_app_backend_calls_do_not_create_runtime_turns(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+
+        status, body, _headers = self.invoke(
+            app,
+            path="/api/apps/chat/backend",
+            method="POST",
+            body={"action": "sidebar.snapshot"},
+        )
+
+        self.assertEqual(status, 200)
+        self.assertIn("threads", json.loads(body))
+        self.assertFalse(any(session.session_id == "default:chat:ui" for session in state.runtime_store.list_sessions("default")))
+        self.assertEqual(state.runtime_store.list_turns("default:chat:ui"), [])
+        self.assertEqual(state.runtime_store.list_events("default:chat:ui"), [])
+
+    def test_platform_host_uses_configured_root_shell_app(self) -> None:
+        repo_root = self.make_repo_root()
+        with patch.dict("os.environ", {"MAVERICK3_ROOT_SHELL_APP_ID": "chat"}):
+            state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+
+        status_root, body_root, _headers_root = self.invoke(app, path="/")
+
+        self.assertEqual(state.root_shell_app_id, "chat")
+        self.assertEqual(status_root, 200)
+        self.assertIn(b"/apps/chat/assets/app-", body_root)
 
     def test_base_shell_contract_mounts_production_dist(self) -> None:
         repo_root = self.make_repo_root()
@@ -483,10 +550,11 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
         self.assertIsNone(rename_payload["thread"]["project_id"])
         self.assertEqual(delete_payload["threads"], [])
 
-    def test_chat_thread_delete_stops_linked_runtime_session(self) -> None:
+    def test_chat_thread_delete_exposes_runtime_session_for_generic_termination(self) -> None:
         repo_root = self.make_repo_root()
         state = bootstrap_platform_state(start_path=repo_root)
         app = PlatformHost(state, start_path=repo_root)
+        cookie = self.login(app)
         session = create_runtime_session(
             state.runtime_store,
             session_id="runtime-to-delete",
@@ -515,12 +583,22 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
             body={"action": "threads.delete", "thread_id": thread_id},
         )
         delete_payload = json.loads(delete_body.decode("utf-8"))
+        status_terminate, terminate_body, _terminate_headers = self.invoke(
+            app,
+            path=f"/api/runtime/sessions/{session.session_id}/terminate",
+            method="POST",
+            body={"reason": "chat_thread_deleted"},
+            cookie=cookie,
+        )
+        terminate_payload = json.loads(terminate_body.decode("utf-8"))
 
         self.assertEqual(status_thread, 201)
         self.assertEqual(status_delete, 200)
         self.assertEqual(delete_payload["deleted_runtime_session_id"], session.session_id)
-        self.assertEqual(delete_payload["runtime_termination"]["session_id"], session.session_id)
-        self.assertEqual(delete_payload["runtime_termination"]["cancelled_turns"], 1)
+        self.assertNotIn("runtime_termination", delete_payload)
+        self.assertEqual(status_terminate, 200)
+        self.assertEqual(terminate_payload["session_id"], session.session_id)
+        self.assertEqual(terminate_payload["cancelled_turns"], 1)
         self.assertEqual(state.runtime_store.get_session(session.session_id).status, "stopped")
         self.assertEqual(state.runtime_store.get_turn(turn.turn_id).status, "cancelled")
 

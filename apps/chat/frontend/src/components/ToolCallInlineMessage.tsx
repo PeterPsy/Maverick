@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import type { ToolCallMessage } from "../api/client";
@@ -10,14 +10,19 @@ type PanelAnchor = {
 };
 
 type ToolCallInlineMessageProps = {
+  defaultExpanded?: boolean;
   toolCalls: ToolCallMessage[];
 };
 
-export function ToolCallInlineMessage({ toolCalls }: ToolCallInlineMessageProps) {
-  const [isExpanded, setIsExpanded] = useState(true);
+export function ToolCallInlineMessage({ defaultExpanded = true, toolCalls }: ToolCallInlineMessageProps) {
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [selectedTool, setSelectedTool] = useState<ToolCallMessage | null>(null);
   const [panelAnchor, setPanelAnchor] = useState<PanelAnchor | null>(null);
   const toolCount = toolCalls.length;
+
+  useEffect(() => {
+    setIsExpanded(defaultExpanded);
+  }, [defaultExpanded]);
 
   return (
     <div className="chatapp-tool-inline">

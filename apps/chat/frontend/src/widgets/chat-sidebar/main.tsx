@@ -4,7 +4,6 @@ import {
   ChatProject,
   ChatThread,
   createProject,
-  createThread,
   deleteProject,
   deleteThread,
   listThreads,
@@ -12,15 +11,16 @@ import {
   updateThread,
 } from "../../api/client";
 import { FloatingPanel, FloatingPanelPosition, SettingsPanel } from "./SettingsPanel";
+import { withRuntimeAvailability } from "./runtimeStatus";
 import { buildSections, isThreadBusy } from "./sections";
 import "./styles.css";
 
-function notifyShell(thread?: ChatThread) {
+function notifyShell(thread?: ChatThread, params: Record<string, string | boolean | null> = {}) {
   window.parent?.postMessage(
     {
       type: "maverick.widget.open-app",
       app_id: "chat",
-      params: thread ? { thread_id: thread.thread_id } : { new_chat: true, new_chat_request_id: crypto.randomUUID() },
+      params: thread ? { thread_id: thread.thread_id } : { new_chat: true, new_chat_request_id: crypto.randomUUID(), ...params },
     },
     window.location.origin,
   );
@@ -72,8 +72,9 @@ function ChatSidebarWidget() {
   async function refresh() {
     try {
       const payload = await listThreads();
+      const hydratedThreads = await withRuntimeAvailability(payload.threads || []);
       setProjects(payload.projects || []);
-      setThreads(payload.threads || []);
+      setThreads(hydratedThreads);
       setError(null);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to load chats.");
@@ -82,6 +83,8 @@ function ChatSidebarWidget() {
 
   useEffect(() => {
     refresh();
+    const refreshInterval = window.setInterval(refresh, 5000);
+    return () => window.clearInterval(refreshInterval);
   }, []);
 
   useEffect(() => {
@@ -89,8 +92,11 @@ function ChatSidebarWidget() {
       if (event.origin !== window.location.origin || !event.data || typeof event.data !== "object") {
         return;
       }
-      const payload = event.data as { owner_app_id?: string; resource?: string; type?: string };
+      const payload = event.data as { active_thread_id?: string; owner_app_id?: string; resource?: string; type?: string };
       if (payload.type === "maverick.widget.data-changed" && payload.owner_app_id === "chat") {
+        if (payload.active_thread_id) {
+          setActiveThreadId(payload.active_thread_id);
+        }
         void refresh();
       }
     }
@@ -101,18 +107,11 @@ function ChatSidebarWidget() {
 
   async function createChat(projectId: string | null = null) {
     setIsPending(true);
-    try {
-      const payload = await createThread("", projectId);
-      updateFromSidebarPayload(payload, setProjects, setThreads);
-      setActiveThreadId(payload.thread.thread_id);
-      setPanel(null);
-      setError(null);
-      notifyShell(payload.thread);
-    } catch (createError) {
-      setError(createError instanceof Error ? createError.message : "Unable to create chat.");
-    } finally {
-      setIsPending(false);
-    }
+    setActiveThreadId(null);
+    setPanel(null);
+    setError(null);
+    notifyShell(undefined, { project_id: projectId });
+    setIsPending(false);
   }
 
   async function moveThread(thread: ChatThread, projectId: string | null) {
@@ -254,7 +253,6 @@ function ChatSidebarWidget() {
                             <div className="bs-chat-list__row">
                               <div className="bs-chat-list__copy">
                                 <p className="bs-chat-list__title" title={thread.title}>{thread.title}</p>
-                                <p className="bs-chat-list__subtitle">{thread.runtime_session_id ? "Runtime ready" : "No runtime"}</p>
                               </div>
                               {isBusy ? <span aria-label="Connected and working" className="bs-presence is-busy" title="Connected and working" /> : null}
                             </div>

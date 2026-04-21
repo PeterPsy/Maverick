@@ -236,6 +236,7 @@ This includes:
 - runtime sessions that can carry an app-provided materialized `system_prompt`
 - runtime sessions that can carry selected `skill_ids` when an agent type narrows the workspace default
 - runtime sessions that can identify the app surface that created them with `source_app_id`
+- runtime turns that can carry structured app references by stable `app_id` when an app UI parses human-facing mention text
 
 These fields are generic runtime configuration. They are not an Agents app dependency.
 
@@ -369,6 +370,26 @@ These are not separate products.
 `skills/` is a non-executable instructional layer attached to those surfaces.
 
 The same platform host framework should also be able to expose app-contributed MCP, CLI, and skill surfaces once those apps are installed and enabled.
+
+Apps may expose reference tools through their declared MCP and CLI surfaces so other apps can link to app-owned records without reading app-private storage. The core's responsibility is generic: validate contracts, register enabled app surfaces, enforce workspace policy, invoke the declared entrypoints, and expose discovery metadata. The core must not know how to search CRM people, chat threads, gallery files, memory nodes, or any other app-specific entity.
+
+The common reference tool convention is:
+
+- `<app_id>_reference_manifest`
+- `<app_id>_reference_search`
+- `<app_id>_reference_resolve`
+- `<app_id>_reference_summarize`
+
+CLI surfaces should mirror the same behavior with lightweight commands such as:
+
+```text
+<app_id> references manifest
+<app_id> references search
+<app_id> references resolve
+<app_id> references summarize
+```
+
+Every app may expose at least a reference manifest. Apps with no referenceable entities should return an empty manifest rather than forcing the core or another app to infer that from missing app-specific behavior.
 
 ## What The Core Is Not
 
@@ -669,13 +690,18 @@ This keeps navigation reliable after login/logout cycles and cold iframe mounts 
 
 The current code keeps the core/app boundary clean at the import level: `core/` does not import app frontend code, and `base-shell` does not import `chat`.
 
-There are still three explicit product assumptions that should be removed in a later cleanup before calling the core and apps fully standalone:
+There is still a product assumption that should be removed before calling the core and apps fully standalone:
 
-- built-in app bootstrap currently lists `base-shell` and `chat` directly instead of reading built-ins from installation configuration or app-store metadata
-- the root `/` platform route currently resolves the root shell by the `base-shell` app id instead of a configurable root-shell app setting
 - `base-shell` currently prefers/pins `chat` as the initial app in local browser state instead of deriving the first-open app from workspace preference or registry metadata
 
-These are not direct code-contamination problems because they do not import app internals into core.
+Built-in app bootstrap is contract-driven and scans installation-level app roots that contain `app_contract.json`.
+Future production packaging may still narrow the default installed set through installation configuration or app-store metadata, but the core bootstrap no longer names individual app ids for discovery.
+
+The root `/` platform route is configured through the hosted platform state.
+The local hosted default is `base-shell`, and operators may override it with `MAVERICK3_ROOT_SHELL_APP_ID`.
+That default is a bootstrap configuration value, not a core dependency on the shell app's internals.
+
+These assumptions are not direct code-contamination problems because they do not import app internals into core.
 
 They are product defaults encoded in code, and they should become configuration or registry-driven policy.
 
@@ -729,6 +755,7 @@ For the first hosted v3 wave, this means:
 
 - one main core host mounted at `maverick3.versy.ai`
 - one separate rescue host
+- one backend watchdog timer that probes the main core host from outside the main backend process
 - a minimal app set mounted by the core:
   - `base-shell`
   - `chat`
@@ -741,6 +768,12 @@ The main core host should run through the ASGI platform host so HTTP and WebSock
 The WSGI host may remain useful for isolated local smoke checks, but it is not the production runtime host once WebSocket is part of the agent communication surface.
 
 `nginx` must forward `/ws/` with `Upgrade` and `Connection: upgrade` headers to the main core host.
+
+The backend watchdog is deployment infrastructure, not app runtime behavior.
+
+It should run as a small `systemd` timer that probes the main backend health endpoint once per minute and persists downtime state under installation-local recovery state. If the backend is continuously unhealthy for at least 300 seconds, it may launch one autonomous Codex rescue agent from the independent rescue path with full host access. The rescue prompt must require a forward minimal fix against the current tree, must forbid git rollback operations such as `git reset`, `git checkout`, or `git restore`, and must preserve unrelated user changes.
+
+The rescue agent should diagnose the current code and deployment state, apply the smallest fix that restores the backend, run targeted verification, restart `maverick3-core.service` when systemd is available, and verify the health endpoint. It must not manually recreate product runtime agents. Runtime session spin-back remains the backend startup recovery responsibility described in the runtime recovery section.
 
 ## Target Core Tree
 
@@ -927,9 +960,13 @@ Current first-use endpoints include:
 - `GET /api/runtime/sessions/<session_id>/events`
 - `GET /api/runtime/sessions/<session_id>/turns`
 - `POST /api/runtime/sessions/<session_id>/turns`
+- `POST /api/runtime/sessions/<session_id>/terminate`
 - `GET /api/runtime/turns/<turn_id>`
 - `POST /api/runtime/turns/<turn_id>/interrupt`
 - `WS /ws/runtime/sessions/<session_id>`
+
+Runtime session creation must include an explicit `agent_id`.
+The core must not default missing runtime ownership metadata to a product app such as Chat.
 
 Turn submission is implemented through a dedicated runtime service so future CLI, MCP, WebSocket, or automation surfaces can reuse the same orchestration without embedding execution logic in HTTP route handlers.
 
@@ -1049,10 +1086,15 @@ For Codex, the local provider runs a persistent `codex app-server --listen stdio
 - `runtime.tool_call.completed`
 - `runtime.tool_call.failed`
 - `runtime.output.delta`
+- `runtime.output.structured`
 
 The Codex adapter must not silently drop app-server notifications just because their method name is not yet known by Maverick.
 
 Known methods should be mapped intentionally. Codex app-server item types such as `commandExecution`, `fileChange`, and `webSearch` must be normalized as first-class generic tool calls with stable `tool_kind`, `tool_call_id`, status, summary, and structured detail fields such as command output, file changes, web-search query, and web-search results.
+
+If an app-owned CLI, MCP, or backend surface returns a generic `chat_render` object, the runtime/provider bridge should normalize it into structured runtime output instead of treating the whole JSON response as assistant prose. The normalized event shape is provider-agnostic: `runtime.output.structured` carries `structured_content` with a stable `kind` and `payload`. Chat and other host apps must resolve that kind through the widget registry; they must not hardcode a specific app such as Dynamic Views.
+
+Provider output that belongs to a tool item must remain tool output. For example, Codex `item.fileChange.outputDelta` notifications are file-change tool updates and must not be emitted as assistant `runtime.output.delta` text.
 
 Codex agent-message output may arrive both as streamed `item/agentMessage/delta` fragments and as a later completed item snapshot. The adapter must emit the text once per provider item: completion snapshots should fill gaps when no delta was streamed, but must not be re-emitted as duplicate transcript output for an item already streamed.
 
@@ -1145,6 +1187,10 @@ The WebSocket transport should subscribe to that bus before performing its initi
 
 The local JSON persistence adapter is suitable for bootstrap control-plane state and runtime history replay. It is not a live token-streaming mechanism and must not sit in the active-turn hot path as a polling source.
 
+For bootstrap deployments that persist runtime events in local JSON, event writes must be append-oriented. Saving one new runtime event must not require rereading and rewriting the full event history file, because active provider turns can produce many events while the HTTP host is also serving shell and app traffic.
+
+The local JSON adapter must treat malformed collection files as storage errors, not as empty collections. A corrupt runtime history file may require recovery, but it must not be silently overwritten in a way that makes existing chat threads appear empty.
+
 Runtime session, turn, event, process, and state records must survive auth logout/login cycles and local host restarts.
 
 For the local hosted bootstrap, runtime-domain collections are persisted under installation-local `.maverick/local-state/runtime/`.
@@ -1181,6 +1227,8 @@ Chat transcript rendering must preserve the runtime event ordering for visible t
 
 Streamed assistant output is part of that same event timeline. When a later `runtime.output.final` arrives, the chat renderer must use it as terminal evidence and as a source for any missing suffix or structured link previews, but it must not replace already-rendered output segments in a way that moves tool groups above or below the text updates that originally separated them.
 
+The runtime must not persist the same assistant text twice as both streamed output and final output. `runtime.output.delta` carries progressive assistant text. `runtime.output.final` is terminal evidence and may carry only text that was not already emitted through deltas. If the provider's final text is exactly the concatenation of streamed deltas, the final event must use an empty `text` field.
+
 Consecutive runtime tool-call invocations within one turn may be rendered as a single `Tool Used` group, with start/update/completion events for the same invocation merged inside that group only when the provider supplies a stable call id such as `tool_call_id`, `call_id`, or `item_id`.
 
 The renderer must not merge separate invocations merely because they use the same tool name or command.
@@ -1195,10 +1243,16 @@ For example, a `skills changed` runtime update may be rendered as a synthetic `s
 
 Deleting a chat thread is also a runtime ownership operation when the thread references a runtime session.
 
-The platform host must terminate any live provider subprocesses registered for that runtime session, cancel queued or active turns, and transition the runtime session to `stopped` before completing the delete response.
-The chat app backend may own thread metadata, but it must not directly kill provider processes; process termination remains a core runtime responsibility.
+The chat app backend owns thread metadata and may return the linked runtime session id when a thread is deleted.
+It must not cause hidden app-specific side effects in the platform app mount.
+The caller should then use the generic runtime endpoint `POST /api/runtime/sessions/<session_id>/terminate`.
+
+The runtime endpoint must terminate any live provider subprocesses registered for that runtime session, cancel queued or active turns, and transition the runtime session to `stopped`.
+Process termination remains a core runtime responsibility, but it is exposed as a generic runtime operation rather than as Chat-specific platform-host behavior.
 
 Therefore a persisted chat thread must not outlive its runtime event history in a way that silently appears as an empty new chat.
+
+Runtime turn state must remain consistent across the turn store and runtime event log. If startup recovery finds a non-terminal turn event without a corresponding turn record, it must append a terminal recovery event for that turn id so event-based transcript rendering and turn-based availability checks do not disagree indefinitely.
 
 The WebSocket transport must support:
 
@@ -1429,6 +1483,7 @@ So the recovery layer should coordinate:
 - backend-startup recovery for interrupted runtime turns
 - failed-start diagnosis
 - health-driven recovery decisions
+- backend downtime watchdog escalation into an autonomous full-access rescue agent after sustained outage
 - operator-facing repair and recovery workflows exposed through controlled CLI or MCP surfaces
 
 The recovery surface should be designed so that operators can still reach it even when the main backend surface is unhealthy or unavailable.
@@ -1449,6 +1504,8 @@ App health probes should execute through the installed app's declared health con
 
 without relying on app-owned surfaces or on direct access to the primary backend runtime internals.
 
+Backend downtime escalation is intentionally outside the main backend process. The watchdog owns only health probing, persisted downtime state, cooldown, and launch control for a single rescue agent. The rescue agent owns diagnosis and the minimal forward code or deployment fix. The backend startup recovery pass owns runtime session spin-back after the main service is healthy again.
+
 #### Recommended first file layout
 
 ```text
@@ -1458,6 +1515,7 @@ recovery/
   store.py
   runtime_recovery.py
   failed_start_recovery.py
+  backend_watchdog.py
   health_checks.py
   service.py
   routes.py

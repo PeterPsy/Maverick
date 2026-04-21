@@ -39,6 +39,17 @@ def app_contract_payload(parsed: ParsedAppContract) -> dict[str, Any]:
             "cli_commands": parsed.contract.capabilities.cli_commands,
             "skills": parsed.contract.capabilities.skills,
             "views": parsed.contract.capabilities.views,
+            "reference_entities": [
+                {
+                    "entity_type": entity.entity_type,
+                    "display_name": entity.display_name,
+                    "searchable": entity.searchable,
+                    "resolvable": entity.resolvable,
+                    "summarizable": entity.summarizable,
+                    "deep_link_supported": entity.deep_link_supported,
+                }
+                for entity in parsed.contract.capabilities.reference_entities
+            ],
         },
         "entrypoints": {
             "mcp": parsed.contract.entrypoints.mcp,

@@ -11,16 +11,24 @@
     "source_access": "none"
   },
   "capabilities": {
-    "mcp_tools": [],
-    "cli_commands": [],
+    "mcp_tools": [
+      "base_shell_reference_manifest",
+      "base_shell_reference_search",
+      "base_shell_reference_resolve",
+      "base_shell_reference_summarize"
+    ],
+    "cli_commands": [
+      "base-shell"
+    ],
     "skills": [],
     "views": [
       "shell"
-    ]
+    ],
+    "reference_entities": []
   },
   "entrypoints": {
-    "mcp": null,
-    "cli": null,
+    "mcp": "mcp/server.py",
+    "cli": "cli/app_cli.py",
     "backend": null,
     "frontend": "frontend/dist",
     "skills_root": null,

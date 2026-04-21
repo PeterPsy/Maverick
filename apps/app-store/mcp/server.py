@@ -13,7 +13,13 @@ from service import AppStoreValidationError, handle_action
 
 payload = json.loads(sys.stdin.read() or "{}")
 arguments = payload.get("arguments") if isinstance(payload.get("arguments"), dict) else {}
-body = {"action": arguments.get("action") or "catalog", **arguments}
+tool_actions = {
+    "app_store_reference_manifest": "references.manifest",
+    "app_store_reference_search": "references.search",
+    "app_store_reference_resolve": "references.resolve",
+    "app_store_reference_summarize": "references.summarize",
+}
+body = {"action": tool_actions.get(str(payload.get("tool_name") or ""), arguments.get("action") or "catalog"), **arguments}
 try:
     status_code, result = handle_action(Path(payload["data_root"]), body)
 except AppStoreValidationError as error:

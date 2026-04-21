@@ -101,6 +101,26 @@ class RuntimeExecutionEventsTestCase(unittest.TestCase):
             ],
         )
 
+    def test_parse_codex_file_change_output_delta_as_tool_update_not_assistant_text(self) -> None:
+        event = parse_provider_json_event(
+            json.dumps(
+                {
+                    "type": "item.fileChange.outputDelta",
+                    "item": {
+                        "id": "fc_1",
+                        "delta": "Success. Updated the following files:\nM apps/chat/main.tsx",
+                    },
+                }
+            )
+        )
+
+        self.assertIsNotNone(event)
+        self.assertEqual(event.event_type, "runtime.tool_call.updated")
+        self.assertEqual(event.payload["name"], "file_change")
+        self.assertEqual(event.payload["tool_kind"], "file_change")
+        self.assertEqual(event.payload["tool_call_id"], "fc_1")
+        self.assertEqual(event.payload["output"], "Success. Updated the following files:\nM apps/chat/main.tsx")
+
     def test_parse_provider_event_without_text_as_step_update(self) -> None:
         event = parse_provider_json_event('{"type":"turn.started"}')
 

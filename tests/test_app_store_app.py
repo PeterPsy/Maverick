@@ -307,8 +307,10 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertEqual(parsed.app_id, "app-store")
         self.assertEqual(parsed.contract.entrypoints.frontend, "frontend/dist")
         self.assertEqual(parsed.contract.entrypoints.backend, "backend/app_backend.py")
-        self.assertEqual(parsed.contract.capabilities.mcp_tools, ["maverick_app_store"])
+        self.assertIn("maverick_app_store", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("app_store_reference_manifest", parsed.contract.capabilities.mcp_tools)
         self.assertEqual(parsed.contract.capabilities.cli_commands, ["app-store"])
+        self.assertIn("installed_app", {item.entity_type for item in parsed.contract.capabilities.reference_entities})
         self.assertEqual(parsed.contract.capabilities.skills, [])
         widgets = {widget.widget_id: widget for widget in parsed.contract.widgets}
         self.assertEqual(widgets["app-shortcuts"].host, "base-shell")

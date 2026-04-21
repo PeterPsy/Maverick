@@ -117,8 +117,10 @@ class DynamicViewsAppTestCase(unittest.TestCase):
         self.assertEqual(parsed.app_id, "dynamic-views")
         self.assertEqual(parsed.contract.entrypoints.backend, "backend/app_backend.py")
         self.assertEqual(parsed.contract.entrypoints.frontend, "frontend/dist")
-        self.assertEqual(parsed.contract.capabilities.mcp_tools, ["maverick_dynamic_views"])
+        self.assertIn("maverick_dynamic_views", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("dynamic_views_reference_manifest", parsed.contract.capabilities.mcp_tools)
         self.assertEqual(parsed.contract.capabilities.cli_commands, ["dynamic-views"])
+        self.assertIn("view", {item.entity_type for item in parsed.contract.capabilities.reference_entities})
         self.assertEqual(parsed.contract.capabilities.skills, [])
         self.assertEqual(len(parsed.contract.widgets), 1)
         widget = parsed.contract.widgets[0]
@@ -126,6 +128,7 @@ class DynamicViewsAppTestCase(unittest.TestCase):
         self.assertEqual(widget.host, "chat")
         self.assertEqual(widget.content_kinds, ["dynamic.view.instance"])
         self.assertEqual(widget.frontend.mount, "frontend/dist/widgets/dynamic-view")
+        self.assertTrue(widget.actions.cli)
         self.assertTrue((DYNAMIC_VIEWS_ROOT / "frontend" / "dist" / "widgets" / "dynamic-view" / "index.html").is_file())
 
     def test_backend_creates_lists_reads_and_deletes_dynamic_view(self) -> None:
@@ -242,6 +245,38 @@ class DynamicViewsAppTestCase(unittest.TestCase):
         self.assertEqual(mcp_payload["chat_render"]["kind"], "dynamic.view.instance")
         self.assertEqual(cli_payload["status_code"], 200)
         self.assertEqual(cli_payload["items"][0]["title"], "Revenue Probe")
+
+    def test_cli_creates_and_reads_dynamic_view(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        context = CliInvocationContext(
+            caller_kind="sandbox_agent",
+            workspace_id="default",
+            agent_id="tester",
+            effective_mode="sandbox",
+        )
+
+        created = run_core_cli_command(
+            command_id="app.dynamic-views.dynamic-views",
+            context=context,
+            arguments=self.sample_create_payload(),
+            app_store=state.app_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+        read = run_core_cli_command(
+            command_id="app.dynamic-views.dynamic-views",
+            context=context,
+            arguments={"action": "read", "id": created["instance"]["id"]},
+            app_store=state.app_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+
+        self.assertEqual(created["status_code"], 200)
+        self.assertEqual(created["chat_render"]["kind"], "dynamic.view.instance")
+        self.assertEqual(read["status_code"], 200)
+        self.assertEqual(read["chat_render"]["payload"]["id"], created["instance"]["id"])
 
 
 if __name__ == "__main__":

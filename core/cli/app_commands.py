@@ -15,6 +15,7 @@ def _workspace_app_command_specs(
     store: AppStore,
     *,
     workspace_id: str,
+    app_event_bus=None,
     start_path: Path | None = None,
 ) -> list[tuple[CliCommandDefinition, Any]]:
     specs: list[tuple[CliCommandDefinition, Any]] = []
@@ -43,8 +44,9 @@ def _workspace_app_command_specs(
                 _workspace_root: str = str(paths.root),
                 _uploaded_storage_root: str = str(paths.uploaded_storage),
                 _generated_storage_root: str = str(paths.generated_storage),
+                _app_event_bus=app_event_bus,
             ) -> dict[str, Any]:
-                return run_json_entrypoint(
+                result = run_json_entrypoint(
                     _entrypoint_path,
                     payload={
                         "surface": "cli",
@@ -61,6 +63,13 @@ def _workspace_app_command_specs(
                     },
                     cwd=_source_root,
                 )
+                _publish_app_events(
+                    _app_event_bus,
+                    result,
+                    workspace_id=context.workspace_id,
+                    app_id=_app_id,
+                )
+                return result
 
             specs.append(
                 (
@@ -85,3 +94,22 @@ def _workspace_app_command_specs(
                 )
             )
     return specs
+
+
+def _publish_app_events(app_event_bus, result: dict[str, Any], *, workspace_id: str, app_id: str) -> None:
+    if app_event_bus is None:
+        return
+    events = result.get("app_events", [])
+    if not isinstance(events, list):
+        return
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        app_event_bus.publish(
+            {
+                "type": str(event.get("type") or "maverick.app.data-changed"),
+                "workspace_id": workspace_id,
+                "owner_app_id": str(event.get("owner_app_id") or app_id),
+                "resource": str(event.get("resource") or ""),
+            }
+        )

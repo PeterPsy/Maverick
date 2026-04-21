@@ -29,6 +29,7 @@ def build_core_mcp_registry(
     recovery_store: RecoveryStore | None = None,
     provider_registry: ProviderRegistry | None = None,
     observability_store=None,
+    app_event_bus=None,
     workspace_id: str | None = None,
     start_path: Path | None = None,
 ) -> McpToolRegistry:
@@ -47,7 +48,12 @@ def build_core_mcp_registry(
     ):
         registry.register_tool(definition, handler)
     if app_store is not None and workspace_id is not None:
-        for definition, handler in _workspace_app_tool_definitions(app_store, workspace_id=workspace_id, start_path=start_path):
+        for definition, handler in _workspace_app_tool_definitions(
+            app_store,
+            workspace_id=workspace_id,
+            app_event_bus=app_event_bus,
+            start_path=start_path,
+        ):
             registry.register_tool(definition, handler)
     return registry
 
@@ -61,6 +67,7 @@ def build_workspace_mcp_surface(
     recovery_store: RecoveryStore | None = None,
     provider_registry: ProviderRegistry | None = None,
     observability_store=None,
+    app_event_bus=None,
     workspace_id: str | None = None,
     start_path: Path | None = None,
     transport: str = "stdio",
@@ -75,6 +82,7 @@ def build_workspace_mcp_surface(
         recovery_store=recovery_store,
         provider_registry=provider_registry,
         observability_store=observability_store,
+        app_event_bus=app_event_bus,
         workspace_id=workspace_id,
         start_path=start_path,
     )
@@ -90,6 +98,7 @@ def list_mcp_tools(
     recovery_store: RecoveryStore | None = None,
     provider_registry: ProviderRegistry | None = None,
     observability_store=None,
+    app_event_bus=None,
     workspace_id: str | None = None,
     start_path: Path | None = None,
 ) -> list[McpToolDefinition]:
@@ -103,6 +112,7 @@ def list_mcp_tools(
         recovery_store=recovery_store,
         provider_registry=provider_registry,
         observability_store=observability_store,
+        app_event_bus=app_event_bus,
         workspace_id=workspace_id,
         start_path=start_path,
     ).list_tools()
@@ -120,6 +130,7 @@ def call_mcp_tool(
     recovery_store: RecoveryStore | None = None,
     provider_registry: ProviderRegistry | None = None,
     observability_store=None,
+    app_event_bus=None,
     workspace_id: str | None = None,
     start_path: Path | None = None,
 ) -> dict[str, Any]:
@@ -133,6 +144,7 @@ def call_mcp_tool(
         recovery_store=recovery_store,
         provider_registry=provider_registry,
         observability_store=observability_store,
+        app_event_bus=app_event_bus,
         workspace_id=workspace_id,
         start_path=start_path,
     )

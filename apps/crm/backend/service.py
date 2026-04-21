@@ -25,7 +25,30 @@ from store import (
     clear_custom_view_payload,
     set_custom_view_payload,
     set_view_filter_payload,
+    update_entity,
 )
+
+
+DATA_CHANGED_ACTIONS = {
+    "add_activity",
+    "clear_custom_view",
+    "create_account",
+    "create_activity",
+    "create_contact",
+    "create_deal",
+    "link",
+    "link_entities",
+    "set_custom_view",
+    "set_view_filter",
+    "update",
+    "update_entity",
+}
+
+
+def app_events_for_action(action: str) -> list[dict[str, str]]:
+    if action not in DATA_CHANGED_ACTIONS:
+        return []
+    return [{"type": "maverick.app.data-changed", "owner_app_id": "crm", "resource": "records"}]
 
 
 def action_from_tool(tool_name: str, fallback: str) -> str:
@@ -65,6 +88,9 @@ def handle_action(data_root: Path, body: dict[str, Any]) -> tuple[int, dict[str,
         return 200, {"deal": create_deal(data_root, body)}
     if action in {"add_activity", "create_activity"}:
         return 200, {"activity": add_activity(data_root, body)}
+    if action in {"update", "update_entity"}:
+        entity_type = str(body.get("entity_type") or body.get("type") or "").strip()
+        return 200, {"entity": update_entity(data_root, body), "entity_type": entity_type}
     if action in {"link_entities", "link"}:
         return 200, {"relationship": link_entities(data_root, body)}
     if action == "get":

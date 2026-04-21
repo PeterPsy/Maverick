@@ -7,6 +7,7 @@ from datetime import datetime
 import os
 from pathlib import Path
 
+from core.api.app_events import AppEventBus
 from core.api.application import create_application
 from core.apps.store import AppCollections, MongoAppStore
 from core.identity.service import bootstrap_default_admin
@@ -36,6 +37,7 @@ class PlatformState:
     provider_store: MongoProviderStore
     runtime_store: MongoRuntimeStore
     runtime_event_bus: RuntimeEventBus
+    app_event_bus: AppEventBus
     secret_store: MongoSecretStore
     recovery_store: MongoRecoveryStore
     observability_store: MongoObservabilityStore
@@ -90,6 +92,7 @@ def bootstrap_platform_state(*, start_path: Path | None = None, now: datetime | 
         )
     )
     runtime_event_bus = RuntimeEventBus()
+    app_event_bus = AppEventBus()
     secret_state_root = control_state_root / "secrets"
     secret_store = MongoSecretStore(
         SecretCollections(
@@ -141,6 +144,7 @@ def bootstrap_platform_state(*, start_path: Path | None = None, now: datetime | 
         provider_store=provider_store,
         runtime_store=runtime_store,
         runtime_event_bus=runtime_event_bus,
+        app_event_bus=app_event_bus,
         secret_store=secret_store,
         recovery_store=recovery_store,
         observability_store=observability_store,

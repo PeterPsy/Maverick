@@ -473,6 +473,35 @@ Every app should expose at least a reference manifest through CLI and MCP. Apps 
 
 Apps that declare `reference_entities` must expose matching CLI or MCP reference behavior through the manifest, search, resolve, and summarize convention. The CRM app is the canonical source-available example: Memory may store a durable reference to a CRM contact or deal, while CRM remains the owner of the structured business record.
 
+### Live Data Event Declaration
+
+Apps with mutable workspace data should declare the app-owned resources that emit live UI invalidation events under `capabilities.data_events`:
+
+```json
+"capabilities": {
+  "data_events": [
+    {
+      "resource": "records",
+      "description": "Emitted when the app's business records change through official app surfaces."
+    }
+  ]
+}
+```
+
+This declaration tells agents and host surfaces which app resources publish the standard `maverick.app.data-changed` event. It is not a data subscription implementation by itself.
+
+Rules:
+
+- app data changes must go through official app backend, MCP, CLI, or lifecycle surfaces
+- direct writes into `data/<app_id>` are repair operations, not normal product behavior, because they bypass live events
+- write actions that mutate a declared resource must return or publish `maverick.app.data-changed` with `owner_app_id` and `resource`
+- mounted app frontends should listen on the core app-event WebSocket and refresh only the affected app/resource
+- frontends must not use periodic polling as their default live-update mechanism
+- `resource` values are lowercase slugs owned by the app contract
+- apps may declare multiple resources when different UI regions can update independently
+
+CRM declares `records` because accounts, contacts, deals, activities, relationships, and CRM view state all affect the visible CRM record surfaces.
+
 ### View Composition Surface Declaration
 
 Referenceable entities let apps such as Memory understand and link app-owned records. Some apps also need to render a curated set of their own records in UI after an agent or another app has selected relevant references.

@@ -7,14 +7,19 @@
     <style>
       :root {
         color-scheme: light;
-        --ink: #17211d;
-        --muted: #66736d;
-        --line: #d9ded8;
+        --ink: #151c1a;
+        --muted: #66706b;
+        --line: #e0e5df;
         --surface: #ffffff;
-        --band: #f4f6f2;
-        --accent: #1d6f5f;
-        --accent-2: #9b5221;
-        --danger: #9f2d26;
+        --band: #f5f7f2;
+        --soft: #eef3ed;
+        --accent: #a9df3f;
+        --accent-ink: #263500;
+        --green: #1f7a5d;
+        --amber: #a86a17;
+        --blue: #315f9d;
+        --danger: #a33b32;
+        --shadow: 0 18px 50px rgba(35, 43, 38, 0.08);
       }
       * { box-sizing: border-box; }
       body {
@@ -22,86 +27,302 @@
         min-height: 100vh;
         font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         color: var(--ink);
-        background: var(--band);
+        background: linear-gradient(135deg, #f2f8eb 0%, #f7f8f4 45%, #f1f5f7 100%);
       }
       button, input, textarea, select { font: inherit; }
       button {
         border: 0;
-        border-radius: 7px;
-        background: var(--accent);
+        border-radius: 8px;
+        background: #080b0a;
         color: #fff;
-        min-height: 38px;
-        padding: 0 13px;
+        min-height: 40px;
+        padding: 0 15px;
         cursor: pointer;
       }
-      button.secondary { background: #e7ece8; color: var(--ink); }
-      button.icon { width: 38px; padding: 0; }
+      button.secondary { background: #eef2ee; color: var(--ink); border: 1px solid var(--line); }
+      button.icon { width: 40px; padding: 0; border-radius: 50%; }
+      button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
       input, textarea, select {
         width: 100%;
         border: 1px solid var(--line);
-        border-radius: 7px;
+        border-radius: 8px;
         background: #fff;
         color: var(--ink);
-        padding: 10px 11px;
+        padding: 11px 12px;
       }
-      textarea { min-height: 84px; resize: vertical; }
+      textarea { min-height: 86px; resize: vertical; }
+      h1, h2, h3, p { margin: 0; letter-spacing: 0; }
+      h1 { font-size: 25px; line-height: 1.05; }
+      h2 { font-size: 18px; line-height: 1.2; }
+      h3 { font-size: 14px; line-height: 1.2; }
+      .muted { color: var(--muted); font-size: 13px; line-height: 1.45; }
+      .app-shell {
+        min-height: 100vh;
+        padding: 14px;
+      }
       .app {
         display: grid;
-        grid-template-columns: 280px minmax(0, 1fr) 360px;
-        min-height: 100vh;
+        grid-template-columns: 224px minmax(0, 1fr) 300px;
+        min-height: calc(100vh - 28px);
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.82);
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.7);
+        box-shadow: var(--shadow);
       }
       .sidebar, .detail {
-        background: var(--surface);
-        border-color: var(--line);
         min-width: 0;
+        background: rgba(255, 255, 255, 0.74);
+        backdrop-filter: blur(18px);
       }
-      .sidebar { border-right: 1px solid var(--line); padding: 18px; }
-      .detail { border-left: 1px solid var(--line); padding: 18px; overflow: auto; }
-      .main { padding: 18px; min-width: 0; }
-      .brand { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
-      h1 { font-size: 24px; line-height: 1.1; margin: 0; letter-spacing: 0; }
-      h2 { font-size: 16px; margin: 0 0 10px; letter-spacing: 0; }
-      h3 { font-size: 14px; margin: 0 0 8px; letter-spacing: 0; }
-      .muted { color: var(--muted); font-size: 13px; }
-      .tabs { display: grid; gap: 7px; margin: 18px 0; }
+      .sidebar {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        border-right: 1px solid rgba(224, 229, 223, 0.8);
+        padding: 22px 18px;
+      }
+      .detail {
+        border-left: 1px solid rgba(224, 229, 223, 0.8);
+        padding: 22px;
+        overflow: auto;
+      }
+      .main {
+        min-width: 0;
+        padding: 22px 22px 26px;
+        overflow: auto;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .brand-mark {
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        background: var(--accent);
+        color: var(--accent-ink);
+        font-weight: 800;
+      }
+      .tabs { display: grid; gap: 7px; }
       .tab {
+        min-height: 42px;
         background: transparent;
         color: var(--ink);
         border: 1px solid transparent;
         display: flex;
         align-items: center;
         justify-content: space-between;
+        text-align: left;
       }
-      .tab.active { border-color: var(--accent); background: #e9f3f0; }
-      .toolbar {
+      .tab span:last-child {
+        min-width: 28px;
+        text-align: center;
+        color: var(--muted);
+      }
+      .tab.active {
+        background: #090c0b;
+        color: #fff;
+      }
+      .tab.active span:last-child { color: var(--accent); }
+      .quick-create {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) auto auto;
-        gap: 10px;
-        align-items: center;
-        margin-bottom: 16px;
+        gap: 9px;
+        margin-top: auto;
+        padding-top: 18px;
+        border-top: 1px solid var(--line);
       }
-      .grid { display: grid; gap: 10px; }
-      .record {
-        background: var(--surface);
+      .topbar {
+        display: grid;
+        grid-template-columns: minmax(280px, 520px) minmax(0, 1fr) auto auto;
+        gap: 12px;
+        align-items: center;
+        margin-bottom: 22px;
+      }
+      .search-wrap { position: relative; }
+      .search-wrap input {
+        height: 44px;
+        border-radius: 999px;
+        padding-left: 40px;
+      }
+      .search-wrap::before {
+        content: "";
+        position: absolute;
+        left: 16px;
+        top: 50%;
+        width: 12px;
+        height: 12px;
+        border: 2px solid var(--muted);
+        border-radius: 50%;
+        transform: translateY(-55%);
+      }
+      .search-wrap::after {
+        content: "";
+        position: absolute;
+        left: 28px;
+        top: 26px;
+        width: 7px;
+        height: 2px;
+        background: var(--muted);
+        transform: rotate(45deg);
+      }
+      .range-chip {
+        justify-self: start;
+        min-height: 38px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.78);
         border: 1px solid var(--line);
+        padding: 0 13px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .hero {
+        display: flex;
+        justify-content: space-between;
+        gap: 18px;
+        align-items: end;
+        margin-bottom: 18px;
+      }
+      .hero p { margin-top: 6px; }
+      .custom-view-banner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        margin-bottom: 18px;
+        padding: 13px 14px;
+        border: 1px solid #d4dfc4;
         border-radius: 8px;
+        background: #f3f9e8;
+      }
+      .custom-view-banner[hidden] { display: none; }
+      .custom-view-banner strong {
+        display: block;
+        margin-bottom: 2px;
+      }
+      .custom-view-banner button { flex: 0 0 auto; }
+      .kpis {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+        margin-bottom: 18px;
+      }
+      .kpi, .panel, .record, .stage, .document-card {
+        background: rgba(255, 255, 255, 0.88);
+        border: 1px solid rgba(224, 229, 223, 0.88);
+        border-radius: 8px;
+      }
+      .kpi {
+        min-height: 118px;
+        padding: 18px;
+      }
+      .kpi-label {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .kpi-value {
+        margin-top: 18px;
+        font-size: 30px;
+        line-height: 1;
+        font-weight: 760;
+      }
+      .kpi-note { margin-top: 9px; color: var(--green); font-size: 13px; }
+      .content-grid {
+        display: grid;
+        grid-template-columns: minmax(280px, 0.9fr) minmax(320px, 1.1fr);
+        gap: 18px;
+        align-items: start;
+      }
+      .content-grid.list-only { grid-template-columns: minmax(0, 1fr); }
+      .panel { padding: 18px; min-width: 0; }
+      .panel-head {
+        display: flex;
+        align-items: start;
+        justify-content: space-between;
+        gap: 14px;
+        margin-bottom: 14px;
+      }
+      .meter {
+        display: grid;
+        place-items: center;
+        min-height: 250px;
+      }
+      .gauge {
+        width: min(260px, 100%);
+        aspect-ratio: 2 / 1;
+        border-radius: 999px 999px 0 0;
+        background:
+          radial-gradient(circle at 50% 100%, #fff 0 39%, transparent 40%),
+          conic-gradient(from 270deg at 50% 100%, #0a0c0b 0 58%, var(--accent) 58% 79%, #e7ece5 79% 100%);
+        position: relative;
+      }
+      .gauge-value {
+        position: absolute;
+        inset: auto 0 22px;
+        text-align: center;
+        font-size: 44px;
+        font-weight: 780;
+      }
+      .gauge-value small {
+        display: block;
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--muted);
+      }
+      .list {
+        display: grid;
+        gap: 10px;
+      }
+      .record {
+        display: grid;
+        gap: 8px;
         padding: 13px;
         cursor: pointer;
+        transition: border-color 160ms ease, transform 160ms ease;
       }
-      .record:hover { border-color: var(--accent); }
+      .record:hover { border-color: #b5c2b4; transform: translateY(-1px); }
       .record.selected { outline: 2px solid var(--accent); outline-offset: 1px; }
-      .record-title { font-weight: 700; margin-bottom: 5px; overflow-wrap: anywhere; }
+      .record-top {
+        display: flex;
+        align-items: start;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .record-title {
+        font-weight: 740;
+        overflow-wrap: anywhere;
+      }
+      .record-kind {
+        flex: 0 0 auto;
+        color: var(--muted);
+        font-size: 12px;
+        text-transform: uppercase;
+      }
       .pill {
         display: inline-flex;
         align-items: center;
         min-height: 24px;
         padding: 0 8px;
         border-radius: 999px;
-        background: #edf0eb;
+        background: #edf1ec;
         color: var(--muted);
         font-size: 12px;
-        margin: 5px 5px 0 0;
+        margin: 3px 5px 0 0;
       }
+      .pill.success { background: #e8f6e1; color: var(--green); }
+      .pill.warning { background: #fff4df; color: var(--amber); }
       .pipeline {
         display: grid;
         grid-template-columns: repeat(4, minmax(180px, 1fr));
@@ -110,90 +331,233 @@
         padding-bottom: 8px;
       }
       .stage {
-        min-height: 420px;
-        background: #eef2ed;
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        padding: 10px;
+        min-height: 360px;
+        background: rgba(244, 247, 242, 0.9);
+        padding: 12px;
       }
-      .stage h3 { display: flex; justify-content: space-between; align-items: center; }
-      .form { display: grid; gap: 9px; }
-      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
-      .detail-block { border-top: 1px solid var(--line); padding-top: 13px; margin-top: 13px; }
-      pre {
-        white-space: pre-wrap;
-        word-break: break-word;
-        background: #f6f7f5;
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        padding: 10px;
-        max-height: 320px;
-        overflow: auto;
+      .stage h3 {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+        text-transform: capitalize;
       }
-      @media (max-width: 1040px) {
-        .app { grid-template-columns: 1fr; }
-        .sidebar, .detail { border: 0; border-bottom: 1px solid var(--line); }
-        .detail { border-top: 1px solid var(--line); }
-        .pipeline { grid-template-columns: repeat(4, 230px); }
+      .detail-empty {
+        min-height: 160px;
+        display: grid;
+        place-items: center;
+        text-align: center;
+        color: var(--muted);
+      }
+      .detail-title { margin-bottom: 6px; }
+      .detail-section {
+        border-top: 1px solid var(--line);
+        padding-top: 14px;
+        margin-top: 14px;
+      }
+      .fields {
+        display: grid;
+        gap: 9px;
+      }
+      .field {
+        display: grid;
+        grid-template-columns: 104px minmax(0, 1fr);
+        gap: 10px;
+        font-size: 13px;
+      }
+      .field span:first-child { color: var(--muted); }
+      .field span:last-child { overflow-wrap: anywhere; }
+      .edit-form {
+        display: grid;
+        gap: 9px;
+      }
+      .edit-form label {
+        display: grid;
+        gap: 5px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .form-actions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .form-message {
+        min-height: 20px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .document-stack {
+        display: grid;
+        gap: 12px;
+        margin-top: 14px;
+      }
+      .document-card {
+        padding: 14px;
+      }
+      .document-card h3 { margin: 8px 0 4px; }
+      .status {
+        display: inline-flex;
+        min-height: 24px;
+        align-items: center;
+        border-radius: 999px;
+        padding: 0 9px;
+        background: #e7f5e5;
+        color: var(--green);
+        font-size: 12px;
+        font-weight: 650;
+      }
+      .status.pending { background: #fff2df; color: var(--amber); }
+      .empty-list {
+        padding: 30px 16px;
+        text-align: center;
+        color: var(--muted);
+        border: 1px dashed var(--line);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.55);
+      }
+      @media (max-width: 1180px) {
+        .app { grid-template-columns: 210px minmax(0, 1fr); }
+        .detail { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--line); }
+      }
+      @media (max-width: 900px) {
+        .app-shell { padding: 0; }
+        .app { grid-template-columns: 1fr; min-height: 100vh; border-radius: 0; }
+        .sidebar { border-right: 0; border-bottom: 1px solid var(--line); }
+        .topbar, .hero, .content-grid { grid-template-columns: 1fr; display: grid; }
+        .kpis { grid-template-columns: 1fr; }
+        .pipeline { grid-template-columns: repeat(4, 240px); }
       }
     </style>
   </head>
   <body>
-    <div class="app">
-      <aside class="sidebar">
-        <div class="brand">
-          <div>
-            <h1>CRM</h1>
-            <div class="muted">Accounts, contacts, deals, activities</div>
+    <div class="app-shell">
+      <div class="app">
+        <aside class="sidebar">
+          <div class="brand">
+            <div class="brand-mark">C</div>
+            <div>
+              <h1>CRM</h1>
+              <div class="muted">Accounts, contacts, deals, activities</div>
+            </div>
           </div>
-          <button id="refresh" class="icon secondary" title="Refresh">↻</button>
-        </div>
-        <input id="search" placeholder="Search CRM" />
-        <div class="tabs">
-          <button class="tab active" data-view="accounts">Accounts <span id="count-accounts">0</span></button>
-          <button class="tab" data-view="contacts">Contacts <span id="count-contacts">0</span></button>
-          <button class="tab" data-view="deals">Deals <span id="count-deals">0</span></button>
-          <button class="tab" data-view="activities">Activities <span id="count-activities">0</span></button>
-          <button class="tab" data-view="pipeline">Pipeline <span>↦</span></button>
-        </div>
-        <div class="form">
-          <h2>Quick Create</h2>
-          <select id="create-kind">
-            <option value="account">Account</option>
-            <option value="contact">Contact</option>
-            <option value="deal">Deal</option>
-            <option value="activity">Activity</option>
-          </select>
-          <input id="create-title" placeholder="Name or subject" />
-          <textarea id="create-body" placeholder="Summary, role, stage, or note"></textarea>
-          <button id="create">Create</button>
-        </div>
-      </aside>
-      <main class="main">
-        <div class="toolbar">
-          <div>
-            <h2 id="view-title">Accounts</h2>
-            <div class="muted" id="view-subtitle">Structured business entities for agents and Memory.</div>
+          <nav class="tabs" aria-label="CRM sections">
+            <button class="tab active" data-view="overview"><span>Overview</span><span>*</span></button>
+            <button class="tab" data-view="accounts"><span>Accounts</span><span id="count-accounts">0</span></button>
+            <button class="tab" data-view="contacts"><span>Contacts</span><span id="count-contacts">0</span></button>
+            <button class="tab" data-view="deals"><span>Deals</span><span id="count-deals">0</span></button>
+            <button class="tab" data-view="activities"><span>Activities</span><span id="count-activities">0</span></button>
+            <button class="tab" data-view="pipeline"><span>Pipeline</span><span>&gt;</span></button>
+          </nav>
+          <div class="quick-create">
+            <h2>Quick Create</h2>
+            <select id="create-kind" aria-label="Record type">
+              <option value="account">Account</option>
+              <option value="contact">Contact</option>
+              <option value="deal">Deal</option>
+              <option value="activity">Activity</option>
+            </select>
+            <input id="create-title" placeholder="Name or subject" />
+            <textarea id="create-body" placeholder="Summary, role, stage, or note"></textarea>
+            <button id="create">Create Record</button>
           </div>
-          <button id="seed" class="secondary">Seed Demo</button>
-          <button id="clear-selection" class="secondary">Clear</button>
-        </div>
-        <section id="list" class="grid"></section>
-        <section id="pipeline" class="pipeline" hidden></section>
-      </main>
-      <aside class="detail">
-        <h2>Record</h2>
-        <div id="detail" class="muted">Select a CRM record.</div>
-        <div class="detail-block">
-          <h2>Reference Preview</h2>
-          <pre id="reference-preview">No record selected.</pre>
-        </div>
-      </aside>
+        </aside>
+        <main class="main">
+          <div class="topbar">
+            <div class="search-wrap">
+              <input id="search" placeholder="Search accounts, contacts, deals, activities" />
+            </div>
+            <div class="range-chip">Current CRM workspace</div>
+            <button id="seed" class="secondary">Seed Demo</button>
+            <button id="refresh" class="icon secondary" title="Refresh" aria-label="Refresh">R</button>
+          </div>
+          <section class="hero">
+            <div>
+              <h1 id="view-title">Overview</h1>
+              <p class="muted" id="view-subtitle">Monitor relationships, open pipeline, and recent customer work.</p>
+            </div>
+            <button id="clear-selection" class="secondary">Clear Selection</button>
+          </section>
+          <section id="custom-view-banner" class="custom-view-banner" hidden>
+            <div>
+              <strong id="custom-view-title">Custom view</strong>
+              <p class="muted" id="custom-view-copy">Showing selected CRM records.</p>
+            </div>
+            <button id="clear-custom-view" class="secondary" type="button">Back to full CRM</button>
+          </section>
+          <section id="overview">
+            <div id="overview-kpis" class="kpis">
+              <article class="kpi">
+                <div class="kpi-label"><span>Total Pipeline</span><span>...</span></div>
+                <div class="kpi-value" id="kpi-pipeline">EUR 0</div>
+                <div class="kpi-note" id="kpi-open-deals">0 open deals</div>
+              </article>
+              <article class="kpi">
+                <div class="kpi-label"><span>Relationships</span><span>...</span></div>
+                <div class="kpi-value" id="kpi-relationships">0</div>
+                <div class="kpi-note" id="kpi-accounts">0 accounts</div>
+              </article>
+              <article class="kpi">
+                <div class="kpi-label"><span>Activity</span><span>...</span></div>
+                <div class="kpi-value" id="kpi-activities">0</div>
+                <div class="kpi-note">recent touchpoints</div>
+              </article>
+            </div>
+            <div id="content-grid" class="content-grid">
+              <section id="performance-panel" class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h2>Sales Performance</h2>
+                    <p class="muted">Weighted by won and active deals.</p>
+                  </div>
+                  <span class="pill success" id="health-pill">0%</span>
+                </div>
+                <div class="meter">
+                  <div class="gauge">
+                    <div class="gauge-value"><span id="gauge-score">0</span><small>of 100 points</small></div>
+                  </div>
+                </div>
+                <h3 id="performance-title">No pipeline yet</h3>
+                <p class="muted" id="performance-copy">Create or seed deals to see account momentum.</p>
+              </section>
+              <section class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h2 id="list-title">Recent Records</h2>
+                    <p class="muted" id="list-subtitle">Latest relationship activity.</p>
+                  </div>
+                </div>
+                <div id="list" class="list"></div>
+                <div id="pipeline" class="pipeline" hidden></div>
+              </section>
+            </div>
+          </section>
+        </main>
+        <aside class="detail">
+          <div class="panel-head">
+            <div>
+              <h2>Record Details</h2>
+              <p class="muted">Customer, deal, and activity context.</p>
+            </div>
+          </div>
+          <div id="detail" class="detail-empty">Select a CRM record to inspect it.</div>
+          <div class="detail-section">
+            <h2>Reference Summary</h2>
+            <div id="reference-preview" class="muted">No record selected.</div>
+          </div>
+          <div class="detail-section">
+            <h2>Documents</h2>
+            <div id="documents" class="document-stack"></div>
+          </div>
+        </aside>
+      </div>
     </div>
     <script>
-      const state = { view: 'accounts', recent: null, selected: null, search: '', viewFilter: null };
+      const state = { view: 'overview', recent: null, selected: null, search: '', viewFilter: null };
       const plural = { account: 'accounts', contact: 'contacts', deal: 'deals', activity: 'activities' };
       const singular = { accounts: 'account', contacts: 'contact', deals: 'deal', activities: 'activity' };
+      const labels = { account: 'Account', contact: 'Contact', deal: 'Deal', activity: 'Activity' };
       const stages = ['lead', 'qualification', 'proposal', 'won'];
 
       async function callCrm(body) {
@@ -207,106 +571,421 @@
         return payload;
       }
 
+      function allItems() {
+        if (!state.recent) return [];
+        return ['accounts', 'contacts', 'deals', 'activities'].flatMap((key) =>
+          (state.recent[key] || []).map((item) => ({ ...item, _entity_type: singular[key] }))
+        );
+      }
+
       function titleFor(type, item) {
-        if (type === 'account') return item.name;
-        if (type === 'contact') return item.display_name;
-        if (type === 'deal') return item.name;
-        return item.subject;
+        if (type === 'account') return item.name || 'Untitled account';
+        if (type === 'contact') return item.display_name || [item.first_name, item.last_name].filter(Boolean).join(' ') || 'Untitled contact';
+        if (type === 'deal') return item.name || 'Untitled deal';
+        return item.subject || 'Untitled activity';
+      }
+
+      function summaryFor(type, item) {
+        if (item.summary) return item.summary;
+        if (type === 'activity') return item.body || '';
+        if (type === 'contact') return [item.role, item.email, item.phone].filter(Boolean).join(' · ');
+        if (type === 'deal') return [item.stage, money(item.value, item.currency), item.close_date].filter(Boolean).join(' · ');
+        return [item.industry, item.domain, item.status].filter(Boolean).join(' · ');
       }
 
       function metaFor(type, item) {
         if (type === 'account') return [item.status, item.industry, item.domain].filter(Boolean);
         if (type === 'contact') return [item.role, item.email].filter(Boolean);
-        if (type === 'deal') return [item.stage, `${item.value || 0} ${item.currency || ''}`.trim(), item.close_date].filter(Boolean);
+        if (type === 'deal') return [item.stage, money(item.value, item.currency), item.close_date].filter(Boolean);
         return [item.activity_type, item.occurred_at].filter(Boolean);
+      }
+
+      function money(value, currency = 'EUR') {
+        const amount = Number(value || 0);
+        if (!amount) return '';
+        try {
+          return new Intl.NumberFormat('en-US', { style: 'currency', currency: currency || 'EUR', maximumFractionDigits: 0 }).format(amount);
+        } catch {
+          return `${amount.toLocaleString()} ${currency || ''}`.trim();
+        }
+      }
+
+      function updateTitle(title, subtitle) {
+        document.getElementById('view-title').textContent = title;
+        document.getElementById('view-subtitle').textContent = subtitle;
+      }
+
+      function renderCustomViewBanner() {
+        const banner = document.getElementById('custom-view-banner');
+        const isCustom = state.viewFilter?.mode === 'custom';
+        banner.hidden = !isCustom;
+        if (!isCustom) return;
+        const count = allItems().length;
+        document.getElementById('custom-view-title').textContent = state.viewFilter.title || 'Custom CRM view';
+        document.getElementById('custom-view-copy').textContent = `You are viewing a custom CRM subset with ${count} selected record${count === 1 ? '' : 's'}.`;
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;')
+          .replaceAll('"', '&quot;')
+          .replaceAll("'", '&#39;');
       }
 
       function renderRecord(type, item) {
         const div = document.createElement('article');
         div.className = `record ${state.selected && state.selected.id === item.id ? 'selected' : ''}`;
         div.onclick = () => selectRecord(type, item.id);
-        div.innerHTML = `<div class="record-title"></div><div class="muted"></div><div></div>`;
-        div.children[0].textContent = titleFor(type, item);
-        div.children[1].textContent = item.summary || item.body || '';
+        div.innerHTML = '<div class="record-top"><div class="record-title"></div><div class="record-kind"></div></div><p class="muted"></p><div></div>';
+        div.querySelector('.record-title').textContent = titleFor(type, item);
+        div.querySelector('.record-kind').textContent = labels[type];
+        div.querySelector('p').textContent = summaryFor(type, item) || 'No summary yet.';
+        const pillWrap = div.lastElementChild;
         metaFor(type, item).forEach((value) => {
           const pill = document.createElement('span');
-          pill.className = 'pill';
+          pill.className = value === 'won' || value === 'customer' ? 'pill success' : value === 'proposal' ? 'pill warning' : 'pill';
           pill.textContent = value;
-          div.children[2].appendChild(pill);
+          pillWrap.appendChild(pill);
         });
         return div;
+      }
+
+      function renderEmpty(target, text) {
+        target.innerHTML = '';
+        const empty = document.createElement('div');
+        empty.className = 'empty-list';
+        empty.textContent = text;
+        target.appendChild(empty);
       }
 
       function renderList() {
         const list = document.getElementById('list');
         const pipeline = document.getElementById('pipeline');
+        const overviewKpis = document.getElementById('overview-kpis');
+        const performancePanel = document.getElementById('performance-panel');
+        const contentGrid = document.getElementById('content-grid');
+        const isOverview = state.view === 'overview';
+        overviewKpis.hidden = !isOverview;
+        performancePanel.hidden = !isOverview;
+        contentGrid.classList.toggle('list-only', !isOverview);
+        renderCustomViewBanner();
         list.hidden = state.view === 'pipeline';
         pipeline.hidden = state.view !== 'pipeline';
         list.innerHTML = '';
         if (!state.recent) return;
-        if (state.view === 'custom') {
-          const items = ['accounts', 'contacts', 'deals', 'activities'].flatMap((key) => (state.recent[key] || []).map((item) => ({ ...item, _entity_type: singular[key] })));
-          const title = state.viewFilter?.title || 'Custom CRM view';
-          document.getElementById('view-title').textContent = title;
-          document.getElementById('view-subtitle').textContent = `${items.length} curated CRM records`;
-          items.forEach((item) => list.appendChild(renderRecord(item._entity_type, item)));
-          return;
-        }
         if (state.view === 'pipeline') return renderPipeline();
-        const type = singular[state.view];
-        const items = state.recent[state.view] || [];
-        document.getElementById('view-title').textContent = state.view[0].toUpperCase() + state.view.slice(1);
-        document.getElementById('view-subtitle').textContent = 'Structured business entities for agents and Memory.';
-        items.forEach((item) => list.appendChild(renderRecord(type, item)));
+
+        let items = [];
+        if (state.view === 'overview') {
+          items = allItems().slice(0, 10);
+          if (state.viewFilter?.mode === 'custom') {
+            updateTitle(state.viewFilter.title || 'Overview', `${items.length} curated CRM records`);
+            document.getElementById('list-title').textContent = state.viewFilter.title || 'Curated Records';
+            document.getElementById('list-subtitle').textContent = 'Records selected by CRM view composition.';
+          } else {
+            updateTitle('Overview', 'Monitor relationships, open pipeline, and recent customer work.');
+            document.getElementById('list-title').textContent = 'Recent Records';
+            document.getElementById('list-subtitle').textContent = 'Latest accounts, contacts, deals, and activities.';
+          }
+        } else if (state.view === 'custom') {
+          items = allItems();
+          updateTitle(state.viewFilter?.title || 'Custom CRM view', `${items.length} curated CRM records`);
+          document.getElementById('list-title').textContent = 'Curated Records';
+          document.getElementById('list-subtitle').textContent = 'Records selected by CRM view composition.';
+        } else if (state.view === 'search') {
+          items = allItems();
+          updateTitle('Search Results', `${items.length} records matching "${state.search}"`);
+          document.getElementById('list-title').textContent = 'Search Results';
+          document.getElementById('list-subtitle').textContent = 'Open a result to inspect the full CRM record.';
+        } else {
+          const type = singular[state.view];
+          items = (state.recent[state.view] || []).map((item) => ({ ...item, _entity_type: type }));
+          updateTitle(state.view[0].toUpperCase() + state.view.slice(1), `Browse ${items.length} ${state.view}.`);
+          document.getElementById('list-title').textContent = state.view[0].toUpperCase() + state.view.slice(1);
+          document.getElementById('list-subtitle').textContent = 'Relationship records for the current workspace.';
+        }
+
+        if (!items.length) return renderEmpty(list, 'No CRM records to show.');
+        items.forEach((item) => list.appendChild(renderRecord(item._entity_type, item)));
       }
 
       function renderPipeline() {
         const pipeline = document.getElementById('pipeline');
         pipeline.innerHTML = '';
-        document.getElementById('view-title').textContent = 'Pipeline';
+        updateTitle('Pipeline', 'Track deals by stage and inspect opportunities.');
+        document.getElementById('list-title').textContent = 'Deal Pipeline';
+        document.getElementById('list-subtitle').textContent = 'Open opportunities grouped by stage.';
         const deals = state.recent?.deals || [];
         stages.forEach((stage) => {
           const column = document.createElement('section');
           column.className = 'stage';
           const matches = deals.filter((deal) => deal.stage === stage);
           column.innerHTML = `<h3>${stage}<span class="pill">${matches.length}</span></h3>`;
+          if (!matches.length) {
+            const empty = document.createElement('p');
+            empty.className = 'muted';
+            empty.textContent = 'No deals in this stage.';
+            column.appendChild(empty);
+          }
           matches.forEach((deal) => column.appendChild(renderRecord('deal', deal)));
           pipeline.appendChild(column);
         });
       }
 
-      async function refresh() {
-        const viewState = await callCrm({ action: 'view_filter' });
+      function renderMetrics() {
+        const recent = state.recent || { accounts: [], contacts: [], deals: [], activities: [] };
+        const deals = recent.deals || [];
+        const openDeals = deals.filter((deal) => deal.stage !== 'won');
+        const total = openDeals.reduce((sum, deal) => sum + Number(deal.value || 0), 0);
+        const relationships = (recent.accounts || []).length + (recent.contacts || []).length;
+        const won = deals.filter((deal) => deal.stage === 'won').length;
+        const score = deals.length ? Math.min(100, Math.round(((won * 1.4 + openDeals.length) / Math.max(deals.length, 1)) * 58 + Math.min(32, relationships * 3))) : 0;
+        document.getElementById('kpi-pipeline').textContent = money(total, 'EUR') || 'EUR 0';
+        document.getElementById('kpi-open-deals').textContent = `${openDeals.length} open deals`;
+        document.getElementById('kpi-relationships').textContent = relationships;
+        document.getElementById('kpi-accounts').textContent = `${(recent.accounts || []).length} accounts`;
+        document.getElementById('kpi-activities').textContent = (recent.activities || []).length;
+        document.getElementById('gauge-score').textContent = score;
+        document.getElementById('health-pill').textContent = `${score}%`;
+        document.getElementById('performance-title').textContent = score > 70 ? 'Team momentum is strong' : score > 30 ? 'Pipeline is building' : 'No pipeline yet';
+        document.getElementById('performance-copy').textContent = score > 70
+          ? 'Relationships, activities, and deal stages show healthy coverage.'
+          : score > 30
+            ? 'Add more activities and opportunity values to improve visibility.'
+            : 'Create or seed deals to see account momentum.';
+      }
+
+      function renderDocuments() {
+        const target = document.getElementById('documents');
+        const deals = (state.recent?.deals || []).slice(0, 2);
+        target.innerHTML = '';
+        if (!deals.length) {
+          target.innerHTML = '<p class="muted">No deal documents are available yet.</p>';
+          return;
+        }
+        deals.forEach((deal, index) => {
+          const card = document.createElement('article');
+          card.className = 'document-card';
+          card.innerHTML = '<span class="status"></span><h3></h3><div class="fields"></div>';
+          card.querySelector('.status').textContent = deal.stage === 'won' ? 'Accepted' : 'Pending';
+          card.querySelector('.status').classList.toggle('pending', deal.stage !== 'won');
+          card.querySelector('h3').textContent = titleFor('deal', deal);
+          const fields = [
+            ['Value', money(deal.value, deal.currency) || 'Not set'],
+            ['Stage', deal.stage || 'Not set'],
+            ['Close date', deal.close_date || 'Not set'],
+            ['Reference', `Deal ${index + 1}`],
+          ];
+          const fieldWrap = card.querySelector('.fields');
+          fields.forEach(([label, value]) => {
+            const row = document.createElement('div');
+            row.className = 'field';
+            row.innerHTML = '<span></span><span></span>';
+            row.children[0].textContent = label;
+            row.children[1].textContent = value;
+            fieldWrap.appendChild(row);
+          });
+          target.appendChild(card);
+        });
+      }
+
+      function targetViewForCustomRefs(refs) {
+        const entityTypes = [...new Set((refs || []).map((ref) => ref.entity_type).filter(Boolean))];
+        if (entityTypes.length === 1 && plural[entityTypes[0]]) return plural[entityTypes[0]];
+        return 'overview';
+      }
+
+      async function clearCustomView() {
+        await callCrm({ action: 'clear_custom_view' });
+        state.view = 'overview';
+        state.search = '';
+        document.getElementById('search').value = '';
+        await refresh();
+      }
+
+      async function refresh(existingViewState = null) {
+        const viewState = existingViewState || await callCrm({ action: 'view_filter' });
         state.viewFilter = viewState.state?.view_filter || null;
-        if (state.viewFilter?.mode === 'custom') {
-          state.view = 'custom';
+        if (state.viewFilter?.mode === 'custom' && state.view !== 'search') {
+          state.view = targetViewForCustomRefs(state.viewFilter.refs);
           state.recent = { accounts: [], contacts: [], deals: [], activities: [] };
           for (const ref of state.viewFilter.refs || []) {
             try {
               const payload = await callCrm({ action: 'get', entity_type: ref.entity_type, entity_id: ref.entity_id });
               state.recent[plural[ref.entity_type]].push(payload.entity);
             } catch {
-              // Ignore stale refs; the owning backend remains the source of truth.
+              // Stale refs are ignored; the backend remains the source of truth.
             }
           }
         } else {
           const payload = await callCrm({ action: 'list_recent', limit: 80 });
           state.recent = payload;
-          if (state.view === 'custom') state.view = 'accounts';
+          if (state.view === 'custom') state.view = 'overview';
         }
         ['accounts', 'contacts', 'deals', 'activities'].forEach((key) => {
           document.getElementById(`count-${key}`).textContent = state.recent[key]?.length || 0;
         });
         document.querySelectorAll('.tab').forEach((item) => item.classList.toggle('active', item.dataset.view === state.view));
+        renderMetrics();
+        renderDocuments();
         renderList();
+      }
+
+      function renderFields(type, entity) {
+        const fieldMap = {
+          account: [['Status', entity.status], ['Industry', entity.industry], ['Domain', entity.domain], ['Updated', entity.updated_at]],
+          contact: [['Role', entity.role], ['Email', entity.email], ['Phone', entity.phone], ['Updated', entity.updated_at]],
+          deal: [['Stage', entity.stage], ['Value', money(entity.value, entity.currency)], ['Close date', entity.close_date], ['Updated', entity.updated_at]],
+          activity: [['Type', entity.activity_type], ['Occurred', entity.occurred_at], ['Updated', entity.updated_at]],
+        };
+        return (fieldMap[type] || [])
+          .filter(([, value]) => value)
+          .map(([label, value]) => `<div class="field"><span>${escapeHtml(label)}</span><span>${escapeHtml(value)}</span></div>`)
+          .join('');
+      }
+
+      function editableFields(type) {
+        return {
+          account: [
+            ['name', 'Name', 'text'],
+            ['domain', 'Domain', 'text'],
+            ['industry', 'Industry', 'text'],
+            ['status', 'Status', 'text'],
+            ['summary', 'Summary', 'textarea'],
+          ],
+          contact: [
+            ['display_name', 'Name', 'text'],
+            ['email', 'Email', 'email'],
+            ['phone', 'Phone', 'text'],
+            ['role', 'Role', 'text'],
+            ['summary', 'Summary', 'textarea'],
+          ],
+          deal: [
+            ['name', 'Name', 'text'],
+            ['stage', 'Stage', 'text'],
+            ['value', 'Value', 'number'],
+            ['currency', 'Currency', 'text'],
+            ['close_date', 'Close date', 'date'],
+            ['summary', 'Summary', 'textarea'],
+          ],
+          activity: [
+            ['subject', 'Subject', 'text'],
+            ['activity_type', 'Type', 'text'],
+            ['occurred_at', 'Occurred at', 'text'],
+            ['body', 'Note', 'textarea'],
+          ],
+        }[type] || [];
+      }
+
+      function addInput(form, entity, [name, label, kind]) {
+        const wrapper = document.createElement('label');
+        const caption = document.createElement('span');
+        const input = kind === 'textarea' ? document.createElement('textarea') : document.createElement('input');
+        caption.textContent = label;
+        input.name = name;
+        if (kind !== 'textarea') input.type = kind;
+        input.value = entity[name] || '';
+        wrapper.append(caption, input);
+        form.appendChild(wrapper);
+      }
+
+      function notePayloadForSelected(body) {
+        const selected = state.selected || {};
+        const payload = {
+          action: 'add_activity',
+          activity_type: 'note',
+          subject: `Note for ${titleFor(selected.type, selected)}`,
+          body,
+        };
+        if (selected.type === 'account') payload.account_id = selected.id;
+        if (selected.type === 'contact') payload.contact_id = selected.id;
+        if (selected.type === 'deal') payload.deal_id = selected.id;
+        if (selected.type === 'activity') {
+          if (selected.account_id) payload.account_id = selected.account_id;
+          if (selected.contact_id) payload.contact_id = selected.contact_id;
+          if (selected.deal_id) payload.deal_id = selected.deal_id;
+        }
+        return payload;
+      }
+
+      function renderEditTools(detail, type, entity) {
+        const editSection = document.createElement('div');
+        editSection.className = 'detail-section';
+        editSection.innerHTML = '<h2>Edit Record</h2><form id="edit-form" class="edit-form"></form><div class="form-message" id="edit-message"></div>';
+        const form = editSection.querySelector('form');
+        editableFields(type).forEach((field) => addInput(form, entity, field));
+        const actions = document.createElement('div');
+        actions.className = 'form-actions';
+        const save = document.createElement('button');
+        save.type = 'submit';
+        save.textContent = 'Save Changes';
+        actions.appendChild(save);
+        form.appendChild(actions);
+        form.onsubmit = updateSelectedRecord;
+        detail.appendChild(editSection);
+
+        const noteSection = document.createElement('div');
+        noteSection.className = 'detail-section';
+        noteSection.innerHTML = '<h2>Add Note</h2><form id="note-form" class="edit-form"><textarea name="body" placeholder="Write a note for this record"></textarea><div class="form-actions"><button type="submit">Add Note</button></div></form><div class="form-message" id="note-message"></div>';
+        noteSection.querySelector('form').onsubmit = addSelectedNote;
+        detail.appendChild(noteSection);
+      }
+
+      async function updateSelectedRecord(event) {
+        event.preventDefault();
+        if (!state.selected) return;
+        const form = event.currentTarget;
+        const body = { action: 'update', entity_type: state.selected.type, entity_id: state.selected.id };
+        editableFields(state.selected.type).forEach(([name]) => {
+          body[name] = form.elements[name].value.trim();
+        });
+        const message = document.getElementById('edit-message');
+        message.textContent = 'Saving...';
+        try {
+          const payload = await callCrm(body);
+          state.selected = { type: state.selected.type, ...payload.entity };
+          message.textContent = 'Saved.';
+          await refresh();
+          await selectRecord(state.selected.type, state.selected.id);
+        } catch (error) {
+          message.textContent = error.message || 'Unable to save changes.';
+        }
+      }
+
+      async function addSelectedNote(event) {
+        event.preventDefault();
+        if (!state.selected) return;
+        const form = event.currentTarget;
+        const body = form.elements.body.value.trim();
+        if (!body) return;
+        const message = document.getElementById('note-message');
+        message.textContent = 'Saving note...';
+        try {
+          await callCrm(notePayloadForSelected(body));
+          form.reset();
+          message.textContent = 'Note added.';
+          await refresh();
+          await selectRecord(state.selected.type, state.selected.id);
+        } catch (error) {
+          message.textContent = error.message || 'Unable to save note.';
+        }
       }
 
       async function selectRecord(type, id) {
         const payload = await callCrm({ action: 'get', entity_type: type, entity_id: id });
         state.selected = { type, ...payload.entity };
-        document.getElementById('detail').innerHTML = `<h3>${titleFor(type, payload.entity)}</h3><pre>${JSON.stringify(payload.entity, null, 2)}</pre>`;
+        const detail = document.getElementById('detail');
+        detail.className = '';
+        detail.innerHTML = `
+          <h2 class="detail-title">${escapeHtml(titleFor(type, payload.entity))}</h2>
+          <p class="muted">${escapeHtml(summaryFor(type, payload.entity) || 'No summary yet.')}</p>
+          <div class="detail-section fields">${renderFields(type, payload.entity) || '<div class="muted">No additional fields.</div>'}</div>
+        `;
+        renderEditTools(detail, type, payload.entity);
         const ref = await callCrm({ action: 'references.summarize', entity_type: type, entity_id: id });
-        document.getElementById('reference-preview').textContent = JSON.stringify(ref, null, 2);
+        document.getElementById('reference-preview').textContent = ref.summary || 'No reference summary available.';
         renderList();
       }
 
@@ -324,6 +1003,7 @@
         await callCrm(actions[kind]);
         document.getElementById('create-title').value = '';
         document.getElementById('create-body').value = '';
+        state.view = plural[kind];
         await refresh();
       }
 
@@ -333,35 +1013,72 @@
         const deal = await callCrm({ action: 'create_deal', account_id: account.account.id, name: 'Bando X', stage: 'qualification', value: 25000, currency: 'EUR', close_date: '2026-05-15' });
         await callCrm({ action: 'add_activity', account_id: account.account.id, contact_id: contact.contact.id, deal_id: deal.deal.id, activity_type: 'meeting', subject: 'Allineamento tecnico bando X', body: 'Mario Rossi conferma che mancano gli allegati economici.' });
         await callCrm({ action: 'link_entities', source_type: 'contact', source_id: contact.contact.id, target_type: 'deal', target_id: deal.deal.id, kind: 'influences', strength: 0.8, reason: 'Mario Rossi guida la validazione tecnica.' });
+        state.view = 'overview';
         await refresh();
       }
 
       document.querySelectorAll('.tab').forEach((button) => {
         button.onclick = () => {
-          document.querySelectorAll('.tab').forEach((item) => item.classList.remove('active'));
-          button.classList.add('active');
           state.view = button.dataset.view;
+          state.search = '';
+          document.getElementById('search').value = '';
+          document.querySelectorAll('.tab').forEach((item) => item.classList.toggle('active', item === button));
           renderList();
         };
       });
       document.getElementById('refresh').onclick = refresh;
       document.getElementById('create').onclick = createQuick;
       document.getElementById('seed').onclick = seedDemo;
+      document.getElementById('clear-custom-view').onclick = clearCustomView;
       document.getElementById('clear-selection').onclick = () => {
         state.selected = null;
-        document.getElementById('detail').textContent = 'Select a CRM record.';
+        document.getElementById('detail').className = 'detail-empty';
+        document.getElementById('detail').textContent = 'Select a CRM record to inspect it.';
         document.getElementById('reference-preview').textContent = 'No record selected.';
         renderList();
       };
       document.getElementById('search').oninput = async (event) => {
         const query = event.target.value.trim();
+        state.search = query;
         if (!query) return refresh();
         const payload = await callCrm({ action: 'search', query, limit: 40 });
-        state.view = 'accounts';
+        state.view = 'search';
         state.recent = { accounts: [], contacts: [], deals: [], activities: [] };
-        payload.results.forEach((item) => state.recent[plural[item.entity_type]].push({ id: item.entity_id, name: item.title, display_name: item.title, subject: item.title, summary: item.summary, updated_at: item.updated_at }));
+        payload.results.forEach((item) => {
+          state.recent[plural[item.entity_type]].push({
+            id: item.entity_id,
+            name: item.title,
+            display_name: item.title,
+            subject: item.title,
+            summary: item.summary,
+            updated_at: item.updated_at,
+          });
+        });
+        document.querySelectorAll('.tab').forEach((item) => item.classList.remove('active'));
+        renderMetrics();
         renderList();
       };
+      window.addEventListener('message', (event) => {
+        if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') return;
+        if (event.data.type === 'maverick.app.data-changed' && event.data.owner_app_id === 'crm') {
+          refresh();
+        }
+      });
+      function connectAppEvents() {
+        if (!('WebSocket' in window)) return;
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const socket = new WebSocket(`${protocol}//${window.location.host}/api/apps/events/ws`);
+        socket.onmessage = (event) => {
+          try {
+            const payload = JSON.parse(event.data);
+            if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === 'crm') refresh();
+          } catch {
+            // Ignore malformed event frames.
+          }
+        };
+      }
+      window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'crm' }, window.location.origin);
+      connectAppEvents();
       refresh();
     </script>
   </body>

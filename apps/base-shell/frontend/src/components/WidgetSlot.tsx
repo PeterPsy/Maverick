@@ -36,6 +36,7 @@ export function WidgetSlot({
   const [isCaptureActive, setIsCaptureActive] = useState(false);
   const [isCaptureBusy, setIsCaptureBusy] = useState(false);
   const captureStreamRef = useRef<MediaStream | null>(null);
+  const captureNavigationScopeRef = useRef("");
   const captureVideoRef = useRef<HTMLVideoElement | null>(null);
   const widgetFrameRef = useRef<HTMLIFrameElement | null>(null);
   const contentSignature = JSON.stringify({ activeWorkspaceId, content });
@@ -83,7 +84,26 @@ export function WidgetSlot({
     return () => {
       cancelled = true;
     };
-  }, [activeWorkspaceId, contentSignature, contentKind, hostAppId]);
+  }, [activeWorkspaceId, contentKind, hostAppId]);
+
+  function postWidgetContextChanged() {
+    if (!widget) {
+      return;
+    }
+    widgetFrameRef.current?.contentWindow?.postMessage(
+      {
+        type: "maverick.widget.context-changed",
+        context: { content: { kind: contentKind, workspace_id: activeWorkspaceId, payload: content } },
+        owner_app_id: widget.owner_app_id,
+        widget_id: widget.widget_id,
+      },
+      window.location.origin,
+    );
+  }
+
+  useEffect(() => {
+    postWidgetContextChanged();
+  }, [activeWorkspaceId, contentKind, contentSignature, widget?.owner_app_id, widget?.widget_id]);
 
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
@@ -95,6 +115,7 @@ export function WidgetSlot({
         app_id?: string;
         height?: string;
         owner_app_id?: string;
+        navigation_scope?: string;
         params?: Record<string, string | boolean | null>;
         resource?: string;
         type?: string;
@@ -110,6 +131,8 @@ export function WidgetSlot({
         payload.owner_app_id === widget?.owner_app_id &&
         payload.widget_id === widget?.widget_id
       ) {
+        const nextNavigationScope = typeof payload.navigation_scope === "string" ? payload.navigation_scope : "";
+        captureNavigationScopeRef.current = nextNavigationScope;
         void startCaptureSession();
       }
       if (
@@ -127,6 +150,7 @@ export function WidgetSlot({
           {
             type: "maverick.widget.data-changed",
             active_thread_id: typeof payload.active_thread_id === "string" ? payload.active_thread_id : "",
+            navigation_scope: typeof payload.navigation_scope === "string" ? payload.navigation_scope : "",
             owner_app_id: payload.owner_app_id,
             resource: payload.resource || "",
           },
@@ -144,6 +168,7 @@ export function WidgetSlot({
       {
         type: "maverick.widget.capture-area.error",
         error: message,
+        navigation_scope: captureNavigationScopeRef.current,
       },
       window.location.origin,
     );
@@ -154,6 +179,7 @@ export function WidgetSlot({
       {
         type: "maverick.widget.capture-area.complete",
         files: [file],
+        navigation_scope: captureNavigationScopeRef.current,
       },
       window.location.origin,
     );
@@ -219,6 +245,7 @@ export function WidgetSlot({
     setIsCaptureActive(false);
     setIsCaptureBusy(false);
     setCaptureDraft(null);
+    captureNavigationScopeRef.current = "";
     setCaptureStart(null);
   }
 
@@ -281,6 +308,7 @@ export function WidgetSlot({
         <iframe
           className="bs-widget-slot__frame"
           key={`${activeWorkspaceId}:${widget.owner_app_id}:${widget.widget_id}:${contextToken}`}
+          onLoad={postWidgetContextChanged}
           ref={widgetFrameRef}
           src={src}
           title={label}

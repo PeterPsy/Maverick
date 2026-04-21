@@ -1,5 +1,6 @@
 import { type MutableRefObject, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ChatMessageAttachment,
   ChatThread,
   createRuntimeSession,
   createThread,
@@ -38,9 +39,11 @@ import { eventsToMessages, firstUserTitle } from "./lib/transcript";
 
 type ShellNavigationMessage = {
   type?: string;
+  context?: Record<string, unknown>;
   deleted_thread_id?: string;
   error?: string;
   files?: unknown[];
+  navigation_scope?: string;
   owner_app_id?: string;
   app_id?: string;
   params?: Record<string, string | boolean | null>;
@@ -76,8 +79,18 @@ type RuntimeHistoryCacheEntry = {
 
 const MESSAGE_HISTORY_LIMIT = 50;
 const RUNTIME_EVENT_REPLAY_LIMIT = 1000;
+const QUEUED_MESSAGES_STORAGE_PREFIX = "maverick.chat.queued-messages.v1";
+const THREAD_SYNC_DEBUG_STORAGE_KEY = "maverick.chat.debug.thread-sync";
 
-export function App({ enablePageCapture = false }: { enablePageCapture?: boolean } = {}) {
+export function App({
+  enablePageCapture = false,
+  navigationScope = "",
+  threadId = null,
+}: {
+  enablePageCapture?: boolean;
+  navigationScope?: string;
+  threadId?: string | null;
+} = {}) {
   const [providers, setProviders] = useState<ProviderItem[]>([]);
   const [activeProviderId, setActiveProviderId] = useState("codex");
   const [threads, setThreads] = useState<ChatThread[]>([]);
@@ -102,6 +115,8 @@ export function App({ enablePageCapture = false }: { enablePageCapture?: boolean
   const historyCacheRef = useRef<Map<string, RuntimeHistoryCacheEntry>>(new Map());
   const lastPublishedRuntimeBusyState = useRef<string | null>(null);
   const historyRequestIdRef = useRef(0);
+  const hasHydratedQueuedMessagesRef = useRef(false);
+  const suppressedExternalThreadIdRef = useRef<string | null>(null);
 
   const messages = useMemo(() => {
     const currentMessages = eventsToMessages(events);
@@ -173,12 +188,20 @@ export function App({ enablePageCapture = false }: { enablePageCapture?: boolean
       lastPublishedRuntimeBusyState.current = null;
       return;
     }
+    if (navigationScope && threadId && activeThread.thread_id !== threadId) {
+      debugThreadSync("app-skip-stale-thread-publication", {
+        activeThreadId: activeThread.thread_id,
+        navigationScope,
+        threadId,
+      });
+      return;
+    }
     const publicationKey = `${activeThread.thread_id}:${isRuntimeBusy ? "busy" : "free"}`;
     if (lastPublishedRuntimeBusyState.current === publicationKey) {
       return;
     }
     lastPublishedRuntimeBusyState.current = publicationKey;
-    notifyAppDataChanged("chat", "threads", { active_thread_id: activeThread.thread_id });
+    notifyChatThreadsChanged({ active_thread_id: activeThread.thread_id });
   }, [activeThread?.thread_id, isRuntimeBusy]);
 
   async function loadInitialState() {
@@ -191,11 +214,15 @@ export function App({ enablePageCapture = false }: { enablePageCapture?: boolean
       setActiveProviderId(providerPayload.active_provider.provider_id);
       setThreads(threadPayload.threads);
       const query = new URLSearchParams(window.location.search);
-      const requestedThreadId = query.get("thread_id");
-      let firstThread = threadPayload.threads.find((thread) => thread.thread_id === requestedThreadId) || threadPayload.threads[0] || null;
+      const requestedThreadId = threadId || query.get("thread_id");
       if (query.get("new_chat") === "1") {
-        firstThread = await createChat({ activeAppContext: widgetActiveAppContext, projectId: query.get("project_id") });
-      } else if (requestedThreadId && !firstThread) {
+        const firstThread = await createChat({ activeAppContext: widgetActiveAppContext, projectId: query.get("project_id") });
+        setQueuedMessages(readPersistedQueuedMessages(queueStorageKey(navigationScope, firstThread?.thread_id || null)));
+        setError(null);
+        return;
+      }
+      let firstThread = requestedThreadId ? threadPayload.threads.find((thread) => thread.thread_id === requestedThreadId) || null : threadPayload.threads[0] || null;
+      if (requestedThreadId && !firstThread) {
         const thread = await getThread(requestedThreadId);
         firstThread = thread.thread;
         setThreads(thread.threads);
@@ -215,7 +242,7 @@ export function App({ enablePageCapture = false }: { enablePageCapture?: boolean
       }
       setPendingUserMessages([]);
       setFailedUserMessages([]);
-      setQueuedMessages([]);
+      setQueuedMessages(readPersistedQueuedMessages(queueStorageKey(navigationScope, firstThread?.thread_id || null)));
       setError(null);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to load chat.");
@@ -228,6 +255,26 @@ export function App({ enablePageCapture = false }: { enablePageCapture?: boolean
     loadInitialState();
     void loadMentionItems();
   }, []);
+
+  useEffect(() => {
+    if (isBootstrapping) {
+      return;
+    }
+    debugThreadSync("app-thread-prop-effect", {
+      activeThreadId: activeThread?.thread_id || "",
+      navigationScope,
+      suppressedExternalThreadId: suppressedExternalThreadIdRef.current,
+      threadId,
+    });
+    if (!threadId || activeThread?.thread_id === threadId) {
+      suppressedExternalThreadIdRef.current = null;
+      return;
+    }
+    if (suppressedExternalThreadIdRef.current && threadId === suppressedExternalThreadIdRef.current) {
+      return;
+    }
+    void openThreadById(threadId);
+  }, [threadId, isBootstrapping, activeThread?.thread_id]);
 
   async function loadMentionItems() {
     const [appsResult, skillsResult] = await Promise.allSettled([listApps(), listSkills()]);
@@ -259,6 +306,9 @@ export function App({ enablePageCapture = false }: { enablePageCapture?: boolean
       }
       const payload = event.data as ShellNavigationMessage;
       if (payload.type === "maverick.widget.capture-area.complete") {
+        if (navigationScope && payload.navigation_scope !== navigationScope) {
+          return;
+        }
         const files = Array.isArray(payload.files) ? payload.files.filter((file): file is File => file instanceof File) : [];
         if (files.length) {
           addAttachments(files);
@@ -267,7 +317,20 @@ export function App({ enablePageCapture = false }: { enablePageCapture?: boolean
         return;
       }
       if (payload.type === "maverick.widget.capture-area.error") {
+        if (navigationScope && payload.navigation_scope !== navigationScope) {
+          return;
+        }
         setComposerError(payload.error || "Unable to capture page area.");
+        return;
+      }
+      if (payload.type === "maverick.widget.context-changed") {
+        setActiveAppContext(activeAppContextFromWidgetContext(payload.context || {}));
+        return;
+      }
+      if (navigationScope && payload.navigation_scope !== navigationScope) {
+        return;
+      }
+      if (!navigationScope && payload.navigation_scope) {
         return;
       }
       if (payload.type === "maverick.app.data-changed" && payload.owner_app_id === "chat" && payload.resource === "threads") {
@@ -329,6 +392,13 @@ export function App({ enablePageCapture = false }: { enablePageCapture?: boolean
   }
 
   async function createChat({ activeAppContext: activeAppContextOverride, projectId = null, resetView = true }: CreateChatOptions = {}) {
+    debugThreadSync("app-create-chat-start", {
+      activeThreadId: activeThread?.thread_id || "",
+      navigationScope,
+      projectId,
+      resetView,
+      threadId,
+    });
     if (resetView) {
       resetActiveConversation();
     }
@@ -344,7 +414,12 @@ export function App({ enablePageCapture = false }: { enablePageCapture?: boolean
       setQueuedMessages([]);
     }
     setActiveTurn(null);
-    notifyAppDataChanged("chat", "threads");
+    debugThreadSync("app-create-chat-complete", {
+      createdThreadId: payload.thread.thread_id,
+      navigationScope,
+      threadId,
+    });
+    notifyChatThreadsChanged({ active_thread_id: payload.thread.thread_id });
     return payload.thread;
   }
 
@@ -391,6 +466,15 @@ export function App({ enablePageCapture = false }: { enablePageCapture?: boolean
     const newChatProjectId = scalarString(params.project_id) || null;
     const runtimeThreadMetadata = runtimeSessionThreadMetadataFromParams(params);
     const shouldCreateChat = params.new_chat === true || params.new_chat === "1";
+    debugThreadSync("app-navigation", {
+      activeThreadId: activeThread?.thread_id || "",
+      navigationScope,
+      params,
+      requestedRuntimeSessionId,
+      requestedThreadId,
+      shouldCreateChat,
+      threadId,
+    });
     if (!requestedThreadId && !requestedRuntimeSessionId && !shouldCreateChat) {
       return;
     }
@@ -402,8 +486,16 @@ export function App({ enablePageCapture = false }: { enablePageCapture?: boolean
       if (requestedRuntimeSessionId) {
         await openRuntimeSessionThread(requestedRuntimeSessionId, runtimeThreadMetadata);
       } else if (shouldCreateChat) {
+        suppressedExternalThreadIdRef.current = threadId || activeThread?.thread_id || null;
+        debugThreadSync("app-new-chat-suppress-previous", {
+          activeThreadId: activeThread?.thread_id || "",
+          navigationScope,
+          suppressedExternalThreadId: suppressedExternalThreadIdRef.current,
+          threadId,
+        });
         await createChat({ projectId: newChatProjectId });
       } else if (requestedThreadId) {
+        suppressedExternalThreadIdRef.current = null;
         await openThreadById(requestedThreadId);
       }
       setError(null);
@@ -432,7 +524,7 @@ export function App({ enablePageCapture = false }: { enablePageCapture?: boolean
       setFailedUserMessages([]);
       setQueuedMessages([]);
       setActiveTurn(inferActiveRuntimeTurn(runtimeEvents.items, runtimeSessionId));
-      notifyAppDataChanged("chat", "threads");
+      notifyChatThreadsChanged({ active_thread_id: payload.thread.thread_id });
     } finally {
       setIsHistoryLoading(false);
     }
@@ -451,6 +543,30 @@ export function App({ enablePageCapture = false }: { enablePageCapture?: boolean
     setThreads(payload.threads);
     await handleSelectThread(payload.thread);
   }
+
+  function notifyChatThreadsChanged(detail: Record<string, string> = {}) {
+    debugThreadSync("app-notify-threads", {
+      activeThreadId: activeThread?.thread_id || "",
+      detail,
+      navigationScope,
+      threadId,
+    });
+    notifyAppDataChanged("chat", "threads", { ...(navigationScope ? { navigation_scope: navigationScope } : {}), ...detail });
+  }
+
+  useEffect(() => {
+    if (isBootstrapping) {
+      return;
+    }
+    hasHydratedQueuedMessagesRef.current = true;
+  }, [isBootstrapping]);
+
+  useEffect(() => {
+    if (isBootstrapping || !hasHydratedQueuedMessagesRef.current) {
+      return;
+    }
+    persistQueuedMessages(queueStorageKey(navigationScope, activeThread?.thread_id || null), queuedMessages);
+  }, [activeThread?.thread_id, isBootstrapping, navigationScope, queuedMessages]);
 
   async function handleSend() {
     const input = composer.trim();
@@ -547,13 +663,13 @@ export function App({ enablePageCapture = false }: { enablePageCapture?: boolean
   }
 
   useEffect(() => {
-    if (isRuntimeBusy || isSending || queuedMessages.length === 0) {
+    if (isBootstrapping || isHistoryLoading || isRuntimeBusy || isSending || queuedMessages.length === 0) {
       return;
     }
     const [nextMessage, ...remainingMessages] = queuedMessages;
     setQueuedMessages(remainingMessages);
     void submitMessage(nextMessage);
-  }, [isRuntimeBusy, isSending, queuedMessages]);
+  }, [isBootstrapping, isHistoryLoading, isRuntimeBusy, isSending, queuedMessages]);
 
   function handleAddAttachments(files: File[]) {
     addAttachments(files);
@@ -566,6 +682,7 @@ export function App({ enablePageCapture = false }: { enablePageCapture?: boolean
         type: "maverick.shell.capture-area.start",
         owner_app_id: "chat",
         widget_id: "chat-floating",
+        navigation_scope: navigationScope,
       },
       window.location.origin,
     );
@@ -740,6 +857,88 @@ function scalarString(value: string | boolean | null | undefined): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function queueStorageKey(navigationScope: string, threadId: string | null): string {
+  return `${QUEUED_MESSAGES_STORAGE_PREFIX}:${navigationScope || "main"}:${threadId || "new"}`;
+}
+
+function readPersistedQueuedMessages(storageKey: string): QueuedMessage[] {
+  try {
+    const rawValue = window.localStorage.getItem(storageKey);
+    if (!rawValue) {
+      return [];
+    }
+    const payload = JSON.parse(rawValue) as { items?: unknown[]; version?: unknown };
+    if (payload.version !== 1 || !Array.isArray(payload.items)) {
+      return [];
+    }
+    return payload.items
+      .map((item) => {
+        if (!item || typeof item !== "object") {
+          return null;
+        }
+        const record = item as Record<string, unknown>;
+        const clientMessageId = typeof record.clientMessageId === "string" ? record.clientMessageId : "";
+        const content = typeof record.content === "string" ? record.content : "";
+        const attachments = Array.isArray(record.attachments) ? record.attachments.filter(isPersistedMessageAttachment) : [];
+        if (!clientMessageId || (!content.trim() && !attachments.length)) {
+          return null;
+        }
+        return {
+          clientMessageId,
+          content,
+          appReferences: persistedAppReferences(record.appReferences),
+          attachments,
+        };
+      })
+      .filter((item): item is QueuedMessage => Boolean(item));
+  } catch {
+    return [];
+  }
+}
+
+function persistQueuedMessages(storageKey: string, queuedMessages: QueuedMessage[]) {
+  try {
+    if (!queuedMessages.length) {
+      window.localStorage.removeItem(storageKey);
+      return;
+    }
+    window.localStorage.setItem(
+      storageKey,
+      JSON.stringify({
+        version: 1,
+        items: queuedMessages.map((message) => ({
+          ...message,
+          attachments: message.attachments.map((attachment) => ({ ...attachment, objectUrl: null })),
+        })),
+      }),
+    );
+  } catch {
+    // Queue persistence is best-effort; in-memory sending remains the source of truth.
+  }
+}
+
+function persistedAppReferences(value: unknown): AppReference[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
+    .map((item) => ({
+      type: "app" as const,
+      app_id: typeof item.app_id === "string" ? item.app_id : "",
+      label: typeof item.label === "string" ? item.label : undefined,
+    }))
+    .filter((item) => item.app_id);
+}
+
+function isPersistedMessageAttachment(value: unknown): value is ChatMessageAttachment {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return typeof record.id === "string" && typeof record.name === "string" && typeof record.size === "number" && typeof record.type === "string";
+}
+
 function notifyAppDataChanged(ownerAppId: string, resource: string, detail: Record<string, string> = {}) {
   window.parent?.postMessage(
     {
@@ -750,4 +949,18 @@ function notifyAppDataChanged(ownerAppId: string, resource: string, detail: Reco
     },
     window.location.origin,
   );
+}
+
+function debugThreadSync(label: string, detail: Record<string, unknown> = {}) {
+  try {
+    if (window.localStorage.getItem(THREAD_SYNC_DEBUG_STORAGE_KEY) !== "1") {
+      return;
+    }
+    console.debug(`[chat thread-sync] ${label}`, {
+      at: new Date().toISOString(),
+      ...detail,
+    });
+  } catch {
+    // Debug logging must never affect chat behavior.
+  }
 }

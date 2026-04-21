@@ -39,6 +39,12 @@
     "views": [
       "crm"
     ],
+    "data_events": [
+      {
+        "resource": "records",
+        "description": "Emitted when CRM accounts, contacts, deals, activities, relationships, or CRM view state change through official CRM surfaces."
+      }
+    ],
     "view_surfaces": [
       {
         "view_id": "crm",

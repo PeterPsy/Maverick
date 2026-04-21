@@ -39,6 +39,13 @@ def app_contract_payload(parsed: ParsedAppContract) -> dict[str, Any]:
             "cli_commands": parsed.contract.capabilities.cli_commands,
             "skills": parsed.contract.capabilities.skills,
             "views": parsed.contract.capabilities.views,
+            "data_events": [
+                {
+                    "resource": event.resource,
+                    "description": event.description,
+                }
+                for event in parsed.contract.capabilities.data_events
+            ],
             "view_surfaces": [
                 {
                     "view_id": surface.view_id,

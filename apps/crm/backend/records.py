@@ -132,6 +132,90 @@ def create_deal(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
         return get_entity_with_context(db, "deal", deal["id"])
 
 
+def _value_from_body(body: dict[str, Any], field: str, current: dict[str, Any]) -> Any:
+    if field not in body:
+        return current.get(field, "")
+    if field in {"value", "probability"}:
+        return float(body.get(field) or 0)
+    return optional_text(body, field) if field != "summary" and field != "body" else str(body.get(field) or "").strip()
+
+
+def _refresh_entity_fts(db, entity_type: str, entity_id: str, entity: dict[str, Any]) -> None:
+    if entity_type == "account":
+        refresh_fts(
+            db,
+            entity_type="account",
+            entity_id=entity_id,
+            title=entity["name"],
+            body=" ".join([entity.get("domain", ""), entity.get("industry", ""), entity.get("summary", "")]),
+        )
+    elif entity_type == "contact":
+        refresh_fts(
+            db,
+            entity_type="contact",
+            entity_id=entity_id,
+            title=entity["display_name"],
+            body=" ".join([entity.get("email", ""), entity.get("phone", ""), entity.get("role", ""), entity.get("summary", "")]),
+        )
+    elif entity_type == "deal":
+        refresh_fts(
+            db,
+            entity_type="deal",
+            entity_id=entity_id,
+            title=entity["name"],
+            body=" ".join([entity.get("stage", ""), entity.get("currency", ""), entity.get("close_date", ""), entity.get("summary", "")]),
+        )
+    else:
+        refresh_fts(db, entity_type="activity", entity_id=entity_id, title=entity["subject"], body=entity.get("body", ""))
+
+
+def update_entity(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
+    ensure_schema(data_root)
+    entity_type = normalize_entity_type(str(body.get("entity_type") or body.get("type") or ""))
+    entity_id = optional_text(body, "entity_id") or optional_text(body, "id")
+    if not entity_id:
+        raise CrmValidationError("entity_id is required.")
+    allowed_fields = {
+        "account": ("name", "domain", "industry", "status", "owner_id", "summary"),
+        "contact": ("account_id", "first_name", "last_name", "display_name", "email", "phone", "role", "owner_id", "summary"),
+        "deal": ("account_id", "name", "stage", "value", "currency", "probability", "close_date", "owner_id", "summary"),
+        "activity": ("activity_type", "subject", "body", "account_id", "contact_id", "deal_id", "occurred_at", "owner_id"),
+    }[entity_type]
+    updates = [field for field in allowed_fields if field in body]
+    if not updates:
+        raise CrmValidationError("No editable CRM fields were provided.")
+    table = entity_table(entity_type)
+    timestamp = now_timestamp()
+    with connect(data_root) as db:
+        current = get_entity(db, entity_type, entity_id)
+        if current is None:
+            raise CrmValidationError("entity not found.")
+        values = {field: _value_from_body(body, field, current) for field in updates}
+        if entity_type == "contact" and ("display_name" not in values or not values["display_name"]):
+            display_name = " ".join(
+                part
+                for part in (
+                    values.get("first_name", current.get("first_name", "")),
+                    values.get("last_name", current.get("last_name", "")),
+                )
+                if part
+            ).strip()
+            if display_name:
+                values["display_name"] = display_name
+        required_title = {"account": "name", "contact": "display_name", "deal": "name", "activity": "subject"}[entity_type]
+        if required_title in values and not str(values[required_title] or "").strip():
+            raise CrmValidationError(f"{required_title} is required.")
+        if "activity_type" in values:
+            values["activity_type"] = normalize_activity_type(str(values["activity_type"]))
+        values["updated_at"] = timestamp
+        assignments = ", ".join(f"{field} = :{field}" for field in values)
+        db.execute(f"UPDATE {table} SET {assignments} WHERE id = :entity_id AND deleted_at IS NULL", values | {"entity_id": entity_id})
+        updated = get_entity(db, entity_type, entity_id) or {}
+        _refresh_entity_fts(db, entity_type, entity_id, updated)
+        record_event(db, event_type=f"{entity_type}_updated", entity_type=entity_type, entity_id=entity_id, payload={"fields": sorted(values)})
+        return get_entity_with_context(db, entity_type, entity_id)
+
+
 def add_activity(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
     ensure_schema(data_root)
     timestamp = now_timestamp()

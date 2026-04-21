@@ -13,6 +13,7 @@ from core.apps.errors import (
 from core.apps.models import (
     AppCapabilities,
     AppContractDescriptor,
+    AppDataEventDeclaration,
     AppDistributionDeclaration,
     AppEntrypoints,
     AppFailureSemantics,
@@ -109,6 +110,10 @@ class MongoAppStore:
         capabilities_payload["reference_entities"] = [
             AppReferenceEntityDeclaration(**entity)
             for entity in capabilities_payload.get("reference_entities", [])
+        ]
+        capabilities_payload["data_events"] = [
+            AppDataEventDeclaration(**event)
+            for event in capabilities_payload.get("data_events", [])
         ]
         capabilities_payload["view_surfaces"] = [
             AppViewSurfaceDeclaration(

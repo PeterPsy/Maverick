@@ -164,6 +164,7 @@ def handle_app_backend(
         secret_results = _apply_app_secret_writes(state, workspace_id=workspace_id, app_id=app_id, result=result)
     except SecretError as error:
         return json_response(start_response, {"error": "secret_error", "detail": str(error)}, status=status_line(500))
+    _publish_app_events(state, workspace_id=workspace_id, app_id=app_id, result=result)
     status_code = int(result.get("status_code", 200))
     if "json" in result:
         response_json = result["json"]
@@ -173,6 +174,25 @@ def handle_app_backend(
     if "body" in result:
         return text_response(start_response, str(result["body"]), status=status_line(status_code))
     return json_response(start_response, result, status=status_line(status_code))
+
+
+def _publish_app_events(state: PlatformState, *, workspace_id: str, app_id: str, result: dict[str, Any]) -> None:
+    events = result.pop("app_events", [])
+    if not isinstance(events, list):
+        return
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        event_type = str(event.get("type") or "maverick.app.data-changed").strip()
+        owner_app_id = str(event.get("owner_app_id") or app_id).strip()
+        state.app_event_bus.publish(
+            {
+                "type": event_type,
+                "workspace_id": workspace_id,
+                "owner_app_id": owner_app_id,
+                "resource": str(event.get("resource") or ""),
+            }
+        )
 
 
 def _resolve_app_secret_payload(state: PlatformState, *, workspace_id: str, app_id: str) -> dict[str, str]:

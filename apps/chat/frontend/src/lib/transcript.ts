@@ -59,14 +59,46 @@ function normalizedRuntimeLabel(value: string): string {
     .toLowerCase();
 }
 
-function toolCallKey(toolCall: ToolCallMessage): string {
+function stableToolCallKey(toolCall: ToolCallMessage): string | null {
   for (const key of ["tool_call_id", "call_id", "item_id"]) {
     const value = toolCall.detail[key];
     if (typeof value === "string" && value.trim()) {
       return `${key}:${value.trim()}`;
     }
   }
+  return null;
+}
+
+function toolCallKey(toolCall: ToolCallMessage): string {
+  const stableKey = stableToolCallKey(toolCall);
+  if (stableKey) {
+    return stableKey;
+  }
   return `event:${toolCall.id}`;
+}
+
+function isFileChangeToolCall(toolCall: ToolCallMessage): boolean {
+  return toolCall.detail.tool_kind === "file_change" || toolCall.name === "file_change";
+}
+
+function activeFileChangeToolCallKey(itemsByKey: Map<string, ToolCallMessage>): string | null {
+  const entries = [...itemsByKey.entries()].reverse();
+  const activeEntry = entries.find(([, item]) => isFileChangeToolCall(item) && (item.status === "started" || item.status === "updated"));
+  return activeEntry?.[0] || null;
+}
+
+function segmentToolCallKey(itemsByKey: Map<string, ToolCallMessage>, toolCall: ToolCallMessage): string {
+  const stableKey = stableToolCallKey(toolCall);
+  if (stableKey && itemsByKey.has(stableKey)) {
+    return stableKey;
+  }
+  if (isFileChangeToolCall(toolCall) && toolCall.status !== "started") {
+    const activeKey = activeFileChangeToolCallKey(itemsByKey);
+    if (activeKey) {
+      return activeKey;
+    }
+  }
+  return stableKey || toolCallKey(toolCall);
 }
 
 function mergeToolCall(previous: ToolCallMessage, next: ToolCallMessage): ToolCallMessage {
@@ -276,11 +308,12 @@ export function eventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
     if (toolCall) {
       flushOutputSegment(turnId, finalTurnIds.has(turnId));
       const current = toolSegmentsByTurn.get(turnId);
-      const key = toolCallKey(toolCall);
       if (current) {
+        const key = segmentToolCallKey(current.itemsByKey, toolCall);
         const previous = current.itemsByKey.get(key);
         current.itemsByKey.set(key, previous ? mergeToolCall(previous, toolCall) : toolCall);
       } else {
+        const key = toolCallKey(toolCall);
         const index = nextToolSegmentIndexByTurn.get(turnId) || 0;
         nextToolSegmentIndexByTurn.set(turnId, index + 1);
         toolSegmentsByTurn.set(turnId, { createdAt: event.created_at, itemsByKey: new Map([[key, toolCall]]), index, order: eventIndex });

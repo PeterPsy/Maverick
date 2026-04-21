@@ -947,6 +947,8 @@ without carrying forward legacy structure or backward-compatibility constraints 
 - [x] Add optional `capabilities.reference_entities` contract metadata
 - [x] Add parser and serializer support for referenceable entity metadata
 - [x] Add parser tests for referenceable entity metadata
+- [x] Add optional `capabilities.data_events` contract metadata for live app data invalidation
+- [x] Add core app-event WebSocket fanout for `maverick.app.data-changed` without frontend polling
 - [x] Add common CLI/MCP reference tool convention: manifest, search, resolve, and summarize
 - [x] Add reference manifests and reference tools to `agents`
 - [x] Add reference manifests and reference tools to `app-store`
@@ -969,6 +971,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
 - [x] Implement CRM MCP surface with shared service behavior
 - [x] Implement CRM reference manifest, search, resolve, and summarize tools for Memory links
 - [x] Declare and implement CRM view composition actions for custom account/contact/deal/activity views
+- [x] Declare CRM live data event resource for record and view-state changes
 - [x] Implement CRM skill template under `apps/crm/skills/crm-ops`
 - [x] Implement initial CRM operator frontend under `apps/crm/frontend/dist`
 - [x] Add CRM app tests for contract parsing, lifecycle hooks, backend behavior, CLI/MCP entrypoints, and core-mounted end-to-end usage

@@ -29,6 +29,7 @@ def build_core_cli_registry(
     recovery_store: RecoveryStore | None = None,
     provider_registry: ProviderRegistry | None = None,
     observability_store=None,
+    app_event_bus=None,
     workspace_id: str | None = None,
     start_path: Path | None = None,
 ) -> CliCommandRegistry:
@@ -47,7 +48,12 @@ def build_core_cli_registry(
     ):
         registry.register_command(definition, handler)
     if app_store is not None and workspace_id is not None:
-        for definition, handler in _workspace_app_command_specs(app_store, workspace_id=workspace_id, start_path=start_path):
+        for definition, handler in _workspace_app_command_specs(
+            app_store,
+            workspace_id=workspace_id,
+            app_event_bus=app_event_bus,
+            start_path=start_path,
+        ):
             registry.register_command(definition, handler)
         for definition, handler in app_lifecycle_command_specs(
             app_store=app_store,
@@ -68,6 +74,7 @@ def list_core_cli_commands(
     recovery_store: RecoveryStore | None = None,
     provider_registry: ProviderRegistry | None = None,
     observability_store=None,
+    app_event_bus=None,
     workspace_id: str | None = None,
     start_path: Path | None = None,
 ) -> list[CliCommandDefinition]:
@@ -81,6 +88,7 @@ def list_core_cli_commands(
         recovery_store=recovery_store,
         provider_registry=provider_registry,
         observability_store=observability_store,
+        app_event_bus=app_event_bus,
         workspace_id=workspace_id,
         start_path=start_path,
     ).list_commands()
@@ -98,6 +106,7 @@ def run_core_cli_command(
     recovery_store: RecoveryStore | None = None,
     provider_registry: ProviderRegistry | None = None,
     observability_store=None,
+    app_event_bus=None,
     workspace_id: str | None = None,
     start_path: Path | None = None,
 ) -> dict[str, Any]:
@@ -111,6 +120,7 @@ def run_core_cli_command(
         recovery_store=recovery_store,
         provider_registry=provider_registry,
         observability_store=observability_store,
+        app_event_bus=app_event_bus,
         workspace_id=workspace_id,
         start_path=start_path,
     )

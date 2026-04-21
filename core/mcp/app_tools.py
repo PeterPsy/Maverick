@@ -15,6 +15,7 @@ def _workspace_app_tool_definitions(
     store: AppStore,
     *,
     workspace_id: str,
+    app_event_bus=None,
     start_path: Path | None = None,
 ) -> list[tuple[McpToolDefinition, Any]]:
     definitions: list[tuple[McpToolDefinition, Any]] = []
@@ -43,8 +44,9 @@ def _workspace_app_tool_definitions(
                 _workspace_root: str = str(paths.root),
                 _uploaded_storage_root: str = str(paths.uploaded_storage),
                 _generated_storage_root: str = str(paths.generated_storage),
+                _app_event_bus=app_event_bus,
             ) -> dict[str, Any]:
-                return run_json_entrypoint(
+                result = run_json_entrypoint(
                     _entrypoint_path,
                     payload={
                         "surface": "mcp",
@@ -59,6 +61,13 @@ def _workspace_app_tool_definitions(
                     },
                     cwd=_source_root,
                 )
+                _publish_app_events(
+                    _app_event_bus,
+                    result,
+                    workspace_id=_workspace_id,
+                    app_id=_app_id,
+                )
+                return result
 
             definitions.append(
                 (
@@ -83,3 +92,22 @@ def _workspace_app_tool_definitions(
                 )
             )
     return definitions
+
+
+def _publish_app_events(app_event_bus, result: dict[str, Any], *, workspace_id: str, app_id: str) -> None:
+    if app_event_bus is None:
+        return
+    events = result.get("app_events", [])
+    if not isinstance(events, list):
+        return
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        app_event_bus.publish(
+            {
+                "type": str(event.get("type") or "maverick.app.data-changed"),
+                "workspace_id": workspace_id,
+                "owner_app_id": str(event.get("owner_app_id") or app_id),
+                "resource": str(event.get("resource") or ""),
+            }
+        )

@@ -35,4 +35,6 @@ Use MCP tools when the runtime already has the CRM server mounted or when a rich
 
 CRM is the structured source of truth for accounts, contacts, deals, and activities. Memory may link to CRM records, but it should not duplicate the full CRM record when a reference is enough.
 
+Use official CRM surfaces for writes. Do not edit `data/crm/crm.sqlite` or CRM JSON state directly during normal operations, because backend, CLI, and MCP write actions emit `maverick.app.data-changed` for the `records` resource so the mounted CRM UI updates live without polling.
+
 Use the view actions when the user wants the CRM UI to show a curated set of accounts, contacts, deals, or activities selected from Memory or another app surface.

@@ -58,6 +58,7 @@ class CrmAppTestCase(unittest.TestCase):
         self.assertIn("crm_reference_search", parsed.contract.capabilities.mcp_tools)
         self.assertEqual(parsed.contract.capabilities.cli_commands, ["crm"])
         self.assertEqual(parsed.contract.storage.storage_kind, "sqlite")
+        self.assertEqual(parsed.contract.capabilities.data_events[0].resource, "records")
         self.assertEqual(
             [item.entity_type for item in parsed.contract.capabilities.reference_entities],
             ["account", "contact", "deal", "activity"],
@@ -193,6 +194,42 @@ class CrmAppTestCase(unittest.TestCase):
             self.assertEqual(cleared["json"]["state"]["view_filter"]["mode"], "search")
             self.assertEqual(rejected["status_code"], 400)
 
+    def test_backend_updates_contact_and_adds_linked_note(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "crm"
+            contact = self.run_backend(data_root, {"action": "create_contact", "display_name": "Mario Rossi"})["json"]["contact"]
+
+            updated = self.run_backend(
+                data_root,
+                {
+                    "action": "update",
+                    "entity_type": "contact",
+                    "entity_id": contact["id"],
+                    "email": "mario.rossi@example.com",
+                    "phone": "+39 02 1234",
+                    "role": "Referente acquisti",
+                    "summary": "Preferisce aggiornamenti via email.",
+                },
+            )["json"]["entity"]
+            note = self.run_backend(
+                data_root,
+                {
+                    "action": "add_activity",
+                    "activity_type": "note",
+                    "subject": "Nota su Mario Rossi",
+                    "body": "Chiamare dopo la revisione dell'offerta.",
+                    "contact_id": contact["id"],
+                },
+            )["json"]["activity"]
+            search = self.run_backend(data_root, {"action": "search", "query": "Referente acquisti"})["json"]
+
+            self.assertEqual(updated["email"], "mario.rossi@example.com")
+            self.assertEqual(updated["phone"], "+39 02 1234")
+            self.assertEqual(updated["role"], "Referente acquisti")
+            self.assertEqual(note["contact_id"], contact["id"])
+            self.assertEqual(note["activity_type"], "note")
+            self.assertTrue(any(item["entity_id"] == contact["id"] for item in search["results"]))
+
     def test_backend_cli_and_mcp_entrypoints_share_crm_behavior(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             data_root = Path(temp) / "data" / "crm"
@@ -236,17 +273,35 @@ class CrmAppTestCase(unittest.TestCase):
             self.assertEqual(view_mcp["status_code"], 200)
             self.assertEqual(view_mcp["state"]["view_filter"]["mode"], "custom")
 
+    def test_backend_write_actions_emit_crm_data_changed_event(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "crm"
+            result = run_json_entrypoint(
+                CRM_ROOT / "backend" / "app_backend.py",
+                payload={"data_root": str(data_root), "body": {"action": "create_account", "name": "CEIDA"}},
+                cwd=CRM_ROOT,
+            )
+
+            self.assertEqual(result["status_code"], 200)
+            self.assertEqual(
+                result["app_events"],
+                [{"type": "maverick.app.data-changed", "owner_app_id": "crm", "resource": "records"}],
+            )
+
     def test_core_mounted_cli_and_mcp_can_use_crm(self) -> None:
         repo_root = self.make_repo_root()
         state = bootstrap_platform_state(start_path=repo_root)
         cli_context = CliInvocationContext(caller_kind="sandbox_agent", workspace_id="default", agent_id="agent-1", effective_mode="sandbox")
         mcp_context = McpInvocationContext(caller_kind="sandbox_agent", workspace_id="default", agent_id="agent-1", effective_mode="sandbox")
+        app_events = state.app_event_bus.subscribe()
+        self.addCleanup(lambda: state.app_event_bus.unsubscribe(app_events))
 
         created = run_core_cli_command(
             command_id="app.crm.crm",
             context=cli_context,
             app_store=state.app_store,
             workspace_store=state.workspace_store,
+            app_event_bus=state.app_event_bus,
             workspace_id="default",
             start_path=repo_root,
             arguments={"action": "create_account", "name": "Acme Spa", "industry": "Manufacturing"},
@@ -259,11 +314,23 @@ class CrmAppTestCase(unittest.TestCase):
             start_path=repo_root,
             arguments={"query": "Acme"},
         )
+        contact = call_mcp_tool(
+            tool_name="app.crm.crm_create_contact",
+            context=mcp_context,
+            app_store=state.app_store,
+            app_event_bus=state.app_event_bus,
+            workspace_id="default",
+            start_path=repo_root,
+            arguments={"account_id": created["account"]["id"], "display_name": "Mario Rossi"},
+        )
 
         self.assertEqual(created["status_code"], 200)
         self.assertEqual(created["account"]["name"], "Acme Spa")
         self.assertEqual(references["status_code"], 200)
         self.assertEqual(references["results"][0]["entity_type"], "account")
+        self.assertEqual(contact["status_code"], 200)
+        self.assertEqual(app_events.get_nowait()["resource"], "records")
+        self.assertEqual(app_events.get_nowait()["resource"], "records")
 
 
 if __name__ == "__main__":

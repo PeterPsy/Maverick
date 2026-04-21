@@ -59,8 +59,17 @@ class AppCapabilities:
     cli_commands: list[str]
     skills: list[str]
     views: list[str]
+    data_events: list["AppDataEventDeclaration"]
     view_surfaces: list["AppViewSurfaceDeclaration"]
     reference_entities: list["AppReferenceEntityDeclaration"]
+
+
+@dataclass(frozen=True)
+class AppDataEventDeclaration:
+    """Describe one app-owned mutable data resource that emits live-change events."""
+
+    resource: str
+    description: str
 
 
 @dataclass(frozen=True)

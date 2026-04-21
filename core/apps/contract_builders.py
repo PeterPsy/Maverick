@@ -9,6 +9,7 @@ from core.apps.contract_common import _normalize_slug
 from core.apps.models import (
     AppCapabilities,
     AppCompatibilityDescriptor,
+    AppDataEventDeclaration,
     AppContractDescriptor,
     AppDistributionDeclaration,
     AppEntrypoints,
@@ -77,6 +78,7 @@ def build_app_capabilities(
     cli_commands: list[str] | None = None,
     skills: list[str] | None = None,
     views: list[str] | None = None,
+    data_events: list[AppDataEventDeclaration] | None = None,
     view_surfaces: list[AppViewSurfaceDeclaration] | None = None,
     reference_entities: list[AppReferenceEntityDeclaration] | None = None,
 ) -> AppCapabilities:
@@ -86,6 +88,7 @@ def build_app_capabilities(
         cli_commands=cli_commands or [],
         skills=skills or [],
         views=views or [],
+        data_events=data_events or [],
         view_surfaces=view_surfaces or [],
         reference_entities=reference_entities or [],
     )

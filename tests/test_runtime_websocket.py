@@ -13,6 +13,7 @@ import tempfile
 import unittest
 from uuid import uuid4
 
+from core.api.app_events import APP_EVENTS_WS_PATH, AppEventBus, stream_app_events
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
 from core.api.runtime_websocket import WEBSOCKET_UNAUTHORIZED, stream_runtime_session_events
@@ -290,6 +291,38 @@ class RuntimeWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
         frames = [json.loads(item["text"]) for item in sent if item.get("type") == "websocket.send"]
         event_frames = [frame for frame in frames if frame["type"] == "runtime.event"]
         self.assertEqual([frame["event"]["event_id"] for frame in event_frames], ["live-event-1"])
+
+    async def test_app_event_websocket_pushes_data_changes_without_polling(self) -> None:
+        bus = AppEventBus()
+        sent: list[dict] = []
+        receive_queue: asyncio.Queue[dict] = asyncio.Queue()
+        await receive_queue.put({"type": "websocket.connect"})
+
+        async def receive() -> dict:
+            return await receive_queue.get()
+
+        async def send(message: dict) -> None:
+            sent.append(message)
+
+        stream_task = asyncio.create_task(
+            stream_app_events(
+                bus=bus,
+                scope={"type": "websocket", "path": APP_EVENTS_WS_PATH},
+                receive=receive,
+                send=send,
+            )
+        )
+        while not any(message.get("type") == "websocket.accept" for message in sent):
+            await asyncio.sleep(0)
+
+        bus.publish({"type": "maverick.app.data-changed", "owner_app_id": "crm", "resource": "records"})
+        while not any("maverick.app.data-changed" in message.get("text", "") for message in sent):
+            await asyncio.sleep(0)
+        await receive_queue.put({"type": "websocket.disconnect"})
+        await stream_task
+
+        frames = [json.loads(item["text"]) for item in sent if item.get("type") == "websocket.send"]
+        self.assertEqual(frames, [{"type": "maverick.app.data-changed", "owner_app_id": "crm", "resource": "records"}])
 
 
 if __name__ == "__main__":

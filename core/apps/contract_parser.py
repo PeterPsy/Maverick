@@ -10,6 +10,7 @@ from core.apps.errors import AppContractValidationError
 from core.apps.models import (
     AppCapabilities,
     AppContractDescriptor,
+    AppDataEventDeclaration,
     AppDistributionDeclaration,
     AppEntrypoints,
     AppFailureSemantics,
@@ -140,6 +141,34 @@ def parse_app_contract_file(source_root: Path) -> ParsedAppContract:
             )
         )
 
+    data_events_payload = capabilities_payload.get("data_events", [])
+    if not isinstance(data_events_payload, list):
+        raise AppContractValidationError("`capabilities.data_events` must be a list.")
+    data_events: list[AppDataEventDeclaration] = []
+    seen_data_event_resources: set[str] = set()
+    for index, item in enumerate(data_events_payload):
+        item_payload = _expect_mapping(item, label=f"capabilities.data_events[{index}]")
+        unexpected_keys = set(item_payload) - {"resource", "description"}
+        if unexpected_keys:
+            unexpected = ", ".join(sorted(unexpected_keys))
+            raise AppContractValidationError(
+                f"Unsupported capabilities.data_events[{index}] field(s): {unexpected}."
+            )
+        resource = _expect_string(item_payload, "resource")
+        if not APP_ID_PATTERN.fullmatch(resource):
+            raise AppContractValidationError(
+                f"`capabilities.data_events[{index}].resource` must be a lowercase slug."
+            )
+        if resource in seen_data_event_resources:
+            raise AppContractValidationError("`capabilities.data_events` entries must use unique resource values.")
+        seen_data_event_resources.add(resource)
+        data_events.append(
+            AppDataEventDeclaration(
+                resource=resource,
+                description=_expect_string(item_payload, "description"),
+            )
+        )
+
     view_surfaces_payload = capabilities_payload.get("view_surfaces", [])
     if not isinstance(view_surfaces_payload, list):
         raise AppContractValidationError("`capabilities.view_surfaces` must be a list.")
@@ -223,6 +252,7 @@ def parse_app_contract_file(source_root: Path) -> ParsedAppContract:
         cli_commands=_expect_string_list(capabilities_payload, "cli_commands"),
         skills=_expect_string_list(capabilities_payload, "skills"),
         views=_expect_string_list(capabilities_payload, "views"),
+        data_events=data_events,
         view_surfaces=view_surfaces,
         reference_entities=reference_entities,
     )

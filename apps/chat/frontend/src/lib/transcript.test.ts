@@ -410,6 +410,58 @@ describe("runtime event transcript projection", () => {
     expect(messages[0].toolCalls).toHaveLength(1);
   });
 
+  it("merges file change lifecycle events even when one event is missing the provider id", () => {
+    const messages = eventsToMessages([
+      event({
+        event_id: "file-change-started",
+        event_type: "runtime.tool_call.started",
+        payload: {
+          name: "file_change",
+          summary: "Applying file changes",
+          tool_kind: "file_change",
+        },
+      }),
+      event({
+        event_id: "file-change-updated",
+        event_type: "runtime.tool_call.updated",
+        payload: {
+          name: "file_change",
+          output: "Success. Updated the following files:\nM apps/chat/main.tsx",
+          tool_call_id: "fc-1",
+          tool_kind: "file_change",
+        },
+      }),
+      event({
+        event_id: "file-change-completed",
+        event_type: "runtime.tool_call.completed",
+        payload: {
+          changes: [{ path: "apps/chat/main.tsx", changeType: "edit" }],
+          name: "file_change",
+          summary: "Applied file changes",
+          tool_call_id: "fc-1",
+          tool_kind: "file_change",
+        },
+      }),
+    ]);
+
+    expect(messages).toMatchObject([
+      {
+        role: "tool",
+        toolCalls: [
+          {
+            name: "file_change",
+            status: "completed",
+            detail: {
+              changes: [{ path: "apps/chat/main.tsx", changeType: "edit" }],
+              output: "Success. Updated the following files:\nM apps/chat/main.tsx",
+            },
+          },
+        ],
+      },
+    ]);
+    expect(messages[0].toolCalls).toHaveLength(1);
+  });
+
   it("filters noisy provider lifecycle steps from the chat transcript", () => {
     const messages = eventsToMessages([
       event({

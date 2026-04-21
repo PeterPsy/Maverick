@@ -1,4 +1,4 @@
-import { DragEvent, FormEvent, KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { ClipboardEvent, DragEvent, FormEvent, KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ComposerAttachment } from "../lib/attachments";
 import { hasInvalidAttachments } from "../lib/attachments";
 import { activeMentionAt, applyMention, filterMentionItems, findMentionTokens, mentionText, removeMentionToken } from "../lib/mentions";
@@ -411,16 +411,14 @@ export function ChatComposer({
     onAddAttachments(Array.from(event.dataTransfer.files));
   }
 
-  useEffect(() => {
-    const handlePaste = (event: ClipboardEvent) => {
-      if (disabled || !event.clipboardData?.files.length) {
-        return;
-      }
-      onAddAttachments(Array.from(event.clipboardData.files));
-    };
-    document.addEventListener("paste", handlePaste);
-    return () => document.removeEventListener("paste", handlePaste);
-  }, [disabled, onAddAttachments]);
+  function onPaste(event: ClipboardEvent<HTMLDivElement>) {
+    if (disabled || !event.clipboardData.files.length) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    onAddAttachments(Array.from(event.clipboardData.files));
+  }
 
   return (
     <section className="chat-ui-surface chatapp-composer">
@@ -443,6 +441,7 @@ export function ChatComposer({
             onKeyDown={onComposerKeyDown}
             onKeyUp={(event) => syncCaret(event.currentTarget)}
             onMouseUp={(event) => syncCaret(event.currentTarget)}
+            onPaste={onPaste}
             ref={editorRef}
             role="textbox"
             suppressContentEditableWarning

@@ -5,6 +5,7 @@ from __future__ import annotations
 from io import BytesIO
 from typing import Any, Awaitable, Callable
 
+from core.api.app_events import APP_EVENTS_WS_PATH, stream_app_events
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import PlatformState, bootstrap_platform_state
 from core.api.runtime_websocket import RUNTIME_SESSION_WS_PREFIX, stream_runtime_session_events
@@ -33,6 +34,9 @@ class PlatformAsgiHost:
 
     async def _handle_websocket(self, scope: dict[str, Any], receive: AsgiReceive, send: AsgiSend) -> None:
         path = str(scope.get("path") or "")
+        if path == APP_EVENTS_WS_PATH:
+            await stream_app_events(bus=self.state.app_event_bus, scope=scope, receive=receive, send=send)
+            return
         if not path.startswith(RUNTIME_SESSION_WS_PREFIX):
             await send({"type": "websocket.close", "code": 4404})
             return

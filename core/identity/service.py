@@ -150,6 +150,34 @@ def set_user_password(
     return store.save_password_credential(credential)
 
 
+def delete_user(
+    identity_store: IdentityStore,
+    workspace_store: WorkspaceStore,
+    *,
+    user_id: str,
+) -> UserRecord:
+    """Delete a platform user and all core-owned access records."""
+    user = identity_store.get_user(user_id)
+    identity_store.delete_auth_sessions_for_user(user_id)
+    identity_store.delete_password_credential(user_id)
+    workspace_store.delete_memberships_for_user(user_id)
+    workspace_store.delete_active_workspace(user_id)
+    identity_store.delete_user(user_id)
+    return user
+
+
+def is_last_active_admin(store: IdentityStore, user: UserRecord) -> bool:
+    """Return whether deleting this user would remove the final active admin."""
+    if user.platform_role != "admin" or not user.is_active:
+        return False
+    return not any(
+        candidate.user_id != user.user_id
+        and candidate.platform_role == "admin"
+        and candidate.is_active
+        for candidate in store.list_users()
+    )
+
+
 def build_password_credential(*, user_id: str, password_hash: str, algorithm: str, now: datetime | None = None) -> PasswordCredentialRecord:
     """Build a stored password credential record."""
     return PasswordCredentialRecord(

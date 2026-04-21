@@ -181,6 +181,89 @@ class UserAdminApiTestCase(unittest.TestCase):
         self.assertEqual(status_session, 200)
         self.assertEqual(session["user"]["username"], "forgotten")
 
+    def test_admin_can_delete_user_and_core_access_state(self) -> None:
+        state = bootstrap_platform_state(start_path=self.make_repo_root())
+        app = PlatformHost(state, start_path=state.repository_root)
+        admin_cookie = self.login(app)
+        status_workspace, workspace, _workspace_headers = self.invoke(
+            app,
+            path="/api/workspaces",
+            method="POST",
+            body={"name": "Delete Target"},
+            cookie=admin_cookie,
+        )
+        status_create, created, _create_headers = self.invoke(
+            app,
+            path="/api/admin/users",
+            method="POST",
+            body={"username": "delete-me", "password": "delete-password", "platform_role": "member"},
+            cookie=admin_cookie,
+        )
+        self.invoke(
+            app,
+            path=f"/api/admin/users/{created['user_id']}/workspaces",
+            method="PUT",
+            body={"memberships": [{"workspace_id": workspace["workspace_id"], "role": "member"}]},
+            cookie=admin_cookie,
+        )
+        deleted_user_cookie = self.login(app, username="delete-me", password="delete-password")
+
+        status_delete, deleted, _delete_headers = self.invoke(
+            app,
+            path=f"/api/admin/users/{created['user_id']}",
+            method="DELETE",
+            cookie=admin_cookie,
+        )
+        status_session, session, _session_headers = self.invoke(app, path="/api/session", cookie=deleted_user_cookie)
+        status_login, login_payload, _login_headers = self.invoke(
+            app,
+            path="/api/auth/login",
+            method="POST",
+            body={"username": "delete-me", "password": "delete-password"},
+        )
+
+        self.assertEqual(status_workspace, 201)
+        self.assertEqual(status_create, 201)
+        self.assertEqual(status_delete, 200)
+        self.assertEqual(deleted["status"], "deleted")
+        self.assertEqual(state.workspace_store.list_memberships_for_user(created["user_id"]), [])
+        self.assertIsNone(state.workspace_store.get_active_workspace(created["user_id"]))
+        self.assertEqual(status_session, 200)
+        self.assertFalse(session["authenticated"])
+        self.assertEqual(status_login, 401)
+        self.assertEqual(login_payload["error"], "invalid_credentials")
+
+    def test_admin_cannot_delete_self_or_final_active_admin(self) -> None:
+        state = bootstrap_platform_state(start_path=self.make_repo_root())
+        app = PlatformHost(state, start_path=state.repository_root)
+        admin_cookie = self.login(app)
+
+        status_self, self_delete, _self_headers = self.invoke(
+            app,
+            path="/api/admin/users/user:admin",
+            method="DELETE",
+            cookie=admin_cookie,
+        )
+        self.invoke(
+            app,
+            path="/api/admin/users",
+            method="POST",
+            body={"username": "member-to-promote", "password": "member-password", "platform_role": "member"},
+            cookie=admin_cookie,
+        )
+        status_demote, _demote, _demote_headers = self.invoke(
+            app,
+            path="/api/admin/users/user:admin",
+            method="PATCH",
+            body={"platform_role": "member"},
+            cookie=admin_cookie,
+        )
+
+        self.assertEqual(status_self, 400)
+        self.assertEqual(self_delete["error"], "cannot_delete_current_user")
+        self.assertEqual(status_demote, 400)
+        self.assertEqual(_demote["error"], "cannot_remove_last_admin")
+
     def test_member_cannot_use_admin_api_or_see_admin_app(self) -> None:
         state = bootstrap_platform_state(start_path=self.make_repo_root())
         app = PlatformHost(state, start_path=state.repository_root)

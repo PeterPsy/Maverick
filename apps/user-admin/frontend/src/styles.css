@@ -480,6 +480,16 @@ button.ua-secondary:hover {
   background: rgba(255, 255, 255, 0.11);
 }
 
+button.ua-danger {
+  border: 1px solid rgba(255, 116, 116, 0.38);
+  background: rgba(167, 35, 35, 0.28);
+  color: #ffd7d7;
+}
+
+button.ua-danger:hover {
+  background: rgba(194, 42, 42, 0.38);
+}
+
 @media (max-width: 980px) {
   .ua-shell {
     grid-template-columns: 1fr;

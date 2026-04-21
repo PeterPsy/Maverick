@@ -29,6 +29,9 @@ class MongoCollection(Protocol):
     def update_one(self, query: dict[str, Any], update: dict[str, Any], *, upsert: bool = False) -> Any:
         ...
 
+    def delete_one(self, query: dict[str, Any]) -> Any:
+        ...
+
 
 class WorkspaceStore(Protocol):
     """Persistence contract for workspace-domain records."""
@@ -57,6 +60,9 @@ class WorkspaceStore(Protocol):
     def list_memberships_for_workspace(self, workspace_id: str) -> list[WorkspaceMembershipRecord]:
         ...
 
+    def delete_memberships_for_user(self, user_id: str) -> None:
+        ...
+
     def save_governance(self, record: WorkspaceGovernanceRecord) -> WorkspaceGovernanceRecord:
         ...
 
@@ -73,6 +79,9 @@ class WorkspaceStore(Protocol):
         ...
 
     def get_active_workspace(self, user_id: str) -> ActiveWorkspaceSelection | None:
+        ...
+
+    def delete_active_workspace(self, user_id: str) -> None:
         ...
 
 
@@ -138,6 +147,13 @@ class MongoWorkspaceStore:
             for document in self.collections.memberships.find({"workspace_id": workspace_id})
         ]
 
+    def delete_memberships_for_user(self, user_id: str) -> None:
+        documents = self.collections.memberships.find({"user_id": user_id})
+        for document in documents:
+            membership_id = document.get("membership_id")
+            if isinstance(membership_id, str):
+                self.collections.memberships.delete_one({"membership_id": membership_id})
+
     def save_governance(self, record: WorkspaceGovernanceRecord) -> WorkspaceGovernanceRecord:
         self.collections.governance.update_one(
             {"workspace_id": record.workspace_id},
@@ -179,6 +195,9 @@ class MongoWorkspaceStore:
         if document is None:
             return None
         return ActiveWorkspaceSelection(**document)
+
+    def delete_active_workspace(self, user_id: str) -> None:
+        self.collections.active_workspace_selections.delete_one({"user_id": user_id})
 
 
 def export_manifest_for_files(

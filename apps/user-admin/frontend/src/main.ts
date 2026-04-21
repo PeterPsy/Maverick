@@ -124,6 +124,17 @@ async function resetSelectedUserPassword(form: HTMLFormElement, user: User) {
   window.alert('Password aggiornata');
 }
 
+async function deleteSelectedUser(user: User) {
+  const label = user.display_name || user.username;
+  const confirmed = window.confirm(`Eliminare definitivamente ${label}? Verranno rimossi accesso, sessioni e assegnazioni workspace.`);
+  if (!confirmed) return;
+  await requestJson<{ status: string }>(`/api/admin/users/${encodeURIComponent(user.user_id)}`, {
+    method: 'DELETE'
+  });
+  selectedUserId = '';
+  await refresh();
+}
+
 async function updateMemberships(user: User) {
   const memberships = workspaces
     .map((workspace) => {
@@ -329,6 +340,10 @@ function render() {
               <span class="material-symbols-rounded" aria-hidden="true">password</span>
               Aggiorna password
             </button>
+            <button type="button" class="ua-danger" id="delete-user">
+              <span class="material-symbols-rounded" aria-hidden="true">person_remove</span>
+              Elimina utente
+            </button>
           </form>
           </div>
           <section class="ua-card">
@@ -382,6 +397,9 @@ function bindEvents() {
   document.getElementById('reset-password')?.addEventListener('submit', (event) => {
     event.preventDefault();
     if (user) resetSelectedUserPassword(event.currentTarget as HTMLFormElement, user).catch(showError);
+  });
+  document.getElementById('delete-user')?.addEventListener('click', () => {
+    if (user) deleteSelectedUser(user).catch(showError);
   });
   document.getElementById('save-memberships')?.addEventListener('click', () => {
     if (user) updateMemberships(user).catch(showError);

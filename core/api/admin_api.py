@@ -10,7 +10,7 @@ from core.api.http import StartResponse, json_response, read_json_body, status_l
 from core.api.platform_state import PlatformState
 from core.api.session_api import RequestSession, public_user_payload, require_session
 from core.identity.errors import UserNotFoundError
-from core.identity.service import UNSET, create_user, set_user_password, update_user
+from core.identity.service import UNSET, create_user, delete_user, is_last_active_admin, set_user_password, update_user
 from core.observability.service import record_platform_audit, record_platform_event
 from core.workspaces.errors import WorkspaceNotFoundError
 from core.workspaces.service import ensure_workspace_membership
@@ -119,13 +119,45 @@ def _handle_user_record(
     start_response: StartResponse,
 ) -> list[bytes]:
     try:
-        state.identity_store.get_user(user_id)
+        user = state.identity_store.get_user(user_id)
     except UserNotFoundError:
         return json_response(start_response, {"error": "user_not_found"}, status="404 Not Found")
     if method == "GET":
         return json_response(start_response, _user_payload(state, user_id))
+    if method == "DELETE":
+        if user_id == context.user.user_id:
+            return json_response(
+                start_response,
+                {"error": "cannot_delete_current_user"},
+                status="400 Bad Request",
+            )
+        if is_last_active_admin(state.identity_store, user):
+            return json_response(
+                start_response,
+                {"error": "cannot_delete_last_admin"},
+                status="400 Bad Request",
+            )
+        deleted = delete_user(state.identity_store, state.workspace_store, user_id=user_id)
+        _audit_admin_action(
+            state,
+            action="identity.user.delete",
+            actor_user_id=context.user.user_id,
+            target_user_id=user_id,
+            payload={"user_id": user_id, "username": deleted.username, "platform_role": deleted.platform_role},
+        )
+        return json_response(start_response, {"status": "deleted", "user_id": user_id})
     if method != "PATCH":
         return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")
+    target_platform_role = body["platform_role"] if "platform_role" in body else user.platform_role
+    target_is_active = bool(body["is_active"]) if "is_active" in body else user.is_active
+    if is_last_active_admin(state.identity_store, user) and (
+        target_platform_role != "admin" or not target_is_active
+    ):
+        return json_response(
+            start_response,
+            {"error": "cannot_remove_last_admin"},
+            status="400 Bad Request",
+        )
     try:
         updated = update_user(
             state.identity_store,

@@ -21,6 +21,9 @@ class MongoCollection(Protocol):
     def update_one(self, query: dict[str, Any], update: dict[str, Any], *, upsert: bool = False) -> Any:
         ...
 
+    def delete_one(self, query: dict[str, Any]) -> Any:
+        ...
+
 
 class IdentityStore(Protocol):
     """Persistence contract for identity-domain records."""
@@ -37,16 +40,25 @@ class IdentityStore(Protocol):
     def list_users(self) -> list[UserRecord]:
         ...
 
+    def delete_user(self, user_id: str) -> None:
+        ...
+
     def save_password_credential(self, record: PasswordCredentialRecord) -> PasswordCredentialRecord:
         ...
 
     def get_password_credential(self, user_id: str) -> PasswordCredentialRecord:
         ...
 
+    def delete_password_credential(self, user_id: str) -> None:
+        ...
+
     def save_auth_session(self, record: AuthSessionRecord) -> AuthSessionRecord:
         ...
 
     def get_auth_session(self, session_id: str) -> AuthSessionRecord:
+        ...
+
+    def delete_auth_sessions_for_user(self, user_id: str) -> None:
         ...
 
 
@@ -85,6 +97,9 @@ class MongoIdentityStore:
     def list_users(self) -> list[UserRecord]:
         return [UserRecord(**document) for document in self.collections.users.find({})]
 
+    def delete_user(self, user_id: str) -> None:
+        self.collections.users.delete_one({"user_id": user_id})
+
     def save_password_credential(self, record: PasswordCredentialRecord) -> PasswordCredentialRecord:
         payload = asdict(record)
         self.collections.credentials.update_one({"user_id": record.user_id}, {"$set": payload}, upsert=True)
@@ -96,6 +111,9 @@ class MongoIdentityStore:
             raise UserNotFoundError(f"No password credential exists for user `{user_id}`.")
         return PasswordCredentialRecord(**document)
 
+    def delete_password_credential(self, user_id: str) -> None:
+        self.collections.credentials.delete_one({"user_id": user_id})
+
     def save_auth_session(self, record: AuthSessionRecord) -> AuthSessionRecord:
         payload = asdict(record)
         self.collections.auth_sessions.update_one({"session_id": record.session_id}, {"$set": payload}, upsert=True)
@@ -106,3 +124,10 @@ class MongoIdentityStore:
         if document is None:
             raise SessionNotFoundError(f"Auth session `{session_id}` was not found.")
         return AuthSessionRecord(**document)
+
+    def delete_auth_sessions_for_user(self, user_id: str) -> None:
+        documents = self.collections.auth_sessions.find({"user_id": user_id})
+        for document in documents:
+            session_id = document.get("session_id")
+            if isinstance(session_id, str):
+                self.collections.auth_sessions.delete_one({"session_id": session_id})

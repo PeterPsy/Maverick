@@ -17,6 +17,8 @@ from store import (
     reference_from_payload,
     rename_file_payload,
     seed_state,
+    clear_custom_view_payload,
+    set_custom_view_payload,
     set_view_filter_payload,
 )
 
@@ -58,7 +60,21 @@ def handle_action(data_root: Path, uploaded_root: Path, generated_root: Path, bo
             query=body.get("query") if "query" in body else None,
             role=body.get("role") if "role" in body else None,
             kind=body.get("kind") if "kind" in body else None,
+            preserve_custom=bool(body.get("preserve_custom")),
         )
+    if action == "set_custom_view":
+        return 200, set_custom_view_payload(
+            data_root=data_root,
+            title=body.get("title"),
+            file_ids=body.get("file_ids"),
+            workspace_relative_paths=body.get("workspace_relative_paths"),
+            files=body.get("files"),
+            query=body.get("query") if "query" in body else None,
+            role=body.get("role") if "role" in body else None,
+            kind=body.get("kind") if "kind" in body else None,
+        )
+    if action == "clear_custom_view":
+        return 200, clear_custom_view_payload(data_root=data_root)
     if action == "read_file":
         role, relative_path = reference_from_payload(
             role=str(body.get("role") or ""),

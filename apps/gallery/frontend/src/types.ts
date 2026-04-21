@@ -26,9 +26,13 @@ export type GalleryFile = {
 };
 
 export type GalleryViewFilter = {
+  mode: 'search' | 'custom';
+  title: string;
   query: string;
   role: FileRole | 'all';
   kind: PreviewKind | 'all';
+  file_ids: string[];
+  workspace_relative_paths: string[];
   updated_at: string;
 };
 

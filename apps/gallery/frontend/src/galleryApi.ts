@@ -24,8 +24,16 @@ export function loadViewFilter() {
   return callBackend<{ state: CatalogPayload['state'] }>({ action: 'view_filter' });
 }
 
-export function setViewFilter(filter: Partial<Pick<GalleryViewFilter, 'query' | 'role' | 'kind'>>) {
+export function setViewFilter(filter: Partial<Pick<GalleryViewFilter, 'query' | 'role' | 'kind'>> & { preserve_custom?: boolean }) {
   return callBackend<{ state: CatalogPayload['state'] }>({ action: 'set_view_filter', ...filter });
+}
+
+export function setCustomView(view: Pick<GalleryViewFilter, 'title' | 'file_ids' | 'workspace_relative_paths'> & Partial<Pick<GalleryViewFilter, 'query' | 'role' | 'kind'>>) {
+  return callBackend<{ state: CatalogPayload['state'] }>({ action: 'set_custom_view', ...view });
+}
+
+export function clearCustomView() {
+  return callBackend<{ state: CatalogPayload['state'] }>({ action: 'clear_custom_view' });
 }
 
 export async function readFile(file: GalleryFile, maxBytes: number) {

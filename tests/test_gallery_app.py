@@ -176,6 +176,54 @@ class GalleryAppTestCase(unittest.TestCase):
             self.assertTrue(catalog["json"]["state"]["view_filter"]["updated_at"])
             self.assertEqual(rejected["status_code"], 400)
 
+    def test_backend_persists_custom_view_for_explicit_file_sets(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data_root = root / "data" / "gallery"
+            uploaded_root = root / "storage" / "uploaded"
+            generated_root = root / "storage" / "generated"
+
+            custom = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={
+                    "action": "set_custom_view",
+                    "title": "Topic: Versy",
+                    "file_ids": ["generated:versy_company_profile.docx"],
+                    "workspace_relative_paths": ["storage/uploaded/logo/Logo.png"],
+                },
+            )
+            refined = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={"action": "set_view_filter", "query": "deck", "preserve_custom": True},
+            )
+            cleared = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={"action": "clear_custom_view"},
+            )
+            rejected = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={"action": "set_custom_view", "file_ids": ["generated:../secret.txt"]},
+            )
+
+            self.assertEqual(custom["status_code"], 200)
+            view = custom["json"]["state"]["view_filter"]
+            self.assertEqual(view["mode"], "custom")
+            self.assertEqual(view["title"], "Topic: Versy")
+            self.assertEqual(view["file_ids"], ["generated:versy_company_profile.docx"])
+            self.assertEqual(view["workspace_relative_paths"], ["storage/uploaded/logo/Logo.png"])
+            self.assertEqual(refined["json"]["state"]["view_filter"]["mode"], "custom")
+            self.assertEqual(refined["json"]["state"]["view_filter"]["query"], "deck")
+            self.assertEqual(cleared["json"]["state"]["view_filter"]["mode"], "search")
+            self.assertEqual(rejected["status_code"], 400)
+
     def test_backend_rejects_path_traversal_when_reading_file(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -456,6 +504,36 @@ class GalleryAppTestCase(unittest.TestCase):
         self.assertEqual(view_filter["status_code"], 200)
         self.assertEqual(view_filter["state"]["view_filter"]["query"], "Versy")
         self.assertNotIn("files", view_filter)
+
+    def test_cli_can_set_gallery_custom_view(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+
+        custom = run_core_cli_command(
+            command_id="app.gallery.gallery",
+            context=CliInvocationContext(
+                caller_kind="sandbox_agent",
+                workspace_id="default",
+                agent_id="tester",
+                effective_mode="sandbox",
+            ),
+            arguments={
+                "action": "set_custom_view",
+                "title": "Topic files",
+                "file_ids": ["generated:memory_app_checklist.md", "generated:versy_company_profile.docx"],
+            },
+            app_store=state.app_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+
+        self.assertEqual(custom["status_code"], 200)
+        self.assertEqual(custom["state"]["view_filter"]["mode"], "custom")
+        self.assertEqual(custom["state"]["view_filter"]["title"], "Topic files")
+        self.assertEqual(
+            custom["state"]["view_filter"]["file_ids"],
+            ["generated:memory_app_checklist.md", "generated:versy_company_profile.docx"],
+        )
 
 
 if __name__ == "__main__":

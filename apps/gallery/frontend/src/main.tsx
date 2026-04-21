@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { decodeBase64, deleteFile, loadCatalog, loadViewFilter, readFile, renameFile, setViewFilter } from './galleryApi';
+import { clearCustomView, decodeBase64, deleteFile, loadCatalog, loadViewFilter, readFile, renameFile, setViewFilter } from './galleryApi';
 import { canInlinePreview, canTextPreview, FileCardPreview, GalleryPreview } from './filePreview';
 import { formatBytes, kindLabels, roleLabels } from './galleryMeta';
 import { loadFullPreview } from './previewCache';
@@ -15,10 +15,15 @@ const viewKinds = new Set<PreviewKind | 'all'>(['all', 'image', 'video', 'audio'
 function normalizedViewFilter(filter?: Partial<GalleryViewFilter>): GalleryViewFilter {
   const role = filter?.role === 'generated' || filter?.role === 'uploaded' ? filter.role : 'all';
   const kind = filter?.kind && viewKinds.has(filter.kind) ? filter.kind : 'all';
+  const mode = filter?.mode === 'custom' ? 'custom' : 'search';
   return {
+    mode,
+    title: filter?.title || '',
     query: filter?.query || '',
     role,
     kind,
+    file_ids: Array.isArray(filter?.file_ids) ? filter.file_ids : [],
+    workspace_relative_paths: Array.isArray(filter?.workspace_relative_paths) ? filter.workspace_relative_paths : [],
     updated_at: filter?.updated_at || ''
   };
 }
@@ -61,6 +66,10 @@ function App() {
   const [activeRole, setActiveRole] = useState<FileRole | 'all'>('all');
   const [query, setQuery] = useState('');
   const [kind, setKind] = useState('all');
+  const [viewMode, setViewMode] = useState<'search' | 'custom'>('search');
+  const [customTitle, setCustomTitle] = useState('');
+  const [customFileIds, setCustomFileIds] = useState<string[]>([]);
+  const [customWorkspacePaths, setCustomWorkspacePaths] = useState<string[]>([]);
   const [previewUrl, setPreviewUrl] = useState('');
   const [previewText, setPreviewText] = useState('');
   const [renameValue, setRenameValue] = useState('');
@@ -72,6 +81,10 @@ function App() {
   function applyRemoteViewFilter(filter: GalleryViewFilter) {
     if (viewFilterPendingRef.current || filter.updated_at === viewFilterUpdatedAtRef.current) return;
     viewFilterUpdatedAtRef.current = filter.updated_at;
+    setViewMode(filter.mode);
+    setCustomTitle(filter.title);
+    setCustomFileIds(filter.file_ids);
+    setCustomWorkspacePaths(filter.workspace_relative_paths);
     setQuery(filter.query);
     setActiveRole(filter.role);
     setKind(filter.kind);
@@ -107,7 +120,7 @@ function App() {
     viewFilterPendingRef.current = true;
     if (viewFilterWriteRef.current !== null) window.clearTimeout(viewFilterWriteRef.current);
     viewFilterWriteRef.current = window.setTimeout(() => {
-      setViewFilter({ query: next.query, role: next.role, kind: next.kind })
+      setViewFilter({ query: next.query, role: next.role, kind: next.kind, preserve_custom: viewMode === 'custom' })
         .then((payload) => {
           const remote = normalizedViewFilter(payload.state.view_filter);
           viewFilterUpdatedAtRef.current = remote.updated_at;
@@ -120,21 +133,34 @@ function App() {
     }, 250);
   }
 
+  function clearCustomFileView() {
+    clearCustomView()
+      .then((payload) => applyRemoteViewFilter(normalizedViewFilter(payload.state.view_filter)))
+      .catch((err: Error) => setError(err.message));
+  }
+
+  const customScopedFiles = useMemo(() => {
+    const customIds = new Set(customFileIds);
+    const customPaths = new Set(customWorkspacePaths);
+    if (viewMode !== 'custom') return files;
+    return files.filter((file) => customIds.has(file.id) || customPaths.has(file.workspace_relative_path));
+  }, [customFileIds, customWorkspacePaths, files, viewMode]);
+
   const filteredFiles = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return files.filter((file) => {
+    return customScopedFiles.filter((file) => {
       const roleMatch = activeRole === 'all' || file.role === activeRole;
       const kindMatch = kind === 'all' || file.preview_kind === kind;
       const textMatch = !needle || `${file.name} ${file.workspace_relative_path} ${file.content_type}`.toLowerCase().includes(needle);
       return roleMatch && kindMatch && textMatch;
     });
-  }, [activeRole, files, kind, query]);
+  }, [activeRole, customScopedFiles, kind, query]);
 
   const stats = useMemo(() => ({
-    all: files.length,
-    generated: files.filter((file) => file.role === 'generated').length,
-    uploaded: files.filter((file) => file.role === 'uploaded').length
-  }), [files]);
+    all: customScopedFiles.length,
+    generated: customScopedFiles.filter((file) => file.role === 'generated').length,
+    uploaded: customScopedFiles.filter((file) => file.role === 'uploaded').length
+  }), [customScopedFiles]);
 
   useEffect(() => {
     setPreviewText('');
@@ -217,6 +243,17 @@ function App() {
 
       {error ? <div className="gallery-error">{error}</div> : null}
 
+      {viewMode === 'custom' ? (
+        <section className="custom-view-bar" aria-label="Custom Gallery view">
+          <div>
+            <span className="material-symbols-rounded" aria-hidden="true">filter_list</span>
+            <strong>{customTitle || 'Custom file view'}</strong>
+            <small>{filteredFiles.length} visible files from {customFileIds.length + customWorkspacePaths.length} selected references</small>
+          </div>
+          <button type="button" onClick={clearCustomFileView}>Clear custom view</button>
+        </section>
+      ) : null}
+
       <section className="gallery-grid" aria-label="Workspace gallery">
         {filteredFiles.map((file) => (
           <FileCard
@@ -228,7 +265,7 @@ function App() {
             onDelete={() => removeFile(file).catch((err: Error) => setError(err.message))}
           />
         ))}
-        {!filteredFiles.length ? <div className="empty-state">No files in workspace storage yet.</div> : null}
+        {!filteredFiles.length ? <div className="empty-state">{viewMode === 'custom' ? 'No files from this custom view are currently available.' : 'No files in workspace storage yet.'}</div> : null}
       </section>
 
       {selectedFile ? (

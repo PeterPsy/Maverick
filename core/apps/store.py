@@ -20,6 +20,7 @@ from core.apps.models import (
     AppHookTimeouts,
     AppLifecycleDeclaration,
     AppCompatibilityDescriptor,
+    AppReferenceEntityDeclaration,
     AppRollbackSupport,
     AppSourceRecord,
     AppStorageDeclaration,
@@ -102,6 +103,11 @@ class MongoAppStore:
         self.collections = collections
 
     def _app_contract(self, payload: dict[str, Any]) -> AppContractDescriptor:
+        capabilities_payload = dict(payload["capabilities"])
+        capabilities_payload["reference_entities"] = [
+            AppReferenceEntityDeclaration(**entity)
+            for entity in capabilities_payload.get("reference_entities", [])
+        ]
         return AppContractDescriptor(
             distribution=AppDistributionDeclaration(**payload["distribution"]),
             visibility=AppVisibilityDeclaration(**payload.get("visibility", {"platform_roles": None})),
@@ -116,7 +122,7 @@ class MongoAppStore:
                     ),
                 }
             ),
-            capabilities=AppCapabilities(**payload["capabilities"]),
+            capabilities=AppCapabilities(**capabilities_payload),
             lifecycle=AppLifecycleDeclaration(**payload["lifecycle"]),
             entrypoints=AppEntrypoints(**payload["entrypoints"]),
             hook_timeouts=AppHookTimeouts(**payload["hook_timeouts"]),

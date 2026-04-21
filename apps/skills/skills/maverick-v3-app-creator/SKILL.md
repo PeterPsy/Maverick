@@ -23,8 +23,10 @@ Before proposing a plan or changing files, read:
 4. `/home/ubuntu/maverick-v3/docs/architecture/core_architecture.md`
 5. `/home/ubuntu/maverick-v3/docs/architecture/app_contract_architecture.md`
 6. `/home/ubuntu/maverick-v3/docs/architecture/workspace_root_architecture.md`
-7. Current examples under `/home/ubuntu/maverick-v3/apps`, especially apps with similar declared surfaces.
-8. Relevant core mounting code for the chosen surfaces, usually `core/apps`, `core/api/app_mounts.py`, `core/api/app_registry.py`, `core/cli`, `core/mcp`, `core/skills`, `core/runtime`, `core/secrets`, and `core/observability`.
+7. `/home/ubuntu/maverick-v3/docs/architecture/app_sdk_architecture.md`
+8. `/home/ubuntu/maverick-v3/docs/app-sdk/getting_started.md`
+9. Current examples under `/home/ubuntu/maverick-v3/apps`, especially apps with similar declared surfaces.
+10. Relevant core mounting code for the chosen surfaces, usually `core/apps`, `core/app_sdk`, `core/api/app_mounts.py`, `core/api/app_registry.py`, `core/cli`, `core/mcp`, `core/skills`, `core/runtime`, `core/secrets`, and `core/observability`.
 
 ## Required Inputs
 
@@ -40,6 +42,7 @@ Clarify or infer these before implementation. If any requirement is still produc
 - runtime/provider needs, if any
 - permissions or execution policy expectations
 - expected verification: unit tests, frontend build, smoke tests, CLI/MCP invocation, runtime checks
+- whether the official App SDK template should be used: `minimal`, `frontend-backend`, `agent-tool`, `data-app`, or `widget`
 
 ## Core Boundary Rules
 
@@ -52,6 +55,42 @@ Clarify or infer these before implementation. If any requirement is still produc
 - Do not add branches like `if app_id == "<new-app>"` in core.
 - If the app needs a missing generic capability, add a generic core surface or document the gap in `IMPLEMENTATION_TASKLIST.md`.
 - If behavior is app-specific, implement it inside the app.
+
+## Official App SDK First
+
+For brand-new workspace-local apps, prefer the official Maverick App SDK unless the requested app requires a surface or structure the SDK does not yet support.
+
+Use the SDK to create the initial source tree, validate the contract, register/install workspace-local apps, inspect status, and package valid app source:
+
+```text
+core.app-sdk.create
+core.app-sdk.validate
+core.app-sdk.register-local
+core.app-sdk.install-local
+core.app-sdk.status
+core.app-sdk.package
+```
+
+Initial SDK templates:
+
+- `minimal`
+- `frontend-backend`
+- `agent-tool`
+- `data-app`
+- `widget`
+
+Recommended flow for an immediately usable workspace-local app:
+
+1. Generate the app with `core.app-sdk.create`.
+2. Replace scaffold behavior with real product behavior.
+3. Keep `app_contract.json` aligned with the real implemented surfaces.
+4. Validate with `core.app-sdk.validate`.
+5. Register with `core.app-sdk.register-local`.
+6. Install with `core.app-sdk.install-local`.
+7. Verify with `core.app-sdk.status`, `/api/status`, `/api/apps`, mounted frontend/backend checks, and CLI/MCP listings when declared.
+8. Package with `core.app-sdk.package` when a generated artifact is useful.
+
+Do not leave SDK scaffold behavior in place when the user asked for a real app. The SDK gives the correct v3 shape; the app still needs real domain behavior, UI, storage, tests, and smoke verification.
 
 ## Installation Is Required
 
@@ -103,14 +142,16 @@ A workspace-local app has three distinct states:
 
 Keep these states explicit in the implementation summary.
 
-Until a stable core CLI exists, use the core service functions directly in tests or a focused repository script only when necessary.
+Use the official SDK CLI registry commands when available:
 
-Preferred future CLI shape:
-
-```bash
-maverick apps register-local --workspace <workspace_id> --path workspaces/<workspace_id>/apps/<app_id>
-maverick apps install-local --workspace <workspace_id> --app <app_id>
+```text
+core.app-sdk.validate
+core.app-sdk.register-local
+core.app-sdk.install-local
+core.app-sdk.status
 ```
+
+Use the core service functions directly in tests or focused repository scripts only when the hosted CLI/API surface is not available for the current environment.
 
 Do not implement app-specific registration shortcuts.
 
@@ -217,13 +258,14 @@ For non-trivial apps, produce a short plan before coding.
 
 1. Define the app's product scope in one paragraph.
 2. Decide declared surfaces and explicitly exclude surfaces that are not needed.
-3. Design `app_contract.json` before implementation.
-4. Define the workspace data layout and schema version.
-5. Identify generic core gaps separately from app work.
-6. Choose the smallest useful app structure.
-7. Define tests and smoke checks before or alongside implementation.
-8. Define the generic registration/install/enable verification for the app's distribution mode.
-9. Include docs and `IMPLEMENTATION_TASKLIST.md` updates in the same change.
+3. Select the closest SDK template or explain why the SDK is not appropriate.
+4. Design `app_contract.json` before implementation.
+5. Define the workspace data layout and schema version.
+6. Identify generic core gaps separately from app work.
+7. Choose the smallest useful app structure.
+8. Define tests and smoke checks before or alongside implementation.
+9. Define the generic registration/install/enable verification for the app's distribution mode.
+10. Include docs and `IMPLEMENTATION_TASKLIST.md` updates in the same change.
 
 ## Target App Structure
 
@@ -265,6 +307,8 @@ apps/<app_id>/
 
 For smaller apps, omit unused surfaces. Do not create empty ceremony.
 
+When using an SDK-generated workspace-local app, the generated starter tree is acceptable as the initial structure. Remove unused generated surfaces if the final app does not actually implement them.
+
 ## Contract-First Rules
 
 `app_contract.json` is the source of truth for executable app metadata.
@@ -278,12 +322,15 @@ Before coding an entrypoint:
 - include build output for built-in mounted frontend apps when the contract points to `frontend/dist`
 - keep `storage.primary_paths` aligned with the real workspace data layout
 - set lifecycle booleans honestly
+- after SDK generation, re-run validation whenever `app_contract.json` or declared entrypoints change
 
 Do not declare MCP, CLI, skills, hooks, widgets, export/import, or frontend if the app does not actually implement them.
 
 ## Backend Pattern
 
 App backend entrypoints are JSON stdin/stdout scripts executed by the core.
+
+For SDK-generated apps, prefer `core.app_sdk.runtime` for JSON payload parsing and response emission, and `core.app_sdk.storage` for safe app data paths.
 
 Use this shape:
 
@@ -356,6 +403,8 @@ If the app exposes skills:
 
 For first implementations, prefer simple JSON or markdown where it is enough.
 
+For SDK-generated apps, use `core.app_sdk.storage.safe_app_data_path`, `read_json_state`, `write_json_state`, or `ensure_json_state` instead of ad hoc path concatenation.
+
 Recommended layout:
 
 ```text
@@ -380,10 +429,13 @@ Default to focused tests for contracts, path rules, store behavior, and entrypoi
 Useful test categories:
 
 - contract parses under `parse_app_contract_file`
+- SDK-generated source validates with `core.app-sdk.validate` when the SDK is used
 - built-in or store app registers from its contract and creates an enabled workspace binding when intended for immediate use
 - workspace-local app is registered with `register_workspace_local_app_project_from_contract`
+- workspace-local app registers with `core.app-sdk.register-local` when using the SDK flow
 - `/api/app-store/installations` reports registered workspace-local app in `local_apps`
 - workspace-local app can be installed with `install_workspace_local_app` when requested
+- workspace-local app installs with `core.app-sdk.install-local` when using the SDK flow
 - `/api/app-store/installations` and/or `/api/apps` reports the app as installed/enabled for the target workspace
 - install hook creates expected data under `data/<app_id>`
 - seed is idempotent
@@ -427,6 +479,14 @@ npm --prefix apps/<app_id> run build
 python3 -m unittest discover -s tests -p 'test_*.py'
 ```
 
+SDK-flow checks:
+
+```text
+core.app-sdk.validate
+core.app-sdk.status
+core.app-sdk.package
+```
+
 If a command cannot run, state why in the final summary.
 
 ## Anti-Patterns
@@ -444,6 +504,7 @@ If a command cannot run, state why in the final summary.
 - committing `node_modules`, caches, temporary files, or local secrets
 - copying an existing app without re-evaluating product scope
 - leaving placeholder UI where a real workflow was requested
+- leaving SDK starter behavior in place after the user requested domain-specific app behavior
 - marking an app complete when only the contract or scaffold exists
 
 ## Definition Of Done
@@ -451,6 +512,7 @@ If a command cannot run, state why in the final summary.
 A new Maverick v3 app is done when:
 
 - `app_contract.json` is valid
+- if the SDK was used, the final app source validates after all domain edits
 - installation-level apps are registered from their contract and installed/enabled in the intended workspace when they should be immediately usable
 - workspace-local apps are registered in app-hosting control-plane records
 - apps that should be usable immediately are installed/enabled in their target workspace
@@ -464,4 +526,5 @@ A new Maverick v3 app is done when:
 - tests cover stable contract and storage behavior
 - docs and `IMPLEMENTATION_TASKLIST.md` are updated
 - final review removes stale files, dead code, and generated junk
+- SDK package output is produced when the user asked for a distributable artifact
 - a focused commit is created and pushed when implementation changes are made

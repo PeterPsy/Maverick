@@ -19,10 +19,15 @@ FILE_ROLES = {"uploaded", "generated"}
 VIEW_FILTER_ROLES = {"all", *FILE_ROLES}
 VIEW_FILTER_KINDS = {"all", "image", "video", "audio", "markdown", "text", "pdf", "document", "presentation", "spreadsheet", "file"}
 MAX_VIEW_QUERY_CHARS = 200
+MAX_TEXT_PREVIEW_CACHE_ENTRIES = 200
 
 
 def state_path(data_root: Path) -> Path:
     return data_root / "state.json"
+
+
+def text_preview_cache_path(data_root: Path) -> Path:
+    return data_root / "preview_cache.json"
 
 
 def seed_state(data_root: Path) -> dict:
@@ -218,7 +223,7 @@ def read_file_payload(*, role: str, relative_path: str, uploaded_root: Path, gen
     }
 
 
-def preview_text_payload(*, role: str, relative_path: str, uploaded_root: Path, generated_root: Path, max_chars: int) -> dict:
+def preview_text_payload(*, role: str, relative_path: str, uploaded_root: Path, generated_root: Path, data_root: Path, max_chars: int) -> dict:
     if max_chars <= 0 or max_chars > MAX_TEXT_PREVIEW_CHARS:
         raise GalleryValidationError(f"max_chars must be between 1 and {MAX_TEXT_PREVIEW_CHARS}.")
     path = resolve_storage_file(
@@ -229,7 +234,15 @@ def preview_text_payload(*, role: str, relative_path: str, uploaded_root: Path, 
     )
     root = storage_root_for_role(role=role, uploaded_root=uploaded_root, generated_root=generated_root).resolve()
     record = file_record(role=role, root=root, path=path.resolve())
-    return {"file": record, "preview_text": extract_text_preview(path, record["preview_kind"], max_chars)}
+    cache_key = _text_preview_cache_key(record, max_chars)
+    cache = _load_text_preview_cache(data_root)
+    cached = cache.get(cache_key)
+    if isinstance(cached, str):
+        return {"file": record, "preview_text": cached, "cache_hit": True}
+    preview_text = extract_text_preview(path, record["preview_kind"], max_chars)
+    cache[cache_key] = preview_text
+    _write_text_preview_cache(data_root, cache)
+    return {"file": record, "preview_text": preview_text, "cache_hit": False}
 
 
 def file_info_payload(*, role: str, relative_path: str, uploaded_root: Path, generated_root: Path) -> dict:
@@ -241,6 +254,32 @@ def file_info_payload(*, role: str, relative_path: str, uploaded_root: Path, gen
     )
     root = storage_root_for_role(role=role, uploaded_root=uploaded_root, generated_root=generated_root).resolve()
     return {"file": file_record(role=role, root=root, path=path.resolve())}
+
+
+def _load_text_preview_cache(data_root: Path) -> dict:
+    path = text_preview_cache_path(data_root)
+    if not path.exists():
+        return {}
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    return payload if isinstance(payload, dict) else {}
+
+
+def _write_text_preview_cache(data_root: Path, cache: dict) -> None:
+    data_root.mkdir(parents=True, exist_ok=True)
+    entries = list(cache.items())[-MAX_TEXT_PREVIEW_CACHE_ENTRIES:]
+    text_preview_cache_path(data_root).write_text(json.dumps(dict(entries), indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _text_preview_cache_key(record: dict, max_chars: int) -> str:
+    return "|".join(
+        [
+            record["id"],
+            record["modified_at"],
+            str(record["size_bytes"]),
+            record["preview_kind"],
+            str(max_chars),
+        ]
+    )
 
 
 def rename_file_payload(*, role: str, relative_path: str, new_name: str, uploaded_root: Path, generated_root: Path) -> dict:

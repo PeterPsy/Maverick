@@ -298,10 +298,18 @@ class GalleryAppTestCase(unittest.TestCase):
                 generated_root=generated_root,
                 body={"action": "preview_text", "workspace_relative_path": "storage/generated/brief.docx"},
             )
+            cached_preview = self.run_backend(
+                data_root=root / "data" / "gallery",
+                uploaded_root=root / "storage" / "uploaded",
+                generated_root=generated_root,
+                body={"action": "preview_text", "workspace_relative_path": "storage/generated/brief.docx"},
+            )
 
             self.assertEqual(preview["status_code"], 200)
             self.assertEqual(preview["json"]["file"]["preview_kind"], "document")
             self.assertIn("Quarterly brief", preview["json"]["preview_text"])
+            self.assertFalse(preview["json"]["cache_hit"])
+            self.assertTrue(cached_preview["json"]["cache_hit"])
 
     def test_bootstrap_installs_gallery_and_exposes_surfaces(self) -> None:
         repo_root = self.make_repo_root()
@@ -413,6 +421,41 @@ class GalleryAppTestCase(unittest.TestCase):
         self.assertEqual(catalog["state"]["view_filter"]["query"], "Versy")
         self.assertEqual(catalog["state"]["view_filter"]["role"], "generated")
         self.assertEqual(catalog["state"]["view_filter"]["kind"], "document")
+
+    def test_cli_can_read_gallery_view_filter_without_catalog_scan(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+
+        run_core_cli_command(
+            command_id="app.gallery.gallery",
+            context=CliInvocationContext(
+                caller_kind="sandbox_agent",
+                workspace_id="default",
+                agent_id="tester",
+                effective_mode="sandbox",
+            ),
+            arguments={"action": "set_view_filter", "query": "Versy"},
+            app_store=state.app_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+        view_filter = run_core_cli_command(
+            command_id="app.gallery.gallery",
+            context=CliInvocationContext(
+                caller_kind="sandbox_agent",
+                workspace_id="default",
+                agent_id="tester",
+                effective_mode="sandbox",
+            ),
+            arguments={"action": "view_filter"},
+            app_store=state.app_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+
+        self.assertEqual(view_filter["status_code"], 200)
+        self.assertEqual(view_filter["state"]["view_filter"]["query"], "Versy")
+        self.assertNotIn("files", view_filter)
 
 
 if __name__ == "__main__":

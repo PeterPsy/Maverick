@@ -50,6 +50,8 @@ def handle_action(data_root: Path, uploaded_root: Path, generated_root: Path, bo
             "state": load_state(data_root),
             "files": list_files(uploaded_root=uploaded_root, generated_root=generated_root),
         }
+    if action == "view_filter":
+        return 200, {"state": load_state(data_root)}
     if action == "set_view_filter":
         return 200, set_view_filter_payload(
             data_root=data_root,
@@ -83,6 +85,7 @@ def handle_action(data_root: Path, uploaded_root: Path, generated_root: Path, bo
             relative_path=relative_path,
             uploaded_root=uploaded_root,
             generated_root=generated_root,
+            data_root=data_root,
             max_chars=max_chars,
         )
     if action == "file_info":

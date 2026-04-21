@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { decodeBase64, deleteFile, loadCatalog, readFile, readPreviewText, renameFile, setViewFilter } from './galleryApi';
+import { decodeBase64, deleteFile, loadCatalog, loadViewFilter, readFile, renameFile, setViewFilter } from './galleryApi';
 import { canInlinePreview, canTextPreview, FileCardPreview, GalleryPreview } from './filePreview';
 import { formatBytes, kindLabels, roleLabels } from './galleryMeta';
+import { loadFullPreview } from './previewCache';
 import type { FileRole, GalleryFile, GalleryViewFilter, PreviewKind } from './types';
 import './styles/main.css';
 
-const PREVIEW_BYTES = 8 * 1024 * 1024;
 const DOWNLOAD_BYTES = 100 * 1024 * 1024;
 const VIEW_SYNC_MS = 2000;
 
@@ -66,27 +66,37 @@ function App() {
   const [renameValue, setRenameValue] = useState('');
   const [error, setError] = useState('');
   const viewFilterUpdatedAtRef = useRef('');
+  const viewFilterWriteRef = useRef<number | null>(null);
+  const viewFilterPendingRef = useRef(false);
 
   function applyRemoteViewFilter(filter: GalleryViewFilter) {
-    if (filter.updated_at === viewFilterUpdatedAtRef.current && filter.query === query && filter.role === activeRole && filter.kind === kind) return;
+    if (viewFilterPendingRef.current || filter.updated_at === viewFilterUpdatedAtRef.current) return;
     viewFilterUpdatedAtRef.current = filter.updated_at;
     setQuery(filter.query);
     setActiveRole(filter.role);
     setKind(filter.kind);
   }
 
-  async function refresh(syncViewFilter = true) {
+  async function refresh() {
     const payload = await loadCatalog();
     setFiles(payload.files);
-    if (syncViewFilter) applyRemoteViewFilter(normalizedViewFilter(payload.state.view_filter));
+    applyRemoteViewFilter(normalizedViewFilter(payload.state.view_filter));
+  }
+
+  async function syncViewFilter() {
+    const payload = await loadViewFilter();
+    applyRemoteViewFilter(normalizedViewFilter(payload.state.view_filter));
   }
 
   useEffect(() => {
     refresh().catch((err: Error) => setError(err.message));
     const interval = window.setInterval(() => {
-      refresh().catch((err: Error) => setError(err.message));
+      syncViewFilter().catch((err: Error) => setError(err.message));
     }, VIEW_SYNC_MS);
-    return () => window.clearInterval(interval);
+    return () => {
+      window.clearInterval(interval);
+      if (viewFilterWriteRef.current !== null) window.clearTimeout(viewFilterWriteRef.current);
+    };
   }, []);
 
   function updateViewFilter(filter: Partial<Pick<GalleryViewFilter, 'query' | 'role' | 'kind'>>) {
@@ -94,12 +104,20 @@ function App() {
     setQuery(next.query);
     setActiveRole(next.role);
     setKind(next.kind);
-    setViewFilter(filter)
-      .then((payload) => {
-        const remote = normalizedViewFilter(payload.state.view_filter);
-        viewFilterUpdatedAtRef.current = remote.updated_at;
-      })
-      .catch((err: Error) => setError(err.message));
+    viewFilterPendingRef.current = true;
+    if (viewFilterWriteRef.current !== null) window.clearTimeout(viewFilterWriteRef.current);
+    viewFilterWriteRef.current = window.setTimeout(() => {
+      setViewFilter({ query: next.query, role: next.role, kind: next.kind })
+        .then((payload) => {
+          const remote = normalizedViewFilter(payload.state.view_filter);
+          viewFilterUpdatedAtRef.current = remote.updated_at;
+        })
+        .catch((err: Error) => setError(err.message))
+        .finally(() => {
+          viewFilterPendingRef.current = false;
+          viewFilterWriteRef.current = null;
+        });
+    }, 250);
   }
 
   const filteredFiles = useMemo(() => {
@@ -124,30 +142,15 @@ function App() {
     setRenameValue(selectedFile?.name || '');
     if (!selectedFile || (!canInlinePreview(selectedFile) && !canTextPreview(selectedFile))) return;
     let active = true;
-    let objectUrl = '';
-    const previewPromise = canInlinePreview(selectedFile)
-      ? readFile(selectedFile, PREVIEW_BYTES).then((payload) => ({ file: payload.file, content_base64: payload.content_base64, preview_text: '' }))
-      : readPreviewText(selectedFile, 12000).then((payload) => ({ file: payload.file, content_base64: '', preview_text: payload.preview_text }));
-    previewPromise
+    loadFullPreview(selectedFile)
       .then((payload) => {
         if (!active) return;
-        if (payload.preview_text) {
-          setPreviewText(payload.preview_text);
-          return;
-        }
-        if (!payload.content_base64) return;
-        const blob = decodeBase64(payload.content_base64, payload.file.content_type);
-        if (['text', 'markdown'].includes(payload.file.preview_kind)) {
-          blob.text().then((text) => active && setPreviewText(text));
-        } else {
-          objectUrl = URL.createObjectURL(blob);
-          setPreviewUrl(objectUrl);
-        }
+        setPreviewText(payload.text);
+        setPreviewUrl(payload.url);
       })
       .catch((err: Error) => active && setError(err.message));
     return () => {
       active = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [selectedFile]);
 

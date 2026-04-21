@@ -56,4 +56,5 @@ export type DeleteFilePayload = {
 export type PreviewTextPayload = {
   file: GalleryFile;
   preview_text: string;
+  cache_hit?: boolean;
 };

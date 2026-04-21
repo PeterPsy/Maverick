@@ -20,6 +20,10 @@ export function loadCatalog() {
   return callBackend<CatalogPayload>({ action: 'catalog' });
 }
 
+export function loadViewFilter() {
+  return callBackend<{ state: CatalogPayload['state'] }>({ action: 'view_filter' });
+}
+
 export function setViewFilter(filter: Partial<Pick<GalleryViewFilter, 'query' | 'role' | 'kind'>>) {
   return callBackend<{ state: CatalogPayload['state'] }>({ action: 'set_view_filter', ...filter });
 }

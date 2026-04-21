@@ -1,11 +1,7 @@
 import { useEffect, useState } from 'react';
-import { decodeBase64, readFile, readPreviewText } from './galleryApi';
 import { iconForKind, kindLabels } from './galleryMeta';
+import { loadCardPreview } from './previewCache';
 import type { GalleryFile } from './types';
-
-const CARD_PREVIEW_BYTES = 8 * 1024 * 1024;
-const TEXT_CARD_CHARS = 1600;
-const DOCUMENT_CARD_CHARS = 1200;
 
 export function canTextPreview(file: GalleryFile) {
   return ['text', 'markdown', 'document', 'presentation', 'spreadsheet'].includes(file.preview_kind);
@@ -52,18 +48,7 @@ export function FileCardPreview({ file }: { file: GalleryFile }) {
     setPreviewFailed(false);
     if (!canInlinePreview(file) && !canTextPreview(file)) return;
     let active = true;
-    let objectUrl = '';
-    const previewPromise = canInlinePreview(file)
-      ? readFile(file, CARD_PREVIEW_BYTES).then((payload) => {
-          const blob = decodeBase64(payload.content_base64, payload.file.content_type);
-          if (['text', 'markdown'].includes(payload.file.preview_kind)) {
-            return blob.text().then((text) => ({ text: text.slice(0, TEXT_CARD_CHARS), url: '' }));
-          }
-          objectUrl = URL.createObjectURL(blob);
-          return { text: '', url: objectUrl };
-        })
-      : readPreviewText(file, DOCUMENT_CARD_CHARS).then((payload) => ({ text: payload.preview_text, url: '' }));
-    previewPromise
+    loadCardPreview(file)
       .then((payload) => {
         if (!active) return;
         setPreviewText(payload.text);
@@ -71,10 +56,9 @@ export function FileCardPreview({ file }: { file: GalleryFile }) {
       })
       .catch(() => {
         if (active) setPreviewFailed(true);
-      });
+    });
     return () => {
       active = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [file]);
 

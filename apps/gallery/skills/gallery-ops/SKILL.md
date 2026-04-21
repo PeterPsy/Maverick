@@ -17,6 +17,7 @@ Prefer official Gallery MCP, CLI, or backend actions instead of walking these fo
 Common actions:
 
 - `catalog`: list uploaded and generated files with metadata.
+- `view_filter`: read the shared Gallery UI filter without scanning workspace storage.
 - `read_file`: read a specific file by `role` and `relative_path` for preview or download workflows.
 - `preview_text`: extract a text preview for text, Markdown, DOCX, PPTX, and XLSX files.
 - `set_view_filter`: update the shared Gallery UI filter with `query`, `role`, and `kind` so the frontend can show the filtered view.

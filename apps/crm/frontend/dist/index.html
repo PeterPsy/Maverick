@@ -191,7 +191,7 @@
       </aside>
     </div>
     <script>
-      const state = { view: 'accounts', recent: null, selected: null, search: '' };
+      const state = { view: 'accounts', recent: null, selected: null, search: '', viewFilter: null };
       const plural = { account: 'accounts', contact: 'contacts', deal: 'deals', activity: 'activities' };
       const singular = { accounts: 'account', contacts: 'contact', deals: 'deal', activities: 'activity' };
       const stages = ['lead', 'qualification', 'proposal', 'won'];
@@ -244,10 +244,19 @@
         pipeline.hidden = state.view !== 'pipeline';
         list.innerHTML = '';
         if (!state.recent) return;
+        if (state.view === 'custom') {
+          const items = ['accounts', 'contacts', 'deals', 'activities'].flatMap((key) => (state.recent[key] || []).map((item) => ({ ...item, _entity_type: singular[key] })));
+          const title = state.viewFilter?.title || 'Custom CRM view';
+          document.getElementById('view-title').textContent = title;
+          document.getElementById('view-subtitle').textContent = `${items.length} curated CRM records`;
+          items.forEach((item) => list.appendChild(renderRecord(item._entity_type, item)));
+          return;
+        }
         if (state.view === 'pipeline') return renderPipeline();
         const type = singular[state.view];
         const items = state.recent[state.view] || [];
         document.getElementById('view-title').textContent = state.view[0].toUpperCase() + state.view.slice(1);
+        document.getElementById('view-subtitle').textContent = 'Structured business entities for agents and Memory.';
         items.forEach((item) => list.appendChild(renderRecord(type, item)));
       }
 
@@ -267,11 +276,28 @@
       }
 
       async function refresh() {
-        const payload = await callCrm({ action: 'list_recent', limit: 80 });
-        state.recent = payload;
+        const viewState = await callCrm({ action: 'view_filter' });
+        state.viewFilter = viewState.state?.view_filter || null;
+        if (state.viewFilter?.mode === 'custom') {
+          state.view = 'custom';
+          state.recent = { accounts: [], contacts: [], deals: [], activities: [] };
+          for (const ref of state.viewFilter.refs || []) {
+            try {
+              const payload = await callCrm({ action: 'get', entity_type: ref.entity_type, entity_id: ref.entity_id });
+              state.recent[plural[ref.entity_type]].push(payload.entity);
+            } catch {
+              // Ignore stale refs; the owning backend remains the source of truth.
+            }
+          }
+        } else {
+          const payload = await callCrm({ action: 'list_recent', limit: 80 });
+          state.recent = payload;
+          if (state.view === 'custom') state.view = 'accounts';
+        }
         ['accounts', 'contacts', 'deals', 'activities'].forEach((key) => {
-          document.getElementById(`count-${key}`).textContent = payload[key]?.length || 0;
+          document.getElementById(`count-${key}`).textContent = state.recent[key]?.length || 0;
         });
+        document.querySelectorAll('.tab').forEach((item) => item.classList.toggle('active', item.dataset.view === state.view));
         renderList();
       }
 

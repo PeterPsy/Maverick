@@ -968,6 +968,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
 - [x] Implement CRM CLI surface for compact agent operations
 - [x] Implement CRM MCP surface with shared service behavior
 - [x] Implement CRM reference manifest, search, resolve, and summarize tools for Memory links
+- [x] Declare and implement CRM view composition actions for custom account/contact/deal/activity views
 - [x] Implement CRM skill template under `apps/crm/skills/crm-ops`
 - [x] Implement initial CRM operator frontend under `apps/crm/frontend/dist`
 - [x] Add CRM app tests for contract parsing, lifecycle hooks, backend behavior, CLI/MCP entrypoints, and core-mounted end-to-end usage

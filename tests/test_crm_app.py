@@ -62,6 +62,13 @@ class CrmAppTestCase(unittest.TestCase):
             [item.entity_type for item in parsed.contract.capabilities.reference_entities],
             ["account", "contact", "deal", "activity"],
         )
+        surface = parsed.contract.capabilities.view_surfaces[0]
+        self.assertEqual(surface.view_id, "crm")
+        self.assertEqual(surface.entity_types, ["account", "contact", "deal", "activity"])
+        actions = {item.action: item for item in surface.state_actions}
+        self.assertTrue(actions["set_custom_view"].standard)
+        self.assertTrue(actions["set_view_filter"].standard)
+        self.assertTrue(surface.supports_custom_view)
 
     def test_install_hook_is_idempotent_and_creates_schema(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -143,6 +150,49 @@ class CrmAppTestCase(unittest.TestCase):
             self.assertEqual(resolved["title"], "Bando X")
             self.assertIn("allegati economici", summary["summary"])
 
+    def test_backend_persists_crm_view_surface_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "crm"
+            account = self.run_backend(data_root, {"action": "create_account", "name": "Acme Spa"})["json"]["account"]
+            deal = self.run_backend(data_root, {"action": "create_deal", "name": "Bando X", "stage": "qualification"})["json"]["deal"]
+
+            filtered = self.run_backend(
+                data_root,
+                {"action": "set_view_filter", "query": "bando", "entity_type": "deal"},
+            )
+            custom = self.run_backend(
+                data_root,
+                {
+                    "action": "set_custom_view",
+                    "title": "Acme pursuit",
+                    "refs": [
+                        {"app_id": "crm", "entity_type": "account", "entity_id": account["id"]},
+                        {"app_id": "crm", "entity_type": "deal", "entity_id": deal["id"]},
+                    ],
+                },
+            )
+            view = self.run_backend(data_root, {"action": "view_filter"})
+            cleared = self.run_backend(data_root, {"action": "clear_custom_view"})
+            rejected = self.run_backend(
+                data_root,
+                {"action": "set_custom_view", "refs": [{"app_id": "gmail-app", "entity_type": "thread", "entity_id": "thread_1"}]},
+            )
+
+            self.assertEqual(filtered["json"]["state"]["view_filter"]["query"], "bando")
+            self.assertEqual(filtered["json"]["state"]["view_filter"]["entity_type"], "deal")
+            self.assertEqual(custom["json"]["state"]["view_filter"]["mode"], "custom")
+            self.assertEqual(custom["json"]["state"]["view_filter"]["title"], "Acme pursuit")
+            self.assertEqual(
+                custom["json"]["state"]["view_filter"]["refs"],
+                [
+                    {"entity_type": "account", "entity_id": account["id"]},
+                    {"entity_type": "deal", "entity_id": deal["id"]},
+                ],
+            )
+            self.assertEqual(view["json"]["state"]["view_filter"]["mode"], "custom")
+            self.assertEqual(cleared["json"]["state"]["view_filter"]["mode"], "search")
+            self.assertEqual(rejected["status_code"], 400)
+
     def test_backend_cli_and_mcp_entrypoints_share_crm_behavior(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             data_root = Path(temp) / "data" / "crm"
@@ -167,6 +217,24 @@ class CrmAppTestCase(unittest.TestCase):
             self.assertTrue(cli["results"])
             self.assertEqual(mcp["app_id"], "crm")
             self.assertEqual(mcp["entity_types"][0]["entity_type"], "account")
+
+            view_mcp = run_json_entrypoint(
+                CRM_ROOT / "mcp" / "server.py",
+                payload={
+                    "workspace_id": "default",
+                    "app_id": "crm",
+                    "data_root": str(data_root),
+                    "tool_name": "crm_set_custom_view",
+                    "arguments": {
+                        "title": "Acme account",
+                        "refs": [{"app_id": "crm", "entity_type": "account", "entity_id": backend["json"]["account"]["id"]}],
+                    },
+                },
+                cwd=CRM_ROOT,
+            )
+
+            self.assertEqual(view_mcp["status_code"], 200)
+            self.assertEqual(view_mcp["state"]["view_filter"]["mode"], "custom")
 
     def test_core_mounted_cli_and_mcp_can_use_crm(self) -> None:
         repo_root = self.make_repo_root()

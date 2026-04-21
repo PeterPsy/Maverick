@@ -13,6 +13,7 @@ Prefer the CRM CLI for compact, low-context operations:
 maverick app cli crm --action search --query "Acme Mario Rossi"
 maverick app cli crm --action list_deals
 maverick app cli crm --action create_account --name "Acme Spa"
+maverick app cli crm --action set_custom_view --title "Acme pursuit" --refs '[{"app_id":"crm","entity_type":"deal","entity_id":"deal_123"}]'
 ```
 
 Use MCP tools when the runtime already has the CRM server mounted or when a richer tool interface is preferable:
@@ -27,5 +28,11 @@ Use MCP tools when the runtime already has the CRM server mounted or when a rich
 - `crm_reference_search`
 - `crm_reference_resolve`
 - `crm_reference_summarize`
+- `crm_view_filter`
+- `crm_set_view_filter`
+- `crm_set_custom_view`
+- `crm_clear_custom_view`
 
 CRM is the structured source of truth for accounts, contacts, deals, and activities. Memory may link to CRM records, but it should not duplicate the full CRM record when a reference is enough.
+
+Use the view actions when the user wants the CRM UI to show a curated set of accounts, contacts, deals, or activities selected from Memory or another app surface.

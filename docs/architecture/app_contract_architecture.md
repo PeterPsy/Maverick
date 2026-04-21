@@ -555,7 +555,20 @@ set_custom_view
 clear_custom_view
 ```
 
-Concrete CLI and MCP command syntax may remain app-specific while `standard: true` action names and payload semantics stay common. Apps can add richer UI operations by declaring additional `standard: false` actions. Gallery is the initial implementation: agents can build a custom file view from topic search, Memory context, CRM references, Gmail references, or any other app-owned evidence without Gallery needing to know why those files were selected.
+Concrete CLI and MCP command syntax may remain app-specific while `standard: true` action names and payload semantics stay common. Apps can add richer UI operations by declaring additional `standard: false` actions. Gallery and CRM are the initial implementations: agents can build a custom Gallery file view or a custom CRM record view from topic search, Memory context, CRM references, Gmail references, or any other app-owned evidence without the rendering app needing to know why those records were selected.
+
+CRM declares the same standard view actions for `account`, `contact`, `deal`, and `activity` references. Its custom view payload stores typed CRM refs such as:
+
+```json
+{
+  "action": "set_custom_view",
+  "title": "Acme pursuit",
+  "refs": [
+    {"app_id": "crm", "entity_type": "account", "entity_id": "account_123"},
+    {"app_id": "crm", "entity_type": "deal", "entity_id": "deal_456"}
+  ]
+}
+```
 
 ## Mounted App Model
 

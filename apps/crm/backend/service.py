@@ -17,10 +17,14 @@ from store import (
     link_entities,
     list_deals,
     list_recent,
+    load_view_state,
     reference_resolve,
     reference_search,
     reference_summarize,
     search_records,
+    clear_custom_view_payload,
+    set_custom_view_payload,
+    set_view_filter_payload,
 )
 
 
@@ -39,6 +43,10 @@ def action_from_tool(tool_name: str, fallback: str) -> str:
         "crm_reference_search": "references.search",
         "crm_reference_resolve": "references.resolve",
         "crm_reference_summarize": "references.summarize",
+        "crm_view_filter": "view_filter",
+        "crm_set_view_filter": "set_view_filter",
+        "crm_set_custom_view": "set_custom_view",
+        "crm_clear_custom_view": "clear_custom_view",
     }
     return mapping.get(tool_name, fallback)
 
@@ -69,6 +77,19 @@ def handle_action(data_root: Path, body: dict[str, Any]) -> tuple[int, dict[str,
         return 200, list_recent(data_root, limit=int(body.get("limit") or 20))
     if action == "list_deals":
         return 200, {"deals": list_deals(data_root, stage=str(body.get("stage") or "").strip(), limit=int(body.get("limit") or 50))}
+    if action == "view_filter":
+        return 200, {"state": load_view_state(data_root)}
+    if action == "set_view_filter":
+        return 200, set_view_filter_payload(
+            data_root=data_root,
+            query=body.get("query") if "query" in body else None,
+            entity_type=body.get("entity_type") if "entity_type" in body else None,
+            preserve_custom=bool(body.get("preserve_custom")),
+        )
+    if action == "set_custom_view":
+        return 200, set_custom_view_payload(data_root=data_root, body=body)
+    if action == "clear_custom_view":
+        return 200, clear_custom_view_payload(data_root=data_root)
     if action == "references.manifest":
         return 200, REFERENCE_MANIFEST
     if action == "references.search":

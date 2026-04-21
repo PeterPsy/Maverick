@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
 from typing import Any
+
+from core.shared.repository import installation_paths
 
 
 def run_json_entrypoint(
@@ -17,12 +20,20 @@ def run_json_entrypoint(
     timeout_seconds: int = 30,
 ) -> dict[str, Any]:
     """Invoke one Python entrypoint script with JSON stdin and JSON stdout."""
+    repository_root = str(installation_paths(start_path=Path(cwd)).repository_root)
+    env = dict(os.environ)
+    env["PYTHONPATH"] = (
+        repository_root
+        if not env.get("PYTHONPATH")
+        else f"{repository_root}{os.pathsep}{env['PYTHONPATH']}"
+    )
     process = subprocess.run(
         [sys.executable, str(entrypoint_path)],
         input=json.dumps(payload, ensure_ascii=True),
         text=True,
         capture_output=True,
         cwd=str(cwd),
+        env=env,
         timeout=timeout_seconds,
         check=False,
     )

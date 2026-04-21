@@ -1146,6 +1146,30 @@ Built-in app id: `maverick-monitor`. Purpose: expose an operator dashboard for M
 - [x] Run `python3 -m compileall apps/maverick-monitor tests/test_maverick_monitor_app.py`
 - [x] Run `python3 scripts/check_unused_imports.py`
 
+## Phase 19: Official Maverick App SDK
+
+Purpose: provide a contract-first SDK for creating Maverick apps without bypassing v3 app-hosting, workspace, data ownership, CLI, MCP, backend, lifecycle, and documentation boundaries.
+
+- [x] Define SDK architecture in `docs/architecture/app_sdk_architecture.md`
+- [x] Create dedicated SDK getting-started documentation in `docs/app-sdk/getting_started.md`
+- [x] Add `core/app_sdk/` domain with explicit models, errors, service, templates, runtime helpers, and storage helpers
+- [x] Generate valid `workspace_local` app contracts through official templates
+- [x] Support `minimal`, `frontend-backend`, `agent-tool`, and `data-app` initial templates
+- [x] Support a widget template with a base-shell widget declaration
+- [x] Validate generated apps through the canonical core app contract parser
+- [x] Expose core CLI commands for SDK create, validate, register-local, install-local, and status
+- [x] Register workspace-local app projects through generic app-hosting registration
+- [x] Install workspace-local app projects through generic app-hosting installation
+- [x] Distinguish source exists, registered, installed, binding status, validation, project root, and data root in SDK status
+- [x] Add safe app-owned JSON storage helpers with path traversal rejection
+- [x] Add JSON stdin/stdout runtime helpers for generated backend, hook, CLI, and MCP entrypoints
+- [x] Add package command and deterministic app source packaging with local junk exclusions
+- [x] Make generic entrypoint and lifecycle runners expose the repository root on `PYTHONPATH` for SDK helper imports
+- [x] Add focused SDK tests for generated template validation, CLI create/register/install/status, generated app CLI surface, hook-created app data, package exclusions, and storage path rejection
+- [x] Run `python3 -m unittest tests/test_app_sdk.py`
+- [ ] Add richer TypeScript/Vite source template and frontend build pipeline
+- [ ] Add developer UI or App Store integration for SDK workflows
+
 ## Phase 8: Inter-Agent Communication
 
 - [ ] Implement inter-agent message model
@@ -1178,7 +1202,8 @@ Built-in app id: `maverick-monitor`. Purpose: expose an operator dashboard for M
 16. Phase 16
 17. Phase 17
 18. Phase 18
-19. Phase 8
+19. Phase 19
+20. Phase 8
 
 ## Immediate Next Step
 

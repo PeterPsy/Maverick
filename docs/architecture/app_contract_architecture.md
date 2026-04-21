@@ -8,6 +8,9 @@ Define the standard contract that every Maverick app must follow.
 
 This contract does not impose the internal data model of an app.
 
+The official App SDK is documented separately in `docs/architecture/app_sdk_architecture.md`.
+The SDK may generate and validate app contracts, but `app_contract.json` remains the source of truth and the core contract parser remains the enforcement point.
+
 It defines the minimum platform-facing structure needed so that apps remain:
 
 - installable

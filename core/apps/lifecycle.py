@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
 import json
 import subprocess
 import sys
@@ -21,6 +22,7 @@ from core.apps.paths import external_app_bundles_root, installed_app_root, works
 from core.execution_policy.models import ExecutionMode
 from core.execution_policy.service import resolve_workspace_execution_profile
 from core.shared.version import current_core_version
+from core.shared.repository import installation_paths
 
 
 def _parse_version(version: str) -> tuple[int, ...]:
@@ -136,11 +138,19 @@ def _run_hook_with_payload(
     payload: dict[str, object],
 ) -> None:
     hook_path = (source_root / hook_relative_path).resolve()
+    repository_root = str(installation_paths(start_path=source_root).repository_root)
+    env = dict(os.environ)
+    env["PYTHONPATH"] = (
+        repository_root
+        if not env.get("PYTHONPATH")
+        else f"{repository_root}{os.pathsep}{env['PYTHONPATH']}"
+    )
     try:
         result = subprocess.run(
             [sys.executable, str(hook_path)],
             input=json.dumps(payload, ensure_ascii=True),
             cwd=source_root,
+            env=env,
             text=True,
             capture_output=True,
             timeout=timeout_seconds,

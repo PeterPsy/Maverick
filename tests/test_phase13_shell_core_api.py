@@ -6,6 +6,7 @@ from io import BytesIO
 from pathlib import Path
 import base64
 import json
+import os
 import time
 from unittest.mock import patch
 import shutil
@@ -77,7 +78,10 @@ class ShellCoreApiTestCase(unittest.TestCase):
             app,
             path="/api/auth/login",
             method="POST",
-            body={"username": "admin", "password": "maverick3"},
+            body={
+                "username": os.environ.get("MAVERICK3_ADMIN_USERNAME", "admin"),
+                "password": os.environ.get("MAVERICK3_ADMIN_PASSWORD", "maverick3"),
+            },
         )
         self.assertEqual(status, 200)
         return headers["Set-Cookie"].split(";", 1)[0]

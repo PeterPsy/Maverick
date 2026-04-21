@@ -5,6 +5,7 @@ from __future__ import annotations
 from io import BytesIO
 from pathlib import Path
 import json
+import os
 import shutil
 import tempfile
 import unittest
@@ -86,12 +87,15 @@ class UserAdminApiTestCase(unittest.TestCase):
         body_bytes = b"".join(app(environ, start_response))
         return int(headers["__status__"].split()[0]), body_bytes, headers
 
-    def login(self, app: PlatformHost, username: str = "admin", password: str = "maverick3") -> str:
+    def login(self, app: PlatformHost, username: str | None = None, password: str | None = None) -> str:
         status, _payload, headers = self.invoke(
             app,
             path="/api/auth/login",
             method="POST",
-            body={"username": username, "password": password},
+            body={
+                "username": username or os.environ.get("MAVERICK3_ADMIN_USERNAME", "admin"),
+                "password": password or os.environ.get("MAVERICK3_ADMIN_PASSWORD", "maverick3"),
+            },
         )
         self.assertEqual(status, 200)
         return headers["Set-Cookie"].split(";", 1)[0]

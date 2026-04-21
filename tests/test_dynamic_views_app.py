@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from io import BytesIO
 import json
+import os
 from pathlib import Path
 import shutil
 import tempfile
@@ -80,7 +81,10 @@ class DynamicViewsAppTestCase(unittest.TestCase):
             app,
             path="/api/auth/login",
             method="POST",
-            body={"username": "admin", "password": "maverick3"},
+            body={
+                "username": os.environ.get("MAVERICK3_ADMIN_USERNAME", "admin"),
+                "password": os.environ.get("MAVERICK3_ADMIN_PASSWORD", "maverick3"),
+            },
         )
         self.assertEqual(status, 200)
         return headers["Set-Cookie"].split(";", 1)[0]

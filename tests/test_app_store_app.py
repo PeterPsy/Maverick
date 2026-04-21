@@ -6,6 +6,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import tarfile
@@ -79,12 +80,15 @@ class AppStoreAppTestCase(unittest.TestCase):
             return status, json.loads(raw.decode("utf-8")), headers
         return status, raw, headers
 
-    def login(self, app, *, username: str = "admin", password: str = "maverick3") -> str:
+    def login(self, app, *, username: str | None = None, password: str | None = None) -> str:
         status, _payload, headers = self.invoke(
             app,
             path="/api/auth/login",
             method="POST",
-            body={"username": username, "password": password},
+            body={
+                "username": username or os.environ.get("MAVERICK3_ADMIN_USERNAME", "admin"),
+                "password": password or os.environ.get("MAVERICK3_ADMIN_PASSWORD", "maverick3"),
+            },
         )
         self.assertEqual(status, 200)
         return headers["Set-Cookie"].split(";", 1)[0]

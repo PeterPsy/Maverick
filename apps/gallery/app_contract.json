@@ -25,6 +25,23 @@
     "views": [
       "gallery"
     ],
+    "view_surfaces": [
+      {
+        "view_id": "gallery",
+        "display_name": "Gallery",
+        "entity_types": [
+          "file"
+        ],
+        "state_actions": [
+          "view_filter",
+          "set_view_filter",
+          "set_custom_view",
+          "clear_custom_view"
+        ],
+        "supports_custom_view": true,
+        "supports_filter_refinement": true
+      }
+    ],
     "reference_entities": [
       {
         "entity_type": "file",

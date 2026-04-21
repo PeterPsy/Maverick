@@ -39,6 +39,17 @@ def app_contract_payload(parsed: ParsedAppContract) -> dict[str, Any]:
             "cli_commands": parsed.contract.capabilities.cli_commands,
             "skills": parsed.contract.capabilities.skills,
             "views": parsed.contract.capabilities.views,
+            "view_surfaces": [
+                {
+                    "view_id": surface.view_id,
+                    "display_name": surface.display_name,
+                    "entity_types": surface.entity_types,
+                    "state_actions": surface.state_actions,
+                    "supports_custom_view": surface.supports_custom_view,
+                    "supports_filter_refinement": surface.supports_filter_refinement,
+                }
+                for surface in parsed.contract.capabilities.view_surfaces
+            ],
             "reference_entities": [
                 {
                     "entity_type": entity.entity_type,

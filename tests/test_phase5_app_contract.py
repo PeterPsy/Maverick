@@ -22,6 +22,7 @@ from core.apps.contracts import (
     build_widget_actions,
     build_widget_declaration,
     build_widget_frontend,
+    build_view_surface_declaration,
     parse_app_contract_file,
     write_app_contract_file,
 )
@@ -70,6 +71,16 @@ class Phase5AppContractTestCase(unittest.TestCase):
                                 display_name="Reservation",
                             )
                         ],
+                        view_surfaces=[
+                            build_view_surface_declaration(
+                                view_id="floor_map",
+                                display_name="Floor Map",
+                                entity_types=["reservation"],
+                                state_actions=["view_state", "set_custom_view", "clear_custom_view"],
+                                supports_custom_view=True,
+                                supports_filter_refinement=True,
+                            )
+                        ],
                     ),
                     lifecycle=build_app_lifecycle(
                         migrate=True,
@@ -103,6 +114,10 @@ class Phase5AppContractTestCase(unittest.TestCase):
             self.assertEqual(loaded.contract.storage.storage_kind, "sqlite")
             self.assertEqual(loaded.contract.storage.indices.kind, "embedded")
             self.assertEqual(loaded.contract.capabilities.views, ["floor_map"])
+            self.assertEqual(loaded.contract.capabilities.view_surfaces[0].view_id, "floor_map")
+            self.assertEqual(loaded.contract.capabilities.view_surfaces[0].entity_types, ["reservation"])
+            self.assertIn("set_custom_view", loaded.contract.capabilities.view_surfaces[0].state_actions)
+            self.assertTrue(loaded.contract.capabilities.view_surfaces[0].supports_custom_view)
             self.assertEqual(loaded.contract.capabilities.reference_entities[0].entity_type, "reservation")
             self.assertTrue(loaded.contract.capabilities.reference_entities[0].searchable)
             self.assertEqual(loaded.contract.distribution.mode, "sealed")
@@ -130,6 +145,67 @@ class Phase5AppContractTestCase(unittest.TestCase):
                 {"entity_type": "Bad-Type", "display_name": "Bad"}
             ]
             contract_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+            with self.assertRaises(AppContractValidationError):
+                parse_app_contract_file(app_root)
+
+    def test_parse_contract_rejects_view_surface_for_undeclared_entity_type(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            app_root = Path(temp_dir) / "apps" / "crm"
+            parsed = build_parsed_app_contract(
+                app_id="crm",
+                name="CRM",
+                version="1.0.0",
+                description="Customer records.",
+                publisher="vendor",
+                contract=build_app_contract(
+                    capabilities=build_app_capabilities(
+                        views=["crm"],
+                        view_surfaces=[
+                            build_view_surface_declaration(
+                                view_id="crm",
+                                display_name="CRM",
+                                entity_types=["deal"],
+                                state_actions=["set_custom_view"],
+                                supports_custom_view=True,
+                            )
+                        ],
+                    )
+                ),
+            )
+            write_app_contract_file(app_root, parsed)
+
+            with self.assertRaises(AppContractValidationError):
+                parse_app_contract_file(app_root)
+
+    def test_parse_contract_rejects_view_surface_for_undeclared_view(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            app_root = Path(temp_dir) / "apps" / "crm"
+            parsed = build_parsed_app_contract(
+                app_id="crm",
+                name="CRM",
+                version="1.0.0",
+                description="Customer records.",
+                publisher="vendor",
+                contract=build_app_contract(
+                    capabilities=build_app_capabilities(
+                        views=["crm"],
+                        reference_entities=[
+                            build_reference_entity_declaration(entity_type="deal", display_name="Deal")
+                        ],
+                        view_surfaces=[
+                            build_view_surface_declaration(
+                                view_id="pipeline",
+                                display_name="Pipeline",
+                                entity_types=["deal"],
+                                state_actions=["set_custom_view"],
+                                supports_custom_view=True,
+                            )
+                        ],
+                    )
+                ),
+            )
+            write_app_contract_file(app_root, parsed)
 
             with self.assertRaises(AppContractValidationError):
                 parse_app_contract_file(app_root)

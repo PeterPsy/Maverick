@@ -473,6 +473,66 @@ Every app should expose at least a reference manifest through CLI and MCP. Apps 
 
 Apps that declare `reference_entities` must expose matching CLI or MCP reference behavior through the manifest, search, resolve, and summarize convention. The CRM app is the canonical source-available example: Memory may store a durable reference to a CRM contact or deal, while CRM remains the owner of the structured business record.
 
+### View Composition Surface Declaration
+
+Referenceable entities let apps such as Memory understand and link app-owned records. Some apps also need to render a curated set of their own records in UI after an agent or another app has selected relevant references.
+
+This is a separate app-owned surface. The core must not decide which CRM deals, Gmail threads, Memory nodes, or Gallery files belong in a view. The selecting agent or app composes stable references by using reference surfaces, then asks the owning app UI to render that set through a declared view composition surface.
+
+Apps that support externally composed views may declare view surfaces under `capabilities.view_surfaces`:
+
+```json
+"capabilities": {
+  "views": ["gallery"],
+  "reference_entities": [
+    {
+      "entity_type": "file",
+      "display_name": "Workspace File",
+      "searchable": true,
+      "resolvable": true,
+      "summarizable": true,
+      "deep_link_supported": true
+    }
+  ],
+  "view_surfaces": [
+    {
+      "view_id": "gallery",
+      "display_name": "Gallery",
+      "entity_types": ["file"],
+      "state_actions": [
+        "view_filter",
+        "set_view_filter",
+        "set_custom_view",
+        "clear_custom_view"
+      ],
+      "supports_custom_view": true,
+      "supports_filter_refinement": true
+    }
+  ]
+}
+```
+
+Rules:
+
+- `view_id` must identify a mounted app view declared in `capabilities.views`
+- `entity_types` must reference entity types declared in `capabilities.reference_entities`
+- the owning app stores and interprets its own view state under `data/<app_id>/`
+- `set_custom_view` should accept a title plus stable references for the declared entity types
+- `set_view_filter` may refine the current custom view when the app supports filter refinement
+- `clear_custom_view` should return the app to its normal view mode
+- the core validates only the contract shape and invokes declared app entrypoints; it does not inspect app-owned view state or app business records
+
+The expected CLI and MCP action names mirror the reference convention:
+
+```text
+<app_id> view-state
+<app_id> set-view-filter ...
+<app_id> set-custom-view --title "Relevant records" --refs '[...]'
+<app_id> clear-custom-view
+```
+
+Concrete command syntax may remain app-specific while the action names and payload semantics stay common. Gallery is the initial implementation: agents can build a custom file view from topic search, Memory context, CRM references, Gmail references, or any other app-owned evidence without Gallery needing to know why those files were selected.
+
 ## Mounted App Model
 
 In Maverick v3, everything above the core should be treated as an app.

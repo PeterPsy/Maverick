@@ -20,6 +20,7 @@ from core.apps.models import (
     AppRollbackSupport,
     AppStorageDeclaration,
     AppStorageIndices,
+    AppViewSurfaceDeclaration,
     AppVisibilityDeclaration,
     ParsedAppContract,
     WidgetActionDeclaration,
@@ -75,6 +76,7 @@ def build_app_capabilities(
     cli_commands: list[str] | None = None,
     skills: list[str] | None = None,
     views: list[str] | None = None,
+    view_surfaces: list[AppViewSurfaceDeclaration] | None = None,
     reference_entities: list[AppReferenceEntityDeclaration] | None = None,
 ) -> AppCapabilities:
     """Build one capability declaration."""
@@ -83,7 +85,27 @@ def build_app_capabilities(
         cli_commands=cli_commands or [],
         skills=skills or [],
         views=views or [],
+        view_surfaces=view_surfaces or [],
         reference_entities=reference_entities or [],
+    )
+
+def build_view_surface_declaration(
+    *,
+    view_id: str,
+    display_name: str,
+    entity_types: list[str] | None = None,
+    state_actions: list[str] | None = None,
+    supports_custom_view: bool = False,
+    supports_filter_refinement: bool = False,
+) -> AppViewSurfaceDeclaration:
+    """Build one view-composition capability declaration."""
+    return AppViewSurfaceDeclaration(
+        view_id=view_id,
+        display_name=display_name,
+        entity_types=entity_types or [],
+        state_actions=state_actions or [],
+        supports_custom_view=supports_custom_view,
+        supports_filter_refinement=supports_filter_refinement,
     )
 
 def build_reference_entity_declaration(

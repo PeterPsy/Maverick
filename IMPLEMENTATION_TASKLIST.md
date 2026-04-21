@@ -222,6 +222,8 @@ without carrying forward legacy structure or backward-compatibility constraints 
 - [x] Define and implement optional `capabilities.reference_entities` metadata for apps that expose referenceable records
 - [x] Define shared CLI/MCP reference tool conventions: manifest, search, resolve, and summarize
 - [x] Add parser and contract tests for referenceable entity metadata before app contracts declare it
+- [x] Define view composition surface metadata for app-owned custom views
+- [x] Add parser and contract tests for declared view composition surfaces
 - [x] Implement lifecycle import-recovery support declarations:
   - [x] `validate_after_import`
   - [x] `repair_after_import`

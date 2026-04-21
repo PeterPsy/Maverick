@@ -59,7 +59,20 @@ class AppCapabilities:
     cli_commands: list[str]
     skills: list[str]
     views: list[str]
+    view_surfaces: list["AppViewSurfaceDeclaration"]
     reference_entities: list["AppReferenceEntityDeclaration"]
+
+
+@dataclass(frozen=True)
+class AppViewSurfaceDeclaration:
+    """Describe an app-owned UI surface that can render curated entity sets."""
+
+    view_id: str
+    display_name: str
+    entity_types: list[str]
+    state_actions: list[str]
+    supports_custom_view: bool
+    supports_filter_refinement: bool
 
 
 @dataclass(frozen=True)

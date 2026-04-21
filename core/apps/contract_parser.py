@@ -20,6 +20,7 @@ from core.apps.models import (
     AppRollbackSupport,
     AppStorageDeclaration,
     AppStorageIndices,
+    AppViewSurfaceDeclaration,
     AppVisibilityDeclaration,
     ParsedAppContract,
 )
@@ -138,11 +139,59 @@ def parse_app_contract_file(source_root: Path) -> ParsedAppContract:
             )
         )
 
+    view_surfaces_payload = capabilities_payload.get("view_surfaces", [])
+    if not isinstance(view_surfaces_payload, list):
+        raise AppContractValidationError("`capabilities.view_surfaces` must be a list.")
+    view_surfaces: list[AppViewSurfaceDeclaration] = []
+    seen_view_surface_ids: set[str] = set()
+    declared_views = _expect_string_list(capabilities_payload, "views")
+    for index, item in enumerate(view_surfaces_payload):
+        item_payload = _expect_mapping(item, label=f"capabilities.view_surfaces[{index}]")
+        view_id = _expect_string(item_payload, "view_id")
+        if view_id not in declared_views:
+            raise AppContractValidationError(
+                f"`capabilities.view_surfaces[{index}].view_id` must reference a declared view."
+            )
+        if view_id in seen_view_surface_ids:
+            raise AppContractValidationError("`capabilities.view_surfaces` entries must use unique view_id values.")
+        seen_view_surface_ids.add(view_id)
+        unexpected_keys = set(item_payload) - {
+            "view_id",
+            "display_name",
+            "entity_types",
+            "state_actions",
+            "supports_custom_view",
+            "supports_filter_refinement",
+        }
+        if unexpected_keys:
+            unexpected = ", ".join(sorted(unexpected_keys))
+            raise AppContractValidationError(
+                f"Unsupported capabilities.view_surfaces[{index}] field(s): {unexpected}."
+            )
+        entity_types = _expect_string_list(item_payload, "entity_types")
+        for entity_index, entity_type in enumerate(entity_types):
+            _expect_entity_type({"entity_type": entity_type}, "entity_type")
+            if entity_type not in seen_reference_entity_types:
+                raise AppContractValidationError(
+                    f"`capabilities.view_surfaces[{index}].entity_types[{entity_index}]` must reference a declared reference entity type."
+                )
+        view_surfaces.append(
+            AppViewSurfaceDeclaration(
+                view_id=view_id,
+                display_name=_expect_string(item_payload, "display_name"),
+                entity_types=entity_types,
+                state_actions=_expect_string_list(item_payload, "state_actions"),
+                supports_custom_view=_expect_bool(item_payload, "supports_custom_view", default=False),
+                supports_filter_refinement=_expect_bool(item_payload, "supports_filter_refinement", default=False),
+            )
+        )
+
     capabilities = AppCapabilities(
         mcp_tools=_expect_string_list(capabilities_payload, "mcp_tools"),
         cli_commands=_expect_string_list(capabilities_payload, "cli_commands"),
         skills=_expect_string_list(capabilities_payload, "skills"),
         views=_expect_string_list(capabilities_payload, "views"),
+        view_surfaces=view_surfaces,
         reference_entities=reference_entities,
     )
 

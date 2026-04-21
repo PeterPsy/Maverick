@@ -19,6 +19,7 @@ Common actions:
 - `catalog`: list uploaded and generated files with metadata.
 - `read_file`: read a specific file by `role` and `relative_path` for preview or download workflows.
 - `preview_text`: extract a text preview for text, Markdown, DOCX, PPTX, and XLSX files.
+- `set_view_filter`: update the shared Gallery UI filter with `query`, `role`, and `kind` so the frontend can show the filtered view.
 - `file_info`: resolve metadata for a file by `role`/`relative_path` or `workspace_relative_path`.
 - `rename_file`: rename a file inside its current storage directory.
 - `delete_file`: delete a file from the active workspace storage root after Gallery path validation.

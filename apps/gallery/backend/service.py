@@ -17,6 +17,7 @@ from store import (
     reference_from_payload,
     rename_file_payload,
     seed_state,
+    set_view_filter_payload,
 )
 
 REFERENCE_MANIFEST = {
@@ -49,6 +50,13 @@ def handle_action(data_root: Path, uploaded_root: Path, generated_root: Path, bo
             "state": load_state(data_root),
             "files": list_files(uploaded_root=uploaded_root, generated_root=generated_root),
         }
+    if action == "set_view_filter":
+        return 200, set_view_filter_payload(
+            data_root=data_root,
+            query=body.get("query") if "query" in body else None,
+            role=body.get("role") if "role" in body else None,
+            kind=body.get("kind") if "kind" in body else None,
+        )
     if action == "read_file":
         role, relative_path = reference_from_payload(
             role=str(body.get("role") or ""),

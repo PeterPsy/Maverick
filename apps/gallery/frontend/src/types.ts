@@ -25,7 +25,21 @@ export type GalleryFile = {
   preview_kind: PreviewKind;
 };
 
+export type GalleryViewFilter = {
+  query: string;
+  role: FileRole | 'all';
+  kind: PreviewKind | 'all';
+  updated_at: string;
+};
+
+export type GalleryState = {
+  schema_version: string;
+  view_mode: string;
+  view_filter: GalleryViewFilter;
+};
+
 export type CatalogPayload = {
+  state: GalleryState;
   files: GalleryFile[];
 };
 

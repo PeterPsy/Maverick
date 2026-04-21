@@ -16,6 +16,9 @@ SCHEMA_VERSION = "1"
 MAX_PREVIEW_BYTES = 8 * 1024 * 1024
 MAX_READ_BYTES = 100 * 1024 * 1024
 FILE_ROLES = {"uploaded", "generated"}
+VIEW_FILTER_ROLES = {"all", *FILE_ROLES}
+VIEW_FILTER_KINDS = {"all", "image", "video", "audio", "markdown", "text", "pdf", "document", "presentation", "spreadsheet", "file"}
+MAX_VIEW_QUERY_CHARS = 200
 
 
 def state_path(data_root: Path) -> Path:
@@ -26,9 +29,27 @@ def seed_state(data_root: Path) -> dict:
     data_root.mkdir(parents=True, exist_ok=True)
     path = state_path(data_root)
     if not path.exists():
-        payload = {"schema_version": SCHEMA_VERSION, "view_mode": "grid"}
+        payload = {"schema_version": SCHEMA_VERSION, "view_mode": "grid", "view_filter": default_view_filter()}
         path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return load_state(data_root)
+
+
+def default_view_filter() -> dict:
+    return {"query": "", "role": "all", "kind": "all", "updated_at": ""}
+
+
+def normalize_view_filter(raw_filter: object) -> dict:
+    if not isinstance(raw_filter, dict):
+        return default_view_filter()
+    query = " ".join(str(raw_filter.get("query") or "").split())[:MAX_VIEW_QUERY_CHARS]
+    role = str(raw_filter.get("role") or "all").strip()
+    kind = str(raw_filter.get("kind") or "all").strip()
+    if role not in VIEW_FILTER_ROLES:
+        raise GalleryValidationError(f"Unsupported view filter role `{role}`.")
+    if kind not in VIEW_FILTER_KINDS:
+        raise GalleryValidationError(f"Unsupported view filter kind `{kind}`.")
+    updated_at = str(raw_filter.get("updated_at") or "").strip()
+    return {"query": query, "role": role, "kind": kind, "updated_at": updated_at}
 
 
 def load_state(data_root: Path) -> dict:
@@ -42,7 +63,31 @@ def load_state(data_root: Path) -> dict:
         raise GalleryValidationError("Gallery state must be a JSON object.")
     payload.setdefault("schema_version", SCHEMA_VERSION)
     payload.setdefault("view_mode", "grid")
+    payload["view_filter"] = normalize_view_filter(payload.get("view_filter"))
     return payload
+
+
+def write_state(data_root: Path, payload: dict) -> dict:
+    data_root.mkdir(parents=True, exist_ok=True)
+    normalized = dict(payload)
+    normalized["schema_version"] = SCHEMA_VERSION
+    normalized.setdefault("view_mode", "grid")
+    normalized["view_filter"] = normalize_view_filter(normalized.get("view_filter"))
+    state_path(data_root).write_text(json.dumps(normalized, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return normalized
+
+
+def set_view_filter_payload(*, data_root: Path, query: object = None, role: object = None, kind: object = None) -> dict:
+    state = load_state(data_root)
+    current = normalize_view_filter(state.get("view_filter"))
+    next_filter = {
+        "query": current["query"] if query is None else query,
+        "role": current["role"] if role is None else role,
+        "kind": current["kind"] if kind is None else kind,
+        "updated_at": datetime.now(tz=UTC).isoformat(),
+    }
+    state["view_filter"] = normalize_view_filter(next_filter)
+    return {"state": write_state(data_root, state)}
 
 
 def storage_root_for_role(*, role: str, uploaded_root: Path, generated_root: Path) -> Path:

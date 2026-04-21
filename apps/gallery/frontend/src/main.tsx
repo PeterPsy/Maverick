@@ -1,13 +1,27 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { decodeBase64, deleteFile, loadCatalog, readFile, readPreviewText, renameFile } from './galleryApi';
+import { decodeBase64, deleteFile, loadCatalog, readFile, readPreviewText, renameFile, setViewFilter } from './galleryApi';
 import { canInlinePreview, canTextPreview, FileCardPreview, GalleryPreview } from './filePreview';
 import { formatBytes, kindLabels, roleLabels } from './galleryMeta';
-import type { FileRole, GalleryFile } from './types';
+import type { FileRole, GalleryFile, GalleryViewFilter, PreviewKind } from './types';
 import './styles/main.css';
 
 const PREVIEW_BYTES = 8 * 1024 * 1024;
 const DOWNLOAD_BYTES = 100 * 1024 * 1024;
+const VIEW_SYNC_MS = 2000;
+
+const viewKinds = new Set<PreviewKind | 'all'>(['all', 'image', 'video', 'audio', 'pdf', 'document', 'presentation', 'spreadsheet', 'markdown', 'text', 'file']);
+
+function normalizedViewFilter(filter?: Partial<GalleryViewFilter>): GalleryViewFilter {
+  const role = filter?.role === 'generated' || filter?.role === 'uploaded' ? filter.role : 'all';
+  const kind = filter?.kind && viewKinds.has(filter.kind) ? filter.kind : 'all';
+  return {
+    query: filter?.query || '',
+    role,
+    kind,
+    updated_at: filter?.updated_at || ''
+  };
+}
 
 function FileCard({ file, selected, onOpen, onDownload, onDelete }: {
   file: GalleryFile;
@@ -51,15 +65,42 @@ function App() {
   const [previewText, setPreviewText] = useState('');
   const [renameValue, setRenameValue] = useState('');
   const [error, setError] = useState('');
+  const viewFilterUpdatedAtRef = useRef('');
 
-  async function refresh() {
+  function applyRemoteViewFilter(filter: GalleryViewFilter) {
+    if (filter.updated_at === viewFilterUpdatedAtRef.current && filter.query === query && filter.role === activeRole && filter.kind === kind) return;
+    viewFilterUpdatedAtRef.current = filter.updated_at;
+    setQuery(filter.query);
+    setActiveRole(filter.role);
+    setKind(filter.kind);
+  }
+
+  async function refresh(syncViewFilter = true) {
     const payload = await loadCatalog();
     setFiles(payload.files);
+    if (syncViewFilter) applyRemoteViewFilter(normalizedViewFilter(payload.state.view_filter));
   }
 
   useEffect(() => {
     refresh().catch((err: Error) => setError(err.message));
+    const interval = window.setInterval(() => {
+      refresh().catch((err: Error) => setError(err.message));
+    }, VIEW_SYNC_MS);
+    return () => window.clearInterval(interval);
   }, []);
+
+  function updateViewFilter(filter: Partial<Pick<GalleryViewFilter, 'query' | 'role' | 'kind'>>) {
+    const next = normalizedViewFilter({ query, role: activeRole, kind: kind as PreviewKind | 'all', ...filter });
+    setQuery(next.query);
+    setActiveRole(next.role);
+    setKind(next.kind);
+    setViewFilter(filter)
+      .then((payload) => {
+        const remote = normalizedViewFilter(payload.state.view_filter);
+        viewFilterUpdatedAtRef.current = remote.updated_at;
+      })
+      .catch((err: Error) => setError(err.message));
+  }
 
   const filteredFiles = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -149,14 +190,14 @@ function App() {
       <section className="gallery-toolbar">
         <div className="role-tabs" aria-label="File sections">
           {(['all', 'generated', 'uploaded'] as const).map((role) => (
-            <button key={role} className={activeRole === role ? 'selected' : ''} onClick={() => setActiveRole(role)}>
+            <button key={role} className={activeRole === role ? 'selected' : ''} onClick={() => updateViewFilter({ role })}>
               <span>{role === 'all' ? 'All' : roleLabels[role]}</span>
               <strong>{stats[role]}</strong>
             </button>
           ))}
         </div>
-        <input className="gallery-search" placeholder="Search files" value={query} onChange={(event) => setQuery(event.target.value)} />
-        <select className="gallery-select" value={kind} onChange={(event) => setKind(event.target.value)}>
+        <input className="gallery-search" placeholder="Search files" value={query} onChange={(event) => updateViewFilter({ query: event.target.value })} />
+        <select className="gallery-select" value={kind} onChange={(event) => updateViewFilter({ kind: event.target.value as PreviewKind | 'all' })}>
           <option value="all">All types</option>
           <option value="image">Images</option>
           <option value="video">Video</option>

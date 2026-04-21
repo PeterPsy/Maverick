@@ -1,4 +1,4 @@
-import type { CatalogPayload, DeleteFilePayload, GalleryFile, PreviewTextPayload, ReadFilePayload } from './types';
+import type { CatalogPayload, DeleteFilePayload, GalleryFile, GalleryViewFilter, PreviewTextPayload, ReadFilePayload } from './types';
 
 export async function callBackend<T>(body: Record<string, unknown>): Promise<T> {
   const response = await fetch('/api/apps/gallery/backend', {
@@ -18,6 +18,10 @@ export function decodeBase64(content: string, contentType: string) {
 
 export function loadCatalog() {
   return callBackend<CatalogPayload>({ action: 'catalog' });
+}
+
+export function setViewFilter(filter: Partial<Pick<GalleryViewFilter, 'query' | 'role' | 'kind'>>) {
+  return callBackend<{ state: CatalogPayload['state'] }>({ action: 'set_view_filter', ...filter });
 }
 
 export async function readFile(file: GalleryFile, maxBytes: number) {

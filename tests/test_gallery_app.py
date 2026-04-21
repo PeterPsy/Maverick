@@ -143,6 +143,39 @@ class GalleryAppTestCase(unittest.TestCase):
             self.assertEqual(kinds["storage/generated/deck.pptx"], "presentation")
             self.assertEqual(kinds["storage/generated/clip.mp4"], "video")
 
+    def test_backend_persists_view_filter_for_shared_ui_control(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data_root = root / "data" / "gallery"
+            uploaded_root = root / "storage" / "uploaded"
+            generated_root = root / "storage" / "generated"
+
+            updated = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={"action": "set_view_filter", "query": "Versy", "role": "generated", "kind": "document"},
+            )
+            catalog = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={"action": "catalog"},
+            )
+            rejected = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={"action": "set_view_filter", "kind": "unknown"},
+            )
+
+            self.assertEqual(updated["status_code"], 200)
+            self.assertEqual(catalog["json"]["state"]["view_filter"]["query"], "Versy")
+            self.assertEqual(catalog["json"]["state"]["view_filter"]["role"], "generated")
+            self.assertEqual(catalog["json"]["state"]["view_filter"]["kind"], "document")
+            self.assertTrue(catalog["json"]["state"]["view_filter"]["updated_at"])
+            self.assertEqual(rejected["status_code"], 400)
+
     def test_backend_rejects_path_traversal_when_reading_file(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -344,6 +377,42 @@ class GalleryAppTestCase(unittest.TestCase):
         self.assertEqual(cli_payload["status_code"], 200)
         self.assertEqual(mcp_payload["files"][0]["workspace_relative_path"], "storage/uploaded/source.txt")
         self.assertEqual(cli_payload["files"][0]["workspace_relative_path"], "storage/uploaded/source.txt")
+
+    def test_cli_can_update_gallery_view_filter(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+
+        updated = run_core_cli_command(
+            command_id="app.gallery.gallery",
+            context=CliInvocationContext(
+                caller_kind="sandbox_agent",
+                workspace_id="default",
+                agent_id="tester",
+                effective_mode="sandbox",
+            ),
+            arguments={"action": "set_view_filter", "query": "Versy", "role": "generated", "kind": "document"},
+            app_store=state.app_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+        catalog = run_core_cli_command(
+            command_id="app.gallery.gallery",
+            context=CliInvocationContext(
+                caller_kind="sandbox_agent",
+                workspace_id="default",
+                agent_id="tester",
+                effective_mode="sandbox",
+            ),
+            arguments={"action": "catalog"},
+            app_store=state.app_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+
+        self.assertEqual(updated["status_code"], 200)
+        self.assertEqual(catalog["state"]["view_filter"]["query"], "Versy")
+        self.assertEqual(catalog["state"]["view_filter"]["role"], "generated")
+        self.assertEqual(catalog["state"]["view_filter"]["kind"], "document")
 
 
 if __name__ == "__main__":

@@ -1422,8 +1422,9 @@ Raw secret values must stay confined to controlled secret-store adapters and sho
 The first v3 implementation should therefore support:
 
 - platform-owned secret records and aliases
-- workspace-scoped or provider-scoped secret bindings
+- workspace-scoped, app-scoped, or provider-scoped secret bindings
 - controlled resolution for runtime use
+- app-scoped secret write and rotation requests from mounted app backend entrypoints, with raw values stripped before frontend responses
 - ephemeral secret delivery into provider launch paths under platform authority
 - operator inspection of metadata without exposing raw values
 - operator-facing CLI and policy-gated MCP hooks for create, inspection, rotation, disable, and revoke operations without ever returning raw secret values

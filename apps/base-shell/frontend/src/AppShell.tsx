@@ -18,6 +18,7 @@ import { readShellSession, writeShellSession } from "./session";
 import { useMobileLayout } from "./hooks/useMobileLayout";
 import { LoginScreen } from "./components/LoginScreen";
 import { Sidebar } from "./components/Sidebar";
+import { ShellOverlayWidgets } from "./components/ShellOverlayWidgets";
 import { ShellDialog, ShellDialogs } from "./components/ShellDialogs";
 import { WorkspaceView } from "./components/WorkspaceView";
 
@@ -154,6 +155,7 @@ export function AppShell() {
       <button aria-label="Apri menu" className="bs-panel-peek bs-panel-peek--left" onClick={() => setIsSidebarOpen(true)} type="button">
         <span aria-hidden="true" className="material-symbols-rounded">menu</span>
       </button>
+      <ShellOverlayWidgets activeApp={activeApp} activeWorkspaceId={activeWorkspaceId} onOpenApp={openApp} user={session.user} />
       <ShellDialogs activeDialog={activeDialog} onClose={() => setActiveDialog(null)} onLogout={handleLogout} settings={settings} />
     </main>
   );

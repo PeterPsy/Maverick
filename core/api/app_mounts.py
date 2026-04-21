@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import json
 import mimetypes
 from pathlib import Path
+from typing import Any
 
 from core.api.app_registry import resolve_app_surface
 from core.api.http import StartResponse, json_response, query_params, read_json_body, status_line, text_response
 from core.api.platform_state import PlatformState
 from core.apps.errors import AppHostingError, WorkspaceAppBindingNotFoundError
 from core.providers.service import resolve_provider_for_workspace
+from core.secrets.errors import SecretError
+from core.secrets.service import bind_app_secret, build_secret_ref, create_platform_secret, resolve_app_secret, rotate_platform_secret
 from core.shared.entrypoints import run_json_entrypoint
 from core.workspaces.paths import workspace_paths
 from core.identity.models import UserRecord
@@ -150,15 +154,91 @@ def handle_app_backend(
                 "provider_id": provider.provider_id,
                 "runtime_session_id": "",
                 "turn_id": "",
+                "app_secrets": _resolve_app_secret_payload(state, workspace_id=workspace_id, app_id=app_id),
             },
             cwd=source_root,
         )
     except Exception as error:
         return json_response(start_response, {"error": str(error)}, status=status_line(500))
+    try:
+        secret_results = _apply_app_secret_writes(state, workspace_id=workspace_id, app_id=app_id, result=result)
+    except SecretError as error:
+        return json_response(start_response, {"error": "secret_error", "detail": str(error)}, status=status_line(500))
     status_code = int(result.get("status_code", 200))
     if "json" in result:
         response_json = result["json"]
+        if secret_results:
+            response_json = {**response_json, "platform_secret_results": secret_results}
         return json_response(start_response, response_json, status=status_line(status_code))
     if "body" in result:
         return text_response(start_response, str(result["body"]), status=status_line(status_code))
     return json_response(start_response, result, status=status_line(status_code))
+
+
+def _resolve_app_secret_payload(state: PlatformState, *, workspace_id: str, app_id: str) -> dict[str, str]:
+    """Resolve app-scoped secrets for one mounted backend invocation."""
+    secrets: dict[str, str] = {}
+    for binding in state.secret_store.list_secret_bindings(workspace_id=workspace_id, app_id=app_id, scope="app"):
+        if binding.status != "active":
+            continue
+        lease = resolve_app_secret(
+            state.secret_store,
+            workspace_id=workspace_id,
+            app_id=app_id,
+            logical_name=binding.logical_name,
+        )
+        secrets[binding.logical_name] = lease.value
+    return secrets
+
+
+def _apply_app_secret_writes(state: PlatformState, *, workspace_id: str, app_id: str, result: dict[str, Any]) -> list[dict[str, Any]]:
+    """Persist app-requested secret writes through generic app-scoped bindings."""
+    writes = result.pop("platform_secret_writes", [])
+    if not isinstance(writes, list):
+        return []
+    persisted: list[dict[str, Any]] = []
+    for write in writes:
+        if not isinstance(write, dict):
+            continue
+        logical_name = str(write.get("logical_name") or "").strip().lower()
+        raw_payload = write.get("raw_value")
+        raw_value = raw_payload if isinstance(raw_payload, str) else json.dumps(raw_payload or {}, ensure_ascii=False, sort_keys=True)
+        if not logical_name or not raw_value:
+            continue
+        existing = [
+            item
+            for item in state.secret_store.list_secret_bindings(workspace_id=workspace_id, app_id=app_id, scope="app", logical_name=logical_name)
+            if item.status == "active"
+        ]
+        if existing:
+            binding = existing[0]
+            secret_id = binding.secret_ref.removeprefix("platform:secrets/")
+            if binding.secret_ref.startswith("platform:secret-alias/"):
+                secret_id = state.secret_store.get_secret_by_alias(binding.secret_ref.removeprefix("platform:secret-alias/")).secret_id
+            secret = rotate_platform_secret(state.secret_store, secret_id=secret_id, raw_value=raw_value)
+        else:
+            alias = str(write.get("alias") or f"{workspace_id}-{app_id}-{logical_name}").strip().lower()
+            secret = create_platform_secret(
+                state.secret_store,
+                label=str(write.get("label") or f"{app_id} {logical_name}"),
+                raw_value=raw_value,
+                alias=alias,
+                description=str(write.get("description") or f"App-scoped secret for {app_id}/{logical_name}."),
+            )
+            binding = bind_app_secret(
+                state.secret_store,
+                workspace_id=workspace_id,
+                app_id=app_id,
+                logical_name=logical_name,
+                secret_ref=build_secret_ref(alias=secret.alias) if secret.alias else build_secret_ref(secret_id=secret.secret_id),
+            )
+        persisted.append(
+            {
+                "logical_name": logical_name,
+                "secret_id": secret.secret_id,
+                "alias": secret.alias,
+                "binding_id": binding.binding_id,
+                "status": secret.status,
+            }
+        )
+    return persisted

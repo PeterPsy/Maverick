@@ -90,11 +90,12 @@ def bootstrap_platform_state(*, start_path: Path | None = None, now: datetime | 
         )
     )
     runtime_event_bus = RuntimeEventBus()
+    secret_state_root = control_state_root / "secrets"
     secret_store = MongoSecretStore(
         SecretCollections(
-            secrets=InMemoryCollection(),
-            values=InMemoryCollection(),
-            bindings=InMemoryCollection(),
+            secrets=JsonFileCollection(secret_state_root / "secrets.json"),
+            values=JsonFileCollection(secret_state_root / "values.json"),
+            bindings=JsonFileCollection(secret_state_root / "bindings.json"),
         )
     )
     recovery_store = MongoRecoveryStore(

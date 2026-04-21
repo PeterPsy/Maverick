@@ -40,3 +40,18 @@ button {
   cursor: pointer;
   font: inherit;
 }
+
+select {
+  color-scheme: dark;
+}
+
+select option,
+select optgroup {
+  background: #171717;
+  color: var(--maverick-text);
+}
+
+select option:checked {
+  background: #2b79ff;
+  color: #ffffff;
+}

@@ -11,6 +11,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         app: "frontend/index.html",
+        "widgets/chat-floating/index": "frontend/widgets/chat-floating/index.html",
         "widgets/chat-sidebar/index": "frontend/widgets/chat-sidebar/index.html",
       },
     },

@@ -5,10 +5,12 @@ export function AttachmentMenu({
   attachments,
   disabled,
   onAddAttachments,
+  onCapturePageArea,
 }: {
   attachments: ComposerAttachment[];
   disabled: boolean;
   onAddAttachments: (files: File[]) => void;
+  onCapturePageArea?: () => void;
 }) {
   const attachmentMenuRef = useRef<HTMLDivElement | null>(null);
   const attachmentMenuPanelRef = useRef<HTMLDivElement | null>(null);
@@ -137,6 +139,18 @@ export function AttachmentMenu({
           <div className="chat-ui-dropdown__menu chat-ui-dropdown__menu--left chatapp-attachment-picker__menu" ref={attachmentMenuPanelRef} role="menu" style={attachmentMenuStyle ?? { visibility: "hidden" }}>
             <AttachmentMenuItem icon="image" iconClass="chatapp-attachment-picker__item-icon--image" onClick={() => imageAttachmentInputRef.current?.click()} title="Carica immagine" detail="Screenshot, foto e altri file visivi" />
             <AttachmentMenuItem icon="description" iconClass="chatapp-attachment-picker__item-icon--file" onClick={() => fileAttachmentInputRef.current?.click()} title="Carica file" detail="PDF, testo, fogli di calcolo e documenti" />
+            {onCapturePageArea ? (
+              <AttachmentMenuItem
+                icon="crop_free"
+                iconClass="chatapp-attachment-picker__item-icon--capture"
+                onClick={() => {
+                  onCapturePageArea();
+                  setIsAttachmentMenuOpen(false);
+                }}
+                title="Cattura area pagina"
+                detail="Trascina sull'app aperta per allegare uno screenshot"
+              />
+            ) : null}
           </div>
         ) : null}
       </div>

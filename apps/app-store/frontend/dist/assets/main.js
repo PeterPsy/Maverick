@@ -96,15 +96,18 @@ function appSummary(appId) {
 }
 
 function localAppSummary(item) {
+  const invalid = item.status === "invalid";
   return {
     app_id: item.app_id,
-    description: item.description || "Workspace-local app project.",
+    description: invalid && item.validation_error ? item.validation_error : item.description || "Workspace-local app project.",
     latest_version: item.version || item.active_version || "",
     name: item.name || titleizeAppId(item.app_id),
     publisher: item.publisher || "workspace",
     surfaces: [],
     versions: [{ version: item.version || item.active_version || "" }],
     localStatus: item.status || "uninstalled",
+    validation_error: item.validation_error || "",
+    can_delete: item.can_delete !== false,
     workspace_id: item.workspace_id,
     project_root: item.project_root,
   };
@@ -275,12 +278,13 @@ function renderMoreOptions(app, mode, version, installState) {
     }),
   );
   if (mode === "local") {
+    const invalid = app.localStatus === "invalid";
     panel.append(
       renderMenuItem({
         label: installed ? "Uninstall from workspace" : "Install in workspace",
         icon: installed ? "delete" : "download",
         danger: installed,
-        disabled: !app.workspace_id || isPending,
+        disabled: invalid || !app.workspace_id || isPending,
         action: () => (installed ? uninstallLocalApp(app) : installLocalApp(app)),
       }),
     );
@@ -289,7 +293,7 @@ function renderMoreOptions(app, mode, version, installState) {
         label: "Delete app completely",
         icon: "delete_forever",
         danger: true,
-        disabled: !app.workspace_id || isPending,
+        disabled: !app.can_delete || !app.workspace_id || isPending,
         action: () => deleteLocalApp(app),
       }),
     );
@@ -348,6 +352,9 @@ function renderRow(app, mode) {
     const localMeta = document.createElement("span");
     localMeta.className = "app-row-surfaces";
     localMeta.textContent = `${app.workspace_id || "workspace"} · ${app.localStatus || "uninstalled"}`;
+    if (app.localStatus === "invalid" && app.validation_error) {
+      localMeta.title = app.validation_error;
+    }
     details.append(localMeta);
   }
   if (mode === "store") {

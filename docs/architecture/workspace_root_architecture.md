@@ -246,6 +246,16 @@ Important trust rule:
 - a workspace-local app must still be explicitly installed or mounted for that workspace before it becomes an active capability
 - code under installation-level `/apps` is not workspace-editable unless a fork is explicitly created under the workspace root
 
+Workspace-local app source has three explicit platform states:
+
+- source exists on disk under `workspaces/<workspace_id>/apps/<app_id>/`
+- the project is registered in the core app-hosting control plane through the generic workspace-local registration surface
+- the app is installed/enabled for the owning workspace through the generic workspace-local install flow
+
+The App Store local-app surface should show invalid workspace-local projects with their contract parser error when a project directory has `app_contract.json` but cannot be registered. This keeps workspace-only agents inside the tenant boundary while still giving them enough platform feedback to repair contracts.
+
+Workspace members may register and install workspace-local apps when the workspace governance switches `allow_custom_apps` and `allow_app_installation` are both enabled. This policy applies only to workspace-owned projects under that same workspace root. Installing remote catalog apps, assigning apps across workspaces, complete deletion of workspace-local project source, and managing platform app state remain admin app-management operations.
+
 This means:
 
 - workspace-created apps can be developed locally and installed only into their own workspace

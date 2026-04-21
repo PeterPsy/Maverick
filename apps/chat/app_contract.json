@@ -129,6 +129,23 @@
         "mcp": false,
         "cli": false
       }
+    },
+    {
+      "widget_id": "chat-floating",
+      "host": "base-shell",
+      "content_kinds": [
+        "shell.overlay.bottomright"
+      ],
+      "frontend": {
+        "kind": "iframe",
+        "mount": "frontend/dist/widgets/chat-floating",
+        "spa_fallback": true
+      },
+      "actions": {
+        "backend": true,
+        "mcp": false,
+        "cli": false
+      }
     }
   ]
 }

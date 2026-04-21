@@ -370,6 +370,10 @@ export function createWidgetContext(payload: {
   });
 }
 
+export function getWidgetContext(contextToken: string): Promise<{ context: Record<string, unknown> }> {
+  return requestJson<{ context: Record<string, unknown> }>(`/api/apps/widgets/context/${encodeURIComponent(contextToken)}`);
+}
+
 export function interruptRuntimeTurn(turnId: string): Promise<{
   turn: RuntimeTurn;
   event?: RuntimeEvent;

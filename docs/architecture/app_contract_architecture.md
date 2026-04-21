@@ -105,6 +105,22 @@ Complete deletion is intentionally narrower than uninstall.
 
 Uninstall removes only the workspace binding and preserves app-owned data by default. Complete deletion is valid for workspace-local app projects, where the workspace owns the app source. It must remove the workspace binding if present, delete `workspaces/<workspace_id>/data/<app_id>/`, delete the project directory under `workspaces/<workspace_id>/apps/<app_id>/`, and remove the workspace-local project record so the app no longer appears in the workspace-local catalog. Platform store apps and remote catalog entries are not deleted through a workspace-local delete action because their source is installation-level or external catalog state rather than workspace-owned material.
 
+Workspace-local discovery must be diagnosable. When the core scans `workspaces/<workspace_id>/apps/<app_id>/` and finds an `app_contract.json` that fails contract validation, the project must be reported to App Store management surfaces as an invalid local project with the validation error. Invalid projects must not silently disappear from the local app list because workspace-only agents need the parser error in order to repair the app contract.
+
+The core exposes a generic workspace-local registration surface for app projects born inside a workspace:
+
+```text
+POST /api/app-store/register-local
+```
+
+The request identifies an `app_id` and one owning workspace. The core resolves the project root as `workspaces/<workspace_id>/apps/<app_id>`, validates the canonical `app_contract.json`, and persists the workspace-local project record. This is distinct from installation:
+
+- registration makes the local project known to the app-hosting control plane
+- `POST /api/app-store/install-local` creates the workspace binding and enables the app
+- complete deletion removes the binding, app-owned data, project source, and project registration
+
+Workspace members may use workspace-local registration and installation when workspace governance allows custom apps and app installation. Platform admins and workspace admins may manage local projects when app installation is allowed. Remote catalog app installation and complete deletion of workspace-local project source remain app-management operations and must not be broadened by this workspace-local policy.
+
 ## Distribution Mutability
 
 An app contract should declare its distribution and mutability expectations.
@@ -602,6 +618,10 @@ The app only owns the references it expects to use.
 
 Secret values remain under platform control and must not be stored inside the app-owned workspace data root.
 
+Mounted app backends may request app-scoped secret writes through the generic entrypoint result contract. The core persists or rotates the raw value in the platform secret store, binds it to the current `(workspace_id, app_id, logical_name)`, strips the raw write from the HTTP response, and returns only non-sensitive metadata. On later mounted backend calls, the core may deliver only secrets bound to that same app scope through the entrypoint payload.
+
+This capability is provider-agnostic. OAuth providers, token shapes, refresh semantics, and account metadata remain app-owned behavior.
+
 ## Lifecycle Declaration
 
 Every app should declare which lifecycle operations it supports.
@@ -871,6 +891,14 @@ Host apps may forward generic app data invalidation messages to widgets when the
 For example, if the chat app creates a thread in its own backend, it may emit `maverick.app.data-changed` with `owner_app_id: "chat"` and `resource: "threads"`.
 
 A shell-hosted chat sidebar widget may receive that as `maverick.widget.data-changed` and refresh through the chat app's own backend.
+
+A shell-hosted floating widget follows the same rule. The shell may reserve a visual overlay slot, such as a bottom-right holder, but the embedded app still owns the widget declaration, renderer, backend actions, and persisted state. The shell selects the widget through the registry by `host` and `content_kind`; it must not import the widget owner's source or call private app APIs.
+
+When a shell overlay widget needs awareness of the user's current work surface, the shell may pass the currently mounted app as explicit widget context. That context should include registry-level metadata only, such as app id, name, description, and views. The shell should suppress a widget whose owner app is already the mounted app, because embedding an app's helper inside that same app usually duplicates the active experience.
+
+A floating widget may be only a thin app-owned frame around the owning app's normal frontend. For example, a chat-owned floating assistant can render the normal Chat app inside a collapsible widget frame. Frame-level controls such as choosing the active chat thread or creating a new empty chat may live in that widget frame, while composer behavior, Markdown rendering, attachments, transcript rendering, and runtime ownership stay in the Chat app instead of being copied into a separate mini-chat implementation.
+
+If a shell-hosted widget needs to attach a screenshot of the currently visible work surface, the widget may request a shell-mediated area capture. The shell owns the drag-selection overlay and returns a generic image file to the requesting widget. This capture path must not inspect the mounted app iframe DOM; it is a visual fallback that works across apps without app-specific selection protocols.
 
 This is not direct app-to-app communication: the shell only relays a generic invalidation event and does not read or write app data.
 

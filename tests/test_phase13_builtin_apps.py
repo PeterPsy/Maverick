@@ -5,6 +5,7 @@ from __future__ import annotations
 from io import BytesIO
 from pathlib import Path
 import json
+import os
 import shutil
 import tempfile
 import time
@@ -99,7 +100,10 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
             app,
             path="/api/auth/login",
             method="POST",
-            body={"username": "admin", "password": "maverick3"},
+            body={
+                "username": os.environ.get("MAVERICK3_ADMIN_USERNAME", "admin"),
+                "password": os.environ.get("MAVERICK3_ADMIN_PASSWORD", "maverick3"),
+            },
         )
         self.assertEqual(status, 200)
         return headers["Set-Cookie"].split(";", 1)[0]
@@ -474,7 +478,7 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
         self.assertIn("app.chat.chat", [command.command_id for command in commands])
         self.assertIn("chat-ops", [skill.skill_id for skill in skills])
 
-    def test_chat_declares_base_shell_sidebar_widget(self) -> None:
+    def test_chat_declares_base_shell_widgets(self) -> None:
         repo_root = self.make_repo_root()
         parsed = parse_app_contract_file(repo_root / "apps" / "chat")
         widgets = {widget.widget_id: widget for widget in parsed.contract.widgets}
@@ -484,8 +488,13 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
         self.assertEqual(widgets["chat-sidebar"].content_kinds, ["shell.sidebar.primary"])
         self.assertEqual(widgets["chat-sidebar"].frontend.mount, "frontend/dist/widgets/chat-sidebar")
         self.assertTrue((repo_root / "apps" / "chat" / "frontend" / "dist" / "widgets" / "chat-sidebar" / "index.html").is_file())
+        self.assertIn("chat-floating", widgets)
+        self.assertEqual(widgets["chat-floating"].host, "base-shell")
+        self.assertEqual(widgets["chat-floating"].content_kinds, ["shell.overlay.bottomright"])
+        self.assertEqual(widgets["chat-floating"].frontend.mount, "frontend/dist/widgets/chat-floating")
+        self.assertTrue((repo_root / "apps" / "chat" / "frontend" / "dist" / "widgets" / "chat-floating" / "index.html").is_file())
 
-    def test_base_shell_discovers_chat_sidebar_widget_without_source_paths(self) -> None:
+    def test_base_shell_discovers_chat_widgets_without_source_paths(self) -> None:
         repo_root = self.make_repo_root()
         state = bootstrap_platform_state(start_path=repo_root)
         app = PlatformHost(state, start_path=repo_root)
@@ -505,6 +514,21 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
         self.assertEqual(payload["items"][0]["frontend_mount"], "/api/apps/widgets/chat/chat-sidebar/frontend/")
         self.assertNotIn("source_root", payload["items"][0])
         self.assertNotIn("source_path", payload["items"][0])
+
+        overlay_status, overlay_body, _overlay_headers = self.invoke(
+            app,
+            path="/api/apps/widgets",
+            query_string="host=base-shell&content_kind=shell.overlay.bottomright",
+            cookie=cookie,
+        )
+        overlay_payload = json.loads(overlay_body.decode("utf-8"))
+
+        self.assertEqual(overlay_status, 200)
+        self.assertEqual(overlay_payload["items"][0]["owner_app_id"], "chat")
+        self.assertEqual(overlay_payload["items"][0]["widget_id"], "chat-floating")
+        self.assertEqual(overlay_payload["items"][0]["frontend_mount"], "/api/apps/widgets/chat/chat-floating/frontend/")
+        self.assertNotIn("source_root", overlay_payload["items"][0])
+        self.assertNotIn("source_path", overlay_payload["items"][0])
 
     def test_chat_sidebar_backend_supports_project_and_thread_settings(self) -> None:
         repo_root = self.make_repo_root()

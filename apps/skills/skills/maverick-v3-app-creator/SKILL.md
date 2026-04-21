@@ -53,6 +53,26 @@ Clarify or infer these before implementation. If any requirement is still produc
 - If the app needs a missing generic capability, add a generic core surface or document the gap in `IMPLEMENTATION_TASKLIST.md`.
 - If behavior is app-specific, implement it inside the app.
 
+## Installation Is Required
+
+Creating an app source tree is not enough for Maverick to use the app.
+
+Every new app must finish with the correct generic app-hosting flow for its distribution mode:
+
+- built-in or installation-level apps under `/home/ubuntu/maverick-v3/apps/<app_id>` must be registered from `app_contract.json`, installed/enabled into the target workspace, and verified through the same generic bootstrap/app-hosting state that the App Store reports
+- workspace-local apps under `workspaces/<workspace_id>/apps/<app_id>` must be registered as workspace-local projects, installed/enabled into their owning workspace, and verified through App Store local-app and installation surfaces
+- source-available forks must be installed from the correct source record or workspace-local fork record; do not rely on copied files alone
+
+Do not say an app is complete just because files, tests, or `app_contract.json` exist. The final summary must explicitly state the app's source state, registration state, installation/binding state, and whether the app is enabled for the intended workspace.
+
+Use only generic platform operations for this:
+
+- built-in/server app registration and install through contract-driven app-hosting bootstrap or `register_app_source_from_contract(...)` plus `install_store_app(...)`
+- workspace-local registration and install through App Store APIs or `register_workspace_local_app_project_from_contract(...)` plus `install_workspace_local_app(...)`
+- verification through `/api/app-store/installations`, `/api/apps`, app bindings, CLI/MCP listings, mounted frontend checks, or equivalent generic core service calls
+
+Do not add app-specific registration scripts, hardcoded core lists, or branches such as `if app_id == "<new-app>"`.
+
 ## Workspace-Local App Registration
 
 Creating files under `workspaces/<workspace_id>/apps/<app_id>/` does not make the app visible to Maverick.
@@ -96,6 +116,101 @@ Do not implement app-specific registration shortcuts.
 
 Registration and installation must remain generic core app-hosting operations.
 
+When running inside a workspace-only sandbox, use the hosted core API rather than reading or writing control-plane files directly:
+
+```text
+POST /api/app-store/register-local
+POST /api/app-store/install-local
+GET /api/app-store/installations
+GET /api/apps
+```
+
+The local project root is always resolved by the core from `workspace_id` and `app_id` as:
+
+```text
+workspaces/<workspace_id>/apps/<app_id>
+```
+
+Do not invent endpoints, desktop launchers, file links, or standalone static servers as substitutes for a Maverick local app. If `GET /api/app-store/installations` reports a local app with `status: "invalid"`, read `validation_error`, fix `app_contract.json`, then call `register-local` again.
+
+Minimum valid frontend-only workspace-local contract:
+
+```json
+{
+  "app_id": "example-local",
+  "contract_version": "1.0",
+  "name": "Example Local",
+  "version": "0.1.0",
+  "description": "Workspace-local app.",
+  "publisher": "workspace",
+  "minimum_core_version": "0.1.0",
+  "distribution": {
+    "mode": "workspace_local",
+    "source_access": "editable"
+  },
+  "capabilities": {
+    "mcp_tools": [],
+    "cli_commands": [],
+    "skills": [],
+    "views": ["main"]
+  },
+  "entrypoints": {
+    "frontend": "frontend/dist",
+    "hooks": {}
+  },
+  "storage": {
+    "storage_kind": "json",
+    "data_schema_version": "1",
+    "primary_paths": ["data/example-local/state.json"],
+    "indices": null,
+    "supports_export": false,
+    "supports_import": false,
+    "supports_migrations": false
+  },
+  "compatibility": {
+    "workspace_modes": ["sandbox", "full-access"]
+  },
+  "hook_timeouts": {
+    "install_seconds": 60,
+    "upgrade_seconds": 120,
+    "migrate_seconds": 300,
+    "export_seconds": 120,
+    "import_seconds": 120,
+    "validate_after_import_seconds": 60,
+    "repair_after_import_seconds": 180,
+    "health_check_seconds": 30
+  },
+  "lifecycle": {
+    "install": false,
+    "upgrade": false,
+    "uninstall": false,
+    "migrate": false,
+    "export": false,
+    "import": false,
+    "validate_after_import": false,
+    "repair_after_import": false,
+    "rebuild": false,
+    "health_check": false
+  },
+  "health_contract": {
+    "mode": "none",
+    "degraded_on_failure": true
+  },
+  "failure_semantics": {
+    "install_failure": "block_activation",
+    "migrate_failure": "preserve_data_mark_unhealthy",
+    "import_failure": "preserve_payload_mark_failed"
+  },
+  "rollback_support": {
+    "bundle": false,
+    "data": false,
+    "repair_only": false
+  }
+}
+```
+
+Replace every `example-local` occurrence with the real `app_id`, keep it lowercase kebab-case, and make every declared entrypoint resolve to a real path under the app root.
+
 ## Planning Workflow
 
 For non-trivial apps, produce a short plan before coding.
@@ -107,7 +222,8 @@ For non-trivial apps, produce a short plan before coding.
 5. Identify generic core gaps separately from app work.
 6. Choose the smallest useful app structure.
 7. Define tests and smoke checks before or alongside implementation.
-8. Include docs and `IMPLEMENTATION_TASKLIST.md` updates in the same change.
+8. Define the generic registration/install/enable verification for the app's distribution mode.
+9. Include docs and `IMPLEMENTATION_TASKLIST.md` updates in the same change.
 
 ## Target App Structure
 
@@ -264,9 +380,11 @@ Default to focused tests for contracts, path rules, store behavior, and entrypoi
 Useful test categories:
 
 - contract parses under `parse_app_contract_file`
+- built-in or store app registers from its contract and creates an enabled workspace binding when intended for immediate use
 - workspace-local app is registered with `register_workspace_local_app_project_from_contract`
 - `/api/app-store/installations` reports registered workspace-local app in `local_apps`
 - workspace-local app can be installed with `install_workspace_local_app` when requested
+- `/api/app-store/installations` and/or `/api/apps` reports the app as installed/enabled for the target workspace
 - install hook creates expected data under `data/<app_id>`
 - seed is idempotent
 - backend actions return expected status and payloads
@@ -315,7 +433,9 @@ If a command cannot run, state why in the final summary.
 
 - creating app-specific shortcuts in core
 - adding an app to a hardcoded core list when contract-driven discovery is available
+- assuming a built-in app is usable because its folder exists under `/apps`
 - assuming a workspace-local app is visible because its folder exists
+- forgetting to run or verify the generic registration/install/enable flow after creating an app
 - forgetting to register a `workspace_local` app after creating its `app_contract.json`
 - installing a workspace-local app into a workspace other than its owning workspace
 - declaring surfaces that are not implemented
@@ -331,9 +451,11 @@ If a command cannot run, state why in the final summary.
 A new Maverick v3 app is done when:
 
 - `app_contract.json` is valid
+- installation-level apps are registered from their contract and installed/enabled in the intended workspace when they should be immediately usable
 - workspace-local apps are registered in app-hosting control-plane records
-- apps that should be usable immediately are installed/enabled in their owning workspace
+- apps that should be usable immediately are installed/enabled in their target workspace
 - App Store visibility is verified through `local_apps` for workspace-local apps
+- App Store installation state, `/api/apps`, app bindings, or equivalent generic service calls verify the installed/enabled state
 - every declared surface exists and works
 - app-owned data is under `data/<app_id>`
 - install and health behavior are idempotent

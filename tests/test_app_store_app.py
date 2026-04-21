@@ -512,6 +512,116 @@ class AppStoreAppTestCase(unittest.TestCase):
         saved = state.app_store.get_workspace_local_app_project(workspace_id="default", app_id="local-notes")
         self.assertEqual(saved.project_root, str(local_app_root))
 
+    def test_installations_api_reports_invalid_workspace_local_app_projects(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        invalid_app_root = repo_root / "workspaces" / "default" / "apps" / "broken-local"
+        invalid_app_root.mkdir(parents=True)
+        (invalid_app_root / "app_contract.json").write_text(
+            json.dumps(
+                {
+                    "app_id": "broken-local",
+                    "contract_version": "1.0",
+                    "name": "Broken Local",
+                    "version": "0.1.0",
+                    "description": "Invalid local app.",
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        app = PlatformHost(state, start_path=repo_root)
+        cookie = self.login(app)
+
+        status, payload, _headers = self.invoke(app, path="/api/app-store/installations", cookie=cookie)
+
+        self.assertEqual(status, 200)
+        invalid_items = [item for item in payload["local_apps"] if item["app_id"] == "broken-local"]
+        self.assertEqual(len(invalid_items), 1)
+        self.assertEqual(invalid_items[0]["status"], "invalid")
+        self.assertIn("publisher", invalid_items[0]["validation_error"])
+
+    def test_register_local_api_reports_contract_validation_errors(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        invalid_app_root = repo_root / "workspaces" / "default" / "apps" / "broken-local"
+        invalid_app_root.mkdir(parents=True)
+        (invalid_app_root / "app_contract.json").write_text("{}", encoding="utf-8")
+        app = PlatformHost(state, start_path=repo_root)
+        cookie = self.login(app)
+
+        status, payload, _headers = self.invoke(
+            app,
+            path="/api/app-store/register-local",
+            method="POST",
+            body={"app_id": "broken-local", "workspace_ids": ["default"]},
+            cookie=cookie,
+        )
+
+        self.assertEqual(status, 400)
+        self.assertEqual(payload["error"], "register_failed")
+        self.assertIn("app_id", payload["detail"])
+
+    def test_member_can_register_and_install_workspace_local_app_when_custom_apps_allowed(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+        admin_cookie = self.login(app)
+        member_cookie = self.create_member_user(app, admin_cookie)
+        local_app_root = repo_root / "workspaces" / "default" / "apps" / "local-notes"
+        self.write_workspace_local_app_contract(local_app_root, frontend=True)
+
+        register_status, registered, _register_headers = self.invoke(
+            app,
+            path="/api/app-store/register-local",
+            method="POST",
+            body={"app_id": "local-notes", "workspace_ids": ["default"]},
+            cookie=member_cookie,
+        )
+        install_status, installed, _install_headers = self.invoke(
+            app,
+            path="/api/app-store/install-local",
+            method="POST",
+            body={"app_id": "local-notes", "workspace_ids": ["default"]},
+            cookie=member_cookie,
+        )
+        mount_status, mount_body, _mount_headers = self.invoke(app, path="/apps/local-notes/", cookie=member_cookie)
+
+        self.assertEqual(register_status, 201)
+        self.assertEqual(registered["status"], "registered")
+        self.assertEqual(install_status, 201)
+        self.assertEqual(installed["source_kind"], "workspace_local_project")
+        self.assertEqual(mount_status, 200)
+        self.assertIn(b"Local Notes", mount_body)
+
+    def test_member_cannot_delete_workspace_local_app_project(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+        admin_cookie = self.login(app)
+        member_cookie = self.create_member_user(app, admin_cookie)
+        local_app_root = repo_root / "workspaces" / "default" / "apps" / "local-notes"
+        self.write_workspace_local_app_contract(local_app_root, frontend=True)
+        self.invoke(
+            app,
+            path="/api/app-store/register-local",
+            method="POST",
+            body={"app_id": "local-notes", "workspace_ids": ["default"]},
+            cookie=member_cookie,
+        )
+
+        delete_status, delete_payload, _headers = self.invoke(
+            app,
+            path="/api/app-store/delete-local",
+            method="POST",
+            body={"app_id": "local-notes", "workspace_ids": ["default"]},
+            cookie=member_cookie,
+        )
+
+        self.assertEqual(delete_status, 403)
+        self.assertEqual(delete_payload["error"], "workspace_admin_required")
+        self.assertTrue(local_app_root.exists())
+
     def test_local_app_discovery_persists_across_platform_bootstrap(self) -> None:
         repo_root = self.make_repo_root()
         state = bootstrap_platform_state(start_path=repo_root)

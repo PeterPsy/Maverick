@@ -179,6 +179,9 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] enforce that an app cannot be enabled before it is installed
 - [x] Implement install flow for server app store artifacts and trusted external bundles
 - [x] Implement install flow for workspace-local apps under `workspaces/<id>/apps/`
+- [x] Expose generic workspace-local app project registration for workspace-owned app source
+- [x] Report invalid workspace-local app contracts in App Store local-app listings instead of silently hiding them
+- [x] Allow workspace members to register and install workspace-local apps when governance allows custom apps and app installation
 - [x] Implement deterministic creation of `workspaces/<id>/data/<app_id>/` during install
 - [x] Implement uninstall flow:
   - [x] remove active capability from the workspace
@@ -789,6 +792,8 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] add focused contract, mount, backend, MCP/CLI, widget, and security validation tests
 - [ ] Define and implement registry-driven widget mounting:
   - [x] document widget ownership and embedding model in architecture docs
+  - [x] keep shell-hosted floating chat as a chat-owned frame around the normal Chat app instead of duplicating mini-chat behavior
+  - [x] support shell-mediated area screenshot capture for the floating chat widget without inspecting mounted app iframe DOM
   - [x] Define widget contract model:
     - [x] add `WidgetDeclaration`
     - [x] add `WidgetFrontendDeclaration`
@@ -860,6 +865,14 @@ without carrying forward legacy structure or backward-compatibility constraints 
     - [x] add app-owned floating settings panels for projects and individual chats
     - [x] support chat-owned rename, move, delete, and project creation actions through the chat backend
     - [x] add tests for contract declaration, widget registry discovery, and absence of source-path leakage
+  - [x] Implement chat-owned floating overlay widget for `base-shell`:
+    - [x] add a base-shell bottom-right overlay holder that mounts widgets through generic discovery
+    - [x] declare `chat-floating` in `apps/chat/app_contract.json`
+    - [x] use `host=base-shell` and `content_kind=shell.overlay.bottomright`
+    - [x] keep floating chat rendering and actions owned by the chat app frontend/backend/runtime surfaces
+    - [x] pass the currently mounted shell app as explicit widget context for floating agent turns
+    - [x] hide owner widgets when the currently mounted app is the same app that owns the widget
+    - [x] keep base-shell free of chat-specific imports or widget-owner filesystem paths
   - [x] Implement App Store-owned sidebar shortcut widget for `base-shell`:
     - [x] declare `app-shortcuts` in `apps/app-store/app_contract.json`
     - [x] use `host=base-shell` and `content_kind=shell.sidebar.apps`
@@ -956,6 +969,161 @@ without carrying forward legacy structure or backward-compatibility constraints 
 - [x] Implement initial CRM operator frontend under `apps/crm/frontend/dist`
 - [x] Add CRM app tests for contract parsing, lifecycle hooks, backend behavior, CLI/MCP entrypoints, and core-mounted end-to-end usage
 
+## Phase 18: Email Provider App
+
+Proposed app id: `email`. Purpose: let a non-technical workspace user connect Gmail or Outlook with delegated OAuth login, then let authorized agents inspect mail, search/read threads, compose drafts locally, and send mail through the connected account without handling provider credentials directly.
+
+- [ ] Confirm product scope and policy boundaries:
+  - [ ] Confirm whether connected accounts are personal-to-user, workspace-shared, or both
+  - [ ] Confirm whether agents may send immediately or must create drafts requiring human approval before send
+  - [ ] Confirm first provider set: Gmail and Outlook/Microsoft Graph only
+  - [ ] Confirm attachment support for read and send in v1
+  - [ ] Confirm retention policy for cached email bodies, metadata, and sent-message audit records
+- [ ] Define app contract before implementation:
+  - [ ] Create built-in app source under `apps/email`
+  - [ ] Set `distribution.mode = "sealed"` and `source_access = "none"` for the first built-in version
+  - [ ] Declare frontend, backend, MCP, CLI, lifecycle hooks, and skills only when implemented
+  - [ ] Declare `capabilities.reference_entities` for `email_account`, `email_thread`, and `email_message`
+  - [ ] Declare storage under `data/email`
+  - [ ] Keep core app-agnostic; do not add Gmail or Outlook branches in core
+- [ ] Resolve generic core gaps before storing real OAuth credentials:
+  - [x] Add a generic app-owned secret write/rotate/revoke surface for mounted app backends, or an equivalent entrypoint payload capability, so apps can store OAuth refresh tokens without writing raw tokens to `data/<app_id>`
+  - [ ] Add authenticated user context to mounted app backend payloads so the Email app can bind OAuth connections to the correct Maverick user
+  - [x] Add tests proving app backends can store and resolve only their own app-scoped secrets without exposing raw values to frontend clients
+  - [x] Keep OAuth provider details inside the Email app; core secret storage remains provider-agnostic
+- [ ] Design provider abstraction inside the app:
+  - [ ] Define `ProviderAdapter` interface for `start_authorization`, `exchange_code`, `refresh_access_token`, `list_messages`, `get_message`, `search_threads`, `create_draft`, and `send_message`
+  - [ ] Implement Gmail adapter with delegated OAuth and least practical scopes for read and send
+  - [ ] Implement Outlook adapter through Microsoft Graph delegated permissions
+  - [ ] Normalize provider records into app-owned models without leaking provider-specific payloads across service boundaries
+  - [ ] Add provider capability metadata for read-only, send, drafts, attachments, labels/folders, and pagination
+- [ ] Define workspace data layout and schema version:
+  - [ ] Use SQLite or a small explicit JSON+SQLite layout under `workspaces/<workspace_id>/data/email`
+  - [ ] Store account metadata, provider ids, user ownership, scope grants, sync cursors, folder/label summaries, message metadata cache, and audit events
+  - [ ] Store OAuth access and refresh tokens only through core app-scoped secrets
+  - [ ] Decide whether full message bodies are cached, encrypted, redacted, or fetched on demand
+  - [ ] Add schema migration support from version `1`
+- [ ] Implement lifecycle hooks:
+  - [ ] `install.py` creates app data root and schema idempotently
+  - [ ] `migrate.py` upgrades schema idempotently
+  - [ ] `health_check.py` verifies database readability and secret binding metadata health without resolving raw tokens
+- [ ] Implement backend actions:
+  - [ ] `providers.list`
+  - [ ] `oauth.start`
+  - [ ] `oauth.callback`
+  - [ ] `accounts.list`
+  - [ ] `accounts.disconnect`
+  - [ ] `messages.search`
+  - [ ] `messages.get`
+  - [ ] `threads.get`
+  - [ ] `drafts.create`
+  - [ ] `drafts.update`
+  - [ ] `messages.send`
+  - [ ] `audit.list`
+  - [ ] `health.check`
+- [ ] Implement frontend workflow:
+  - [ ] First screen shows connected accounts and provider login buttons, not a marketing page
+  - [ ] User can connect Gmail or Outlook through one-click OAuth login
+  - [ ] User can see connection status, granted scopes, last sync/check status, and disconnect action
+  - [ ] User can search/read mail, compose a draft, and send from connected accounts
+  - [ ] UI clearly marks agent-sent or agent-drafted mail and exposes audit history
+  - [ ] Error states explain admin/provider verification issues without exposing tokens
+- [ ] Implement MCP tools for agents:
+  - [ ] `email_accounts_list`
+  - [ ] `email_messages_search`
+  - [ ] `email_message_get`
+  - [ ] `email_thread_get`
+  - [ ] `email_draft_create`
+  - [ ] `email_send`
+  - [ ] `email_reference_manifest`
+  - [ ] `email_reference_search`
+  - [ ] `email_reference_resolve`
+  - [ ] `email_reference_summarize`
+  - [ ] Enforce account ownership/workspace policy and send-approval mode in every tool
+- [ ] Implement CLI surface:
+  - [ ] `email accounts list`
+  - [ ] `email messages search`
+  - [ ] `email message get`
+  - [ ] `email draft create`
+  - [ ] `email send`
+  - [ ] `email health`
+- [ ] Implement skill template:
+  - [ ] Add `apps/email/skills/email-ops/SKILL.md`
+  - [ ] Instruct agents to search/read narrowly, summarize safely, draft before send when policy requires, and avoid exposing sensitive mail content unnecessarily
+- [ ] Security and compliance checks:
+  - [ ] Use OAuth state/nonce and bind callbacks to the active Maverick user/session
+  - [ ] Store provider client secrets as platform/app secrets, not in app source or workspace data
+  - [ ] Store user refresh tokens as app-scoped secrets
+  - [ ] Redact tokens and sensitive headers from logs, audit events, runtime output, frontend payloads, and tests
+  - [ ] Keep Gmail restricted-scope verification/security-assessment requirements documented before production use
+  - [ ] Keep Microsoft delegated permissions separate from application permissions; do not request tenant-wide application mail access in v1
+- [ ] Tests and verification:
+  - [ ] Contract parser test for `apps/email/app_contract.json`
+  - [ ] Lifecycle hook idempotency tests
+  - [ ] Store/model tests for accounts, cursors, audit events, drafts, and message cache
+  - [ ] OAuth flow tests with mocked Gmail and Microsoft token endpoints
+  - [ ] Provider adapter tests with mocked Gmail API and Graph responses
+  - [ ] Backend action tests for happy paths and permission failures
+  - [ ] MCP and CLI tests sharing the same service behavior
+  - [ ] Core gap tests for app-scoped secret write/resolve if that generic surface is added
+  - [ ] Frontend build test with `npm --prefix apps/email run build`
+  - [ ] Mounted app smoke test through `PlatformHost`
+- [ ] Documentation and release readiness:
+  - [ ] Document app data layout and OAuth setup in app README
+  - [ ] Document required Gmail and Microsoft app registration steps
+  - [ ] Document user-facing privacy and send-approval behavior
+  - [ ] Update architecture docs only if generic core secret or backend user-context behavior changes
+  - [ ] Do not mark this phase complete until frontend, backend, MCP, CLI, hooks, tests, docs, and verification are real
+
+## Phase 18A: Gmail App Relationship MVP
+
+Built-in app id: `gmail-app`. Purpose: connect a Google Workspace Gmail workflow to Maverick relationship operations with user-reviewed CRM saves and explicit confirmation before every send.
+
+- [x] Define the Gmail App architecture and implementation tasklist in `workspaces/default/storage/generated/gmail_app_architecture_tasklist.md`
+- [x] Create built-in app source under `apps/gmail-app`
+- [x] Declare `source_available` and `forkable` distribution in `apps/gmail-app/app_contract.json`
+- [x] Declare frontend, backend, MCP, CLI, lifecycle hooks, and skill surfaces only where implemented
+- [x] Store Gmail App data under `data/gmail-app` with SQLite plus `state.json`
+- [x] Implement idempotent install, migrate, and health-check hooks
+- [x] Implement Gmail client abstraction with a fake client for deterministic tests and a minimal HTTP Gmail adapter for token-backed calls
+- [x] Implement browser-session Google Workspace OAuth authorization-code login with PKCE/state checks
+- [x] Implement backend actions for connection status, account metadata, thread search, thread detail, summary, relationship suggestions, reviewed CRM save, reply preparation, send approval, approved send, audit, and health
+- [x] Enforce explicit send approval before Gmail send
+- [x] Keep OAuth tokens out of app-owned data; only account metadata and secret references are persisted
+- [x] Implement CRM gateway through the CRM CLI entrypoint instead of direct CRM data-file writes
+- [x] Implement MCP tools sharing backend service behavior
+- [x] Implement CLI command group sharing backend service behavior
+- [x] Implement `gmail-app-ops` skill with send-confirmation and CRM-boundary rules
+- [x] Implement an operator frontend and build `frontend/dist`
+- [x] Document MVP boundaries and Google Workspace setup notes in `apps/gmail-app/README.md`
+- [x] Add focused tests for contract parsing, lifecycle idempotency, thread review, reviewed CRM save through CRM entrypoint, send approval, and CLI/MCP entrypoints
+- [x] Run `python3 -m unittest discover -s tests -p 'test_gmail_app.py'`
+- [x] Run `npm --prefix apps/gmail-app run build`
+- [x] Run `python3 scripts/check_unused_imports.py`
+- [x] Move refresh-token persistence to generic app-scoped core secrets once that write/resolve surface is available
+- [ ] Refine user-facing CRM field mapping after live workflow testing with real contacts and accounts
+
+## Phase 18B: Document Generator App
+
+Built-in app id: `document-generator`. Purpose: expose agent-facing document generation for DOCX, PPTX, PDF, and XLSX through Maverick CLI, MCP, and a procedural skill, with a minimal frontend mount only for app visibility.
+
+- [x] Create built-in app source under `apps/document-generator`
+- [x] Declare sealed distribution in `apps/document-generator/app_contract.json`
+- [x] Declare backend, CLI, MCP, skill, lifecycle hook, and minimal frontend surfaces only where implemented
+- [x] Store app-owned state under `data/document-generator`
+- [x] Write generated documents under workspace `storage/generated`
+- [x] Support `docx`, `pptx`, `pdf`, and `xlsx`; intentionally exclude legacy `xls`
+- [x] Implement idempotent install, migrate, and health-check hooks
+- [x] Implement backend service validation and generation with standard-library document writers
+- [x] Implement CLI command sharing backend service behavior
+- [x] Implement MCP tools sharing backend service behavior
+- [x] Implement `document-generator-docs` skill for agent document creation procedure
+- [x] Add a minimal mounted frontend under `frontend/dist`
+- [x] Add focused tests for contract parsing, format generation, invalid `xls`, path rejection, frontend mounting, CLI, and MCP
+- [x] Run `python3 -m unittest tests/test_document_generator_app.py`
+- [x] Run `python3 -m compileall apps/document-generator tests/test_document_generator_app.py`
+- [x] Run `python3 scripts/check_unused_imports.py`
+
 ## Phase 8: Inter-Agent Communication
 
 - [ ] Implement inter-agent message model
@@ -984,7 +1152,11 @@ without carrying forward legacy structure or backward-compatibility constraints 
 12. Phase 12
 13. Phase 13
 14. Phase 14
-15. Phase 8
+15. Phase 15
+16. Phase 16
+17. Phase 17
+18. Phase 18
+19. Phase 8
 
 ## Immediate Next Step
 

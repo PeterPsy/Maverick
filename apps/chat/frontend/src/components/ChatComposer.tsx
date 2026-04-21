@@ -236,6 +236,7 @@ export function ChatComposer({
   isSending,
   mentionItems,
   onAddAttachments,
+  onCapturePageArea,
   onChange,
   onRemoveAttachment,
   onStopTurn,
@@ -251,6 +252,7 @@ export function ChatComposer({
   isSending: boolean;
   mentionItems: MentionItem[];
   onAddAttachments: (files: File[]) => void;
+  onCapturePageArea?: () => void;
   onChange: (value: string) => void;
   onRemoveAttachment: (attachmentId: string) => void;
   onStopTurn: () => void;
@@ -427,7 +429,7 @@ export function ChatComposer({
         <AttachmentPreviewStrip attachments={attachments} disabled={isSending} onRemoveAttachment={onRemoveAttachment} />
         <QueuedMessageNotice queuedCount={queuedCount} queuedPreview={queuedPreview} />
         <div className={`chatapp-composer__row ${isSending ? "is-busy" : "is-idle"}`}>
-          <AttachmentMenu attachments={attachments} disabled={disabled} onAddAttachments={onAddAttachments} />
+          <AttachmentMenu attachments={attachments} disabled={disabled} onAddAttachments={onAddAttachments} onCapturePageArea={onCapturePageArea} />
           <div
             aria-disabled={disabled}
             className={`chat-ui-input chat-ui-input--textarea chatapp-composer__field chatapp-composer__editor ${value ? "" : "is-empty"}`}

@@ -100,7 +100,13 @@
 }
 
 .chatapp-provider-selector option {
-  color: #10131c;
+  background: #171717;
+  color: var(--maverick-text);
+}
+
+.chatapp-provider-selector option:checked {
+  background: #2b79ff;
+  color: #ffffff;
 }
 
 .chatapp-execution-chip {

@@ -3,9 +3,11 @@ import {
   ChatThread,
   createRuntimeSession,
   createThread,
+  AppReference,
   getAgentsCommonPrompt,
   getThread,
   getRuntimeSession,
+  getWidgetContext,
   interruptRuntimeTurn,
   listApps,
   listProviders,
@@ -37,6 +39,8 @@ import { eventsToMessages, firstUserTitle } from "./lib/transcript";
 type ShellNavigationMessage = {
   type?: string;
   deleted_thread_id?: string;
+  error?: string;
+  files?: unknown[];
   owner_app_id?: string;
   app_id?: string;
   params?: Record<string, string | boolean | null>;
@@ -52,8 +56,16 @@ type RuntimeSessionThreadMetadata = {
 };
 
 type CreateChatOptions = {
+  activeAppContext?: ActiveAppContext | null;
   projectId?: string | null;
   resetView?: boolean;
+};
+
+type ActiveAppContext = {
+  app_id: string;
+  description: string;
+  name: string;
+  views: string[];
 };
 
 type RuntimeHistoryCacheEntry = {
@@ -65,7 +77,7 @@ type RuntimeHistoryCacheEntry = {
 const MESSAGE_HISTORY_LIMIT = 50;
 const RUNTIME_EVENT_REPLAY_LIMIT = 1000;
 
-export function App() {
+export function App({ enablePageCapture = false }: { enablePageCapture?: boolean } = {}) {
   const [providers, setProviders] = useState<ProviderItem[]>([]);
   const [activeProviderId, setActiveProviderId] = useState("codex");
   const [threads, setThreads] = useState<ChatThread[]>([]);
@@ -84,6 +96,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [composerError, setComposerError] = useState<string | null>(null);
   const [mentionItems, setMentionItems] = useState<MentionItem[]>([]);
+  const [activeAppContext, setActiveAppContext] = useState<ActiveAppContext | null>(null);
   const consumedNewChatRequests = useRef<Set<string>>(new Set());
   const consumedLegacyNewChatRequest = useRef(false);
   const historyCacheRef = useRef<Map<string, RuntimeHistoryCacheEntry>>(new Map());
@@ -171,6 +184,8 @@ export function App() {
   async function loadInitialState() {
     setIsBootstrapping(true);
     try {
+      const widgetActiveAppContext = await loadWidgetActiveAppContext();
+      setActiveAppContext(widgetActiveAppContext);
       const [providerPayload, threadPayload] = await Promise.all([listProviders(), listThreads()]);
       setProviders(providerPayload.items || [providerPayload.active_provider]);
       setActiveProviderId(providerPayload.active_provider.provider_id);
@@ -179,7 +194,7 @@ export function App() {
       const requestedThreadId = query.get("thread_id");
       let firstThread = threadPayload.threads.find((thread) => thread.thread_id === requestedThreadId) || threadPayload.threads[0] || null;
       if (query.get("new_chat") === "1") {
-        firstThread = await createChat({ projectId: query.get("project_id") });
+        firstThread = await createChat({ activeAppContext: widgetActiveAppContext, projectId: query.get("project_id") });
       } else if (requestedThreadId && !firstThread) {
         const thread = await getThread(requestedThreadId);
         firstThread = thread.thread;
@@ -243,6 +258,18 @@ export function App() {
         return;
       }
       const payload = event.data as ShellNavigationMessage;
+      if (payload.type === "maverick.widget.capture-area.complete") {
+        const files = Array.isArray(payload.files) ? payload.files.filter((file): file is File => file instanceof File) : [];
+        if (files.length) {
+          addAttachments(files);
+          setComposerError(null);
+        }
+        return;
+      }
+      if (payload.type === "maverick.widget.capture-area.error") {
+        setComposerError(payload.error || "Unable to capture page area.");
+        return;
+      }
       if (payload.type === "maverick.app.data-changed" && payload.owner_app_id === "chat" && payload.resource === "threads") {
         void refreshThreadsAfterDataChange(payload.deleted_thread_id || "");
         return;
@@ -301,11 +328,11 @@ export function App() {
     clearAttachments();
   }
 
-  async function createChat({ projectId = null, resetView = true }: CreateChatOptions = {}) {
+  async function createChat({ activeAppContext: activeAppContextOverride, projectId = null, resetView = true }: CreateChatOptions = {}) {
     if (resetView) {
       resetActiveConversation();
     }
-    const systemPrompt = await loadDefaultSystemPrompt();
+    const systemPrompt = await loadDefaultSystemPrompt(activeAppContextOverride ?? activeAppContext);
     const payload = await createThread("", projectId, { system_prompt: systemPrompt });
     setThreads(payload.threads);
     setActiveThread(payload.thread);
@@ -441,7 +468,7 @@ export function App() {
     }
     setComposer("");
     clearAttachments();
-    const appReferences = appReferencesFromText(input, mentionItems);
+    const appReferences = mergeAppReferences(appReferencesFromText(input, mentionItems), activeAppContext);
     if (isRuntimeBusy || isSending) {
       setQueuedMessages((current) => [...current, { clientMessageId, content: input, attachments: messageAttachments, appReferences }]);
       return;
@@ -472,7 +499,7 @@ export function App() {
       }
       if (!thread.runtime_session_id) {
         const session = await createRuntimeSession({
-          system_prompt: thread.system_prompt,
+          system_prompt: promptWithActiveAppContext(thread.system_prompt, activeAppContext),
           source_app_id: "chat",
         });
         const updated = await updateThread({ thread_id: thread.thread_id, runtime_session_id: session.session_id });
@@ -533,6 +560,17 @@ export function App() {
     setComposerError(null);
   }
 
+  function handleCapturePageArea() {
+    window.parent?.postMessage(
+      {
+        type: "maverick.shell.capture-area.start",
+        owner_app_id: "chat",
+        widget_id: "chat-floating",
+      },
+      window.location.origin,
+    );
+  }
+
   async function handleStopTurn() {
     if (!activeTurn || !canStopTurn) {
       return;
@@ -578,6 +616,7 @@ export function App() {
               isSending={isRuntimeBusy || isSending}
               mentionItems={mentionItems}
               onAddAttachments={handleAddAttachments}
+              onCapturePageArea={enablePageCapture ? handleCapturePageArea : undefined}
               onChange={setComposer}
               onRemoveAttachment={removeAttachment}
               onStopTurn={handleStopTurn}
@@ -625,12 +664,76 @@ function consumeNewChatRequest(
   return true;
 }
 
-async function loadDefaultSystemPrompt(): Promise<string> {
-  try {
-    return await getAgentsCommonPrompt();
-  } catch {
-    return "";
+async function loadWidgetActiveAppContext(): Promise<ActiveAppContext | null> {
+  const token = new URLSearchParams(window.location.search).get("context");
+  if (!token) {
+    return null;
   }
+  try {
+    const payload = await getWidgetContext(token);
+    return activeAppContextFromWidgetContext(payload.context);
+  } catch {
+    return null;
+  }
+}
+
+async function loadDefaultSystemPrompt(activeApp: ActiveAppContext | null): Promise<string> {
+  try {
+    return promptWithActiveAppContext(await getAgentsCommonPrompt(), activeApp);
+  } catch {
+    return promptWithActiveAppContext("", activeApp);
+  }
+}
+
+function activeAppContextFromWidgetContext(context: Record<string, unknown>): ActiveAppContext | null {
+  const content = context.content;
+  if (!content || typeof content !== "object") {
+    return null;
+  }
+  const payload = (content as { payload?: unknown }).payload;
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+  const activeApp = (payload as { active_app?: unknown }).active_app;
+  if (!activeApp || typeof activeApp !== "object") {
+    return null;
+  }
+  const record = activeApp as Record<string, unknown>;
+  const appId = typeof record.app_id === "string" ? record.app_id.trim() : "";
+  if (!appId || appId === "chat") {
+    return null;
+  }
+  return {
+    app_id: appId,
+    description: typeof record.description === "string" ? record.description : "",
+    name: typeof record.name === "string" && record.name.trim() ? record.name.trim() : appId,
+    views: Array.isArray(record.views) ? record.views.filter((item): item is string => typeof item === "string") : [],
+  };
+}
+
+function promptWithActiveAppContext(basePrompt: string, activeApp: ActiveAppContext | null): string {
+  if (!activeApp) {
+    return basePrompt;
+  }
+  if (basePrompt.includes(`active_app_id: ${activeApp.app_id}`)) {
+    return basePrompt;
+  }
+  const lines = [
+    "Current shell context:",
+    `- active_app_id: ${activeApp.app_id}`,
+    `- active_app_name: ${activeApp.name}`,
+  ];
+  if (activeApp.description) {
+    lines.push(`- active_app_description: ${activeApp.description}`);
+  }
+  return [basePrompt.trim(), lines.join("\n")].filter(Boolean).join("\n\n");
+}
+
+function mergeAppReferences(references: AppReference[], activeApp: ActiveAppContext | null): AppReference[] {
+  if (!activeApp || references.some((reference) => reference.app_id === activeApp.app_id)) {
+    return references;
+  }
+  return [...references, { type: "app", app_id: activeApp.app_id, label: activeApp.name }];
 }
 
 function scalarString(value: string | boolean | null | undefined): string {

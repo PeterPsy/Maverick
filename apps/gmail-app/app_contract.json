@@ -1,0 +1,129 @@
+{
+  "app_id": "gmail-app",
+  "contract_version": "1.0",
+  "name": "Gmail App",
+  "version": "0.1.0",
+  "description": "Google Workspace Gmail relationship workflow app with referenceable email context and explicit send confirmation.",
+  "publisher": "versy",
+  "minimum_core_version": "0.1.0",
+  "distribution": {
+    "mode": "source_available",
+    "source_access": "forkable"
+  },
+  "capabilities": {
+    "mcp_tools": [
+      "gmail_app_connection_status",
+      "gmail_app_oauth_authorization_url",
+      "gmail_app_oauth_exchange",
+      "gmail_app_search_threads",
+      "gmail_app_latest_threads",
+      "gmail_app_get_thread",
+      "gmail_app_summarize_thread",
+      "gmail_app_prepare_reply",
+      "gmail_app_request_send_approval",
+      "gmail_app_send_approved",
+      "gmail_app_list_relationship_suggestions",
+      "gmail_app_mark_relationship_suggestion",
+      "gmail_app_audit_recent",
+      "gmail_app_reference_manifest",
+      "gmail_app_reference_search",
+      "gmail_app_reference_resolve",
+      "gmail_app_reference_summarize"
+    ],
+    "cli_commands": [
+      "gmail-app"
+    ],
+    "skills": [
+      "gmail-app-ops"
+    ],
+    "views": [
+      "gmail-app"
+    ],
+    "reference_entities": [
+      {
+        "entity_type": "thread",
+        "display_name": "Gmail Thread",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      },
+      {
+        "entity_type": "message",
+        "display_name": "Gmail Message",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      }
+    ]
+  },
+  "entrypoints": {
+    "mcp": "mcp/server.py",
+    "cli": "cli/app_cli.py",
+    "backend": "backend/app_backend.py",
+    "frontend": "frontend/dist",
+    "skills_root": "skills",
+    "hooks": {
+      "install": "hooks/install.py",
+      "migrate": "hooks/migrate.py",
+      "health_check": "hooks/health_check.py"
+    }
+  },
+  "storage": {
+    "storage_kind": "sqlite",
+    "data_schema_version": "1",
+    "primary_paths": [
+      "data/gmail-app/gmail.sqlite",
+      "data/gmail-app/state.json"
+    ],
+    "indices": {
+      "kind": "embedded"
+    },
+    "supports_export": false,
+    "supports_import": false,
+    "supports_migrations": true
+  },
+  "compatibility": {
+    "workspace_modes": [
+      "sandbox",
+      "full-access"
+    ]
+  },
+  "hook_timeouts": {
+    "install_seconds": 60,
+    "upgrade_seconds": 120,
+    "migrate_seconds": 300,
+    "export_seconds": 120,
+    "import_seconds": 120,
+    "validate_after_import_seconds": 60,
+    "repair_after_import_seconds": 180,
+    "health_check_seconds": 30
+  },
+  "lifecycle": {
+    "install": true,
+    "upgrade": true,
+    "uninstall": false,
+    "migrate": true,
+    "export": false,
+    "import": false,
+    "validate_after_import": false,
+    "repair_after_import": false,
+    "rebuild": false,
+    "health_check": true
+  },
+  "health_contract": {
+    "mode": "hook",
+    "degraded_on_failure": true
+  },
+  "failure_semantics": {
+    "install_failure": "block_activation",
+    "migrate_failure": "preserve_data_mark_unhealthy",
+    "import_failure": "preserve_payload_mark_failed"
+  },
+  "rollback_support": {
+    "bundle": false,
+    "data": false,
+    "repair_only": false
+  }
+}

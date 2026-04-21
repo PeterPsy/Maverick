@@ -42,6 +42,21 @@ select {
   font: inherit;
 }
 
+select {
+  color-scheme: dark;
+}
+
+select option,
+select optgroup {
+  background: #171717;
+  color: #ececec;
+}
+
+select option:checked {
+  background: #2b79ff;
+  color: #ffffff;
+}
+
 button {
   cursor: pointer;
 }

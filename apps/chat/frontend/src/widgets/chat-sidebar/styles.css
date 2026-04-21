@@ -464,6 +464,20 @@ button {
   text-transform: none;
 }
 
+.bs-sidebar-floating-panel__field select {
+  color-scheme: dark;
+}
+
+.bs-sidebar-floating-panel__field select option {
+  background: #171717;
+  color: var(--maverick-text);
+}
+
+.bs-sidebar-floating-panel__field select option:checked {
+  background: #2b79ff;
+  color: #ffffff;
+}
+
 .bs-sidebar-floating-panel__actions {
   display: grid;
   gap: 0.4rem;

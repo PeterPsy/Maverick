@@ -254,12 +254,19 @@ input::placeholder {
 }
 
 select {
+  color-scheme: dark;
   color: var(--ua-text);
 }
 
-option {
+option,
+optgroup {
   background: #171717;
   color: var(--ua-text);
+}
+
+option:checked {
+  background: #2b79ff;
+  color: #ffffff;
 }
 
 input:focus,

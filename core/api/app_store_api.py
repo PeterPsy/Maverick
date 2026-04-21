@@ -13,8 +13,14 @@ from core.api.session_api import RequestSession, require_session
 from core.apps.errors import AppHostingError
 from core.apps.models import AppContractDescriptor, WorkspaceAppBindingRecord, WorkspaceLocalAppProjectRecord
 from core.apps.remote_store import fetch_remote_catalog, install_remote_store_app
-from core.apps.service import delete_workspace_local_app_project, install_workspace_local_app, uninstall_workspace_app
-from core.apps.workspace_local_discovery import sync_workspace_local_app_projects
+from core.apps.paths import workspace_apps_root
+from core.apps.service import (
+    delete_workspace_local_app_project,
+    install_workspace_local_app,
+    register_workspace_local_app_project_from_contract,
+    uninstall_workspace_app,
+)
+from core.apps.workspace_local_discovery import discover_workspace_local_app_projects
 from core.workspaces.models import WorkspaceMembershipRecord
 from core.workspaces.errors import WorkspaceMembershipError, WorkspaceNotFoundError
 
@@ -46,6 +52,39 @@ def _authorize_app_management_targets(state: PlatformState, context: RequestSess
             return "workspace_not_available"
         if context.user.platform_role != "admin" and membership.role != "admin":
             return "workspace_admin_required"
+        if not governance.allow_app_installation:
+            return "app_installation_disabled"
+    return None
+
+
+def _authorize_workspace_local_app_targets(
+    state: PlatformState,
+    context: RequestSession,
+    workspace_ids: list[str],
+) -> str | None:
+    if not workspace_ids:
+        return "workspace_required"
+    unique_ids = []
+    for workspace_id in workspace_ids:
+        if workspace_id and workspace_id not in unique_ids:
+            unique_ids.append(workspace_id)
+    if len(unique_ids) != len(workspace_ids):
+        return "duplicate_workspace"
+    for workspace_id in unique_ids:
+        try:
+            workspace = state.workspace_store.get_workspace(workspace_id)
+            membership = state.workspace_store.get_membership(user_id=context.user.user_id, workspace_id=workspace_id)
+            governance = state.workspace_store.get_governance(workspace_id)
+        except (WorkspaceNotFoundError, WorkspaceMembershipError):
+            return "workspace_not_available"
+        if workspace.status != "active" or membership.status != "active":
+            return "workspace_not_available"
+        if context.user.platform_role == "admin" or membership.role == "admin":
+            if not governance.allow_app_installation:
+                return "app_installation_disabled"
+            continue
+        if not governance.allow_custom_apps:
+            return "custom_apps_disabled"
         if not governance.allow_app_installation:
             return "app_installation_disabled"
     return None
@@ -149,9 +188,29 @@ def _local_project_visible_for_context(
 ) -> bool:
     if _can_manage_workspace_apps(context, membership):
         return True
+    try:
+        governance = state.workspace_store.get_governance(membership.workspace_id)
+    except WorkspaceNotFoundError:
+        governance = None
+    if governance is not None and governance.allow_custom_apps:
+        return user_can_mount_app(context.user, project.contract.visibility.platform_roles)
     if binding is None:
         return False
     return _app_visible_for_context(context, membership, project.contract)
+
+
+def _invalid_local_project_visible_for_context(
+    state: PlatformState,
+    context: RequestSession,
+    membership: WorkspaceMembershipRecord,
+) -> bool:
+    if _can_manage_workspace_apps(context, membership):
+        return True
+    try:
+        governance = state.workspace_store.get_governance(membership.workspace_id)
+    except WorkspaceNotFoundError:
+        return False
+    return governance.allow_custom_apps
 
 
 def _installation_payload(state: PlatformState, context: RequestSession, workspace_ids: list[str]) -> dict[str, object]:
@@ -182,11 +241,36 @@ def _local_apps_payload(state: PlatformState, context: RequestSession, workspace
         membership = _workspace_membership(state, context, workspace_id)
         if membership is None:
             continue
-        sync_workspace_local_app_projects(state.app_store, workspace_id=workspace_id, start_path=start_path)
+        discovery = discover_workspace_local_app_projects(
+            state.app_store,
+            workspace_id=workspace_id,
+            start_path=start_path,
+        )
         bindings = {
             binding.app_id: binding
             for binding in state.app_store.list_workspace_app_bindings(workspace_id)
         }
+        if _invalid_local_project_visible_for_context(state, context, membership):
+            for invalid in discovery.invalid_projects:
+                items.append(
+                    {
+                        "workspace_id": workspace_id,
+                        "project_id": f"{workspace_id}:{invalid.app_id}",
+                        "app_id": invalid.app_id,
+                        "name": invalid.app_id,
+                        "version": "",
+                        "description": "Workspace-local app project has an invalid app_contract.json.",
+                        "publisher": "workspace",
+                        "project_root": invalid.project_root,
+                        "distribution": {"mode": "workspace_local", "source_access": "editable"},
+                        "installed": False,
+                        "status": "invalid",
+                        "active_version": None,
+                        "binding_source_kind": None,
+                        "validation_error": invalid.error,
+                        "can_delete": _can_manage_workspace_apps(context, membership),
+                    }
+                )
         for project in state.app_store.list_workspace_local_app_projects(workspace_id):
             binding = bindings.get(project.app_id)
             if not _local_project_visible_for_context(state, context, membership, project, binding):
@@ -206,6 +290,7 @@ def _local_apps_payload(state: PlatformState, context: RequestSession, workspace
                     "status": binding.status if binding else "uninstalled",
                     "active_version": binding.active_version if binding else None,
                     "binding_source_kind": binding.source_kind if binding else None,
+                    "can_delete": _can_manage_workspace_apps(context, membership),
                 }
             )
     return items
@@ -235,6 +320,7 @@ def handle_app_store_api(
         "/api/app-store/install",
         "/api/app-store/install-local",
         "/api/app-store/installations",
+        "/api/app-store/register-local",
         "/api/app-store/delete-local",
         "/api/app-store/uninstall",
     }:
@@ -295,7 +381,7 @@ def handle_app_store_api(
         body = read_json_body(environ)
         app_id = str(body.get("app_id") or "").strip()
         workspace_ids = _unique_workspace_ids(_workspace_ids_from_body(body, context))
-        authorization_error = _authorize_app_management_targets(state, context, workspace_ids)
+        authorization_error = _authorize_workspace_local_app_targets(state, context, workspace_ids)
         if not app_id:
             return json_response(start_response, {"error": "app_id_required"}, status="400 Bad Request")
         if authorization_error is not None:
@@ -303,7 +389,7 @@ def handle_app_store_api(
         try:
             bindings = []
             for workspace_id in workspace_ids:
-                sync_workspace_local_app_projects(state.app_store, workspace_id=workspace_id, start_path=start_path)
+                discover_workspace_local_app_projects(state.app_store, workspace_id=workspace_id, start_path=start_path)
                 binding = install_workspace_local_app(
                     state.app_store,
                     workspace_id=workspace_id,
@@ -339,6 +425,46 @@ def handle_app_store_api(
             status="201 Created",
         )
 
+    if path == "/api/app-store/register-local" and method == "POST":
+        body = read_json_body(environ)
+        app_id = str(body.get("app_id") or "").strip()
+        workspace_ids = _unique_workspace_ids(_workspace_ids_from_body(body, context))
+        authorization_error = _authorize_workspace_local_app_targets(state, context, workspace_ids)
+        if not app_id:
+            return json_response(start_response, {"error": "app_id_required"}, status="400 Bad Request")
+        if len(workspace_ids) != 1:
+            return json_response(start_response, {"error": "single_workspace_required"}, status="400 Bad Request")
+        if authorization_error is not None:
+            return json_response(start_response, {"error": authorization_error}, status="403 Forbidden")
+        workspace_id = workspace_ids[0]
+        project_root = workspace_apps_root(workspace_id=workspace_id, start_path=start_path) / app_id
+        try:
+            project = register_workspace_local_app_project_from_contract(
+                state.app_store,
+                workspace_id=workspace_id,
+                project_root=str(project_root),
+            )
+        except (AppHostingError, WorkspaceNotFoundError) as error:
+            return json_response(
+                start_response,
+                {"error": "register_failed", "detail": str(error)},
+                status="400 Bad Request",
+            )
+        return json_response(
+            start_response,
+            {
+                "workspace_id": project.workspace_id,
+                "project_id": project.project_id,
+                "app_id": project.app_id,
+                "name": project.name,
+                "version": project.version,
+                "project_root": project.project_root,
+                "status": "registered",
+                "source_kind": "workspace_local_project",
+            },
+            status="201 Created",
+        )
+
     if path == "/api/app-store/delete-local" and method == "POST":
         body = read_json_body(environ)
         app_id = str(body.get("app_id") or "").strip()
@@ -351,7 +477,7 @@ def handle_app_store_api(
         try:
             items = []
             for workspace_id in workspace_ids:
-                sync_workspace_local_app_projects(state.app_store, workspace_id=workspace_id, start_path=start_path)
+                discover_workspace_local_app_projects(state.app_store, workspace_id=workspace_id, start_path=start_path)
                 items.append(
                     delete_workspace_local_app_project(
                         state.app_store,

@@ -583,6 +583,11 @@
   background: linear-gradient(180deg, rgba(191, 114, 34, 0.18), rgba(255, 255, 255, 0.05));
 }
 
+.chatapp-attachment-picker__item-icon--capture {
+  color: #b8d8ff;
+  background: linear-gradient(180deg, rgba(59, 130, 246, 0.18), rgba(255, 255, 255, 0.05));
+}
+
 .chatapp-attachment-picker__item-icon .material-symbols-rounded {
   font-size: 1.2rem;
 }

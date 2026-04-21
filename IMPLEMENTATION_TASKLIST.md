@@ -1128,6 +1128,21 @@ Built-in app id: `document-generator`. Purpose: expose agent-facing document gen
 - [x] Run `python3 -m compileall apps/document-generator tests/test_document_generator_app.py`
 - [x] Run `python3 scripts/check_unused_imports.py`
 
+Built-in app id: `maverick-monitor`. Purpose: expose an operator dashboard for Maverick machine pressure, workspace storage/RAM attribution, app process attribution, and service health signals.
+
+- [x] Create built-in app source under `apps/maverick-monitor`
+- [x] Declare sealed distribution in `apps/maverick-monitor/app_contract.json`
+- [x] Declare frontend, backend, CLI, and lifecycle hook surfaces only where implemented
+- [x] Store app-owned state under `data/maverick-monitor`
+- [x] Implement idempotent install, migrate, and health-check hooks
+- [x] Implement backend snapshot collection for CPU/load, RAM, disk, app process attribution, workspace usage, logs, runtime, and operational insights
+- [x] Implement mounted frontend dashboard with machine, app, workspace, and process views
+- [x] Add focused tests for contract parsing, backend snapshot behavior, settings persistence, built-in registration/install, and mounted frontend/backend usage
+- [x] Run `npm --prefix apps/maverick-monitor run build`
+- [x] Run `python3 -m unittest tests/test_maverick_monitor_app.py`
+- [x] Run `python3 -m compileall apps/maverick-monitor tests/test_maverick_monitor_app.py`
+- [x] Run `python3 scripts/check_unused_imports.py`
+
 ## Phase 8: Inter-Agent Communication
 
 - [ ] Implement inter-agent message model

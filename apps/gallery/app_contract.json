@@ -33,10 +33,26 @@
           "file"
         ],
         "state_actions": [
-          "view_filter",
-          "set_view_filter",
-          "set_custom_view",
-          "clear_custom_view"
+          {
+            "action": "view_filter",
+            "standard": true,
+            "description": "Read the current Gallery view state without scanning workspace storage."
+          },
+          {
+            "action": "set_view_filter",
+            "standard": true,
+            "description": "Set keyword, role, and kind filters for the Gallery view."
+          },
+          {
+            "action": "set_custom_view",
+            "standard": true,
+            "description": "Show a curated set of Gallery file references."
+          },
+          {
+            "action": "clear_custom_view",
+            "standard": true,
+            "description": "Return Gallery to normal search mode."
+          }
         ],
         "supports_custom_view": true,
         "supports_filter_refinement": true

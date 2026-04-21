@@ -224,6 +224,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
 - [x] Add parser and contract tests for referenceable entity metadata before app contracts declare it
 - [x] Define view composition surface metadata for app-owned custom views
 - [x] Add parser and contract tests for declared view composition surfaces
+- [x] Distinguish standard and app-specific view actions with explicit `standard: true/false` contract metadata
 - [x] Implement lifecycle import-recovery support declarations:
   - [x] `validate_after_import`
   - [x] `repair_after_import`

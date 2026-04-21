@@ -20,6 +20,7 @@ from core.apps.models import (
     AppRollbackSupport,
     AppStorageDeclaration,
     AppStorageIndices,
+    AppViewStateActionDeclaration,
     AppViewSurfaceDeclaration,
     AppVisibilityDeclaration,
     ParsedAppContract,
@@ -175,12 +176,43 @@ def parse_app_contract_file(source_root: Path) -> ParsedAppContract:
                 raise AppContractValidationError(
                     f"`capabilities.view_surfaces[{index}].entity_types[{entity_index}]` must reference a declared reference entity type."
                 )
+        state_actions_payload = item_payload.get("state_actions", [])
+        if not isinstance(state_actions_payload, list):
+            raise AppContractValidationError(
+                f"`capabilities.view_surfaces[{index}].state_actions` must be a list."
+            )
+        state_actions: list[AppViewStateActionDeclaration] = []
+        seen_state_actions: set[str] = set()
+        for action_index, action_item in enumerate(state_actions_payload):
+            action_payload = _expect_mapping(
+                action_item,
+                label=f"capabilities.view_surfaces[{index}].state_actions[{action_index}]",
+            )
+            unexpected_action_keys = set(action_payload) - {"action", "standard", "description"}
+            if unexpected_action_keys:
+                unexpected = ", ".join(sorted(unexpected_action_keys))
+                raise AppContractValidationError(
+                    f"Unsupported capabilities.view_surfaces[{index}].state_actions[{action_index}] field(s): {unexpected}."
+                )
+            action = _expect_string(action_payload, "action")
+            if action in seen_state_actions:
+                raise AppContractValidationError(
+                    f"`capabilities.view_surfaces[{index}].state_actions` entries must use unique action values."
+                )
+            seen_state_actions.add(action)
+            state_actions.append(
+                AppViewStateActionDeclaration(
+                    action=action,
+                    standard=_expect_bool(action_payload, "standard"),
+                    description=_expect_string(action_payload, "description"),
+                )
+            )
         view_surfaces.append(
             AppViewSurfaceDeclaration(
                 view_id=view_id,
                 display_name=_expect_string(item_payload, "display_name"),
                 entity_types=entity_types,
-                state_actions=_expect_string_list(item_payload, "state_actions"),
+                state_actions=state_actions,
                 supports_custom_view=_expect_bool(item_payload, "supports_custom_view", default=False),
                 supports_filter_refinement=_expect_bool(item_payload, "supports_filter_refinement", default=False),
             )

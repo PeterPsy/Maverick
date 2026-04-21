@@ -101,7 +101,12 @@ class GalleryAppTestCase(unittest.TestCase):
         self.assertIn("file", {item.entity_type for item in parsed.contract.capabilities.reference_entities})
         self.assertEqual(parsed.contract.capabilities.view_surfaces[0].view_id, "gallery")
         self.assertEqual(parsed.contract.capabilities.view_surfaces[0].entity_types, ["file"])
-        self.assertIn("set_custom_view", parsed.contract.capabilities.view_surfaces[0].state_actions)
+        view_actions = {
+            item.action: item
+            for item in parsed.contract.capabilities.view_surfaces[0].state_actions
+        }
+        self.assertTrue(view_actions["set_custom_view"].standard)
+        self.assertTrue(view_actions["set_view_filter"].standard)
         self.assertTrue(parsed.contract.capabilities.view_surfaces[0].supports_custom_view)
         self.assertEqual(len(parsed.contract.widgets), 1)
         widget = parsed.contract.widgets[0]

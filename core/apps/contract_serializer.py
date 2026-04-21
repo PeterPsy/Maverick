@@ -44,7 +44,14 @@ def app_contract_payload(parsed: ParsedAppContract) -> dict[str, Any]:
                     "view_id": surface.view_id,
                     "display_name": surface.display_name,
                     "entity_types": surface.entity_types,
-                    "state_actions": surface.state_actions,
+                    "state_actions": [
+                        {
+                            "action": action.action,
+                            "standard": action.standard,
+                            "description": action.description,
+                        }
+                        for action in surface.state_actions
+                    ],
                     "supports_custom_view": surface.supports_custom_view,
                     "supports_filter_refinement": surface.supports_filter_refinement,
                 }

@@ -22,6 +22,7 @@ from core.apps.contracts import (
     build_widget_actions,
     build_widget_declaration,
     build_widget_frontend,
+    build_view_state_action_declaration,
     build_view_surface_declaration,
     parse_app_contract_file,
     write_app_contract_file,
@@ -76,7 +77,23 @@ class Phase5AppContractTestCase(unittest.TestCase):
                                 view_id="floor_map",
                                 display_name="Floor Map",
                                 entity_types=["reservation"],
-                                state_actions=["view_state", "set_custom_view", "clear_custom_view"],
+                                state_actions=[
+                                    build_view_state_action_declaration(
+                                        action="view_state",
+                                        standard=True,
+                                        description="Read current view state.",
+                                    ),
+                                    build_view_state_action_declaration(
+                                        action="set_custom_view",
+                                        standard=True,
+                                        description="Render a curated reservation set.",
+                                    ),
+                                    build_view_state_action_declaration(
+                                        action="floor_heatmap",
+                                        standard=False,
+                                        description="Toggle app-specific floor heatmap data.",
+                                    ),
+                                ],
                                 supports_custom_view=True,
                                 supports_filter_refinement=True,
                             )
@@ -116,7 +133,9 @@ class Phase5AppContractTestCase(unittest.TestCase):
             self.assertEqual(loaded.contract.capabilities.views, ["floor_map"])
             self.assertEqual(loaded.contract.capabilities.view_surfaces[0].view_id, "floor_map")
             self.assertEqual(loaded.contract.capabilities.view_surfaces[0].entity_types, ["reservation"])
-            self.assertIn("set_custom_view", loaded.contract.capabilities.view_surfaces[0].state_actions)
+            actions = {item.action: item for item in loaded.contract.capabilities.view_surfaces[0].state_actions}
+            self.assertTrue(actions["set_custom_view"].standard)
+            self.assertFalse(actions["floor_heatmap"].standard)
             self.assertTrue(loaded.contract.capabilities.view_surfaces[0].supports_custom_view)
             self.assertEqual(loaded.contract.capabilities.reference_entities[0].entity_type, "reservation")
             self.assertTrue(loaded.contract.capabilities.reference_entities[0].searchable)
@@ -166,7 +185,13 @@ class Phase5AppContractTestCase(unittest.TestCase):
                                 view_id="crm",
                                 display_name="CRM",
                                 entity_types=["deal"],
-                                state_actions=["set_custom_view"],
+                                state_actions=[
+                                    build_view_state_action_declaration(
+                                        action="set_custom_view",
+                                        standard=True,
+                                        description="Render a curated deal set.",
+                                    )
+                                ],
                                 supports_custom_view=True,
                             )
                         ],
@@ -198,7 +223,13 @@ class Phase5AppContractTestCase(unittest.TestCase):
                                 view_id="pipeline",
                                 display_name="Pipeline",
                                 entity_types=["deal"],
-                                state_actions=["set_custom_view"],
+                                state_actions=[
+                                    build_view_state_action_declaration(
+                                        action="set_custom_view",
+                                        standard=True,
+                                        description="Render a curated deal set.",
+                                    )
+                                ],
                                 supports_custom_view=True,
                             )
                         ],

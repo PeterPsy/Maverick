@@ -64,13 +64,22 @@ class AppCapabilities:
 
 
 @dataclass(frozen=True)
+class AppViewStateActionDeclaration:
+    """Describe one app-owned view-state action and whether it follows a shared contract."""
+
+    action: str
+    standard: bool
+    description: str
+
+
+@dataclass(frozen=True)
 class AppViewSurfaceDeclaration:
     """Describe an app-owned UI surface that can render curated entity sets."""
 
     view_id: str
     display_name: str
     entity_types: list[str]
-    state_actions: list[str]
+    state_actions: list[AppViewStateActionDeclaration]
     supports_custom_view: bool
     supports_filter_refinement: bool
 

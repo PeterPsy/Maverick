@@ -20,6 +20,7 @@ from core.apps.models import (
     AppRollbackSupport,
     AppStorageDeclaration,
     AppStorageIndices,
+    AppViewStateActionDeclaration,
     AppViewSurfaceDeclaration,
     AppVisibilityDeclaration,
     ParsedAppContract,
@@ -94,7 +95,7 @@ def build_view_surface_declaration(
     view_id: str,
     display_name: str,
     entity_types: list[str] | None = None,
-    state_actions: list[str] | None = None,
+    state_actions: list[AppViewStateActionDeclaration] | None = None,
     supports_custom_view: bool = False,
     supports_filter_refinement: bool = False,
 ) -> AppViewSurfaceDeclaration:
@@ -106,6 +107,19 @@ def build_view_surface_declaration(
         state_actions=state_actions or [],
         supports_custom_view=supports_custom_view,
         supports_filter_refinement=supports_filter_refinement,
+    )
+
+def build_view_state_action_declaration(
+    *,
+    action: str,
+    standard: bool,
+    description: str,
+) -> AppViewStateActionDeclaration:
+    """Build one view-state action declaration."""
+    return AppViewStateActionDeclaration(
+        action=action,
+        standard=standard,
+        description=description,
     )
 
 def build_reference_entity_declaration(

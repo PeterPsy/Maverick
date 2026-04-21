@@ -25,6 +25,7 @@ from core.apps.models import (
     AppSourceRecord,
     AppStorageDeclaration,
     AppStorageIndices,
+    AppViewStateActionDeclaration,
     AppViewSurfaceDeclaration,
     AppVisibilityDeclaration,
     WidgetActionDeclaration,
@@ -110,7 +111,15 @@ class MongoAppStore:
             for entity in capabilities_payload.get("reference_entities", [])
         ]
         capabilities_payload["view_surfaces"] = [
-            AppViewSurfaceDeclaration(**surface)
+            AppViewSurfaceDeclaration(
+                **{
+                    **surface,
+                    "state_actions": [
+                        AppViewStateActionDeclaration(**action)
+                        for action in surface.get("state_actions", [])
+                    ],
+                }
+            )
             for surface in capabilities_payload.get("view_surfaces", [])
         ]
         return AppContractDescriptor(

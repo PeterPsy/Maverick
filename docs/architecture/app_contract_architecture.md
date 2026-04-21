@@ -500,10 +500,31 @@ Apps that support externally composed views may declare view surfaces under `cap
       "display_name": "Gallery",
       "entity_types": ["file"],
       "state_actions": [
-        "view_filter",
-        "set_view_filter",
-        "set_custom_view",
-        "clear_custom_view"
+        {
+          "action": "view_filter",
+          "standard": true,
+          "description": "Read the current Gallery view state without scanning workspace storage."
+        },
+        {
+          "action": "set_view_filter",
+          "standard": true,
+          "description": "Set keyword, role, and kind filters for the Gallery view."
+        },
+        {
+          "action": "set_custom_view",
+          "standard": true,
+          "description": "Show a curated set of Gallery file references."
+        },
+        {
+          "action": "clear_custom_view",
+          "standard": true,
+          "description": "Return Gallery to normal search mode."
+        },
+        {
+          "action": "toggle_preview_density",
+          "standard": false,
+          "description": "Example of an app-specific Gallery view enhancement."
+        }
       ],
       "supports_custom_view": true,
       "supports_filter_refinement": true
@@ -516,22 +537,25 @@ Rules:
 
 - `view_id` must identify a mounted app view declared in `capabilities.views`
 - `entity_types` must reference entity types declared in `capabilities.reference_entities`
+- each `state_actions` entry must declare an `action`, a boolean `standard`, and a human-readable `description`
+- `standard: true` means the action follows a Maverick-wide view-composition semantic contract and agents may call it consistently across apps that declare it
+- `standard: false` means the action is app-specific; agents may use it only after reading that app's declaration and should not assume other apps expose the same behavior
 - the owning app stores and interprets its own view state under `data/<app_id>/`
 - `set_custom_view` should accept a title plus stable references for the declared entity types
 - `set_view_filter` may refine the current custom view when the app supports filter refinement
 - `clear_custom_view` should return the app to its normal view mode
 - the core validates only the contract shape and invokes declared app entrypoints; it does not inspect app-owned view state or app business records
 
-The expected CLI and MCP action names mirror the reference convention:
+The shared standard action names mirror the reference convention:
 
 ```text
-<app_id> view-state
-<app_id> set-view-filter ...
-<app_id> set-custom-view --title "Relevant records" --refs '[...]'
-<app_id> clear-custom-view
+view_filter
+set_view_filter
+set_custom_view
+clear_custom_view
 ```
 
-Concrete command syntax may remain app-specific while the action names and payload semantics stay common. Gallery is the initial implementation: agents can build a custom file view from topic search, Memory context, CRM references, Gmail references, or any other app-owned evidence without Gallery needing to know why those files were selected.
+Concrete CLI and MCP command syntax may remain app-specific while `standard: true` action names and payload semantics stay common. Apps can add richer UI operations by declaring additional `standard: false` actions. Gallery is the initial implementation: agents can build a custom file view from topic search, Memory context, CRM references, Gmail references, or any other app-owned evidence without Gallery needing to know why those files were selected.
 
 ## Mounted App Model
 

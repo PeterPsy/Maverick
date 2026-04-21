@@ -74,6 +74,9 @@ class RuntimeStore(Protocol):
     def list_events(self, session_id: str) -> list[RuntimeEventRecord]:
         ...
 
+    def list_all_events(self) -> list[RuntimeEventRecord]:
+        ...
+
     def save_process(self, record: RuntimeProcessRecord) -> RuntimeProcessRecord:
         ...
 
@@ -131,6 +134,9 @@ class MongoRuntimeStore:
 
     def list_events(self, session_id: str) -> list[RuntimeEventRecord]:
         return [RuntimeEventRecord(**document) for document in self.collections.events.find({"session_id": session_id})]
+
+    def list_all_events(self) -> list[RuntimeEventRecord]:
+        return [RuntimeEventRecord(**document) for document in self.collections.events.find({})]
 
     def save_process(self, record: RuntimeProcessRecord) -> RuntimeProcessRecord:
         self.collections.processes.update_one({"process_id": record.process_id}, {"$set": asdict(record)}, upsert=True)

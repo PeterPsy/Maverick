@@ -49,11 +49,19 @@ def recover_interrupted_runtime_turns_after_backend_restart(
     recovered = 0
     closed_turns = 0
     queued_resumes = 0
-    for session in state.runtime_store.list_all_sessions():
-        if session.status != "running":
-            continue
+    running_sessions = [
+        session
+        for session in state.runtime_store.list_all_sessions()
+        if session.status == "running"
+    ]
+    events_by_session_id = _events_by_session_id(state, session_ids={session.session_id for session in running_sessions})
+    for session in running_sessions:
         inspected += 1
-        closed_turns += _close_orphan_non_terminal_turn_events(state, session_id=session.session_id)
+        closed_turns += _close_orphan_non_terminal_turn_events(
+            state,
+            session_id=session.session_id,
+            events=events_by_session_id.get(session.session_id, []),
+        )
         interrupted_turns = [
             turn
             for turn in state.runtime_store.list_turns(session.session_id)
@@ -110,15 +118,28 @@ def recover_interrupted_runtime_turns_after_backend_restart(
     )
 
 
-def _close_orphan_non_terminal_turn_events(state: "PlatformState", *, session_id: str) -> int:
+def _events_by_session_id(state: "PlatformState", *, session_ids: set[str]) -> dict[str, list]:
+    """Group persisted runtime events for the running sessions being recovered."""
+    grouped: dict[str, list] = {session_id: [] for session_id in session_ids}
+    if not session_ids:
+        return grouped
+    for event in state.runtime_store.list_all_events():
+        if event.session_id in grouped:
+            grouped[event.session_id].append(event)
+    return grouped
+
+
+def _close_orphan_non_terminal_turn_events(state: "PlatformState", *, session_id: str, events: list | None = None) -> int:
     """Close non-terminal turn events whose canonical turn record is missing."""
+    if events is None:
+        events = state.runtime_store.list_events(session_id)
     terminal_turn_ids = {
         event.turn_id
-        for event in state.runtime_store.list_events(session_id)
+        for event in events
         if event.turn_id and event.event_type in TERMINAL_TURN_EVENTS
     }
     orphan_status_by_turn_id: dict[str, str] = {}
-    for event in state.runtime_store.list_events(session_id):
+    for event in events:
         if not event.turn_id or event.turn_id in terminal_turn_ids:
             continue
         target_status = NON_TERMINAL_TURN_EVENTS.get(event.event_type)

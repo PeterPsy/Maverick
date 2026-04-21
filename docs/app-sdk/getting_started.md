@@ -157,7 +157,7 @@ It generates:
 
 ## Developer Kit
 
-The `developer-kit` app provides a browser UI for SDK workflows. It can create, validate, and package workspace-local app source. Generic App Store APIs still own registration and installation.
+The `developer-kit` app provides a browser UI for SDK workflows. It is workspace-visible rather than admin-only, so any workspace user can learn the SDK and create, validate, and package workspace-local app source. Generic App Store APIs still own registration and installation.
 
 ## Development Rules
 

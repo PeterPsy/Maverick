@@ -1168,7 +1168,7 @@ Purpose: provide a contract-first SDK for creating Maverick apps without bypassi
 - [x] Add terminal CLI wrapper under `scripts/maverick` and project console-script metadata
 - [x] Add React/Vite source template with committed mountable `frontend/dist` smoke output
 - [x] Add CRM-inspired `entity-sqlite` template with generated entities, SQLite schema, backend, CLI, MCP, skills, lifecycle hooks, reference metadata, and entrypoint tests
-- [x] Add admin-visible `developer-kit` app for SDK create, validate, register-local, install-local, and package workflows
+- [x] Add workspace-visible `developer-kit` app for SDK create, validate, register-local, install-local, and package workflows
 - [x] Add extended SDK docs for templates, frontend, backend, storage, packaging, and Developer Kit
 - [x] Make generic entrypoint and lifecycle runners expose the repository root on `PYTHONPATH` for SDK helper imports
 - [x] Add focused SDK tests for generated template validation, CLI create/register/install/status, generated app CLI surface, hook-created app data, package manifest/checksum, CLI wrapper, entity SQLite backend/CLI/MCP behavior, Developer Kit contract, and storage path rejection

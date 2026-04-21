@@ -11,9 +11,7 @@
     "source_access": "none"
   },
   "visibility": {
-    "platform_roles": [
-      "admin"
-    ]
+    "platform_roles": null
   },
   "capabilities": {
     "mcp_tools": [],

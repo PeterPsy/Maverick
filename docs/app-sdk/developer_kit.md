@@ -2,7 +2,7 @@
 
 Date: 2026-04-21
 
-`developer-kit` is a sealed admin-visible Maverick app for SDK workflows.
+`developer-kit` is a sealed workspace-visible Maverick app for SDK workflows. It is intentionally not admin-only: every workspace user should be able to learn the SDK, generate app source, validate contracts, and package source artifacts.
 
 It exposes:
 
@@ -24,3 +24,5 @@ POST /api/app-store/install-local
 ```
 
 The Developer Kit app must not write app-hosting control-plane records directly.
+
+If a workspace policy later restricts registration or installation, that restriction belongs in the App Store/core app-hosting API authorization layer. The SDK and Developer Kit should remain generally visible and usable.

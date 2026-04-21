@@ -292,6 +292,7 @@ class MaverickAppSdkTestCase(unittest.TestCase):
 
         self.assertEqual(parsed.app_id, "developer-kit")
         self.assertEqual(parsed.contract.entrypoints.backend, "backend/app_backend.py")
+        self.assertIsNone(parsed.contract.visibility.platform_roles)
 
 
 if __name__ == "__main__":

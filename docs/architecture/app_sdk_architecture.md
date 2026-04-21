@@ -129,7 +129,7 @@ App entrypoints run in app source roots. The generic entrypoint and lifecycle ru
 
 ## Developer Kit App
 
-`apps/developer-kit` is a sealed admin-visible app that exposes a frontend and backend for SDK workflows.
+`apps/developer-kit` is a sealed workspace-visible app that exposes a frontend and backend for SDK workflows. It is intentionally not admin-only because the official SDK must be usable by every workspace developer. Permission checks for registering or installing apps belong to the generic App Store/core app-hosting API layer, not to SDK discoverability.
 
 The Developer Kit backend can:
 
@@ -180,4 +180,4 @@ tests/test_app_sdk.py
 docs/app-sdk/getting_started.md
 ```
 
-It includes contract-first app generation, React/Vite and SQLite entity templates, packaging metadata, a CLI wrapper, and an admin Developer Kit app while preserving the core/app boundary.
+It includes contract-first app generation, React/Vite and SQLite entity templates, packaging metadata, a CLI wrapper, and a workspace-visible Developer Kit app while preserving the core/app boundary.

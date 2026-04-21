@@ -23,6 +23,8 @@ Available initial templates:
 - `agent-tool`
 - `data-app`
 - `widget`
+- `react-vite`
+- `entity-sqlite`
 
 Use `minimal` when defining a contract-first skeleton.
 
@@ -37,6 +39,10 @@ Use `agent-tool` for apps that expose CLI, MCP, and skill surfaces.
 Use `data-app` for a stateful app with lifecycle hooks and JSON app-owned data.
 
 Use `widget` for an app that declares a base-shell widget surface.
+
+Use `react-vite` for a mounted frontend app with React/Vite source.
+
+Use `entity-sqlite` for CRM-like apps with SQLite persistence, entities, reference metadata, CLI, MCP, hooks, and generated entrypoint tests.
 
 ## Commands
 
@@ -62,7 +68,16 @@ maverick app status my-app --workspace default
 maverick app package --app-root workspaces/default/apps/my-app
 ```
 
-Until a shell executable wraps the core CLI registry, tests and platform surfaces invoke these commands by command id.
+The repository includes a terminal wrapper:
+
+```bash
+scripts/maverick app create my-app --template entity-sqlite --entity account --entity contact
+scripts/maverick app validate my-app --workspace default
+scripts/maverick app register-local my-app --workspace default
+scripts/maverick app install-local my-app --workspace default
+scripts/maverick app status my-app --workspace default
+scripts/maverick app package --app-root workspaces/default/apps/my-app
+```
 
 ## Workspace-Local App Flow
 
@@ -106,6 +121,43 @@ data/<app_id>/state.json
 ```
 
 The hook is idempotent and can be run more than once.
+
+## React/Vite App
+
+The `react-vite` template includes:
+
+- `package.json`
+- `tsconfig.json`
+- `vite.config.ts`
+- `frontend/index.html`
+- `frontend/src/main.tsx`
+- `frontend/src/styles.css`
+- `frontend/dist/index.html`
+
+The contract points to `frontend/dist`, so the generated app is mountable immediately. Run a frontend build when dependencies are installed to refresh production assets.
+
+## Entity SQLite App
+
+The `entity-sqlite` template is the recommended scaffold for CRM-like apps:
+
+```bash
+scripts/maverick app create mini-crm --template entity-sqlite --entity account --entity contact --entity deal
+```
+
+It generates:
+
+- SQLite schema and store under `backend/`
+- list/create/get/search actions
+- backend, CLI, and MCP entrypoints
+- reference entity metadata
+- lifecycle hooks
+- skill template
+- React/Vite source
+- generated entrypoint tests
+
+## Developer Kit
+
+The `developer-kit` app provides a browser UI for SDK workflows. It can create, validate, and package workspace-local app source. Generic App Store APIs still own registration and installation.
 
 ## Development Rules
 

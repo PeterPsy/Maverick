@@ -69,6 +69,7 @@ def _create_handler(start_path: Path | None):
             publisher=str(arguments.get("publisher") or "workspace"),
             version=str(arguments.get("version") or "0.1.0"),
             overwrite=bool(arguments.get("overwrite", False)),
+            entities=arguments.get("entities"),
         )
         return asdict(create_app_source(request, start_path=start_path))
 

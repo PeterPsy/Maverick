@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import hashlib
+import json
 import tarfile
 
 from core.app_sdk.models import AppSdkPackageResult
@@ -36,11 +38,32 @@ def package_app_source(app_root: str | Path, *, output_path: str | Path | None =
     with tarfile.open(artifact, "w:gz") as archive:
         for path in files:
             archive.add(path, arcname=str(Path(root.name) / path.relative_to(root)), recursive=False)
+    checksum = _sha256(artifact)
+    manifest = {
+        "app_id": parsed.app_id,
+        "version": parsed.version,
+        "contract_version": parsed.contract.compatibility.contract_version,
+        "distribution": {
+            "mode": parsed.contract.distribution.mode,
+            "source_access": parsed.contract.distribution.source_access,
+        },
+        "artifact": artifact.name,
+        "checksum_sha256": checksum,
+        "files": [str(path.relative_to(root)) for path in files],
+        "provenance": {
+            "packager": "maverick-app-sdk",
+            "source_root": str(root),
+        },
+    }
+    manifest_path = artifact.with_suffix(artifact.suffix + ".manifest.json")
+    manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
     return AppSdkPackageResult(
         app_id=parsed.app_id,
         version=parsed.version,
         app_root=str(root),
         artifact_path=str(artifact),
+        manifest_path=str(manifest_path),
+        checksum_sha256=checksum,
         files_packaged=[str(path.relative_to(root)) for path in files],
     )
 
@@ -56,3 +79,11 @@ def _package_files(root: Path) -> list[Path]:
             continue
         files.append(path)
     return files
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()

@@ -7,9 +7,20 @@ from typing import Any
 
 from core.app_sdk.errors import AppSdkTemplateError
 from core.app_sdk.models import AppSdkCreateRequest
+from core.app_sdk.template_common import normalize_entities, title_from_slug
+from core.app_sdk.template_entity import entity_sqlite_files
+from core.app_sdk.template_react import react_vite_files
 
 
-SUPPORTED_TEMPLATES = {"minimal", "frontend-backend", "agent-tool", "data-app", "widget"}
+SUPPORTED_TEMPLATES = {
+    "minimal",
+    "frontend-backend",
+    "agent-tool",
+    "data-app",
+    "widget",
+    "react-vite",
+    "entity-sqlite",
+}
 
 
 def render_template_files(request: AppSdkCreateRequest) -> dict[str, str]:
@@ -29,16 +40,27 @@ def render_template_files(request: AppSdkCreateRequest) -> dict[str, str]:
         files.update(_agent_surface_files(request))
     if request.template_id == "data-app":
         files.update(_data_app_files(request))
+    if request.template_id == "react-vite":
+        files.update(_backend_files(request))
+        files.update(react_vite_files(request))
+    if request.template_id == "entity-sqlite":
+        files.update(entity_sqlite_files(request))
     return files
 
 
 def _contract_payload(request: AppSdkCreateRequest) -> dict[str, Any]:
     app_id = request.app_id
     has_backend = request.template_id in {"frontend-backend", "data-app", "widget"}
+    if request.template_id in {"react-vite", "entity-sqlite"}:
+        has_backend = True
     has_widget = request.template_id == "widget"
     has_frontend = request.template_id in {"frontend-backend", "data-app", "widget"}
-    has_agent = request.template_id in {"agent-tool", "data-app"}
-    has_data_hooks = request.template_id == "data-app"
+    if request.template_id in {"react-vite", "entity-sqlite"}:
+        has_frontend = True
+    has_agent = request.template_id in {"agent-tool", "data-app", "entity-sqlite"}
+    has_data_hooks = request.template_id in {"data-app", "entity-sqlite"}
+    is_entity = request.template_id == "entity-sqlite"
+    entities = normalize_entities(request.entities) if is_entity else []
     distribution = (
         {"mode": "workspace_local", "source_access": "editable"}
         if request.target_kind == "workspace_local"
@@ -70,20 +92,54 @@ def _contract_payload(request: AppSdkCreateRequest) -> dict[str, Any]:
         "distribution": distribution,
         "visibility": {"platform_roles": None},
         "capabilities": {
-            "mcp_tools": [f"{app_id}_reference_manifest"] if has_agent else [],
+            "mcp_tools": (
+                [
+                    f"{app_id}_reference_manifest",
+                    f"{app_id}_list",
+                    f"{app_id}_create",
+                    f"{app_id}_get",
+                    f"{app_id}_search",
+                ]
+                if is_entity
+                else [f"{app_id}_reference_manifest"] if has_agent else []
+            ),
             "cli_commands": [app_id] if has_agent else [],
             "skills": [f"{app_id}-ops"] if has_agent else [],
             "views": ["main"] if has_frontend else [],
-            "data_events": [{"resource": "state", "description": "Primary app state changed."}] if has_data_hooks else [],
-            "view_surfaces": [],
-            "reference_entities": [],
+            "data_events": [
+                {
+                    "resource": "records" if is_entity else "state",
+                    "description": "Primary app records changed." if is_entity else "Primary app state changed.",
+                }
+            ] if has_data_hooks else [],
+            "view_surfaces": [
+                {
+                    "view_id": "main",
+                    "display_name": request.name or _title(app_id),
+                    "entity_types": entities,
+                    "state_actions": [],
+                    "supports_custom_view": False,
+                    "supports_filter_refinement": True,
+                }
+            ] if is_entity else [],
+            "reference_entities": [
+                {
+                    "entity_type": entity,
+                    "display_name": entity.replace("_", " ").title(),
+                    "searchable": True,
+                    "resolvable": True,
+                    "summarizable": True,
+                    "deep_link_supported": True,
+                }
+                for entity in entities
+            ],
         },
         "entrypoints": entrypoints,
         "storage": {
-            "storage_kind": "json",
+            "storage_kind": "sqlite" if is_entity else "json",
             "data_schema_version": "1",
-            "primary_paths": [f"data/{app_id}/state.json"],
-            "indices": None,
+            "primary_paths": [f"data/{app_id}/app.sqlite" if is_entity else f"data/{app_id}/state.json"],
+            "indices": {"kind": "embedded"} if is_entity else None,
             "supports_export": has_data_hooks,
             "supports_import": has_data_hooks,
             "supports_migrations": has_data_hooks,
@@ -153,14 +209,14 @@ def _frontend_files(request: AppSdkCreateRequest) -> dict[str, str]:
             "{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{action:'status'}})}});"
             "document.getElementById('result').textContent=JSON.stringify(await r.json(),null,2);}};</script>\n"
             "</body></html>\n"
-        ).format(title=request.name or _title(request.app_id), app_id=request.app_id),
+        ).format(title=request.name or title_from_slug(request.app_id), app_id=request.app_id),
         **(
             {
                 "frontend/dist/widgets/main/index.html": (
                     "<!doctype html>\n"
                     "<html><head><meta charset=\"utf-8\"><title>{title} Widget</title></head>\n"
                     "<body><main><strong>{title}</strong><p>Widget ready.</p></main></body></html>\n"
-                ).format(title=request.name or _title(request.app_id))
+                ).format(title=request.name or title_from_slug(request.app_id))
             }
             if request.template_id == "widget"
             else {}
@@ -190,8 +246,13 @@ def _backend_entrypoint(request: AppSdkCreateRequest) -> str:
 
 from __future__ import annotations
 
+from pathlib import Path
+import sys
+
 from core.app_sdk.runtime import backend_response, emit_json, read_entrypoint_payload
-from backend.service import status_payload
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from service import status_payload
 
 
 payload = read_entrypoint_payload()
@@ -357,4 +418,4 @@ Use the app's official CLI or MCP surfaces. Do not read or write another app's p
 
 
 def _title(app_id: str) -> str:
-    return " ".join(part.capitalize() for part in app_id.split("-"))
+    return title_from_slug(app_id)

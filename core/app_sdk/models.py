@@ -6,7 +6,15 @@ from dataclasses import dataclass
 from typing import Literal
 
 
-AppSdkTemplateId = Literal["minimal", "frontend-backend", "agent-tool", "data-app", "widget"]
+AppSdkTemplateId = Literal[
+    "minimal",
+    "frontend-backend",
+    "agent-tool",
+    "data-app",
+    "widget",
+    "react-vite",
+    "entity-sqlite",
+]
 AppSdkTargetKind = Literal["workspace_local", "platform"]
 
 
@@ -23,6 +31,7 @@ class AppSdkCreateRequest:
     publisher: str = "workspace"
     version: str = "0.1.0"
     overwrite: bool = False
+    entities: list[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -78,4 +87,6 @@ class AppSdkPackageResult:
     version: str
     app_root: str
     artifact_path: str
+    manifest_path: str
+    checksum_sha256: str
     files_packaged: list[str]

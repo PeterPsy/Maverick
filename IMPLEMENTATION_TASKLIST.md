@@ -1164,11 +1164,16 @@ Purpose: provide a contract-first SDK for creating Maverick apps without bypassi
 - [x] Add safe app-owned JSON storage helpers with path traversal rejection
 - [x] Add JSON stdin/stdout runtime helpers for generated backend, hook, CLI, and MCP entrypoints
 - [x] Add package command and deterministic app source packaging with local junk exclusions
+- [x] Add package manifest, SHA-256 checksum, and packager provenance metadata
+- [x] Add terminal CLI wrapper under `scripts/maverick` and project console-script metadata
+- [x] Add React/Vite source template with committed mountable `frontend/dist` smoke output
+- [x] Add CRM-inspired `entity-sqlite` template with generated entities, SQLite schema, backend, CLI, MCP, skills, lifecycle hooks, reference metadata, and entrypoint tests
+- [x] Add admin-visible `developer-kit` app for SDK create, validate, register-local, install-local, and package workflows
+- [x] Add extended SDK docs for templates, frontend, backend, storage, packaging, and Developer Kit
 - [x] Make generic entrypoint and lifecycle runners expose the repository root on `PYTHONPATH` for SDK helper imports
-- [x] Add focused SDK tests for generated template validation, CLI create/register/install/status, generated app CLI surface, hook-created app data, package exclusions, and storage path rejection
+- [x] Add focused SDK tests for generated template validation, CLI create/register/install/status, generated app CLI surface, hook-created app data, package manifest/checksum, CLI wrapper, entity SQLite backend/CLI/MCP behavior, Developer Kit contract, and storage path rejection
 - [x] Run `python3 -m unittest tests/test_app_sdk.py`
-- [ ] Add richer TypeScript/Vite source template and frontend build pipeline
-- [ ] Add developer UI or App Store integration for SDK workflows
+- [x] Add visual Developer Kit install/register controls that call App Store APIs from the frontend
 
 ## Phase 8: Inter-Agent Communication
 

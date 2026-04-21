@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 from pathlib import Path
+from contextlib import redirect_stdout
+from io import StringIO
 import os
 import tempfile
 import unittest
 
 from core.app_sdk.errors import AppSdkPathError
+from core.app_sdk.cli import main as app_sdk_cli_main
 from core.app_sdk.models import AppSdkCreateRequest
 from core.app_sdk.packaging import package_app_source
 from core.app_sdk.service import app_sdk_status, create_app_source, validate_app_source
 from core.app_sdk.storage import ensure_json_state, safe_app_data_path
 from core.apps.contracts import parse_app_contract_file
+from core.shared.entrypoints import run_json_entrypoint
 from core.apps.store import AppCollections, MongoAppStore
 from core.cli.models import CliInvocationContext
 from core.cli.service import list_core_cli_commands, run_core_cli_command
@@ -54,7 +58,15 @@ class MaverickAppSdkTestCase(unittest.TestCase):
 
     def test_sdk_generates_valid_contracts_for_supported_templates(self) -> None:
         repo_root = self.make_repo_root()
-        for template_id in ("minimal", "frontend-backend", "agent-tool", "data-app", "widget"):
+        for template_id in (
+            "minimal",
+            "frontend-backend",
+            "agent-tool",
+            "data-app",
+            "widget",
+            "react-vite",
+            "entity-sqlite",
+        ):
             with self.subTest(template_id=template_id):
                 app_id = f"sdk-{template_id}"
                 result = create_app_source(
@@ -76,6 +88,9 @@ class MaverickAppSdkTestCase(unittest.TestCase):
                 self.assertTrue(validation.valid)
                 if template_id == "widget":
                     self.assertEqual(parsed.contract.widgets[0].widget_id, "sdk-widget-widget")
+                if template_id == "entity-sqlite":
+                    self.assertEqual(parsed.contract.storage.storage_kind, "sqlite")
+                    self.assertEqual([entity.entity_type for entity in parsed.contract.capabilities.reference_entities], ["record"])
 
     def test_sdk_cli_create_register_install_status_and_app_cli_surface(self) -> None:
         repo_root = self.make_repo_root()
@@ -192,6 +207,91 @@ class MaverickAppSdkTestCase(unittest.TestCase):
         self.assertTrue(Path(package.artifact_path).is_file())
         self.assertIn("app_contract.json", package.files_packaged)
         self.assertNotIn("__pycache__/junk.pyc", package.files_packaged)
+        self.assertTrue(Path(package.manifest_path).is_file())
+        self.assertEqual(len(package.checksum_sha256), 64)
+
+    def test_entity_sqlite_template_exercises_backend_cli_and_mcp(self) -> None:
+        repo_root = self.make_repo_root()
+        result = create_app_source(
+            AppSdkCreateRequest(
+                app_id="sdk-crm-lite",
+                template_id="entity-sqlite",
+                target_kind="workspace_local",
+                workspace_id="default",
+                entities=["account", "contact", "deal"],
+            ),
+            start_path=repo_root,
+        )
+        app_root = Path(result.app_root)
+        data_root = repo_root / "workspaces" / "default" / "data" / "sdk-crm-lite"
+
+        backend_create = run_json_entrypoint(
+            app_root / "backend" / "app_backend.py",
+            cwd=app_root,
+            payload={
+                "app_id": "sdk-crm-lite",
+                "workspace_id": "default",
+                "data_root": str(data_root),
+                "body": {"action": "create", "entity_type": "account", "title": "Acme"},
+            },
+        )
+        cli_list = run_json_entrypoint(
+            app_root / "cli" / "app_cli.py",
+            cwd=app_root,
+            payload={
+                "app_id": "sdk-crm-lite",
+                "workspace_id": "default",
+                "data_root": str(data_root),
+                "arguments": {"action": "list", "entity_type": "account"},
+            },
+        )
+        mcp_manifest = run_json_entrypoint(
+            app_root / "mcp" / "server.py",
+            cwd=app_root,
+            payload={
+                "app_id": "sdk-crm-lite",
+                "workspace_id": "default",
+                "data_root": str(data_root),
+                "tool_name": "sdk-crm-lite_reference_manifest",
+                "arguments": {},
+            },
+        )
+
+        self.assertEqual(backend_create["status_code"], 201)
+        self.assertEqual(cli_list["items"][0]["title"], "Acme")
+        self.assertEqual(
+            [entity["entity_type"] for entity in mcp_manifest["entity_types"]],
+            ["account", "contact", "deal"],
+        )
+
+    def test_cli_wrapper_creates_workspace_app(self) -> None:
+        repo_root = self.make_repo_root()
+
+        with redirect_stdout(StringIO()):
+            exit_code = app_sdk_cli_main(
+                [
+                    "--repository-root",
+                    str(repo_root),
+                    "app",
+                    "create",
+                    "sdk-cli",
+                    "--template",
+                    "react-vite",
+                    "--workspace",
+                    "default",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        self.assertTrue((repo_root / "workspaces" / "default" / "apps" / "sdk-cli" / "package.json").is_file())
+
+    def test_developer_kit_contract_parses(self) -> None:
+        app_root = Path(__file__).resolve().parents[1] / "apps" / "developer-kit"
+
+        parsed = parse_app_contract_file(app_root)
+
+        self.assertEqual(parsed.app_id, "developer-kit")
+        self.assertEqual(parsed.contract.entrypoints.backend, "backend/app_backend.py")
 
 
 if __name__ == "__main__":

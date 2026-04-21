@@ -11,5 +11,8 @@ dependencies = [
     "uvicorn[standard]>=0.30",
 ]
 
+[project.scripts]
+maverick = "core.app_sdk.cli:main"
+
 [tool.setuptools]
 include-package-data = true

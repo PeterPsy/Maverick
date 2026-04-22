@@ -194,6 +194,14 @@ class CrmAppTestCase(unittest.TestCase):
             self.assertEqual(cleared["json"]["state"]["view_filter"]["mode"], "search")
             self.assertEqual(rejected["status_code"], 400)
 
+    def test_frontend_applies_surface_search_view_filters(self) -> None:
+        html = (CRM_ROOT / "frontend" / "dist" / "index.html").read_text(encoding="utf-8")
+
+        self.assertIn("function hasSearchViewFilter(viewFilter)", html)
+        self.assertIn("async function applySearchViewFilter(viewFilter)", html)
+        self.assertIn("state.view = entityType !== 'all' && plural[entityType] ? plural[entityType] : 'search';", html)
+        self.assertIn("await applySearchViewFilter(state.viewFilter);", html)
+
     def test_backend_updates_contact_and_adds_linked_note(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             data_root = Path(temp) / "data" / "crm"

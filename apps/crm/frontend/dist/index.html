@@ -615,14 +615,42 @@
         document.getElementById('view-subtitle').textContent = subtitle;
       }
 
-      function renderCustomViewBanner() {
+      function hasSearchViewFilter(viewFilter) {
+        return viewFilter?.mode === 'search' && (Boolean(viewFilter.query) || (viewFilter.entity_type && viewFilter.entity_type !== 'all'));
+      }
+
+      function emptyRecent() {
+        return { accounts: [], contacts: [], deals: [], activities: [] };
+      }
+
+      function addSearchResult(item, entityTypeFilter = 'all') {
+        if (entityTypeFilter !== 'all' && item.entity_type !== entityTypeFilter) return;
+        state.recent[plural[item.entity_type]].push({
+          id: item.entity_id,
+          name: item.title,
+          display_name: item.title,
+          subject: item.title,
+          summary: item.summary,
+          updated_at: item.updated_at,
+        });
+      }
+
+      function renderViewBanner() {
         const banner = document.getElementById('custom-view-banner');
         const isCustom = state.viewFilter?.mode === 'custom';
-        banner.hidden = !isCustom;
-        if (!isCustom) return;
+        const isSearchFilter = hasSearchViewFilter(state.viewFilter);
+        banner.hidden = !isCustom && !isSearchFilter;
+        if (!isCustom && !isSearchFilter) return;
         const count = allItems().length;
-        document.getElementById('custom-view-title').textContent = state.viewFilter.title || 'Custom CRM view';
-        document.getElementById('custom-view-copy').textContent = `You are viewing a custom CRM subset with ${count} selected record${count === 1 ? '' : 's'}.`;
+        if (isCustom) {
+          document.getElementById('custom-view-title').textContent = state.viewFilter.title || 'Custom CRM view';
+          document.getElementById('custom-view-copy').textContent = `You are viewing a custom CRM subset with ${count} selected record${count === 1 ? '' : 's'}.`;
+        } else {
+          const entityLabel = state.viewFilter.entity_type === 'all' ? 'records' : `${state.viewFilter.entity_type}s`;
+          const queryLabel = state.viewFilter.query ? ` matching "${state.viewFilter.query}"` : '';
+          document.getElementById('custom-view-title').textContent = 'Filtered CRM view';
+          document.getElementById('custom-view-copy').textContent = `Showing ${count} ${entityLabel}${queryLabel}.`;
+        }
       }
 
       function escapeHtml(value) {
@@ -670,7 +698,7 @@
         overviewKpis.hidden = !isOverview;
         performancePanel.hidden = !isOverview;
         contentGrid.classList.toggle('list-only', !isOverview);
-        renderCustomViewBanner();
+        renderViewBanner();
         list.hidden = state.view === 'pipeline';
         pipeline.hidden = state.view !== 'pipeline';
         list.innerHTML = '';
@@ -702,7 +730,13 @@
         } else {
           const type = singular[state.view];
           items = (state.recent[state.view] || []).map((item) => ({ ...item, _entity_type: type }));
-          updateTitle(state.view[0].toUpperCase() + state.view.slice(1), `Browse ${items.length} ${state.view}.`);
+          const title = state.view[0].toUpperCase() + state.view.slice(1);
+          if (hasSearchViewFilter(state.viewFilter)) {
+            const queryLabel = state.viewFilter.query ? ` matching "${state.viewFilter.query}"` : '';
+            updateTitle(title, `Showing ${items.length} filtered ${state.view}${queryLabel}.`);
+          } else {
+            updateTitle(title, `Browse ${items.length} ${state.view}.`);
+          }
           document.getElementById('list-title').textContent = state.view[0].toUpperCase() + state.view.slice(1);
           document.getElementById('list-subtitle').textContent = 'Relationship records for the current workspace.';
         }
@@ -805,12 +839,33 @@
         await refresh();
       }
 
+      async function applySearchViewFilter(viewFilter) {
+        const query = viewFilter.query || '';
+        const entityType = viewFilter.entity_type || 'all';
+        state.search = query;
+        document.getElementById('search').value = query;
+        state.view = entityType !== 'all' && plural[entityType] ? plural[entityType] : 'search';
+        state.recent = emptyRecent();
+        if (query) {
+          const payload = await callCrm({ action: 'search', query, limit: 50 });
+          payload.results.forEach((item) => addSearchResult(item, entityType));
+          return;
+        }
+        const payload = await callCrm({ action: 'list_recent', limit: 80 });
+        state.recent = payload;
+        if (entityType !== 'all') {
+          Object.keys(state.recent).forEach((key) => {
+            if (key !== plural[entityType]) state.recent[key] = [];
+          });
+        }
+      }
+
       async function refresh(existingViewState = null) {
         const viewState = existingViewState || await callCrm({ action: 'view_filter' });
         state.viewFilter = viewState.state?.view_filter || null;
         if (state.viewFilter?.mode === 'custom' && state.view !== 'search') {
           state.view = targetViewForCustomRefs(state.viewFilter.refs);
-          state.recent = { accounts: [], contacts: [], deals: [], activities: [] };
+          state.recent = emptyRecent();
           for (const ref of state.viewFilter.refs || []) {
             try {
               const payload = await callCrm({ action: 'get', entity_type: ref.entity_type, entity_id: ref.entity_id });
@@ -819,6 +874,8 @@
               // Stale refs are ignored; the backend remains the source of truth.
             }
           }
+        } else if (hasSearchViewFilter(state.viewFilter)) {
+          await applySearchViewFilter(state.viewFilter);
         } else {
           const payload = await callCrm({ action: 'list_recent', limit: 80 });
           state.recent = payload;
@@ -1043,17 +1100,8 @@
         if (!query) return refresh();
         const payload = await callCrm({ action: 'search', query, limit: 40 });
         state.view = 'search';
-        state.recent = { accounts: [], contacts: [], deals: [], activities: [] };
-        payload.results.forEach((item) => {
-          state.recent[plural[item.entity_type]].push({
-            id: item.entity_id,
-            name: item.title,
-            display_name: item.title,
-            subject: item.title,
-            summary: item.summary,
-            updated_at: item.updated_at,
-          });
-        });
+        state.recent = emptyRecent();
+        payload.results.forEach((item) => addSearchResult(item));
         document.querySelectorAll('.tab').forEach((item) => item.classList.remove('active'));
         renderMetrics();
         renderList();

@@ -4,11 +4,11 @@ After=network.target
 
 [Service]
 Type=simple
-User=ubuntu
-Group=ubuntu
-WorkingDirectory=/opt/maverick-v3
+User={{SERVICE_USER}}
+Group={{SERVICE_GROUP}}
+WorkingDirectory={{INSTALL_ROOT}}
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/usr/bin/python3 -m core.api.server --service rescue --host 127.0.0.1 --port 8015
+ExecStart={{INSTALL_ROOT}}/.venv/bin/python -m core.api.server --service rescue --host {{BIND_HOST}} --port {{RESCUE_PORT}}
 Restart=on-failure
 RestartSec=3
 

@@ -12,7 +12,20 @@ Maverick is not production-ready. Do not expose this configuration with real sec
 - `scripts/deploy/systemd/maverick3-backend-watchdog.timer`
 - `scripts/deploy/nginx/maverick.example.conf`
 
-The example files assume the repository is installed at `/opt/maverick-v3` and the public hostname is `maverick.example.com`. Change those values for your environment.
+Render environment-specific units and nginx config through:
+
+```bash
+python3 scripts/install_maverick.py --hostname maverick.example.com --install-root /opt/maverick-v3
+```
+
+By default the installer writes:
+
+- `.maverick/install/systemd/*.service`
+- `.maverick/install/systemd/*.timer`
+- `.maverick/install/nginx/<hostname>.conf`
+- `.maverick/install/install-manifest.json`
+
+Use `--systemd-dir` and `--nginx-conf` to target other output paths.
 
 ## Minimum Hardening
 

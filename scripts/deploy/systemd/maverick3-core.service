@@ -4,11 +4,11 @@ After=network.target
 
 [Service]
 Type=simple
-User=ubuntu
-Group=ubuntu
-WorkingDirectory=/opt/maverick-v3
+User={{SERVICE_USER}}
+Group={{SERVICE_GROUP}}
+WorkingDirectory={{INSTALL_ROOT}}
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/usr/bin/python3 -m uvicorn core.api.asgi_application:app --host 127.0.0.1 --port 8014
+ExecStart={{INSTALL_ROOT}}/.venv/bin/python -m uvicorn core.api.asgi_application:app --host {{BIND_HOST}} --port {{CORE_PORT}}
 Restart=always
 RestartSec=3
 

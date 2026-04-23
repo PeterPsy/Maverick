@@ -14,6 +14,30 @@ Maverick is experimental. Use fake data and local-only networking.
 
 For the first public release, the recommended path is local CLI-first setup, not Docker and not a setup UI.
 
+## Installer CLI
+
+For a fresh install with explicit deployment parameters, use the installer CLI:
+
+```bash
+python3 scripts/install_maverick.py --hostname maverick.example.com
+```
+
+That command:
+
+- bootstraps the Python environment
+- runs the core verification suite
+- renders systemd units under `.maverick/install/systemd/`
+- renders nginx config under `.maverick/install/nginx/`
+- writes `.maverick/install/install-manifest.json`
+
+For a local-only install without nginx/TLS rendering:
+
+```bash
+python3 scripts/install_maverick.py --local-only
+```
+
+Use `--install-root`, `--service-user`, `--service-group`, `--core-port`, `--rescue-port`, `--bind-host`, `--output-root`, `--systemd-dir`, `--nginx-conf`, and `--acme-root` to customize the generated deployment plan.
+
 ## Python Environment
 
 ```bash

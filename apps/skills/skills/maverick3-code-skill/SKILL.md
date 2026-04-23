@@ -33,9 +33,7 @@ After resolving canonical developer context, also read and follow these local re
 - `README.md`
 - `CONTRIBUTING.md`
 - `SECURITY.md`
-- `OPEN_SOURCE.md`
 - the local architecture documents in the repository docs tree
-- `IMPLEMENTATION_TASKLIST.md`
 
 If code and docs disagree, fix the disagreement in the same change when it is in scope.
 
@@ -113,7 +111,7 @@ Maverick is experimental and not production-ready.
 
 When touching runtime, workspace isolation, auth, app hosting, app store, secrets, WebSockets, OAuth, deployment, or recovery:
 
-- read `SECURITY.md` and the relevant part of `SECURITY_AUDIT.md`
+- read `SECURITY.md` and the relevant security documentation in `docs/security/`
 - avoid weakening sandbox-first non-default workspace behavior
 - avoid new default secrets, private hostnames, or local machine paths
 - prefer fail-closed behavior for security boundaries

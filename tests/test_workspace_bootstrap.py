@@ -53,7 +53,6 @@ class WorkspaceBootstrapTestCase(unittest.TestCase):
         (repo_root / "docs" / "architecture").mkdir(parents=True)
         (repo_root / "scripts").mkdir()
         (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
-        (repo_root / "IMPLEMENTATION_TASKLIST.md").write_text("", encoding="utf-8")
         return repo_root
 
     def test_workspace_layout_is_materialized(self) -> None:

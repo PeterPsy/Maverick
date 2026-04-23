@@ -76,7 +76,6 @@ class Phase11ObservabilityBase(unittest.TestCase):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
         (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
-        (repo_root / "IMPLEMENTATION_TASKLIST.md").write_text("", encoding="utf-8")
         return repo_root
 
     def make_workspace_store(self) -> MongoWorkspaceStore:

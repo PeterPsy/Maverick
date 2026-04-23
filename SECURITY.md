@@ -1,6 +1,6 @@
 # Security Policy
 
-Maverick v3 is experimental software. Do not expose it to the public internet or store production secrets in it until the issues tracked in `SECURITY_AUDIT.md` are resolved.
+Maverick v3 is experimental software. Do not expose it to the public internet or store production secrets in it until the documented hardening work is complete.
 
 For a compact boundary overview, read `docs/security/threat_model.md`. For the current production-use limitations, read `docs/security/production_readiness.md`.
 
@@ -28,7 +28,7 @@ Include:
 
 Maverick is not production-safe for sensitive data on an internet-connected host.
 
-Known launch blockers are documented in `SECURITY_AUDIT.md`, including:
+Known launch blockers currently include:
 
 - plaintext local bootstrap secrets
 - missing CSRF protection for cookie-authenticated unsafe requests

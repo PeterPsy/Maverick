@@ -31,7 +31,6 @@ class RuntimeWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
         (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
-        (repo_root / "IMPLEMENTATION_TASKLIST.md").write_text("", encoding="utf-8")
         source_apps_root = Path(__file__).resolve().parents[1] / "apps"
         shutil.copytree(source_apps_root / "base-shell", repo_root / "apps" / "base-shell", ignore=shutil.ignore_patterns("node_modules"))
         shutil.copytree(source_apps_root / "chat", repo_root / "apps" / "chat", ignore=shutil.ignore_patterns("node_modules"))

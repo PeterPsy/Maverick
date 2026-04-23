@@ -4,7 +4,7 @@ Date: 2026-04-20
 
 ## 1. Architecture Alignment
 
-- v3 docs read: `AGENTS.md`, `IMPLEMENTATION_TASKLIST.md`, `docs/architecture/core_architecture.md`, `docs/architecture/app_contract_architecture.md`, and `docs/architecture/workspace_root_architecture.md`.
+- v3 docs read: `AGENTS.md`, `docs/architecture/core_architecture.md`, `docs/architecture/app_contract_architecture.md`, and `docs/architecture/workspace_root_architecture.md`.
 - relevant core modules inspected: `core/api/platform_host.py`, `core/api/app_mounts.py`, `core/api/widget_api.py`, `core/apps/*`, `core/mcp/*`, `core/cli/*`, `core/skills/*`, `core/runtime/*`, `core/secrets/*`, and `core/observability/*`.
 - target app role in v3: app-owned persisted dynamic view packages and instances, rendered in its own frontend and through a chat widget.
 - app-store decision: sealed installation-level app under `apps/dynamic-views`, packageable into `<app-store-checkout>`.

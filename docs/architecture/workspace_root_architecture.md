@@ -1475,7 +1475,7 @@ That means:
 - readable and writable: `/workspaces/<workspace_id>/...`
 - not readable or writable: `/core/...`
 - not readable or writable: `/apps/...`
-- not readable or writable: repository-root files such as `IMPLEMENTATION_TASKLIST.md`
+- not readable or writable: repository-root files such as `AGENTS.md`
 - not readable or writable: `/workspaces/<other_workspace_id>/...`
 
 Default may use `full-access` only when policy explicitly allows it.

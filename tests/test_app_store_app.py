@@ -37,7 +37,6 @@ class AppStoreAppTestCase(unittest.TestCase):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
         (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
-        (repo_root / "IMPLEMENTATION_TASKLIST.md").write_text("", encoding="utf-8")
         source_apps_root = Path(__file__).resolve().parents[1] / "apps"
         for app_id in ("base-shell", "chat", "agents", "app-store", "user-admin"):
             shutil.copytree(

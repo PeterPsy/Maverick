@@ -4,7 +4,7 @@ Maverick v3 is a clean-slate rebuild. Contributions should make the platform eas
 
 ## Project Status
 
-Maverick is experimental and not production-ready. Security-critical work is tracked in `SECURITY_AUDIT.md` and launch readiness is tracked in `OPEN_SOURCE.md`.
+Maverick is experimental and not production-ready. Public security posture is documented in `SECURITY.md` and `docs/security/threat_model.md`. Public launch priorities are tracked in `ROADMAP.md`.
 
 ## Before You Change Code
 
@@ -13,7 +13,6 @@ Read the source-of-truth documents:
 - `docs/architecture/core_architecture.md`
 - `docs/architecture/workspace_root_architecture.md`
 - `docs/architecture/app_contract_architecture.md`
-- `IMPLEMENTATION_TASKLIST.md`
 
 If implementation and documentation disagree, fix the disagreement in the same change.
 
@@ -94,4 +93,4 @@ For public release work and architecture-sensitive changes, start with:
 - `docs/reference/core_surfaces.md`
 - `docs/reference/runtime_provider_model.md`
 - `docs/reference/persistence_model.md`
-- `OPEN_SOURCE_CHECKLIST.md`
+- `ROADMAP.md`

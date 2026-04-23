@@ -2,7 +2,7 @@
 
 This deployment path is for local demos, self-hosted evaluation, and controlled review environments only.
 
-Maverick is not production-ready. Do not expose this configuration with real secrets until `SECURITY_AUDIT.md` blockers are closed.
+Maverick is not production-ready. Do not expose this configuration with real secrets until the documented security hardening work is closed.
 
 ## Files
 

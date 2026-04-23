@@ -11,7 +11,6 @@ Before changing structure or implementation, align with these files:
 - `docs/architecture/core_architecture.md`
 - `docs/architecture/workspace_root_architecture.md`
 - `docs/architecture/app_contract_architecture.md`
-- `IMPLEMENTATION_TASKLIST.md`
 
 If code, structure, and documentation disagree, fix the disagreement immediately.
 
@@ -86,10 +85,7 @@ Rules:
 
 - architecture decisions belong in `docs/architecture/`
 - repository workflow and engineering discipline belong in `AGENTS.md`
-- implementation progress belongs in `IMPLEMENTATION_TASKLIST.md`
 - if a task changes the intended target architecture, update the relevant architecture doc before or together with the code
-- if a task completes a real implementation step, mark the corresponding checklist items in `IMPLEMENTATION_TASKLIST.md` immediately
-- do not postpone checklist updates until the end of the session when the task has already been closed
 - do not leave TODO notes as a substitute for updating documentation
 
 ## Skills

@@ -551,7 +551,6 @@ class Phase5AppContractTestCase(unittest.TestCase):
             for name in ("core", "apps", "workspaces"):
                 (repo_root / name).mkdir(parents=True, exist_ok=True)
             (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
-            (repo_root / "IMPLEMENTATION_TASKLIST.md").write_text("", encoding="utf-8")
             app_root = repo_root / "apps" / "validator"
             lifecycle_root = app_root / "backend" / "lifecycle"
             lifecycle_root.mkdir(parents=True, exist_ok=True)

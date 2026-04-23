@@ -84,7 +84,6 @@ class Phase6RuntimeTestCase(unittest.TestCase):
         (repo_root / "docs" / "architecture").mkdir(parents=True)
         (repo_root / "scripts").mkdir()
         (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
-        (repo_root / "IMPLEMENTATION_TASKLIST.md").write_text("", encoding="utf-8")
         return repo_root
 
     def test_create_runtime_session_persists_authoritative_workspace_and_state(self) -> None:

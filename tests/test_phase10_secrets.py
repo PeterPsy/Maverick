@@ -153,7 +153,6 @@ class Phase10SecretsAndRecoveryTestCase(unittest.TestCase):
             else:
                 target.mkdir(parents=True, exist_ok=True)
         (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
-        (repo_root / "IMPLEMENTATION_TASKLIST.md").write_text("", encoding="utf-8")
         return repo_root
 
     def test_secret_records_keep_raw_values_out_of_metadata(self) -> None:

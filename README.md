@@ -12,7 +12,7 @@ Maverick is an experimental open source, self-hostable platform for workspace-is
 
 Maverick v3 is experimental and not production-ready.
 
-Do not expose it to the public internet or store production secrets in it yet. Known security blockers are documented in `SECURITY_AUDIT.md`; open source launch readiness is tracked in `OPEN_SOURCE.md`; the first-release execution plan is tracked in `OPEN_SOURCE_CHECKLIST.md`.
+Do not expose it to the public internet or store production secrets in it yet. Current security limitations and launch posture are documented in `SECURITY.md`, `docs/security/threat_model.md`, and `ROADMAP.md`.
 
 ## What Maverick Provides
 
@@ -115,7 +115,6 @@ Architecture source of truth:
 - `docs/architecture/core_architecture.md`
 - `docs/architecture/workspace_root_architecture.md`
 - `docs/architecture/app_contract_architecture.md`
-- `IMPLEMENTATION_TASKLIST.md`
 
 Decision summaries:
 
@@ -123,8 +122,6 @@ Decision summaries:
 
 Open source launch and roadmap:
 
-- `OPEN_SOURCE.md`
-- `OPEN_SOURCE_CHECKLIST.md`
 - `ROADMAP.md`
 
 If code and docs disagree, fix the disagreement in the same change.

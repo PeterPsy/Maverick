@@ -2,7 +2,7 @@
 
 Maverick v3 is not production-ready.
 
-Do not run an internet-exposed Maverick deployment with real secrets, customer data, or privileged connected accounts until `SECURITY_AUDIT.md` blockers are closed.
+Do not run an internet-exposed Maverick deployment with real secrets, customer data, or privileged connected accounts until the documented security hardening work is closed.
 
 ## Launch Blockers
 

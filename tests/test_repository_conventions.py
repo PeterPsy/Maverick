@@ -17,7 +17,6 @@ class RepositoryConventionsTestCase(unittest.TestCase):
         paths = installation_paths(start_path=current_file)
 
         self.assertTrue((paths.repository_root / "AGENTS.md").is_file())
-        self.assertTrue((paths.repository_root / "IMPLEMENTATION_TASKLIST.md").is_file())
         self.assertEqual(paths.core_root, paths.repository_root / "core")
         self.assertEqual(paths.apps_root, paths.repository_root / "apps")
         self.assertEqual(paths.workspaces_root, paths.repository_root / "workspaces")
@@ -45,7 +44,6 @@ class RepositoryConventionsTestCase(unittest.TestCase):
     def test_public_release_docs_exist(self) -> None:
         repo_root = installation_paths(start_path=Path(__file__)).repository_root
         required_paths = [
-            "OPEN_SOURCE_CHECKLIST.md",
             "docs/security/threat_model.md",
             "docs/adr/README.md",
             "docs/reference/core_surfaces.md",

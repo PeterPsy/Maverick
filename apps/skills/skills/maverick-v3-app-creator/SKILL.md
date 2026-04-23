@@ -60,7 +60,7 @@ Clarify or infer these before implementation. If any requirement is still produc
 - Workspace-local app projects live under `workspaces/<workspace_id>/apps/<app_id>/`.
 - The core must not import app source or contain app-specific conditionals.
 - Do not add branches like `if app_id == "<new-app>"` in core.
-- If the app needs a missing generic capability, add a generic core surface or document the gap in `IMPLEMENTATION_TASKLIST.md`.
+- If the app needs a missing generic capability, add a generic core surface or document the gap in the relevant architecture or roadmap docs.
 - If behavior is app-specific, implement it inside the app.
 
 ## Official App SDK First
@@ -284,7 +284,7 @@ For non-trivial apps, produce a short plan before coding.
 7. Choose the smallest useful app structure.
 8. Define tests and smoke checks before or alongside implementation.
 9. Define the generic registration/install/enable verification for the app's distribution mode.
-10. Include docs and `IMPLEMENTATION_TASKLIST.md` updates in the same change.
+10. Include docs updates in the same change.
 
 ## Target App Structure
 
@@ -480,7 +480,7 @@ Update docs in the same change when any of these move:
 Use:
 
 - `docs/porting/` only for porting plans, not new app creation plans
-- `IMPLEMENTATION_TASKLIST.md` for progress and open gaps
+- `ROADMAP.md` and relevant docs for public progress and open gaps
 
 Mark tasklist items complete only when implementation and verification are real.
 
@@ -542,7 +542,7 @@ A new Maverick v3 app is done when:
 - frontend builds use `maverick app <app_id> frontend build --json` when `lifecycle.rebuild` is declared
 - backend/MCP/CLI use shared service logic where applicable
 - tests cover stable contract and storage behavior
-- docs and `IMPLEMENTATION_TASKLIST.md` are updated
+- docs are updated
 - final review removes stale files, dead code, and generated junk
 - SDK package output is produced when the user asked for a distributable artifact
 - a focused commit is created and pushed when implementation changes are made

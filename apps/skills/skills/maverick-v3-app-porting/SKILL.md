@@ -53,7 +53,7 @@ Clarify these before implementation. If any are unknown, include the gap in the 
 - The v3 core must not know app business logic or contain app-specific conditionals.
 - Do not add branches like `if app_id == "<specific-app>"` in core code.
 - Do not preserve v2 API shapes in the core as compatibility shims.
-- If an app needs a missing capability, add a generic core surface or document the gap in `IMPLEMENTATION_TASKLIST.md`.
+- If an app needs a missing capability, add a generic core surface or document the gap in the relevant architecture or roadmap docs.
 - If a behavior is app-specific, implement it inside the app.
 
 ## App SDK Use During Ports
@@ -86,8 +86,8 @@ Bad SDK uses during porting:
 5. Design the target v3 `app_contract.json` before coding.
 6. Identify required generic core gaps separately from app implementation work.
 7. Produce a file-by-file implementation plan using `references/port-plan-template.md`.
-8. Include documentation, tasklist, tests, build, deployment, SDK validation/status/package checks, and smoke verification in the plan.
-9. After approval or an explicit implementation request, execute the plan end-to-end and update docs/tasklist in the same change.
+8. Include documentation, tests, build, deployment, SDK validation/status/package checks, and smoke verification in the plan.
+9. After approval or an explicit implementation request, execute the plan end-to-end and update docs in the same change.
 
 ## Installation And Verification
 
@@ -145,7 +145,7 @@ An app plan or port is not complete until it covers:
 - storage and data schema ownership
 - lifecycle hooks, health, migration, export/import, and rollback expectations where relevant
 - generic core gaps, documented without app-specific shortcuts
-- docs and `IMPLEMENTATION_TASKLIST.md` updates
+- docs updates
 - tests and smoke checks
 - generic registration/install/enable status is verified for the target workspace when the app should be usable
 - packaged artifact is produced when the port needs distribution

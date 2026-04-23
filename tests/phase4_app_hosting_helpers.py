@@ -90,7 +90,6 @@ class Phase4AppHostingBase(unittest.TestCase):
     def make_repo_root(self, temp_dir: str) -> Path:
         root = Path(temp_dir)
         (root / "AGENTS.md").write_text("test", encoding="utf-8")
-        (root / "IMPLEMENTATION_TASKLIST.md").write_text("test", encoding="utf-8")
         (root / "pyproject.toml").write_text(
             '[project]\nname = "maverick-v3"\nversion = "0.1.0"\n',
             encoding="utf-8",

@@ -38,7 +38,7 @@ class WorkspaceSandboxTest(unittest.TestCase):
         self.assertIn(str(dependency_root), command)
         self.assertIn("--remount-ro", command)
         self.assertNotIn(str(repo_root), _mount_sources(command))
-        self.assertNotIn(str(repo_root / "IMPLEMENTATION_TASKLIST.md"), command)
+        self.assertNotIn(str(repo_root / "AGENTS.md"), command)
         self.assertEqual(command[-2:], ["codex", "app-server"])
 
     def test_resolver_roots_include_resolved_systemd_resolver_parent(self) -> None:
@@ -121,7 +121,7 @@ class WorkspaceSandboxTest(unittest.TestCase):
             workspace_root = repo_root / "workspaces" / "ceida"
             runtime_root = workspace_root / ".runtime"
             runtime_bin = runtime_root / "bin"
-            outside_file = repo_root / "IMPLEMENTATION_TASKLIST.md"
+            outside_file = repo_root / "AGENTS.md"
             workspace_root.mkdir(parents=True)
             outside_file.parent.mkdir(parents=True, exist_ok=True)
             outside_file.write_text("outside-only-needle\n", encoding="utf-8")

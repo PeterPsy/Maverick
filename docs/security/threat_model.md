@@ -6,7 +6,7 @@ Date: 2026-04-23
 
 This document gives a compact threat model for Maverick v3 as an experimental, self-hostable, workspace-isolated AI operating environment.
 
-It is not a substitute for `SECURITY_AUDIT.md`.
+It is not a substitute for deeper internal security review notes.
 
 Use this document to understand:
 
@@ -19,7 +19,7 @@ Use this document to understand:
 
 Maverick v3 is not production-ready.
 
-The system is designed around stronger boundaries than a single-user personal assistant, especially for non-default workspaces, but the implementation still has open security blockers documented in `SECURITY_AUDIT.md`.
+The system is designed around stronger boundaries than a single-user personal assistant, especially for non-default workspaces, but the implementation still has open security hardening work.
 
 Current intended position:
 

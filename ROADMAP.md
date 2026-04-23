@@ -12,14 +12,14 @@ Maverick v3 is pre-release software. This roadmap is intentionally conservative 
 
 ## In Progress
 
-- Complete the first public release checklist from `OPEN_SOURCE_CHECKLIST.md`.
+- Complete the first public release hardening and documentation work.
 - Keep non-default workspace runtime sessions sandbox-first.
 - Keep architecture docs, ADRs, and implementation aligned.
 - Keep the CLI-first local setup path reproducible from a clean clone.
 
 ## Planned
 
-- Close security blockers from `SECURITY_AUDIT.md`.
+- Close the remaining public security hardening items called out in `SECURITY.md` and `docs/security/threat_model.md`.
 - Add public docs index, glossary, and app developer tutorial.
 - Add stronger dependency audit, SBOM generation, and release checks.
 - Add browser smoke tests for core shell and mounted apps.

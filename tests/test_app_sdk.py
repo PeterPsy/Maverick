@@ -41,7 +41,6 @@ class MaverickAppSdkTestCase(unittest.TestCase):
         for name in ("apps", "workspaces", "docs", "scripts", "tests"):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         (repo_root / "AGENTS.md").write_text("test", encoding="utf-8")
-        (repo_root / "IMPLEMENTATION_TASKLIST.md").write_text("test", encoding="utf-8")
         return repo_root
 
     def make_store(self) -> MongoAppStore:

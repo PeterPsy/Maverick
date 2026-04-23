@@ -31,7 +31,6 @@ class PathRebasingTestCase(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="maverick-rebase-") as temp_dir:
             repository_root = Path(temp_dir)
             (repository_root / "AGENTS.md").write_text("", encoding="utf-8")
-            (repository_root / "IMPLEMENTATION_TASKLIST.md").write_text("", encoding="utf-8")
             (repository_root / "core").mkdir()
             (repository_root / "apps").mkdir()
             (repository_root / "workspaces" / "default" / "data" / "skills").mkdir(parents=True)

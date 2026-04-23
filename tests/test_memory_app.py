@@ -34,7 +34,6 @@ class MemoryAppTestCase(unittest.TestCase):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
         (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
-        (repo_root / "IMPLEMENTATION_TASKLIST.md").write_text("", encoding="utf-8")
         for app_id in ("base-shell", "chat", "memory"):
             shutil.copytree(
                 REPO_ROOT / "apps" / app_id,

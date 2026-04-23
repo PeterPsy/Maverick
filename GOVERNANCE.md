@@ -31,7 +31,7 @@ Security embargoes, disclosure timing, and vulnerability severity are maintainer
 
 ## Release Authority
 
-Only maintainers may cut releases. Public release is blocked until the P0 checklist in `OPEN_SOURCE.md` is complete.
+Only maintainers may cut releases. Public release decisions follow the current roadmap and documented security posture.
 
 ## Contributor Roles
 

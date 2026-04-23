@@ -30,6 +30,7 @@ Recommended pattern:
 - backend translates mounted HTTP requests into app actions
 - CLI translates command invocations into the same app actions
 - MCP translates tool invocations into the same app actions
+- mutating actions emit `app_events` such as `maverick.app.data-changed` when mounted UI should refresh live
 
 If the app declares:
 

@@ -40,3 +40,16 @@ That is the official path that:
 - lets mounted clients refresh without a manual full-page reload
 
 Do not rely on ad hoc static servers or undocumented rebuild shortcuts.
+
+## Live Update Rule
+
+If app writes emit `app_events` such as `maverick.app.data-changed`, the mounted frontend should react to them without manual refresh.
+
+Recommended pattern:
+
+- listen for same-origin `postMessage` events such as `maverick.app.data-changed` when the app is mounted inside `base-shell`
+- connect to the official app-event WebSocket at `/api/apps/events/ws` when the app also needs to refresh outside shell forwarding
+- filter by `owner_app_id` and `resource`
+- reload the affected view state through the app's own backend surface
+
+Do not rely on stale startup-only fetches for stateful apps. If the app emits live change events, the frontend implementation should consume them.

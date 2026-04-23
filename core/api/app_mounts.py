@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import mimetypes
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,9 @@ from core.secrets.service import bind_app_secret, build_secret_ref, create_platf
 from core.shared.entrypoints import run_json_entrypoint
 from core.workspaces.paths import workspace_paths
 from core.identity.models import UserRecord
+
+
+logger = logging.getLogger(__name__)
 
 
 def serve_frontend(
@@ -66,11 +70,19 @@ def handle_root_shell(
         return json_response(start_response, {"error": "shell_not_installed"}, status="404 Not Found")
     except AppHostingError:
         return json_response(start_response, {"error": "shell_unavailable"}, status="503 Service Unavailable")
-    return serve_frontend(
-        start_response,
-        frontend_root=(source_root / parsed.contract.entrypoints.frontend).resolve(),
-        subpath="/",
-    )
+    try:
+        return serve_frontend(
+            start_response,
+            frontend_root=(source_root / parsed.contract.entrypoints.frontend).resolve(),
+            subpath="/",
+        )
+    except Exception:
+        logger.exception(
+            "Root shell `%s` in workspace `%s` failed during frontend serving.",
+            root_shell_app_id,
+            workspace_id,
+        )
+        return json_response(start_response, {"error": "shell_unavailable"}, status="503 Service Unavailable")
 
 
 def handle_app_frontend(
@@ -101,7 +113,11 @@ def handle_app_frontend(
     frontend = parsed.contract.entrypoints.frontend
     if frontend is None:
         return text_response(start_response, "App frontend not found", status="404 Not Found")
-    return serve_frontend(start_response, frontend_root=(source_root / frontend).resolve(), subpath=subpath)
+    try:
+        return serve_frontend(start_response, frontend_root=(source_root / frontend).resolve(), subpath=subpath)
+    except Exception:
+        logger.exception("App `%s` frontend mount failed in workspace `%s`.", app_id, workspace_id)
+        return json_response(start_response, {"error": "app_unavailable"}, status="404 Not Found")
 
 
 def handle_app_frontend_build(

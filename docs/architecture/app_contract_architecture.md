@@ -104,6 +104,8 @@ Workspace-facing aggregate surfaces must degrade per app when a binding points t
 
 For example, `/api/apps`, `/api/status`, and widget discovery must skip an unavailable enabled app and continue returning the remaining workspace capabilities. Direct mounts for that unavailable app should return an app-unavailable response instead of leaking a filesystem exception or failing the whole shell.
 
+Hosted app isolation must treat unexpected app-hosting faults the same way operationally. If one app surface raises an unclassified exception during contract resolution, registry serialization, or frontend serving, the core must log it, exclude only that app from aggregate workspace surfaces, and keep the rest of the shell responsive. A direct shell mount failure for the configured root shell should degrade to `503 shell_unavailable`; a direct mount for any other app should degrade to `404 app_unavailable`. An unexpected exception must not bubble out of the hosted platform request path and take down the backend process.
+
 Complete deletion is intentionally narrower than uninstall.
 
 Uninstall removes only the workspace binding and preserves app-owned data by default. Complete deletion is valid for workspace-local app projects, where the workspace owns the app source. It must remove the workspace binding if present, delete `workspaces/<workspace_id>/data/<app_id>/`, delete the project directory under `workspaces/<workspace_id>/apps/<app_id>/`, and remove the workspace-local project record so the app no longer appears in the workspace-local catalog. Platform store apps and remote catalog entries are not deleted through a workspace-local delete action because their source is installation-level or external catalog state rather than workspace-owned material.

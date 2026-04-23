@@ -47,6 +47,7 @@ Do not declare surfaces that are not implemented.
 - if the contract declares `reference_entities`, the app should implement matching manifest, search, resolve, and summarize behavior through CLI or MCP
 - if the contract declares `view_surfaces`, the app should implement real view state actions such as `view_filter`, `set_view_filter`, `set_custom_view`, and `clear_custom_view`
 - if the contract declares `lifecycle.rebuild: true`, the app must contain a `package.json` with a `build` script and a declared frontend artifact root
+- if app writes emit `app_events`, mounted frontend and widget surfaces should consume `maverick.app.data-changed` or `maverick.widget.data-changed` so users do not need manual refreshes
 
 The contract is not documentation-only metadata. It is an executable promise to the rest of Maverick.
 
@@ -73,6 +74,17 @@ maverick app <app_id> frontend build --json
 
 That command runs the declared frontend build, verifies the declared artifact root, and emits `maverick.app.frontend-changed` so mounted clients can refresh without a manual page reload.
 
+## Live Update Wiring
+
+When an app backend, CLI, or MCP write returns `app_events`, treat that as part of the product contract rather than as optional polish.
+
+- mounted frontends should react to `maverick.app.data-changed`
+- widgets should react to `maverick.widget.data-changed`
+- shell-mounted apps can consume same-origin `postMessage` forwarding from `base-shell`
+- direct mounts can connect to `/api/apps/events/ws`
+
+Do not leave stateful apps in a startup-fetch-only mode if the app already emits live change events.
+
 ## App Creation Checklist
 
 1. Pick a lowercase kebab-case app id.
@@ -85,7 +97,8 @@ That command runs the declared frontend build, verifies the declared artifact ro
 8. Run `maverick app install-local <app_id>`.
 9. Run `maverick app status <app_id>` and confirm `installed` is true.
 10. If the app declares `lifecycle.rebuild: true`, run `maverick app <app_id> frontend build --json`.
-11. Package with `maverick app package <app_id>` when an artifact is needed.
+11. If the app emits live data-change events, verify the mounted frontend or widget updates without manual refresh.
+12. Package with `maverick app package <app_id>` when an artifact is needed.
 
 ## Verification
 

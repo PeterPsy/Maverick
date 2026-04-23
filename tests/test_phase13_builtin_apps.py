@@ -436,6 +436,75 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
         self.assertNotIn("missing-local", {item["app_id"] for item in payload["items"]})
         self.assertIn("base-shell", {item["app_id"] for item in payload["items"]})
 
+    def test_app_registry_skips_enabled_app_after_unexpected_surface_failure(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+
+        real_bindings = state.app_store.list_workspace_app_bindings("default")
+        target_binding = next(binding for binding in real_bindings if binding.app_id == "chat")
+
+        def broken_enabled_bindings(_store, *, workspace_id: str):
+            return real_bindings
+
+        def broken_resolve_surface(_store, *, binding, start_path=None):
+            if binding.app_id == target_binding.app_id:
+                raise RuntimeError("unexpected parse failure")
+            from core.apps.surfaces import resolve_workspace_app_surface as real_resolve_workspace_app_surface
+
+            return real_resolve_workspace_app_surface(_store, binding=binding, start_path=start_path)
+
+        with patch("core.api.app_registry.enabled_workspace_app_bindings", broken_enabled_bindings), patch(
+            "core.api.app_registry.resolve_workspace_app_surface",
+            broken_resolve_surface,
+        ):
+            status, body, _headers = self.invoke(app, path="/api/apps")
+
+        payload = json.loads(body.decode("utf-8"))
+
+        self.assertEqual(status, 200)
+        self.assertNotIn("chat", {item["app_id"] for item in payload["items"]})
+        self.assertIn("base-shell", {item["app_id"] for item in payload["items"]})
+
+    def test_root_shell_returns_service_unavailable_after_unexpected_frontend_failure(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+
+        with patch("core.api.app_mounts.serve_frontend", side_effect=RuntimeError("frontend crash")):
+            status, body, _headers = self.invoke(app, path="/")
+
+        payload = json.loads(body.decode("utf-8"))
+
+        self.assertEqual(status, 503)
+        self.assertEqual(payload["error"], "shell_unavailable")
+
+    def test_app_frontend_mount_returns_not_found_after_unexpected_frontend_failure(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+
+        with patch("core.api.app_mounts.serve_frontend", side_effect=RuntimeError("frontend crash")):
+            status, body, _headers = self.invoke(app, path="/apps/chat/")
+
+        payload = json.loads(body.decode("utf-8"))
+
+        self.assertEqual(status, 404)
+        self.assertEqual(payload["error"], "app_unavailable")
+
+    def test_platform_host_returns_internal_server_error_for_unhandled_route_exception(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+
+        with patch("core.api.platform_host.handle_workspace_api", side_effect=RuntimeError("route crash")):
+            status, body, _headers = self.invoke(app, path="/api/status")
+
+        payload = json.loads(body.decode("utf-8"))
+
+        self.assertEqual(status, 500)
+        self.assertEqual(payload["error"], "internal_server_error")
+
     def test_base_shell_uses_registry_without_fake_static_apps(self) -> None:
         repo_root = self.make_repo_root()
         state = bootstrap_platform_state(start_path=repo_root)

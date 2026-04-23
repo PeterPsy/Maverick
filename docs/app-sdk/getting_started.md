@@ -83,6 +83,7 @@ Rules:
 - If you declare `reference_entities`, implement matching reference behavior through manifest, search, resolve, and summarize actions.
 - If you declare `view_surfaces`, implement real persisted or derived view state plus the declared state actions.
 - If you declare `lifecycle.rebuild: true`, ship a real `package.json` build script and use the official frontend rebuild operation.
+- If app writes emit `app_events`, wire the frontend or widget to consume `maverick.app.data-changed` or `maverick.widget.data-changed` so mounted UI updates live.
 
 The contract is an executable promise, not aspirational metadata.
 
@@ -192,6 +193,7 @@ The `developer-kit` app provides a browser UI for SDK workflows. It is workspace
 - Verify every declared surface with scoped `list` and `inspect` commands.
 - Treat `reference_entities` and `view_surfaces` as real implementation work, not contract decoration.
 - Run `maverick app <app_id> frontend build --json` for apps that declare `lifecycle.rebuild: true`.
+- When the app emits data-change events, make mounted frontend and widget surfaces refresh from those events instead of requiring manual reloads.
 - Keep app data under `data/<app_id>`.
 - Keep app behavior inside the app.
 - Use CLI/MCP/backend surfaces for operations.

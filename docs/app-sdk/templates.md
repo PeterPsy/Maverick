@@ -51,11 +51,13 @@ Generated files are starting source. Replace placeholder behavior with real prod
 - Frontend, backend, CLI, MCP, and lifecycle hooks.
 - Good for simple JSON-state tools.
 - Frontend is static by default, so rebuild remains off until you add a real build pipeline.
+- If you add mutating actions that emit `maverick.app.data-changed`, also add frontend live-update wiring instead of relying on startup-only loads.
 
 `widget`
 
 - Frontend, backend, and widget declaration.
 - Use when the app primarily contributes an embeddable mounted widget.
+- If widget state depends on app writes, consume `maverick.widget.data-changed` in the widget frontend.
 
 `react-vite`
 
@@ -63,6 +65,7 @@ Generated files are starting source. Replace placeholder behavior with real prod
 - `package.json` build script present.
 - `lifecycle.rebuild: true` enabled.
 - Use `maverick app <app_id> frontend build --json` after frontend edits.
+- When app writes emit live change events, wire the frontend to `/api/apps/events/ws` or shell-forwarded `postMessage` updates.
 
 `entity-sqlite`
 
@@ -70,3 +73,4 @@ Generated files are starting source. Replace placeholder behavior with real prod
 - `package.json` build script present.
 - `lifecycle.rebuild: true` enabled.
 - Best starting point when developers need to learn how to expose a complete app surface area cleanly.
+- Treat emitted `maverick.app.data-changed` events as part of the template completion bar for mounted views.

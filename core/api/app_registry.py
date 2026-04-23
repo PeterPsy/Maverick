@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from core.api.platform_state import PlatformState
 from core.apps.errors import AppHostingError, WorkspaceAppBindingNotFoundError
 from core.apps.surfaces import enabled_workspace_app_bindings, resolve_workspace_app_surface
 from core.identity.models import UserRecord
+
+
+logger = logging.getLogger(__name__)
 
 
 def user_can_mount_app(user: UserRecord | None, platform_roles: list[str] | None) -> bool:
@@ -31,30 +35,44 @@ def enabled_app_items(
             source_root, parsed = resolve_workspace_app_surface(state.app_store, binding=binding, start_path=start_path)
         except AppHostingError:
             continue
+        except Exception:
+            logger.exception(
+                "Skipping enabled app `%s` in workspace `%s` after unexpected surface resolution failure.",
+                binding.app_id,
+                workspace_id,
+            )
+            continue
         if not user_can_mount_app(user, parsed.contract.visibility.platform_roles):
             continue
-        logo_path = source_root / "frontend" / "dist" / "maverick-icon-compact.png"
-        item = {
-            "app_id": parsed.app_id,
-            "name": parsed.name,
-            "version": parsed.version,
-            "description": parsed.description,
-            "publisher": parsed.publisher,
-            "status": binding.status,
-            "distribution_mode": parsed.contract.distribution.mode,
-            "source_access": parsed.contract.distribution.source_access,
-            "views": list(parsed.contract.capabilities.views),
-            "logo": (
-                {"kind": "image", "value": f"/apps/{parsed.app_id}/maverick-icon-compact.png"}
-                if logo_path.exists()
-                else None
-            ),
-            "frontend_mount": f"/apps/{parsed.app_id}/" if parsed.contract.entrypoints.frontend else "",
-            "backend_mount": f"/api/apps/{parsed.app_id}/backend" if parsed.contract.entrypoints.backend else "",
-        }
-        if parsed.contract.visibility.platform_roles:
-            item["visibility"] = {"platform_roles": parsed.contract.visibility.platform_roles}
-        items.append(item)
+        try:
+            logo_path = source_root / "frontend" / "dist" / "maverick-icon-compact.png"
+            item = {
+                "app_id": parsed.app_id,
+                "name": parsed.name,
+                "version": parsed.version,
+                "description": parsed.description,
+                "publisher": parsed.publisher,
+                "status": binding.status,
+                "distribution_mode": parsed.contract.distribution.mode,
+                "source_access": parsed.contract.distribution.source_access,
+                "views": list(parsed.contract.capabilities.views),
+                "logo": (
+                    {"kind": "image", "value": f"/apps/{parsed.app_id}/maverick-icon-compact.png"}
+                    if logo_path.exists()
+                    else None
+                ),
+                "frontend_mount": f"/apps/{parsed.app_id}/" if parsed.contract.entrypoints.frontend else "",
+                "backend_mount": f"/api/apps/{parsed.app_id}/backend" if parsed.contract.entrypoints.backend else "",
+            }
+            if parsed.contract.visibility.platform_roles:
+                item["visibility"] = {"platform_roles": parsed.contract.visibility.platform_roles}
+            items.append(item)
+        except Exception:
+            logger.exception(
+                "Skipping enabled app `%s` in workspace `%s` after unexpected registry serialization failure.",
+                binding.app_id,
+                workspace_id,
+            )
     return items
 
 

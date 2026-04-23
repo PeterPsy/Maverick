@@ -21,5 +21,4 @@ security:
   - changed-files:
       - any-glob-to-any-file:
           - "SECURITY.md"
-          - "SECURITY_AUDIT.md"
           - "docs/security/**"

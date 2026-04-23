@@ -9,7 +9,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
 from errors import MemoryValidationError
-from service import handle_action
+from service import app_events_for_action, handle_action
 
 
 payload = json.loads(sys.stdin.read() or "{}")
@@ -25,5 +25,7 @@ try:
 except MemoryValidationError as error:
     status_code, result = 400, {"error": "validation_error", "detail": str(error)}
 
-print(json.dumps({"status_code": status_code, "workspace_id": payload.get("workspace_id"), **result}, ensure_ascii=False))
-
+response = {"status_code": status_code, "workspace_id": payload.get("workspace_id"), **result}
+if status_code < 400:
+    response["app_events"] = app_events_for_action(action)
+print(json.dumps(response, ensure_ascii=False))

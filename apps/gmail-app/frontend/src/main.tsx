@@ -153,10 +153,15 @@ function App() {
     setError('');
     const requestedOffset = options.offset ?? 0;
     const isMore = Boolean(options.pageToken) || requestedOffset > 0;
+    const isRemoteSync = Boolean(options.forceRemote || options.pageToken);
     if (isMore) {
       setIsLoadingMore(true);
-    } else {
+    } else if (isRemoteSync) {
       setIsLoadingLatest(true);
+      setNextPageToken('');
+      setNextOffset(0);
+      setHasMoreCached(false);
+    } else {
       setNextPageToken('');
       setNextOffset(0);
       setHasMoreCached(false);
@@ -184,11 +189,6 @@ function App() {
       setIsLoadingLatest(false);
       setIsLoadingMore(false);
     }
-  }
-
-  async function loadMailboxCacheThenSync(targetMailbox = mailbox) {
-    await loadMailbox(targetMailbox);
-    await loadMailbox(targetMailbox, { forceRemote: true });
   }
 
   async function summarize(thread: ThreadSummary) {
@@ -253,7 +253,7 @@ function App() {
 
   useEffect(() => {
     if (viewMode === 'list') {
-      loadMailboxCacheThenSync(mailbox).catch((err: Error) => setError(err.message));
+      loadMailbox(mailbox).catch((err: Error) => setError(err.message));
     }
   }, [mailbox]);
 

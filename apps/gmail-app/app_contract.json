@@ -10,6 +10,9 @@
     "mode": "source_available",
     "source_access": "forkable"
   },
+  "visibility": {
+    "platform_roles": null
+  },
   "capabilities": {
     "mcp_tools": [
       "gmail_app_connection_status",
@@ -39,6 +42,29 @@
     "views": [
       "gmail-app"
     ],
+    "data_events": [
+      {
+        "resource": "accounts",
+        "description": "Emitted when Gmail connection records change through official Gmail App surfaces."
+      },
+      {
+        "resource": "threads",
+        "description": "Emitted when cached Gmail thread data changes through official Gmail App surfaces."
+      },
+      {
+        "resource": "suggestions",
+        "description": "Emitted when Gmail relationship suggestions change through official Gmail App surfaces."
+      },
+      {
+        "resource": "send-approvals",
+        "description": "Emitted when Gmail send approval records change through official Gmail App surfaces."
+      },
+      {
+        "resource": "sent-messages",
+        "description": "Emitted when sent-message audit records change through official Gmail App surfaces."
+      }
+    ],
+    "view_surfaces": [],
     "reference_entities": [
       {
         "entity_type": "thread",
@@ -109,7 +135,7 @@
     "import": false,
     "validate_after_import": false,
     "repair_after_import": false,
-    "rebuild": false,
+    "rebuild": true,
     "health_check": true
   },
   "health_contract": {
@@ -125,5 +151,6 @@
     "bundle": false,
     "data": false,
     "repair_only": false
-  }
+  },
+  "widgets": []
 }

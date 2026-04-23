@@ -57,9 +57,10 @@ def build_core_cli_registry(
             registry.register_command(definition, handler)
         for definition, handler in app_lifecycle_command_specs(
             app_store=app_store,
-            observability_store=observability_store,
             workspace_id=workspace_id,
             start_path=start_path,
+            observability_store=observability_store,
+            app_event_bus=app_event_bus,
         ):
             registry.register_command(definition, handler)
     return registry

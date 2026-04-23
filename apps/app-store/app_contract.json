@@ -10,6 +10,9 @@
     "mode": "sealed",
     "source_access": "none"
   },
+  "visibility": {
+    "platform_roles": null
+  },
   "capabilities": {
     "mcp_tools": [
       "maverick_app_store",
@@ -25,6 +28,13 @@
     "views": [
       "app-store"
     ],
+    "data_events": [
+      {
+        "resource": "state",
+        "description": "Emitted when pinned apps or remembered installs change through official App Store surfaces."
+      }
+    ],
+    "view_surfaces": [],
     "reference_entities": [
       {
         "entity_type": "installed_app",
@@ -84,7 +94,7 @@
     "import": false,
     "validate_after_import": false,
     "repair_after_import": false,
-    "rebuild": false,
+    "rebuild": true,
     "health_check": true
   },
   "health_contract": {

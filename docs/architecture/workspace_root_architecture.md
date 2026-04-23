@@ -191,6 +191,16 @@ Runtime session provider state must be partitioned below that root by runtime se
 
 Provider-specific homes such as Codex `CODEX_HOME`, runtime-local `TMPDIR`, copied runtime skills, and transient provider binaries live under the session runtime root. The workspace may contain hundreds or thousands of runtime session roots over time, but active provider state must not be shared between concurrent agents unless a provider adapter documents an explicit immutable cache.
 
+Runtime sessions may also contain provider-managed executable shims under:
+
+```text
+/workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/bin/
+```
+
+The `maverick` shim installed there is the official SDK and platform CLI for workspace-isolated agents. It is a hosted API client scoped by a runtime token and must not depend on installation-level `core/`, `apps/`, or `scripts/` paths being readable inside the workspace sandbox.
+
+The shim must support the same discovery-first command families documented for agents, including `maverick apps list --json`, `maverick core cli list --json`, `maverick app <app_id> cli list --json`, and `maverick app <app_id> frontend build --json`. Runtime shims forward those commands to a core-owned runtime CLI API, which resolves the workspace and runtime session from the token and enforces the command's invocation policy before running server-side operations. Frontend rebuild is intentionally allowed from sandbox runtime sessions because it is the official way for workspace agents to publish updated app assets and trigger mounted-client refresh events; broader app management operations such as install, uninstall, and source removal remain more restricted.
+
 So the distinction is:
 
 - `workspace_root` = the writable sandbox boundary for the workspace

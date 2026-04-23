@@ -9,6 +9,7 @@ from uuid import uuid4
 from database import connect, ensure_schema, health_payload, json_dumps, json_loads
 from errors import GmailAppValidationError
 from gmail_models import GmailThread, has_excluded_system_label, utc_now
+from attachments import normalize_attachments
 
 __all__ = [
     "consume_send_approval",
@@ -152,46 +153,66 @@ def list_threads(
         if query.strip():
             pattern = f"%{query.strip()}%"
             rows = connection.execute(
-                "SELECT * FROM threads WHERE subject LIKE ? OR snippet LIKE ? OR participants_json LIKE ? ORDER BY updated_at DESC",
+                """
+                SELECT threads.*, latest.from_email AS latest_from_email, latest.to_emails_json AS latest_to_emails_json
+                FROM threads
+                LEFT JOIN messages AS latest
+                  ON latest.id = (
+                    SELECT id FROM messages
+                    WHERE thread_id = threads.id
+                    ORDER BY received_at DESC
+                    LIMIT 1
+                  )
+                WHERE threads.subject LIKE ? OR threads.snippet LIKE ? OR threads.participants_json LIKE ?
+                ORDER BY threads.updated_at DESC
+                """,
                 (pattern, pattern, pattern),
             ).fetchall()
         else:
-            rows = connection.execute("SELECT * FROM threads ORDER BY updated_at DESC").fetchall()
+            rows = connection.execute(
+                """
+                SELECT threads.*, latest.from_email AS latest_from_email, latest.to_emails_json AS latest_to_emails_json
+                FROM threads
+                LEFT JOIN messages AS latest
+                  ON latest.id = (
+                    SELECT id FROM messages
+                    WHERE thread_id = threads.id
+                    ORDER BY received_at DESC
+                    LIMIT 1
+                  )
+                ORDER BY threads.updated_at DESC
+                """
+            ).fetchall()
     results = []
     excluded = {str(label).upper() for label in excluded_labels or []}
     skipped = 0
-    with connect(data_root) as connection:
-        for row in rows:
-            labels = json_loads(row["labels_json"])
-            normalized_labels = {str(label).upper() for label in labels or []}
-            if required_label and required_label.upper() not in normalized_labels:
-                continue
-            if excluded.intersection(normalized_labels):
-                continue
-            if not include_system_labels and has_excluded_system_label(labels):
-                continue
-            if skipped < offset:
-                skipped += 1
-                continue
-            latest_message = connection.execute(
-                "SELECT from_email, to_emails_json FROM messages WHERE thread_id = ? ORDER BY received_at DESC LIMIT 1",
-                (row["id"],),
-            ).fetchone()
-            results.append(
-                {
-                    "id": row["id"],
-                    "subject": row["subject"],
-                    "participants": json_loads(row["participants_json"]),
-                    "snippet": row["snippet"],
-                    "updated_at": row["updated_at"],
-                    "is_unread": bool(row["is_unread"]),
-                    "labels": labels,
-                    "from_email": latest_message["from_email"] if latest_message else "",
-                    "to_emails": json_loads(latest_message["to_emails_json"]) if latest_message else [],
-                }
-            )
-            if len(results) >= limit:
-                break
+    for row in rows:
+        labels = json_loads(row["labels_json"])
+        normalized_labels = {str(label).upper() for label in labels or []}
+        if required_label and required_label.upper() not in normalized_labels:
+            continue
+        if excluded.intersection(normalized_labels):
+            continue
+        if not include_system_labels and has_excluded_system_label(labels):
+            continue
+        if skipped < offset:
+            skipped += 1
+            continue
+        results.append(
+            {
+                "id": row["id"],
+                "subject": row["subject"],
+                "participants": json_loads(row["participants_json"]),
+                "snippet": row["snippet"],
+                "updated_at": row["updated_at"],
+                "is_unread": bool(row["is_unread"]),
+                "labels": labels,
+                "from_email": row["latest_from_email"] or "",
+                "to_emails": json_loads(row["latest_to_emails_json"]) if row["latest_to_emails_json"] else [],
+            }
+        )
+        if len(results) >= limit:
+            break
     return results
 
 
@@ -319,6 +340,7 @@ def create_send_approval(data_root: Path, payload: dict[str, Any]) -> dict[str, 
     if not to_emails or not subject or not body_text:
         raise GmailAppValidationError("Send approval requires to_emails, subject, and body_text.")
     now = utc_now()
+    attachments = normalize_attachments(data_root, payload)
     approval = {
         "id": f"approval_{uuid4().hex}",
         "status": "approved",
@@ -326,6 +348,7 @@ def create_send_approval(data_root: Path, payload: dict[str, Any]) -> dict[str, 
         "subject": subject,
         "body_text": body_text,
         "thread_id": str(payload.get("thread_id") or ""),
+        "attachments": attachments,
         "confirmation_text": str(payload.get("confirmation_text") or "send this email"),
         "created_at": now,
         "approved_at": now,
@@ -334,12 +357,17 @@ def create_send_approval(data_root: Path, payload: dict[str, Any]) -> dict[str, 
     with connect(data_root) as connection:
         connection.execute(
             """
-            INSERT INTO send_approvals(id, status, to_emails_json, subject, body_text, thread_id, confirmation_text, created_at, approved_at, consumed_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO send_approvals(id, status, to_emails_json, subject, body_text, thread_id, attachments_json, confirmation_text, created_at, approved_at, consumed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (approval["id"], approval["status"], json_dumps(to_emails), subject, body_text, approval["thread_id"], approval["confirmation_text"], now, now, ""),
+            (approval["id"], approval["status"], json_dumps(to_emails), subject, body_text, approval["thread_id"], json_dumps(attachments), approval["confirmation_text"], now, now, ""),
         )
-    record_audit(data_root, "gmail.send_approved", subject_id=approval["id"], payload={"to_emails": to_emails, "subject": subject})
+    record_audit(
+        data_root,
+        "gmail.send_approved",
+        subject_id=approval["id"],
+        payload={"to_emails": to_emails, "subject": subject, "attachment_count": len(attachments)},
+    )
     return approval
 
 
@@ -354,7 +382,15 @@ def consume_send_approval(data_root: Path, approval_id: str) -> dict[str, Any]:
         if row["status"] != "approved" or row["consumed_at"]:
             raise GmailAppValidationError("Approval is not available for sending.")
         connection.execute("UPDATE send_approvals SET status = ?, consumed_at = ? WHERE id = ?", ("consumed", now, approval_id))
-    return {"id": row["id"], "to_emails": json_loads(row["to_emails_json"]), "subject": row["subject"], "body_text": row["body_text"], "thread_id": row["thread_id"], "consumed_at": now}
+    return {
+        "id": row["id"],
+        "to_emails": json_loads(row["to_emails_json"]),
+        "subject": row["subject"],
+        "body_text": row["body_text"],
+        "thread_id": row["thread_id"],
+        "attachments": json_loads(row["attachments_json"]) if "attachments_json" in row.keys() else [],
+        "consumed_at": now,
+    }
 
 
 def record_sent_message(data_root: Path, approval_id: str, gmail_message_id: str, thread_id: str = "") -> dict[str, Any]:

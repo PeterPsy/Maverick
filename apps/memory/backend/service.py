@@ -9,13 +9,17 @@ from errors import MemoryValidationError
 from store import (
     add_external_ref,
     audit_events,
+    clear_custom_view_payload,
     context_payload,
     create_edge,
     create_node,
     graph_payload,
     health_payload,
     inspect_node,
+    load_view_state,
     search_nodes,
+    set_custom_view_payload,
+    set_view_filter_payload,
     soft_delete_edge,
     soft_delete_node,
     update_node,
@@ -38,6 +42,32 @@ REFERENCE_MANIFEST = {
     ],
 }
 
+DATA_CHANGED_RESOURCES = {
+    "clear_custom_view",
+    "remember",
+    "create_node",
+    "set_custom_view",
+    "set_view_filter",
+    "update_node",
+    "delete_node",
+    "soft_delete_node",
+    "link",
+    "link_nodes",
+    "unlink",
+    "unlink_nodes",
+    "attach_file",
+    "attach_entity",
+    "attach_app_entity",
+}
+VIEW_STATE_ACTIONS = {"set_view_filter", "set_custom_view", "clear_custom_view"}
+
+
+def app_events_for_action(action: str) -> list[dict[str, str]]:
+    if action not in DATA_CHANGED_RESOURCES:
+        return []
+    resource = "view-state" if action in VIEW_STATE_ACTIONS else "graph"
+    return [{"type": "maverick.app.data-changed", "resource": resource}]
+
 
 def action_from_tool(tool_name: str, fallback: str) -> str:
     mapping = {
@@ -52,6 +82,10 @@ def action_from_tool(tool_name: str, fallback: str) -> str:
         "memory_attach_app_entity": "attach_entity",
         "memory_inspect_node": "inspect",
         "memory_audit": "audit",
+        "memory_view_filter": "view_filter",
+        "memory_set_view_filter": "set_view_filter",
+        "memory_set_custom_view": "set_custom_view",
+        "memory_clear_custom_view": "clear_custom_view",
         "memory_reference_manifest": "references.manifest",
         "memory_reference_search": "references.search",
         "memory_reference_resolve": "references.resolve",
@@ -92,10 +126,23 @@ def handle_action(data_root: Path, body: dict[str, Any]) -> tuple[int, dict[str,
         return 200, graph_payload(
             data_root,
             query=str(body.get("query") or "").strip(),
+            node_ids=body.get("node_ids"),
             limit=int(body.get("limit") or 200),
         )
     if action == "audit":
         return 200, {"events": audit_events(data_root, limit=int(body.get("limit") or 50))}
+    if action == "view_filter":
+        return 200, {"state": load_view_state(data_root)}
+    if action == "set_view_filter":
+        return 200, set_view_filter_payload(
+            data_root=data_root,
+            query=body.get("query") if "query" in body else None,
+            preserve_custom=bool(body.get("preserve_custom")),
+        )
+    if action == "set_custom_view":
+        return 200, set_custom_view_payload(data_root=data_root, body=body)
+    if action == "clear_custom_view":
+        return 200, clear_custom_view_payload(data_root=data_root)
     if action == "health.check":
         return 200, health_payload(data_root)
     if action == "references.manifest":

@@ -24,7 +24,7 @@ class GmailClient(Protocol):
     def get_thread(self, thread_id: str) -> GmailThread:
         """Return one Gmail thread."""
 
-    def send_message(self, to_emails: list[str], subject: str, body_text: str, thread_id: str = "") -> dict[str, Any]:
+    def send_message(self, to_emails: list[str], subject: str, body_text: str, thread_id: str = "", attachments: list[dict[str, Any]] | None = None) -> dict[str, Any]:
         """Send one message and return Gmail metadata."""
 
 
@@ -62,7 +62,8 @@ class FakeGmailClient:
                 return thread
         raise GmailAppValidationError(f"Thread `{thread_id}` was not found.")
 
-    def send_message(self, to_emails: list[str], subject: str, body_text: str, thread_id: str = "") -> dict[str, Any]:
+    def send_message(self, to_emails: list[str], subject: str, body_text: str, thread_id: str = "", attachments: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+        attachments = attachments or []
         sent = {
             "id": f"fake_msg_{len(self.sent_messages) + 1}",
             "thread_id": thread_id or f"fake_thread_sent_{len(self.sent_messages) + 1}",
@@ -70,6 +71,14 @@ class FakeGmailClient:
             "to_emails": to_emails,
             "subject": subject,
             "body_text": body_text,
+            "attachments": [
+                {
+                    "filename": str(item.get("filename") or ""),
+                    "content_type": str(item.get("content_type") or ""),
+                    "size_bytes": len(item.get("content_bytes") or b""),
+                }
+                for item in attachments
+            ],
         }
         self.sent_messages.append(sent)
         return sent
@@ -111,11 +120,21 @@ class HttpGmailClient:
         payload = self._request_json(f"https://gmail.googleapis.com/gmail/v1/users/me/threads/{quote(thread_id)}?format=full")
         return thread_from_gmail_payload(payload)
 
-    def send_message(self, to_emails: list[str], subject: str, body_text: str, thread_id: str = "") -> dict[str, Any]:
+    def send_message(self, to_emails: list[str], subject: str, body_text: str, thread_id: str = "", attachments: list[dict[str, Any]] | None = None) -> dict[str, Any]:
         message = EmailMessage()
         message["To"] = ", ".join(to_emails)
         message["Subject"] = subject
         message.set_content(body_text)
+        for attachment in attachments or []:
+            maintype, _, subtype = str(attachment.get("content_type") or "application/octet-stream").partition("/")
+            if not subtype:
+                maintype, subtype = "application", "octet-stream"
+            message.add_attachment(
+                attachment.get("content_bytes") or b"",
+                maintype=maintype,
+                subtype=subtype,
+                filename=str(attachment.get("filename") or "attachment"),
+            )
         raw = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii")
         body: dict[str, Any] = {"raw": raw}
         if thread_id:

@@ -122,6 +122,30 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
         self.assertTrue((repo_root / "workspaces" / "default" / "data" / "agents" / "agent_types.json").is_file())
         self.assertTrue((repo_root / "workspaces" / "default" / "data" / "skills" / "state.json").is_file())
 
+    def test_all_builtin_frontend_apps_declare_rebuild_lifecycle(self) -> None:
+        apps_root = Path(__file__).resolve().parents[1] / "apps"
+        missing: list[str] = []
+        for contract_path in sorted(apps_root.glob("*/app_contract.json")):
+            parsed = parse_app_contract_file(contract_path.parent)
+            frontend = parsed.contract.entrypoints.frontend
+            if frontend is None:
+                continue
+            package_roots = [contract_path.parent, contract_path.parent / frontend.split("/", 1)[0]]
+            has_build_script = False
+            for package_root in package_roots:
+                package_path = package_root / "package.json"
+                if not package_path.is_file():
+                    continue
+                package_payload = json.loads(package_path.read_text(encoding="utf-8"))
+                scripts = package_payload.get("scripts") if isinstance(package_payload, dict) else None
+                has_build_script = isinstance(scripts, dict) and bool(scripts.get("build"))
+                if has_build_script:
+                    break
+            if not parsed.contract.lifecycle.rebuild or not has_build_script:
+                missing.append(parsed.app_id)
+
+        self.assertEqual(missing, [])
+
     def test_bootstrap_rebuilds_builtin_app_bindings_for_persisted_workspaces(self) -> None:
         repo_root = self.make_repo_root()
         initial_state = bootstrap_platform_state(start_path=repo_root)
@@ -171,6 +195,77 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
         self.assertEqual(resume_turns[0].status, "completed")
         self.assertIn("runtime.recovery.resume_queued", event_types)
         self.assertIn("runtime.turn.failed", event_types)
+
+    def test_bootstrap_does_not_resume_turn_that_already_has_terminal_output(self) -> None:
+        repo_root = self.make_repo_root()
+        initial_state = bootstrap_platform_state(start_path=repo_root)
+        session = create_runtime_session(
+            initial_state.runtime_store,
+            session_id="runtime-terminal-event",
+            workspace_id="default",
+            agent_id="chat",
+            governance=initial_state.workspace_store.get_governance("default"),
+            platform_allows_full_access=True,
+            start_path=repo_root,
+        )
+        transition_runtime_session(initial_state.runtime_store, session_id=session.session_id, target_status="running")
+        turn = queue_runtime_turn(initial_state.runtime_store, turn_id="terminal-output-turn", session_id=session.session_id, input_text="done work")
+        transition_runtime_turn(initial_state.runtime_store, turn_id=turn.turn_id, target_status="active")
+        record_runtime_event(
+            initial_state.runtime_store,
+            event_id="terminal-output",
+            session_id=session.session_id,
+            turn_id=turn.turn_id,
+            plane="turn",
+            event_type="runtime.output.final",
+            payload={"text": "done", "exit_code": 0},
+            event_bus=initial_state.runtime_event_bus,
+        )
+
+        restarted_state = bootstrap_platform_state(start_path=repo_root)
+
+        turns = restarted_state.runtime_store.list_turns(session.session_id)
+        event_types = [event.event_type for event in restarted_state.runtime_store.list_events(session.session_id)]
+
+        self.assertEqual(restarted_state.runtime_store.get_turn(turn.turn_id).status, "completed")
+        self.assertFalse([item for item in turns if item.input_text == "resume"])
+        self.assertIn("runtime.turn.completed", event_types)
+        self.assertNotIn("runtime.recovery.resume_queued", event_types)
+
+    def test_bootstrap_does_not_chain_backend_restart_resume_turns(self) -> None:
+        repo_root = self.make_repo_root()
+        initial_state = bootstrap_platform_state(start_path=repo_root)
+        session = create_runtime_session(
+            initial_state.runtime_store,
+            session_id="runtime-resume-loop",
+            workspace_id="default",
+            agent_id="chat",
+            governance=initial_state.workspace_store.get_governance("default"),
+            platform_allows_full_access=True,
+            start_path=repo_root,
+        )
+        transition_runtime_session(initial_state.runtime_store, session_id=session.session_id, target_status="running")
+        turn = queue_runtime_turn(initial_state.runtime_store, turn_id="resume-turn", session_id=session.session_id, input_text="resume")
+        transition_runtime_turn(initial_state.runtime_store, turn_id=turn.turn_id, target_status="active")
+        record_runtime_event(
+            initial_state.runtime_store,
+            event_id="resume-queued",
+            session_id=session.session_id,
+            turn_id=turn.turn_id,
+            plane="turn",
+            event_type="runtime.turn.queued",
+            payload={"input_text": "resume", "client_message_id": f"backend-restart-resume:{session.session_id}:1"},
+            event_bus=initial_state.runtime_event_bus,
+        )
+
+        restarted_state = bootstrap_platform_state(start_path=repo_root)
+
+        turns = restarted_state.runtime_store.list_turns(session.session_id)
+        event_types = [event.event_type for event in restarted_state.runtime_store.list_events(session.session_id)]
+
+        self.assertEqual(restarted_state.runtime_store.get_turn(turn.turn_id).status, "failed")
+        self.assertEqual([item.input_text for item in turns].count("resume"), 1)
+        self.assertNotIn("runtime.recovery.resume_queued", event_types)
 
     def test_bootstrap_closes_orphan_non_terminal_turn_events_after_backend_restart(self) -> None:
         repo_root = self.make_repo_root()

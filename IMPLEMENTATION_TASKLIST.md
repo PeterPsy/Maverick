@@ -368,6 +368,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] define operator-facing commands separately from agent-safe commands
   - [x] support scriptable and batch-safe platform operations
   - [x] execute app-owned CLI entrypoints through a platform-managed host
+  - [x] expose scoped core/app CLI and MCP discovery plus invocation through `maverick core ...` and `maverick app <app_id> ...` wrapper paths
   - [x] expose core-owned per-app lifecycle CLI commands for install, uninstall, and workspace-local remove when available
   - [x] return operational core data when the relevant control-plane stores are available
 - [x] Implement workspace-owned skills loading model
@@ -716,6 +717,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
   - [x] rebuild built-in app bindings for every active persisted workspace during local hosted bootstrap
   - [x] replace hardcoded root shell app id with configurable root-shell app selection
   - [x] move base-shell pinned app shortcuts into App Store-owned workspace state and a registry-mounted widget
+  - [x] add official core app-hosting frontend build command and event-driven mounted iframe refresh
   - [ ] replace base-shell's hardcoded `chat` initial preference with registry/workspace preference metadata
 - [x] Implement `agents` as an app on top of core runtime/provider system
   - [x] add `apps/agents/app_contract.json`
@@ -936,6 +938,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
 - [x] Implement Memory MCP surface
 - [x] Implement Memory skill template under `apps/memory/skills/memory-ops`
 - [x] Implement initial Memory operator frontend under `apps/memory/frontend/dist`
+- [x] Declare and implement Memory view composition actions for graph filters and custom node views
 - [x] Add deterministic FTS-backed retrieval with graph expansion and provenance in context output
 - [x] Add Memory app tests for contract parsing, lifecycle hooks, backend behavior, CLI/MCP entrypoints, and core-mounted end-to-end usage
 - [x] Defer embeddings and vector search until after the stable local retrieval contract is in place
@@ -949,6 +952,9 @@ without carrying forward legacy structure or backward-compatibility constraints 
 - [x] Add parser tests for referenceable entity metadata
 - [x] Add optional `capabilities.data_events` contract metadata for live app data invalidation
 - [x] Add core app-event WebSocket fanout for `maverick.app.data-changed` without frontend polling
+- [x] Normalize every built-in app contract to the canonical serializer shape and audit live `data_events` declarations app-by-app
+- [x] Add backend, CLI, and MCP app-event publication for every built-in app with mutable workspace data
+- [x] Add repository tests that fail when built-in app contracts drift from canonical shape or mutable apps stop declaring live data events
 - [x] Add common CLI/MCP reference tool convention: manifest, search, resolve, and summarize
 - [x] Add reference manifests and reference tools to `agents`
 - [x] Add reference manifests and reference tools to `app-store`
@@ -1174,6 +1180,11 @@ Purpose: provide a contract-first SDK for creating Maverick apps without bypassi
 - [x] Add focused SDK tests for generated template validation, CLI create/register/install/status, generated app CLI surface, hook-created app data, package manifest/checksum, CLI wrapper, entity SQLite backend/CLI/MCP behavior, Developer Kit contract, and storage path rejection
 - [x] Run `python3 -m unittest tests/test_app_sdk.py`
 - [x] Add visual Developer Kit install/register controls that call App Store APIs from the frontend
+- [x] Add authenticated `/api/app-sdk` workspace API with runtime bearer-token support for isolated agents
+- [x] Install a workspace-local `maverick` SDK wrapper into runtime session `bin/` without mounting installation-level `core/`, `apps/`, or `scripts/`
+- [x] Move Developer Kit SDK operations to the authenticated SDK API and remove the obsolete app-owned backend
+- [x] Update Maverick app creation/porting skills to require SDK usage without global repo path assumptions or manual fallback creation
+- [x] Add tests for non-default workspace SDK API creation/register/install/status and runtime launch isolation
 
 ## Phase 8: Inter-Agent Communication
 

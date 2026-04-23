@@ -29,6 +29,8 @@
     "views": [
       "admin"
     ],
+    "data_events": [],
+    "view_surfaces": [],
     "reference_entities": []
   },
   "entrypoints": {
@@ -75,7 +77,7 @@
     "import": false,
     "validate_after_import": false,
     "repair_after_import": false,
-    "rebuild": false,
+    "rebuild": true,
     "health_check": false
   },
   "health_contract": {
@@ -91,5 +93,6 @@
     "bundle": false,
     "data": false,
     "repair_only": false
-  }
+  },
+  "widgets": []
 }

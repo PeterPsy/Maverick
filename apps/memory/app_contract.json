@@ -10,6 +10,9 @@
     "mode": "source_available",
     "source_access": "forkable"
   },
+  "visibility": {
+    "platform_roles": null
+  },
   "capabilities": {
     "mcp_tools": [
       "memory_context",
@@ -23,6 +26,10 @@
       "memory_attach_app_entity",
       "memory_inspect_node",
       "memory_audit",
+      "memory_view_filter",
+      "memory_set_view_filter",
+      "memory_set_custom_view",
+      "memory_clear_custom_view",
       "memory_reference_manifest",
       "memory_reference_search",
       "memory_reference_resolve",
@@ -37,6 +44,16 @@
     "views": [
       "memory"
     ],
+    "data_events": [
+      {
+        "resource": "graph",
+        "description": "Emitted when memory nodes, edges, or external references change through official Memory surfaces."
+      },
+      {
+        "resource": "view-state",
+        "description": "Emitted when Memory view filters or custom graph views change through official Memory surfaces."
+      }
+    ],
     "reference_entities": [
       {
         "entity_type": "node",
@@ -45,6 +62,39 @@
         "resolvable": true,
         "summarizable": true,
         "deep_link_supported": true
+      }
+    ],
+    "view_surfaces": [
+      {
+        "view_id": "memory",
+        "display_name": "Memory",
+        "entity_types": [
+          "node"
+        ],
+        "state_actions": [
+          {
+            "action": "view_filter",
+            "standard": true,
+            "description": "Read the current Memory graph view state."
+          },
+          {
+            "action": "set_view_filter",
+            "standard": true,
+            "description": "Set the keyword filter for the Memory graph view."
+          },
+          {
+            "action": "set_custom_view",
+            "standard": true,
+            "description": "Show a curated set of Memory node references."
+          },
+          {
+            "action": "clear_custom_view",
+            "standard": true,
+            "description": "Return Memory to normal graph search mode."
+          }
+        ],
+        "supports_custom_view": true,
+        "supports_filter_refinement": true
       }
     ]
   },
@@ -99,7 +149,7 @@
     "import": false,
     "validate_after_import": false,
     "repair_after_import": false,
-    "rebuild": false,
+    "rebuild": true,
     "health_check": true
   },
   "health_contract": {
@@ -115,5 +165,6 @@
     "bundle": false,
     "data": false,
     "repair_only": false
-  }
+  },
+  "widgets": []
 }

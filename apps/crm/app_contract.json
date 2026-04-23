@@ -10,6 +10,9 @@
     "mode": "source_available",
     "source_access": "forkable"
   },
+  "visibility": {
+    "platform_roles": null
+  },
   "capabilities": {
     "mcp_tools": [
       "crm_search",
@@ -166,7 +169,7 @@
     "import": false,
     "validate_after_import": false,
     "repair_after_import": false,
-    "rebuild": false,
+    "rebuild": true,
     "health_check": true
   },
   "health_contract": {
@@ -182,5 +185,6 @@
     "bundle": false,
     "data": false,
     "repair_only": false
-  }
+  },
+  "widgets": []
 }

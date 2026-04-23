@@ -28,6 +28,22 @@ REFERENCE_MANIFEST = {
     ],
 }
 
+DATA_CHANGED_ACTIONS = {
+    "create_role",
+    "update_role",
+    "delete_role",
+    "create_agent_type",
+    "update_agent_type",
+    "delete_agent_type",
+    "set_common_prompt",
+}
+
+
+def app_events_for_action(action: str) -> list[dict]:
+    if action not in DATA_CHANGED_ACTIONS:
+        return []
+    return [{"type": "maverick.app.data-changed", "resource": "configuration"}]
+
 
 def catalog(data_root: Path) -> dict:
     seed_defaults(data_root)

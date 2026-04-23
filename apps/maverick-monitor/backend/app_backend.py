@@ -7,7 +7,7 @@ from pathlib import Path
 import sys
 
 from errors import MonitorValidationError
-from service import handle_action
+from service import app_events_for_action, handle_action
 
 
 def _response(status_code: int, payload: dict) -> None:
@@ -17,6 +17,7 @@ def _response(status_code: int, payload: dict) -> None:
 def main() -> None:
     payload = json.loads(sys.stdin.read() or "{}")
     body = payload.get("body") if isinstance(payload.get("body"), dict) else {}
+    action = str(body.get("action") or "snapshot")
     try:
         status_code, result = handle_action(
             workspace_root=Path(payload["workspace_root"]),
@@ -26,7 +27,10 @@ def main() -> None:
     except MonitorValidationError as error:
         _response(400, {"error": "validation_error", "detail": str(error)})
         return
-    _response(status_code, result)
+    response = {"status_code": status_code, "json": result}
+    if status_code < 400:
+        response["app_events"] = app_events_for_action(action)
+    print(json.dumps(response, ensure_ascii=False))
 
 
 if __name__ == "__main__":

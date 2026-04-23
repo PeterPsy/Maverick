@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from pathlib import Path
 from contextlib import redirect_stdout
-from io import StringIO
+from io import BytesIO, StringIO
+import json
 import os
 import tempfile
 import unittest
 
+from core.api.platform_host import PlatformHost
+from core.api.platform_state import bootstrap_platform_state
 from core.app_sdk.errors import AppSdkPathError
 from core.app_sdk.cli import main as app_sdk_cli_main
 from core.app_sdk.models import AppSdkCreateRequest
@@ -20,6 +23,8 @@ from core.shared.entrypoints import run_json_entrypoint
 from core.apps.store import AppCollections, MongoAppStore
 from core.cli.models import CliInvocationContext
 from core.cli.service import list_core_cli_commands, run_core_cli_command
+from core.runtime.workspace_api_token import issue_workspace_api_token
+from core.workspaces.service import create_workspace
 from tests.phase4_app_hosting_helpers import FakeCollection
 
 
@@ -55,6 +60,32 @@ class MaverickAppSdkTestCase(unittest.TestCase):
             agent_id=None,
             effective_mode="full-access",
         )
+
+    def invoke_json(
+        self,
+        app: PlatformHost,
+        path: str,
+        *,
+        method: str = "GET",
+        payload: dict[str, object] | None = None,
+        token: str | None = None,
+    ) -> tuple[str, dict[str, object]]:
+        raw = json.dumps(payload or {}).encode("utf-8") if payload is not None else b""
+        environ = {
+            "PATH_INFO": path,
+            "REQUEST_METHOD": method,
+            "CONTENT_LENGTH": str(len(raw)),
+            "wsgi.input": BytesIO(raw),
+        }
+        if token:
+            environ["HTTP_AUTHORIZATION"] = f"Bearer {token}"
+        status_holder: list[str] = []
+
+        def start_response(status: str, headers: list[tuple[str, str]]) -> None:
+            status_holder.append(status)
+
+        body = b"".join(app(environ, start_response)).decode("utf-8")
+        return status_holder[0], json.loads(body) if body else {}
 
     def test_sdk_generates_valid_contracts_for_supported_templates(self) -> None:
         repo_root = self.make_repo_root()
@@ -285,13 +316,140 @@ class MaverickAppSdkTestCase(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertTrue((repo_root / "workspaces" / "default" / "apps" / "sdk-cli" / "package.json").is_file())
 
+    def test_workspace_sdk_api_uses_runtime_token_without_default_workspace_fallback(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        create_workspace(
+            state.workspace_store,
+            name="CEIDA",
+            created_by_user_id="user:admin",
+            creator_role="member",
+        )
+        app = PlatformHost(state, workspace_id="default", start_path=repo_root)
+        token = issue_workspace_api_token(workspace_id="ceida", runtime_session_id="sess-ceida")
+
+        create_status, create_payload = self.invoke_json(
+            app,
+            "/api/app-sdk",
+            method="POST",
+            token=token,
+            payload={
+                "action": "create",
+                "app_id": "pisa-weather",
+                "template_id": "react-vite",
+                "name": "Pisa Weather",
+            },
+        )
+        register_status, register_payload = self.invoke_json(
+            app,
+            "/api/app-sdk",
+            method="POST",
+            token=token,
+            payload={"action": "register-local", "app_id": "pisa-weather"},
+        )
+        install_status, install_payload = self.invoke_json(
+            app,
+            "/api/app-sdk",
+            method="POST",
+            token=token,
+            payload={"action": "install-local", "app_id": "pisa-weather"},
+        )
+        status_status, status_payload = self.invoke_json(
+            app,
+            "/api/app-sdk",
+            method="POST",
+            token=token,
+            payload={"action": "status", "app_id": "pisa-weather"},
+        )
+
+        self.assertEqual(create_status, "201 Created")
+        self.assertEqual(create_payload["workspace_id"], "ceida")
+        self.assertTrue((repo_root / "workspaces" / "ceida" / "apps" / "pisa-weather" / "app_contract.json").is_file())
+        self.assertFalse((repo_root / "workspaces" / "default" / "apps" / "pisa-weather").exists())
+        self.assertEqual(register_status, "201 Created")
+        self.assertEqual(register_payload["workspace_id"], "ceida")
+        self.assertEqual(install_status, "201 Created")
+        self.assertEqual(install_payload["workspace_id"], "ceida")
+        self.assertEqual(status_status, "200 OK")
+        self.assertTrue(status_payload["installed"])
+
+    def test_workspace_sdk_api_returns_documentation_content(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        create_workspace(
+            state.workspace_store,
+            name="Docs Workspace",
+            created_by_user_id="user:admin",
+            creator_role="member",
+        )
+        app = PlatformHost(state, workspace_id="default", start_path=repo_root)
+        token = issue_workspace_api_token(workspace_id="docs-workspace", runtime_session_id="sess-docs")
+
+        status, payload = self.invoke_json(
+            app,
+            "/api/app-sdk",
+            method="POST",
+            token=token,
+            payload={"action": "docs"},
+        )
+
+        self.assertEqual(status, "200 OK")
+        self.assertEqual(payload["workspace_id"], "docs-workspace")
+        self.assertEqual(payload["format"], "markdown")
+        self.assertIn("Maverick App SDK", payload["content"])
+        self.assertIn("maverick app create", payload["content"])
+        self.assertNotIn("docs/app-sdk", payload["content"])
+
+    def test_runtime_cli_api_runs_official_cli_with_runtime_token_workspace(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        create_workspace(
+            state.workspace_store,
+            name="CEIDA",
+            created_by_user_id="user:admin",
+            creator_role="member",
+        )
+        app = PlatformHost(state, workspace_id="default", start_path=repo_root)
+        token = issue_workspace_api_token(workspace_id="ceida", runtime_session_id="sess-ceida")
+
+        status, payload = self.invoke_json(
+            app,
+            "/api/runtime/cli",
+            method="POST",
+            token=token,
+            payload={"argv": ["apps", "list", "--json"], "effective_mode": "sandbox"},
+        )
+
+        self.assertEqual(status, "200 OK")
+        self.assertEqual(payload["workspace_id"], "ceida")
+        self.assertEqual(payload["apps"], [])
+
+    def test_sdk_skill_sources_do_not_reference_installation_global_paths(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        skill_paths = [
+            repo_root / "apps" / "skills" / "skills" / "maverick3-code-skill" / "SKILL.md",
+            repo_root / "apps" / "skills" / "skills" / "maverick-v3-app-creator" / "SKILL.md",
+            repo_root / "apps" / "skills" / "skills" / "maverick-v3-app-porting" / "SKILL.md",
+        ]
+
+        for skill_path in skill_paths:
+            with self.subTest(skill_path=skill_path):
+                content = skill_path.read_text(encoding="utf-8")
+                self.assertNotIn("/home/ubuntu/maverick-v3", content)
+                self.assertNotIn("maverick-v3/workspaces/default", content)
+                self.assertNotIn("docs/architecture", content)
+                self.assertNotIn("core_architecture", content)
+                self.assertNotIn("workspace_root_architecture", content)
+                self.assertNotIn("app_contract_architecture", content)
+                self.assertNotIn("app_sdk_architecture", content)
+
     def test_developer_kit_contract_parses(self) -> None:
         app_root = Path(__file__).resolve().parents[1] / "apps" / "developer-kit"
 
         parsed = parse_app_contract_file(app_root)
 
         self.assertEqual(parsed.app_id, "developer-kit")
-        self.assertEqual(parsed.contract.entrypoints.backend, "backend/app_backend.py")
+        self.assertIsNone(parsed.contract.entrypoints.backend)
         self.assertIsNone(parsed.contract.visibility.platform_roles)
 
 

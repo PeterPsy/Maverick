@@ -31,6 +31,21 @@ REFERENCE_MANIFEST = {
     ],
 }
 
+DATA_CHANGED_RESOURCES = {
+    "set_view_filter": "view-state",
+    "set_custom_view": "view-state",
+    "clear_custom_view": "view-state",
+    "rename_file": "files",
+    "delete_file": "files",
+}
+
+
+def app_events_for_action(action: str) -> list[dict[str, str]]:
+    resource = DATA_CHANGED_RESOURCES.get(action)
+    if resource is None:
+        return []
+    return [{"type": "maverick.app.data-changed", "resource": resource}]
+
 
 def _file_reference(record: dict[str, Any]) -> dict[str, Any]:
     return {

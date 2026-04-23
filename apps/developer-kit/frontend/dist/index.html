@@ -39,22 +39,15 @@
         <button id="validate">Validate Last App</button>
         <button id="register">Register Last App</button>
         <button id="install">Install Last App</button>
+        <button id="status">Status Last App</button>
         <button id="package">Package Last App</button>
         <pre id="result"></pre>
       </section>
     </main>
     <script>
       let lastAppId = '';
-      async function callBackend(body) {
-        const response = await fetch('/api/apps/developer-kit/backend', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify(body)
-        });
-        return response.json();
-      }
-      async function callAppStore(path, body) {
-        const response = await fetch(path, {
+      async function callSdk(body) {
+        const response = await fetch('/api/app-sdk', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify(body)
@@ -70,12 +63,13 @@
         lastAppId = data.app_id;
         data.action = 'create';
         data.entities = String(data.entities || '').split(',').map((item) => item.trim()).filter(Boolean);
-        show(await callBackend(data));
+        show(await callSdk(data));
       };
-      document.getElementById('validate').onclick = async () => show(await callBackend({action: 'validate', app_id: lastAppId}));
-      document.getElementById('register').onclick = async () => show(await callAppStore('/api/app-store/register-local', {app_id: lastAppId}));
-      document.getElementById('install').onclick = async () => show(await callAppStore('/api/app-store/install-local', {app_id: lastAppId}));
-      document.getElementById('package').onclick = async () => show(await callBackend({action: 'package', app_id: lastAppId}));
+      document.getElementById('validate').onclick = async () => show(await callSdk({action: 'validate', app_id: lastAppId}));
+      document.getElementById('register').onclick = async () => show(await callSdk({action: 'register-local', app_id: lastAppId}));
+      document.getElementById('install').onclick = async () => show(await callSdk({action: 'install-local', app_id: lastAppId}));
+      document.getElementById('status').onclick = async () => show(await callSdk({action: 'status', app_id: lastAppId}));
+      document.getElementById('package').onclick = async () => show(await callSdk({action: 'package', app_id: lastAppId}));
     </script>
   </body>
 </html>

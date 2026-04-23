@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+from contextlib import redirect_stdout
+from io import StringIO
+import json
+import os
 from pathlib import Path
 import shutil
 import tempfile
 import unittest
 
+from core.app_sdk.cli import main as maverick_cli_main
 from core.apps.contracts import parse_app_contract_file
 from core.api.platform_state import bootstrap_platform_state
 from core.cli.models import CliInvocationContext
@@ -47,6 +52,30 @@ class MemoryAppTestCase(unittest.TestCase):
         self.assertIn("json", result)
         return result
 
+    def run_maverick_cli(self, argv: list[str], *, cwd: Path) -> dict:
+        original_cwd = Path.cwd()
+        output = StringIO()
+        try:
+            os.chdir(cwd)
+            with redirect_stdout(output):
+                exit_code = maverick_cli_main(argv)
+        finally:
+            os.chdir(original_cwd)
+        self.assertEqual(exit_code, 0)
+        return json.loads(output.getvalue())
+
+    def run_maverick_cli_text(self, argv: list[str], *, cwd: Path) -> str:
+        original_cwd = Path.cwd()
+        output = StringIO()
+        try:
+            os.chdir(cwd)
+            with redirect_stdout(output):
+                exit_code = maverick_cli_main(argv)
+        finally:
+            os.chdir(original_cwd)
+        self.assertEqual(exit_code, 0)
+        return output.getvalue()
+
     def test_contract_declares_memory_surfaces_and_reference_entities(self) -> None:
         parsed = parse_app_contract_file(MEMORY_ROOT)
 
@@ -55,9 +84,17 @@ class MemoryAppTestCase(unittest.TestCase):
         self.assertEqual(parsed.contract.entrypoints.frontend, "frontend/dist")
         self.assertIn("memory_context", parsed.contract.capabilities.mcp_tools)
         self.assertIn("memory_reference_manifest", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("memory_set_view_filter", parsed.contract.capabilities.mcp_tools)
         self.assertEqual(parsed.contract.capabilities.cli_commands, ["memory"])
         self.assertEqual(parsed.contract.storage.storage_kind, "sqlite+files")
         self.assertEqual(parsed.contract.capabilities.reference_entities[0].entity_type, "node")
+        view_surface = parsed.contract.capabilities.view_surfaces[0]
+        self.assertEqual(view_surface.view_id, "memory")
+        self.assertEqual(view_surface.entity_types, ["node"])
+        self.assertEqual(
+            [action.action for action in view_surface.state_actions],
+            ["view_filter", "set_view_filter", "set_custom_view", "clear_custom_view"],
+        )
 
     def test_install_hook_is_idempotent_and_creates_schema(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -141,6 +178,33 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual(len(graph["edges"]), 1)
             self.assertEqual(graph["edges"][0]["kind"], "mentions")
 
+    def test_backend_persists_view_filter_and_custom_memory_view(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            first = self.run_backend(data_root, {"action": "remember", "title": "Versy", "body": "Versy context."})["json"]["node"]
+            second = self.run_backend(data_root, {"action": "remember", "title": "CEIDA", "body": "CEIDA context."})["json"]["node"]
+
+            filtered = self.run_backend(data_root, {"action": "set_view_filter", "query": "Versy"})
+            view_filter = self.run_backend(data_root, {"action": "view_filter"})
+            custom = self.run_backend(
+                data_root,
+                {
+                    "action": "set_custom_view",
+                    "title": "Versy only",
+                    "refs": [{"app_id": "memory", "entity_type": "node", "entity_id": first["id"]}],
+                },
+            )
+            graph = self.run_backend(data_root, {"action": "graph", "node_ids": [first["id"]]})
+
+            self.assertEqual(filtered["status_code"], 200)
+            self.assertEqual(filtered["json"]["state"]["view_filter"]["query"], "Versy")
+            self.assertEqual(view_filter["json"]["state"]["view_filter"]["query"], "Versy")
+            self.assertEqual(custom["json"]["state"]["view_filter"]["mode"], "custom")
+            self.assertEqual(custom["json"]["state"]["view_filter"]["title"], "Versy only")
+            self.assertEqual(custom["json"]["state"]["view_filter"]["refs"], [{"entity_type": "node", "entity_id": first["id"]}])
+            self.assertEqual([node["id"] for node in graph["json"]["nodes"]], [first["id"]])
+            self.assertNotIn(second["id"], [node["id"] for node in graph["json"]["nodes"]])
+
     def test_backend_cli_and_mcp_entrypoints_share_memory_behavior(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             data_root = Path(temp) / "data" / "memory"
@@ -159,12 +223,18 @@ class MemoryAppTestCase(unittest.TestCase):
                 payload={"workspace_id": "default", "app_id": "memory", "data_root": str(data_root), "tool_name": "memory_reference_manifest", "arguments": {}},
                 cwd=MEMORY_ROOT,
             )
+            view_filter = run_json_entrypoint(
+                MEMORY_ROOT / "cli" / "app_cli.py",
+                payload={"workspace_id": "default", "app_id": "memory", "data_root": str(data_root), "command_id": "app.memory.memory", "arguments": {"action": "set_view_filter", "query": "Acme"}},
+                cwd=MEMORY_ROOT,
+            )
 
             self.assertEqual(backend["status_code"], 200)
             self.assertEqual(cli["status_code"], 200)
             self.assertTrue(cli["items"])
             self.assertEqual(mcp["app_id"], "memory")
             self.assertEqual(mcp["entity_types"][0]["entity_type"], "node")
+            self.assertEqual(view_filter["state"]["view_filter"]["query"], "Acme")
 
     def test_core_mounted_cli_and_mcp_can_use_memory(self) -> None:
         repo_root = self.make_repo_root()
@@ -204,3 +274,100 @@ class MemoryAppTestCase(unittest.TestCase):
         self.assertEqual(remembered["node"]["title"], "Bando X")
         self.assertEqual(context_payload["status_code"], 200)
         self.assertTrue(context_payload["items"])
+
+    def test_maverick_wrapper_invokes_workspace_app_cli_and_mcp_without_app_paths(self) -> None:
+        repo_root = self.make_repo_root()
+        workspace_root = repo_root / "workspaces" / "default"
+        workspace_root.mkdir(parents=True, exist_ok=True)
+
+        remembered = self.run_maverick_cli(
+            [
+                "--repository-root",
+                str(repo_root),
+                "app",
+                "memory",
+                "cli",
+                "run",
+                "memory",
+                "--action",
+                "remember",
+                "--title",
+                "Versy",
+                "--body",
+                "Versy has a workspace memory note.",
+            ],
+            cwd=workspace_root,
+        )
+        cli_context = self.run_maverick_cli(
+            [
+                "--repository-root",
+                str(repo_root),
+                "app",
+                "memory",
+                "cli",
+                "run",
+                "memory",
+                "--action",
+                "context",
+                "--query",
+                "Versy",
+            ],
+            cwd=workspace_root,
+        )
+        mcp_context = self.run_maverick_cli(
+            [
+                "--repository-root",
+                str(repo_root),
+                "app",
+                "memory",
+                "mcp",
+                "call",
+                "memory_context",
+                "--query",
+                "Versy",
+            ],
+            cwd=workspace_root,
+        )
+
+        self.assertEqual(remembered["status_code"], 200)
+        self.assertEqual(remembered["node"]["title"], "Versy")
+        apps_list = self.run_maverick_cli(
+            ["--repository-root", str(repo_root), "apps", "list", "--json"],
+            cwd=workspace_root,
+        )
+        self.assertIn("memory", [app["app_id"] for app in apps_list["apps"]])
+        help_text = self.run_maverick_cli_text(
+            ["--repository-root", str(repo_root), "app", "memory", "cli", "--help"],
+            cwd=workspace_root,
+        )
+        self.assertIn("maverick app memory cli list --json", help_text)
+        self.assertIn("list` and `inspect`", self.run_maverick_cli_text(["--help"], cwd=workspace_root))
+        cli_list = self.run_maverick_cli(
+            ["--repository-root", str(repo_root), "app", "memory", "cli", "list", "--json"],
+            cwd=workspace_root,
+        )
+        self.assertEqual(cli_list["commands"][0]["name"], "memory")
+        cli_inspect = self.run_maverick_cli(
+            ["--repository-root", str(repo_root), "app", "memory", "cli", "inspect", "memory", "--json"],
+            cwd=workspace_root,
+        )
+        self.assertEqual(cli_inspect["command"]["name"], "memory")
+        mcp_list = self.run_maverick_cli(
+            ["--repository-root", str(repo_root), "app", "memory", "mcp", "list", "--json"],
+            cwd=workspace_root,
+        )
+        self.assertIn("memory_context", [tool["name"] for tool in mcp_list["tools"]])
+        mcp_inspect = self.run_maverick_cli(
+            ["--repository-root", str(repo_root), "app", "memory", "mcp", "inspect", "memory_context", "--json"],
+            cwd=workspace_root,
+        )
+        self.assertEqual(mcp_inspect["tool"]["name"], "memory_context")
+        with self.assertRaises(SystemExit):
+            self.run_maverick_cli(
+                ["--repository-root", str(repo_root), "app", "cli", "memory", "--action", "context", "--query", "Versy"],
+                cwd=workspace_root,
+            )
+        self.assertEqual(cli_context["status_code"], 200)
+        self.assertTrue(cli_context["items"])
+        self.assertEqual(mcp_context["status_code"], 200)
+        self.assertTrue(mcp_context["items"])

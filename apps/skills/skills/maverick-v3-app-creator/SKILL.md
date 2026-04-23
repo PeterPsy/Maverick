@@ -1,6 +1,6 @@
 ---
 name: maverick-v3-app-creator
-description: "Use when planning or implementing a brand-new Maverick v3 app in /home/ubuntu/maverick-v3, not when porting from Maverick v2. Enforces clean-slate app design, app-agnostic core boundaries, contract-first implementation, workspace-owned data under data/<app_id>, declared frontend/backend/MCP/CLI/skills/hooks surfaces, tests, docs, tasklist updates, final review, and checkpoint commits."
+description: "Use when planning or implementing a brand-new Maverick v3 app in the current workspace/repository, not when porting from Maverick v2. Enforces clean-slate app design, app-agnostic core boundaries, contract-first implementation, workspace-owned data under data/<app_id>, declared frontend/backend/MCP/CLI/skills/hooks surfaces, tests, docs, tasklist updates, final review, and checkpoint commits."
 ---
 
 # Maverick v3 App Creator
@@ -11,22 +11,29 @@ Do not use this skill for ports from Maverick v2 or any legacy app. For porting 
 
 ## Mandatory Pairing
 
-Also use `maverick3-code-skill` for any task that touches `/home/ubuntu/maverick-v3`.
+Also use `maverick3-code-skill` for any task that touches Maverick v3 source or workspace app files.
 
-## Required Read Order
+## Immediate SDK Gate
 
-Before proposing a plan or changing files, read:
+For every brand-new workspace-local app, check the official SDK before reading examples or inspecting app source:
 
-1. `/home/ubuntu/maverick-v3/AGENTS.md`
-2. `/home/ubuntu/maverick-v3/apps/skills/skills/maverick3-code-skill/SKILL.md`
-3. `/home/ubuntu/maverick-v3/IMPLEMENTATION_TASKLIST.md`
-4. `/home/ubuntu/maverick-v3/docs/architecture/core_architecture.md`
-5. `/home/ubuntu/maverick-v3/docs/architecture/app_contract_architecture.md`
-6. `/home/ubuntu/maverick-v3/docs/architecture/workspace_root_architecture.md`
-7. `/home/ubuntu/maverick-v3/docs/architecture/app_sdk_architecture.md`
-8. `/home/ubuntu/maverick-v3/docs/app-sdk/getting_started.md`
-9. Current examples under `/home/ubuntu/maverick-v3/apps`, especially apps with similar declared surfaces.
-10. Relevant core mounting code for the chosen surfaces, usually `core/apps`, `core/app_sdk`, `core/api/app_mounts.py`, `core/api/app_registry.py`, `core/cli`, `core/mcp`, `core/skills`, `core/runtime`, `core/secrets`, and `core/observability`.
+```bash
+command -v maverick
+maverick sdk templates
+maverick sdk docs
+```
+
+If `maverick` is unavailable or `maverick sdk templates` fails, stop and report that the Maverick SDK runtime surface is unavailable. Use `maverick sdk docs` for SDK instructions instead of reading documentation files from disk. Do not create the app by copying another workspace app, manually inventing an `app_contract.json`, or using repository-global files as a fallback.
+
+## Local Guidance
+
+After the SDK gate succeeds, read `AGENTS.md` when it is present in the current workspace/repository.
+
+Missing repository guidance in a workspace-only runtime is expected. Do not search outside the workspace, do not mention a non-default workspace special case, and do not fall back to existing app folders. Use the SDK for creation and lifecycle.
+
+Inspect current examples under `apps/` only after SDK generation, and only to understand local product conventions. Do not copy an existing app as the creation mechanism.
+
+Core source inspection is only for platform-source work when those paths are present in the current repository checkout.
 
 ## Required Inputs
 
@@ -49,7 +56,7 @@ Clarify or infer these before implementation. If any requirement is still produc
 - The app owns its domain data, UI, app-specific backend actions, MCP tool behavior, CLI commands, lifecycle hooks, and skills.
 - The core owns app registration, app mounting, workspace binding, identity, governance, runtime, provider, secrets, recovery, and observability.
 - App-owned workspace data must live under `workspaces/<workspace_id>/data/<app_id>/`.
-- App source for server-installed apps lives under installation-level `/apps/<app_id>/`.
+- App source for server-installed apps lives under installation-level `apps/<app_id>/`.
 - Workspace-local app projects live under `workspaces/<workspace_id>/apps/<app_id>/`.
 - The core must not import app source or contain app-specific conditionals.
 - Do not add branches like `if app_id == "<new-app>"` in core.
@@ -60,15 +67,15 @@ Clarify or infer these before implementation. If any requirement is still produc
 
 For brand-new workspace-local apps, prefer the official Maverick App SDK unless the requested app requires a surface or structure the SDK does not yet support.
 
-Use the SDK to create the initial source tree, validate the contract, register/install workspace-local apps, inspect status, and package valid app source:
+Use the SDK to create the initial source tree, validate the contract, register/install workspace-local apps, inspect status, and package valid app source. If `maverick` is unavailable in an agent runtime, report the SDK/runtime as unavailable instead of creating a manual fallback:
 
 ```text
-core.app-sdk.create
-core.app-sdk.validate
-core.app-sdk.register-local
-core.app-sdk.install-local
-core.app-sdk.status
-core.app-sdk.package
+maverick app create <app_id>
+maverick app validate <app_id>
+maverick app register-local <app_id>
+maverick app install-local <app_id>
+maverick app status <app_id>
+maverick app package <app_id>
 ```
 
 Initial SDK templates:
@@ -81,14 +88,14 @@ Initial SDK templates:
 
 Recommended flow for an immediately usable workspace-local app:
 
-1. Generate the app with `core.app-sdk.create`.
+1. Generate the app with `maverick app create <app_id>`.
 2. Replace scaffold behavior with real product behavior.
 3. Keep `app_contract.json` aligned with the real implemented surfaces.
-4. Validate with `core.app-sdk.validate`.
-5. Register with `core.app-sdk.register-local`.
-6. Install with `core.app-sdk.install-local`.
-7. Verify with `core.app-sdk.status`, `/api/status`, `/api/apps`, mounted frontend/backend checks, and CLI/MCP listings when declared.
-8. Package with `core.app-sdk.package` when a generated artifact is useful.
+4. Validate with `maverick app validate <app_id>`.
+5. Register with `maverick app register-local <app_id>`.
+6. Install with `maverick app install-local <app_id>`.
+7. Verify with `maverick app status <app_id>`, `/api/status`, `/api/apps`, mounted frontend/backend checks, and CLI/MCP listings when declared.
+8. Package with `maverick app package <app_id>` when a generated artifact is useful.
 
 Do not leave SDK scaffold behavior in place when the user asked for a real app. The SDK gives the correct v3 shape; the app still needs real domain behavior, UI, storage, tests, and smoke verification.
 
@@ -98,7 +105,7 @@ Creating an app source tree is not enough for Maverick to use the app.
 
 Every new app must finish with the correct generic app-hosting flow for its distribution mode:
 
-- built-in or installation-level apps under `/home/ubuntu/maverick-v3/apps/<app_id>` must be registered from `app_contract.json`, installed/enabled into the target workspace, and verified through the same generic bootstrap/app-hosting state that the App Store reports
+- built-in or installation-level apps under `apps/<app_id>` must be registered from `app_contract.json`, installed/enabled into the target workspace, and verified through the same generic bootstrap/app-hosting state that the App Store reports
 - workspace-local apps under `workspaces/<workspace_id>/apps/<app_id>` must be registered as workspace-local projects, installed/enabled into their owning workspace, and verified through App Store local-app and installation surfaces
 - source-available forks must be installed from the correct source record or workspace-local fork record; do not rely on copied files alone
 
@@ -145,11 +152,23 @@ Keep these states explicit in the implementation summary.
 Use the official SDK CLI registry commands when available:
 
 ```text
-core.app-sdk.validate
-core.app-sdk.register-local
-core.app-sdk.install-local
-core.app-sdk.status
+maverick app validate <app_id>
+maverick app register-local <app_id>
+maverick app install-local <app_id>
+maverick app status <app_id>
 ```
+
+When verifying declared executable surfaces, keep discovery scoped:
+
+```text
+maverick apps list --json
+maverick app <app_id> cli list --json
+maverick app <app_id> cli inspect <command_name> --json
+maverick app <app_id> mcp list --json
+maverick app <app_id> mcp inspect <tool_name> --json
+```
+
+Use `maverick core cli ...` and `maverick core mcp ...` only for core-owned commands and tools. `--help` is human syntax help; `list` and `inspect` are the machine-readable discovery contract.
 
 Use the core service functions directly in tests or focused repository scripts only when the hosted CLI/API surface is not available for the current environment.
 
@@ -355,7 +374,7 @@ For React/Vite app frontends:
 - call generic core APIs only for platform-owned behavior
 - keep UI controls feature-complete for the app's real workflow
 - avoid landing pages when the app is an operator tool
-- run `npm run build` and commit `frontend/dist` for built-in mounted apps
+- run `maverick app <app_id> frontend build --json` for buildable mounted apps and commit the refreshed `frontend/dist` artifact when source-managed
 - do not commit `node_modules`
 
 Keep files small. If `main.tsx` grows beyond roughly 250 to 300 lines, split components and hooks.
@@ -429,13 +448,13 @@ Default to focused tests for contracts, path rules, store behavior, and entrypoi
 Useful test categories:
 
 - contract parses under `parse_app_contract_file`
-- SDK-generated source validates with `core.app-sdk.validate` when the SDK is used
+- SDK-generated source validates with `maverick app validate <app_id>` when the SDK is used
 - built-in or store app registers from its contract and creates an enabled workspace binding when intended for immediate use
 - workspace-local app is registered with `register_workspace_local_app_project_from_contract`
-- workspace-local app registers with `core.app-sdk.register-local` when using the SDK flow
+- workspace-local app registers with `maverick app register-local <app_id>` when using the SDK flow
 - `/api/app-store/installations` reports registered workspace-local app in `local_apps`
 - workspace-local app can be installed with `install_workspace_local_app` when requested
-- workspace-local app installs with `core.app-sdk.install-local` when using the SDK flow
+- workspace-local app installs with `maverick app install-local <app_id>` when using the SDK flow
 - `/api/app-store/installations` and/or `/api/apps` reports the app as installed/enabled for the target workspace
 - install hook creates expected data under `data/<app_id>`
 - seed is idempotent
@@ -443,7 +462,7 @@ Useful test categories:
 - invalid ids or paths are rejected
 - MCP and CLI surfaces are visible when the app is enabled
 - MCP and CLI entrypoints call the same service behavior as backend
-- frontend build output exists when declared
+- frontend build output exists when declared, refreshed through `maverick app <app_id> frontend build --json` when the app declares `lifecycle.rebuild`
 - mounted frontend is served by `PlatformHost`
 - generic core gaps are covered by core tests, not app-specific tests
 
@@ -460,7 +479,6 @@ Update docs in the same change when any of these move:
 
 Use:
 
-- `docs/architecture/` for architecture changes
 - `docs/porting/` only for porting plans, not new app creation plans
 - `IMPLEMENTATION_TASKLIST.md` for progress and open gaps
 
@@ -482,9 +500,9 @@ python3 -m unittest discover -s tests -p 'test_*.py'
 SDK-flow checks:
 
 ```text
-core.app-sdk.validate
-core.app-sdk.status
-core.app-sdk.package
+maverick app validate <app_id>
+maverick app status <app_id>
+maverick app package <app_id>
 ```
 
 If a command cannot run, state why in the final summary.
@@ -521,7 +539,7 @@ A new Maverick v3 app is done when:
 - every declared surface exists and works
 - app-owned data is under `data/<app_id>`
 - install and health behavior are idempotent
-- frontend builds if declared
+- frontend builds use `maverick app <app_id> frontend build --json` when `lifecycle.rebuild` is declared
 - backend/MCP/CLI use shared service logic where applicable
 - tests cover stable contract and storage behavior
 - docs and `IMPLEMENTATION_TASKLIST.md` are updated

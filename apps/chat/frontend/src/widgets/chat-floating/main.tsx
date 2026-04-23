@@ -339,6 +339,11 @@ function ChatFloatingMount() {
     });
   }
 
+  function removeWindow(windowId: string) {
+    pendingNewChatPreviousThreadByWindow.current.delete(windowId);
+    setWindows((current) => (current.length > 1 ? current.filter((windowItem) => windowItem.id !== windowId) : current));
+  }
+
   async function renameThread(threadId: string, title: string) {
     const payload = await updateThread({ thread_id: threadId, title });
     const hydratedThreads = await withRuntimeAvailability(payload.threads || []);
@@ -358,14 +363,19 @@ function ChatFloatingMount() {
     }
   }
 
+  const hasMultipleWindows = windows.length > 1;
+
   return (
-    <div className="chat-floating-widget-stack">
-      {windows.map((windowItem) => (
+    <div className={`chat-floating-widget-stack ${hasMultipleWindows ? "has-multiple-windows" : "has-single-window"}`}>
+      {windows.map((windowItem, index) => (
         <ChatFloatingWindow
+          canRemoveWindow={index > 0}
+          canSplit={index === 0}
           key={windowItem.id}
           onCollapseChange={setWindowCollapsed}
           onCreateChat={createChat}
           onExecutionModeChange={setWindowExecutionMode}
+          onRemoveWindow={removeWindow}
           onRemoveThread={removeThread}
           onRenameThread={renameThread}
           onSelectThread={selectThread}
@@ -379,9 +389,12 @@ function ChatFloatingMount() {
 }
 
 function ChatFloatingWindow({
+  canRemoveWindow,
+  canSplit,
   onCollapseChange,
   onCreateChat,
   onExecutionModeChange,
+  onRemoveWindow,
   onRemoveThread,
   onRenameThread,
   onSelectThread,
@@ -389,9 +402,12 @@ function ChatFloatingWindow({
   threads,
   windowItem,
 }: {
+  canRemoveWindow: boolean;
+  canSplit: boolean;
   onCollapseChange: (windowId: string, isCollapsed: boolean) => void;
   onCreateChat: (windowId: string) => void;
   onExecutionModeChange: (windowId: string, executionMode: string) => void;
+  onRemoveWindow: (windowId: string) => void;
   onRemoveThread: (windowId: string, thread: ChatThread) => void;
   onRenameThread: (threadId: string, title: string) => Promise<void>;
   onSelectThread: (windowId: string, threadId: string) => void;
@@ -472,141 +488,158 @@ function ChatFloatingWindow({
     setEditingThreadTitle("");
   }
 
-  if (windowItem.isCollapsed) {
-    return (
-      <button aria-label="Apri chat" className="chat-floating-widget-launcher" onClick={() => onCollapseChange(windowItem.id, false)} type="button">
+  return (
+    <>
+      <button
+        aria-label="Apri chat"
+        className={`chat-floating-widget-launcher ${windowItem.isCollapsed ? "" : "is-hidden"}`}
+        onClick={() => onCollapseChange(windowItem.id, false)}
+        type="button"
+      >
         <span aria-hidden="true" className="material-symbols-rounded">
           forum
         </span>
       </button>
-    );
-  }
-
-  return (
-    <section className="chat-floating-widget-shell" aria-label="Chat">
-      <header className="chat-floating-widget-shell__bar">
-        <div className="chat-floating-widget-shell__thread-tools">
-          <div className="chat-floating-thread-menu" ref={threadMenuRef}>
-            <button
-              aria-expanded={isThreadMenuOpen}
-              aria-haspopup="menu"
-              aria-label="Scegli chat"
-              className={`chat-floating-thread-menu__trigger ${activeThread && isThreadBusy(activeThread) ? "is-busy" : ""}`}
-              disabled={threads.length === 0}
-              onClick={() => setIsThreadMenuOpen((current) => !current)}
-              type="button"
-            >
-              <span className="chat-floating-thread-menu__trigger-title">{activeThread?.title || "New chat"}</span>
-              {activeThread && isThreadBusy(activeThread) ? <span aria-label="Chat in lavoro" className="chat-floating-thread-menu__presence" title="Chat in lavoro" /> : null}
-              <span aria-hidden="true" className="material-symbols-rounded chat-floating-thread-menu__chevron">
-                expand_more
+      <section className={`chat-floating-widget-shell ${windowItem.isCollapsed ? "is-hidden" : ""}`} aria-label="Chat">
+        <header className="chat-floating-widget-shell__bar">
+          <div className="chat-floating-widget-shell__thread-tools">
+            <div className="chat-floating-thread-menu" ref={threadMenuRef}>
+              <button
+                aria-expanded={isThreadMenuOpen}
+                aria-haspopup="menu"
+                aria-label="Scegli chat"
+                className={`chat-floating-thread-menu__trigger ${activeThread && isThreadBusy(activeThread) ? "is-busy" : ""}`}
+                disabled={threads.length === 0}
+                onClick={() => setIsThreadMenuOpen((current) => !current)}
+                type="button"
+              >
+                <span className="chat-floating-thread-menu__trigger-title">{activeThread?.title || "New chat"}</span>
+                {activeThread && isThreadBusy(activeThread) ? <span aria-label="Chat in lavoro" className="chat-floating-thread-menu__presence" title="Chat in lavoro" /> : null}
+                <span aria-hidden="true" className="material-symbols-rounded chat-floating-thread-menu__chevron">
+                  expand_more
+                </span>
+              </button>
+              {isThreadMenuOpen ? (
+                <div className="chat-floating-thread-menu__panel" role="menu">
+                  {threads.map((thread) => {
+                    const isBusy = isThreadBusy(thread);
+                    const isEditing = editingThreadId === thread.thread_id;
+                    return (
+                      <div
+                        className={`chat-floating-thread-menu__item ${windowItem.threadId === thread.thread_id ? "is-active" : ""} ${isBusy ? "is-busy" : ""}`}
+                        key={thread.thread_id}
+                        role="menuitem"
+                      >
+                        {isEditing ? (
+                          <input
+                            aria-label="Rinomina chat"
+                            autoFocus
+                            className="chat-floating-thread-menu__rename-input"
+                            onChange={(event) => setEditingThreadTitle(event.target.value)}
+                            onClick={(event) => event.stopPropagation()}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.preventDefault();
+                                void saveRenameThread();
+                              }
+                              if (event.key === "Escape") {
+                                setEditingThreadId(null);
+                                setEditingThreadTitle("");
+                              }
+                            }}
+                            value={editingThreadTitle}
+                          />
+                        ) : (
+                          <button className="chat-floating-thread-menu__item-select" onClick={() => selectThread(thread.thread_id)} type="button">
+                            <span className="chat-floating-thread-menu__item-copy">
+                              <span className="chat-floating-thread-menu__item-title">{thread.title || "New chat"}</span>
+                            </span>
+                            {isBusy ? <span aria-label="Chat in lavoro" className="chat-floating-thread-menu__presence is-busy" title="Chat in lavoro" /> : null}
+                          </button>
+                        )}
+                        <div className="chat-floating-thread-menu__item-actions">
+                          <button
+                            aria-label={`Rinomina ${thread.title || "chat"}`}
+                            className="chat-floating-thread-menu__icon-action"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              startRenameThread(thread);
+                            }}
+                            type="button"
+                          >
+                            <span aria-hidden="true" className="material-symbols-rounded">
+                              edit
+                            </span>
+                          </button>
+                          <button
+                            aria-label={`Cancella ${thread.title || "chat"}`}
+                            className="chat-floating-thread-menu__icon-action is-danger"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void onRemoveThread(windowItem.id, thread);
+                            }}
+                            type="button"
+                          >
+                            <span aria-hidden="true" className="material-symbols-rounded">
+                              delete
+                            </span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </div>
+            <button aria-label="Nuova chat" className="chat-floating-widget-shell__button" onClick={() => onCreateChat(windowItem.id)} type="button">
+              <span aria-hidden="true" className="material-symbols-rounded">
+                add
               </span>
             </button>
-            {isThreadMenuOpen ? (
-              <div className="chat-floating-thread-menu__panel" role="menu">
-                {threads.map((thread) => {
-                  const isBusy = isThreadBusy(thread);
-                  const isEditing = editingThreadId === thread.thread_id;
-                  return (
-                    <div
-                      className={`chat-floating-thread-menu__item ${windowItem.threadId === thread.thread_id ? "is-active" : ""} ${isBusy ? "is-busy" : ""}`}
-                      key={thread.thread_id}
-                      role="menuitem"
-                    >
-                      {isEditing ? (
-                        <input
-                          aria-label="Rinomina chat"
-                          autoFocus
-                          className="chat-floating-thread-menu__rename-input"
-                          onChange={(event) => setEditingThreadTitle(event.target.value)}
-                          onClick={(event) => event.stopPropagation()}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              void saveRenameThread();
-                            }
-                            if (event.key === "Escape") {
-                              setEditingThreadId(null);
-                              setEditingThreadTitle("");
-                            }
-                          }}
-                          value={editingThreadTitle}
-                        />
-                      ) : (
-                        <button className="chat-floating-thread-menu__item-select" onClick={() => selectThread(thread.thread_id)} type="button">
-                          <span className="chat-floating-thread-menu__item-copy">
-                            <span className="chat-floating-thread-menu__item-title">{thread.title || "New chat"}</span>
-                          </span>
-                          {isBusy ? <span aria-label="Chat in lavoro" className="chat-floating-thread-menu__presence is-busy" title="Chat in lavoro" /> : null}
-                        </button>
-                      )}
-                      <div className="chat-floating-thread-menu__item-actions">
-                        <button
-                          aria-label={`Rinomina ${thread.title || "chat"}`}
-                          className="chat-floating-thread-menu__icon-action"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            startRenameThread(thread);
-                          }}
-                          type="button"
-                        >
-                          <span aria-hidden="true" className="material-symbols-rounded">
-                            edit
-                          </span>
-                        </button>
-                        <button
-                          aria-label={`Cancella ${thread.title || "chat"}`}
-                          className="chat-floating-thread-menu__icon-action is-danger"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void onRemoveThread(windowItem.id, thread);
-                          }}
-                          type="button"
-                        >
-                          <span aria-hidden="true" className="material-symbols-rounded">
-                            delete
-                          </span>
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : null}
           </div>
-          <button aria-label="Nuova chat" className="chat-floating-widget-shell__button" onClick={() => onCreateChat(windowItem.id)} type="button">
+          <div className="chat-floating-widget-shell__runtime-tools">
+            {canSplit ? (
+              <button aria-label="Sdoppia chat" className="chat-floating-widget-shell__button" onClick={() => onSplit(windowItem.id)} title="Sdoppia chat" type="button">
+                <span aria-hidden="true" className="material-symbols-rounded">
+                  add_box
+                </span>
+              </button>
+            ) : null}
+            {canRemoveWindow ? (
+              <button
+                aria-label="Rimuovi finestra chat"
+                className="chat-floating-widget-shell__button chat-floating-widget-shell__button--danger"
+                onClick={() => onRemoveWindow(windowItem.id)}
+                title="Rimuovi finestra chat"
+                type="button"
+              >
+                <span aria-hidden="true" className="material-symbols-rounded">
+                  close
+                </span>
+              </button>
+            ) : null}
+            <span
+              aria-label={windowItem.executionMode}
+              className={`chat-floating-widget-shell__mode-icon ${windowItem.executionMode === "full-access" ? "is-full-access" : "is-sandbox"}`}
+              role="img"
+              title={windowItem.executionMode}
+            >
+              <span aria-hidden="true" className="material-symbols-rounded">
+                {windowItem.executionMode === "full-access" ? "admin_panel_settings" : "lock"}
+              </span>
+            </span>
+          </div>
+          <button aria-label="Collassa chat" className="chat-floating-widget-shell__button" onClick={() => onCollapseChange(windowItem.id, true)} type="button">
             <span aria-hidden="true" className="material-symbols-rounded">
-              add
+              keyboard_arrow_down
             </span>
           </button>
+        </header>
+        <div className="chat-floating-widget-shell__body">
+          <App enablePageCapture navigationScope={windowItem.id} threadId={windowItem.threadId} />
         </div>
-        <div className="chat-floating-widget-shell__runtime-tools">
-          <button aria-label="Sdoppia chat" className="chat-floating-widget-shell__button" onClick={() => onSplit(windowItem.id)} title="Sdoppia chat" type="button">
-            <span aria-hidden="true" className="material-symbols-rounded">
-              add_box
-            </span>
-          </button>
-          <span
-            aria-label={windowItem.executionMode}
-            className={`chat-floating-widget-shell__mode-icon ${windowItem.executionMode === "full-access" ? "is-full-access" : "is-sandbox"}`}
-            role="img"
-            title={windowItem.executionMode}
-          >
-            <span aria-hidden="true" className="material-symbols-rounded">
-              {windowItem.executionMode === "full-access" ? "admin_panel_settings" : "lock"}
-            </span>
-          </span>
-        </div>
-        <button aria-label="Collassa chat" className="chat-floating-widget-shell__button" onClick={() => onCollapseChange(windowItem.id, true)} type="button">
-          <span aria-hidden="true" className="material-symbols-rounded">
-            keyboard_arrow_down
-          </span>
-        </button>
-      </header>
-      <div className="chat-floating-widget-shell__body">
-        <App enablePageCapture navigationScope={windowItem.id} threadId={windowItem.threadId} />
-      </div>
-    </section>
+      </section>
+    </>
   );
 }
 

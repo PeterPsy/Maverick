@@ -1,24 +1,17 @@
 ---
 name: maverick3-code-skill
-description: "Use when working on the Maverick v3 codebase or when asked to implement, refactor, document, or review code in /home/ubuntu/maverick-v3. Enforces clean-slate v3 development: read AGENTS.md and docs/architecture first, diagnose root causes with tests/simulations before patching, ask clarifying questions when requirements are not clear enough, propose a step plan before implementation, prefer test-driven work, keep files small and maintainable, update architecture docs when architecture changes, perform a final review pass, and use frequent checkpoint commits and pushes during implementation."
+description: "Use when working on Maverick v3 code in the current workspace/repository or when asked to implement, refactor, document, or review code. Enforces clean-slate v3 development: read local working instructions when present, diagnose root causes with tests/simulations before patching, ask clarifying questions when requirements are not clear enough, propose a step plan before implementation, prefer test-driven work, keep files small and maintainable, update docs when behavior changes, perform a final review pass, and use frequent checkpoint commits and pushes during implementation."
 ---
 
 # Maverick v3 Code Skill
 
-Use this skill for code work in `/home/ubuntu/maverick-v3`.
+Use this skill for Maverick v3 code work in the current workspace/repository root.
 
-## Required Read Order
+## Local Guidance
 
-Before changing code or structure, read:
+Before changing code or structure in a repository checkout, read `AGENTS.md` when it is present in the current workspace/repository.
 
-1. `/home/ubuntu/maverick-v3/AGENTS.md`
-2. the relevant architecture docs in `/home/ubuntu/maverick-v3/docs/architecture/`
-
-Minimum architecture set:
-
-- `core_architecture.md`
-- `workspace_root_architecture.md`
-- `app_contract_architecture.md`
+If the current runtime is workspace-only and repository guidance is not present, do not search outside the workspace. Continue with workspace-local instructions and available Maverick commands.
 
 ## Non-Negotiable Rules
 
@@ -29,6 +22,8 @@ Minimum architecture set:
 - do not introduce wrapper folders like `backend/`, `runtime_backend/`, or `app/` inside `core/`
 - do not leave stale references, dead code, commented-out code, or half-migrated structures behind
 - do not patch symptoms before identifying the root cause with concrete evidence
+- when discovering Maverick CLI or MCP capabilities, use scoped machine-readable discovery: `maverick core cli list --json`, `maverick core mcp list --json`, `maverick app <app_id> cli list --json`, and `maverick app <app_id> mcp list --json`
+- treat `--help` as human syntax help, not as the agent discovery contract
 
 ## Diagnosis First
 
@@ -49,10 +44,10 @@ If the cause cannot be proven yet, continue diagnosis or ask the user for the mi
 3. Diagnose the root cause with tests, simulations, persisted state inspection, or runtime/event tracing before choosing an implementation.
 4. Propose a short step-by-step plan before implementation for non-trivial work.
 5. Check the existing tree before proposing structure changes.
-6. Align the change with the relevant architecture docs.
+6. Align the change with the current local contracts and documented behavior.
 7. Prefer test-driven implementation for stable logic and contract work.
 8. Implement with small files and explicit names.
-9. Update docs in the same change if architecture, layout, policy, or contracts moved.
+9. Update docs in the same change if layout, policy, or contracts moved.
 10. Run the smallest relevant validation and aim to leave all relevant tests passing.
 11. Do a final review pass over the diff and remove temporary or dirty leftovers.
 12. Make frequent checkpoint commits and push meaningful progress regularly when working on the branch.
@@ -69,7 +64,6 @@ If the cause cannot be proven yet, continue diagnosis or ask the user for the mi
 
 When you change any of the following, update documentation in the same change:
 
-- architecture
 - filesystem layout
 - package boundaries
 - runtime behavior
@@ -78,8 +72,6 @@ When you change any of the following, update documentation in the same change:
 - repository workflow expectations
 
 Documentation ownership:
-
-- `docs/architecture/` for architecture and contracts
 - `AGENTS.md` for repository working rules
 
 ## Final Review Standard

@@ -10,6 +10,9 @@
     "mode": "sealed",
     "source_access": "none"
   },
+  "visibility": {
+    "platform_roles": null
+  },
   "capabilities": {
     "mcp_tools": [
       "maverick_document_generator",
@@ -27,6 +30,13 @@
     "views": [
       "document-generator"
     ],
+    "data_events": [
+      {
+        "resource": "documents",
+        "description": "Emitted when generated document jobs or output files are created through official Document Generator surfaces."
+      }
+    ],
+    "view_surfaces": [],
     "reference_entities": [
       {
         "entity_type": "document",
@@ -88,7 +98,7 @@
     "import": false,
     "validate_after_import": false,
     "repair_after_import": false,
-    "rebuild": false,
+    "rebuild": true,
     "health_check": true
   },
   "health_contract": {
@@ -104,5 +114,6 @@
     "bundle": false,
     "data": false,
     "repair_only": false
-  }
+  },
+  "widgets": []
 }

@@ -46,29 +46,19 @@ Use `entity-sqlite` for CRM-like apps with SQLite persistence, entities, referen
 
 ## Commands
 
-The core command ids are:
-
-```text
-core.app-sdk.create
-core.app-sdk.validate
-core.app-sdk.register-local
-core.app-sdk.install-local
-core.app-sdk.status
-core.app-sdk.package
-```
-
-The intended human command shape is:
+Inside an agent runtime, use the workspace-local `maverick` command. It targets the current workspace through the runtime token issued by Maverick:
 
 ```bash
-maverick app create my-app --template data-app --workspace default
-maverick app validate my-app --workspace default
-maverick app register-local my-app --workspace default
-maverick app install-local my-app --workspace default
-maverick app status my-app --workspace default
-maverick app package --app-root workspaces/default/apps/my-app
+maverick app create my-app --template data-app
+maverick sdk docs
+maverick app validate my-app
+maverick app register-local my-app
+maverick app install-local my-app
+maverick app status my-app
+maverick app package my-app
 ```
 
-The repository includes a terminal wrapper:
+The repository also includes an operator/development wrapper for local source-tree work:
 
 ```bash
 scripts/maverick app create my-app --template entity-sqlite --entity account --entity contact
@@ -78,6 +68,8 @@ scripts/maverick app install-local my-app --workspace default
 scripts/maverick app status my-app --workspace default
 scripts/maverick app package --app-root workspaces/default/apps/my-app
 ```
+
+If `maverick` is not available inside an agent runtime, the SDK runtime surface is missing and the app should not be created by manually copying another app.
 
 ## Workspace-Local App Flow
 
@@ -134,7 +126,13 @@ The `react-vite` template includes:
 - `frontend/src/styles.css`
 - `frontend/dist/index.html`
 
-The contract points to `frontend/dist`, so the generated app is mountable immediately. Run a frontend build when dependencies are installed to refresh production assets.
+The contract points to `frontend/dist`, so the generated app is mountable immediately. When dependencies are installed, refresh production assets through the official core lifecycle path:
+
+```text
+maverick app <app_id> frontend build --json
+```
+
+That command runs the declared app frontend build and emits the mounted-frontend refresh event after success.
 
 ## Entity SQLite App
 
@@ -157,7 +155,7 @@ It generates:
 
 ## Developer Kit
 
-The `developer-kit` app provides a browser UI for SDK workflows. It is workspace-visible rather than admin-only, so any workspace user can learn the SDK and create, validate, and package workspace-local app source. Generic App Store APIs still own registration and installation.
+The `developer-kit` app provides a browser UI for SDK workflows. It is workspace-visible rather than admin-only, so any workspace user can learn the SDK and create, validate, register, install, inspect, and package workspace-local app source through the authenticated SDK API.
 
 ## Development Rules
 

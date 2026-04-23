@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 import sys
 
-from service import AppStoreValidationError, handle_action
+from service import AppStoreValidationError, app_events_for_action, handle_action
 
 
 def _response(status_code: int, payload: dict) -> None:
@@ -16,6 +16,7 @@ def _response(status_code: int, payload: dict) -> None:
 def main() -> None:
     payload = json.loads(sys.stdin.read() or "{}")
     body = payload.get("body") if isinstance(payload.get("body"), dict) else {}
+    action = str(body.get("action") or "catalog")
     try:
         status_code, result = handle_action(Path(payload["data_root"]), body)
     except AppStoreValidationError as error:
@@ -24,7 +25,10 @@ def main() -> None:
     except Exception as error:
         _response(502, {"error": "catalog_unavailable", "detail": str(error)})
         return
-    _response(status_code, result)
+    response = {"status_code": status_code, "json": result}
+    if status_code < 400:
+        response["app_events"] = app_events_for_action(action)
+    print(json.dumps(response, ensure_ascii=False))
 
 
 if __name__ == "__main__":

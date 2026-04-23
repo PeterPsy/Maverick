@@ -15,6 +15,14 @@ REFERENCE_MANIFEST = {
     ],
 }
 
+DATA_CHANGED_ACTIONS = {"create_skill", "update_skill", "delete_skill"}
+
+
+def app_events_for_action(action: str) -> list[dict[str, str]]:
+    if action not in DATA_CHANGED_ACTIONS:
+        return []
+    return [{"type": "maverick.app.data-changed", "resource": "skills"}]
+
 
 def catalog(data_root: Path) -> dict:
     ensure_data_root(data_root)

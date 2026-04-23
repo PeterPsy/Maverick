@@ -550,7 +550,7 @@ If `agents` should be enabled by default, the platform should avoid adding more 
 
 - Run focused agents app tests.
 - Run app contract and built-in app tests.
-- Run frontend build.
+- Run the official frontend build lifecycle with `maverick app agents frontend build --json`.
 - Run unused import check after Python refactors.
 - Review diff for stale v2 references.
 - Update docs and implementation tasklist in the same change.

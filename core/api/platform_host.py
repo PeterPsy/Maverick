@@ -6,13 +6,15 @@ from pathlib import Path
 from typing import Iterable
 
 from core.api.admin_api import handle_admin_api
-from core.api.app_mounts import handle_app_backend, handle_app_frontend, handle_root_shell
+from core.api.app_mounts import handle_app_backend, handle_app_frontend, handle_app_frontend_build, handle_root_shell
 from core.api.app_registry import enabled_app_items
+from core.api.app_sdk_api import handle_app_sdk_api
 from core.api.app_store_api import handle_app_store_api
 from core.api.http import StartResponse, json_response, text_response
 from core.api.platform_state import PlatformState
 from core.api.provider_api import handle_provider_api
 from core.api.runtime_api import handle_runtime_api
+from core.api.runtime_cli_api import handle_runtime_cli_api
 from core.api.session_api import handle_session_api, resolve_request_session
 from core.api.settings_api import handle_settings_api
 from core.api.widget_api import handle_widget_api
@@ -47,7 +49,13 @@ class PlatformHost:
         routed = handle_app_store_api(self.state, environ, start_response, start_path=self.start_path)
         if routed is not None:
             return routed
+        routed = handle_app_sdk_api(self.state, environ, start_response, start_path=self.start_path)
+        if routed is not None:
+            return routed
         routed = handle_provider_api(self.state, environ, start_response)
+        if routed is not None:
+            return routed
+        routed = handle_runtime_cli_api(self.state, environ, start_response, start_path=self.start_path)
         if routed is not None:
             return routed
         routed = handle_runtime_api(self.state, environ, start_response, start_path=self.start_path)
@@ -98,6 +106,16 @@ class PlatformHost:
                 workspace_id=workspace_id,
                 app_id=app_id,
                 subpath=subpath,
+                user=user,
+                start_path=self.start_path,
+                start_response=start_response,
+            )
+        if path.startswith("/api/apps/") and path.endswith("/frontend/build") and method == "POST":
+            app_id = path.removeprefix("/api/apps/").removesuffix("/frontend/build").strip("/")
+            return handle_app_frontend_build(
+                self.state,
+                workspace_id=workspace_id,
+                app_id=app_id,
                 user=user,
                 start_path=self.start_path,
                 start_response=start_response,

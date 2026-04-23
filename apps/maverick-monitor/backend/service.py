@@ -10,6 +10,12 @@ from snapshot import collect_snapshot
 from store import load_state, save_state, seed_state
 
 
+def app_events_for_action(action: str) -> list[dict[str, str]]:
+    if action != "settings.update":
+        return []
+    return [{"type": "maverick.app.data-changed", "resource": "settings"}]
+
+
 def handle_action(*, workspace_root: Path, data_root: Path, body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
     action = str(body.get("action") or "snapshot")
     if action == "snapshot":

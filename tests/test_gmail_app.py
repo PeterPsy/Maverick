@@ -329,6 +329,48 @@ class GmailAppTestCase(unittest.TestCase):
             self.assertEqual(sent["gmail"]["id"], "fake_msg_1")
             self.assertEqual(second["status_code"], 400)
 
+    def test_send_approval_can_include_workspace_attachments(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            workspace_root = Path(temp)
+            data_root = workspace_root / "data" / "gmail-app"
+            attachment_path = workspace_root / "storage" / "generated" / "brief.txt"
+            attachment_path.parent.mkdir(parents=True)
+            attachment_path.write_text("Attachment body", encoding="utf-8")
+
+            approval = self.run_backend(
+                data_root,
+                {
+                    "action": "send.request_approval",
+                    "to_emails": ["mario.rossi@acme.example"],
+                    "subject": "Brief",
+                    "body_text": "In allegato.",
+                    "workspace_attachments": ["storage/generated/brief.txt"],
+                },
+            )["json"]["approval"]
+            sent = self.run_backend(data_root, {"action": "send.approved", "approval_id": approval["id"], "gmail_client_mode": "fake"})["json"]
+
+            self.assertEqual(approval["attachments"][0]["workspace_relative_path"], "storage/generated/brief.txt")
+            self.assertEqual(approval["attachments"][0]["filename"], "brief.txt")
+            self.assertEqual(sent["gmail"]["attachments"], [{"filename": "brief.txt", "content_type": "text/plain", "size_bytes": 15}])
+
+    def test_send_approval_rejects_attachments_outside_workspace_storage(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "gmail-app"
+
+            rejected = self.run_backend(
+                data_root,
+                {
+                    "action": "send.request_approval",
+                    "to_emails": ["mario.rossi@acme.example"],
+                    "subject": "Brief",
+                    "body_text": "In allegato.",
+                    "workspace_attachments": ["data/crm/private.sqlite"],
+                },
+            )
+
+            self.assertEqual(rejected["status_code"], 400)
+            self.assertIn("storage/generated or storage/uploaded", rejected["json"]["detail"])
+
     def test_relationship_suggestion_can_be_marked_reviewed_without_cross_app_write(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             data_root = Path(temp) / "data" / "gmail-app"

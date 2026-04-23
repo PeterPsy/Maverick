@@ -113,10 +113,34 @@ def context_payload(data_root: Path, query: str, *, limit: int = 8) -> dict[str,
     return {"query": query, "items": items[:limit]}
 
 
-def graph_payload(data_root: Path, *, query: str = "", limit: int = 200) -> dict[str, Any]:
+def graph_payload(data_root: Path, *, query: str = "", node_ids: object = None, limit: int = 200) -> dict[str, Any]:
     ensure_schema(data_root)
     normalized_limit = max(1, min(int(limit or 200), 500))
-    if query.strip():
+    selected_node_ids = _normalized_node_ids(node_ids, limit=normalized_limit)
+    if selected_node_ids:
+        placeholders = ",".join("?" for _item in selected_node_ids)
+        with connect(data_root) as db:
+            rows = [
+                row_payload(row) or {}
+                for row in db.execute(
+                    f"""
+                    SELECT *, 0.0 AS score FROM nodes
+                    WHERE status = 'active' AND id IN ({placeholders})
+                    """,
+                    tuple(selected_node_ids),
+                )
+            ]
+        row_by_id = {row["id"]: row for row in rows}
+        nodes = [row_by_id[node_id] for node_id in selected_node_ids if node_id in row_by_id]
+        if query.strip():
+            needle = query.strip().lower()
+            nodes = [
+                node
+                for node in nodes
+                if needle in f"{node['title']} {node['summary']} {node['body_text']}".lower()
+            ]
+        node_ids = {node["id"] for node in nodes}
+    elif query.strip():
         nodes = search_nodes(data_root, query, limit=normalized_limit)
         node_ids = {node["id"] for node in nodes}
     else:
@@ -186,6 +210,24 @@ def graph_payload(data_root: Path, *, query: str = "", limit: int = 200) -> dict
         for edge in edges
     ]
     return {"nodes": graph_nodes, "edges": graph_edges}
+
+
+def _normalized_node_ids(raw_node_ids: object, *, limit: int) -> list[str]:
+    if raw_node_ids is None:
+        return []
+    if not isinstance(raw_node_ids, list):
+        return []
+    node_ids: list[str] = []
+    seen: set[str] = set()
+    for raw_node_id in raw_node_ids:
+        node_id = str(raw_node_id or "").strip()
+        if not node_id or node_id in seen:
+            continue
+        seen.add(node_id)
+        node_ids.append(node_id)
+        if len(node_ids) >= limit:
+            break
+    return node_ids
 
 
 def audit_events(data_root: Path, *, limit: int = 50) -> list[dict[str, Any]]:

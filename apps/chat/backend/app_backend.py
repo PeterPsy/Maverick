@@ -22,9 +22,29 @@ from chat_state import (
     write_state,
 )
 
+DATA_CHANGED_ACTIONS = {
+    "threads.create",
+    "threads.update",
+    "threads.delete",
+    "projects.create",
+    "projects.update",
+    "projects.delete",
+}
+
+
+def app_events_for_action(action: str) -> list[dict]:
+    if action.startswith("threads.") and action in DATA_CHANGED_ACTIONS:
+        return [{"type": "maverick.app.data-changed", "resource": "threads"}]
+    if action.startswith("projects.") and action in DATA_CHANGED_ACTIONS:
+        return [{"type": "maverick.app.data-changed", "resource": "projects"}]
+    return []
+
 
 def _response(status_code: int, payload: dict) -> None:
-    print(json.dumps({"status_code": status_code, "json": payload}, ensure_ascii=False))
+    response = {"status_code": status_code, "json": payload}
+    if status_code < 400:
+        response["app_events"] = app_events_for_action(str(payload.pop("_action", "")))
+    print(json.dumps(response, ensure_ascii=False))
 
 
 def main() -> None:
@@ -41,14 +61,14 @@ def main() -> None:
     if action == "threads.create":
         thread = create_thread(state, body)
         write_state(path, state)
-        _response(201, {"thread": thread, "threads": list_threads(state), "projects": list_projects(state)})
+        _response(201, {"thread": thread, "threads": list_threads(state), "projects": list_projects(state), "_action": action})
         return
     if action == "threads.get":
         thread = find_thread(state, str(body.get("thread_id") or ""))
         if thread is None:
             _response(404, {"error": "thread_not_found"})
             return
-        _response(200, {"thread": thread, "threads": list_threads(state), "projects": list_projects(state)})
+        _response(200, {"thread": thread, "threads": list_threads(state), "projects": list_projects(state), "_action": action})
         return
     if action == "threads.update":
         thread = update_thread(state, body)
@@ -70,6 +90,7 @@ def main() -> None:
                 **sidebar_snapshot(state),
                 "deleted_thread_id": deleted_thread["thread_id"],
                 "deleted_runtime_session_id": deleted_thread["runtime_session_id"],
+                "_action": action,
             },
         )
         return
@@ -79,7 +100,7 @@ def main() -> None:
     if action == "projects.create":
         project = create_project(state, body)
         write_state(path, state)
-        _response(201, {"project": project, **sidebar_snapshot(state)})
+        _response(201, {"project": project, **sidebar_snapshot(state), "_action": action})
         return
     if action == "projects.update":
         project = update_project(state, body)
@@ -87,14 +108,14 @@ def main() -> None:
             _response(404, {"error": "project_not_found"})
             return
         write_state(path, state)
-        _response(200, {"project": project, **sidebar_snapshot(state)})
+        _response(200, {"project": project, **sidebar_snapshot(state), "_action": action})
         return
     if action == "projects.delete":
         if not delete_project(state, body):
             _response(404, {"error": "project_not_found"})
             return
         write_state(path, state)
-        _response(200, sidebar_snapshot(state))
+        _response(200, {**sidebar_snapshot(state), "_action": action})
         return
     if action == "sidebar.snapshot":
         _response(200, sidebar_snapshot(state))

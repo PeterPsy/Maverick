@@ -151,6 +151,7 @@ def ensure_schema(data_root: Path) -> None:
         ensure_column(connection, "threads", "is_unread", "INTEGER NOT NULL DEFAULT 0")
         ensure_column(connection, "threads", "labels_json", "TEXT NOT NULL DEFAULT '[]'")
         ensure_column(connection, "messages", "is_unread", "INTEGER NOT NULL DEFAULT 0")
+        ensure_column(connection, "send_approvals", "attachments_json", "TEXT NOT NULL DEFAULT '[]'")
         connection.commit()
     finally:
         connection.close()

@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from core.providers.errors import ProviderLaunchError
 from core.providers.models import ProviderCapabilitySet, ProviderDefinition, RuntimeBackendLaunchSpec
 from core.runtime.runtime_session import RuntimeSessionRecord
+from core.runtime.workspace_api_token import issue_workspace_api_token
 
 if TYPE_CHECKING:
     from core.skills.models import SkillDefinition, SkillMaterialization
@@ -100,11 +101,14 @@ class CodexProviderAdapter:
         workspace_root = Path(session.workspace_root)
         runtime_root = Path(session.runtime_root)
         runtime_home = self._prepare_runtime_home(session)
+        runtime_bin = self._prepare_runtime_bin(session)
         env = self._build_subprocess_env(
             workdir=workdir,
             workspace_root=workspace_root,
             runtime_root=runtime_root,
             runtime_home=runtime_home,
+            runtime_bin=runtime_bin,
+            session=session,
             execution_mode=session.effective_mode,
             secret_env=secret_env,
         )
@@ -197,6 +201,8 @@ class CodexProviderAdapter:
         workspace_root: Path,
         runtime_root: Path,
         runtime_home: Path,
+        runtime_bin: Path,
+        session: RuntimeSessionRecord,
         execution_mode: str,
         secret_env: dict[str, str] | None = None,
         base_env: dict[str, str] | None = None,
@@ -204,7 +210,7 @@ class CodexProviderAdapter:
         env = dict(base_env or os.environ)
         env.update(secret_env or {})
         path_entries = [entry for entry in str(env.get("PATH") or "").split(os.pathsep) if entry]
-        prepend_entries: list[str] = []
+        prepend_entries: list[str] = [str(runtime_bin)]
 
         if os.sep in self.codex_command:
             configured = Path(self.codex_command).expanduser()
@@ -231,14 +237,24 @@ class CodexProviderAdapter:
 
         env["CODEX_HOME"] = str(runtime_home)
         env["MAVERICK_WORKSPACE_ROOT"] = str(workspace_root)
+        env["MAVERICK_WORKSPACE_ID"] = session.workspace_id
         env["MAVERICK_RUNTIME_ROOT"] = str(runtime_root)
+        env["MAVERICK_RUNTIME_SESSION_ID"] = session.session_id
+        env["MAVERICK_EFFECTIVE_MODE"] = execution_mode
+        env["MAVERICK_RUNTIME_API_TOKEN"] = issue_workspace_api_token(
+            workspace_id=session.workspace_id,
+            runtime_session_id=session.session_id,
+        )
+        env["MAVERICK_API_BASE"] = str(
+            env.get("MAVERICK_API_BASE") or env.get("MAVERICK3_API_BASE") or "http://127.0.0.1:8014"
+        ).rstrip("/")
         if execution_mode == "sandbox":
             runtime_root.mkdir(parents=True, exist_ok=True)
             env["TMPDIR"] = str(runtime_root)
             env["TMP"] = str(runtime_root)
             env["TEMP"] = str(runtime_root)
             env["HOME"] = str(runtime_home)
-            env["PYTHONPATH"] = self._runtime_pythonpath(env.get("PYTHONPATH"))
+            env["PYTHONPATH"] = self._launcher_pythonpath(env.get("PYTHONPATH"))
         return env
 
     def _runtime_home(self, session: RuntimeSessionRecord) -> Path:
@@ -263,6 +279,14 @@ class CodexProviderAdapter:
         self._remove_disabled_runtime_material(runtime_home)
         remove_codex_system_skills(runtime_home)
         return runtime_home
+
+    def _prepare_runtime_bin(self, session: RuntimeSessionRecord) -> Path:
+        runtime_bin = Path(session.runtime_root) / "bin"
+        runtime_bin.mkdir(parents=True, exist_ok=True)
+        maverick = runtime_bin / "maverick"
+        maverick.write_text(_workspace_maverick_wrapper_source(), encoding="utf-8")
+        maverick.chmod(0o755)
+        return runtime_bin
 
     def _source_codex_home(self) -> Path:
         configured = str(os.environ.get("MAVERICK3_CODEX_HOME") or os.environ.get("CODEX_HOME") or "").strip()
@@ -437,12 +461,12 @@ class CodexProviderAdapter:
     def _is_standalone_codex_binary(self, resolved: Path) -> bool:
         return resolved.name == "codex" and resolved.parent.name == "codex" and "vendor" in resolved.parts
 
-    def _runtime_pythonpath(self, existing: str | None) -> str:
+    def _launcher_pythonpath(self, existing: str | None) -> str:
         repo_root = Path(__file__).resolve().parents[2]
         entries = [str(repo_root)]
         entries.extend(entry for entry in str(existing or "").split(os.pathsep) if entry)
-        seen: set[str] = set()
         unique: list[str] = []
+        seen: set[str] = set()
         for entry in entries:
             if entry in seen:
                 continue
@@ -459,3 +483,129 @@ def remove_codex_system_skills(runtime_home: Path) -> None:
         return
     if system_root.is_dir():
         shutil.rmtree(system_root, ignore_errors=True)
+
+
+def _workspace_maverick_wrapper_source() -> str:
+    """Return the workspace-local Maverick CLI wrapper installed into runtime/bin."""
+    return """#!/usr/bin/env python3
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
+
+
+def main(argv):
+    if not argv or argv in (["--help"], ["-h"]):
+        print("Usage: maverick {apps|core|app|sdk} ...")
+        print("       maverick apps list --json")
+        print("       maverick core cli list --json")
+        print("       maverick app <app_id> frontend build --json")
+        print("       maverick app create <app_id> [--template <id>] [--name <name>] [--description <text>] [--overwrite]")
+        return 0
+    if argv[:2] == ["sdk", "templates"]:
+        return call_sdk({"action": "templates"})
+    if argv[:2] == ["sdk", "docs"]:
+        return call_sdk({"action": "docs"}, text_field="content")
+    if argv[:2] == ["app", "create"]:
+        app_id, options = parse_app_create(argv[2:])
+        return call_sdk({"action": "create", "app_id": app_id, **options})
+    if argv[0] == "app" and len(argv) >= 3:
+        action = {
+            "validate": "validate",
+            "register-local": "register-local",
+            "install-local": "install-local",
+            "status": "status",
+            "package": "package",
+        }.get(argv[1])
+        if action:
+            return call_sdk({"action": action, "app_id": argv[2]})
+    return call_cli(argv)
+
+
+def parse_app_create(args):
+    if not args:
+        raise SystemExit("maverick app create requires app_id")
+    app_id = args[0]
+    options = {"template_id": "minimal"}
+    index = 1
+    while index < len(args):
+        name = args[index]
+        if name == "--template" and index + 1 < len(args):
+            options["template_id"] = args[index + 1]
+            index += 2
+        elif name == "--name" and index + 1 < len(args):
+            options["name"] = args[index + 1]
+            index += 2
+        elif name == "--description" and index + 1 < len(args):
+            options["description"] = args[index + 1]
+            index += 2
+        elif name == "--entities" and index + 1 < len(args):
+            options["entities"] = [item.strip() for item in args[index + 1].split(",") if item.strip()]
+            index += 2
+        elif name == "--overwrite":
+            options["overwrite"] = True
+            index += 1
+        else:
+            raise SystemExit(f"unsupported option: {name}")
+    return app_id, options
+
+
+def runtime_auth_headers():
+    token = os.environ.get("MAVERICK_RUNTIME_API_TOKEN", "")
+    if not token:
+        print("maverick: MAVERICK_RUNTIME_API_TOKEN is not set", file=sys.stderr)
+        return None
+    return {"Content-Type": "application/json", "Authorization": "Bearer " + token}
+
+
+def call_sdk(payload, text_field=None):
+    base_url = os.environ.get("MAVERICK_API_BASE", "http://127.0.0.1:8014").rstrip("/")
+    headers = runtime_auth_headers()
+    if headers is None:
+        return 1
+    request = urllib.request.Request(
+        base_url + "/api/app-sdk",
+        data=json.dumps(payload).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+    return print_response(request, text_field=text_field)
+
+
+def call_cli(argv):
+    base_url = os.environ.get("MAVERICK_API_BASE", "http://127.0.0.1:8014").rstrip("/")
+    headers = runtime_auth_headers()
+    if headers is None:
+        return 1
+    request = urllib.request.Request(
+        base_url + "/api/runtime/cli",
+        data=json.dumps({"argv": argv, "effective_mode": os.environ.get("MAVERICK_EFFECTIVE_MODE", "sandbox")}).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+    return print_response(request)
+
+
+def print_response(request, text_field=None):
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            body = response.read().decode("utf-8")
+    except urllib.error.HTTPError as error:
+        sys.stderr.write(error.read().decode("utf-8") + "\\n")
+        return 1
+    if text_field:
+        try:
+            decoded = json.loads(body)
+        except json.JSONDecodeError:
+            print(body)
+            return 0
+        print(decoded.get(text_field, ""))
+        return 0
+    print(body)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))
+"""

@@ -102,6 +102,18 @@ Rules:
 - do not rely on `~/.codex/skills`, plugin skills, or repository `local-skills/` as Maverick runtime skill sources
 - Codex provider-generated system skills under `CODEX_HOME/skills/.system` are not Maverick product skills and must be removed from Maverick-managed runtime homes
 
+## Maverick CLI And MCP Discovery
+
+- do not guess app CLI or MCP commands, and do not inspect installation-level app source just to discover how to call an installed app
+- use `maverick apps list --json` for compact installed-app discovery
+- use `maverick core cli list --json`, `maverick core cli inspect <command_id> --json`, and `maverick core cli run <command_id> ...` for core CLI commands
+- use `maverick app <app_id> cli list --json`, `maverick app <app_id> cli inspect <command_name> --json`, and `maverick app <app_id> cli run <command_name> ...` for app CLI commands
+- use `maverick app <app_id> frontend build --json` for official app frontend rebuilds so mounted clients receive the core refresh event
+- use `maverick core mcp list --json`, `maverick core mcp inspect <tool_name> --json`, and `maverick core mcp call <tool_name> ...` for core MCP tools
+- use `maverick app <app_id> mcp list --json`, `maverick app <app_id> mcp inspect <tool_name> --json`, and `maverick app <app_id> mcp call <tool_name> ...` for app MCP tools
+- keep discovery scoped; do not ask the core for a merged list of every command and tool across every app
+- treat `--help` as human command-line syntax help; use `list` and `inspect` for machine-readable agent discovery
+
 ## Testing And Verification
 
 - new core logic should ship with tests when the behavior is stable enough to assert

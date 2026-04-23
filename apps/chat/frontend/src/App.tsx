@@ -80,6 +80,8 @@ type RuntimeHistoryCacheEntry = {
 const MESSAGE_HISTORY_LIMIT = 50;
 const RUNTIME_EVENT_REPLAY_LIMIT = 1000;
 const QUEUED_MESSAGES_STORAGE_PREFIX = "maverick.chat.queued-messages.v1";
+const RUNTIME_HISTORY_CACHE_STORAGE_PREFIX = "maverick.chat.runtime-history-cache.v1";
+const RUNTIME_HISTORY_CACHE_EVENT_LIMIT = 350;
 const THREAD_SYNC_DEBUG_STORAGE_KEY = "maverick.chat.debug.thread-sync";
 
 export function App({
@@ -117,6 +119,7 @@ export function App({
   const historyRequestIdRef = useRef(0);
   const hasHydratedQueuedMessagesRef = useRef(false);
   const suppressedExternalThreadIdRef = useRef<string | null>(null);
+  const activeRuntimeSessionIdRef = useRef<string | null>(null);
 
   const messages = useMemo(() => {
     const currentMessages = eventsToMessages(events);
@@ -173,14 +176,17 @@ export function App({
 
   useEffect(() => {
     const runtimeSessionId = activeThread?.runtime_session_id;
+    activeRuntimeSessionIdRef.current = runtimeSessionId || null;
     if (!runtimeSessionId) {
       return;
     }
-    historyCacheRef.current.set(runtimeSessionId, {
+    const cacheEntry = {
       activeTurn,
       events,
       session: activeSession,
-    });
+    };
+    historyCacheRef.current.set(runtimeSessionId, cacheEntry);
+    persistRuntimeHistoryCache(runtimeHistoryCacheKey(navigationScope, runtimeSessionId), cacheEntry);
   }, [activeSession, activeThread?.runtime_session_id, activeTurn, events]);
 
   useEffect(() => {
@@ -229,13 +235,20 @@ export function App({
       }
       setActiveThread(firstThread);
       if (firstThread?.runtime_session_id) {
-        const [runtimeSession, runtimeEvents] = await Promise.all([
-          getRuntimeSession(firstThread.runtime_session_id),
-          listRuntimeEvents(firstThread.runtime_session_id, { limit: RUNTIME_EVENT_REPLAY_LIMIT }),
-        ]);
-        setActiveSession(runtimeSession);
-        setEvents(runtimeEvents.items);
-        setActiveTurn(inferActiveRuntimeTurn(runtimeEvents.items, firstThread.runtime_session_id));
+        activeRuntimeSessionIdRef.current = firstThread.runtime_session_id;
+        const cachedHistory = readRuntimeHistoryCache(runtimeHistoryCacheKey(navigationScope, firstThread.runtime_session_id));
+        if (cachedHistory) {
+          historyCacheRef.current.set(firstThread.runtime_session_id, cachedHistory);
+          setActiveSession(cachedHistory.session);
+          setEvents(cachedHistory.events);
+          setActiveTurn(cachedHistory.activeTurn || inferActiveRuntimeTurn(cachedHistory.events, firstThread.runtime_session_id));
+          void refreshRuntimeHistory(firstThread.runtime_session_id);
+        } else {
+          const runtimeHistory = await fetchRuntimeHistory(firstThread.runtime_session_id);
+          setActiveSession(runtimeHistory.session);
+          setEvents(runtimeHistory.events);
+          setActiveTurn(runtimeHistory.activeTurn);
+        }
       } else {
         setActiveSession(null);
         setActiveTurn(null);
@@ -426,9 +439,10 @@ export function App({
   async function handleSelectThread(thread: ChatThread) {
     const requestId = historyRequestIdRef.current + 1;
     historyRequestIdRef.current = requestId;
-    const cachedHistory = thread.runtime_session_id ? historyCacheRef.current.get(thread.runtime_session_id) : null;
+    const cachedHistory = thread.runtime_session_id ? historyCacheRef.current.get(thread.runtime_session_id) || readRuntimeHistoryCache(runtimeHistoryCacheKey(navigationScope, thread.runtime_session_id)) : null;
     setIsHistoryLoading(!cachedHistory);
     setActiveThread(thread);
+    activeRuntimeSessionIdRef.current = thread.runtime_session_id || null;
     setActiveSession(cachedHistory?.session || null);
     setEvents(cachedHistory?.events || []);
     setPendingUserMessages([]);
@@ -440,16 +454,13 @@ export function App({
         setError(null);
         return;
       }
-      const [runtimeSession, runtimeEvents] = await Promise.all([
-        getRuntimeSession(thread.runtime_session_id),
-        listRuntimeEvents(thread.runtime_session_id, { limit: RUNTIME_EVENT_REPLAY_LIMIT }),
-      ]);
+      const runtimeHistory = await fetchRuntimeHistory(thread.runtime_session_id);
       if (historyRequestIdRef.current !== requestId) {
         return;
       }
-      setActiveSession(runtimeSession);
-      setEvents(runtimeEvents.items);
-      setActiveTurn(inferActiveRuntimeTurn(runtimeEvents.items, thread.runtime_session_id));
+      setActiveSession(runtimeHistory.session);
+      setEvents(runtimeHistory.events);
+      setActiveTurn(runtimeHistory.activeTurn);
       setError(null);
     } catch (selectError) {
       setError(selectError instanceof Error ? selectError.message : "Unable to load thread.");
@@ -517,13 +528,15 @@ export function App({
       const [runtimeSession, payload] = await Promise.all([getRuntimeSession(runtimeSessionId), createThread(runtimeSessionId, null, metadata)]);
       setThreads(payload.threads);
       setActiveThread(payload.thread);
+      activeRuntimeSessionIdRef.current = runtimeSessionId;
       setActiveSession(runtimeSession);
-      const runtimeEvents = await listRuntimeEvents(runtimeSessionId, { limit: RUNTIME_EVENT_REPLAY_LIMIT });
-      setEvents(runtimeEvents.items);
+      const runtimeHistory = await fetchRuntimeHistory(runtimeSessionId);
+      setActiveSession(runtimeHistory.session);
+      setEvents(runtimeHistory.events);
       setPendingUserMessages([]);
       setFailedUserMessages([]);
       setQueuedMessages([]);
-      setActiveTurn(inferActiveRuntimeTurn(runtimeEvents.items, runtimeSessionId));
+      setActiveTurn(runtimeHistory.activeTurn);
       notifyChatThreadsChanged({ active_thread_id: payload.thread.thread_id });
     } finally {
       setIsHistoryLoading(false);
@@ -552,6 +565,35 @@ export function App({
       threadId,
     });
     notifyAppDataChanged("chat", "threads", { ...(navigationScope ? { navigation_scope: navigationScope } : {}), ...detail });
+  }
+
+  async function fetchRuntimeHistory(runtimeSessionId: string): Promise<RuntimeHistoryCacheEntry> {
+    const [runtimeSession, runtimeEvents] = await Promise.all([
+      getRuntimeSession(runtimeSessionId),
+      listRuntimeEvents(runtimeSessionId, { limit: RUNTIME_EVENT_REPLAY_LIMIT }),
+    ]);
+    return {
+      activeTurn: inferActiveRuntimeTurn(runtimeEvents.items, runtimeSessionId),
+      events: runtimeEvents.items,
+      session: runtimeSession,
+    };
+  }
+
+  async function refreshRuntimeHistory(runtimeSessionId: string) {
+    try {
+      const runtimeHistory = await fetchRuntimeHistory(runtimeSessionId);
+      if (activeRuntimeSessionIdRef.current !== runtimeSessionId) {
+        return;
+      }
+      setActiveSession(runtimeHistory.session);
+      setEvents(runtimeHistory.events);
+      setActiveTurn(runtimeHistory.activeTurn);
+      setError(null);
+    } catch (historyError) {
+      if (events.length === 0) {
+        setError(historyError instanceof Error ? historyError.message : "Unable to refresh runtime history.");
+      }
+    }
   }
 
   useEffect(() => {
@@ -859,6 +901,94 @@ function scalarString(value: string | boolean | null | undefined): string {
 
 function queueStorageKey(navigationScope: string, threadId: string | null): string {
   return `${QUEUED_MESSAGES_STORAGE_PREFIX}:${navigationScope || "main"}:${threadId || "new"}`;
+}
+
+function runtimeHistoryCacheKey(navigationScope: string, runtimeSessionId: string): string {
+  return `${RUNTIME_HISTORY_CACHE_STORAGE_PREFIX}:${navigationScope || "main"}:${runtimeSessionId}`;
+}
+
+function readRuntimeHistoryCache(storageKey: string): RuntimeHistoryCacheEntry | null {
+  try {
+    const rawValue = window.sessionStorage.getItem(storageKey);
+    if (!rawValue) {
+      return null;
+    }
+    const payload = JSON.parse(rawValue) as { activeTurn?: unknown; events?: unknown[]; session?: unknown; version?: unknown };
+    if (payload.version !== 1 || !Array.isArray(payload.events)) {
+      return null;
+    }
+    const session = isRuntimeSession(payload.session) ? payload.session : null;
+    return {
+      activeTurn: isRuntimeTurn(payload.activeTurn) ? payload.activeTurn : null,
+      events: payload.events.filter(isRuntimeEvent),
+      session,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function persistRuntimeHistoryCache(storageKey: string, cacheEntry: RuntimeHistoryCacheEntry) {
+  try {
+    if (!cacheEntry.session && cacheEntry.events.length === 0) {
+      window.sessionStorage.removeItem(storageKey);
+      return;
+    }
+    window.sessionStorage.setItem(
+      storageKey,
+      JSON.stringify({
+        version: 1,
+        activeTurn: cacheEntry.activeTurn,
+        events: sanitizeRuntimeEventsForCache(cacheEntry.events).slice(-RUNTIME_HISTORY_CACHE_EVENT_LIMIT),
+        session: cacheEntry.session,
+      }),
+    );
+  } catch {
+    // History cache is an optimization for reloads; live HTTP/WebSocket history remains authoritative.
+  }
+}
+
+function sanitizeRuntimeEventsForCache(events: RuntimeEvent[]): RuntimeEvent[] {
+  return events.map((event) => {
+    if (event.event_type !== "runtime.step.updated") {
+      return event;
+    }
+    const payload = { ...event.payload };
+    delete payload.raw;
+    return { ...event, payload };
+  });
+}
+
+function isRuntimeSession(value: unknown): value is RuntimeSession {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return typeof record.session_id === "string" && typeof record.workspace_id === "string" && typeof record.agent_id === "string" && typeof record.status === "string";
+}
+
+function isRuntimeTurn(value: unknown): value is RuntimeTurn {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return typeof record.turn_id === "string" && typeof record.session_id === "string" && typeof record.status === "string";
+}
+
+function isRuntimeEvent(value: unknown): value is RuntimeEvent {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.event_id === "string" &&
+    typeof record.session_id === "string" &&
+    (typeof record.turn_id === "string" || record.turn_id === null) &&
+    typeof record.event_type === "string" &&
+    Boolean(record.payload) &&
+    typeof record.payload === "object" &&
+    typeof record.created_at === "string"
+  );
 }
 
 function readPersistedQueuedMessages(storageKey: string): QueuedMessage[] {

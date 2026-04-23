@@ -40,6 +40,12 @@ REFERENCE_MANIFEST = {
 }
 
 
+def app_events_for_action(action: str) -> list[dict]:
+    if action != "generate_document":
+        return []
+    return [{"type": "maverick.app.data-changed", "resource": "documents"}]
+
+
 def _workspace_relative(path: Path, generated_root: Path) -> str:
     return f"storage/generated/{path.relative_to(generated_root).as_posix()}"
 

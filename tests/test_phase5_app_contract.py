@@ -27,12 +27,74 @@ from core.apps.contracts import (
     parse_app_contract_file,
     write_app_contract_file,
 )
+from core.apps.contract_serializer import app_contract_payload
 from core.apps.errors import AppContractValidationError
 from core.apps.lifecycle import run_lifecycle_hook
 
 
 class Phase5AppContractTestCase(unittest.TestCase):
     """Verify canonical contract-file parsing, validation, and timeout-backed hook execution."""
+
+    def test_builtin_app_contracts_are_canonical_and_declare_live_data_events(self) -> None:
+        apps_root = Path(__file__).resolve().parents[1] / "apps"
+        expected_events = {
+            "agents": ["configuration"],
+            "app-store": ["state"],
+            "base-shell": [],
+            "chat": ["threads", "projects"],
+            "crm": ["records"],
+            "document-generator": ["documents"],
+            "dynamic-views": ["views"],
+            "gallery": ["files", "view-state"],
+            "gmail-app": ["accounts", "threads", "suggestions", "send-approvals", "sent-messages"],
+            "maverick-monitor": ["settings"],
+            "memory": ["graph", "view-state"],
+            "skills": ["skills"],
+            "user-admin": [],
+        }
+
+        for contract_path in sorted(apps_root.glob("*/app_contract.json")):
+            with self.subTest(app=contract_path.parent.name):
+                parsed = parse_app_contract_file(contract_path.parent)
+                raw = json.loads(contract_path.read_text(encoding="utf-8"))
+                self.assertEqual(raw, app_contract_payload(parsed))
+                self.assertEqual(
+                    [event.resource for event in parsed.contract.capabilities.data_events],
+                    expected_events[parsed.app_id],
+                )
+
+    def test_builtin_mutable_apps_publish_live_events_from_official_surfaces(self) -> None:
+        apps_root = Path(__file__).resolve().parents[1] / "apps"
+        event_apps = {
+            "agents",
+            "app-store",
+            "chat",
+            "crm",
+            "document-generator",
+            "dynamic-views",
+            "gallery",
+            "gmail-app",
+            "maverick-monitor",
+            "memory",
+            "skills",
+        }
+
+        for app_id in sorted(event_apps):
+            with self.subTest(app=app_id):
+                app_root = apps_root / app_id
+                service_text = "\n".join(
+                    path.read_text(encoding="utf-8")
+                    for path in (app_root / "backend").glob("*.py")
+                )
+                self.assertIn("app_events_for_action", service_text)
+                for entrypoint in ("backend/app_backend.py", "cli/app_cli.py", "mcp/server.py"):
+                    path = app_root / entrypoint
+                    if not path.is_file():
+                        continue
+                    text = path.read_text(encoding="utf-8")
+                    if app_id == "chat" and entrypoint != "backend/app_backend.py":
+                        continue
+                    self.assertIn("app_events", text)
 
     def test_parse_contract_file_supports_storage_capabilities_and_lifecycle(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -484,7 +546,12 @@ class Phase5AppContractTestCase(unittest.TestCase):
 
     def test_run_lifecycle_hook_uses_configured_timeout_mapping(self) -> None:
         with TemporaryDirectory() as temp_dir:
-            app_root = Path(temp_dir) / "apps" / "validator"
+            repo_root = Path(temp_dir) / "maverick-v3"
+            for name in ("core", "apps", "workspaces"):
+                (repo_root / name).mkdir(parents=True, exist_ok=True)
+            (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
+            (repo_root / "IMPLEMENTATION_TASKLIST.md").write_text("", encoding="utf-8")
+            app_root = repo_root / "apps" / "validator"
             lifecycle_root = app_root / "backend" / "lifecycle"
             lifecycle_root.mkdir(parents=True, exist_ok=True)
             (lifecycle_root / "validate.py").write_text("print('validate')\n", encoding="utf-8")

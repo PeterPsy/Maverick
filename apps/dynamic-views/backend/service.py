@@ -17,6 +17,12 @@ REFERENCE_MANIFEST = {
 }
 
 
+def app_events_for_action(action: str) -> list[dict]:
+    if action not in {"create", "delete"}:
+        return []
+    return [{"type": "maverick.app.data-changed", "resource": "views"}]
+
+
 def _owner_user_id(body: dict[str, Any], source_instance_id: str | None) -> str:
     owner = str(body.get("owner_user_id") or "").strip()
     if owner:

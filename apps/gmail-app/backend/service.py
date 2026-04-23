@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from attachments import read_attachment_bytes
 from errors import GmailAppValidationError
 from gmail_client import client_from_body
 from gmail_models import email_domain
@@ -54,6 +55,28 @@ REFERENCE_MANIFEST = {
         },
     ],
 }
+
+DATA_CHANGED_RESOURCES = {
+    "connection.configure": "accounts",
+    "oauth.exchange": "accounts",
+    "threads.search": "threads",
+    "threads.latest": "threads",
+    "threads.spam": "threads",
+    "threads.page": "threads",
+    "threads.get": "threads",
+    "threads.mark_read": "threads",
+    "threads.summarize": "suggestions",
+    "suggestions.mark_reviewed": "suggestions",
+    "send.request_approval": "send-approvals",
+    "send.approved": "sent-messages",
+}
+
+
+def app_events_for_action(action: str) -> list[dict[str, str]]:
+    resource = DATA_CHANGED_RESOURCES.get(action)
+    if resource is None:
+        return []
+    return [{"type": "maverick.app.data-changed", "resource": resource}]
 
 
 def action_from_tool(tool_name: str, fallback: str) -> str:
@@ -242,11 +265,13 @@ def handle_action(data_root: Path, body: dict[str, Any], *, workspace_id: str = 
         if not str(body.get("access_token") or "").strip() and str(body.get("gmail_client_mode") or "").strip().lower() != "fake":
             raise GmailAppValidationError("A real Gmail access token is required to send email. Reconnect Gmail or send from the authenticated app session.")
         approval = consume_send_approval(data_root, str(body.get("approval_id") or ""))
+        attachments = attachments_with_content(data_root, approval.get("attachments", []))
         sent = client_from_body(body).send_message(
             approval["to_emails"],
             approval["subject"],
             approval["body_text"],
             thread_id=approval["thread_id"],
+            attachments=attachments,
         )
         record = record_sent_message(data_root, approval["id"], str(sent.get("id") or ""), str(sent.get("threadId") or sent.get("thread_id") or approval["thread_id"]))
         return 200, {"sent": record, "gmail": sent}
@@ -292,6 +317,16 @@ def with_secret_access_token(body: dict[str, Any], app_secrets: dict[str, str]) 
     if not access_token:
         return body
     return {**body, "access_token": access_token}
+
+
+def attachments_with_content(data_root: Path, attachments: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            **attachment,
+            "content_bytes": read_attachment_bytes(data_root, attachment),
+        }
+        for attachment in attachments
+    ]
 
 
 def summarize_thread(thread: dict[str, Any]) -> dict[str, Any]:

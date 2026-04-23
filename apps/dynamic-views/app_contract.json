@@ -10,6 +10,9 @@
     "mode": "sealed",
     "source_access": "none"
   },
+  "visibility": {
+    "platform_roles": null
+  },
   "capabilities": {
     "mcp_tools": [
       "maverick_dynamic_views",
@@ -25,6 +28,13 @@
     "views": [
       "dynamic-views"
     ],
+    "data_events": [
+      {
+        "resource": "views",
+        "description": "Emitted when persisted dynamic view instances change through official Dynamic Views surfaces."
+      }
+    ],
+    "view_surfaces": [],
     "reference_entities": [
       {
         "entity_type": "view",
@@ -85,7 +95,7 @@
     "import": false,
     "validate_after_import": false,
     "repair_after_import": false,
-    "rebuild": false,
+    "rebuild": true,
     "health_check": true
   },
   "health_contract": {

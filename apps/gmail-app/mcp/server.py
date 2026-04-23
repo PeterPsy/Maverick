@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
 from errors import GmailAppError, GmailAppValidationError
 from secret_bridge import resolve_local_app_secrets
-from service import action_from_tool, handle_action
+from service import action_from_tool, app_events_for_action, handle_action
 
 
 payload = json.loads(sys.stdin.read() or "{}")
@@ -29,4 +29,7 @@ except GmailAppValidationError as error:
 except GmailAppError as error:
     status_code, result = 502, {"error": "gmail_app_error", "detail": str(error)}
 
-print(json.dumps({"status_code": status_code, **result}, ensure_ascii=False))
+response = {"status_code": status_code, **result}
+if status_code < 400:
+    response["app_events"] = app_events_for_action(action)
+print(json.dumps(response, ensure_ascii=False))

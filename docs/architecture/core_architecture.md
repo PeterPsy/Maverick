@@ -600,6 +600,7 @@ The intended first shape is:
 - `base-shell` keeps the iframe-mounted widget alive while the sidebar is hidden, so opening and closing the menu does not reload app-owned widget state
 - `base-shell` may react to a generic browser message asking it to open an app with scalar navigation params, but it must not import chat code or call chat-private internals
 - `base-shell` keeps mounted app iframe documents alive after first open and sends app navigation through a generic `postMessage` protocol instead of rebuilding iframe URLs for every internal app route
+- `base-shell` listens to the core app-event WebSocket and may remount only the affected app iframe after a successful official frontend rebuild event
 - `chat` owns project/thread settings panels, rename/move/delete actions, and "new chat" behavior through its own backend
 
 Mounted app navigation is intentionally message-driven.
@@ -767,7 +768,7 @@ The main core host should run through the ASGI platform host so HTTP and WebSock
 
 The WSGI host may remain useful for isolated local smoke checks, but it is not the production runtime host once WebSocket is part of the agent communication surface.
 
-`nginx` must forward `/ws/` with `Upgrade` and `Connection: upgrade` headers to the main core host.
+`nginx` must forward `/ws/` and WebSocket-capable API routes such as `/api/apps/events/ws` with `Upgrade` and `Connection: upgrade` headers to the main core host.
 
 The backend watchdog is deployment infrastructure, not app runtime behavior.
 
@@ -1199,7 +1200,7 @@ This is a bootstrap adapter detail, not the domain model. Production deployments
 
 Backend process restart is a runtime recovery event.
 
-On startup, the platform must inspect persisted running runtime sessions. If a running session has a queued or active turn, the in-memory worker that owned that turn died with the previous backend process. The startup recovery pass must close those stale non-terminal turns with explicit backend-restart evidence, then enqueue a new asynchronous turn with the fixed input `resume` on the same runtime session.
+On startup, the platform must inspect persisted running runtime sessions. If a running session has a queued or active turn, the in-memory worker that owned that turn died with the previous backend process. The startup recovery pass must first reconcile the turn store with persisted terminal events: if the event log already contains a terminal event such as `runtime.output.final`, `runtime.turn.completed`, `runtime.turn.failed`, or `runtime.turn.cancelled`, the non-terminal turn record must be closed to match that evidence and no resume turn should be queued for it. Remaining stale non-terminal user turns must be closed with explicit backend-restart evidence, then the platform may enqueue one new asynchronous turn with the fixed input `resume` on the same runtime session. Recovery-created `resume` turns must not chain into further `resume` turns on later restarts.
 
 This behavior is deterministic platform recovery. It must not depend on frontend reconnect timing, agent-specific logic, or a user manually sending another message.
 
@@ -1706,7 +1707,11 @@ The same CLI framework should be able to host both:
 
 The core remains responsible for command registration, workspace authority checks, and exposure policy.
 
-Per-app lifecycle CLI commands use the app namespace but remain core-owned operations. They do not require each app to implement its own install or uninstall script. `app.<app_id>.install` is available when a platform app source or workspace-local project exists. `app.<app_id>.uninstall` is available when the app has a workspace binding. `app.<app_id>.remove` is available only for workspace-local app projects, because complete removal deletes workspace-owned source and data rather than merely detaching a binding.
+The user-facing Maverick wrapper must keep discovery scoped by authority and owner. `maverick apps list --json` is the compact app-discovery command. Core-owned CLI commands are discovered and invoked through `maverick core cli list --json`, `maverick core cli inspect <command_id> --json`, and `maverick core cli run <command_id> ...`. App-owned CLI commands are discovered and invoked through `maverick app <app_id> cli list --json`, `maverick app <app_id> cli inspect <command_name> --json`, and `maverick app <app_id> cli run <command_name> ...`. Official app frontend rebuilds use `maverick app <app_id> frontend build --json`, which runs the core app-hosting frontend build lifecycle and emits the mounted-frontend refresh event after success. The wrapper must not provide a default global command dump that merges all core and app commands, because agents should pull only the command surface relevant to the task.
+
+MCP follows the same scoped discovery rule. Core tools use `maverick core mcp list --json`, `maverick core mcp inspect <tool_name> --json`, and `maverick core mcp call <tool_name> ...`. App tools use `maverick app <app_id> mcp list --json`, `maverick app <app_id> mcp inspect <tool_name> --json`, and `maverick app <app_id> mcp call <tool_name> ...`. `--help` remains human-oriented parser help; `list` and `inspect` are the machine-readable discovery contract for agents.
+
+Per-app lifecycle CLI commands use the app namespace but remain core-owned operations. They do not require each app to implement its own install or uninstall script. `app.<app_id>.install` is available when a platform app source or workspace-local project exists. `app.<app_id>.uninstall` is available when the app has a workspace binding. `app.<app_id>.frontend.build` is available when the enabled app declares `lifecycle.rebuild: true` and has a declared frontend build artifact. `app.<app_id>.remove` is available only for workspace-local app projects, because complete removal deletes workspace-owned source and data rather than merely detaching a binding.
 
 In the first local v3 implementation, app-owned CLI entrypoints follow the same deterministic subprocess contract:
 

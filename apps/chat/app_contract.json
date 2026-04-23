@@ -10,6 +10,9 @@
     "mode": "sealed",
     "source_access": "none"
   },
+  "visibility": {
+    "platform_roles": null
+  },
   "capabilities": {
     "mcp_tools": [
       "threads.list",
@@ -28,6 +31,17 @@
     "views": [
       "chat"
     ],
+    "data_events": [
+      {
+        "resource": "threads",
+        "description": "Emitted when chat threads change through official Chat app surfaces."
+      },
+      {
+        "resource": "projects",
+        "description": "Emitted when chat projects change through official Chat app surfaces."
+      }
+    ],
+    "view_surfaces": [],
     "reference_entities": [
       {
         "entity_type": "thread",
@@ -95,7 +109,7 @@
     "import": false,
     "validate_after_import": false,
     "repair_after_import": false,
-    "rebuild": false,
+    "rebuild": true,
     "health_check": true
   },
   "health_contract": {

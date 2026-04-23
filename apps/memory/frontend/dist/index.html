@@ -33,6 +33,16 @@
       .stack { display: grid; gap: 12px; }
       .toolbar { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
       .toolbar button { width: auto; min-width: 76px; }
+      .custom-view-bar {
+        display: grid;
+        gap: 8px;
+        border: 1px solid #46544b;
+        background: #18211b;
+        border-radius: 6px;
+        padding: 12px;
+      }
+      .custom-view-bar[hidden] { display: none; }
+      .custom-view-bar strong { color: #d8f06e; }
       .item {
         text-align: left;
         border: 1px solid #2e3a43;
@@ -136,6 +146,11 @@
             <button id="search">Search</button>
           </div>
           <button id="refresh" class="secondary">Refresh graph</button>
+          <div id="custom-view-bar" class="custom-view-bar" hidden>
+            <strong id="custom-view-title">Custom Memory view</strong>
+            <div id="custom-view-copy" class="muted">Showing selected memory nodes.</div>
+            <button id="clear-custom-view" class="secondary" type="button">Back to full memory</button>
+          </div>
           <div class="stack">
             <h2>Matches</h2>
             <div id="results" class="stack"></div>
@@ -199,6 +214,7 @@
         selectedId: null,
         hoverId: null,
         query: '',
+        viewFilter: null,
         scale: 1,
         offsetX: 0,
         offsetY: 0,
@@ -206,8 +222,17 @@
         panning: false,
         lastX: 0,
         lastY: 0,
+        firstHydration: true,
+        appSocket: null,
+        appSocketReconnectTimer: null,
+        appSocketRetry: 0,
+        exitingNodes: [],
+        exitingEdges: [],
         animation: null
       };
+      const NODE_ANIMATION_MS = 900;
+      const EDGE_ANIMATION_MS = 1100;
+      const EXIT_ANIMATION_MS = 700;
       const colors = {
         note: '#d8f06e',
         fact: '#67d5ff',
@@ -229,6 +254,33 @@
         const payload = await response.json();
         return payload.json || payload;
       }
+      function normalizeViewFilter(raw) {
+        return {
+          mode: raw?.mode === 'custom' ? 'custom' : 'search',
+          title: raw?.title || '',
+          query: raw?.query || '',
+          refs: Array.isArray(raw?.refs) ? raw.refs : [],
+          updated_at: raw?.updated_at || ''
+        };
+      }
+      function applyViewFilter(viewFilter) {
+        state.viewFilter = normalizeViewFilter(viewFilter);
+        const queryInput = document.getElementById('query');
+        if (queryInput.value !== state.viewFilter.query) queryInput.value = state.viewFilter.query;
+        renderCustomViewBar();
+      }
+      async function loadViewFilter() {
+        const payload = await callMemory({ action: 'view_filter' });
+        applyViewFilter(payload.state?.view_filter);
+      }
+      function renderCustomViewBar() {
+        const bar = document.getElementById('custom-view-bar');
+        const isCustom = state.viewFilter?.mode === 'custom';
+        bar.hidden = !isCustom;
+        if (!isCustom) return;
+        document.getElementById('custom-view-title').textContent = state.viewFilter.title || 'Custom Memory view';
+        document.getElementById('custom-view-copy').textContent = `Showing ${state.viewFilter.refs.length} selected memory node${state.viewFilter.refs.length === 1 ? '' : 's'}.`;
+      }
       function resizeCanvas() {
         const rect = canvas.getBoundingClientRect();
         const ratio = window.devicePixelRatio || 1;
@@ -240,23 +292,66 @@
         const rect = canvas.getBoundingClientRect();
         return { x: rect.width / 2, y: rect.height / 2 };
       }
+      function edgeKey(edge) {
+        return edge.id || `${edge.source}->${edge.target}:${edge.kind}`;
+      }
       function hydrateGraph(payload) {
         const center = graphCenter();
+        const now = performance.now();
         const existing = new Map(state.nodes.map((node) => [node.id, node]));
+        const exitingById = new Map(state.exitingNodes.map((node) => [node.id, node]));
+        const nextNodeIds = new Set((payload.nodes || []).map((node) => node.id));
+        const newlyExitingNodes = state.firstHydration ? [] : state.nodes
+          .filter((node) => !nextNodeIds.has(node.id))
+          .map((node) => ({ ...node, disappearingAt: now, vx: 0, vy: 0 }));
+        const exitingNodeIds = new Set();
+        state.exitingNodes = [
+          ...state.exitingNodes.filter((node) => !nextNodeIds.has(node.id) && now - (node.disappearingAt || now) < EXIT_ANIMATION_MS),
+          ...newlyExitingNodes
+        ].filter((node) => {
+          if (exitingNodeIds.has(node.id)) return false;
+          exitingNodeIds.add(node.id);
+          return true;
+        });
         state.nodes = (payload.nodes || []).map((node, index, all) => {
           const cached = existing.get(node.id);
+          const exiting = exitingById.get(node.id);
           const angle = (index / Math.max(1, all.length)) * Math.PI * 2;
           const radius = 90 + Math.min(260, all.length * 10);
           return {
             ...node,
-            x: cached?.x ?? center.x + Math.cos(angle) * radius,
-            y: cached?.y ?? center.y + Math.sin(angle) * radius,
+            x: cached?.x ?? exiting?.x ?? center.x + Math.cos(angle) * radius,
+            y: cached?.y ?? exiting?.y ?? center.y + Math.sin(angle) * radius,
             vx: cached?.vx ?? 0,
             vy: cached?.vy ?? 0,
-            radius: 12 + Math.min(12, Number(node.importance || 0.5) * 14)
+            radius: 12 + Math.min(12, Number(node.importance || 0.5) * 14),
+            appearedAt: cached?.appearedAt ?? (state.firstHydration ? 0 : now)
           };
         });
-        state.edges = payload.edges || [];
+        const nextEdgeKeys = new Set((payload.edges || []).map(edgeKey));
+        const existingEdges = new Set(state.edges.map(edgeKey));
+        const newlyExitingEdges = state.firstHydration ? [] : state.edges
+          .filter((edge) => !nextEdgeKeys.has(edgeKey(edge)))
+          .map((edge) => ({ ...edge, disappearingAt: now }));
+        state.edges = (payload.edges || []).map((edge) => {
+          const key = edgeKey(edge);
+          const previous = state.edges.find((item) => edgeKey(item) === key);
+          return {
+            ...edge,
+            appearedAt: previous?.appearedAt ?? (state.firstHydration || existingEdges.has(key) ? 0 : now)
+          };
+        });
+        const exitingEdgeKeys = new Set();
+        state.exitingEdges = [
+          ...state.exitingEdges.filter((edge) => !nextEdgeKeys.has(edgeKey(edge)) && now - (edge.disappearingAt || now) < EXIT_ANIMATION_MS),
+          ...newlyExitingEdges
+        ].filter((edge) => {
+          const key = edgeKey(edge);
+          if (exitingEdgeKeys.has(key)) return false;
+          exitingEdgeKeys.add(key);
+          return true;
+        });
+        state.firstHydration = false;
         document.getElementById('node-count').textContent = `${state.nodes.length} nodes`;
         document.getElementById('edge-count').textContent = `${state.edges.length} links`;
         document.getElementById('empty').style.display = state.nodes.length ? 'none' : 'grid';
@@ -333,48 +428,89 @@
         }
       }
       function draw() {
+        const now = performance.now();
+        state.exitingNodes = state.exitingNodes.filter((node) => now - (node.disappearingAt || now) < EXIT_ANIMATION_MS);
+        state.exitingEdges = state.exitingEdges.filter((edge) => now - (edge.disappearingAt || now) < EXIT_ANIMATION_MS);
         resizeCanvas();
         const rect = canvas.getBoundingClientRect();
         ctx.clearRect(0, 0, rect.width, rect.height);
         ctx.save();
         ctx.translate(state.offsetX, state.offsetY);
         ctx.scale(state.scale, state.scale);
-        const nodeById = new Map(state.nodes.map((node) => [node.id, node]));
-        state.edges.forEach((edge) => {
+        const nodeById = new Map([...state.exitingNodes, ...state.nodes].map((node) => [node.id, node]));
+        state.exitingEdges.forEach((edge) => drawEdge(edge, nodeById, now, true));
+        state.edges.forEach((edge) => drawEdge(edge, nodeById, now, false));
+        state.exitingNodes.forEach((node) => drawNode(node, now, true));
+        state.nodes.forEach((node) => drawNode(node, now, false));
+        ctx.restore();
+      }
+      function drawEdge(edge, nodeById, now, exiting) {
           const source = nodeById.get(edge.source);
           const target = nodeById.get(edge.target);
           if (!source || !target) return;
+          const edgeAge = edge.appearedAt ? now - edge.appearedAt : EDGE_ANIMATION_MS;
+          const edgeProgress = Math.min(1, Math.max(0, edgeAge / EDGE_ANIMATION_MS));
+          const easedEdge = easeOutCubic(edgeProgress);
+          const exitAge = exiting ? now - (edge.disappearingAt || now) : 0;
+          const exitProgress = Math.min(1, Math.max(0, exitAge / EXIT_ANIMATION_MS));
+          const exitAlpha = exiting ? 1 - easeOutCubic(exitProgress) : 1;
+          const visibleProgress = exiting ? 1 - exitProgress : easedEdge;
+          const targetX = source.x + (target.x - source.x) * visibleProgress;
+          const targetY = source.y + (target.y - source.y) * visibleProgress;
           const active = state.selectedId && (edge.source === state.selectedId || edge.target === state.selectedId);
-          ctx.strokeStyle = active ? 'rgba(216,240,110,.82)' : 'rgba(130,150,160,.26)';
-          ctx.lineWidth = active ? 2.6 : 0.8 + Number(edge.weight || 0.5) * 1.8;
+          const alpha = (active ? 0.82 : 0.22 + easedEdge * 0.16) * exitAlpha;
+          ctx.strokeStyle = exiting ? `rgba(255,141,161,${Math.max(0, alpha)})` : active ? `rgba(216,240,110,${alpha})` : `rgba(130,150,160,${alpha})`;
+          ctx.lineWidth = ((active ? 2.6 : 0.8 + Number(edge.weight || 0.5) * 1.8) + (1 - easedEdge) * 2.4) * (exiting ? 0.7 + exitAlpha * 0.3 : 1);
           ctx.beginPath();
           ctx.moveTo(source.x, source.y);
-          ctx.lineTo(target.x, target.y);
+          ctx.lineTo(targetX, targetY);
           ctx.stroke();
-        });
-        state.nodes.forEach((node) => {
+          if (!exiting && edgeProgress < 1) {
+            ctx.beginPath();
+            ctx.arc(targetX, targetY, 4 + (1 - easedEdge) * 4, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(216,240,110,${0.24 + (1 - easedEdge) * 0.52})`;
+            ctx.fill();
+          }
+      }
+      function drawNode(node, now, exiting) {
           const active = node.id === state.selectedId;
           const hovered = node.id === state.hoverId;
           const color = colors[node.type] || '#ccd6dd';
+          const nodeAge = node.appearedAt ? now - node.appearedAt : NODE_ANIMATION_MS;
+          const nodeProgress = Math.min(1, Math.max(0, nodeAge / NODE_ANIMATION_MS));
+          const exitAge = exiting ? now - (node.disappearingAt || now) : 0;
+          const exitProgress = Math.min(1, Math.max(0, exitAge / EXIT_ANIMATION_MS));
+          const exitAlpha = exiting ? 1 - easeOutCubic(exitProgress) : 1;
+          const easedNode = easeOutBack(nodeProgress);
+          const pulse = nodeProgress < 1 ? Math.sin(nodeProgress * Math.PI) : 0;
+          const radius = Math.max(2, node.radius * easedNode * (exiting ? 1 - exitProgress * 0.72 : 1));
           ctx.beginPath();
-          ctx.arc(node.x, node.y, node.radius + (active ? 7 : hovered ? 4 : 0), 0, Math.PI * 2);
-          ctx.fillStyle = active ? 'rgba(216,240,110,.18)' : hovered ? 'rgba(255,255,255,.10)' : 'rgba(255,255,255,.04)';
+          ctx.arc(node.x, node.y, radius + (active ? 7 : hovered ? 4 : 0) + pulse * 15, 0, Math.PI * 2);
+          ctx.fillStyle = active ? `rgba(216,240,110,${0.18 * exitAlpha})` : hovered ? `rgba(255,255,255,${0.10 * exitAlpha})` : `rgba(255,255,255,${(0.04 + pulse * 0.08) * exitAlpha})`;
           ctx.fill();
           ctx.beginPath();
-          ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
+          ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
+          ctx.globalAlpha = exitAlpha;
           ctx.fillStyle = color;
           ctx.fill();
+          ctx.globalAlpha = 1;
           ctx.lineWidth = active ? 3 : 1.4;
-          ctx.strokeStyle = active ? '#ffffff' : '#0b0f12';
+          ctx.strokeStyle = exiting ? `rgba(255,141,161,${0.2 + exitAlpha * 0.55})` : nodeProgress < 1 ? `rgba(255,255,255,${0.25 + pulse * 0.55})` : active ? '#ffffff' : '#0b0f12';
           ctx.stroke();
-          if (active || hovered || state.nodes.length < 36) {
+          if (!exiting && (active || hovered || state.nodes.length < 36)) {
             ctx.font = '12px Inter, system-ui, sans-serif';
-            ctx.fillStyle = '#edf4f6';
+            ctx.fillStyle = nodeProgress < 1 ? `rgba(237,244,246,${nodeProgress})` : '#edf4f6';
             ctx.textAlign = 'center';
-            ctx.fillText(truncate(node.title, 28), node.x, node.y + node.radius + 18);
+            ctx.fillText(truncate(node.title, 28), node.x, node.y + radius + 18);
           }
-        });
-        ctx.restore();
+      }
+      function easeOutCubic(value) {
+        return 1 - Math.pow(1 - value, 3);
+      }
+      function easeOutBack(value) {
+        const c1 = 1.70158;
+        const c3 = c1 + 1;
+        return 1 + c3 * Math.pow(value - 1, 3) + c1 * Math.pow(value - 1, 2);
       }
       function truncate(value, max) {
         const text = String(value || '');
@@ -428,16 +564,73 @@
       }
       async function refreshGraph() {
         state.query = document.getElementById('query').value;
-        const payload = await callMemory({ action: 'graph', query: state.query, limit: 220 });
+        const body = { action: 'graph', query: state.query, limit: 220 };
+        if (state.viewFilter?.mode === 'custom') {
+          body.node_ids = state.viewFilter.refs.map((ref) => ref.entity_id).filter(Boolean);
+        }
+        const payload = await callMemory(body);
         hydrateGraph(payload);
+      }
+      function handleMemoryChanged() {
+        loadViewFilter().then(refreshGraph).catch(() => {
+          // Keep the graph usable if a transient refresh fails.
+        });
+      }
+      window.addEventListener('message', (event) => {
+        if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') return;
+        if (event.data.type === 'maverick.app.data-changed' && event.data.owner_app_id === 'memory') {
+          handleMemoryChanged();
+        }
+      });
+      function connectAppEvents() {
+        if (!('WebSocket' in window)) return;
+        if (state.appSocket && state.appSocket.readyState <= 1) return;
+        if (state.appSocketReconnectTimer !== null) {
+          window.clearTimeout(state.appSocketReconnectTimer);
+          state.appSocketReconnectTimer = null;
+        }
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const socket = new WebSocket(`${protocol}//${window.location.host}/api/apps/events/ws`);
+        state.appSocket = socket;
+        socket.onopen = () => {
+          state.appSocketRetry = 0;
+          handleMemoryChanged();
+        };
+        socket.onmessage = (event) => {
+          try {
+            const payload = JSON.parse(event.data);
+            if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === 'memory') {
+              handleMemoryChanged();
+            }
+          } catch {
+            // Ignore malformed event frames.
+          }
+        };
+        socket.onerror = () => {
+          socket.close();
+        };
+        socket.onclose = () => {
+          if (state.appSocket !== socket) return;
+          state.appSocket = null;
+          const delay = Math.min(5000, 500 + state.appSocketRetry * 750);
+          state.appSocketRetry += 1;
+          state.appSocketReconnectTimer = window.setTimeout(connectAppEvents, delay);
+        };
       }
       document.getElementById('search').onclick = async () => {
         const query = document.getElementById('query').value;
+        const viewState = await callMemory({ action: 'set_view_filter', query });
+        applyViewFilter(viewState.state?.view_filter);
         const payload = await callMemory({ action: 'search', query, limit: 50 });
         renderResults(payload.results || []);
         await refreshGraph();
       };
       document.getElementById('refresh').onclick = refreshGraph;
+      document.getElementById('clear-custom-view').onclick = async () => {
+        const payload = await callMemory({ action: 'clear_custom_view' });
+        applyViewFilter(payload.state?.view_filter);
+        await refreshGraph();
+      };
       document.getElementById('fit').onclick = () => {
         state.scale = 1;
         state.offsetX = 0;
@@ -500,7 +693,9 @@
         draw();
       }, { passive: false });
       window.addEventListener('resize', draw);
-      refreshGraph();
+      window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'memory' }, window.location.origin);
+      connectAppEvents();
+      loadViewFilter().then(refreshGraph).catch(refreshGraph);
       animate();
     </script>
   </body>

@@ -25,7 +25,7 @@
     "reference_entities": []
   },
   "entrypoints": {
-    "backend": "backend/app_backend.py",
+    "backend": null,
     "frontend": "frontend/dist",
     "hooks": {}
   },
@@ -65,7 +65,7 @@
     "import": false,
     "validate_after_import": false,
     "repair_after_import": false,
-    "rebuild": false,
+    "rebuild": true,
     "health_check": false
   },
   "health_contract": {

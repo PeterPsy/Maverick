@@ -1,6 +1,6 @@
 ---
 name: maverick-v3-app-porting
-description: "Use when planning or executing the porting or adaptation of an existing Maverick app into /home/ubuntu/maverick-v3, especially when studying an app from /home/ubuntu/maverick-v2 and producing a rigorous v3 app porting plan. Enforces v3 core/app architecture first, app-agnostic core boundaries, file-by-file legacy inventory, tasklist updates for missing generic core surfaces, and end-to-end ownership of the approved plan."
+description: "Use when planning or executing the porting or adaptation of an existing Maverick app into the current workspace/repository. Enforces SDK-first v3 app creation, app-agnostic core boundaries, file-by-file source inventory, tasklist updates for missing generic core surfaces, and end-to-end ownership of the approved plan."
 ---
 
 # Maverick v3 App Porting
@@ -11,29 +11,35 @@ This skill is planning-first. Produce a rigorous plan before implementation unle
 
 ## Mandatory Pairing
 
-Also use `maverick3-code-skill` for any task that touches `/home/ubuntu/maverick-v3`.
+Also use `maverick3-code-skill` for any task that touches Maverick v3 source or workspace app files.
 
-## Required Read Order
+## Immediate SDK Gate
 
-Before proposing an app plan or changing files, read:
+When the port target is a workspace-local Maverick v3 app, check the official SDK before creating or editing the target app:
 
-1. `/home/ubuntu/maverick-v3/AGENTS.md`
-2. `/home/ubuntu/maverick-v3/apps/skills/skills/maverick3-code-skill/SKILL.md`
-3. `/home/ubuntu/maverick-v3/IMPLEMENTATION_TASKLIST.md`
-4. `/home/ubuntu/maverick-v3/docs/architecture/core_architecture.md`
-5. `/home/ubuntu/maverick-v3/docs/architecture/app_contract_architecture.md`
-6. `/home/ubuntu/maverick-v3/docs/architecture/workspace_root_architecture.md`
-7. `/home/ubuntu/maverick-v3/docs/architecture/app_sdk_architecture.md`
-8. `/home/ubuntu/maverick-v3/docs/app-sdk/getting_started.md`
-9. relevant v3 core mounting code, usually `core/apps`, `core/app_sdk`, `core/api/platform_host.py`, `core/cli`, `core/mcp`, `core/skills`, `core/runtime`, `core/secrets`, and `core/observability`
+```bash
+command -v maverick
+maverick sdk templates
+maverick sdk docs
+```
 
-Only inspect the legacy source app after the v3 architecture and core boundaries are clear.
+If `maverick` is unavailable or `maverick sdk templates` fails, stop and report that the Maverick SDK runtime surface is unavailable. Use `maverick sdk docs` for SDK instructions instead of reading documentation files from disk. Do not create a manual v3 app fallback by copying existing app folders.
+
+## Local Guidance
+
+Before proposing an app plan or changing files, read `AGENTS.md` when it is present in the current workspace/repository.
+
+Missing repository guidance in a workspace-only runtime is expected. Do not search outside the workspace and do not use missing docs as a reason to bypass SDK creation or lifecycle.
+
+Core source inspection is only for platform-source work when those paths are present in the current repository checkout.
+
+Only inspect the source app after the SDK target and workspace lifecycle are clear.
 
 ## Required Inputs
 
 Clarify these before implementation. If any are unknown, include the gap in the plan instead of guessing:
 
-- source app path, for example `/home/ubuntu/maverick-v2/apps/<app_name>`
+- source app path, supplied by the user or present under the current workspace
 - target v3 app id, using canonical hyphenated form
 - app kind: `frontend-only`, `backend-only`, `frontend+backend`, `mcp/cli-only`, `shell/host app`, or mixed
 - distribution mode: sealed app-store artifact, source-available forkable app, or workspace-local app
@@ -59,10 +65,10 @@ Use the SDK for structure; do not use it as a compatibility layer.
 Good SDK uses during porting:
 
 - generate the initial v3 app root with the closest template: `minimal`, `frontend-backend`, `agent-tool`, `data-app`, or `widget`
-- validate `app_contract.json` through `core.app-sdk.validate`
-- register/install workspace-local ports through `core.app-sdk.register-local` and `core.app-sdk.install-local`
-- inspect source/registration/install state through `core.app-sdk.status`
-- package a valid app source through `core.app-sdk.package`
+- validate `app_contract.json` through `maverick app validate <app_id>`
+- register/install workspace-local ports through `maverick app register-local <app_id>` and `maverick app install-local <app_id>`
+- inspect source/registration/install state through `maverick app status <app_id>`
+- package a valid app source through `maverick app package <app_id>`
 
 Bad SDK uses during porting:
 
@@ -73,7 +79,7 @@ Bad SDK uses during porting:
 
 ## Planning Workflow
 
-1. Read the required v3 architecture and core files.
+1. Verify the SDK is available for the target workspace.
 2. Inventory the source app in detail: manifests, frontend, backend, MCP, CLI, skills, hooks, assets, tests, storage, secrets, routes, environment assumptions, and external dependencies.
 3. Classify every meaningful v2 file with the categories in `references/file-classification.md`.
 4. Choose whether the SDK will generate the initial v3 source tree; if not, explain why.
@@ -89,19 +95,31 @@ Ported apps are not complete when files exist.
 
 Every implemented port must finish with the correct generic app-hosting flow:
 
-- installation-level apps under `/home/ubuntu/maverick-v3/apps/<app_id>` must register from `app_contract.json`, install/enable into the intended workspace when usable, and verify through generic app-hosting state
+- installation-level apps under `apps/<app_id>` must register from `app_contract.json`, install/enable into the intended workspace when usable, and verify through generic app-hosting state
 - workspace-local ports under `workspaces/<workspace_id>/apps/<app_id>` must validate, register, install, and verify with App Store/API/CLI/MCP/mount surfaces
 - source-available forks must preserve provenance and install from the correct source or workspace-local fork record
 
 Use SDK commands where appropriate:
 
 ```text
-core.app-sdk.validate
-core.app-sdk.register-local
-core.app-sdk.install-local
-core.app-sdk.status
-core.app-sdk.package
+maverick app validate <app_id>
+maverick app register-local <app_id>
+maverick app install-local <app_id>
+maverick app status <app_id>
+maverick app package <app_id>
 ```
+
+When verifying ported MCP or CLI surfaces, keep discovery scoped:
+
+```text
+maverick apps list --json
+maverick app <app_id> cli list --json
+maverick app <app_id> cli inspect <command_name> --json
+maverick app <app_id> mcp list --json
+maverick app <app_id> mcp inspect <tool_name> --json
+```
+
+Use `maverick core cli ...` and `maverick core mcp ...` only for core-owned commands and tools. Do not rely on a merged global list of all app and core commands.
 
 ## Anti-Patterns
 

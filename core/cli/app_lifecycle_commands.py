@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from core.apps.errors import AppHostingError
+from core.apps.frontend_build import app_supports_frontend_build, build_workspace_app_frontend
 from core.apps.models import AppSourceRecord, WorkspaceLocalAppProjectRecord
 from core.apps.service import delete_workspace_local_app_project, install_store_app, install_workspace_local_app, uninstall_workspace_app
 from core.apps.store import AppStore
@@ -21,13 +22,21 @@ APP_MANAGEMENT = CliInvocationPolicy(
     requires_full_access=False,
 )
 
+APP_FRONTEND_BUILD = CliInvocationPolicy(
+    operator_only=False,
+    sandbox_agent_allowed=True,
+    requires_workspace_context=True,
+    requires_full_access=False,
+)
+
 
 def app_lifecycle_command_specs(
     *,
     app_store: AppStore | None,
-    observability_store=None,
     workspace_id: str | None,
     start_path: Path | None = None,
+    observability_store=None,
+    app_event_bus=None,
 ) -> list[tuple[CliCommandDefinition, Any]]:
     """Build per-app lifecycle CLI commands for known app sources and workspace-local projects."""
     if app_store is None or workspace_id is None:
@@ -46,11 +55,48 @@ def app_lifecycle_command_specs(
     specs: list[tuple[CliCommandDefinition, Any]] = []
     for app_id in app_ids:
         if app_id in sources_by_app or app_id in projects_by_app:
-            specs.append(_install_command(app_store, app_id=app_id, sources=sources_by_app.get(app_id, []), project=projects_by_app.get(app_id), observability_store=observability_store, workspace_id=workspace_id, start_path=start_path))
+            specs.append(
+                _install_command(
+                    app_store,
+                    app_id=app_id,
+                    sources=sources_by_app.get(app_id, []),
+                    project=projects_by_app.get(app_id),
+                    observability_store=observability_store,
+                    workspace_id=workspace_id,
+                    start_path=start_path,
+                )
+            )
         if app_id in bindings_by_app:
-            specs.append(_uninstall_command(app_store, app_id=app_id, observability_store=observability_store, workspace_id=workspace_id))
+            specs.append(
+                _uninstall_command(
+                    app_store,
+                    app_id=app_id,
+                    observability_store=observability_store,
+                    workspace_id=workspace_id,
+                )
+            )
+            binding = bindings_by_app[app_id]
+            if app_supports_frontend_build(app_store, binding=binding, start_path=start_path):
+                specs.append(
+                    _frontend_build_command(
+                        app_store,
+                        app_id=app_id,
+                        app_event_bus=app_event_bus,
+                        observability_store=observability_store,
+                        workspace_id=workspace_id,
+                        start_path=start_path,
+                    )
+                )
         if app_id in projects_by_app:
-            specs.append(_remove_command(app_store, app_id=app_id, observability_store=observability_store, workspace_id=workspace_id, start_path=start_path))
+            specs.append(
+                _remove_command(
+                    app_store,
+                    app_id=app_id,
+                    observability_store=observability_store,
+                    workspace_id=workspace_id,
+                    start_path=start_path,
+                )
+            )
     return specs
 
 
@@ -74,6 +120,21 @@ def _command_definition(*, app_id: str, action: str, description: str, workspace
         workspace_id=workspace_id,
         exposure_scope="core_global",
         invocation_policy=APP_MANAGEMENT,
+        entrypoint_path=None,
+    )
+
+
+def _frontend_build_command_definition(*, app_id: str, description: str, workspace_id: str) -> CliCommandDefinition:
+    return CliCommandDefinition(
+        command_id=f"app.{app_id}.frontend.build",
+        path_segments=["app", app_id, "frontend.build"],
+        description=description,
+        argument_schema={"type": "object"},
+        owner_kind="app",
+        owner_id=app_id,
+        workspace_id=workspace_id,
+        exposure_scope="core_global",
+        invocation_policy=APP_FRONTEND_BUILD,
         entrypoint_path=None,
     )
 
@@ -221,6 +282,43 @@ def _remove_command(
             app_id=app_id,
             action="remove",
             description=f"Remove workspace-local app `{app_id}` completely from the current workspace.",
+            workspace_id=workspace_id,
+        ),
+        _handler,
+    )
+
+
+def _frontend_build_command(
+    app_store: AppStore,
+    *,
+    app_id: str,
+    app_event_bus,
+    observability_store,
+    workspace_id: str,
+    start_path: Path | None,
+) -> tuple[CliCommandDefinition, Any]:
+    def _handler(arguments: dict[str, Any], context: CliInvocationContext) -> dict[str, Any]:
+        target_workspace_id = _target_workspace_id(arguments, context, workspace_id)
+        payload = build_workspace_app_frontend(
+            app_store,
+            workspace_id=target_workspace_id,
+            app_id=app_id,
+            start_path=start_path,
+            app_event_bus=app_event_bus,
+        )
+        record_cli_audit(
+            observability_store,
+            action="cli.app.frontend.build",
+            detail=f"Built frontend for app `{app_id}` through CLI.",
+            workspace_id=target_workspace_id,
+            payload=payload,
+        )
+        return payload
+
+    return (
+        _frontend_build_command_definition(
+            app_id=app_id,
+            description=f"Build the declared frontend artifact for app `{app_id}` and refresh mounted clients.",
             workspace_id=workspace_id,
         ),
         _handler,

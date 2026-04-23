@@ -10,6 +10,9 @@
     "mode": "sealed",
     "source_access": "none"
   },
+  "visibility": {
+    "platform_roles": null
+  },
   "capabilities": {
     "mcp_tools": [
       "maverick_gallery",
@@ -24,6 +27,16 @@
     "skills": [],
     "views": [
       "gallery"
+    ],
+    "data_events": [
+      {
+        "resource": "files",
+        "description": "Emitted when workspace uploaded or generated files change through official Gallery surfaces."
+      },
+      {
+        "resource": "view-state",
+        "description": "Emitted when Gallery filters or custom view state change through official Gallery surfaces."
+      }
     ],
     "view_surfaces": [
       {
@@ -117,7 +130,7 @@
     "import": false,
     "validate_after_import": false,
     "repair_after_import": false,
-    "rebuild": false,
+    "rebuild": true,
     "health_check": true
   },
   "health_contract": {

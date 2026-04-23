@@ -20,10 +20,17 @@ REFERENCE_MANIFEST = {
 }
 
 DEFAULT_CATALOG_URL = "https://maverick-app-store.versy.ai"
+DATA_CHANGED_ACTIONS = {"pinned_apps.set", "pinned_apps.toggle", "remember_install"}
 
 
 class AppStoreValidationError(ValueError):
     """Raised when an app-store request payload is invalid."""
+
+
+def app_events_for_action(action: str) -> list[dict]:
+    if action not in DATA_CHANGED_ACTIONS:
+        return []
+    return [{"type": "maverick.app.data-changed", "resource": "state"}]
 
 
 def catalog_url() -> str:

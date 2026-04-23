@@ -41,6 +41,15 @@ body {
   box-shadow: 0 22px 70px rgba(0, 0, 0, 0.42);
 }
 
+.chat-floating-widget-stack.has-single-window .chat-floating-widget-shell {
+  box-shadow: none;
+}
+
+.chat-floating-widget-shell.is-hidden,
+.chat-floating-widget-launcher.is-hidden {
+  display: none;
+}
+
 .chat-floating-widget-shell__bar {
   display: flex;
   align-items: center;
@@ -373,6 +382,15 @@ body {
 .chat-floating-widget-shell__button:hover {
   border-color: rgba(142, 200, 255, 0.42);
   background: rgba(142, 200, 255, 0.12);
+}
+
+.chat-floating-widget-shell__button--danger {
+  color: #ff6b7d;
+}
+
+.chat-floating-widget-shell__button--danger:hover {
+  border-color: rgba(255, 107, 125, 0.4);
+  background: rgba(255, 107, 125, 0.11);
 }
 
 .chat-floating-widget-shell__button:disabled {

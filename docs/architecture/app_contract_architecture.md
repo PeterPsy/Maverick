@@ -587,7 +587,7 @@ set_custom_view
 clear_custom_view
 ```
 
-Concrete CLI and MCP command syntax may remain app-specific while `standard: true` action names and payload semantics stay common. Apps can add richer UI operations by declaring additional `standard: false` actions. Gallery and CRM are the initial implementations: agents can build a custom Gallery file view or a custom CRM record view from topic search, Memory context, CRM references, Gmail references, or any other app-owned evidence without the rendering app needing to know why those records were selected.
+Concrete CLI and MCP command syntax may remain app-specific while `standard: true` action names and payload semantics stay common. Apps can add richer UI operations by declaring additional `standard: false` actions. Gallery, CRM, and Memory implement these standard view surfaces: agents can build a custom Gallery file view, CRM record view, or Memory graph view from topic search, Memory context, CRM references, Gmail references, or any other app-owned evidence without the rendering app needing to know why those records were selected.
 
 CRM declares the same standard view actions for `account`, `contact`, `deal`, and `activity` references. Its custom view payload stores typed CRM refs such as:
 
@@ -878,6 +878,8 @@ The generated artifact is part of the app store payload, not part of the core pa
 
 The build source remains app-owned and must not introduce framework-specific assumptions into the core host.
 
+For the first frontend build operation, the core supports app sources that declare `lifecycle.rebuild: true` and contain a `package.json` with a `build` script either at the app root or at the frontend source root. The core runs the build from that package root, verifies that the declared frontend artifact root exists, and only then emits `maverick.app.frontend-changed`.
+
 The v2 `base_shell` UI/UX is the visual and interaction reference for the v3 `base-shell`.
 
 The port should preserve the shell experience, layout behavior, sidebar composition, workspace/app panels, and responsive behavior where those concepts are still valid.
@@ -945,6 +947,8 @@ This avoids losing navigation requests when an app iframe is freshly mounted aft
 - the receiving app must ignore messages from unexpected origins
 
 The initial iframe URL remains the registry-provided `frontend_mount`.
+
+Apps that declare `lifecycle.rebuild: true` may be rebuilt through the official core app-hosting frontend build operation. After a successful rebuild, the core publishes `maverick.app.frontend-changed` on the app event WebSocket. The shell should react to that event by remounting only the affected app iframe with a shell-owned cache-busting query parameter. This refresh path is for updated frontend artifacts after rebuilds. It must not be used for app-owned internal navigation, must not poll mounted frontend documents, and must not require a full shell page reload.
 
 This avoids unnecessary reloads, keeps app state alive, and preserves a clean core/app boundary.
 
@@ -1527,6 +1531,50 @@ The contract declares which surfaces the app exposes, but the platform still dec
 - app source skills are templates, not directly visible runtime skills
 - the Skills app copies bundled skill templates into workspace-owned editable skill data
 - provider-specific runtime installation of enabled workspace skill assets, optionally narrowed by explicit session skill ids, is handled by the selected provider adapter
+
+Workspace agents and users must invoke core-owned and app-owned CLI and MCP capabilities through scoped core-managed workspace surfaces, not by discovering or executing files under installation-level `apps/<app_id>/`.
+Discovery must be narrow by default so agents do not pull every command from every installed app into context.
+
+The compact installed-app discovery shape is:
+
+```text
+maverick apps list --json
+```
+
+Core CLI discovery and invocation use:
+
+```text
+maverick core cli list --json
+maverick core cli inspect <command_id> --json
+maverick core cli run <command_id> ...
+```
+
+App CLI discovery and invocation use:
+
+```text
+maverick app <app_id> cli list --json
+maverick app <app_id> cli inspect <command_name> --json
+maverick app <app_id> cli run <command_name> ...
+```
+
+Core MCP discovery and invocation use:
+
+```text
+maverick core mcp list --json
+maverick core mcp inspect <tool_name> --json
+maverick core mcp call <tool_name> ...
+```
+
+App MCP discovery and invocation use:
+
+```text
+maverick app <app_id> mcp list --json
+maverick app <app_id> mcp inspect <tool_name> --json
+maverick app <app_id> mcp call <tool_name> ...
+```
+
+The wrapper resolves the current workspace, checks the enabled app registry, applies CLI or MCP invocation policy, resolves the app-owned data root when applicable, and then executes the declared entrypoint through the platform host.
+Sandboxed workspace agents therefore do not need to know where an app source artifact lives outside the workspace.
 
 When app-owned MCP tools are surfaced through the platform, the host may apply namespacing to avoid collisions with core-owned assets or assets from other apps.
 

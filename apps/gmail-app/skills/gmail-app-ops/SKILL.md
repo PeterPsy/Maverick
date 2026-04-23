@@ -28,6 +28,31 @@ Use this skill when the user asks you to work with their Google Workspace Gmail 
 8. Request explicit approval with `gmail_app_request_send_approval`.
 9. Send only with `gmail_app_send_approved` after the user confirms.
 
+## Workspace Attachments
+
+Send approvals may include workspace files generated or uploaded by the user. Pass one of these fields to CLI/MCP:
+
+```json
+{
+  "workspace_attachments": ["storage/generated/report.docx"]
+}
+```
+
+or:
+
+```json
+{
+  "attachments": [
+    {
+      "workspace_relative_path": "storage/generated/report.docx",
+      "filename": "report.docx"
+    }
+  ]
+}
+```
+
+Only files under `storage/generated/` and `storage/uploaded/` are accepted. Confirm the recipients, subject, full body, and attachment filenames before sending.
+
 ## Confirmation Standard
 
 Before sending, show:
@@ -35,6 +60,7 @@ Before sending, show:
 - recipients
 - subject
 - full body
+- attachment filenames, if any
 - thread context, if any
 
 The user's confirmation must clearly authorize sending that message.

@@ -11,6 +11,7 @@ from core.api.app_registry import resolve_app_surface
 from core.api.http import StartResponse, json_response, query_params, read_json_body, status_line, text_response
 from core.api.platform_state import PlatformState
 from core.apps.errors import AppHostingError, WorkspaceAppBindingNotFoundError
+from core.apps.service import build_workspace_app_frontend
 from core.providers.service import resolve_provider_for_workspace
 from core.secrets.errors import SecretError
 from core.secrets.service import bind_app_secret, build_secret_ref, create_platform_secret, resolve_app_secret, rotate_platform_secret
@@ -101,6 +102,35 @@ def handle_app_frontend(
     if frontend is None:
         return text_response(start_response, "App frontend not found", status="404 Not Found")
     return serve_frontend(start_response, frontend_root=(source_root / frontend).resolve(), subpath=subpath)
+
+
+def handle_app_frontend_build(
+    state: PlatformState,
+    *,
+    workspace_id: str,
+    app_id: str,
+    user: UserRecord | None,
+    start_path: Path,
+    start_response: StartResponse,
+) -> list[bytes]:
+    """Build one app frontend through the hosted core process and notify mounted clients."""
+    if user is None:
+        return json_response(start_response, {"error": "authentication_required"}, status="401 Unauthorized")
+    if user.platform_role != "admin":
+        return json_response(start_response, {"error": "app_management_forbidden"}, status="403 Forbidden")
+    try:
+        payload = build_workspace_app_frontend(
+            state.app_store,
+            workspace_id=workspace_id,
+            app_id=app_id,
+            start_path=start_path,
+            app_event_bus=state.app_event_bus,
+        )
+    except WorkspaceAppBindingNotFoundError:
+        return json_response(start_response, {"error": "app_not_installed"}, status="404 Not Found")
+    except AppHostingError as error:
+        return json_response(start_response, {"error": "frontend_build_failed", "detail": str(error)}, status="400 Bad Request")
+    return json_response(start_response, payload)
 
 
 def handle_app_backend(

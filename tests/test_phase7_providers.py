@@ -23,6 +23,7 @@ from core.providers.service import (
     register_builtin_providers,
     resolve_provider_for_runtime_session,
 )
+from core.runtime.workspace_api_token import verify_workspace_api_token
 from core.providers.store import MongoProviderStore, ProviderCollections
 from core.runtime.service import create_runtime_session
 from core.runtime.store import MongoRuntimeStore, RuntimeCollections
@@ -238,9 +239,23 @@ class Phase7ProvidersTestCase(unittest.TestCase):
         self.assertEqual(launch_spec.writable_roots, [str(repo_root / "workspaces" / "acme")])
         self.assertIn("CODEX_HOME", launch_spec.env_overrides)
         self.assertEqual(launch_spec.env_overrides["MAVERICK_WORKSPACE_ROOT"], str(repo_root / "workspaces" / "acme"))
+        self.assertEqual(launch_spec.env_overrides["MAVERICK_WORKSPACE_ID"], "acme")
+        self.assertEqual(launch_spec.env_overrides["MAVERICK_EFFECTIVE_MODE"], "sandbox")
+        self.assertEqual(
+            verify_workspace_api_token(launch_spec.env_overrides["MAVERICK_RUNTIME_API_TOKEN"]),
+            {"workspace_id": "acme", "runtime_session_id": "sess-1"},
+        )
         self.assertEqual(launch_spec.env_overrides["TMPDIR"], str(repo_root / "workspaces" / "acme" / "runtime" / "sessions" / "sess-1"))
         self.assertEqual(launch_spec.env_overrides["HOME"], launch_spec.env_overrides["CODEX_HOME"])
+        runtime_bin = repo_root / "workspaces" / "acme" / "runtime" / "sessions" / "sess-1" / "bin"
+        self.assertTrue((runtime_bin / "maverick").is_file())
+        self.assertTrue(os.access(runtime_bin / "maverick", os.X_OK))
+        self.assertIn("/api/runtime/cli", (runtime_bin / "maverick").read_text(encoding="utf-8"))
+        self.assertEqual(launch_spec.env_overrides["PATH"].split(os.pathsep)[0], str(runtime_bin))
         self.assertIn(str(Path(__file__).resolve().parents[1]), launch_spec.env_overrides["PYTHONPATH"])
+        self.assertNotIn(str(Path(__file__).resolve().parents[1] / "core"), launch_spec.command)
+        self.assertNotIn(str(Path(__file__).resolve().parents[1] / "apps"), launch_spec.command)
+        self.assertNotIn(str(Path(__file__).resolve().parents[1] / "scripts"), launch_spec.command)
         self.assertTrue((Path(launch_spec.env_overrides["CODEX_HOME"])).is_dir())
 
     def test_codex_nvm_dependency_root_is_standalone_binary_parent(self) -> None:

@@ -1,6 +1,7 @@
 """Public app-hosting service facade."""
 
 from core.apps.forks import fork_store_app_to_workspace
+from core.apps.frontend_build import build_workspace_app_frontend
 from core.apps.health import probe_workspace_app_health
 from core.apps.hook_payloads import build_app_export_hook_payload, build_app_health_hook_payload
 from core.apps.installation import install_store_app, install_workspace_local_app
@@ -19,6 +20,7 @@ from core.apps.workspace_local_deletion import delete_workspace_local_app_projec
 __all__ = [
     "build_app_export_hook_payload",
     "build_app_health_hook_payload",
+    "build_workspace_app_frontend",
     "build_workspace_app_binding_record",
     "delete_workspace_local_app_project",
     "fork_store_app_to_workspace",

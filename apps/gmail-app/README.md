@@ -35,15 +35,40 @@ Implemented:
 - fake Gmail client for deterministic local use and tests
 - minimal HTTP Gmail adapter for access-token-backed API calls
 - explicit send approval before every send
+- workspace file attachments from `storage/generated/` and `storage/uploaded/` for approved sends
 - generic Gmail reference provider for `thread` and `message` entities
 
 Deferred:
 
 - persistent app-scoped refresh-token storage through core secrets
 - native Gmail drafts
-- attachments
 - bulk send
 - autonomous cross-app persistence
+
+## Sending Attachments
+
+Agents can attach workspace files when requesting send approval through CLI or MCP by passing either:
+
+```json
+{
+  "workspace_attachments": ["storage/generated/report.docx"]
+}
+```
+
+or:
+
+```json
+{
+  "attachments": [
+    {
+      "workspace_relative_path": "storage/generated/report.docx",
+      "filename": "report.docx"
+    }
+  ]
+}
+```
+
+Attachment paths are validated against the active workspace root and must live under `storage/generated/` or `storage/uploaded/`. Gmail App stores only attachment metadata in `data/gmail-app`; file bytes are read from workspace storage only when the approved message is sent.
 
 ## Google Workspace Setup Notes
 

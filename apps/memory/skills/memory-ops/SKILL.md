@@ -12,17 +12,33 @@ Use this skill when a user asks a workspace-specific question, asks about prior 
 Before answering a workspace-specific question, retrieve context:
 
 ```bash
-memory context --query "<user question>" --limit 8
+maverick app memory cli run memory --action context --query "<user question>" --limit 8
 ```
 
 Use returned provenance to mention files or app entities only when they are relevant.
+
+## Memory Views
+
+When the user asks to filter or curate the Memory graph UI, use the Memory app view surface instead of only reading data:
+
+```bash
+maverick app memory cli run memory --action set_view_filter --query "Versy"
+```
+
+For a curated graph, pass Memory node references:
+
+```bash
+maverick app memory cli run memory --action set_custom_view --title "Versy context" --refs '[{"app_id":"memory","entity_type":"node","entity_id":"node_123"}]'
+```
+
+Use `clear_custom_view` to return the app to normal graph search mode.
 
 ## Saving Memory
 
 Save only stable, business-relevant information:
 
 ```bash
-memory remember --title "<short title>" --body "<fact or note>" --type note
+maverick app memory cli run memory --action remember --title "<short title>" --body "<fact or note>" --type note
 ```
 
 Prefer updating or linking existing nodes over creating duplicates.
@@ -32,13 +48,13 @@ Prefer updating or linking existing nodes over creating duplicates.
 Attach files when they are relevant evidence:
 
 ```bash
-memory attach-file --node <node_id> --file-id <file_id> --workspace-relative-path storage/uploaded/example.pdf --reason "<why it matters>"
+maverick app memory cli run memory --action attach_file --node-id <node_id> --file-id <file_id> --workspace-relative-path storage/uploaded/example.pdf --reason "<why it matters>"
 ```
 
 Attach app entities when they clarify people, companies, deals, emails, or records:
 
 ```bash
-memory attach-entity --node <node_id> --app crm --type person --id person_123 --title "Mario Rossi"
+maverick app memory cli run memory --action attach_app_entity --node-id <node_id> --app crm --type person --id person_123 --title "Mario Rossi"
 ```
 
 ## Relationship Discipline
@@ -46,8 +62,7 @@ memory attach-entity --node <node_id> --app crm --type person --id person_123 --
 Create inferred relationships only with a reason and confidence:
 
 ```bash
-memory link --source <node_id> --target <node_id> --kind supports --weight 0.8 --confidence 0.7 --reason "<why these are connected>"
+maverick app memory cli run memory --action link --source-node-id <node_id> --target-node-id <node_id> --kind supports --weight 0.8 --confidence 0.7 --reason "<why these are connected>"
 ```
 
 Do not save speculative facts as confirmed memory. If uncertain, mark lower confidence or ask the user.
-

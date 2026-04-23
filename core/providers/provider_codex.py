@@ -100,8 +100,9 @@ class CodexProviderAdapter:
         workdir = Path(session.workdir)
         workspace_root = Path(session.workspace_root)
         runtime_root = Path(session.runtime_root)
+        host_command = self._runtime_command(self.codex_command)
         runtime_home = self._prepare_runtime_home(session)
-        runtime_bin = self._prepare_runtime_bin(session)
+        runtime_bin = self._prepare_runtime_bin(session, host_command=host_command)
         env = self._build_subprocess_env(
             workdir=workdir,
             workspace_root=workspace_root,
@@ -118,6 +119,7 @@ class CodexProviderAdapter:
                 workspace_root=workspace_root,
                 runtime_root=runtime_root,
                 execution_mode=session.effective_mode,
+                host_command=host_command,
             ),
             env_overrides=env,
             credential_binding_id=credential_binding_id,
@@ -167,8 +169,15 @@ class CodexProviderAdapter:
             )
         return materializations
 
-    def _build_command(self, *, workspace_root: Path, runtime_root: Path, execution_mode: str) -> list[str]:
-        host_command = self._runtime_command(self.codex_command)
+    def _build_command(
+        self,
+        *,
+        workspace_root: Path,
+        runtime_root: Path,
+        execution_mode: str,
+        host_command: str | None = None,
+    ) -> list[str]:
+        host_command = host_command or self._runtime_command(self.codex_command)
         command = [host_command]
         for feature in CODEX_DISABLED_RUNTIME_FEATURES:
             command.extend(["--disable", feature])
@@ -283,13 +292,27 @@ class CodexProviderAdapter:
         remove_codex_system_skills(runtime_home)
         return runtime_home
 
-    def _prepare_runtime_bin(self, session: RuntimeSessionRecord) -> Path:
+    def _prepare_runtime_bin(self, session: RuntimeSessionRecord, *, host_command: str | None = None) -> Path:
         runtime_bin = Path(session.runtime_root) / "bin"
         runtime_bin.mkdir(parents=True, exist_ok=True)
         maverick = runtime_bin / "maverick"
         maverick.write_text(_workspace_maverick_wrapper_source(), encoding="utf-8")
         maverick.chmod(0o755)
+        host_command_path = Path(host_command or self._runtime_command(self.codex_command))
+        self._install_runtime_tool_if_present(
+            runtime_bin=runtime_bin,
+            source=self._vendored_codex_tool_binary(host_command_path, "rg"),
+            tool_name="rg",
+        )
         return runtime_bin
+
+    def _install_runtime_tool_if_present(self, *, runtime_bin: Path, source: Path | None, tool_name: str) -> None:
+        destination = runtime_bin / tool_name
+        self._reset_path(destination)
+        if source is None or not source.is_file():
+            return
+        shutil.copy2(source, destination)
+        destination.chmod(destination.stat().st_mode | 0o111)
 
     def _source_codex_home(self) -> Path:
         configured = str(os.environ.get("MAVERICK3_CODEX_HOME") or os.environ.get("CODEX_HOME") or "").strip()

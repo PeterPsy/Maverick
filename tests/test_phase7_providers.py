@@ -23,6 +23,7 @@ from core.providers.service import (
     register_builtin_providers,
     resolve_provider_for_runtime_session,
 )
+from core.workspaces.models import WorkspaceGovernanceRecord
 from core.runtime.workspace_api_token import verify_workspace_api_token
 from core.providers.store import MongoProviderStore, ProviderCollections
 from core.runtime.service import create_runtime_session
@@ -305,6 +306,68 @@ class Phase7ProvidersTestCase(unittest.TestCase):
         self.assertIn(f"{rg}={home / 'workspace' / 'runtime' / 'bin' / 'rg'}", sandbox_command)
         separator_index = sandbox_command.index("--")
         self.assertEqual(sandbox_command[separator_index + 1], str(home / "workspace" / "runtime" / "bin" / "codex"))
+
+    def test_codex_full_access_runtime_bin_prefers_vendored_rg_binary(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp)
+            node_version_root = home / ".nvm" / "versions" / "node" / "v24.14.0"
+            codex_bin = node_version_root / "bin" / "codex"
+            codex_js = node_version_root / "lib" / "node_modules" / "@openai" / "codex" / "bin" / "codex.js"
+            standalone = (
+                node_version_root
+                / "lib"
+                / "node_modules"
+                / "@openai"
+                / "codex"
+                / "node_modules"
+                / "@openai"
+                / "codex-linux-x64"
+                / "vendor"
+                / "x86_64-unknown-linux-musl"
+                / "codex"
+                / "codex"
+            )
+            rg = standalone.parent.parent / "path" / "rg"
+            codex_js.parent.mkdir(parents=True)
+            standalone.parent.mkdir(parents=True)
+            rg.parent.mkdir(parents=True)
+            codex_js.write_text("#!/usr/bin/env node\n", encoding="utf-8")
+            standalone.write_text("binary\n", encoding="utf-8")
+            rg.write_text("rg-binary\n", encoding="utf-8")
+            codex_bin.parent.mkdir(parents=True)
+            codex_bin.symlink_to("../lib/node_modules/@openai/codex/bin/codex.js")
+
+            runtime_store = self.make_runtime_store()
+            repo_root = self.make_repo_root()
+            session = create_runtime_session(
+                runtime_store,
+                session_id="sess-full-rg",
+                workspace_id="default",
+                agent_id="agent-1",
+                requested_mode="full-access",
+                governance=WorkspaceGovernanceRecord(
+                    workspace_id="default",
+                    allow_app_installation=True,
+                    allow_agent_creation=True,
+                    allow_agent_management=True,
+                    allow_custom_apps=True,
+                    allow_full_access_runtime=True,
+                    created_at=datetime.now(UTC),
+                    updated_at=datetime.now(UTC),
+                ),
+                platform_allows_full_access=True,
+                start_path=repo_root,
+            )
+
+            with patch.dict(os.environ, {"HOME": str(home)}, clear=False):
+                with patch("core.providers.provider_codex.shutil.which", return_value=str(codex_bin)):
+                    spec = CodexProviderAdapter(codex_command="codex").build_launch_spec(session)
+
+        runtime_bin = Path(spec.env_overrides["PATH"].split(os.pathsep)[0])
+        runtime_rg = runtime_bin / "rg"
+        self.assertEqual(spec.command[0], str(standalone))
+        self.assertEqual(runtime_rg.read_text(encoding="utf-8"), "rg-binary\n")
+        self.assertTrue(os.access(runtime_rg, os.X_OK))
 
     def test_codex_runtime_home_is_prepared_from_configured_source_home(self) -> None:
         runtime_store = self.make_runtime_store()

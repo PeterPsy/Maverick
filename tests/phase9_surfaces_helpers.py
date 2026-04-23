@@ -22,7 +22,7 @@ from core.cli.models import CliInvocationContext
 from core.cli.service import list_core_cli_commands, run_core_cli_command
 from core.mcp.errors import McpInvocationNotAllowedError
 from core.mcp.models import McpInvocationContext
-from core.mcp.service import build_workspace_mcp_surface, list_mcp_tools
+from core.mcp.service import build_workspace_mcp_surface, call_mcp_tool, list_mcp_tools
 from core.providers.service import prepare_runtime_skills, register_builtin_providers
 from core.providers.store import MongoProviderStore, ProviderCollections
 from core.runtime.service import create_runtime_session

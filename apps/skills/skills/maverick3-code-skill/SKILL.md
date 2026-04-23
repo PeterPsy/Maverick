@@ -7,11 +7,35 @@ description: "Use when working on Maverick v3 code, docs, tests, repository work
 
 Use this skill for Maverick v3 engineering work in the current repository or workspace.
 
-This skill should orient the agent, not script every step. Read the local repository first, reason from the current code and docs, and choose the smallest reliable path to finish the user's goal.
+This skill should orient the agent, not script every step. Resolve the canonical developer context first, then read the local repository that is actually available to the current session, and choose the smallest reliable path to finish the user's goal.
 
 ## Source Of Truth
 
-When present, read and follow:
+Read the canonical developer documents through the core first:
+
+```bash
+maverick core cli run developer-context.list --json
+maverick core cli run developer-context.read --doc-id agents_working_agreement --json
+maverick core cli run developer-context.read --doc-id core_architecture --json
+maverick core cli run developer-context.read --doc-id workspace_root_architecture --json
+maverick core cli run developer-context.read --doc-id app_contract_architecture --json
+```
+
+The canonical developer document ids are:
+
+- `agents_working_agreement`
+- `core_architecture`
+- `workspace_root_architecture`
+- `app_contract_architecture`
+
+If the caller specifically needs MCP transport, use:
+
+```bash
+maverick core mcp call developer-context.list
+maverick core mcp call developer-context.read --doc-id core_architecture
+```
+
+After resolving canonical developer context, also read and follow these local repository files when they are present in the current filesystem:
 
 - `AGENTS.md`
 - `README.md`
@@ -133,8 +157,12 @@ Use scoped machine-readable discovery:
 
 ```bash
 maverick apps list --json
+maverick core cli run developer-context.list --json
+maverick core cli run developer-context.read --doc-id <doc_id> --json
 maverick core cli list --json
 maverick core mcp list --json
+maverick core mcp call developer-context.list
+maverick core mcp call developer-context.read --doc-id <doc_id>
 maverick app <app_id> cli list --json
 maverick app <app_id> mcp list --json
 ```

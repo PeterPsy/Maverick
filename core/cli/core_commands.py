@@ -7,6 +7,7 @@ from typing import Any
 
 from core.apps.store import AppStore
 from core.cli.app_sdk_commands import app_sdk_command_specs
+from core.cli.developer_context_commands import developer_context_command_specs
 from core.cli.models import CliCommandDefinition
 from core.cli.recovery_commands import recovery_command_specs
 from core.cli.runtime_provider_commands import runtime_provider_command_specs
@@ -35,6 +36,7 @@ def _core_command_specs(
     """Build all core-owned CLI command specs without mixing command domains."""
     specs: list[tuple[CliCommandDefinition, Any]] = []
     specs.extend(workspace_command_specs(workspace_store=workspace_store))
+    specs.extend(developer_context_command_specs(start_path=start_path))
     specs.extend(
         app_sdk_command_specs(
             app_store=app_store,

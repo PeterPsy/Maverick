@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from core.apps.store import AppStore
+from core.mcp.developer_context_tools import developer_context_tool_specs
 from core.mcp.models import McpToolDefinition
 from core.mcp.recovery_tools import recovery_tool_specs
 from core.mcp.runtime_provider_tools import runtime_provider_tool_specs
@@ -34,6 +35,7 @@ def _core_tool_specs(
     """Build all core-owned MCP tool specs without mixing tool domains."""
     specs: list[tuple[McpToolDefinition, Any]] = []
     specs.extend(workspace_tool_specs(workspace_store=workspace_store))
+    specs.extend(developer_context_tool_specs(start_path=start_path))
     specs.extend(runtime_provider_tool_specs(provider_store=provider_store, runtime_store=runtime_store))
     specs.extend(secret_tool_specs(secret_store=secret_store, observability_store=observability_store))
     specs.extend(

@@ -95,7 +95,8 @@ Rules:
 ## Skills
 
 - Maverick product skills are app-owned extension data, not core assets.
-- the versioned source for bundled Maverick skills lives under `apps/skills/skills/`
+- bundled Maverick skill templates may live under app-owned source directories such as `apps/skills/skills/`, `apps/chat/skills/`, or `apps/<app_id>/skills/`
+- the Skills app seeds bundled templates by scanning `apps/*/skills/` for direct child directories that contain `SKILL.md`
 - the Skills app copies those bundled skill templates into each workspace under `workspaces/<workspace_id>/data/skills/skills/`
 - base runtime sessions may use every enabled workspace-owned skill copy from the workspace Skills app
 - agent-type runtime sessions may narrow that set with the agent type's selected workspace skill ids
@@ -106,9 +107,12 @@ Rules:
 
 - do not guess app CLI or MCP commands, and do not inspect installation-level app source just to discover how to call an installed app
 - use `maverick apps list --json` for compact installed-app discovery
+- use `maverick core cli run developer-context.list --json` to discover canonical developer documents exposed by the core
+- use `maverick core cli run developer-context.read --doc-id <doc_id> --json` to read one canonical developer document through the core
 - use `maverick core cli list --json`, `maverick core cli inspect <command_id> --json`, and `maverick core cli run <command_id> ...` for core CLI commands
 - use `maverick app <app_id> cli list --json`, `maverick app <app_id> cli inspect <command_name> --json`, and `maverick app <app_id> cli run <command_name> ...` for app CLI commands
 - use `maverick app <app_id> frontend build --json` for official app frontend rebuilds so mounted clients receive the core refresh event
+- use `maverick core mcp call developer-context.list` and `maverick core mcp call developer-context.read --doc-id <doc_id>` when the caller needs the same developer context over MCP
 - use `maverick core mcp list --json`, `maverick core mcp inspect <tool_name> --json`, and `maverick core mcp call <tool_name> ...` for core MCP tools
 - use `maverick app <app_id> mcp list --json`, `maverick app <app_id> mcp inspect <tool_name> --json`, and `maverick app <app_id> mcp call <tool_name> ...` for app MCP tools
 - keep discovery scoped; do not ask the core for a merged list of every command and tool across every app

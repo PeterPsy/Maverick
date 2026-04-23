@@ -8,6 +8,70 @@ from tests.phase9_surfaces_helpers import *
 class TestPhase9McpCliSurfaces(Phase9SurfacesBase):
     """Focused test slice."""
 
+    def test_developer_context_surfaces_are_listed_for_workspace_agents(self) -> None:
+        repo_root = self.make_repo_root()
+
+        commands = list_core_cli_commands(workspace_id="default", start_path=repo_root)
+        tools = list_mcp_tools(workspace_id="default", start_path=repo_root)
+
+        self.assertIn("developer-context.list", [command.command_id for command in commands])
+        self.assertIn("developer-context.read", [command.command_id for command in commands])
+        self.assertIn("developer-context.list", [tool.tool_name for tool in tools])
+        self.assertIn("developer-context.read", [tool.tool_name for tool in tools])
+
+    def test_developer_context_cli_and_mcp_return_canonical_document_text(self) -> None:
+        repo_root = self.make_repo_root()
+        (repo_root / "AGENTS.md").write_text("Working agreement body.\n", encoding="utf-8")
+        (repo_root / "docs" / "architecture" / "core_architecture.md").write_text("# Core\n\nCanonical core architecture.\n", encoding="utf-8")
+        (repo_root / "docs" / "architecture" / "workspace_root_architecture.md").write_text("# Workspace\n\nCanonical workspace architecture.\n", encoding="utf-8")
+        (repo_root / "docs" / "architecture" / "app_contract_architecture.md").write_text("# App Contract\n\nCanonical app contract architecture.\n", encoding="utf-8")
+        sandbox_cli_context = CliInvocationContext(
+            caller_kind="sandbox_agent",
+            workspace_id="default",
+            agent_id="agent-1",
+            effective_mode="sandbox",
+        )
+        sandbox_mcp_context = McpInvocationContext(
+            caller_kind="sandbox_agent",
+            workspace_id="default",
+            agent_id="agent-1",
+            effective_mode="sandbox",
+        )
+
+        cli_list = run_core_cli_command(
+            command_id="developer-context.list",
+            context=sandbox_cli_context,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+        cli_read = run_core_cli_command(
+            command_id="developer-context.read",
+            context=sandbox_cli_context,
+            workspace_id="default",
+            start_path=repo_root,
+            arguments={"doc_id": "core_architecture"},
+        )
+        mcp_read = call_mcp_tool(
+            tool_name="developer-context.read",
+            context=sandbox_mcp_context,
+            workspace_id="default",
+            start_path=repo_root,
+            arguments={"doc_id": "agents_working_agreement"},
+        )
+
+        self.assertEqual([item["doc_id"] for item in cli_list["items"]], [
+            "agents_working_agreement",
+            "core_architecture",
+            "workspace_root_architecture",
+            "app_contract_architecture",
+        ])
+        self.assertEqual(cli_read["doc_id"], "core_architecture")
+        self.assertEqual(cli_read["source_path"], "docs/architecture/core_architecture.md")
+        self.assertIn("Canonical core architecture.", cli_read["content"])
+        self.assertEqual(mcp_read["doc_id"], "agents_working_agreement")
+        self.assertEqual(mcp_read["source_path"], "AGENTS.md")
+        self.assertIn("Working agreement body.", mcp_read["content"])
+
     def test_workspace_mcp_surface_merges_core_and_enabled_app_tools(self) -> None:
         store = self.make_app_store()
         workspace_store = self.make_workspace_store()

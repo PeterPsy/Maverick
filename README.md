@@ -4,11 +4,15 @@ Maverick is a workspace-isolated AI operating environment for building, running,
 
 Maverick v3 is a clean rebuild. It is not a backward-compatible continuation of Maverick v2.
 
+Public launch description:
+
+Maverick is an experimental open source, self-hostable platform for workspace-isolated agent apps, not a production-ready hosted service.
+
 ## Status
 
 Maverick v3 is experimental and not production-ready.
 
-Do not expose it to the public internet or store production secrets in it yet. Known security blockers are documented in `SECURITY_AUDIT.md`; open source launch readiness is tracked in `OPEN_SOURCE.md`.
+Do not expose it to the public internet or store production secrets in it yet. Known security blockers are documented in `SECURITY_AUDIT.md`; open source launch readiness is tracked in `OPEN_SOURCE.md`; the first-release execution plan is tracked in `OPEN_SOURCE_CHECKLIST.md`.
 
 ## What Maverick Provides
 
@@ -19,6 +23,24 @@ Do not expose it to the public internet or store production secrets in it yet. K
 - sandbox-first runtime policy for non-default workspaces
 - provider-backed runtime sessions for agents
 - app CLI and MCP discovery surfaces
+
+## What Maverick Is Not
+
+Maverick is not yet:
+
+- a production-safe deployment target
+- a hosted SaaS service
+- a hardened internet-facing multi-tenant platform
+- a backward-compatible Maverick v2 migration layer
+- a trusted third-party app execution platform
+
+## Current Limitations
+
+- security hardening remains incomplete for internet-facing or sensitive deployments
+- production secret storage is not implemented yet
+- provider-backed agent execution currently assumes Codex for the real runtime path
+- deployment guidance is suitable for evaluation, not for production endorsement
+- setup is intentionally CLI-first in this phase; a setup UI is planned later
 
 ## Repository Layout
 
@@ -46,21 +68,15 @@ The current local bootstrap can run core tests without MongoDB, but a full hoste
 ## Quick Start
 
 ```bash
-python3 -m venv .venv
-. .venv/bin/activate
-python3 -m pip install --upgrade pip
-python3 -m pip install -e ".[dev]"
-# Alternatively: python3 -m pip install -r requirements-dev.txt
-
-python3 -m unittest discover -s tests -p 'test_*.py'
-python3 -m compileall core tests scripts
-python3 scripts/check_unused_imports.py
+./scripts/bootstrap_local.sh
+source .venv/bin/activate
+./scripts/verify_local.sh
 ```
 
 To run the ASGI host locally:
 
 ```bash
-uvicorn core.api.asgi_application:app --host 127.0.0.1 --port 8000
+./scripts/run_local.sh
 ```
 
 Then open `http://127.0.0.1:8000/health`.
@@ -70,9 +86,7 @@ Then open `http://127.0.0.1:8000/health`.
 Some built-in apps commit `frontend/dist/` so they can mount without a build step. Apps with frontend source and a `package-lock.json` can be rebuilt from their app directory:
 
 ```bash
-cd apps/chat
-npm ci
-npm run build
+cd apps/chat && npm ci && npm run build
 ```
 
 Generated artifact policy is documented in `docs/development/generated_artifacts.md`.
@@ -81,18 +95,37 @@ Generated artifact policy is documented in `docs/development/generated_artifacts
 
 Maverick product skills are app-owned extension data.
 
-Bundled skill templates live under `apps/skills/skills/`. The Skills app copies workspace-owned skill templates into `workspaces/<workspace_id>/data/skills/skills/`.
+Bundled skill templates live under app-owned source directories such as `apps/skills/skills/` and `apps/<app_id>/skills/`. The Skills app copies workspace-owned skill templates into `workspaces/<workspace_id>/data/skills/skills/`.
 
 Maverick runtime sessions do not rely on `~/.codex/skills`, plugin skills, or repository `local-skills/` directories.
 
-## Architecture Docs
+## Docs Map
 
-Read these before changing structure or implementation:
+Start here:
+
+- `docs/deployment/local_setup.md`
+- `docs/deployment/self_hosted_evaluation.md`
+- `docs/security/threat_model.md`
+- `docs/reference/core_surfaces.md`
+- `docs/reference/runtime_provider_model.md`
+- `docs/reference/persistence_model.md`
+
+Architecture source of truth:
 
 - `docs/architecture/core_architecture.md`
 - `docs/architecture/workspace_root_architecture.md`
 - `docs/architecture/app_contract_architecture.md`
 - `IMPLEMENTATION_TASKLIST.md`
+
+Decision summaries:
+
+- `docs/adr/README.md`
+
+Open source launch and roadmap:
+
+- `OPEN_SOURCE.md`
+- `OPEN_SOURCE_CHECKLIST.md`
+- `ROADMAP.md`
 
 If code and docs disagree, fix the disagreement in the same change.
 
@@ -106,6 +139,7 @@ Important current limitations:
 - app frontend and backend isolation is still being hardened
 - public internet deployment is not supported
 - recovery automation and runtime provider policies need additional production gates
+- production secret storage is not implemented yet
 
 ## Contributing
 

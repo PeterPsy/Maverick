@@ -7,7 +7,7 @@ name = "maverick-v3"
 version = "0.1.0"
 description = "Workspace-isolated AI operating environment for agent-powered apps."
 requires-python = ">=3.12"
-license = { text = "MIT" }
+license = "MIT"
 readme = "README.md"
 dependencies = [
     "uvicorn[standard]>=0.30",
@@ -15,7 +15,6 @@ dependencies = [
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Topic :: Software Development :: Libraries :: Application Frameworks",
@@ -31,3 +30,7 @@ maverick = "core.app_sdk.cli:main"
 
 [tool.setuptools]
 include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["core*"]
+namespaces = true

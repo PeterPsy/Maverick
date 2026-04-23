@@ -59,6 +59,7 @@ def _contract_payload(request: AppSdkCreateRequest) -> dict[str, Any]:
         has_frontend = True
     has_agent = request.template_id in {"agent-tool", "data-app", "entity-sqlite"}
     has_data_hooks = request.template_id in {"data-app", "entity-sqlite"}
+    has_buildable_frontend = request.template_id in {"react-vite", "entity-sqlite"}
     is_entity = request.template_id == "entity-sqlite"
     entities = normalize_entities(request.entities) if is_entity else []
     distribution = (
@@ -164,7 +165,7 @@ def _contract_payload(request: AppSdkCreateRequest) -> dict[str, Any]:
             "import": False,
             "validate_after_import": False,
             "repair_after_import": False,
-            "rebuild": False,
+            "rebuild": has_buildable_frontend,
             "health_check": has_data_hooks,
         },
         "health_contract": {"mode": "hook" if has_data_hooks else "none", "degraded_on_failure": True},

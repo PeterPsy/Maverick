@@ -15,24 +15,16 @@ Read the canonical developer documents through the core first:
 
 ```bash
 maverick core cli run developer-context.list --json
-maverick core cli run developer-context.read --doc-id agents_working_agreement --json
-maverick core cli run developer-context.read --doc-id core_architecture --json
-maverick core cli run developer-context.read --doc-id workspace_root_architecture --json
-maverick core cli run developer-context.read --doc-id app_contract_architecture --json
+maverick core cli run developer-context.read --doc-id <doc_id> --json
 ```
 
-The canonical developer document ids are:
-
-- `agents_working_agreement`
-- `core_architecture`
-- `workspace_root_architecture`
-- `app_contract_architecture`
+Use `developer-context.list` to discover the canonical working-agreement and architecture documents, then read only the documents needed for the task.
 
 If the caller specifically needs MCP transport, use:
 
 ```bash
 maverick core mcp call developer-context.list
-maverick core mcp call developer-context.read --doc-id core_architecture
+maverick core mcp call developer-context.read --doc-id <doc_id>
 ```
 
 After resolving canonical developer context, also read and follow these local repository files when they are present in the current filesystem:
@@ -42,9 +34,7 @@ After resolving canonical developer context, also read and follow these local re
 - `CONTRIBUTING.md`
 - `SECURITY.md`
 - `OPEN_SOURCE.md`
-- `docs/architecture/core_architecture.md`
-- `docs/architecture/workspace_root_architecture.md`
-- `docs/architecture/app_contract_architecture.md`
+- the local architecture documents in the repository docs tree
 - `IMPLEMENTATION_TASKLIST.md`
 
 If code and docs disagree, fix the disagreement in the same change when it is in scope.

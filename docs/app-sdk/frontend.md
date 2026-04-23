@@ -23,3 +23,20 @@ Mounted frontends call their app backend through:
 ```
 
 Do not call another app's private backend or private files directly. Use the owning app's official backend, CLI, or MCP surfaces.
+
+## Rebuild Rule
+
+If the app declares `lifecycle.rebuild: true`, frontend updates should be published through:
+
+```text
+maverick app <app_id> frontend build --json
+```
+
+That is the official path that:
+
+- runs the declared frontend build
+- verifies the declared frontend artifact root
+- emits `maverick.app.frontend-changed`
+- lets mounted clients refresh without a manual full-page reload
+
+Do not rely on ad hoc static servers or undocumented rebuild shortcuts.

@@ -22,22 +22,20 @@ If implementation and documentation disagree, fix the disagreement in the same c
 Use Python 3.12. A minimal local setup is:
 
 ```bash
-python3 -m venv .venv
-. .venv/bin/activate
-python3 -m pip install --upgrade pip
-python3 -m pip install -e ".[dev]"
+./scripts/bootstrap_local.sh
+source .venv/bin/activate
 ```
 
 Frontend apps with source have their own `package-lock.json`; install and build them from each app directory.
+
+The first public release is intentionally CLI-first. A built-in setup or onboarding UI is deferred until the setup path and public docs stabilize.
 
 ## Verification
 
 Run the smallest relevant checks for your change. For broad changes, run:
 
 ```bash
-python3 -m unittest discover -s tests -p 'test_*.py'
-python3 -m compileall core tests scripts
-python3 scripts/check_unused_imports.py
+./scripts/verify_local.sh
 ```
 
 For frontend app changes, run the app's local `npm run build` and `npm test` if present.
@@ -86,3 +84,14 @@ AI-assisted code is allowed, but contributors are responsible for correctness, l
 ## Vulnerabilities
 
 Do not report vulnerabilities in public issues. Follow `SECURITY.md`.
+
+## Docs To Read First
+
+For public release work and architecture-sensitive changes, start with:
+
+- `docs/security/threat_model.md`
+- `docs/adr/README.md`
+- `docs/reference/core_surfaces.md`
+- `docs/reference/runtime_provider_model.md`
+- `docs/reference/persistence_model.md`
+- `OPEN_SOURCE_CHECKLIST.md`

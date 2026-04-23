@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from core.apps.store import AppStore
-from core.mcp.core_tool_helpers import OPERATOR_ONLY, core_mcp_tool
+from core.mcp.core_tool_helpers import OPERATOR_ONLY, WORKSPACE_SAFE, core_mcp_tool
 from core.mcp.models import McpInvocationContext, McpToolDefinition
 from core.providers.provider_registry import ProviderRegistry
 from core.recovery.service import execute_session_restart, record_app_health, record_failed_start, record_provider_health, record_runtime_health, recovery_status
@@ -93,10 +93,10 @@ def recovery_tool_specs(
         return {"health": {"target_kind": result.target_kind, "target_id": result.target_id, "status": result.status, "detail": result.detail}}
 
     tool_specs = [
-        ("core.recovery.status", "Inspect recovery status for one workspace or runtime session.", _recovery_status_handler),
-        ("core.recovery.restart", "Execute one runtime restart recovery action when allowed.", _recovery_restart_handler),
-        ("core.recovery.failed_start", "Record one failed-start diagnosis and plan recovery.", _recovery_failed_start_handler),
-        ("core.recovery.health", "Run one recovery health probe on demand.", _recovery_health_handler),
+        ("core.recovery.status", "Inspect recovery status for one workspace or runtime session.", OPERATOR_ONLY, _recovery_status_handler),
+        ("core.recovery.restart", "Execute one runtime restart recovery action when allowed.", WORKSPACE_SAFE, _recovery_restart_handler),
+        ("core.recovery.failed_start", "Record one failed-start diagnosis and plan recovery.", OPERATOR_ONLY, _recovery_failed_start_handler),
+        ("core.recovery.health", "Run one recovery health probe on demand.", OPERATOR_ONLY, _recovery_health_handler),
     ]
     return [
         (
@@ -104,9 +104,9 @@ def recovery_tool_specs(
                 tool_name=tool_name,
                 description=description,
                 owner_id="recovery",
-                invocation_policy=OPERATOR_ONLY,
+                invocation_policy=invocation_policy,
             ),
             handler,
         )
-        for tool_name, description, handler in tool_specs
+        for tool_name, description, invocation_policy, handler in tool_specs
     ]

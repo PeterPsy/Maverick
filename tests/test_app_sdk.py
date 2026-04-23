@@ -119,9 +119,12 @@ class MaverickAppSdkTestCase(unittest.TestCase):
                 self.assertTrue(validation.valid)
                 if template_id == "widget":
                     self.assertEqual(parsed.contract.widgets[0].widget_id, "sdk-widget-widget")
+                if template_id == "react-vite":
+                    self.assertTrue(parsed.contract.lifecycle.rebuild)
                 if template_id == "entity-sqlite":
                     self.assertEqual(parsed.contract.storage.storage_kind, "sqlite")
                     self.assertEqual([entity.entity_type for entity in parsed.contract.capabilities.reference_entities], ["record"])
+                    self.assertTrue(parsed.contract.lifecycle.rebuild)
 
     def test_sdk_cli_create_register_install_status_and_app_cli_surface(self) -> None:
         repo_root = self.make_repo_root()

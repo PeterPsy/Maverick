@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from core.apps.store import AppStore
-from core.cli.core_command_helpers import OPERATOR_ONLY, core_cli_command
+from core.cli.core_command_helpers import OPERATOR_ONLY, WORKSPACE_SAFE, core_cli_command
 from core.cli.models import CliCommandDefinition, CliInvocationContext
 from core.providers.provider_registry import ProviderRegistry
 from core.recovery.service import execute_session_restart, record_app_health, record_failed_start, record_provider_health, record_runtime_health, recovery_status
@@ -110,10 +110,10 @@ def recovery_command_specs(
         }
 
     command_specs = [
-        ("core.recovery.status", ["core", "recovery", "status"], "Inspect recovery status for one workspace or runtime session.", _recovery_status_handler),
-        ("core.recovery.restart", ["core", "recovery", "restart"], "Execute one runtime restart recovery action when allowed.", _recovery_restart_handler),
-        ("core.recovery.failed_start", ["core", "recovery", "failed-start"], "Record one failed-start diagnosis and plan recovery.", _recovery_failed_start_handler),
-        ("core.recovery.health", ["core", "recovery", "health"], "Run one recovery health probe on demand.", _recovery_health_handler),
+        ("core.recovery.status", ["core", "recovery", "status"], "Inspect recovery status for one workspace or runtime session.", OPERATOR_ONLY, _recovery_status_handler),
+        ("core.recovery.restart", ["core", "recovery", "restart"], "Execute one runtime restart recovery action when allowed.", WORKSPACE_SAFE, _recovery_restart_handler),
+        ("core.recovery.failed_start", ["core", "recovery", "failed-start"], "Record one failed-start diagnosis and plan recovery.", OPERATOR_ONLY, _recovery_failed_start_handler),
+        ("core.recovery.health", ["core", "recovery", "health"], "Run one recovery health probe on demand.", OPERATOR_ONLY, _recovery_health_handler),
     ]
     return [
         (
@@ -122,9 +122,9 @@ def recovery_command_specs(
                 path_segments=path_segments,
                 description=description,
                 owner_id="recovery",
-                invocation_policy=OPERATOR_ONLY,
+                invocation_policy=invocation_policy,
             ),
             handler,
         )
-        for command_id, path_segments, description, handler in command_specs
+        for command_id, path_segments, description, invocation_policy, handler in command_specs
     ]

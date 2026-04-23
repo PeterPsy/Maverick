@@ -99,7 +99,7 @@ class TestPhase11SecretRecoverySurfaces(Phase11ObservabilityBase):
         cli_context = CliInvocationContext(caller_kind="operator", workspace_id="default", agent_id=None, effective_mode="full-access")
         restart_result = run_core_cli_command(
             command_id="core.recovery.restart",
-            context=cli_context,
+            context=CliInvocationContext(caller_kind="sandbox_agent", workspace_id="default", agent_id="agent-1", effective_mode="sandbox"),
             arguments={"session_id": session.session_id, "reason": "operator requested"},
             runtime_store=runtime_store,
             recovery_store=recovery_store,
@@ -119,3 +119,14 @@ class TestPhase11SecretRecoverySurfaces(Phase11ObservabilityBase):
         )
         self.assertEqual(status_result["status"]["failure_count"], 1)
         self.assertEqual(status_result["status"]["latest_intent_action"], "restart_runtime")
+
+        restart_tool_result = call_mcp_tool(
+            tool_name="core.recovery.restart",
+            context=McpInvocationContext(caller_kind="sandbox_agent", workspace_id="default", agent_id="agent-1", effective_mode="sandbox"),
+            arguments={"session_id": session.session_id, "reason": "agent requested"},
+            recovery_store=recovery_store,
+            runtime_store=runtime_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+        self.assertTrue(restart_tool_result["executed"])

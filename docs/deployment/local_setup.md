@@ -12,27 +12,25 @@ Maverick is experimental. Use fake data and local-only networking.
 - Codex CLI for Codex-backed runtime sessions
 - MongoDB for hosted control-plane persistence
 
+For the first public release, the recommended path is local CLI-first setup, not Docker and not a setup UI.
+
 ## Python Environment
 
 ```bash
-python3 -m venv .venv
-. .venv/bin/activate
-python3 -m pip install --upgrade pip
-python3 -m pip install -e ".[dev]"
+./scripts/bootstrap_local.sh
+source .venv/bin/activate
 ```
 
 ## Verify Core
 
 ```bash
-python3 -m unittest discover -s tests -p 'test_*.py'
-python3 -m compileall core tests scripts
-python3 scripts/check_unused_imports.py
+./scripts/verify_local.sh
 ```
 
 ## Run Core Host
 
 ```bash
-uvicorn core.api.asgi_application:app --host 127.0.0.1 --port 8000
+./scripts/run_local.sh
 ```
 
 Health check:
@@ -53,11 +51,28 @@ npm run build
 
 Apps that only verify `frontend/dist/index.html` are using committed built artifacts. See `docs/development/generated_artifacts.md`.
 
+To build every app frontend during bootstrap:
+
+```bash
+MAVERICK_BUILD_FRONTENDS=1 ./scripts/bootstrap_local.sh
+```
+
 ## Environment Variables
 
 Copy `.env.example` only as a local starting point. Do not commit `.env`.
 
 Production-quality secret storage is not implemented yet. Do not put production OAuth credentials or API keys into the local bootstrap environment.
+
+## CLI Discovery
+
+Use the checked-in wrapper for machine-readable discovery:
+
+```bash
+./scripts/maverick apps list --json
+./scripts/maverick core cli list --json
+./scripts/maverick core mcp list --json
+./scripts/maverick core cli run developer-context.list --json
+```
 
 ## Persistence
 

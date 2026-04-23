@@ -20,3 +20,20 @@ Keep entrypoints thin:
 - return `{"status_code": <int>, "json": <object>}`
 
 Keep persistence in `store.py` or `database.py`.
+
+## Surface Mapping
+
+Backend, CLI, and MCP should share the same service logic whenever possible.
+
+Recommended pattern:
+
+- backend translates mounted HTTP requests into app actions
+- CLI translates command invocations into the same app actions
+- MCP translates tool invocations into the same app actions
+
+If the app declares:
+
+- `reference_entities`, implement manifest, search, resolve, and summarize behavior through CLI or MCP
+- `view_surfaces`, implement real view-state actions such as `view_filter`, `set_view_filter`, `set_custom_view`, and `clear_custom_view`
+
+Do not declare these surfaces unless the behavior exists in the app service layer.

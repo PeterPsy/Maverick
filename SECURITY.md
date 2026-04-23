@@ -2,6 +2,8 @@
 
 Maverick v3 is experimental software. Do not expose it to the public internet or store production secrets in it until the issues tracked in `SECURITY_AUDIT.md` are resolved.
 
+For a compact boundary overview, read `docs/security/threat_model.md`. For the current production-use limitations, read `docs/security/production_readiness.md`.
+
 ## Supported Versions
 
 Only the current `v3` branch is supported during the pre-release period. No stable release line exists yet.

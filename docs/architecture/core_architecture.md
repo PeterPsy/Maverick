@@ -534,7 +534,7 @@ The first shell-facing API slice is intentionally core-generic, not `base-shell`
 - `/api/status` exposes platform status for the active workspace
 - `/api/providers/active` and `/api/runtime/status` expose active runtime provider and runtime sessions
 - `/api/settings/platform` exposes read-only platform/workspace/provider/runtime/recovery metadata for settings UI
-- `/api/recovery/status`, `/api/recovery/health`, and `/api/recovery/restart-runtime` expose operator recovery inspection and actions
+- `/api/recovery/status` and `/api/recovery/health` expose operator recovery inspection, while `/api/recovery/restart-runtime` is the controlled runtime-restart action surfaced to trusted workspace callers through the core recovery flow
 
 These APIs are platform capabilities that any suitable shell app may consume.
 

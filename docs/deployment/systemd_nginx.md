@@ -1,6 +1,6 @@
 # Systemd and Nginx Deployment
 
-This deployment path is for local demos and controlled review environments only.
+This deployment path is for local demos, self-hosted evaluation, and controlled review environments only.
 
 Maverick is not production-ready. Do not expose this configuration with real secrets until `SECURITY_AUDIT.md` blockers are closed.
 

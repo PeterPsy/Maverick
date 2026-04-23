@@ -12,20 +12,29 @@ Maverick is not production-ready. Do not expose this configuration with real sec
 - `scripts/deploy/systemd/maverick3-backend-watchdog.timer`
 - `scripts/deploy/nginx/maverick.example.conf`
 
-Render environment-specific units and nginx config through:
+Run the installer to bootstrap, verify, render, and optionally apply the deployment in one flow:
 
 ```bash
 python3 scripts/install_maverick.py --hostname maverick.example.com --install-root /opt/maverick-v3
 ```
 
-By default the installer writes:
+In interactive mode the installer asks for missing values, then prompts before:
+
+- writing live systemd units
+- writing live nginx config and symlink
+- enabling and restarting services
+- requesting a TLS certificate with `certbot`
+
+It always renders a copy of the deployment plan under:
 
 - `.maverick/install/systemd/*.service`
 - `.maverick/install/systemd/*.timer`
 - `.maverick/install/nginx/<hostname>.conf`
 - `.maverick/install/install-manifest.json`
 
-Use `--systemd-dir` and `--nginx-conf` to target other output paths.
+Use `--render-only` to stop after rendering.
+
+Use `--systemd-dir` and `--nginx-conf` to customize rendered output paths, and `--live-systemd-dir`, `--live-nginx-conf`, and `--live-nginx-enabled` to customize the live target paths used by apply.
 
 ## Minimum Hardening
 

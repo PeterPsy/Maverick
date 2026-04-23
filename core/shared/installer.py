@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import os
 from pathlib import Path
+import shutil
 import subprocess
 from typing import Any
+from urllib import error, request
 
 from core.shared.repository import installation_paths
 
@@ -31,6 +34,9 @@ class InstallerConfig:
     acme_root: Path | None
     systemd_dir: Path
     nginx_conf_path: Path | None
+    live_systemd_dir: Path
+    live_nginx_conf_path: Path | None
+    live_nginx_enabled_path: Path | None
 
     @property
     def public_url(self) -> str:
@@ -92,7 +98,10 @@ def build_install_manifest(config: InstallerConfig) -> dict[str, Any]:
         "local_only": config.local_only,
         "hostname": config.hostname,
         "systemd_dir": str(config.systemd_dir),
+        "live_systemd_dir": str(config.live_systemd_dir),
         "nginx_conf_path": None if config.nginx_conf_path is None else str(config.nginx_conf_path),
+        "live_nginx_conf_path": None if config.live_nginx_conf_path is None else str(config.live_nginx_conf_path),
+        "live_nginx_enabled_path": None if config.live_nginx_enabled_path is None else str(config.live_nginx_enabled_path),
         "acme_root": None if config.acme_root is None else str(config.acme_root),
         "bootstrap_requested": config.bootstrap,
         "verify_requested": config.verify,
@@ -115,6 +124,91 @@ def run_install_steps(config: InstallerConfig) -> None:
         subprocess.run([str(repository_root / "scripts" / "verify_local.sh")], cwd=repository_root, check=True)
 
 
+def preflight_check(config: InstallerConfig) -> list[str]:
+    """Return human-readable warnings for missing optional dependencies."""
+    warnings: list[str] = []
+    if shutil.which("systemctl") is None:
+        warnings.append("systemctl not found in PATH")
+    if not config.local_only and shutil.which("nginx") is None:
+        warnings.append("nginx not found in PATH")
+    if not config.local_only and config.public_scheme == "https" and shutil.which("certbot") is None:
+        warnings.append("certbot not found in PATH")
+    if shutil.which("bubblewrap") is None and shutil.which("bwrap") is None:
+        warnings.append("bubblewrap not found in PATH")
+    if shutil.which("codex") is None:
+        warnings.append("codex not found in PATH")
+    return warnings
+
+
+def apply_install_plan(
+    config: InstallerConfig,
+    rendered_files: dict[Path, str],
+    *,
+    run_command: Any = None,
+) -> None:
+    """Apply the rendered install plan to live system paths."""
+    runner = run_command or run_privileged_command
+    _write_tree(rendered_files, source_root=config.systemd_dir, destination_root=config.live_systemd_dir)
+    if config.nginx_conf_path is not None and config.live_nginx_conf_path is not None:
+        nginx_content = rendered_files.get(config.nginx_conf_path)
+        if nginx_content is None and config.nginx_conf_path.is_file():
+            nginx_content = config.nginx_conf_path.read_text(encoding="utf-8")
+        if nginx_content is None:
+            raise FileNotFoundError(f"Rendered nginx config missing at `{config.nginx_conf_path}`.")
+        _write_file(config.live_nginx_conf_path, nginx_content)
+        if config.live_nginx_enabled_path is not None:
+            _ensure_symlink(config.live_nginx_enabled_path, config.live_nginx_conf_path)
+    if config.acme_root is not None:
+        runner(["mkdir", "-p", str(config.acme_root)])
+    runner(["systemctl", "daemon-reload"])
+    runner(["systemctl", "enable", "maverick3-core.service"])
+    runner(["systemctl", "enable", "maverick3-rescue.service"])
+    runner(["systemctl", "enable", "maverick3-backend-watchdog.timer"])
+    runner(["systemctl", "restart", "maverick3-core.service"])
+    runner(["systemctl", "restart", "maverick3-rescue.service"])
+    runner(["systemctl", "start", "maverick3-backend-watchdog.timer"])
+    if config.live_nginx_conf_path is not None:
+        runner(["nginx", "-t"])
+        runner(["systemctl", "reload", "nginx"])
+
+
+def request_tls_certificate(config: InstallerConfig, *, run_command: Any = None) -> None:
+    """Request or renew the public TLS certificate for one hostname."""
+    if config.local_only or not config.hostname or config.acme_root is None:
+        return
+    runner = run_command or run_privileged_command
+    runner(["mkdir", "-p", str(config.acme_root)])
+    runner(
+        [
+            "certbot",
+            "certonly",
+            "--webroot",
+            "-w",
+            str(config.acme_root),
+            "-d",
+            config.hostname,
+        ]
+    )
+    runner(["nginx", "-t"])
+    runner(["systemctl", "reload", "nginx"])
+
+
+def check_health(config: InstallerConfig, *, timeout_seconds: float = 5.0) -> dict[str, bool]:
+    """Return local/public health availability after install."""
+    health: dict[str, bool] = {
+        f"http://{config.bind_host}:{config.core_port}/health": _url_is_healthy(
+            f"http://{config.bind_host}:{config.core_port}/health",
+            timeout_seconds=timeout_seconds,
+        )
+    }
+    if not config.local_only and config.hostname:
+        health[f"{config.public_scheme}://{config.hostname}/health"] = _url_is_healthy(
+            f"{config.public_scheme}://{config.hostname}/health",
+            timeout_seconds=timeout_seconds,
+        )
+    return health
+
+
 def default_output_root(repository_root: Path) -> Path:
     """Return the default installer output root inside the repository."""
     return repository_root / ".maverick" / "install"
@@ -132,6 +226,25 @@ def default_nginx_conf_path(output_root: Path, *, hostname: str | None) -> Path 
     return output_root / "nginx" / f"{hostname}.conf"
 
 
+def default_live_systemd_dir() -> Path:
+    """Return the default live systemd target path."""
+    return Path("/etc/systemd/system")
+
+
+def default_live_nginx_conf_path(*, hostname: str | None) -> Path | None:
+    """Return the default live nginx config target path."""
+    if not hostname:
+        return None
+    return Path("/etc/nginx/sites-available") / f"{hostname}.conf"
+
+
+def default_live_nginx_enabled_path(*, hostname: str | None) -> Path | None:
+    """Return the default nginx sites-enabled symlink path."""
+    if not hostname:
+        return None
+    return Path("/etc/nginx/sites-enabled") / f"{hostname}.conf"
+
+
 def default_install_root(start_path: Path | None = None) -> Path:
     """Return the current repository root as the default install target."""
     return installation_paths(start_path=start_path).repository_root
@@ -145,3 +258,47 @@ def _render_template(path: Path, substitutions: dict[str, str]) -> str:
     if unresolved:
         raise ValueError(f"Unresolved installer template placeholders in `{path}`.")
     return content
+
+
+def run_privileged_command(command: list[str]) -> None:
+    """Run one installer command, adding sudo when required."""
+    if os.geteuid() == 0:
+        subprocess.run(command, check=True)
+        return
+    subprocess.run(["sudo", *command], check=True)
+
+
+def _write_tree(files: dict[Path, str], *, source_root: Path, destination_root: Path) -> None:
+    for source_path, content in files.items():
+        if not _is_relative_to(source_path, source_root):
+            continue
+        target_path = destination_root / source_path.relative_to(source_root)
+        _write_file(target_path, content)
+
+
+def _write_file(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+def _ensure_symlink(link_path: Path, target_path: Path) -> None:
+    link_path.parent.mkdir(parents=True, exist_ok=True)
+    if link_path.is_symlink() or link_path.exists():
+        link_path.unlink()
+    link_path.symlink_to(target_path)
+
+
+def _url_is_healthy(url: str, *, timeout_seconds: float) -> bool:
+    try:
+        with request.urlopen(url, timeout=timeout_seconds) as response:
+            return 200 <= response.status < 300
+    except (error.URLError, TimeoutError, ValueError):
+        return False
+
+
+def _is_relative_to(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False

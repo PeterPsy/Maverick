@@ -16,27 +16,39 @@ For the first public release, the recommended path is local CLI-first setup, not
 
 ## Installer CLI
 
-For a fresh install with explicit deployment parameters, use the installer CLI:
+For a fresh install, use the installer CLI:
 
 ```bash
-python3 scripts/install_maverick.py --hostname maverick.example.com
+python3 scripts/install_maverick.py
 ```
 
-That command:
+The default flow is interactive. It:
 
+- asks for the missing deployment values
 - bootstraps the Python environment
 - runs the core verification suite
 - renders systemd units under `.maverick/install/systemd/`
 - renders nginx config under `.maverick/install/nginx/`
 - writes `.maverick/install/install-manifest.json`
+- offers to apply the rendered plan to systemd and nginx
+- offers to request a TLS certificate with `certbot` for public `https` installs
+- runs final health checks
 
-For a local-only install without nginx/TLS rendering:
+For a non-interactive public install with defaults accepted:
+
+```bash
+python3 scripts/install_maverick.py --hostname maverick.example.com --yes
+```
+
+For a local-only install without nginx or TLS:
 
 ```bash
 python3 scripts/install_maverick.py --local-only
 ```
 
-Use `--install-root`, `--service-user`, `--service-group`, `--core-port`, `--rescue-port`, `--bind-host`, `--output-root`, `--systemd-dir`, `--nginx-conf`, and `--acme-root` to customize the generated deployment plan.
+Use `--render-only` when you only want the generated files without changing the live system.
+
+Use `--install-root`, `--service-user`, `--service-group`, `--core-port`, `--rescue-port`, `--bind-host`, `--output-root`, `--systemd-dir`, `--nginx-conf`, `--live-systemd-dir`, `--live-nginx-conf`, `--live-nginx-enabled`, and `--acme-root` to customize the flow.
 
 ## Python Environment
 

@@ -10,12 +10,16 @@ from unittest.mock import patch
 
 from core.shared.installer import (
     InstallerConfig,
+    apply_install_plan,
+    default_live_nginx_conf_path,
+    default_live_nginx_enabled_path,
+    default_live_systemd_dir,
     default_nginx_conf_path,
     default_output_root,
     default_systemd_dir,
     render_install_plan,
 )
-from scripts.install_maverick import main as installer_main
+from scripts.install_maverick import build_config, main as installer_main, parse_args
 
 
 class InstallerRenderingTestCase(unittest.TestCase):
@@ -38,6 +42,9 @@ class InstallerRenderingTestCase(unittest.TestCase):
             acme_root=None if hostname is None else Path("/var/www") / hostname,
             systemd_dir=default_systemd_dir(output_root),
             nginx_conf_path=None if hostname is None else default_nginx_conf_path(output_root, hostname=hostname),
+            live_systemd_dir=default_live_systemd_dir(),
+            live_nginx_conf_path=None if hostname is None else default_live_nginx_conf_path(hostname=hostname),
+            live_nginx_enabled_path=None if hostname is None else default_live_nginx_enabled_path(hostname=hostname),
         )
 
     def test_render_install_plan_renders_custom_hostname_and_units(self) -> None:
@@ -54,6 +61,7 @@ class InstallerRenderingTestCase(unittest.TestCase):
         self.assertIn("server_name maverick.example.test;", nginx_conf)
         self.assertIn("ssl_certificate /etc/letsencrypt/live/maverick.example.test/fullchain.pem;", nginx_conf)
         self.assertEqual(manifest["public_url"], "https://maverick.example.test")
+        self.assertEqual(manifest["live_systemd_dir"], "/etc/systemd/system")
 
     def test_render_install_plan_skips_nginx_for_local_only_mode(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
@@ -63,6 +71,8 @@ class InstallerRenderingTestCase(unittest.TestCase):
 
         self.assertEqual(json.loads(rendered[config.output_root / "install-manifest.json"])["public_url"], "http://127.0.0.1:8014")
 
+
+class InstallerFlowTestCase(unittest.TestCase):
     def test_installer_main_writes_rendered_files_without_bootstrap(self) -> None:
         with tempfile.TemporaryDirectory(prefix="maverick-install-") as temp_dir:
             output_root = Path(temp_dir) / "install"
@@ -74,6 +84,8 @@ class InstallerRenderingTestCase(unittest.TestCase):
                     str(output_root),
                     "--skip-bootstrap",
                     "--skip-verify",
+                    "--render-only",
+                    "--yes",
                 ]
             )
 
@@ -82,9 +94,12 @@ class InstallerRenderingTestCase(unittest.TestCase):
             self.assertTrue((output_root / "nginx" / "maverick.example.test.conf").is_file())
             self.assertTrue((output_root / "install-manifest.json").is_file())
 
-    def test_installer_main_requires_hostname_without_local_only(self) -> None:
-        with self.assertRaises(SystemExit):
-            installer_main(["--skip-bootstrap", "--skip-verify"])
+    def test_installer_main_prompts_for_hostname_when_missing(self) -> None:
+        args = parse_args(["--skip-bootstrap", "--skip-verify", "--render-only"])
+        with patch("builtins.input", side_effect=["public", "maverick.example.test", "", "", "", "", "", "", ""]):
+            config = build_config(args, interactive=True)
+        self.assertEqual(config.hostname, "maverick.example.test")
+        self.assertFalse(config.local_only)
 
     def test_installer_main_runs_bootstrap_and_verify_when_requested(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
@@ -96,6 +111,8 @@ class InstallerRenderingTestCase(unittest.TestCase):
                         "--local-only",
                         "--output-root",
                         str(output_root),
+                        "--render-only",
+                        "--yes",
                     ]
                 )
 
@@ -103,6 +120,81 @@ class InstallerRenderingTestCase(unittest.TestCase):
         self.assertEqual(mocked_run.call_count, 2)
         self.assertEqual(mocked_run.call_args_list[0].args[0], [str(repo_root / "scripts" / "bootstrap_local.sh")])
         self.assertEqual(mocked_run.call_args_list[1].args[0], [str(repo_root / "scripts" / "verify_local.sh")])
+
+    def test_installer_main_applies_live_plan_when_confirmed(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="maverick-install-") as temp_dir:
+            output_root = Path(temp_dir) / "install"
+            live_systemd_dir = Path(temp_dir) / "live-systemd"
+            live_nginx_conf = Path(temp_dir) / "sites-available" / "maverick.example.test.conf"
+            live_nginx_enabled = Path(temp_dir) / "sites-enabled" / "maverick.example.test.conf"
+            with patch("core.shared.installer.run_privileged_command") as mocked_runner, patch(
+                "scripts.install_maverick.check_health",
+                return_value={"http://127.0.0.1:8014/health": True},
+            ):
+                exit_code = installer_main(
+                    [
+                        "--hostname",
+                        "maverick.example.test",
+                        "--output-root",
+                        str(output_root),
+                        "--live-systemd-dir",
+                        str(live_systemd_dir),
+                        "--live-nginx-conf",
+                        str(live_nginx_conf),
+                        "--live-nginx-enabled",
+                        str(live_nginx_enabled),
+                        "--skip-bootstrap",
+                        "--skip-verify",
+                        "--yes",
+                        "--skip-tls",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 0)
+            self.assertTrue((live_systemd_dir / "maverick3-core.service").is_file())
+            self.assertTrue(live_nginx_conf.is_file())
+            self.assertTrue(live_nginx_enabled.is_symlink())
+            self.assertTrue(mocked_runner.call_args_list)
+
+    def test_apply_install_plan_copies_rendered_files_and_reloads_services(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory(prefix="maverick-install-") as temp_dir:
+            temp_root = Path(temp_dir)
+            output_root = temp_root / "install"
+            config = InstallerConfig(
+                repository_root=repo_root,
+                install_root=repo_root,
+                output_root=output_root,
+                service_user="ubuntu",
+                service_group="ubuntu",
+                bind_host="127.0.0.1",
+                hostname="maverick.example.test",
+                public_scheme="https",
+                core_port=8014,
+                rescue_port=8015,
+                bootstrap=False,
+                verify=False,
+                local_only=False,
+                acme_root=temp_root / "acme",
+                systemd_dir=output_root / "systemd",
+                nginx_conf_path=output_root / "nginx" / "maverick.example.test.conf",
+                live_systemd_dir=temp_root / "live-systemd",
+                live_nginx_conf_path=temp_root / "sites-available" / "maverick.example.test.conf",
+                live_nginx_enabled_path=temp_root / "sites-enabled" / "maverick.example.test.conf",
+            )
+            rendered = render_install_plan(config)
+            for path, content in rendered.items():
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(content, encoding="utf-8")
+
+            commands: list[list[str]] = []
+            apply_install_plan(config, rendered, run_command=commands.append)
+
+            self.assertTrue((config.live_systemd_dir / "maverick3-core.service").is_file())
+            self.assertTrue(config.live_nginx_conf_path.is_file())
+            self.assertTrue(config.live_nginx_enabled_path.is_symlink())
+            self.assertIn(["systemctl", "daemon-reload"], commands)
+            self.assertIn(["systemctl", "reload", "nginx"], commands)
 
 
 if __name__ == "__main__":

@@ -24,6 +24,9 @@ from core.workspaces.service import ensure_workspace_layout
 from core.workspaces.store import WorkspaceStore
 
 
+DEFAULT_PUBLIC_CATALOG_URL = "https://maverick-app-store.versy.ai"
+
+
 @dataclass(frozen=True)
 class RemoteAppVersion:
     """Version metadata returned by a Maverick app catalog."""
@@ -47,11 +50,14 @@ def _read_url_json(url: str, *, timeout_seconds: int = 30) -> dict[str, Any]:
     return payload
 
 
-def fetch_remote_catalog(base_url: str) -> dict[str, Any]:
+def catalog_base_url(base_url: str | None = None) -> str:
+    return (base_url or DEFAULT_PUBLIC_CATALOG_URL).strip().rstrip("/")
+
+
+def fetch_remote_catalog(base_url: str | None = None) -> dict[str, Any]:
     """Fetch the public app catalog from a configured Maverick App Store."""
-    if not base_url:
-        raise AppLifecycleError("MAVERICK_APP_STORE_URL must be configured before fetching the public app catalog.")
-    return _read_url_json(urljoin(base_url.rstrip("/") + "/", "api/apps"))
+    resolved_base_url = catalog_base_url(base_url)
+    return _read_url_json(urljoin(resolved_base_url.rstrip("/") + "/", "api/apps"))
 
 
 def resolve_remote_app_version(base_url: str, *, app_id: str, version: str | None = None) -> RemoteAppVersion:

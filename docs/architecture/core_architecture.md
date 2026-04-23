@@ -185,7 +185,7 @@ The installation-level `/apps` directory is the server-managed app store and tru
 
 It may contain built-in apps, commercial sealed apps, source-available store apps, and validated app bundles.
 
-Remote catalog ingestion is still a core app-hosting responsibility. The app-store UI may request installation or uninstall for selected workspaces, but the core must own the authenticated operation that downloads a remote bundle, verifies its checksum, stages it under `apps/_bundles/<app_id>/<version>/`, registers the source as an `external_bundle`, creates workspace bindings for the authorized target workspaces, reports current workspace installation state, reports workspace-local app projects for the selected workspace context, and removes bindings during uninstall without deleting app-owned data.
+Remote catalog ingestion is still a core app-hosting responsibility. The official public catalog defaults to `https://maverick-app-store.versy.ai` and may be overridden per installation with `MAVERICK_APP_STORE_URL`. The app-store UI may request installation or uninstall for selected workspaces, but the core must own the authenticated operation that downloads a remote bundle, verifies its checksum, stages it under `apps/_bundles/<app_id>/<version>/`, registers the source as an `external_bundle`, creates workspace bindings for the authorized target workspaces, reports current workspace installation state, reports workspace-local app projects for the selected workspace context, and removes bindings during uninstall without deleting app-owned data.
 
 The workspace-level `workspaces/<workspace_id>/apps/` directory is editable workspace material.
 

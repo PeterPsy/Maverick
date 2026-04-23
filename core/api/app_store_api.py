@@ -12,7 +12,7 @@ from core.api.platform_state import PlatformState
 from core.api.session_api import RequestSession, require_session
 from core.apps.errors import AppHostingError
 from core.apps.models import AppContractDescriptor, WorkspaceAppBindingRecord, WorkspaceLocalAppProjectRecord
-from core.apps.remote_store import fetch_remote_catalog, install_remote_store_app
+from core.apps.remote_store import catalog_base_url, fetch_remote_catalog, install_remote_store_app
 from core.apps.paths import workspace_apps_root
 from core.apps.service import (
     delete_workspace_local_app_project,
@@ -26,7 +26,7 @@ from core.workspaces.errors import WorkspaceMembershipError, WorkspaceNotFoundEr
 
 
 def _catalog_base_url() -> str:
-    return os.environ.get("MAVERICK_APP_STORE_URL", "").strip().rstrip("/")
+    return catalog_base_url(os.environ.get("MAVERICK_APP_STORE_URL"))
 
 
 def _authorize_app_management_targets(state: PlatformState, context: RequestSession, workspace_ids: list[str]) -> str | None:

@@ -692,6 +692,24 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertEqual(status_toggle, 200)
         self.assertEqual(toggled["state"]["pinned_apps"], ["chat", "agents"])
 
+    def test_app_store_backend_uses_official_catalog_by_default(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+        cookie = self.login(app)
+
+        with patch.dict("os.environ", {}, clear=True):
+            status, payload, _headers = self.invoke(
+                app,
+                path="/api/apps/app-store/backend",
+                method="POST",
+                body={"action": "state"},
+                cookie=cookie,
+            )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["catalog_url"], "https://maverick-app-store.versy.ai")
+
     def test_app_store_install_hook_does_not_reset_pinned_apps_on_bootstrap(self) -> None:
         repo_root = self.make_repo_root()
         state = bootstrap_platform_state(start_path=repo_root)

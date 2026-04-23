@@ -4,7 +4,7 @@
   "name": "Memory",
   "version": "0.1.0",
   "description": "Workspace knowledge graph for durable agent and user memory.",
-  "publisher": "versy",
+  "publisher": "maverick",
   "minimum_core_version": "0.1.0",
   "distribution": {
     "mode": "source_available",

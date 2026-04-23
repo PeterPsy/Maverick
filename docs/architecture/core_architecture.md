@@ -445,7 +445,7 @@ The public Maverick host should run the core, not one particular app.
 
 In deployment terms, the intended model is:
 
-- `maverick3.versy.ai` reaches the core platform host
+- a public deployment hostname reaches the core platform host
 - the core mounts enabled app surfaces
 - the core enforces auth, workspace context, and policy before dispatching to app surfaces
 
@@ -739,7 +739,7 @@ under one mounted app contract.
 For the first real hosted deployment, the intended shape is:
 
 - `nginx` as the public ingress
-- one main core service behind `maverick3.versy.ai`
+- one main core service behind the deployment hostname
 - one independent rescue service that does not depend on the main backend staying alive
 
 The default assumption should not be one `systemd` service per app.
@@ -754,7 +754,7 @@ It should remain independently deployable so the user can still reach recovery t
 
 For the first hosted v3 wave, this means:
 
-- one main core host mounted at `maverick3.versy.ai`
+- one main core host mounted at the deployment hostname
 - one separate rescue host
 - one backend watchdog timer that probes the main core host from outside the main backend process
 - a minimal app set mounted by the core:

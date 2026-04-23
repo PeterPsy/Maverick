@@ -25,11 +25,8 @@ from core.workspaces.models import WorkspaceMembershipRecord
 from core.workspaces.errors import WorkspaceMembershipError, WorkspaceNotFoundError
 
 
-DEFAULT_APP_STORE_URL = "https://maverick-app-store.versy.ai"
-
-
 def _catalog_base_url() -> str:
-    return os.environ.get("MAVERICK_APP_STORE_URL", DEFAULT_APP_STORE_URL).strip().rstrip("/")
+    return os.environ.get("MAVERICK_APP_STORE_URL", "").strip().rstrip("/")
 
 
 def _authorize_app_management_targets(state: PlatformState, context: RequestSession, workspace_ids: list[str]) -> str | None:

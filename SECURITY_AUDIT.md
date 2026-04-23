@@ -54,7 +54,6 @@ Sources used:
 Local OpenClaw checkout note:
 
 - The actual local OpenClaw checkout is `/tmp/openclaw`.
-- A small Cursor MCP browser metadata directory also exists under `/home/ubuntu/.cursor/projects/tmp-openclaw`, but it is not the full OpenClaw repo.
 - The local OpenClaw repo is useful because it shows how a mature agentic project documents trust boundaries, sandboxing, exec approvals, dangerous flags, plugin trust, gateway auth, security audit tooling, and incident response.
 
 Relevant external findings:
@@ -711,7 +710,7 @@ Architectural decision:
 
 Evidence:
 
-- `scripts/rescue_backend_watchdog.py` default command is `codex exec --dangerously-bypass-approvals-and-sandbox --json -C /home/ubuntu/maverick-v3 -`.
+- `scripts/rescue_backend_watchdog.py` default command is `codex exec --dangerously-bypass-approvals-and-sandbox --json -`; it runs with the repository root as the subprocess working directory.
 - The prompt explicitly grants full filesystem access and asks the agent to patch and restart the backend.
 - The systemd watchdog runs as `ubuntu`.
 
@@ -1030,7 +1029,7 @@ Architectural decision:
 
 Evidence:
 
-- `scripts/deploy/nginx/maverick3.versy.ai.conf` proxies app/core traffic but sets no HSTS/CSP/security headers.
+- `scripts/deploy/nginx/maverick.example.conf` proxies app/core traffic but sets no HSTS/CSP/security headers.
 - systemd services run as `ubuntu` without hardening directives.
 
 Impact:

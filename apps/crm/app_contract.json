@@ -4,7 +4,7 @@
   "name": "CRM",
   "version": "0.1.0",
   "description": "Forkable workspace CRM for accounts, contacts, deals, activities, and business relationships.",
-  "publisher": "versy",
+  "publisher": "maverick",
   "minimum_core_version": "0.1.0",
   "distribution": {
     "mode": "source_available",

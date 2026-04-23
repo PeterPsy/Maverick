@@ -19,7 +19,6 @@ REFERENCE_MANIFEST = {
     ],
 }
 
-DEFAULT_CATALOG_URL = "https://maverick-app-store.versy.ai"
 DATA_CHANGED_ACTIONS = {"pinned_apps.set", "pinned_apps.toggle", "remember_install"}
 
 
@@ -34,11 +33,14 @@ def app_events_for_action(action: str) -> list[dict]:
 
 
 def catalog_url() -> str:
-    return os.environ.get("MAVERICK_APP_STORE_URL", DEFAULT_CATALOG_URL).strip().rstrip("/")
+    return os.environ.get("MAVERICK_APP_STORE_URL", "").strip().rstrip("/")
 
 
 def fetch_catalog() -> dict[str, Any]:
-    url = urljoin(catalog_url().rstrip("/") + "/", "api/apps")
+    base_url = catalog_url()
+    if not base_url:
+        raise AppStoreValidationError("MAVERICK_APP_STORE_URL must be configured before fetching the public catalog.")
+    url = urljoin(base_url.rstrip("/") + "/", "api/apps")
     with urlopen(url, timeout=30) as response:
         payload = json.loads(response.read().decode("utf-8"))
     if not isinstance(payload, dict):

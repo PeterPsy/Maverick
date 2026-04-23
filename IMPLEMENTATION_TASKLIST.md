@@ -7,7 +7,7 @@ Date: 2026-04-17
 Build Maverick v3 from a clean codebase under:
 
 ```text
-/home/ubuntu/maverick-v3
+Repository root
 ```
 
 without carrying forward legacy structure or backward-compatibility constraints from v2.
@@ -79,7 +79,7 @@ without carrying forward legacy structure or backward-compatibility constraints 
 - [ ] Core can delegate between agents
 - [ ] Core can switch runtime backend via provider abstraction
 - [x] Chat app works on top of core runtime interfaces
-- [x] Hosted v3 is reachable at `maverick3.versy.ai`
+- [x] Hosted v3 can be served behind a deployment hostname.
 - [x] Base shell app discovers and mounts enabled app frontends through the core host
 - [ ] Export/import works for one workspace without legacy assumptions
 

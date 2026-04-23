@@ -13,13 +13,13 @@ The app exposes one official CLI command and one official MCP tool. Use those su
 
 Implementation scripts behind those surfaces:
 
-- CLI entrypoint: `/home/ubuntu/maverick-v3/apps/document-generator/cli/app_cli.py`
-- MCP entrypoint: `/home/ubuntu/maverick-v3/apps/document-generator/mcp/server.py`
-- shared service: `/home/ubuntu/maverick-v3/apps/document-generator/backend/service.py`
-- DOCX writer: `/home/ubuntu/maverick-v3/apps/document-generator/backend/generators/docx_generator.py`
-- PPTX writer: `/home/ubuntu/maverick-v3/apps/document-generator/backend/generators/pptx_generator.py`
-- PDF writer: `/home/ubuntu/maverick-v3/apps/document-generator/backend/generators/pdf_generator.py`
-- XLSX writer: `/home/ubuntu/maverick-v3/apps/document-generator/backend/generators/xlsx_generator.py`
+- CLI entrypoint: `<repo>/apps/document-generator/cli/app_cli.py`
+- MCP entrypoint: `<repo>/apps/document-generator/mcp/server.py`
+- shared service: `<repo>/apps/document-generator/backend/service.py`
+- DOCX writer: `<repo>/apps/document-generator/backend/generators/docx_generator.py`
+- PPTX writer: `<repo>/apps/document-generator/backend/generators/pptx_generator.py`
+- PDF writer: `<repo>/apps/document-generator/backend/generators/pdf_generator.py`
+- XLSX writer: `<repo>/apps/document-generator/backend/generators/xlsx_generator.py`
 
 Do not call generator scripts directly. They are implementation details used by the CLI, MCP, and backend service.
 

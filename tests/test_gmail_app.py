@@ -95,7 +95,7 @@ class GmailAppTestCase(unittest.TestCase):
                         {
                             "id": "msg_unread_1",
                             "from_email": "client@example.com",
-                            "to_emails": ["piero@versytechnologies.com"],
+                            "to_emails": ["user@example.com"],
                             "snippet": "Please review this.",
                             "body_text": "Please review this.",
                             "received_at": "2026-04-21T10:00:00Z",
@@ -112,7 +112,7 @@ class GmailAppTestCase(unittest.TestCase):
                     "messages": [
                         {
                             "id": "msg_sent_1",
-                            "from_email": "piero@versytechnologies.com",
+                            "from_email": "user@example.com",
                             "to_emails": ["client@example.com"],
                             "snippet": "I sent this.",
                             "body_text": "I sent this.",
@@ -130,7 +130,7 @@ class GmailAppTestCase(unittest.TestCase):
                         {
                             "id": "msg_spam_1",
                             "from_email": "spam@example.com",
-                            "to_emails": ["piero@versytechnologies.com"],
+                            "to_emails": ["user@example.com"],
                             "snippet": "You won.",
                             "body_text": "You won.",
                             "received_at": "2026-04-21T12:00:00Z",
@@ -152,9 +152,9 @@ class GmailAppTestCase(unittest.TestCase):
             self.assertNotIn("thread_spam_1", {item["id"] for item in cached["threads"]})
             self.assertEqual([item["id"] for item in spam["threads"]], ["thread_spam_1"])
             self.assertEqual(inbound["from_email"], "client@example.com")
-            self.assertEqual(inbound["to_emails"], ["piero@versytechnologies.com"])
+            self.assertEqual(inbound["to_emails"], ["user@example.com"])
             self.assertTrue(inbound["is_unread"])
-            self.assertEqual(sent["from_email"], "piero@versytechnologies.com")
+            self.assertEqual(sent["from_email"], "user@example.com")
             self.assertEqual(sent["to_emails"], ["client@example.com"])
             self.assertFalse(marked["is_unread"])
             self.assertFalse(marked["messages"][0]["is_unread"])
@@ -175,7 +175,7 @@ class GmailAppTestCase(unittest.TestCase):
                             {
                                 "id": f"msg_page_{index}",
                                 "from_email": f"person{index}@example.com",
-                                "to_emails": ["piero@versytechnologies.com"],
+                                "to_emails": ["user@example.com"],
                                 "snippet": f"Page snippet {index}",
                                 "body_text": f"Page body {index}",
                                 "received_at": f"2026-04-21T1{index}:00:00Z",
@@ -195,7 +195,7 @@ class GmailAppTestCase(unittest.TestCase):
                         {
                             "id": "msg_promo_newer",
                             "from_email": "promo@example.com",
-                            "to_emails": ["piero@versytechnologies.com"],
+                            "to_emails": ["user@example.com"],
                             "snippet": "Not inbox page",
                             "body_text": "Not inbox page",
                             "received_at": "2026-04-21T19:00:00Z",
@@ -214,7 +214,7 @@ class GmailAppTestCase(unittest.TestCase):
                         {
                             "id": "msg_spam_page",
                             "from_email": "spam@example.com",
-                            "to_emails": ["piero@versytechnologies.com"],
+                            "to_emails": ["user@example.com"],
                             "snippet": "Not inbox page",
                             "body_text": "Not inbox page",
                             "received_at": "2026-04-21T09:00:00Z",
@@ -281,7 +281,7 @@ class GmailAppTestCase(unittest.TestCase):
                         "payload": {
                             "headers": [
                                 {"name": "From", "value": "old@example.com"},
-                                {"name": "To", "value": "piero@versytechnologies.com"},
+                                {"name": "To", "value": "user@example.com"},
                                 {"name": "Subject", "value": "Real date"},
                             ]
                         },
@@ -294,7 +294,7 @@ class GmailAppTestCase(unittest.TestCase):
                         "payload": {
                             "headers": [
                                 {"name": "From", "value": "new@example.com"},
-                                {"name": "To", "value": "piero@versytechnologies.com"},
+                                {"name": "To", "value": "user@example.com"},
                                 {"name": "Subject", "value": "Real date"},
                             ]
                         },

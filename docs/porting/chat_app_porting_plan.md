@@ -8,11 +8,11 @@ The goal is not to copy the v2 backend shape. The goal is to keep the chat as a 
 
 Source app:
 
-- `/home/ubuntu/maverick-v2/apps/chat_app`
+- `<maverick-v2-checkout>/apps/chat_app`
 
 Target app:
 
-- `/home/ubuntu/maverick-v3/apps/chat`
+- `<repo>/apps/chat`
 
 Current v3 state:
 

@@ -7,7 +7,7 @@ Wants=maverick3-rescue.service
 Type=oneshot
 User=ubuntu
 Group=ubuntu
-WorkingDirectory=/home/ubuntu/maverick-v3
+WorkingDirectory=/opt/maverick-v3
 Environment=PYTHONUNBUFFERED=1
 ExecStart=/usr/bin/python3 scripts/rescue_backend_watchdog.py
 TimeoutStartSec=infinity

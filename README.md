@@ -1,78 +1,118 @@
 # Maverick v3
 
-Maverick v3 is a clean rebuild of Maverick with:
+Maverick is a workspace-isolated AI operating environment for building, running, and extending agent-powered apps.
 
-- a standalone headless core
-- standalone apps
-- workspace-first isolation
-- provider-agnostic runtime architecture
-- explicit inter-agent communication as a core capability
+Maverick v3 is a clean rebuild. It is not a backward-compatible continuation of Maverick v2.
 
-This repository is intentionally separate from `maverick-v2`.
+## Status
 
-It is not a backward-compatible continuation of the v2 codebase.
+Maverick v3 is experimental and not production-ready.
 
-## Initial Layout
+Do not expose it to the public internet or store production secrets in it yet. Known security blockers are documented in `SECURITY_AUDIT.md`; open source launch readiness is tracked in `OPEN_SOURCE.md`.
+
+## What Maverick Provides
+
+- headless platform core under `core/`
+- workspace-rooted tenant data under `workspaces/<workspace_id>/`
+- app-owned workspace data under `workspaces/<workspace_id>/data/<app_id>/`
+- contract-driven built-in apps under `apps/`
+- sandbox-first runtime policy for non-default workspaces
+- provider-backed runtime sessions for agents
+- app CLI and MCP discovery surfaces
+
+## Repository Layout
 
 ```text
-/home/ubuntu/maverick-v3/
-  apps/
-  core/
-  docs/
-  local-skills/
-  scripts/
-  tests/
-  workspaces/
+apps/        Built-in app packages and app contracts.
+core/        Maverick platform core package root.
+docs/        Architecture, SDK, deployment, and security documentation.
+scripts/     Developer, verification, and deployment helper scripts.
+tests/       Python test suite.
+workspaces/  Workspace-owned runtime and app data roots.
 ```
 
-## Repository Conventions
+The `core/` directory is the direct Python package root. Do not wrap it in `backend/`, `runtime_backend/`, `app/`, or `core/core/`.
 
-- Python version: `3.12`
-- Package root: `core/` is imported directly as the Maverick core package root
-- Tests live under `tests/`
-- Current default control-plane persistence backend: MongoDB
-- Domain models and service-layer contracts must remain persistence-agnostic above the store adapter boundary
-- Preferred verification commands:
-  - `python3 -m unittest discover -s tests -p 'test_*.py'`
-  - `python3 -m compileall core tests`
-- Environment bootstrap:
-  - `python3 -m venv .venv`
-  - `. .venv/bin/activate`
+## Requirements
 
-## Core Layout Rule
+- Python 3.12
+- Node.js and npm for frontend app builds
+- Linux with `bubblewrap` for workspace sandbox verification
+- Codex CLI if you want to run Codex-backed agents
+- MongoDB for the hosted control-plane persistence path
 
-`core/` is the package root of the Maverick core.
+The current local bootstrap can run core tests without MongoDB, but a full hosted environment needs the persistence and deployment pieces documented in `docs/deployment/local_setup.md`.
 
-This means:
+## Quick Start
 
-- the core code lives directly under `core/`
-- the core must not be wrapped in extra technical folders such as `backend/`, `runtime_backend/`, or `app/`
-- the core is organized by Maverick domains such as `runtime/`, `identity/`, `workspaces/`, `providers/`, `mcp/`, and `cli/`
-- the repository must not introduce an ambiguous `core/core/` subtree
+```bash
+python3 -m venv .venv
+. .venv/bin/activate
+python3 -m pip install --upgrade pip
+python3 -m pip install -e ".[dev]"
+# Alternatively: python3 -m pip install -r requirements-dev.txt
 
-If shared internal code is needed inside the core, it should live under an explicit domain-oriented name such as `shared/` or `foundation/`, not under `core/core/`
+python3 -m unittest discover -s tests -p 'test_*.py'
+python3 -m compileall core tests scripts
+python3 scripts/check_unused_imports.py
+```
 
-## Documentation
+To run the ASGI host locally:
 
-The initial architecture documents live in `docs/architecture/`:
+```bash
+uvicorn core.api.asgi_application:app --host 127.0.0.1 --port 8000
+```
 
-- `workspace_root_architecture.md`
-- `app_contract_architecture.md`
-- `core_architecture.md`
+Then open `http://127.0.0.1:8000/health`.
 
-Implementation tracking lives in:
+## Frontend Apps
 
+Some built-in apps commit `frontend/dist/` so they can mount without a build step. Apps with frontend source and a `package-lock.json` can be rebuilt from their app directory:
+
+```bash
+cd apps/chat
+npm ci
+npm run build
+```
+
+Generated artifact policy is documented in `docs/development/generated_artifacts.md`.
+
+## Skills
+
+Maverick product skills are app-owned extension data.
+
+Bundled skill templates live under `apps/skills/skills/`. The Skills app copies workspace-owned skill templates into `workspaces/<workspace_id>/data/skills/skills/`.
+
+Maverick runtime sessions do not rely on `~/.codex/skills`, plugin skills, or repository `local-skills/` directories.
+
+## Architecture Docs
+
+Read these before changing structure or implementation:
+
+- `docs/architecture/core_architecture.md`
+- `docs/architecture/workspace_root_architecture.md`
+- `docs/architecture/app_contract_architecture.md`
 - `IMPLEMENTATION_TASKLIST.md`
-- `AGENTS.md`
 
-Repository-local Codex skills live in:
+If code and docs disagree, fix the disagreement in the same change.
 
-- `local-skills/`
+## Security
 
-When a skill should be auto-discovered by Codex, install it in `~/.codex/skills` via symlink to the versioned path in this repository.
+Read `SECURITY.md` before testing or deploying Maverick.
 
-## Build Principle
+Important current limitations:
 
-v3 starts from a clean structure and only reintroduces concepts that still fit the new architecture.
+- local bootstrap secrets are not a production secret backend
+- app frontend and backend isolation is still being hardened
+- public internet deployment is not supported
+- recovery automation and runtime provider policies need additional production gates
 
-MongoDB is the initial persistence adapter for control-plane records, not the architectural definition of the core.
+## Contributing
+
+Read `CONTRIBUTING.md`, `GOVERNANCE.md`, and `CODE_OF_CONDUCT.md`.
+
+Use public issues for reproducible bugs and docs gaps after the repository is public. Use the private security process in `SECURITY.md` for vulnerabilities.
+
+## License
+
+Maverick is released under the MIT License. See `LICENSE`.

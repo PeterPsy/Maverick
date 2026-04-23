@@ -675,7 +675,7 @@ function SetupModal(props: SetupModalProps) {
         </label>
         <label>
           <span>Login email</span>
-          <input ref={props.loginEmailRef} value={props.loginEmail} onChange={(event) => props.setLoginEmail(event.target.value)} placeholder="piero@versytechnologies.com" autoComplete="email" spellCheck={false} />
+          <input ref={props.loginEmailRef} value={props.loginEmail} onChange={(event) => props.setLoginEmail(event.target.value)} placeholder="user@example.com" autoComplete="email" spellCheck={false} />
         </label>
         <div className="oauth-actions">
           <button type="button" onClick={() => props.generateLoginUrl()}>

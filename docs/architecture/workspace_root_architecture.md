@@ -408,7 +408,7 @@ That means the platform should support this principle:
 
 The standard contract for Maverick apps is defined in:
 
-- [app_contract_architecture.md](/home/ubuntu/maverick-v3/docs/architecture/app_contract_architecture.md)
+- [app_contract_architecture.md](app_contract_architecture.md)
 
 Examples of valid app-local storage choices:
 

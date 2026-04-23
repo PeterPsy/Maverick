@@ -19,7 +19,7 @@ def utcnow() -> str:
 def default_state() -> dict[str, Any]:
     return {
         "schema_version": SCHEMA_VERSION,
-        "catalog_url": "https://maverick-app-store.versy.ai",
+        "catalog_url": "",
         "pinned_apps": ["chat"],
         "recent_installs": [],
         "created_at": utcnow(),

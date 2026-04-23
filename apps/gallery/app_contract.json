@@ -4,7 +4,7 @@
   "name": "Gallery",
   "version": "0.1.0",
   "description": "Workspace file gallery for uploaded files and generated artifacts.",
-  "publisher": "versy",
+  "publisher": "maverick",
   "minimum_core_version": "0.1.0",
   "distribution": {
     "mode": "sealed",

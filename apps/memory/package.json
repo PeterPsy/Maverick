@@ -1,6 +1,7 @@
 {
   "name": "@maverick/memory",
   "version": "0.1.0",
+  "license": "MIT",
   "private": true,
   "scripts": {
     "build": "node -e \"require('fs').accessSync('frontend/dist/index.html')\""

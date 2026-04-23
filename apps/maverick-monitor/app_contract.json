@@ -4,7 +4,7 @@
   "name": "Maverick Monitor",
   "version": "0.1.0",
   "description": "Operator dashboard for machine, workspace, app, process, and Maverick service health.",
-  "publisher": "versy",
+  "publisher": "maverick",
   "minimum_core_version": "0.1.0",
   "distribution": {
     "mode": "sealed",

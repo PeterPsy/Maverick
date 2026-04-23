@@ -136,7 +136,7 @@ describe("runtime event transcript projection", () => {
       event({
         event_id: "final-with-local-path",
         event_type: "runtime.output.final",
-        payload: { text: "File: /home/ubuntu/maverick-v3/workspaces/default/storage/generated/secret.pdf" },
+        payload: { text: "File: /srv/maverick/workspaces/default/storage/generated/secret.pdf" },
       }),
     ]);
 
@@ -148,7 +148,7 @@ describe("runtime event transcript projection", () => {
         workspace_relative_path: "storage/generated/secret.pdf",
       },
     });
-    expect(JSON.stringify(preview?.structuredContent?.payload)).not.toContain("/home/ubuntu");
+    expect(JSON.stringify(preview?.structuredContent?.payload)).not.toContain("/srv/maverick");
   });
 
   it("groups runtime tool call events under one tool-used message", () => {

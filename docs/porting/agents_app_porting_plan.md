@@ -8,11 +8,11 @@ The goal is not to preserve the v2 backend, route, or Mongo shape. The goal is t
 
 Source app:
 
-- `/home/ubuntu/maverick-v2/apps/agents`
+- `<maverick-v2-checkout>/apps/agents`
 
 Target app:
 
-- `/home/ubuntu/maverick-v3/apps/agents`
+- `<repo>/apps/agents`
 
 Current v3 state:
 
@@ -81,7 +81,7 @@ apps/agents/
       layout.css
       main.css
       responsive.css
-      versyBrandTokens.css
+      maverickBrandTokens.css
 ```
 
 Generated `__pycache__` directories and empty compatibility files are not porting inputs.
@@ -103,7 +103,7 @@ Generated `__pycache__` directories and empty compatibility files are not portin
 | `frontend/styles/layout.css` | port as reference only | focused v3 app layout CSS |
 | `frontend/styles/main.css` | port as reference only | focused v3 app CSS |
 | `frontend/styles/responsive.css` | port as reference only | responsive rules folded into v3 CSS |
-| `frontend/styles/versyBrandTokens.css` | port only if tokens are still product policy | otherwise do not port |
+| `frontend/styles/maverickBrandTokens.css` | port only if tokens are still product policy | otherwise do not port |
 
 ## Role Inventory
 
@@ -120,12 +120,12 @@ The v2 app includes 17 role documents:
 - `dynamic-product-price-researcher`
 - `frontend-design-engineer`
 - `general-operator`
-- `piero-linkedin-content-os`
+- `example-content-agent`
 - `platform-verifier`
 - `role-creator`
 - `server-coding-engineer`
-- `versy-design-analyst`
-- `versy-media-creative-direction`
+- `example-design-analyst`
+- `example-media-creative-direction`
 
 The v3 port should seed all 17 roles and create an initial usable `agent_type` for each role. V2 seeded only a smaller subset of default agent types, but the v3 product requirement is to have all agents available to manage and use.
 

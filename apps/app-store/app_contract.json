@@ -4,7 +4,7 @@
   "name": "App Store",
   "version": "0.1.0",
   "description": "Authenticated Maverick app catalog for installing system apps into selected workspaces.",
-  "publisher": "versy",
+  "publisher": "maverick",
   "minimum_core_version": "0.1.0",
   "distribution": {
     "mode": "sealed",

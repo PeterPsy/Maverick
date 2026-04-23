@@ -49,6 +49,8 @@ def _read_url_json(url: str, *, timeout_seconds: int = 30) -> dict[str, Any]:
 
 def fetch_remote_catalog(base_url: str) -> dict[str, Any]:
     """Fetch the public app catalog from a configured Maverick App Store."""
+    if not base_url:
+        raise AppLifecycleError("MAVERICK_APP_STORE_URL must be configured before fetching the public app catalog.")
     return _read_url_json(urljoin(base_url.rstrip("/") + "/", "api/apps"))
 
 

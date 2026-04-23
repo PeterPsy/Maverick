@@ -7,12 +7,12 @@ Date: 2026-04-20
 - v3 docs read: `AGENTS.md`, `IMPLEMENTATION_TASKLIST.md`, `docs/architecture/core_architecture.md`, `docs/architecture/app_contract_architecture.md`, and `docs/architecture/workspace_root_architecture.md`.
 - relevant core modules inspected: `core/api/platform_host.py`, `core/api/app_mounts.py`, `core/api/widget_api.py`, `core/apps/*`, `core/mcp/*`, `core/cli/*`, `core/skills/*`, `core/runtime/*`, `core/secrets/*`, and `core/observability/*`.
 - target app role in v3: app-owned persisted dynamic view packages and instances, rendered in its own frontend and through a chat widget.
-- app-store decision: sealed installation-level app under `apps/dynamic-views`, packageable into `/home/ubuntu/Maverick-App-Store`.
+- app-store decision: sealed installation-level app under `apps/dynamic-views`, packageable into `<app-store-checkout>`.
 - core boundary: no Dynamic Views business logic was added to core; core only mounts the declared app surfaces and widget.
 
 ## 2. V2 App Inventory
 
-- source path: `/home/ubuntu/maverick-v2/apps/dynamic_views`
+- source path: `<maverick-v2-checkout>/apps/dynamic_views`
 - manifest: `app.manifest.json`, v2 integration manifest with `core_namespaced` storage and underscore content kind.
 - frontend: React panels, iframe renderer, CSS tokens, shared UI primitives, and direct v2 API helpers.
 - backend: FastAPI routes, Pydantic schemas, Mongo collections, v2 workspace file roots, package source validation, package/instance persistence, and chat render payload creation.
@@ -98,8 +98,8 @@ The only product mismatch is the v2 content kind `dynamic_view_instance`. V3 con
 - app integration tests: `python3 -m unittest tests.test_dynamic_views_app tests.test_phase13_widgets tests.test_gallery_app tests.test_gallery_widget`
 - compile/import checks: `python3 -m compileall apps/dynamic-views tests/test_dynamic_views_app.py` and `python3 scripts/check_unused_imports.py`
 - live route smoke: `/apps/dynamic-views/` and `/api/apps/dynamic-views/backend`
-- app-store packaging: `/home/ubuntu/Maverick-App-Store/scripts/package_app.sh`
-- catalog validation: `/home/ubuntu/Maverick-App-Store/scripts/validate_catalog.py`
+- app-store packaging: `<app-store-checkout>/scripts/package_app.sh`
+- catalog validation: `<app-store-checkout>/scripts/validate_catalog.py`
 
 ## 8. Open Questions
 

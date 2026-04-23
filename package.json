@@ -1,17 +1,24 @@
 {
   "name": "maverick-v3",
-  "version": "1.0.0",
-  "description": "Maverick v3 is a clean rebuild of Maverick with:",
+  "version": "0.1.0",
+  "description": "Workspace-isolated AI operating environment for agent-powered apps.",
   "main": "index.js",
   "directories": {
     "doc": "docs",
     "test": "tests"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "python3 -m unittest discover -s tests -p 'test_*.py'",
+    "test:python": "python3 -m unittest discover -s tests -p 'test_*.py'",
+    "check:python": "python3 -m compileall core tests scripts && python3 scripts/check_unused_imports.py"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "agents",
+    "workspace",
+    "apps",
+    "ai"
+  ],
+  "author": "Maverick contributors",
+  "license": "MIT",
   "type": "commonjs"
 }

@@ -1,0 +1,11 @@
+title = "Maverick gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Documented placeholders and test fixtures"
+regexes = [
+  '''replace-with-local-development-secret''',
+  '''example\.(com|org|net)''',
+]

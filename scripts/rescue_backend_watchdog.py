@@ -31,7 +31,7 @@ DEFAULT_HEALTH_URL = "http://127.0.0.1:8014/health"
 DEFAULT_STATE_FILE = ".maverick/local-state/recovery/backend-watchdog.json"
 DEFAULT_LOCK_FILE = ".maverick/local-state/recovery/backend-rescue-agent.lock"
 DEFAULT_LOG_DIR = ".maverick/local-state/recovery/logs"
-DEFAULT_CODEX_COMMAND = "codex exec --dangerously-bypass-approvals-and-sandbox --json -C /home/ubuntu/maverick-v3 -"
+DEFAULT_CODEX_COMMAND = "codex exec --dangerously-bypass-approvals-and-sandbox --json -"
 
 
 def _utc_now() -> datetime:
@@ -77,7 +77,7 @@ def _build_rescue_prompt(*, health_url: str, downtime_seconds: float, detail: st
     return f"""Maverick v3 autonomous backend rescue.
 
 Context:
-- Repository: /home/ubuntu/maverick-v3
+- Repository: {REPOSITORY_ROOT}
 - Main backend health URL: {health_url}
 - The main backend has been continuously unhealthy for about {downtime_minutes:.1f} minutes.
 - Latest health failure: {detail}

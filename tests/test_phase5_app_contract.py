@@ -43,6 +43,7 @@ class Phase5AppContractTestCase(unittest.TestCase):
             "base-shell": [],
             "chat": ["threads", "projects"],
             "crm": ["records"],
+            "developer-kit": [],
             "document-generator": ["documents"],
             "dynamic-views": ["views"],
             "gallery": ["files", "view-state"],

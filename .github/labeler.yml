@@ -1,0 +1,25 @@
+docs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "docs/**"
+          - "*.md"
+frontend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "apps/*/frontend/**"
+backend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "core/**"
+          - "apps/*/backend/**"
+runtime:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "core/runtime/**"
+          - "core/providers/**"
+security:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "SECURITY.md"
+          - "SECURITY_AUDIT.md"
+          - "docs/security/**"

@@ -4,7 +4,7 @@
   "name": "Chat",
   "version": "0.2.0",
   "description": "Workspace chat app that talks to the selected Maverick runtime provider.",
-  "publisher": "versy",
+  "publisher": "maverick",
   "minimum_core_version": "0.1.0",
   "distribution": {
     "mode": "sealed",

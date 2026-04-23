@@ -4,7 +4,7 @@
   "name": "Base Shell",
   "version": "2.0.0",
   "description": "Maverick v3 product shell app that hosts enabled app frontends through the platform registry.",
-  "publisher": "versy",
+  "publisher": "maverick",
   "minimum_core_version": "0.1.0",
   "distribution": {
     "mode": "sealed",

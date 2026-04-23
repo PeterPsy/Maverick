@@ -8,6 +8,11 @@ __pycache__/
 .ruff_cache/
 .venv/
 venv/
+.env
+.env.*
+!.env.example
+.codex
+.maverick/
 .maverick/local-state/
 
 # Local databases and app-owned storage
@@ -15,12 +20,16 @@ venv/
 *.sqlite
 *.sqlite3
 *.duckdb
+tmp/cleanup-backups/
 
 # Logs and runtime state
 logs/
 tmp/
+output/
 runtime/
 *.log
+runtime-transcripts/
+provider-homes/
 
 # Keep the core runtime package in the repository
 !core/runtime/

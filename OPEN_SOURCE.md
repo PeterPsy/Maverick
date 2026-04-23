@@ -63,24 +63,30 @@ For launch, the practical goal is not "be as large as OpenClaw." The goal is tha
 
 ## Current Verdict
 
-Maverick v3 is not ready to be published as open source.
+Maverick v3 now has the minimum repository scaffolding expected of an experimental open source project, but it is still not ready for a broad public announcement or any production-readiness claim.
 
-The main blockers are:
+P0 repository-readiness work now has baseline coverage:
 
-- no root `LICENSE`
-- inconsistent package licensing metadata
-- no public contributor workflow
-- no security disclosure policy
-- no CI
-- no reproducible setup path for external users
+- root `LICENSE`
+- aligned MIT package metadata
+- public contributor workflow
+- security disclosure policy
+- baseline CI
+- clean-clone setup path for external users
+- generated artifact policy
+- local-state ignore policy
+- private deployment hostname cleanup
+
+The remaining launch risks are:
+
 - public-facing security issues already documented in `SECURITY_AUDIT.md`
-- local/private deployment assumptions in docs and configs
-- committed build artifacts without a documented policy
-- possible private branding and role content that needs legal/product review
-- no dependency, SBOM, provenance, or release process
-- no clear statement of project scope, maturity, threat model, or production readiness
+- dependency, SBOM, and provenance depth
+- production deployment hardening
+- complete threat model and ADR set
+- browser/accessibility coverage
+- release automation maturity
 
-The repository can be made publishable, but it needs a dedicated open-source hardening pass before release.
+The repository can be made public as experimental software after final review, but it should not be marketed as secure, production-ready, or safe for internet-exposed deployments.
 
 ## Release Gate
 
@@ -91,6 +97,8 @@ Do not announce the project broadly until all P1 items are complete.
 P2 items can follow shortly after launch if they are clearly tracked in public issues.
 
 ## P0: Must Fix Before Public Repository
+
+The subsections below are the audit checklist. Items may describe the original gap that triggered the P0 work; use the exit criteria to verify whether the current tree satisfies each item.
 
 ### 1. Choose and add the actual open source license
 
@@ -369,12 +377,12 @@ Exit criteria:
 
 ### 9. Remove private branding and product-specific content that should not be open
 
-Current state:
+Original state:
 
-- Several files reference `versy`, `maverick3.versy.ai`, and personal or company-specific roles.
-- App role templates include names such as `piero-linkedin-content-os`, `versy-design-analyst`, and `versy-media-creative-direction`.
-- CSS includes `versyBrandTokens.css`.
-- Docs include deployment references to `maverick3.versy.ai`.
+- Several files referenced private company branding, a private deployment hostname, and personal or company-specific role examples.
+- App role templates included private role names.
+- CSS used private brand-token naming.
+- Deployment docs used a private hosted domain.
 
 Required work:
 

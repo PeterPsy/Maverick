@@ -4,7 +4,7 @@
   "name": "Skills",
   "version": "0.1.0",
   "description": "Workspace app for creating, editing, validating, and deleting workspace-owned Codex skills.",
-  "publisher": "versy",
+  "publisher": "maverick",
   "minimum_core_version": "0.1.0",
   "distribution": {
     "mode": "sealed",

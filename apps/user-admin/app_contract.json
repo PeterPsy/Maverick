@@ -4,7 +4,7 @@
   "name": "User Admin",
   "version": "0.1.0",
   "description": "Admin-only control panel for users, platform roles, and workspace assignments.",
-  "publisher": "versy",
+  "publisher": "maverick",
   "minimum_core_version": "0.1.0",
   "distribution": {
     "mode": "sealed",

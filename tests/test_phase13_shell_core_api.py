@@ -274,13 +274,20 @@ class ShellCoreApiTestCase(unittest.TestCase):
         state = bootstrap_platform_state(start_path=self.make_repo_root())
         app = PlatformHost(state, start_path=state.repository_root)
         cookie = self.login(app)
-        self.invoke(app, path="/api/apps/chat/backend", method="POST", body={"action": "bootstrap"}, cookie=cookie)
+        create_status, _created_session, _create_headers = self.invoke(
+            app,
+            path="/api/runtime/sessions",
+            method="POST",
+            body={"agent_id": "chat"},
+            cookie=cookie,
+        )
 
         status_provider, provider, _provider_headers = self.invoke(app, path="/api/providers/active", cookie=cookie)
         status_runtime, runtime, _runtime_headers = self.invoke(app, path="/api/runtime/status", cookie=cookie)
         status_settings, settings, _settings_headers = self.invoke(app, path="/api/settings/platform", cookie=cookie)
         status_recovery, recovery, _recovery_headers = self.invoke(app, path="/api/recovery/status", cookie=cookie)
 
+        self.assertEqual(create_status, 201)
         self.assertEqual(status_provider, 200)
         self.assertEqual(provider["active_provider"]["provider_id"], "codex")
         self.assertEqual(status_runtime, 200)

@@ -4,7 +4,7 @@
   "name": "Gmail App",
   "version": "0.1.0",
   "description": "Google Workspace Gmail relationship workflow app with referenceable email context and explicit send confirmation.",
-  "publisher": "versy",
+  "publisher": "maverick",
   "minimum_core_version": "0.1.0",
   "distribution": {
     "mode": "source_available",

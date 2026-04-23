@@ -18,10 +18,10 @@ function event(event_id: string, created_at: string): RuntimeEvent {
 
 describe("runtime websocket helpers", () => {
   it("builds a same-origin websocket URL with replay cursor", () => {
-    vi.stubGlobal("window", { location: { protocol: "https:", host: "maverick3.versy.ai" } });
+    vi.stubGlobal("window", { location: { protocol: "https:", host: "example.localhost" } });
 
     expect(runtimeWebSocketUrl("session 1", "event-1")).toBe(
-      "wss://maverick3.versy.ai/ws/runtime/sessions/session%201?last_event_id=event-1",
+      "wss://example.localhost/ws/runtime/sessions/session%201?last_event_id=event-1",
     );
 
     vi.unstubAllGlobals();

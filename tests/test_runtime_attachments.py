@@ -19,7 +19,7 @@ class RuntimeAttachmentPromptTestCase(unittest.TestCase):
                     "relativePath": "storage/uploaded/file-1/ChatGPT-Image.png",
                 }
             ],
-            workspace_root="/home/ubuntu/maverick-v3/workspaces/default",
+            workspace_root="<repo>/workspaces/default",
         )
 
         self.assertIn("Can you see this image?", prompt)
@@ -27,7 +27,7 @@ class RuntimeAttachmentPromptTestCase(unittest.TestCase):
         self.assertIn("ChatGPT Image.png", prompt)
         self.assertIn("image/png", prompt)
         self.assertIn("storage/uploaded/file-1/ChatGPT-Image.png", prompt)
-        self.assertIn("/home/ubuntu/maverick-v3/workspaces/default/storage/uploaded/file-1/ChatGPT-Image.png", prompt)
+        self.assertIn("<repo>/workspaces/default/storage/uploaded/file-1/ChatGPT-Image.png", prompt)
 
     def test_attachment_only_turn_gets_default_provider_instruction(self) -> None:
         prompt = input_text_with_attachment_links(

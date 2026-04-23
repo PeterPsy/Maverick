@@ -4,7 +4,7 @@
   "name": "Agents",
   "version": "0.1.0",
   "description": "Workspace app for managing agent roles, prompt composition, and runtime-ready agent types.",
-  "publisher": "versy",
+  "publisher": "maverick",
   "minimum_core_version": "0.1.0",
   "distribution": {
     "mode": "sealed",

@@ -11,7 +11,7 @@ function app(app_id: string, frontend_mount: string): AppRegistryItem {
     frontend_mount,
     logo: null,
     name: app_id,
-    publisher: "versy",
+    publisher: "maverick",
     source_access: "none",
     status: "enabled",
     version: "1.0.0",

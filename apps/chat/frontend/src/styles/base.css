@@ -1,7 +1,7 @@
-@import "./versyBrandTokens.css";
+@import "./maverickBrandTokens.css";
 
 :root {
-  font-family: var(--versy-font-family-base);
+  font-family: var(--maverick-font-family-base);
   color-scheme: dark;
   --maverick-bg: #1f1f1f;
   --maverick-bg-strong: #171717;

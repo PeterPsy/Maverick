@@ -199,7 +199,7 @@ class GalleryAppTestCase(unittest.TestCase):
                 body={
                     "action": "set_custom_view",
                     "title": "Topic: Versy",
-                    "file_ids": ["generated:versy_company_profile.docx"],
+                    "file_ids": ["generated:company_profile.docx"],
                     "workspace_relative_paths": ["storage/uploaded/logo/Logo.png"],
                 },
             )
@@ -226,7 +226,7 @@ class GalleryAppTestCase(unittest.TestCase):
             view = custom["json"]["state"]["view_filter"]
             self.assertEqual(view["mode"], "custom")
             self.assertEqual(view["title"], "Topic: Versy")
-            self.assertEqual(view["file_ids"], ["generated:versy_company_profile.docx"])
+            self.assertEqual(view["file_ids"], ["generated:company_profile.docx"])
             self.assertEqual(view["workspace_relative_paths"], ["storage/uploaded/logo/Logo.png"])
             self.assertEqual(refined["json"]["state"]["view_filter"]["mode"], "custom")
             self.assertEqual(refined["json"]["state"]["view_filter"]["query"], "deck")
@@ -595,7 +595,7 @@ class GalleryAppTestCase(unittest.TestCase):
             arguments={
                 "action": "set_custom_view",
                 "title": "Topic files",
-                "file_ids": ["generated:memory_app_checklist.md", "generated:versy_company_profile.docx"],
+                "file_ids": ["generated:memory_app_checklist.md", "generated:company_profile.docx"],
             },
             app_store=state.app_store,
             workspace_id="default",
@@ -607,7 +607,7 @@ class GalleryAppTestCase(unittest.TestCase):
         self.assertEqual(custom["state"]["view_filter"]["title"], "Topic files")
         self.assertEqual(
             custom["state"]["view_filter"]["file_ids"],
-            ["generated:memory_app_checklist.md", "generated:versy_company_profile.docx"],
+            ["generated:memory_app_checklist.md", "generated:company_profile.docx"],
         )
 
 

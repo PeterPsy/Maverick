@@ -4,7 +4,7 @@
   "name": "Dynamic Views",
   "version": "0.1.0",
   "description": "Persisted custom visual views rendered in chat and reopened from a workspace library.",
-  "publisher": "versy",
+  "publisher": "maverick",
   "minimum_core_version": "0.1.0",
   "distribution": {
     "mode": "sealed",

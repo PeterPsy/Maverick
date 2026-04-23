@@ -435,7 +435,7 @@ class MaverickAppSdkTestCase(unittest.TestCase):
         for skill_path in skill_paths:
             with self.subTest(skill_path=skill_path):
                 content = skill_path.read_text(encoding="utf-8")
-                self.assertNotIn("/home/ubuntu/maverick-v3", content)
+                self.assertNotIn("<repo>", content)
                 self.assertNotIn("maverick-v3/workspaces/default", content)
                 self.assertNotIn("docs/architecture", content)
                 self.assertNotIn("core_architecture", content)

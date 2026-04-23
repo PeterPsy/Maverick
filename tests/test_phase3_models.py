@@ -102,7 +102,7 @@ class Phase3ModelTestCase(unittest.TestCase):
 
     def test_identity_models_build_expected_records(self) -> None:
         now = datetime.now(tz=UTC)
-        user = build_user_record(user_id="u1", username="piero", now=now, platform_role="admin")
+        user = build_user_record(user_id="u1", username="alice", now=now, platform_role="admin")
         credential = build_password_credential(user_id="u1", password_hash="hash", algorithm="pbkdf2_sha256", now=now)
         session = build_auth_session(session_id="s1", user_id="u1", expires_at=now + timedelta(hours=1), now=now)
 
@@ -112,13 +112,13 @@ class Phase3ModelTestCase(unittest.TestCase):
 
     def test_identity_service_accepts_non_mongo_store_contract(self) -> None:
         now = datetime.now(tz=UTC)
-        user = build_user_record(user_id="u1", username="piero", now=now)
+        user = build_user_record(user_id="u1", username="alice", now=now)
         credential = build_password_credential(user_id="u1", password_hash="hash", algorithm="pbkdf2_sha256", now=now)
         store = FakeIdentityStore()
 
         register_user(store, user, credential)
 
-        self.assertEqual(store.get_user("u1").username, "piero")
+        self.assertEqual(store.get_user("u1").username, "alice")
         self.assertEqual(store.get_password_credential("u1").algorithm, "pbkdf2_sha256")
 
     def test_default_workspace_record_is_bootstrapped_immediately(self) -> None:

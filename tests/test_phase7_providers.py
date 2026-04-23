@@ -278,10 +278,13 @@ class Phase7ProvidersTestCase(unittest.TestCase):
                 / "codex"
                 / "codex"
             )
+            rg = standalone.parent.parent / "path" / "rg"
             codex_js.parent.mkdir(parents=True)
             standalone.parent.mkdir(parents=True)
+            rg.parent.mkdir(parents=True)
             codex_js.write_text("#!/usr/bin/env node\n", encoding="utf-8")
             standalone.write_text("binary\n", encoding="utf-8")
+            rg.write_text("rg-binary\n", encoding="utf-8")
             codex_bin.parent.mkdir(parents=True)
             codex_bin.symlink_to("../lib/node_modules/@openai/codex/bin/codex.js")
             adapter = CodexProviderAdapter(codex_command="codex")
@@ -300,6 +303,7 @@ class Phase7ProvidersTestCase(unittest.TestCase):
         self.assertEqual(runtime_command, str(standalone))
         self.assertIn("--dependency-file", sandbox_command)
         self.assertIn(f"{standalone}={home / 'workspace' / 'runtime' / 'bin' / 'codex'}", sandbox_command)
+        self.assertIn(f"{rg}={home / 'workspace' / 'runtime' / 'bin' / 'rg'}", sandbox_command)
         separator_index = sandbox_command.index("--")
         self.assertEqual(sandbox_command[separator_index + 1], str(home / "workspace" / "runtime" / "bin" / "codex"))
 

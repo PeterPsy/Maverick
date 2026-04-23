@@ -181,6 +181,9 @@ class CodexProviderAdapter:
             sandbox_command = runtime_root / "bin" / "codex"
             dependency_args = ["--dependency-file", f"{host_command_path}={sandbox_command}"]
             command[0] = str(sandbox_command)
+            rg = self._vendored_codex_tool_binary(host_command_path, "rg")
+            if rg is not None:
+                dependency_args.extend(["--dependency-file", f"{rg}={runtime_root / 'bin' / 'rg'}"])
         return [
             sys.executable,
             "-m",
@@ -456,6 +459,14 @@ class CodexProviderAdapter:
         for candidate in candidates:
             if candidate.is_file():
                 return candidate.resolve(strict=False)
+        return None
+
+    def _vendored_codex_tool_binary(self, standalone_codex: Path, tool_name: str) -> Path | None:
+        if not self._is_standalone_codex_binary(standalone_codex):
+            return None
+        candidate = standalone_codex.parent.parent / "path" / tool_name
+        if candidate.is_file():
+            return candidate.resolve(strict=False)
         return None
 
     def _is_standalone_codex_binary(self, resolved: Path) -> bool:

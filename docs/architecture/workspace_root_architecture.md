@@ -199,6 +199,8 @@ Runtime sessions may also contain provider-managed executable shims under:
 
 The `maverick` shim installed there is the official SDK and platform CLI for workspace-isolated agents. It is a hosted API client scoped by a runtime token and must not depend on installation-level `core/`, `apps/`, or `scripts/` paths being readable inside the workspace sandbox.
 
+Provider adapters may also bind specific development helper binaries into this directory when those tools are required for ordinary workspace work. These must be explicit file-level read-only binds, not broad package-root, home-directory, or repository mounts. For Codex, the adapter binds the packaged standalone `rg` binary into `runtime/sessions/<runtime_session_id>/bin/rg` so agents can search inside their workspace without being able to read the operator's Codex package tree or any non-workspace data.
+
 The shim must support the same discovery-first command families documented for agents, including `maverick apps list --json`, `maverick core cli list --json`, `maverick app <app_id> cli list --json`, and `maverick app <app_id> frontend build --json`. Runtime shims forward those commands to a core-owned runtime CLI API, which resolves the workspace and runtime session from the token and enforces the command's invocation policy before running server-side operations. Frontend rebuild is intentionally allowed from sandbox runtime sessions because it is the official way for workspace agents to publish updated app assets and trigger mounted-client refresh events; broader app management operations such as install, uninstall, and source removal remain more restricted.
 
 So the distinction is:

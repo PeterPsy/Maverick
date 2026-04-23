@@ -294,10 +294,6 @@ export function listRuntimeEvents(sessionId: string, options: { limit?: number }
   return requestJson<{ items: RuntimeEvent[] }>(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/events${suffix}`);
 }
 
-export function listRuntimeTurns(sessionId: string): Promise<{ items: RuntimeTurn[] }> {
-  return requestJson<{ items: RuntimeTurn[] }>(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/turns`);
-}
-
 export function runtimeWebSocketUrl(sessionId: string, lastEventId?: string | null): string {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   const url = new URL(`${protocol}//${window.location.host}/ws/runtime/sessions/${encodeURIComponent(sessionId)}`);
@@ -427,6 +423,7 @@ export function updateThread(payload: {
   system_prompt?: string;
   project_id?: string | null;
   archived?: boolean;
+  availability?: string;
 }): Promise<{ thread: ChatThread; threads: ChatThread[]; projects?: ChatProject[] }> {
   return requestJson<{ thread: ChatThread; threads: ChatThread[]; projects?: ChatProject[] }>("/api/apps/chat/backend", {
     method: "POST",

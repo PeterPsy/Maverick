@@ -687,7 +687,7 @@
 
   .chatapp-structured-widget {
     width: 100%;
-    min-height: min(360px, 62dvh);
+    min-height: min(160px, 40dvh);
     border-radius: 14px;
   }
 

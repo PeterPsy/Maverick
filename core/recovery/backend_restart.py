@@ -14,7 +14,9 @@ if TYPE_CHECKING:
     from core.api.platform_state import PlatformState
 
 
-RESUME_INPUT_TEXT = "resume"
+BACKEND_RESTART_CONTINUATION_INPUT_TEXT = (
+    "The backend restarted successfully. Continue from where you left off using the prior conversation and current workspace state."
+)
 RESUME_CLIENT_MESSAGE_ID_PREFIX = "backend-restart-resume:"
 NON_TERMINAL_TURN_STATUSES = {"queued", "active"}
 NON_TERMINAL_TURN_EVENTS = {
@@ -118,7 +120,7 @@ def recover_interrupted_runtime_turns_after_backend_restart(
         submit_runtime_turn_async(
             state,
             session=state.runtime_store.get_session(session.session_id),
-            input_text=RESUME_INPUT_TEXT,
+            input_text=BACKEND_RESTART_CONTINUATION_INPUT_TEXT,
             client_message_id=f"{RESUME_CLIENT_MESSAGE_ID_PREFIX}{session.session_id}:{uuid4()}",
         )
         queued_resumes += 1
@@ -128,7 +130,7 @@ def recover_interrupted_runtime_turns_after_backend_restart(
             session_id=session.session_id,
             plane="runtime",
             event_type="runtime.recovery.resume_queued",
-            payload={"reason": "backend_restart", "input_text": RESUME_INPUT_TEXT},
+            payload={"reason": "backend_restart", "input_text": BACKEND_RESTART_CONTINUATION_INPUT_TEXT},
             event_bus=state.runtime_event_bus,
         )
     return BackendRestartRecoveryResult(
@@ -268,7 +270,7 @@ def _failure_reason_from_terminal_event(event) -> str | None:
 
 
 def _is_backend_restart_resume_turn(turn, events: list) -> bool:
-    if turn.input_text != RESUME_INPUT_TEXT:
+    if turn.input_text != BACKEND_RESTART_CONTINUATION_INPUT_TEXT:
         return False
     for event in events:
         if event.turn_id != turn.turn_id or event.event_type != "runtime.turn.queued":

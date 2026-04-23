@@ -41,6 +41,8 @@ class _CodexAppServerRuntime:
     current_event_sink: RuntimeExecutionEventSink | None = None
     current_chunks: list[str] = field(default_factory=list)
     streamed_agent_item_ids: set[str] = field(default_factory=set)
+    pending_agent_json_chunks: dict[str, list[str]] = field(default_factory=dict)
+    emitted_structured_keys: set[str] = field(default_factory=set)
     current_error_text: str | None = None
     completion_queue: queue.Queue = field(default_factory=lambda: queue.Queue(maxsize=1))
     reader_thread: threading.Thread | None = None
@@ -68,6 +70,8 @@ def execute_codex_app_server_turn(
         runtime.current_event_sink = event_sink
         runtime.current_chunks = []
         runtime.streamed_agent_item_ids = set()
+        runtime.pending_agent_json_chunks = {}
+        runtime.emitted_structured_keys = set()
         runtime.current_error_text = None
         runtime.completion_queue = queue.Queue(maxsize=1)
 
@@ -97,6 +101,8 @@ def execute_codex_app_server_turn(
             error_text = runtime.current_error_text
             runtime.current_chunks = []
             runtime.streamed_agent_item_ids = set()
+            runtime.pending_agent_json_chunks = {}
+            runtime.emitted_structured_keys = set()
             runtime.current_error_text = None
 
     status = str(completion.get("status") or "completed").strip().lower() if isinstance(completion, dict) else "completed"
@@ -329,6 +335,7 @@ def _handle_notification(runtime: _CodexAppServerRuntime, payload: dict[str, Any
             runtime.current_provider_turn_id = provider_turn_id
         return
     if method == "turn/completed":
+        _flush_pending_agent_json_chunks(runtime, provider_event_type=method)
         turn = params.get("turn") if isinstance(params.get("turn"), dict) else {}
         _put_completion(runtime, {"status": str(turn.get("status") or "completed")})
         return
@@ -336,6 +343,8 @@ def _handle_notification(runtime: _CodexAppServerRuntime, payload: dict[str, Any
         delta = str(params.get("delta") or "")
         if delta:
             item_id = _item_id(params)
+            if item_id and _should_buffer_agent_json_delta(runtime=runtime, item_id=item_id, delta=delta):
+                return
             with runtime.event_lock:
                 runtime.current_chunks.append(delta)
                 if item_id:
@@ -370,6 +379,8 @@ def _extract_error_text(params: dict[str, Any]) -> str:
 
 def _handle_item_event(runtime: _CodexAppServerRuntime, *, provider_type: str, item: dict[str, Any]) -> None:
     if _is_agent_message_item(item) and provider_type.endswith("completed"):
+        if _emit_completed_agent_message_output(runtime=runtime, provider_type=provider_type, item=item):
+            return
         text = str(item.get("text") or "").strip()
         if text:
             item_id = _item_id(item)
@@ -385,21 +396,145 @@ def _handle_item_event(runtime: _CodexAppServerRuntime, *, provider_type: str, i
         _emit(runtime, event)
     structured = _structured_content_from_completed_item(provider_type=provider_type, item=item)
     if structured is not None:
-        _emit(
+        _emit_structured_output(
             runtime,
-            RuntimeExecutionEvent(
-                event_type="runtime.output.structured",
-                payload={
-                    "structured_content": structured,
-                    "provider_event_type": provider_type,
-                    "tool_call_id": _item_id(item) or None,
-                },
-            ),
+            provider_event_type=provider_type,
+            structured=structured,
+            tool_call_id=_item_id(item) or None,
         )
 
 
 def _is_agent_message_item(item: dict[str, Any]) -> bool:
     return str(item.get("type") or "").strip() in {"agentMessage", "agent_message"}
+
+
+def _should_buffer_agent_json_delta(*, runtime: _CodexAppServerRuntime, item_id: str, delta: str) -> bool:
+    with runtime.event_lock:
+        pending = runtime.pending_agent_json_chunks.get(item_id)
+        if pending is not None:
+            pending.append(delta)
+            return True
+        if delta.lstrip().startswith("{"):
+            runtime.pending_agent_json_chunks[item_id] = [delta]
+            return True
+    return False
+
+
+def _emit_completed_agent_message_output(*, runtime: _CodexAppServerRuntime, provider_type: str, item: dict[str, Any]) -> bool:
+    item_id = _item_id(item)
+    text = str(item.get("text") or "")
+    pending_text = _pop_pending_agent_json_chunk(runtime, item_id)
+    candidate_text = text or pending_text
+    if candidate_text:
+        parsed = _parse_structured_agent_output(candidate_text)
+        if parsed is not None:
+            _emit_agent_text_output(runtime=runtime, provider_event_type=provider_type, item_id=item_id, text=parsed.get("text") or "")
+            _emit_structured_output(
+                runtime,
+                provider_event_type=provider_type,
+                structured=parsed["structured_content"],
+                tool_call_id=item_id or None,
+            )
+            return True
+    if pending_text:
+        _emit_agent_text_output(runtime=runtime, provider_event_type=provider_type, item_id=item_id, text=candidate_text)
+        return True
+    return False
+
+
+def _pop_pending_agent_json_chunk(runtime: _CodexAppServerRuntime, item_id: str) -> str:
+    if not item_id:
+        return ""
+    with runtime.event_lock:
+        chunks = runtime.pending_agent_json_chunks.pop(item_id, None)
+    return "".join(chunks or [])
+
+
+def _emit_agent_text_output(*, runtime: _CodexAppServerRuntime, provider_event_type: str, item_id: str, text: str) -> None:
+    if not text:
+        return
+    with runtime.event_lock:
+        runtime.current_chunks.append(text)
+        if item_id:
+            runtime.streamed_agent_item_ids.add(item_id)
+    _emit(runtime, RuntimeExecutionEvent(event_type="runtime.output.delta", payload={"text": text, "provider_event_type": provider_event_type}))
+
+
+def _flush_pending_agent_json_chunks(runtime: _CodexAppServerRuntime, *, provider_event_type: str) -> None:
+    with runtime.event_lock:
+        pending_items = list(runtime.pending_agent_json_chunks.items())
+        runtime.pending_agent_json_chunks = {}
+    for item_id, chunks in pending_items:
+        text = "".join(chunks)
+        if not text:
+            continue
+        parsed = _parse_structured_agent_output(text)
+        if parsed is not None:
+            _emit_agent_text_output(runtime=runtime, provider_event_type=provider_event_type, item_id=item_id, text=parsed.get("text") or "")
+            _emit_structured_output(
+                runtime,
+                provider_event_type=provider_event_type,
+                structured=parsed["structured_content"],
+                tool_call_id=item_id or None,
+            )
+            continue
+        _emit_agent_text_output(runtime=runtime, provider_event_type=provider_event_type, item_id=item_id, text=text)
+
+
+def _emit_structured_output(
+    runtime: _CodexAppServerRuntime,
+    *,
+    provider_event_type: str,
+    structured: dict[str, Any],
+    tool_call_id: str | None,
+) -> None:
+    key = json.dumps(structured, sort_keys=True, separators=(",", ":"))
+    with runtime.event_lock:
+        if key in runtime.emitted_structured_keys:
+            return
+        runtime.emitted_structured_keys.add(key)
+    _emit(
+        runtime,
+        RuntimeExecutionEvent(
+            event_type="runtime.output.structured",
+            payload={
+                "structured_content": structured,
+                "provider_event_type": provider_event_type,
+                "tool_call_id": tool_call_id,
+            },
+        ),
+    )
+
+
+def _parse_structured_agent_output(value: str) -> dict[str, Any] | None:
+    payload = _decode_json_object(value)
+    if payload is None:
+        return None
+    structured = _structured_content_from_payload(payload)
+    if structured is None:
+        return None
+    text = str(payload.get("text") or "").strip()
+    return {"text": text, "structured_content": structured}
+
+
+def _structured_content_from_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
+    structured_payload = payload.get("structured_content") or payload.get("structuredContent") or payload.get("content")
+    if isinstance(structured_payload, dict):
+        structured = _structured_content_record(structured_payload)
+        if structured is not None:
+            return structured
+    chat_render = payload.get("chat_render")
+    if isinstance(chat_render, dict):
+        return _structured_content_record(chat_render)
+    return None
+
+
+def _structured_content_record(value: dict[str, Any]) -> dict[str, Any] | None:
+    kind = str(value.get("kind") or "").strip()
+    if not kind:
+        return None
+    content_payload = value.get("payload") if isinstance(value.get("payload"), dict) else value
+    return {"kind": kind, "payload": content_payload}
 
 
 def _structured_content_from_completed_item(*, provider_type: str, item: dict[str, Any]) -> dict[str, Any] | None:
@@ -413,14 +548,7 @@ def _structured_content_from_completed_item(*, provider_type: str, item: dict[st
     payload = _decode_json_object(output)
     if payload is None:
         return None
-    chat_render = payload.get("chat_render")
-    if not isinstance(chat_render, dict):
-        return None
-    kind = str(chat_render.get("kind") or "").strip()
-    if not kind:
-        return None
-    content_payload = chat_render.get("payload") if isinstance(chat_render.get("payload"), dict) else chat_render
-    return {"kind": kind, "payload": content_payload}
+    return _structured_content_from_payload(payload)
 
 
 def _decode_json_object(value: str) -> dict[str, Any] | None:

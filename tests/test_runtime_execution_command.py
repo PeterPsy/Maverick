@@ -206,6 +206,29 @@ class RuntimeExecutionCommandTest(unittest.TestCase):
         self.assertEqual(structured_events[0].payload["structured_content"]["kind"], "dynamic.view.instance")
         self.assertEqual(structured_events[0].payload["structured_content"]["payload"]["id"], "view_1")
 
+    def test_codex_completed_agent_message_can_emit_structured_runtime_output(self) -> None:
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        session = _session("sandbox", root=temp_dir.name, session_id="session-agent-structured")
+        emitted = []
+
+        result = execute_runtime_turn(
+            session=session,
+            provider=build_codex_definition(),
+            input_text="show checklist",
+            launch_spec=_launch_spec(session),
+            event_sink=emitted.append,
+            command_runner=FakeCodexStructuredAgentMessageProcess,
+            timeout_seconds=2,
+        )
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(result.output_text, "Checklist pronta")
+        self.assertEqual([event.event_type for event in emitted], ["runtime.output.delta", "runtime.output.structured"])
+        self.assertEqual(emitted[0].payload["text"], "Checklist pronta")
+        self.assertEqual(emitted[1].payload["structured_content"]["kind"], "checklist.design")
+        self.assertEqual(emitted[1].payload["structured_content"]["payload"]["id"], "check_demo1234")
+
 
 def _session(effective_mode: str, *, root: str = "/tmp", session_id: str = "session-1") -> RuntimeSessionRecord:
     now = datetime(2026, 4, 19, tzinfo=timezone.utc)
@@ -458,6 +481,44 @@ class FakeCodexChatRenderCliProcess(FakeCodexProcess):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.stdin = FakeCodexChatRenderCliStdin(self.stdout)
+
+
+class FakeCodexStructuredAgentMessageStdin(FakeStdin):
+    def write(self, raw: str) -> None:
+        payload = json.loads(raw)
+        method = payload["method"]
+        request_id = payload["id"]
+        if method == "initialize":
+            self.stdout.put({"jsonrpc": "2.0", "id": request_id, "result": {}})
+        elif method == "thread/start":
+            self.stdout.put({"jsonrpc": "2.0", "id": request_id, "result": {"thread": {"id": "thread-structured"}}})
+        elif method == "turn/start":
+            agent_output = json.dumps(
+                {
+                    "text": "Checklist pronta",
+                    "structured_content": {
+                        "kind": "checklist.design",
+                        "payload": {"id": "check_demo1234", "title": "Checklist demo"},
+                    },
+                }
+            )
+            self.stdout.put({"jsonrpc": "2.0", "id": request_id, "result": {"turn": {"id": "turn-structured"}}})
+            self.stdout.put({"jsonrpc": "2.0", "method": "item/agentMessage/delta", "params": {"itemId": "item-structured", "delta": agent_output[:24]}})
+            self.stdout.put({"jsonrpc": "2.0", "method": "item/agentMessage/delta", "params": {"itemId": "item-structured", "delta": agent_output[24:]}})
+            self.stdout.put(
+                {
+                    "jsonrpc": "2.0",
+                    "method": "item/completed",
+                    "params": {"item": {"id": "item-structured", "type": "agentMessage", "text": agent_output}},
+                }
+            )
+            self.stdout.put({"jsonrpc": "2.0", "method": "turn/completed", "params": {"turn": {"status": "completed"}}})
+
+
+class FakeCodexStructuredAgentMessageProcess(FakeCodexProcess):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.stdin = FakeCodexStructuredAgentMessageStdin(self.stdout)
 
 
 if __name__ == "__main__":

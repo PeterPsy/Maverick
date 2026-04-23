@@ -25,6 +25,11 @@ def parsed_contract_to_app_source_record(
     source_path: str,
     source_id: str | None = None,
     now: datetime | None = None,
+    created_at: str | None = None,
+    owner_user_id: str | None = None,
+    owner_username: str | None = None,
+    promoted_from_workspace_id: str | None = None,
+    promoted_from_project_id: str | None = None,
 ) -> AppSourceRecord:
     """Persist one parsed app contract as an installation-level app source record."""
     timestamp = _timestamp(now)
@@ -38,8 +43,12 @@ def parsed_contract_to_app_source_record(
         source_kind=source_kind,
         source_path=source_path,
         contract=parsed.contract,
-        created_at=timestamp,
+        created_at=created_at or timestamp,
         updated_at=timestamp,
+        owner_user_id=owner_user_id,
+        owner_username=owner_username,
+        promoted_from_workspace_id=promoted_from_workspace_id,
+        promoted_from_project_id=promoted_from_project_id,
     )
 
 def parsed_contract_to_workspace_local_project_record(
@@ -51,6 +60,9 @@ def parsed_contract_to_workspace_local_project_record(
     forked_from_source_id: str | None = None,
     forked_from_version: str | None = None,
     now: datetime | None = None,
+    created_at: str | None = None,
+    owner_user_id: str | None = None,
+    owner_username: str | None = None,
 ) -> WorkspaceLocalAppProjectRecord:
     """Persist one parsed app contract as a workspace-local project record."""
     timestamp = _timestamp(now)
@@ -64,8 +76,10 @@ def parsed_contract_to_workspace_local_project_record(
         publisher=parsed.publisher,
         project_root=project_root,
         contract=parsed.contract,
-        created_at=timestamp,
+        created_at=created_at or timestamp,
         updated_at=timestamp,
+        owner_user_id=owner_user_id,
+        owner_username=owner_username,
         forked_from_source_id=forked_from_source_id,
         forked_from_version=forked_from_version,
     )

@@ -116,6 +116,7 @@ export function App({
   const consumedLegacyNewChatRequest = useRef(false);
   const historyCacheRef = useRef<Map<string, RuntimeHistoryCacheEntry>>(new Map());
   const lastPublishedRuntimeBusyState = useRef<string | null>(null);
+  const availabilitySyncRequestRef = useRef(0);
   const historyRequestIdRef = useRef(0);
   const hasHydratedQueuedMessagesRef = useRef(false);
   const suppressedExternalThreadIdRef = useRef<string | null>(null);
@@ -207,8 +208,27 @@ export function App({
       return;
     }
     lastPublishedRuntimeBusyState.current = publicationKey;
-    notifyChatThreadsChanged({ active_thread_id: activeThread.thread_id });
-  }, [activeThread?.thread_id, isRuntimeBusy]);
+    const nextAvailability = isRuntimeBusy ? "busy" : "free";
+    const currentThreadId = activeThread.thread_id;
+    if (activeThread.availability !== nextAvailability) {
+      const requestId = availabilitySyncRequestRef.current + 1;
+      availabilitySyncRequestRef.current = requestId;
+      void updateThread({ thread_id: currentThreadId, availability: nextAvailability })
+        .then((payload) => {
+          if (availabilitySyncRequestRef.current !== requestId) {
+            return;
+          }
+          setThreads(payload.threads);
+          setActiveThread((current) => (current?.thread_id === payload.thread.thread_id ? payload.thread : current));
+          notifyChatThreadsChanged({ active_thread_id: payload.thread.thread_id });
+        })
+        .catch((syncError) => {
+          setError((current) => current || (syncError instanceof Error ? syncError.message : "Unable to sync thread availability."));
+        });
+      return;
+    }
+    notifyChatThreadsChanged({ active_thread_id: currentThreadId });
+  }, [activeThread?.availability, activeThread?.thread_id, isRuntimeBusy]);
 
   async function loadInitialState() {
     setIsBootstrapping(true);

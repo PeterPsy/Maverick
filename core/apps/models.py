@@ -250,6 +250,10 @@ class AppSourceRecord:
     contract: AppContractDescriptor
     created_at: str
     updated_at: str
+    owner_user_id: str | None = None
+    owner_username: str | None = None
+    promoted_from_workspace_id: str | None = None
+    promoted_from_project_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -267,6 +271,8 @@ class WorkspaceLocalAppProjectRecord:
     contract: AppContractDescriptor
     created_at: str
     updated_at: str
+    owner_user_id: str | None = None
+    owner_username: str | None = None
     forked_from_source_id: str | None = None
     forked_from_version: str | None = None
 

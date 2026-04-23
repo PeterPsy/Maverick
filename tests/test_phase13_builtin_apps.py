@@ -26,6 +26,7 @@ from core.apps.contracts import (
 from core.apps.service import install_workspace_local_app, register_workspace_local_app_project_from_contract
 from core.cli.service import list_core_cli_commands
 from core.mcp.service import list_mcp_tools
+from core.recovery.backend_restart import BACKEND_RESTART_CONTINUATION_INPUT_TEXT
 from core.runtime.service import (
     create_runtime_session,
     queue_runtime_turn,
@@ -180,13 +181,13 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
             restarted_state = bootstrap_platform_state(start_path=repo_root)
             for _attempt in range(100):
                 turns = restarted_state.runtime_store.list_turns(session.session_id)
-                if any(item.input_text == "resume" and item.status == "completed" for item in turns):
+                if any(item.input_text == BACKEND_RESTART_CONTINUATION_INPUT_TEXT and item.status == "completed" for item in turns):
                     break
                 time.sleep(0.05)
 
         turns = restarted_state.runtime_store.list_turns(session.session_id)
         interrupted = restarted_state.runtime_store.get_turn("interrupted-turn")
-        resume_turns = [item for item in turns if item.input_text == "resume"]
+        resume_turns = [item for item in turns if item.input_text == BACKEND_RESTART_CONTINUATION_INPUT_TEXT]
         event_types = [event.event_type for event in restarted_state.runtime_store.list_events(session.session_id)]
 
         self.assertEqual(interrupted.status, "failed")
@@ -227,7 +228,7 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
         event_types = [event.event_type for event in restarted_state.runtime_store.list_events(session.session_id)]
 
         self.assertEqual(restarted_state.runtime_store.get_turn(turn.turn_id).status, "completed")
-        self.assertFalse([item for item in turns if item.input_text == "resume"])
+        self.assertFalse([item for item in turns if item.input_text == BACKEND_RESTART_CONTINUATION_INPUT_TEXT])
         self.assertIn("runtime.turn.completed", event_types)
         self.assertNotIn("runtime.recovery.resume_queued", event_types)
 
@@ -244,7 +245,12 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
             start_path=repo_root,
         )
         transition_runtime_session(initial_state.runtime_store, session_id=session.session_id, target_status="running")
-        turn = queue_runtime_turn(initial_state.runtime_store, turn_id="resume-turn", session_id=session.session_id, input_text="resume")
+        turn = queue_runtime_turn(
+            initial_state.runtime_store,
+            turn_id="resume-turn",
+            session_id=session.session_id,
+            input_text=BACKEND_RESTART_CONTINUATION_INPUT_TEXT,
+        )
         transition_runtime_turn(initial_state.runtime_store, turn_id=turn.turn_id, target_status="active")
         record_runtime_event(
             initial_state.runtime_store,
@@ -253,7 +259,10 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
             turn_id=turn.turn_id,
             plane="turn",
             event_type="runtime.turn.queued",
-            payload={"input_text": "resume", "client_message_id": f"backend-restart-resume:{session.session_id}:1"},
+            payload={
+                "input_text": BACKEND_RESTART_CONTINUATION_INPUT_TEXT,
+                "client_message_id": f"backend-restart-resume:{session.session_id}:1",
+            },
             event_bus=initial_state.runtime_event_bus,
         )
 
@@ -263,7 +272,7 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
         event_types = [event.event_type for event in restarted_state.runtime_store.list_events(session.session_id)]
 
         self.assertEqual(restarted_state.runtime_store.get_turn(turn.turn_id).status, "failed")
-        self.assertEqual([item.input_text for item in turns].count("resume"), 1)
+        self.assertEqual([item.input_text for item in turns].count(BACKEND_RESTART_CONTINUATION_INPUT_TEXT), 1)
         self.assertNotIn("runtime.recovery.resume_queued", event_types)
 
     def test_bootstrap_closes_orphan_non_terminal_turn_events_after_backend_restart(self) -> None:
@@ -286,7 +295,7 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
             turn_id="missing-turn",
             plane="turn",
             event_type="runtime.turn.queued",
-            payload={"input_text": "resume"},
+            payload={"input_text": BACKEND_RESTART_CONTINUATION_INPUT_TEXT},
             event_bus=initial_state.runtime_event_bus,
         )
 

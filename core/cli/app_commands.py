@@ -11,6 +11,25 @@ from core.cli.models import CliCommandDefinition, CliInvocationContext, CliInvoc
 from core.shared.entrypoints import run_json_entrypoint
 from core.workspaces.paths import workspace_paths
 
+
+def _app_command_invocation_policy(app_id: str, command_name: str) -> CliInvocationPolicy:
+    if app_id == "skills" and command_name == "sync":
+        return CliInvocationPolicy(
+            operator_only=False,
+            required_platform_role="admin",
+            sandbox_agent_allowed=True,
+            requires_workspace_context=True,
+            requires_full_access=False,
+        )
+    return CliInvocationPolicy(
+        operator_only=False,
+        required_platform_role=None,
+        sandbox_agent_allowed=True,
+        requires_workspace_context=True,
+        requires_full_access=False,
+    )
+
+
 def _workspace_app_command_specs(
     store: AppStore,
     *,
@@ -82,12 +101,7 @@ def _workspace_app_command_specs(
                         owner_id=parsed.app_id,
                         workspace_id=workspace_id,
                         exposure_scope="workspace_enabled_app",
-                        invocation_policy=CliInvocationPolicy(
-                            operator_only=False,
-                            sandbox_agent_allowed=True,
-                            requires_workspace_context=True,
-                            requires_full_access=False,
-                        ),
+                        invocation_policy=_app_command_invocation_policy(parsed.app_id, command_name),
                         entrypoint_path=entrypoint_path,
                     ),
                     _handler,

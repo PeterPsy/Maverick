@@ -610,7 +610,7 @@
 .chatapp-structured-widget {
   display: block;
   width: min(100%, 760px);
-  min-height: 360px;
+  min-height: 160px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 18px;
   background: rgba(0, 0, 0, 0.18);

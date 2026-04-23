@@ -17,6 +17,11 @@ const statusText = document.querySelector("#statusText");
 const refreshButton = document.querySelector("#refreshButton");
 const tabButtons = [...document.querySelectorAll("[data-tab]")];
 const panels = [...document.querySelectorAll("[data-panel]")];
+const promotionModal = document.querySelector("#promotionModal");
+const promotionModalTitle = document.querySelector("#promotionModalTitle");
+const promotionModalBody = document.querySelector("#promotionModalBody");
+const promotionModalActions = document.querySelector("#promotionModalActions");
+const promotionModalClose = document.querySelector("#promotionModalClose");
 
 async function requestJson(url, options = {}) {
   const response = await fetch(url, {
@@ -108,6 +113,9 @@ function localAppSummary(item) {
     localStatus: item.status || "uninstalled",
     validation_error: item.validation_error || "",
     can_delete: item.can_delete !== false,
+    can_promote: item.can_promote === true,
+    promotion_kind: item.promotion_kind || "promote",
+    promotion_detail: item.promotion_detail || "",
     workspace_id: item.workspace_id,
     project_root: item.project_root,
   };
@@ -185,6 +193,32 @@ function closeOpenMenus() {
   document.querySelectorAll(".app-row-menu[open]").forEach((menu) => {
     menu.removeAttribute("open");
   });
+}
+
+function closePromotionModal() {
+  promotionModal.classList.add("is-hidden");
+  promotionModal.setAttribute("aria-hidden", "true");
+  promotionModalActions.replaceChildren();
+}
+
+function renderModalButton({ label, intent = "default", action }) {
+  const button = document.createElement("button");
+  button.className = "app-modal__button";
+  button.type = "button";
+  if (intent !== "default") {
+    button.dataset.intent = intent;
+  }
+  button.textContent = label;
+  button.addEventListener("click", action);
+  return button;
+}
+
+function openPromotionModal({ title, body, actions }) {
+  promotionModalTitle.textContent = title;
+  promotionModalBody.textContent = body;
+  promotionModalActions.replaceChildren(...actions);
+  promotionModal.classList.remove("is-hidden");
+  promotionModal.setAttribute("aria-hidden", "false");
 }
 
 function renderMenuItem({ label, icon, disabled = false, danger = false, action }) {
@@ -286,6 +320,14 @@ function renderMoreOptions(app, mode, version, installState) {
         danger: installed,
         disabled: invalid || !app.workspace_id || isPending,
         action: () => (installed ? uninstallLocalApp(app) : installLocalApp(app)),
+      }),
+    );
+    panel.append(
+      renderMenuItem({
+        label: app.promotion_kind === "update" ? "Push Update" : "Promote app",
+        icon: "upload",
+        disabled: isPending,
+        action: () => promoteLocalApp(app),
       }),
     );
     panel.append(
@@ -586,6 +628,84 @@ async function deleteLocalApp(app) {
   }
 }
 
+async function promoteLocalApp(app) {
+  const workspaceId = app.workspace_id;
+  if (app.localStatus === "invalid") {
+    const detail = app.validation_error || "This local app has an invalid app_contract.json and cannot be promoted.";
+    setStatus(detail, "error");
+    openPromotionModal({
+      title: `Cannot promote ${app.name}`,
+      body: detail,
+      actions: [
+        renderModalButton({ label: "Close", action: closePromotionModal }),
+      ],
+    });
+    return;
+  }
+  if (!workspaceId) {
+    const detail = "Workspace-local app is missing its owner workspace.";
+    setStatus(detail, "error");
+    openPromotionModal({
+      title: `Cannot promote ${app.name}`,
+      body: detail,
+      actions: [
+        renderModalButton({ label: "Close", action: closePromotionModal }),
+      ],
+    });
+    return;
+  }
+  if (!app.can_promote) {
+    const detail = app.promotion_detail || "This workspace-local app cannot be promoted right now.";
+    setStatus(detail, "error");
+    openPromotionModal({
+      title: `Cannot promote ${app.name}`,
+      body: detail,
+      actions: [
+        renderModalButton({ label: "Close", action: closePromotionModal }),
+      ],
+    });
+    return;
+  }
+  const startPromotion = async (normalizedMode) => {
+    closePromotionModal();
+    const pendingKey = `${app.app_id}:promote:${normalizedMode}:${workspaceId}`;
+    state.pending.add(pendingKey);
+    render();
+    setStatus(`Promoting ${app.name} as ${normalizedMode}`, "busy");
+    try {
+      await requestJson("/api/app-store/promote-local", {
+        method: "POST",
+        body: JSON.stringify({ app_id: app.app_id, workspace_ids: [workspaceId], promotion_mode: normalizedMode }),
+      });
+      await refreshInstallations();
+      setStatus(`Promoted ${app.name} as ${normalizedMode}`, "ok");
+    } catch (error) {
+      setStatus(error.message, "error");
+      openPromotionModal({
+        title: `Promotion failed for ${app.name}`,
+        body: error.message,
+        actions: [
+          renderModalButton({ label: "Close", action: closePromotionModal }),
+        ],
+      });
+    } finally {
+      state.pending.delete(pendingKey);
+      render();
+    }
+  };
+  openPromotionModal({
+    title: app.promotion_kind === "update" ? `Publish update for ${app.name}` : `Promote ${app.name}`,
+    body: app.promotion_kind === "update"
+      ? `${app.promotion_detail || `Publish a new server-wide version of ${app.name}.`} The workspace-local copy will remain unchanged.`
+      : `${app.promotion_detail || `Choose how to publish ${app.name} from ${workspaceId}.`} The workspace-local copy will remain unchanged.`,
+    actions: [
+      renderModalButton({ label: "Cancel", action: closePromotionModal }),
+      renderModalButton({ label: "As sealed", action: () => startPromotion("sealed") }),
+      renderModalButton({ label: "As forkable", intent: "primary", action: () => startPromotion("forkable") }),
+    ],
+  });
+}
+
 async function setWorkspaceAssignment(app, version, workspaceId, shouldInstall) {
   const assignmentKey = `${app.app_id}:${version.version}:${workspaceId}`;
   state.pending.add(assignmentKey);
@@ -680,6 +800,13 @@ document.addEventListener("click", () => closeOpenMenus());
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     closeOpenMenus();
+    closePromotionModal();
+  }
+});
+promotionModalClose.addEventListener("click", closePromotionModal);
+promotionModal.addEventListener("click", (event) => {
+  if (event.target === promotionModal) {
+    closePromotionModal();
   }
 });
 

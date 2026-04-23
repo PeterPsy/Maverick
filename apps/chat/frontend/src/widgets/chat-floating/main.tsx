@@ -3,7 +3,6 @@ import { createRoot } from "react-dom/client";
 import { App } from "../../App";
 import type { ChatThread } from "../../api/client";
 import { deleteThread, getRuntimeSession, getWidgetContext, listThreads, updateThread } from "../../api/client";
-import { withRuntimeAvailability } from "../chat-sidebar/runtimeStatus";
 import { isThreadBusy } from "../chat-sidebar/sections";
 import "../../styles/main.css";
 import "./styles.css";
@@ -246,7 +245,6 @@ function ChatFloatingMount() {
     debugThreadSync("refresh-start", { navigationScope, preferredThreadId, requestId });
     try {
       const payload = await listThreads();
-      const hydratedThreads = await withRuntimeAvailability(payload.threads || []);
       if (refreshThreadsRequestIdsByScopeRef.current.get(requestScope) !== requestId) {
         debugThreadSync("refresh-stale", {
           currentRequestId: refreshThreadsRequestIdsByScopeRef.current.get(requestScope),
@@ -256,9 +254,10 @@ function ChatFloatingMount() {
         });
         return;
       }
-      setThreads(hydratedThreads);
+      const nextThreads = payload.threads || [];
+      setThreads(nextThreads);
       setWindows((current) => {
-        const nextWindows = reconcileWindowsWithThreads(current, hydratedThreads, preferredThreadId, navigationScope);
+        const nextWindows = reconcileWindowsWithThreads(current, nextThreads, preferredThreadId, navigationScope);
         if (areWindowThreadSelectionsEqual(current, nextWindows)) {
           debugThreadSync("refresh-apply-unchanged", {
             navigationScope,
@@ -346,16 +345,15 @@ function ChatFloatingMount() {
 
   async function renameThread(threadId: string, title: string) {
     const payload = await updateThread({ thread_id: threadId, title });
-    const hydratedThreads = await withRuntimeAvailability(payload.threads || []);
-    setThreads(hydratedThreads);
+    setThreads(payload.threads || []);
     notifyChatDataChanged("threads", { active_thread_id: payload.thread.thread_id });
   }
 
   async function removeThread(windowId: string, thread: ChatThread) {
     const payload = await deleteThread(thread.thread_id);
-    const hydratedThreads = await withRuntimeAvailability(payload.threads || []);
-    const nextThreadId = hydratedThreads[0]?.thread_id || "";
-    setThreads(hydratedThreads);
+    const nextThreads = payload.threads || [];
+    const nextThreadId = nextThreads[0]?.thread_id || "";
+    setThreads(nextThreads);
     setWindows((current) => current.map((windowItem) => (windowItem.threadId === thread.thread_id ? { ...windowItem, threadId: nextThreadId } : windowItem)));
     notifyChatDataChanged("threads", { deleted_thread_id: thread.thread_id, ...(nextThreadId ? { active_thread_id: nextThreadId, navigation_scope: windowId } : {}) });
     if (nextThreadId) {

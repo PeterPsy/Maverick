@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from tests.phase11_observability_helpers import *
 
 
@@ -130,3 +132,51 @@ class TestPhase11SecretRecoverySurfaces(Phase11ObservabilityBase):
             start_path=repo_root,
         )
         self.assertTrue(restart_tool_result["executed"])
+
+    def test_cli_and_mcp_expose_explicit_backend_restart_surface(self) -> None:
+        repo_root = self.make_repo_root()
+
+        cli_context = CliInvocationContext(caller_kind="operator", workspace_id="default", agent_id=None, effective_mode="full-access")
+        with patch("core.cli.recovery_commands.restart_backend_service") as restart_backend:
+            restart_backend.return_value.to_payload.return_value = {
+                "service_name": "maverick3-core.service",
+                "health_url": "http://127.0.0.1:8014/health",
+                "restarted": True,
+                "method": "signal",
+                "detail": "ok",
+                "previous_pid": 10,
+                "current_pid": 11,
+                "active_state": "active",
+                "sub_state": "running",
+                "healthy": True,
+            }
+            cli_result = run_core_cli_command(
+                command_id="core.recovery.restart_backend",
+                context=cli_context,
+                workspace_id="default",
+                start_path=repo_root,
+            )
+        self.assertTrue(cli_result["restarted"])
+        self.assertEqual(cli_result["command_id"], "core.recovery.restart_backend")
+
+        mcp_context = McpInvocationContext(caller_kind="operator", workspace_id="default", agent_id=None, effective_mode="full-access")
+        with patch("core.mcp.recovery_tools.restart_backend_service") as restart_backend:
+            restart_backend.return_value.to_payload.return_value = {
+                "service_name": "maverick3-core.service",
+                "health_url": "http://127.0.0.1:8014/health",
+                "restarted": True,
+                "method": "signal",
+                "detail": "ok",
+                "previous_pid": 10,
+                "current_pid": 11,
+                "active_state": "active",
+                "sub_state": "running",
+                "healthy": True,
+            }
+            mcp_result = call_mcp_tool(
+                tool_name="core.recovery.restart_backend",
+                context=mcp_context,
+                workspace_id="default",
+                start_path=repo_root,
+            )
+        self.assertTrue(mcp_result["restarted"])

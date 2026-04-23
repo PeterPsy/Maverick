@@ -164,7 +164,10 @@ def list_skills(data_root: Path) -> list[dict]:
     records = []
     for item in state["skills"]:
         summary = skill_summary(item)
-        summary["source_path"] = str(skill_dir(data_root, summary["id"]))
+        path = skill_dir(data_root, summary["id"])
+        if not (path / "SKILL.md").is_file():
+            continue
+        summary["source_path"] = str(path)
         records.append(summary)
     existing_ids = {item["id"] for item in records}
     for path in sorted(skills_root(data_root).iterdir()):

@@ -454,6 +454,85 @@ h3 {
   color: var(--app-text-muted);
 }
 
+.app-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(5, 5, 7, 0.68);
+  backdrop-filter: blur(4px);
+}
+
+.app-modal-backdrop.is-hidden {
+  display: none;
+}
+
+.app-modal {
+  width: min(32rem, calc(100vw - 24px));
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--app-border-strong);
+  border-radius: 12px;
+  background: rgba(24, 24, 24, 0.98);
+  box-shadow: 0 24px 72px rgba(0, 0, 0, 0.42);
+}
+
+.app-modal__header,
+.app-modal__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.app-modal__body {
+  margin: 0;
+  color: var(--app-text-muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.app-modal__actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.app-modal__button,
+.app-modal__close {
+  min-height: 2.1rem;
+  padding: 0 0.82rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--app-text);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.app-modal__button:hover,
+.app-modal__close:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.app-modal__button[data-intent="primary"] {
+  background: linear-gradient(135deg, var(--app-primary), var(--app-primary-strong));
+  color: #fff;
+}
+
+.app-modal__button[data-intent="danger"] {
+  color: var(--app-danger);
+}
+
+.app-modal__close {
+  width: 2rem;
+  min-width: 2rem;
+  padding: 0;
+  display: grid;
+  place-items: center;
+}
+
 @media (max-width: 940px) {
   .app-list {
     grid-template-columns: 1fr;

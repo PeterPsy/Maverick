@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from models import DEFAULT_SKILL_CONTENT
+from seeds import seed_default_skills
 from store import delete_skill, ensure_data_root, get_skill, list_skills, save_skill, skill_markdown
 
 REFERENCE_MANIFEST = {
@@ -15,7 +16,7 @@ REFERENCE_MANIFEST = {
     ],
 }
 
-DATA_CHANGED_ACTIONS = {"create_skill", "update_skill", "delete_skill"}
+DATA_CHANGED_ACTIONS = {"create_skill", "update_skill", "delete_skill", "sync_bundled_skills"}
 
 
 def app_events_for_action(action: str) -> list[dict[str, str]]:
@@ -37,6 +38,14 @@ def new_skill_payload(body: dict) -> dict:
         "description": str(body.get("description") or "Describe when this skill should be used.").strip(),
         "content": str(body.get("content") or DEFAULT_SKILL_CONTENT).strip(),
         "enabled": bool(body.get("enabled", True)),
+    }
+
+
+def sync_bundled_skills(data_root: Path, *, repository_root: Path) -> dict:
+    seeded = seed_default_skills(data_root, repository_root=repository_root)
+    return {
+        "seeded_skill_ids": seeded,
+        "skills": list_skills(data_root),
     }
 
 
@@ -70,6 +79,11 @@ def handle_action(data_root: Path, body: dict) -> tuple[int, dict]:
     if action == "delete_skill":
         deleted = delete_skill(data_root, str(body.get("skill_id") or ""))
         return (200, {"deleted": True}) if deleted else (404, {"error": "skill_not_found"})
+    if action == "sync_bundled_skills":
+        repository_root = Path(str(body.get("repository_root") or "")).resolve()
+        if not repository_root.exists():
+            return 400, {"error": "repository_root_required"}
+        return 200, sync_bundled_skills(data_root, repository_root=repository_root)
     if action == "preview_markdown":
         return 200, {"markdown": skill_markdown(body)}
     if action == "health.check":

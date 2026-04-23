@@ -11,7 +11,7 @@ Prefer the `app.dynamic-views.dynamic-views` CLI command for agent work. Use the
 
 Do not paste raw HTML, CSS, or JavaScript into chat after the CLI or tool succeeds. Successful `create`, `read`, and `recall` actions return `chat_render.kind: "dynamic.view.instance"` and a `chat_render.payload` that Chat can render through the registry-mounted Dynamic Views widget.
 
-After creating or recalling a Dynamic View, always make the view visible in chat by returning the `chat_render` object as structured content for the final response. Do not stop at "created id=..." unless the caller explicitly asked for an ID-only operation. If the current runtime cannot project `chat_render` into `runtime.output.final.structured_content`, treat that as a generic runtime/app-surface bridge gap, not as a reason to hardcode Dynamic Views behavior in Chat.
+After creating or recalling a Dynamic View, always make the view visible in chat by returning either the raw `chat_render` object or a `{ "structured_content": ... }` envelope in the final agent message. Do not stop at "created id=..." unless the caller explicitly asked for an ID-only operation. If the current runtime cannot normalize that envelope into `runtime.output.structured`, treat that as a generic runtime/app-surface bridge gap, not as a reason to hardcode Dynamic Views behavior in Chat.
 
 ## Actions
 

@@ -8,8 +8,9 @@ from core.cli.models import CliCommandDefinition, CliInvocationPolicy
 from core.observability.service import record_platform_audit, record_platform_event
 
 
-OPERATOR_ONLY = CliInvocationPolicy(True, False, False, False)
-WORKSPACE_SAFE = CliInvocationPolicy(False, True, True, False)
+OPERATOR_ONLY = CliInvocationPolicy(True, None, False, False, False)
+OPERATOR_FULL_ACCESS = CliInvocationPolicy(True, None, False, True, True)
+WORKSPACE_SAFE = CliInvocationPolicy(False, None, True, True, False)
 
 
 def core_cli_command(

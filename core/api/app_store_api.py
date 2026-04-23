@@ -17,6 +17,7 @@ from core.apps.paths import workspace_apps_root
 from core.apps.service import (
     delete_workspace_local_app_project,
     install_workspace_local_app,
+    promote_workspace_local_app_project,
     register_workspace_local_app_project_from_contract,
     uninstall_workspace_app,
 )
@@ -84,6 +85,12 @@ def _authorize_workspace_local_app_targets(
             return "custom_apps_disabled"
         if not governance.allow_app_installation:
             return "app_installation_disabled"
+    return None
+
+
+def _authorize_platform_admin(context: RequestSession) -> str | None:
+    if context.user.platform_role != "admin":
+        return "platform_admin_required"
     return None
 
 
@@ -266,12 +273,14 @@ def _local_apps_payload(state: PlatformState, context: RequestSession, workspace
                         "binding_source_kind": None,
                         "validation_error": invalid.error,
                         "can_delete": _can_manage_workspace_apps(context, membership),
+                        "can_promote": False,
                     }
                 )
         for project in state.app_store.list_workspace_local_app_projects(workspace_id):
             binding = bindings.get(project.app_id)
             if not _local_project_visible_for_context(state, context, membership, project, binding):
                 continue
+            promotion_state = _local_project_promotion_state(state, context, project)
             items.append(
                 {
                     "workspace_id": workspace_id,
@@ -288,9 +297,69 @@ def _local_apps_payload(state: PlatformState, context: RequestSession, workspace
                     "active_version": binding.active_version if binding else None,
                     "binding_source_kind": binding.source_kind if binding else None,
                     "can_delete": _can_manage_workspace_apps(context, membership),
+                    "can_promote": promotion_state["can_promote"],
+                    "promotion_kind": promotion_state["promotion_kind"],
+                    "promotion_detail": promotion_state["promotion_detail"],
                 }
             )
     return items
+
+
+def _local_project_promotion_state(
+    state: PlatformState,
+    context: RequestSession,
+    project: WorkspaceLocalAppProjectRecord,
+) -> dict[str, object]:
+    if context.user.platform_role != "admin":
+        return {
+            "can_promote": False,
+            "promotion_kind": "blocked",
+            "promotion_detail": "Only platform admins can promote workspace-local apps.",
+        }
+    platform_sources = [
+        source for source in state.app_store.list_app_sources() if source.app_id == project.app_id and source.source_kind == "platform"
+    ]
+    if not platform_sources:
+        return {
+            "can_promote": True,
+            "promotion_kind": "promote",
+            "promotion_detail": "Publish this workspace-local app as a new installation-level app.",
+        }
+    owner_user_id = next((source.owner_user_id for source in platform_sources if source.owner_user_id), None)
+    owner_username = next((source.owner_username for source in platform_sources if source.owner_username), None)
+    if owner_user_id is None and project.owner_user_id is not None:
+        owner_user_id = project.owner_user_id
+        owner_username = project.owner_username
+    if owner_user_id is None:
+        return {
+            "can_promote": False,
+            "promotion_kind": "blocked",
+            "promotion_detail": (
+                f"App id `{project.app_id}` is already claimed by an installation-level app without publish ownership metadata."
+            ),
+        }
+    if context.user.user_id != owner_user_id:
+        return {
+            "can_promote": False,
+            "promotion_kind": "blocked",
+            "promotion_detail": (
+                f"Only the original app owner `{owner_username or owner_user_id}` can publish updates for `{project.app_id}`."
+            ),
+        }
+    if project.owner_user_id is not None and project.owner_user_id != owner_user_id:
+        return {
+            "can_promote": False,
+            "promotion_kind": "blocked",
+            "promotion_detail": (
+                f"This workspace-local project belongs to `{project.owner_username or project.owner_user_id}`. "
+                "Fork under a different app_id to publish it as a separate app."
+            ),
+        }
+    return {
+        "can_promote": True,
+        "promotion_kind": "update",
+        "promotion_detail": "Publish a new server-wide version of this already-promoted app.",
+    }
 
 
 def _workspace_ids_from_body(body: dict, context: RequestSession) -> list[str]:
@@ -318,6 +387,7 @@ def handle_app_store_api(
         "/api/app-store/install-local",
         "/api/app-store/installations",
         "/api/app-store/register-local",
+        "/api/app-store/promote-local",
         "/api/app-store/delete-local",
         "/api/app-store/uninstall",
     }:
@@ -440,6 +510,8 @@ def handle_app_store_api(
                 state.app_store,
                 workspace_id=workspace_id,
                 project_root=str(project_root),
+                owner_user_id=context.user.user_id,
+                owner_username=context.user.username,
             )
         except (AppHostingError, WorkspaceNotFoundError) as error:
             return json_response(
@@ -461,6 +533,39 @@ def handle_app_store_api(
             },
             status="201 Created",
         )
+
+    if path == "/api/app-store/promote-local" and method == "POST":
+        body = read_json_body(environ)
+        app_id = str(body.get("app_id") or "").strip()
+        workspace_ids = _unique_workspace_ids(_workspace_ids_from_body(body, context))
+        promotion_mode = str(body.get("promotion_mode") or "forkable").strip().lower()
+        authorization_error = _authorize_platform_admin(context)
+        if not app_id:
+            return json_response(start_response, {"error": "app_id_required"}, status="400 Bad Request")
+        if len(workspace_ids) != 1:
+            return json_response(start_response, {"error": "single_workspace_required"}, status="400 Bad Request")
+        if authorization_error is not None:
+            return json_response(start_response, {"error": authorization_error}, status="403 Forbidden")
+        if promotion_mode not in {"sealed", "forkable"}:
+            return json_response(start_response, {"error": "invalid_promotion_mode"}, status="400 Bad Request")
+        workspace_id = workspace_ids[0]
+        try:
+            result = promote_workspace_local_app_project(
+                state.app_store,
+                workspace_id=workspace_id,
+                app_id=app_id,
+                promotion_mode=promotion_mode,
+                start_path=start_path,
+                actor_user_id=context.user.user_id,
+                actor_username=context.user.username,
+            )
+        except (AppHostingError, WorkspaceNotFoundError) as error:
+            return json_response(
+                start_response,
+                {"error": "promotion_failed", "detail": str(error)},
+                status="400 Bad Request",
+            )
+        return json_response(start_response, result, status="201 Created")
 
     if path == "/api/app-store/delete-local" and method == "POST":
         body = read_json_body(environ)

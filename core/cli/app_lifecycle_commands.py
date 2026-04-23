@@ -17,6 +17,7 @@ from core.cli.models import CliCommandDefinition, CliInvocationContext, CliInvoc
 
 APP_MANAGEMENT = CliInvocationPolicy(
     operator_only=True,
+    required_platform_role=None,
     sandbox_agent_allowed=False,
     requires_workspace_context=True,
     requires_full_access=False,
@@ -24,6 +25,7 @@ APP_MANAGEMENT = CliInvocationPolicy(
 
 APP_FRONTEND_BUILD = CliInvocationPolicy(
     operator_only=False,
+    required_platform_role=None,
     sandbox_agent_allowed=True,
     requires_workspace_context=True,
     requires_full_access=False,

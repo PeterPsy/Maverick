@@ -201,6 +201,8 @@ The core app-hosting domain should model at least these distribution modes:
 - source-available
 - workspace-local
 
+Promotion of a workspace-local app into an installation-level app is a core app-hosting operation, not an app-owned behavior. The initial promotion path is admin-only, copies the workspace-local source tree into `apps/<app_id>/`, rewrites only the copied contract's distribution declaration to `sealed` or `source_available/forkable`, registers the copied app as a `platform` source, and leaves the workspace-local project unchanged. The control plane must also persist ownership lineage: the workspace-local project creator becomes the promoted app owner for that `app_id`, later promotions of the same `app_id` are treated as owner-only updates, and a fork that wants to publish independently must use a different `app_id`.
+
 This lets the core host closed commercial apps, open-source store apps, and fully local agent-created apps without changing the app surface model.
 
 Implementation files in `core/apps/` should keep lifecycle responsibilities separate.
@@ -1093,7 +1095,7 @@ The Codex adapter must not silently drop app-server notifications just because t
 
 Known methods should be mapped intentionally. Codex app-server item types such as `commandExecution`, `fileChange`, and `webSearch` must be normalized as first-class generic tool calls with stable `tool_kind`, `tool_call_id`, status, summary, and structured detail fields such as command output, file changes, web-search query, and web-search results.
 
-If an app-owned CLI, MCP, or backend surface returns a generic `chat_render` object, the runtime/provider bridge should normalize it into structured runtime output instead of treating the whole JSON response as assistant prose. The normalized event shape is provider-agnostic: `runtime.output.structured` carries `structured_content` with a stable `kind` and `payload`. Chat and other host apps must resolve that kind through the widget registry; they must not hardcode a specific app such as Dynamic Views.
+If an app-owned CLI, MCP, or backend surface returns a generic `chat_render` object, the runtime/provider bridge should normalize it into structured runtime output instead of treating the whole JSON response as assistant prose. The same normalization rule applies when an agent-message completion intentionally returns a JSON envelope with `structured_content` or `chat_render`. The normalized event shape is provider-agnostic: `runtime.output.structured` carries `structured_content` with a stable `kind` and `payload`. Chat and other host apps must resolve that kind through the widget registry; they must not hardcode a specific app such as Dynamic Views.
 
 Provider output that belongs to a tool item must remain tool output. For example, Codex `item.fileChange.outputDelta` notifications are file-change tool updates and must not be emitted as assistant `runtime.output.delta` text.
 

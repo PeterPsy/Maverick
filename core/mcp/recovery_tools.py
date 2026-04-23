@@ -6,9 +6,10 @@ from pathlib import Path
 from typing import Any
 
 from core.apps.store import AppStore
-from core.mcp.core_tool_helpers import OPERATOR_ONLY, WORKSPACE_SAFE, core_mcp_tool
+from core.mcp.core_tool_helpers import OPERATOR_FULL_ACCESS, OPERATOR_ONLY, WORKSPACE_SAFE, core_mcp_tool
 from core.mcp.models import McpInvocationContext, McpToolDefinition
 from core.providers.provider_registry import ProviderRegistry
+from core.recovery.backend_service import restart_backend_service
 from core.recovery.service import execute_session_restart, record_app_health, record_failed_start, record_provider_health, record_runtime_health, recovery_status
 from core.recovery.store import RecoveryStore
 from core.runtime.store import RuntimeStore
@@ -46,6 +47,13 @@ def recovery_tool_specs(
             observability_store=observability_store,
         )
         return {"executed": True, "intent_id": intent.intent_id, "action": intent.action, "runtime_status": restarted.status}
+
+    def _recovery_backend_restart_handler(arguments: dict[str, Any], context: McpInvocationContext) -> dict[str, Any]:
+        result = restart_backend_service(
+            service_name=str(arguments.get("service_name") or "maverick3-core.service"),
+            health_url=str(arguments.get("health_url") or "http://127.0.0.1:8014/health"),
+        )
+        return result.to_payload()
 
     def _recovery_failed_start_handler(arguments: dict[str, Any], context: McpInvocationContext) -> dict[str, Any]:
         if recovery_store is None:
@@ -94,7 +102,8 @@ def recovery_tool_specs(
 
     tool_specs = [
         ("core.recovery.status", "Inspect recovery status for one workspace or runtime session.", OPERATOR_ONLY, _recovery_status_handler),
-        ("core.recovery.restart", "Execute one runtime restart recovery action when allowed.", WORKSPACE_SAFE, _recovery_restart_handler),
+        ("core.recovery.restart", "Execute one runtime-session restart recovery action when allowed.", WORKSPACE_SAFE, _recovery_restart_handler),
+        ("core.recovery.restart_backend", "Restart the Maverick backend host service and verify its health.", OPERATOR_FULL_ACCESS, _recovery_backend_restart_handler),
         ("core.recovery.failed_start", "Record one failed-start diagnosis and plan recovery.", OPERATOR_ONLY, _recovery_failed_start_handler),
         ("core.recovery.health", "Run one recovery health probe on demand.", OPERATOR_ONLY, _recovery_health_handler),
     ]

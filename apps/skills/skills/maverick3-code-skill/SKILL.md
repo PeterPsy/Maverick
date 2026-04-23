@@ -62,6 +62,23 @@ For non-trivial work:
 
 Ask a clarifying question only when requirements are genuinely ambiguous or destructive. Otherwise, make reasonable assumptions and keep moving.
 
+## Checklist Discipline
+
+For multi-step work that benefits from explicit progress tracking, create or update a work checklist in the workspace `checklist` app instead of keeping the plan only in chat text.
+
+Preferred flow:
+
+```bash
+maverick app checklist mcp list --json
+maverick app checklist mcp call checklist_create --json --title "<title>"
+```
+
+When the task needs structured sections and tasks, prefer the Checklist app's MCP create flow such as `maverick_tasklist` or `checklist_create` with a structured payload.
+
+If the workspace exposes the Checklist app skill `checklist-ops`, use it and link the work to that app skill instead of inventing a parallel checklist format.
+
+Treat the Checklist app as the durable source of truth for implementation task tracking when it is available in the current workspace.
+
 ## Verification
 
 Choose checks based on the change.
@@ -84,6 +101,14 @@ npm ci
 npm run build
 npm test --if-present
 ```
+
+For static HTML frontends or widgets that use inline `<script>` blocks, also run:
+
+```bash
+python3 scripts/check_inline_script_syntax.py apps/<app_id>/frontend/dist/index.html
+```
+
+Include widget HTML files when they contain inline scripts.
 
 Repository hygiene checks:
 

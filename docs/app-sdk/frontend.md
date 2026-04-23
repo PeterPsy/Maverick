@@ -41,6 +41,14 @@ That is the official path that:
 
 Do not rely on ad hoc static servers or undocumented rebuild shortcuts.
 
+For static HTML apps with inline `<script>` blocks, add a syntax gate before closing the task:
+
+```text
+python3 scripts/check_inline_script_syntax.py apps/<app_id>/frontend/dist/index.html
+```
+
+Include widget HTML mounts when they also contain inline scripts.
+
 ## Live Update Rule
 
 If app writes emit `app_events` such as `maverick.app.data-changed`, the mounted frontend should react to them without manual refresh.

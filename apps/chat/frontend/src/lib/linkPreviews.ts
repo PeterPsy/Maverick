@@ -64,8 +64,8 @@ function linkCandidates(text: string): LinkCandidate[] {
 }
 
 export function structuredContentFromAgentLinks(text: string): StructuredContent[] {
-  const seenPaths = new Set<string>();
   const items: StructuredContent[] = [];
+  const seenPaths = new Set<string>();
   for (const candidate of linkCandidates(text)) {
     const path = workspaceRelativePath(candidate.target);
     if (!path || seenPaths.has(path)) {

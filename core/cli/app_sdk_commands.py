@@ -15,6 +15,7 @@ from core.cli.models import CliCommandDefinition, CliInvocationContext, CliInvoc
 
 APP_SDK_POLICY = CliInvocationPolicy(
     operator_only=True,
+    required_platform_role=None,
     sandbox_agent_allowed=False,
     requires_workspace_context=True,
     requires_full_access=False,

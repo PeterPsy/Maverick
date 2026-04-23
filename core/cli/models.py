@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from core.execution_policy.models import ExecutionMode
+from core.identity.models import PlatformRole
 
 
 CliOwnerKind = Literal["core", "app"]
@@ -18,6 +19,7 @@ class CliInvocationPolicy:
     """Policy gates applied before one CLI command may run."""
 
     operator_only: bool
+    required_platform_role: PlatformRole | None
     sandbox_agent_allowed: bool
     requires_workspace_context: bool
     requires_full_access: bool
@@ -47,3 +49,4 @@ class CliInvocationContext:
     workspace_id: str | None
     agent_id: str | None
     effective_mode: ExecutionMode | None
+    platform_role: PlatformRole | None = None

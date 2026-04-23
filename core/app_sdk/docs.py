@@ -74,6 +74,14 @@ maverick app <app_id> frontend build --json
 
 That command runs the declared frontend build, verifies the declared artifact root, and emits `maverick.app.frontend-changed` so mounted clients can refresh without a manual page reload.
 
+For static HTML apps with inline `<script>` blocks, run a syntax gate before or together with rebuild:
+
+```bash
+python3 scripts/check_inline_script_syntax.py apps/<app_id>/frontend/dist/index.html
+```
+
+If the app ships widget HTML files with inline scripts, include those too.
+
 ## Live Update Wiring
 
 When an app backend, CLI, or MCP write returns `app_events`, treat that as part of the product contract rather than as optional polish.
@@ -97,8 +105,9 @@ Do not leave stateful apps in a startup-fetch-only mode if the app already emits
 8. Run `maverick app install-local <app_id>`.
 9. Run `maverick app status <app_id>` and confirm `installed` is true.
 10. If the app declares `lifecycle.rebuild: true`, run `maverick app <app_id> frontend build --json`.
-11. If the app emits live data-change events, verify the mounted frontend or widget updates without manual refresh.
-12. Package with `maverick app package <app_id>` when an artifact is needed.
+11. If the frontend ships inline `<script>` blocks, run `python3 scripts/check_inline_script_syntax.py ...`.
+12. If the app emits live data-change events, verify the mounted frontend or widget updates without manual refresh.
+13. Package with `maverick app package <app_id>` when an artifact is needed.
 
 ## Verification
 

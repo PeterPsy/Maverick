@@ -7,6 +7,7 @@ from contextlib import redirect_stdout
 from io import BytesIO, StringIO
 import json
 import os
+import subprocess
 import tempfile
 import unittest
 
@@ -242,6 +243,39 @@ class MaverickAppSdkTestCase(unittest.TestCase):
         self.assertNotIn("__pycache__/junk.pyc", package.files_packaged)
         self.assertTrue(Path(package.manifest_path).is_file())
         self.assertEqual(len(package.checksum_sha256), 64)
+
+    def test_inline_script_syntax_checker_accepts_valid_html_and_rejects_invalid_html(self) -> None:
+        repo_root = self.make_repo_root()
+        checker = Path(__file__).resolve().parents[1] / "scripts" / "check_inline_script_syntax.py"
+        valid_html = repo_root / "workspaces" / "default" / "apps" / "valid.html"
+        invalid_html = repo_root / "workspaces" / "default" / "apps" / "invalid.html"
+        valid_html.parent.mkdir(parents=True, exist_ok=True)
+        valid_html.write_text(
+            "<!doctype html><html><body><script>const ok = 1; console.log(ok);</script></body></html>",
+            encoding="utf-8",
+        )
+        invalid_html.write_text(
+            "<!doctype html><html><body><script>const broken = `oops` tail;</script></body></html>",
+            encoding="utf-8",
+        )
+
+        valid = subprocess.run(
+            ["python3", str(checker), str(valid_html)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        invalid = subprocess.run(
+            ["python3", str(checker), str(invalid_html)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(valid.returncode, 0)
+        self.assertIn("Validated 1 inline <script> block", valid.stdout)
+        self.assertNotEqual(invalid.returncode, 0)
+        self.assertIn("failed syntax check", invalid.stderr)
 
     def test_entity_sqlite_template_exercises_backend_cli_and_mcp(self) -> None:
         repo_root = self.make_repo_root()

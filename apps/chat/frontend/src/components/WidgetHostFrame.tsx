@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { createWidgetContext, listWidgets } from "../api/client";
 import type { StructuredContent, WidgetRegistryItem } from "../api/client";
@@ -22,10 +22,13 @@ export function WidgetHostFrame({
   title?: string;
 }) {
   const [state, setState] = useState<WidgetHostState>({ status: "loading" });
+  const [frameHeight, setFrameHeight] = useState<string | null>(null);
+  const frameRef = useRef<HTMLIFrameElement | null>(null);
   const contentSignature = useMemo(() => stableContentSignature(content), [content]);
 
   useEffect(() => {
     let cancelled = false;
+    setFrameHeight(null);
 
     async function loadWidget() {
       try {
@@ -61,13 +64,35 @@ export function WidgetHostFrame({
     };
   }, [contentSignature, hostAppId, messageId]);
 
+  useEffect(() => {
+    if (state.status !== "ready") {
+      return;
+    }
+
+    function handleMessage(event: MessageEvent) {
+      if (event.origin !== window.location.origin || event.source !== frameRef.current?.contentWindow || !event.data || typeof event.data !== "object") {
+        return;
+      }
+      const payload = event.data as { type?: string; height?: string };
+      if (payload.type !== "maverick.widget.resize" || typeof payload.height !== "string" || !payload.height) {
+        return;
+      }
+      setFrameHeight(payload.height);
+    }
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [state]);
+
   if (state.status === "ready") {
     const src = `${state.widget.frontend_mount}?context=${encodeURIComponent(state.contextToken)}`;
     return (
       <iframe
         className="chatapp-structured-widget"
+        ref={frameRef}
         key={`${hostAppId}:${messageId}:${state.widget.owner_app_id}:${state.widget.widget_id}:${state.contextToken}`}
         src={src}
+        style={frameHeight ? { height: frameHeight } : undefined}
         title={title || `${content.kind} widget`}
       />
     );

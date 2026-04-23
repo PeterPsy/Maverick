@@ -132,6 +132,7 @@ def _run_app_frontend(app_id: str, operation: str, tokens: list[str], *, options
             workspace_id=workspace_id,
             agent_id=options.get("agent_id"),
             effective_mode=options.get("effective_mode", "full-access"),
+            platform_role=options.get("platform_role"),
         ),
         app_store=state.app_store,
         workspace_store=state.workspace_store,
@@ -287,6 +288,7 @@ def _run_app_sdk(tokens: list[str], *, state) -> dict[str, Any]:
         workspace_id=workspace_id,
         agent_id=None,
         effective_mode="full-access",
+        platform_role="admin",
     )
     return run_core_cli_command(
         command_id=f"core.app-sdk.{args.action}",
@@ -409,6 +411,7 @@ def _cli_context(options: dict[str, str], workspace_id: str) -> CliInvocationCon
         workspace_id=workspace_id,
         agent_id=options.get("agent_id"),
         effective_mode=options.get("effective_mode", "sandbox"),
+        platform_role=options.get("platform_role"),
     )
 
 
@@ -431,7 +434,7 @@ def _split_wrapper_options(tokens: list[str]) -> tuple[dict[str, str], list[str]
             options["json"] = "true"
             index += 1
             continue
-        if token in {"--workspace", "--caller-kind", "--effective-mode", "--agent-id", "--arguments-json"}:
+        if token in {"--workspace", "--caller-kind", "--effective-mode", "--agent-id", "--arguments-json", "--platform-role"}:
             if index + 1 >= len(tokens):
                 _die(f"{token} requires a value")
             options[token[2:].replace("-", "_")] = tokens[index + 1]

@@ -92,12 +92,21 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertEqual(status, 200)
         return headers["Set-Cookie"].split(";", 1)[0]
 
-    def create_member_user(self, app, admin_cookie: str, *, username: str = "viewer") -> str:
+    def create_user(
+        self,
+        app,
+        admin_cookie: str,
+        *,
+        username: str,
+        password: str,
+        platform_role: str = "member",
+        workspace_role: str = "member",
+    ) -> str:
         status_user, user, _user_headers = self.invoke(
             app,
             path="/api/admin/users",
             method="POST",
-            body={"username": username, "password": "memberpass", "platform_role": "member"},
+            body={"username": username, "password": password, "platform_role": platform_role},
             cookie=admin_cookie,
         )
         self.assertEqual(status_user, 201)
@@ -105,11 +114,21 @@ class AppStoreAppTestCase(unittest.TestCase):
             app,
             path=f"/api/admin/users/{user['user_id']}/workspaces",
             method="PUT",
-            body={"memberships": [{"workspace_id": "default", "role": "member"}]},
+            body={"memberships": [{"workspace_id": "default", "role": workspace_role}]},
             cookie=admin_cookie,
         )
         self.assertEqual(status_workspace, 200)
-        return self.login(app, username=username, password="memberpass")
+        return self.login(app, username=username, password=password)
+
+    def create_member_user(self, app, admin_cookie: str, *, username: str = "viewer") -> str:
+        return self.create_user(
+            app,
+            admin_cookie,
+            username=username,
+            password="memberpass",
+            platform_role="member",
+            workspace_role="member",
+        )
 
     def write_remote_app_contract(self, app_root: Path) -> None:
         contract = {
@@ -476,6 +495,9 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertIn("local_apps", payload)
         local_apps = {(item["workspace_id"], item["app_id"], item["status"]) for item in payload["local_apps"]}
         self.assertIn(("default", "local-notes", "uninstalled"), local_apps)
+        local_item = next(item for item in payload["local_apps"] if item["app_id"] == "local-notes")
+        self.assertTrue(local_item["can_promote"])
+        self.assertEqual(local_item["promotion_kind"], "promote")
 
     def test_member_installations_api_hides_admin_only_local_apps(self) -> None:
         repo_root = self.make_repo_root()
@@ -498,6 +520,27 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertEqual(member_status, 200)
         self.assertIn("local-notes", {item["app_id"] for item in admin_payload["local_apps"]})
         self.assertNotIn("local-notes", {item["app_id"] for item in member_payload["local_apps"]})
+
+    def test_member_installations_api_marks_local_app_promotion_unavailable(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        local_app_root = repo_root / "workspaces" / "default" / "apps" / "local-notes"
+        self.write_workspace_local_app_contract(local_app_root)
+        register_workspace_local_app_project_from_contract(
+            state.app_store,
+            workspace_id="default",
+            project_root=str(local_app_root),
+        )
+        app = PlatformHost(state, start_path=repo_root)
+        admin_cookie = self.login(app)
+        member_cookie = self.create_member_user(app, admin_cookie)
+
+        status, payload, _headers = self.invoke(app, path="/api/app-store/installations", cookie=member_cookie)
+
+        self.assertEqual(status, 200)
+        local_item = next(item for item in payload["local_apps"] if item["app_id"] == "local-notes")
+        self.assertFalse(local_item["can_promote"])
+        self.assertEqual(local_item["promotion_kind"], "blocked")
 
     def test_installations_api_discovers_workspace_local_app_projects_on_disk(self) -> None:
         repo_root = self.make_repo_root()
@@ -624,6 +667,234 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertEqual(delete_status, 403)
         self.assertEqual(delete_payload["error"], "workspace_admin_required")
         self.assertTrue(local_app_root.exists())
+
+    def test_platform_admin_can_promote_workspace_local_app_as_forkable(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        local_app_root = repo_root / "workspaces" / "default" / "apps" / "local-notes"
+        self.write_workspace_local_app_contract(local_app_root, frontend=True)
+        app = PlatformHost(state, start_path=repo_root)
+        cookie = self.login(app)
+
+        self.invoke(
+            app,
+            path="/api/app-store/register-local",
+            method="POST",
+            body={"app_id": "local-notes", "workspace_ids": ["default"]},
+            cookie=cookie,
+        )
+        promote_status, promoted, _headers = self.invoke(
+            app,
+            path="/api/app-store/promote-local",
+            method="POST",
+            body={"app_id": "local-notes", "workspace_ids": ["default"], "promotion_mode": "forkable"},
+            cookie=cookie,
+        )
+
+        promoted_root = repo_root / "apps" / "local-notes"
+        promoted_contract = parse_app_contract_file(promoted_root)
+        local_contract = parse_app_contract_file(local_app_root)
+        source = state.app_store.get_app_source("platform:local-notes:0.1.0")
+
+        self.assertEqual(promote_status, 201)
+        self.assertEqual(promoted["status"], "promoted")
+        self.assertEqual(promoted["source_kind"], "platform")
+        self.assertTrue(promoted_root.is_dir())
+        self.assertEqual(promoted_contract.contract.distribution.mode, "source_available")
+        self.assertEqual(promoted_contract.contract.distribution.source_access, "forkable")
+        self.assertEqual(local_contract.contract.distribution.mode, "workspace_local")
+        self.assertEqual(local_contract.contract.distribution.source_access, "editable")
+        self.assertEqual(source.source_kind, "platform")
+        self.assertEqual(source.source_path, str(promoted_root))
+        self.assertEqual(source.owner_user_id, "user:admin")
+        self.assertEqual(source.owner_username, "admin")
+        self.assertEqual(source.promoted_from_workspace_id, "default")
+        self.assertEqual(source.promoted_from_project_id, "default:local-notes")
+
+    def test_platform_admin_owner_can_publish_update_for_promoted_local_app(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        local_app_root = repo_root / "workspaces" / "default" / "apps" / "local-notes"
+        self.write_workspace_local_app_contract(local_app_root, frontend=True)
+        app = PlatformHost(state, start_path=repo_root)
+        cookie = self.login(app)
+
+        self.invoke(
+            app,
+            path="/api/app-store/register-local",
+            method="POST",
+            body={"app_id": "local-notes", "workspace_ids": ["default"]},
+            cookie=cookie,
+        )
+        self.invoke(
+            app,
+            path="/api/app-store/promote-local",
+            method="POST",
+            body={"app_id": "local-notes", "workspace_ids": ["default"], "promotion_mode": "forkable"},
+            cookie=cookie,
+        )
+        contract = json.loads((local_app_root / "app_contract.json").read_text(encoding="utf-8"))
+        contract["version"] = "0.2.0"
+        contract["description"] = "Workspace-local notes app updated."
+        (local_app_root / "app_contract.json").write_text(json.dumps(contract, indent=2), encoding="utf-8")
+        self.invoke(
+            app,
+            path="/api/app-store/register-local",
+            method="POST",
+            body={"app_id": "local-notes", "workspace_ids": ["default"]},
+            cookie=cookie,
+        )
+
+        installations_status, installations_payload, _headers = self.invoke(
+            app,
+            path="/api/app-store/installations",
+            cookie=cookie,
+        )
+        update_item = next(item for item in installations_payload["local_apps"] if item["app_id"] == "local-notes")
+        promote_status, promoted, _headers = self.invoke(
+            app,
+            path="/api/app-store/promote-local",
+            method="POST",
+            body={"app_id": "local-notes", "workspace_ids": ["default"], "promotion_mode": "sealed"},
+            cookie=cookie,
+        )
+
+        updated_source = state.app_store.get_app_source("platform:local-notes:0.2.0")
+        self.assertEqual(installations_status, 200)
+        self.assertTrue(update_item["can_promote"])
+        self.assertEqual(update_item["promotion_kind"], "update")
+        self.assertEqual(promote_status, 201)
+        self.assertEqual(promoted["status"], "updated")
+        self.assertEqual(updated_source.owner_user_id, "user:admin")
+
+    def test_other_platform_admin_cannot_publish_update_for_promoted_local_app(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        local_app_root = repo_root / "workspaces" / "default" / "apps" / "local-notes"
+        self.write_workspace_local_app_contract(local_app_root, frontend=True)
+        app = PlatformHost(state, start_path=repo_root)
+        admin_cookie = self.login(app)
+        other_admin_cookie = self.create_user(
+            app,
+            admin_cookie,
+            username="operator",
+            password="operatorpass",
+            platform_role="admin",
+            workspace_role="admin",
+        )
+
+        self.invoke(
+            app,
+            path="/api/app-store/register-local",
+            method="POST",
+            body={"app_id": "local-notes", "workspace_ids": ["default"]},
+            cookie=admin_cookie,
+        )
+        self.invoke(
+            app,
+            path="/api/app-store/promote-local",
+            method="POST",
+            body={"app_id": "local-notes", "workspace_ids": ["default"], "promotion_mode": "forkable"},
+            cookie=admin_cookie,
+        )
+        contract = json.loads((local_app_root / "app_contract.json").read_text(encoding="utf-8"))
+        contract["version"] = "0.2.0"
+        (local_app_root / "app_contract.json").write_text(json.dumps(contract, indent=2), encoding="utf-8")
+        self.invoke(
+            app,
+            path="/api/app-store/register-local",
+            method="POST",
+            body={"app_id": "local-notes", "workspace_ids": ["default"]},
+            cookie=admin_cookie,
+        )
+
+        status, payload, _headers = self.invoke(app, path="/api/app-store/installations", cookie=other_admin_cookie)
+        local_item = next(item for item in payload["local_apps"] if item["app_id"] == "local-notes")
+        promote_status, promote_payload, _headers = self.invoke(
+            app,
+            path="/api/app-store/promote-local",
+            method="POST",
+            body={"app_id": "local-notes", "workspace_ids": ["default"], "promotion_mode": "sealed"},
+            cookie=other_admin_cookie,
+        )
+
+        self.assertEqual(status, 200)
+        self.assertFalse(local_item["can_promote"])
+        self.assertEqual(local_item["promotion_kind"], "blocked")
+        self.assertIn("original app owner", local_item["promotion_detail"])
+        self.assertEqual(promote_status, 400)
+        self.assertEqual(promote_payload["error"], "promotion_failed")
+        self.assertIn("Only the original app owner", promote_payload["detail"])
+
+    def test_legacy_promoted_local_app_without_owner_metadata_still_shows_update_for_project_owner(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        local_app_root = repo_root / "workspaces" / "default" / "apps" / "local-notes"
+        self.write_workspace_local_app_contract(local_app_root, frontend=True)
+        app = PlatformHost(state, start_path=repo_root)
+        cookie = self.login(app)
+
+        self.invoke(
+            app,
+            path="/api/app-store/register-local",
+            method="POST",
+            body={"app_id": "local-notes", "workspace_ids": ["default"]},
+            cookie=cookie,
+        )
+        self.invoke(
+            app,
+            path="/api/app-store/promote-local",
+            method="POST",
+            body={"app_id": "local-notes", "workspace_ids": ["default"], "promotion_mode": "forkable"},
+            cookie=cookie,
+        )
+        legacy_source = state.app_store.get_app_source("platform:local-notes:0.1.0")
+        state.app_store.save_app_source(
+            type(legacy_source)(
+                **{
+                    **legacy_source.__dict__,
+                    "owner_user_id": None,
+                    "owner_username": None,
+                    "promoted_from_workspace_id": None,
+                    "promoted_from_project_id": None,
+                }
+            )
+        )
+
+        status, payload, _headers = self.invoke(app, path="/api/app-store/installations", cookie=cookie)
+
+        local_item = next(item for item in payload["local_apps"] if item["app_id"] == "local-notes")
+        self.assertEqual(status, 200)
+        self.assertTrue(local_item["can_promote"])
+        self.assertEqual(local_item["promotion_kind"], "update")
+
+    def test_member_cannot_promote_workspace_local_app(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        local_app_root = repo_root / "workspaces" / "default" / "apps" / "local-notes"
+        self.write_workspace_local_app_contract(local_app_root, frontend=True)
+        app = PlatformHost(state, start_path=repo_root)
+        admin_cookie = self.login(app)
+        member_cookie = self.create_member_user(app, admin_cookie)
+
+        self.invoke(
+            app,
+            path="/api/app-store/register-local",
+            method="POST",
+            body={"app_id": "local-notes", "workspace_ids": ["default"]},
+            cookie=admin_cookie,
+        )
+        promote_status, promote_payload, _headers = self.invoke(
+            app,
+            path="/api/app-store/promote-local",
+            method="POST",
+            body={"app_id": "local-notes", "workspace_ids": ["default"], "promotion_mode": "sealed"},
+            cookie=member_cookie,
+        )
+
+        self.assertEqual(promote_status, 403)
+        self.assertEqual(promote_payload["error"], "platform_admin_required")
+        self.assertFalse((repo_root / "apps" / "local-notes").exists())
 
     def test_local_app_discovery_persists_across_platform_bootstrap(self) -> None:
         repo_root = self.make_repo_root()

@@ -11,7 +11,6 @@ import {
   updateThread,
 } from "../../api/client";
 import { FloatingPanel, FloatingPanelPosition, SettingsPanel } from "./SettingsPanel";
-import { withRuntimeAvailability } from "./runtimeStatus";
 import { buildSections, isThreadBusy } from "./sections";
 import "./styles.css";
 
@@ -72,9 +71,8 @@ function ChatSidebarWidget() {
   async function refresh() {
     try {
       const payload = await listThreads();
-      const hydratedThreads = await withRuntimeAvailability(payload.threads || []);
       setProjects(payload.projects || []);
-      setThreads(hydratedThreads);
+      setThreads(payload.threads || []);
       setError(null);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to load chats.");
@@ -83,7 +81,7 @@ function ChatSidebarWidget() {
 
   useEffect(() => {
     refresh();
-    const refreshInterval = window.setInterval(refresh, 5000);
+    const refreshInterval = window.setInterval(refresh, 30000);
     return () => window.clearInterval(refreshInterval);
   }, []);
 

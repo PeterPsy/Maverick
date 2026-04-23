@@ -5,6 +5,7 @@ from core.apps.frontend_build import build_workspace_app_frontend
 from core.apps.health import probe_workspace_app_health
 from core.apps.hook_payloads import build_app_export_hook_payload, build_app_health_hook_payload
 from core.apps.installation import install_store_app, install_workspace_local_app
+from core.apps.promotion import promote_workspace_local_app_project
 from core.apps.registration import (
     build_workspace_app_binding_record,
     register_app_source,
@@ -27,6 +28,7 @@ __all__ = [
     "install_store_app",
     "install_workspace_local_app",
     "probe_workspace_app_health",
+    "promote_workspace_local_app_project",
     "purge_workspace_app_data",
     "register_app_source",
     "register_app_source_from_contract",

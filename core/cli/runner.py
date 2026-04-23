@@ -12,6 +12,8 @@ from core.cli.models import CliInvocationContext, CliInvocationPolicy
 def _enforce_invocation_policy(policy: CliInvocationPolicy, context: CliInvocationContext) -> None:
     if policy.operator_only and context.caller_kind != "operator":
         raise CliInvocationNotAllowedError("This CLI command is operator-only.")
+    if policy.required_platform_role is not None and context.platform_role != policy.required_platform_role:
+        raise CliInvocationNotAllowedError(f"This CLI command requires platform role `{policy.required_platform_role}`.")
     if context.caller_kind == "sandbox_agent" and not policy.sandbox_agent_allowed:
         raise CliInvocationNotAllowedError("Sandboxed agents may not invoke this CLI command.")
     if policy.requires_workspace_context and not context.workspace_id:

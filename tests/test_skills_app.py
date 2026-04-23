@@ -14,6 +14,7 @@ import unittest
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
 from core.apps.contracts import parse_app_contract_file
+from core.cli.errors import CliInvocationNotAllowedError
 from core.cli.models import CliInvocationContext
 from core.cli.service import list_core_cli_commands, run_core_cli_command
 from core.mcp.models import McpInvocationContext
@@ -82,7 +83,7 @@ class SkillsAppTestCase(unittest.TestCase):
         self.assertEqual(parsed.contract.entrypoints.frontend, "frontend/dist")
         self.assertIn("maverick_skills_app", parsed.contract.capabilities.mcp_tools)
         self.assertIn("skills_reference_manifest", parsed.contract.capabilities.mcp_tools)
-        self.assertEqual(parsed.contract.capabilities.cli_commands, ["skills"])
+        self.assertEqual(parsed.contract.capabilities.cli_commands, ["skills", "sync"])
         self.assertEqual(parsed.contract.capabilities.skills, [])
         self.assertIn("skill", {item.entity_type for item in parsed.contract.capabilities.reference_entities})
 
@@ -167,6 +168,30 @@ class SkillsAppTestCase(unittest.TestCase):
             self.assertEqual(detail_status, 404)
             self.assertEqual(detail_payload["error"], "skill_not_found")
 
+    def test_catalog_drops_stale_state_entries_without_skill_files(self) -> None:
+        service, store = load_skills_backend_modules()
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "skills"
+            store.ensure_data_root(data_root)
+            store.write_state(
+                data_root,
+                [
+                    {
+                        "id": "stale-skill",
+                        "name": "Stale Skill",
+                        "description": "Old record without backing files.",
+                        "enabled": True,
+                    }
+                ],
+            )
+
+            status, payload = service.handle_action(data_root, {"action": "catalog"})
+            rewritten = store.read_state(data_root)
+
+            self.assertEqual(status, 200)
+            self.assertEqual(payload["skills"], [])
+            self.assertEqual(rewritten["skills"], [])
+
     def test_bootstrap_installs_skills_and_exposes_surfaces(self) -> None:
         repo_root = self.make_repo_root()
         state = bootstrap_platform_state(start_path=repo_root)
@@ -175,6 +200,7 @@ class SkillsAppTestCase(unittest.TestCase):
         self.assertIn("skills", {binding.app_id for binding in bindings})
         self.assertTrue((repo_root / "workspaces" / "default" / "data" / "skills" / "state.json").is_file())
         self.assertTrue((repo_root / "workspaces" / "default" / "data" / "skills" / "skills" / "skills-ops" / "SKILL.md").is_file())
+        self.assertTrue((repo_root / "workspaces" / "default" / "data" / "skills" / "skills" / "generate-image" / "SKILL.md").is_file())
 
         tools = list_mcp_tools(app_store=state.app_store, workspace_id="default", start_path=repo_root)
         commands = list_core_cli_commands(app_store=state.app_store, workspace_id="default", start_path=repo_root)
@@ -183,6 +209,7 @@ class SkillsAppTestCase(unittest.TestCase):
         self.assertIn("app.skills.maverick_skills_app", [tool.tool_name for tool in tools])
         self.assertIn("app.skills.skills", [command.command_id for command in commands])
         self.assertIn("skills-ops", [skill.skill_id for skill in skills])
+        self.assertIn("generate-image", [skill.skill_id for skill in skills])
 
     def test_platform_backend_mount_returns_skills_catalog(self) -> None:
         repo_root = self.make_repo_root()
@@ -237,6 +264,64 @@ class SkillsAppTestCase(unittest.TestCase):
         self.assertEqual(cli_payload["status_code"], 200)
         self.assertIn("skills", mcp_payload)
         self.assertIn("skills", cli_payload)
+
+    def test_admin_sync_command_repairs_catalog_and_seeds_bundled_skills(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        data_root = repo_root / "workspaces" / "default" / "data" / "skills"
+        generate_image_root = data_root / "skills" / "generate-image"
+        shutil.rmtree(generate_image_root)
+        state_payload = json.loads((data_root / "state.json").read_text(encoding="utf-8"))
+        state_payload["skills"].append(
+            {
+                "id": "stale-skill",
+                "name": "Stale Skill",
+                "description": "Old record without backing files.",
+                "enabled": True,
+            }
+        )
+        (data_root / "state.json").write_text(json.dumps(state_payload, indent=2) + "\n", encoding="utf-8")
+
+        result = run_core_cli_command(
+            command_id="app.skills.sync",
+            context=CliInvocationContext(
+                caller_kind="sandbox_agent",
+                workspace_id="default",
+                agent_id="agent-1",
+                effective_mode="sandbox",
+                platform_role="admin",
+            ),
+            app_store=state.app_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+
+        rebuilt_state = json.loads((data_root / "state.json").read_text(encoding="utf-8"))
+        rebuilt_ids = {item["id"] for item in rebuilt_state["skills"]}
+
+        self.assertEqual(result["status_code"], 200)
+        self.assertIn("generate-image", result["seeded_skill_ids"])
+        self.assertIn("generate-image", rebuilt_ids)
+        self.assertNotIn("stale-skill", rebuilt_ids)
+
+    def test_sync_command_is_blocked_for_non_admin_users(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+
+        with self.assertRaises(CliInvocationNotAllowedError):
+            run_core_cli_command(
+            command_id="app.skills.sync",
+            context=CliInvocationContext(
+                caller_kind="sandbox_agent",
+                workspace_id="default",
+                agent_id="agent-1",
+                effective_mode="sandbox",
+                platform_role="member",
+            ),
+                app_store=state.app_store,
+                workspace_id="default",
+                start_path=repo_root,
+            )
 
 
 if __name__ == "__main__":

@@ -152,6 +152,26 @@ If a workspace needs to customize the app, the core should create a workspace-lo
 
 They may later be promoted into an installation-level distribution channel, but that promotion is an explicit packaging step, not an implicit side effect of local development.
 
+The first promotion flow is admin-only and control-plane owned:
+
+- source project stays in `workspaces/<workspace_id>/apps/<app_id>/`
+- promotion copies the full app directory into installation-level `apps/<app_id>/`
+- the copied contract is rewritten for the selected installation distribution:
+  - `sealed` -> `distribution.mode: sealed`, `source_access: none`
+  - `forkable` -> `distribution.mode: source_available`, `source_access: forkable`
+- the copied app is then registered as an installation-level `platform` source
+
+Promotion ownership is separate from contract distribution metadata:
+
+- the workspace-local project record persists its creator as the project owner
+- the first successful promotion claims that installation-level `app_id` for that owner
+- later promotions of the same `app_id` are treated as server-wide updates, not as a second independent app
+- only the original promoted-app owner may publish updates for that `app_id`
+- if another workspace forks and customizes the app, it must change the `app_id` before promotion so the result is a separate installation-level app
+- promotion must report a clear blocked reason when an existing installation-level `app_id` belongs to a different owner
+
+Promotion must never mutate the original workspace-local project in place.
+
 The app contract should make source access explicit.
 
 Source mutability is app-level distribution metadata, not actor-specific metadata.
@@ -1006,7 +1026,7 @@ The first known case is chat structured content:
 - an installed app declares that it can render that `kind`
 - the chat app renders the matching app-owned widget surface
 
-App-owned surfaces may return a generic `chat_render` object when they create or recall content meant for chat. The runtime bridge treats that as structured output by copying `chat_render.kind` and `chat_render.payload` into provider-agnostic structured content. Host apps still discover renderers through the widget registry; `chat_render` is not permission for Chat to special-case the producing app.
+App-owned surfaces may return a generic `chat_render` object when they create or recall content meant for chat. The runtime bridge treats that as structured output by copying `chat_render.kind` and `chat_render.payload` into provider-agnostic structured content. Agent-message completions may also return the same envelope, or a direct `structured_content` envelope with the same `kind` and `payload`, and the runtime bridge must normalize both forms identically. Host apps still discover renderers through the widget registry; `chat_render` is not permission for Chat to special-case the producing app.
 
 This is an app surface model, not app-to-app communication.
 

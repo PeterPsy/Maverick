@@ -47,6 +47,8 @@ def handle_runtime_cli_api(
         effective_mode,
         "--agent-id",
         claims["runtime_session_id"],
+        "--platform-role",
+        "member",
     ]
     try:
         return json_response(start_response, run_cli_json(trusted_argv, state=state, repository_root=start_path))

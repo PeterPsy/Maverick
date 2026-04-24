@@ -45,7 +45,7 @@ jobs:
           - apps/user-admin
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: "22"
           cache: npm
@@ -66,7 +66,7 @@ jobs:
       - frontend-builds
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: "22"
       - name: Rebuild source frontends and check committed dist

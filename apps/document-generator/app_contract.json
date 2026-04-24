@@ -139,7 +139,7 @@
     "import": false,
     "validate_after_import": false,
     "repair_after_import": false,
-    "rebuild": true,
+    "rebuild": false,
     "health_check": true
   },
   "health_contract": {

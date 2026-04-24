@@ -42,6 +42,11 @@ from core.shared.in_memory_collection import InMemoryCollection
 from core.workspaces.service import create_workspace, ensure_workspace_layout
 
 
+def _is_noop_frontend_build_script(script: str) -> bool:
+    normalized = script.replace(" ", "").replace("'", '"').lower()
+    return "process.exit(0)" in normalized or "accesssync(\"frontend/dist/index.html\")" in normalized
+
+
 class Phase13BuiltinAppsTestCase(unittest.TestCase):
     """Verify first-boot built-in apps are mounted by the core host."""
 
@@ -131,9 +136,10 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
         self.assertTrue((repo_root / "workspaces" / "default" / "data" / "agents" / "agent_types.json").is_file())
         self.assertTrue((repo_root / "workspaces" / "default" / "data" / "skills" / "state.json").is_file())
 
-    def test_all_builtin_frontend_apps_declare_rebuild_lifecycle(self) -> None:
+    def test_builtin_frontend_apps_have_honest_rebuild_contracts(self) -> None:
         apps_root = Path(__file__).resolve().parents[1] / "apps"
         missing: list[str] = []
+        dishonest_rebuilds: list[str] = []
         for contract_path in sorted(apps_root.glob("*/app_contract.json")):
             parsed = parse_app_contract_file(contract_path.parent)
             frontend = parsed.contract.entrypoints.frontend
@@ -147,13 +153,19 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
                     continue
                 package_payload = json.loads(package_path.read_text(encoding="utf-8"))
                 scripts = package_payload.get("scripts") if isinstance(package_payload, dict) else None
-                has_build_script = isinstance(scripts, dict) and bool(scripts.get("build"))
+                build_script = str(scripts.get("build") or "").strip() if isinstance(scripts, dict) else ""
+                has_build_script = bool(build_script)
                 if has_build_script:
+                    if parsed.contract.lifecycle.rebuild and _is_noop_frontend_build_script(build_script):
+                        dishonest_rebuilds.append(parsed.app_id)
                     break
-            if not parsed.contract.lifecycle.rebuild or not has_build_script:
+            if parsed.contract.lifecycle.rebuild and not has_build_script:
+                missing.append(parsed.app_id)
+            if not parsed.contract.lifecycle.rebuild and not (contract_path.parent / frontend / "index.html").is_file():
                 missing.append(parsed.app_id)
 
         self.assertEqual(missing, [])
+        self.assertEqual(dishonest_rebuilds, [])
 
     def test_all_builtin_rebuildable_frontend_apps_expose_frontend_build_cli(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]

@@ -33,6 +33,10 @@ The platform must not force all apps into the same internal schema.
 
 The platform must require every app to describe how it behaves.
 
+`lifecycle.rebuild` is an executable contract, not a label for "has frontend files".
+Apps that declare `lifecycle.rebuild: true` must provide a real source build that can regenerate the declared frontend artifact.
+Apps that ship only committed `frontend/dist` artifacts must declare `lifecycle.rebuild: false` until source-buildable frontend material exists.
+
 ## Contract Versus Installation State
 
 The app contract is not the same thing as app installation state.

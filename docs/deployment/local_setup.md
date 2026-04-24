@@ -10,7 +10,9 @@ Maverick is experimental. Use fake data and local-only networking.
 - Node.js and npm
 - `bubblewrap` on Linux for sandbox tests
 - Codex CLI for Codex-backed runtime sessions
-- MongoDB for hosted control-plane persistence
+
+The current clean-clone local bootstrap uses JSON files under `.maverick/local-state`.
+MongoDB remains a future/hosted persistence adapter target and is not required for the current local installer path.
 
 For the first public release, the recommended path is local CLI-first setup, not Docker and not a setup UI.
 
@@ -62,6 +64,13 @@ For live apply, missing required preflight tools fail before the installer write
 source .venv/bin/activate
 ```
 
+Bootstrap does not rewrite existing local-state paths by default.
+When moving a checkout and intentionally migrating local JSON state, run:
+
+```bash
+./scripts/bootstrap_local.sh --rebase-local-state
+```
+
 ## Verify Core
 
 ```bash
@@ -80,6 +89,10 @@ Health check:
 curl http://127.0.0.1:8000/health
 ```
 
+`scripts/run_local.sh` is the development profile and defaults to port `8000`.
+The installer/systemd profile defaults to core port `8014` and rescue port `8015` to avoid clashing with a developer server.
+Use `--core-port` or `MAVERICK_PORT` when you need a different profile.
+
 ## Frontend Apps
 
 Apps with source are built from their app directories:
@@ -90,7 +103,8 @@ npm ci
 npm run build
 ```
 
-Apps that only verify `frontend/dist/index.html` are using committed built artifacts. See `docs/development/generated_artifacts.md`.
+Apps with `lifecycle.rebuild: true` must have a real build script.
+Apps with only committed `frontend/dist` artifacts must declare `lifecycle.rebuild: false`; see `docs/development/generated_artifacts.md`.
 
 To build every app frontend during bootstrap:
 

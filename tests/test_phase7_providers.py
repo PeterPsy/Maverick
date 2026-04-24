@@ -462,6 +462,30 @@ class Phase7ProvidersTestCase(unittest.TestCase):
         self.assertFalse((runtime_home / ".tmp" / "plugins.sha").exists())
         self.assertFalse((runtime_home / ".tmp" / "app-server-remote-plugin-sync-v1").exists())
 
+    def test_codex_runtime_home_ignores_unreadable_source_config(self) -> None:
+        runtime_store = self.make_runtime_store()
+        repo_root = self.make_repo_root()
+        source_home = repo_root / "operator-codex-home"
+        source_home.mkdir()
+        config_path = source_home / "config.toml"
+        config_path.write_text('model = "gpt-5.4"\n', encoding="utf-8")
+        config_path.chmod(0)
+        self.addCleanup(lambda: config_path.chmod(0o600) if config_path.exists() else None)
+        session = create_runtime_session(
+            runtime_store,
+            session_id="sess-unreadable-config",
+            workspace_id="default",
+            agent_id="agent-1",
+            start_path=repo_root,
+        )
+
+        with patch.dict(os.environ, {"MAVERICK3_CODEX_HOME": str(source_home)}, clear=False):
+            spec = CodexProviderAdapter(codex_command="/bin/echo").build_launch_spec(session)
+
+        runtime_config = (Path(spec.env_overrides["CODEX_HOME"]) / "config.toml").read_text(encoding="utf-8")
+        self.assertIn('model = "gpt-5.5"', runtime_config)
+        self.assertNotIn("gpt-5.4", runtime_config)
+
     def test_disable_binding_preserves_record_but_makes_it_inactive(self) -> None:
         provider_store = self.make_provider_store()
         binding = bind_provider_credential(

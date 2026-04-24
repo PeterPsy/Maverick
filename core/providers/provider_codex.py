@@ -477,10 +477,13 @@ class CodexProviderAdapter:
             return False
 
     def _copy_file_if_present(self, source: Path, destination: Path) -> None:
-        if not source.is_file():
+        try:
+            if not source.is_file():
+                return
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, destination)
+        except OSError:
             return
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, destination)
 
     def _write_runtime_config(
         self,
@@ -492,7 +495,7 @@ class CodexProviderAdapter:
         model_id: str | None = None,
         model_reasoning_effort: str | None = None,
     ) -> None:
-        raw_lines = source.read_text(encoding="utf-8").splitlines() if source.is_file() else []
+        raw_lines = self._read_runtime_config_lines(source)
         sanitized_lines: list[str] = []
         skipping_disabled_section = False
         current_section: str | None = None
@@ -525,6 +528,12 @@ class CodexProviderAdapter:
         output_lines.extend(self._managed_runtime_feature_lines())
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_text("\n".join(output_lines).strip() + "\n", encoding="utf-8")
+
+    def _read_runtime_config_lines(self, source: Path) -> list[str]:
+        try:
+            return source.read_text(encoding="utf-8").splitlines() if source.is_file() else []
+        except OSError:
+            return []
 
     def _is_managed_model_config_key(self, stripped: str, *, current_section: str | None) -> bool:
         if not stripped or stripped.startswith("#") or "=" not in stripped:

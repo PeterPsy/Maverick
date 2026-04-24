@@ -1,5 +1,6 @@
 const state = {
   apps: [],
+  serverApps: [],
   installations: [],
   localApps: [],
   pinnedApps: [],
@@ -10,6 +11,7 @@ const state = {
 };
 
 const catalogGrid = document.querySelector("#catalogGrid");
+const serverList = document.querySelector("#serverList");
 const installedList = document.querySelector("#installedList");
 const localList = document.querySelector("#localList");
 const workspaceList = document.querySelector("#workspaceList");
@@ -125,6 +127,12 @@ function surfaceLabel(app) {
   const surfaces = app.surfaces || [];
   if (surfaces.length === 0) return "No declared surfaces";
   return surfaces.join(" / ");
+}
+
+function sourceKindLabel(app) {
+  if (app.source_kind === "external_bundle") return "External bundle";
+  if (app.source_kind === "platform") return "Platform app";
+  return "Server app";
 }
 
 function statusLabel(appId) {
@@ -311,7 +319,19 @@ function renderMoreOptions(app, mode, version, installState) {
       action: () => togglePinnedApp(app),
     }),
   );
-  if (mode === "local") {
+  if (mode === "server") {
+    const sourceInfo = document.createElement("div");
+    sourceInfo.className = "app-row-menu-section";
+    const title = document.createElement("p");
+    title.className = "app-row-menu-label";
+    title.textContent = sourceKindLabel(app);
+    sourceInfo.append(title);
+    const versionInfo = document.createElement("p");
+    versionInfo.className = "app-row-menu-note";
+    versionInfo.textContent = version?.version ? `Available source ${version.version}` : "Registered server source";
+    sourceInfo.append(versionInfo);
+    panel.append(sourceInfo);
+  } else if (mode === "local") {
     const invalid = app.localStatus === "invalid";
     panel.append(
       renderMenuItem({
@@ -405,6 +425,12 @@ function renderRow(app, mode) {
     surfaces.textContent = surfaceLabel(app);
     details.append(surfaces);
   }
+  if (mode === "server") {
+    const serverMeta = document.createElement("span");
+    serverMeta.className = "app-row-surfaces";
+    serverMeta.textContent = `${sourceKindLabel(app)} · ${surfaceLabel(app)}`;
+    details.append(serverMeta);
+  }
 
   const actionWrap = document.createElement("div");
   actionWrap.className = "app-row-actions";
@@ -459,6 +485,18 @@ function renderStore() {
   state.apps.forEach((app) => catalogGrid.append(renderRow(app, "store")));
 }
 
+function renderServer() {
+  serverList.replaceChildren();
+  if (!state.serverApps.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = "No server apps are registered on this Maverick installation.";
+    serverList.append(empty);
+    return;
+  }
+  state.serverApps.forEach((app) => serverList.append(renderRow(app, "server")));
+}
+
 function renderLocal() {
   localList.replaceChildren();
   const selected = new Set(selectedWorkspaceIds());
@@ -490,6 +528,7 @@ function render() {
   renderTabs();
   renderInstalled();
   renderStore();
+  renderServer();
   renderLocal();
 }
 
@@ -509,6 +548,7 @@ async function installApp(app, version) {
       body: JSON.stringify({ action: "remember_install", app_id: app.app_id, version: version.version, workspace_ids: workspaceIds }),
     }).catch(() => null);
     await refreshInstallations();
+    await refreshServerApps();
     setStatus(`Installed ${app.name}`, "ok");
   } catch (error) {
     setStatus(error.message, "error");
@@ -678,6 +718,7 @@ async function promoteLocalApp(app) {
         body: JSON.stringify({ app_id: app.app_id, workspace_ids: [workspaceId], promotion_mode: normalizedMode }),
       });
       await refreshInstallations();
+      await refreshServerApps();
       setStatus(`Promoted ${app.name} as ${normalizedMode}`, "ok");
     } catch (error) {
       setStatus(error.message, "error");
@@ -732,6 +773,11 @@ async function refreshInstallations() {
   state.localApps = payload.local_apps || [];
 }
 
+async function refreshServerApps() {
+  const payload = await requestJson("/api/app-store/server-apps");
+  state.serverApps = payload.items || [];
+}
+
 async function refreshPinnedApps() {
   const payload = await requestJson("/api/apps/app-store/backend", {
     method: "POST",
@@ -763,9 +809,10 @@ async function togglePinnedApp(app) {
 
 async function load() {
   setStatus("Loading", "busy");
-  const [workspaces, catalog, installations, pinned] = await Promise.all([
+  const [workspaces, catalog, serverApps, installations, pinned] = await Promise.all([
     requestJson("/api/workspaces"),
     requestJson("/api/app-store/apps"),
+    requestJson("/api/app-store/server-apps"),
     requestJson("/api/app-store/installations"),
     requestJson("/api/apps/app-store/backend", {
       method: "POST",
@@ -774,13 +821,14 @@ async function load() {
   ]);
   state.workspaces = workspaces.items || [];
   state.apps = catalog.items || [];
+  state.serverApps = serverApps.items || [];
   state.installations = installations.items || [];
   state.localApps = installations.local_apps || [];
   state.pinnedApps = pinned.pinned_apps || [];
   state.selectedWorkspaces = new Set([workspaces.active_workspace_id || state.workspaces[0]?.workspace_id].filter(Boolean));
   renderWorkspaces();
   render();
-  setStatus(`${state.apps.length} apps`, "ok");
+  setStatus(`${state.apps.length} catalog apps · ${state.serverApps.length} server apps`, "ok");
 }
 
 refreshButton.addEventListener("click", () => {

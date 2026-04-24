@@ -21,6 +21,14 @@ def default_state() -> dict[str, Any]:
         "schema_version": SCHEMA_VERSION,
         "catalog_url": "",
         "pinned_apps": ["chat"],
+        "view_filter": {
+            "mode": "search",
+            "query": "",
+            "scope": "all",
+            "title": "",
+            "refs": [],
+            "updated_at": utcnow(),
+        },
         "recent_installs": [],
         "created_at": utcnow(),
         "updated_at": utcnow(),
@@ -39,6 +47,17 @@ def load_state(data_root: Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         return seed_state(data_root)
     payload.setdefault("pinned_apps", ["chat"])
+    payload.setdefault(
+        "view_filter",
+        {
+            "mode": "search",
+            "query": "",
+            "scope": "all",
+            "title": "",
+            "refs": [],
+            "updated_at": utcnow(),
+        },
+    )
     return payload
 
 
@@ -97,3 +116,69 @@ def toggle_pinned_app(data_root: Path, app_id: str) -> dict[str, Any]:
     if app_id in current:
         return set_pinned_apps(data_root, [item for item in current if item != app_id])
     return set_pinned_apps(data_root, [*current, app_id])
+
+
+def view_filter_state(data_root: Path) -> dict[str, Any]:
+    state = load_state(data_root)
+    view_filter = state.get("view_filter")
+    if not isinstance(view_filter, dict):
+        state["view_filter"] = default_state()["view_filter"]
+        save_state(data_root, state)
+        view_filter = state["view_filter"]
+    return view_filter
+
+
+def set_view_filter(data_root: Path, *, query: object = None, scope: object = None, preserve_custom: bool = False) -> dict[str, Any]:
+    state = load_state(data_root)
+    current = state.get("view_filter") if isinstance(state.get("view_filter"), dict) else {}
+    next_scope = str(scope or current.get("scope") or "all").strip() or "all"
+    if next_scope not in {"all", "catalog", "installed", "local"}:
+        raise ValueError("scope must be one of: all, catalog, installed, local")
+    state["view_filter"] = {
+        "mode": "custom" if preserve_custom and current.get("mode") == "custom" else "search",
+        "query": str(query if query is not None else current.get("query") or "").strip(),
+        "scope": next_scope,
+        "title": str(current.get("title") or "") if preserve_custom and current.get("mode") == "custom" else "",
+        "refs": list(current.get("refs") or []) if preserve_custom and current.get("mode") == "custom" else [],
+        "updated_at": utcnow(),
+    }
+    return save_state(data_root, state)
+
+
+def set_custom_view(data_root: Path, *, title: object = None, refs: object = None, query: object = None, scope: object = None) -> dict[str, Any]:
+    next_scope = str(scope or "all").strip() or "all"
+    if next_scope not in {"all", "catalog", "installed", "local"}:
+        raise ValueError("scope must be one of: all, catalog, installed, local")
+    normalized_refs: list[dict[str, str]] = []
+    for item in refs if isinstance(refs, list) else []:
+        if not isinstance(item, dict):
+            continue
+        entity_type = str(item.get("entity_type") or "").strip()
+        entity_id = str(item.get("entity_id") or "").strip()
+        if entity_type != "installed_app" or not entity_id:
+            raise ValueError("custom view refs must target installed_app entities")
+        normalized_refs.append({"entity_type": entity_type, "entity_id": entity_id})
+    state = load_state(data_root)
+    state["view_filter"] = {
+        "mode": "custom",
+        "query": str(query or "").strip(),
+        "scope": next_scope,
+        "title": str(title or "").strip(),
+        "refs": normalized_refs,
+        "updated_at": utcnow(),
+    }
+    return save_state(data_root, state)
+
+
+def clear_custom_view(data_root: Path) -> dict[str, Any]:
+    state = load_state(data_root)
+    current = state.get("view_filter") if isinstance(state.get("view_filter"), dict) else {}
+    state["view_filter"] = {
+        "mode": "search",
+        "query": str(current.get("query") or "").strip(),
+        "scope": str(current.get("scope") or "all").strip() or "all",
+        "title": "",
+        "refs": [],
+        "updated_at": utcnow(),
+    }
+    return save_state(data_root, state)

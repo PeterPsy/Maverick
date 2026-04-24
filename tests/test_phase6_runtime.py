@@ -7,6 +7,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
+from core.api.platform_state import _migrate_legacy_runtime_partition
 from core.runtime.service import (
     build_runtime_routing,
     create_child_runtime_session,
@@ -18,6 +19,9 @@ from core.runtime.service import (
     transition_runtime_session,
     transition_runtime_turn,
 )
+from core.runtime.event_collection import RuntimeEventJsonCollection
+from core.runtime.session_collection import RuntimeSessionJsonCollection
+from core.runtime.session_termination import terminate_runtime_session
 from core.runtime.store import MongoRuntimeStore, RuntimeCollections
 from core.runtime.turn_submission import _missing_final_suffix
 from core.shared.json_file_collection import JsonFileCollection
@@ -48,6 +52,13 @@ class FakeCollection:
         if upsert:
             self.documents.append({**query, **payload})
 
+    def delete_one(self, query: dict) -> None:
+        self.documents = [
+            document
+            for document in self.documents
+            if not all(document.get(key) == value for key, value in query.items())
+        ]
+
 
 class Phase6RuntimeTestCase(unittest.TestCase):
     """Verify workspace-aware runtime routing and lifecycle records."""
@@ -63,14 +74,15 @@ class Phase6RuntimeTestCase(unittest.TestCase):
             )
         )
 
-    def make_json_store(self, state_root: Path) -> MongoRuntimeStore:
+    def make_json_store(self, repo_root: Path) -> MongoRuntimeStore:
+        state_root = repo_root / ".maverick" / "local-state" / "runtime"
         return MongoRuntimeStore(
             RuntimeCollections(
                 sessions=JsonFileCollection(state_root / "sessions.json"),
-                turns=JsonFileCollection(state_root / "turns.json"),
-                events=JsonFileCollection(state_root / "events.json"),
-                processes=JsonFileCollection(state_root / "processes.json"),
-                states=JsonFileCollection(state_root / "states.json"),
+                turns=RuntimeSessionJsonCollection(start_path=repo_root, filename="turns.json"),
+                events=RuntimeEventJsonCollection(start_path=repo_root),
+                processes=RuntimeSessionJsonCollection(start_path=repo_root, filename="processes.json"),
+                states=RuntimeSessionJsonCollection(start_path=repo_root, filename="state.json"),
             )
         )
 
@@ -177,9 +189,8 @@ class Phase6RuntimeTestCase(unittest.TestCase):
 
     def test_json_runtime_store_keeps_history_across_bootstrap_instances(self) -> None:
         repo_root = self.make_repo_root()
-        state_root = repo_root / ".maverick" / "local-state" / "runtime"
         now = datetime.now(tz=UTC)
-        first_store = self.make_json_store(state_root)
+        first_store = self.make_json_store(repo_root)
 
         create_runtime_session(first_store, session_id="sess-1", workspace_id="acme", agent_id="chat", now=now, start_path=repo_root)
         queue_runtime_turn(first_store, turn_id="turn-1", session_id="sess-1", input_text="hello", now=now)
@@ -194,12 +205,52 @@ class Phase6RuntimeTestCase(unittest.TestCase):
             now=now,
         )
 
-        second_store = self.make_json_store(state_root)
+        second_store = self.make_json_store(repo_root)
 
         self.assertEqual(second_store.get_session("sess-1").workspace_id, "acme")
         self.assertEqual(second_store.list_turns("sess-1")[0].input_text, "hello")
         self.assertEqual(second_store.list_events("sess-1")[0].event_type, "runtime.turn.queued")
         self.assertEqual(second_store.get_state("sess-1").session_status, "created")
+        session_root = repo_root / "workspaces" / "acme" / "runtime" / "sessions" / "sess-1"
+        self.assertTrue((session_root / "turns.json").is_file())
+        self.assertTrue((session_root / "events.json").is_file())
+        self.assertTrue((session_root / "state.json").is_file())
+        self.assertFalse((repo_root / ".maverick" / "local-state" / "runtime" / "turns.json").exists())
+        self.assertFalse((repo_root / ".maverick" / "local-state" / "runtime" / "events.json").exists())
+        self.assertFalse((repo_root / ".maverick" / "local-state" / "runtime" / "states.json").exists())
+
+    def test_legacy_global_turns_are_migrated_into_session_partition(self) -> None:
+        repo_root = self.make_repo_root()
+        legacy_path = repo_root / ".maverick" / "local-state" / "runtime" / "turns.json"
+        JsonFileCollection(legacy_path).update_one(
+            {"turn_id": "turn-legacy"},
+            {
+                "$set": {
+                    "turn_id": "turn-legacy",
+                    "session_id": "sess-legacy",
+                    "workspace_id": "acme",
+                    "status": "queued",
+                    "input_text": "hello",
+                    "created_at": datetime.now(tz=UTC),
+                    "updated_at": datetime.now(tz=UTC),
+                    "started_at": None,
+                    "completed_at": None,
+                    "failure_reason": None,
+                }
+            },
+            upsert=True,
+        )
+        collection = RuntimeSessionJsonCollection(start_path=repo_root, filename="turns.json")
+
+        _migrate_legacy_runtime_partition(
+            legacy_path=legacy_path,
+            collection=collection,
+            identity_field="turn_id",
+        )
+
+        self.assertEqual(JsonFileCollection(legacy_path).find({}), [])
+        self.assertEqual(collection.find_one({"turn_id": "turn-legacy"})["input_text"], "hello")
+        self.assertTrue((repo_root / "workspaces" / "acme" / "runtime" / "sessions" / "sess-legacy" / "turns.json").is_file())
 
     def test_runtime_process_lifecycle_tracks_exit_and_timeout(self) -> None:
         store = self.make_store()
@@ -364,6 +415,74 @@ class Phase6RuntimeTestCase(unittest.TestCase):
         self.assertEqual(final.status, "stopped")
         self.assertEqual(store.get_state("sess-1").session_status, "stopped")
         self.assertEqual(store.get_state("sess-1").forced_stop_reason, "shutdown requested")
+
+    def test_created_runtime_session_can_be_stopped_and_purged(self) -> None:
+        store = self.make_store()
+        repo_root = self.make_repo_root()
+        now = datetime.now(tz=UTC)
+        create_runtime_session(
+            store,
+            session_id="sess-created",
+            workspace_id="acme",
+            agent_id="agent-1",
+            now=now,
+            start_path=repo_root,
+        )
+        queue_runtime_turn(store, turn_id="turn-1", session_id="sess-created", input_text="queued", now=now)
+        record_runtime_event(
+            store,
+            event_id="event-1",
+            session_id="sess-created",
+            plane="session",
+            event_type="runtime.session.test",
+            payload={},
+            now=now,
+        )
+
+        termination = terminate_runtime_session(store, session_id="sess-created", reason="cleanup")
+        deleted = store.delete_session_records("sess-created")
+
+        self.assertTrue(termination["found"])
+        self.assertEqual(deleted["sessions"], 1)
+        self.assertEqual(deleted["turns"], 1)
+        self.assertEqual(deleted["events"], 2)
+        self.assertEqual(store.list_all_sessions(), [])
+
+    def test_session_partitioned_runtime_files_are_removed_with_runtime_records(self) -> None:
+        repo_root = self.make_repo_root()
+        store = self.make_json_store(repo_root)
+        now = datetime.now(tz=UTC)
+        create_runtime_session(
+            store,
+            session_id="sess-json-delete",
+            workspace_id="acme",
+            agent_id="agent-1",
+            now=now,
+            start_path=repo_root,
+        )
+        record_runtime_event(
+            store,
+            event_id="event-json-delete",
+            session_id="sess-json-delete",
+            plane="session",
+            event_type="runtime.session.test",
+            payload={},
+            now=now,
+        )
+        queue_runtime_turn(store, turn_id="turn-json-delete", session_id="sess-json-delete", input_text="queued", now=now)
+        create_runtime_process(store, process_id="proc-json-delete", session_id="sess-json-delete", command=["codex"], now=now)
+
+        session_root = repo_root / "workspaces" / "acme" / "runtime" / "sessions" / "sess-json-delete"
+        deleted = store.delete_session_records("sess-json-delete")
+
+        self.assertEqual(deleted["events"], 1)
+        self.assertEqual(deleted["turns"], 1)
+        self.assertEqual(deleted["processes"], 1)
+        self.assertEqual(deleted["states"], 1)
+        self.assertFalse((session_root / "events.json").exists())
+        self.assertFalse((session_root / "turns.json").exists())
+        self.assertFalse((session_root / "processes.json").exists())
+        self.assertFalse((session_root / "state.json").exists())
 
 
 if __name__ == "__main__":

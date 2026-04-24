@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -18,9 +19,96 @@ REFERENCE_MANIFEST = {
 
 
 def app_events_for_action(action: str) -> list[dict]:
-    if action not in {"create", "delete"}:
-        return []
-    return [{"type": "maverick.app.data-changed", "resource": "views"}]
+    if action in {"create", "delete"}:
+        return [{"type": "maverick.app.data-changed", "resource": "views"}]
+    if action in {"set_view_filter", "set_custom_view", "clear_custom_view"}:
+        return [{"type": "maverick.app.data-changed", "resource": "view-state"}]
+    return []
+
+
+def _now() -> str:
+    return datetime.now(tz=UTC).isoformat()
+
+
+def _normalize_view_filter(raw_filter: object) -> dict[str, Any]:
+    if not isinstance(raw_filter, dict):
+        raw_filter = {}
+    status = str(raw_filter.get("status") or "all").strip() or "all"
+    if status not in {"all", "ready"}:
+        status = "all"
+    refs = []
+    for item in raw_filter.get("refs") if isinstance(raw_filter.get("refs"), list) else []:
+        if not isinstance(item, dict):
+            continue
+        entity_id = str(item.get("entity_id") or "").strip()
+        if str(item.get("entity_type") or "") == "view" and entity_id:
+            refs.append({"entity_type": "view", "entity_id": entity_id})
+    return {
+        "mode": "custom" if str(raw_filter.get("mode") or "") == "custom" else "search",
+        "query": str(raw_filter.get("query") or "").strip(),
+        "status": status,
+        "title": str(raw_filter.get("title") or "").strip(),
+        "refs": refs,
+        "updated_at": str(raw_filter.get("updated_at") or _now()),
+    }
+
+
+def _view_state(data_root: Path) -> dict[str, Any]:
+    state = load_state(data_root)
+    state["view_filter"] = _normalize_view_filter(state.get("view_filter"))
+    save_state(data_root, state)
+    return {"view_filter": state["view_filter"]}
+
+
+def _set_view_filter(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
+    state = load_state(data_root)
+    current = _normalize_view_filter(state.get("view_filter"))
+    preserve_custom = bool(body.get("preserve_custom")) and current.get("mode") == "custom"
+    state["view_filter"] = _normalize_view_filter(
+        {
+            "mode": "custom" if preserve_custom else "search",
+            "query": body.get("query") if "query" in body else current.get("query"),
+            "status": body.get("status") if "status" in body else current.get("status"),
+            "title": current.get("title") if preserve_custom else "",
+            "refs": current.get("refs") if preserve_custom else [],
+            "updated_at": _now(),
+        }
+    )
+    save_state(data_root, state)
+    return {"view_filter": state["view_filter"]}
+
+
+def _set_custom_view(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
+    state = load_state(data_root)
+    state["view_filter"] = _normalize_view_filter(
+        {
+            "mode": "custom",
+            "query": body.get("query"),
+            "status": body.get("status"),
+            "title": body.get("title"),
+            "refs": body.get("refs") if isinstance(body.get("refs"), list) else [],
+            "updated_at": _now(),
+        }
+    )
+    save_state(data_root, state)
+    return {"view_filter": state["view_filter"]}
+
+
+def _clear_custom_view(data_root: Path) -> dict[str, Any]:
+    state = load_state(data_root)
+    current = _normalize_view_filter(state.get("view_filter"))
+    state["view_filter"] = _normalize_view_filter(
+        {
+            "mode": "search",
+            "query": current.get("query"),
+            "status": current.get("status"),
+            "title": "",
+            "refs": [],
+            "updated_at": _now(),
+        }
+    )
+    save_state(data_root, state)
+    return {"view_filter": state["view_filter"]}
 
 
 def _owner_user_id(body: dict[str, Any], source_instance_id: str | None) -> str:
@@ -90,6 +178,14 @@ def handle_action(
         items = _hydrate_all(load_state(data_root))
         limit = max(1, min(int(body.get("limit") or 50), 100))
         return 200, {"action": "list", "summary": f"dynamic views list | count={len(items[:limit])}", "items": items[:limit]}
+    if action == "view_filter":
+        return 200, {"state": _view_state(data_root)}
+    if action == "set_view_filter":
+        return 200, {"state": _set_view_filter(data_root, body)}
+    if action == "set_custom_view":
+        return 200, {"state": _set_custom_view(data_root, body)}
+    if action == "clear_custom_view":
+        return 200, {"state": _clear_custom_view(data_root)}
     if action == "create":
         return 200, create_instance(
             data_root,

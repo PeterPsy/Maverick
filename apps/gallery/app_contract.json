@@ -16,6 +16,10 @@
   "capabilities": {
     "mcp_tools": [
       "maverick_gallery",
+      "gallery_view_filter",
+      "gallery_set_view_filter",
+      "gallery_set_custom_view",
+      "gallery_clear_custom_view",
       "gallery_reference_manifest",
       "gallery_reference_search",
       "gallery_reference_resolve",
@@ -24,7 +28,9 @@
     "cli_commands": [
       "gallery"
     ],
-    "skills": [],
+    "skills": [
+      "gallery-ops"
+    ],
     "views": [
       "gallery"
     ],

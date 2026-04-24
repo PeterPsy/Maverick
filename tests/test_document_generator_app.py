@@ -69,10 +69,15 @@ class DocumentGeneratorAppTestCase(unittest.TestCase):
             return status, json.loads(raw.decode("utf-8")), headers
         return status, raw, headers
 
-    def run_backend(self, *, data_root: Path, generated_root: Path, body: dict) -> dict:
+    def run_backend(self, *, data_root: Path, generated_root: Path, body: dict, uploaded_root: Path | None = None) -> dict:
         return run_json_entrypoint(
             APP_ROOT / "backend" / "app_backend.py",
-            payload={"data_root": str(data_root), "generated_storage_root": str(generated_root), "body": body},
+            payload={
+                "data_root": str(data_root),
+                "uploaded_storage_root": str(uploaded_root) if uploaded_root is not None else "",
+                "generated_storage_root": str(generated_root),
+                "body": body,
+            },
             cwd=APP_ROOT,
         )
 
@@ -84,7 +89,11 @@ class DocumentGeneratorAppTestCase(unittest.TestCase):
         self.assertEqual(parsed.contract.entrypoints.frontend, "frontend/dist")
         self.assertEqual(parsed.contract.capabilities.cli_commands, ["document-generator"])
         self.assertIn("maverick_document_generator", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("document_generator_extract_text", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("document_generator_set_view_filter", parsed.contract.capabilities.mcp_tools)
         self.assertIn("document-generator-docs", parsed.contract.capabilities.skills)
+        self.assertEqual(parsed.contract.capabilities.view_surfaces[0].view_id, "document-generator")
+        self.assertEqual(parsed.contract.capabilities.view_surfaces[0].entity_types, ["document"])
         self.assertTrue((APP_ROOT / "frontend" / "dist" / "index.html").is_file())
 
     def test_backend_generates_supported_document_formats(self) -> None:
@@ -113,6 +122,54 @@ class DocumentGeneratorAppTestCase(unittest.TestCase):
             self.assertTrue(zipfile.is_zipfile(generated_root / "book.xlsx"))
             self.assertTrue((generated_root / "pdf.pdf").read_bytes().startswith(b"%PDF-"))
 
+    def test_backend_extracts_text_from_supported_workspace_documents(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data_root = root / "data" / "document-generator"
+            uploaded_root = root / "storage" / "uploaded"
+            generated_root = root / "storage" / "generated"
+            specs = [
+                {"format": "docx", "title": "Brief", "sections": [{"heading": "Summary", "text": "Alpha docx text"}]},
+                {"format": "pptx", "title": "Deck", "slides": [{"title": "Slide", "bullets": ["Bravo pptx text"]}]},
+                {"format": "pdf", "title": "PDF", "sections": [{"heading": "Summary", "text": "Charlie pdf text"}]},
+                {"format": "xlsx", "title": "Book", "sheets": [{"name": "Sheet1", "rows": [["Name", "Value"], ["Delta", "xlsx text"]]}]},
+            ]
+            generated = [
+                self.run_backend(data_root=data_root, generated_root=generated_root, body={"action": "generate_document", "spec": spec})["json"]["document"]
+                for spec in specs
+            ]
+
+            extracted = [
+                self.run_backend(
+                    data_root=data_root,
+                    uploaded_root=uploaded_root,
+                    generated_root=generated_root,
+                    body={"action": "extract_text", "workspace_relative_path": document["workspace_relative_path"]},
+                )["json"]
+                for document in generated
+            ]
+
+            combined_text = "\n".join(item["text"] for item in extracted)
+            self.assertIn("Alpha docx text", combined_text)
+            self.assertIn("Bravo pptx text", combined_text)
+            self.assertIn("Charlie pdf text", combined_text)
+            self.assertIn("Delta", combined_text)
+            self.assertIn("xlsx text", combined_text)
+
+    def test_backend_extract_text_rejects_paths_outside_workspace_storage(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data_root = root / "data" / "document-generator"
+            generated_root = root / "storage" / "generated"
+
+            result = self.run_backend(
+                data_root=data_root,
+                generated_root=generated_root,
+                body={"action": "extract_text", "workspace_relative_path": "../secret.pdf"},
+            )
+
+            self.assertEqual(result["status_code"], 400)
+
     def test_backend_rejects_xls_and_path_traversal(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -136,6 +193,7 @@ class DocumentGeneratorAppTestCase(unittest.TestCase):
         frontend_status, frontend_payload, _headers = self.invoke(app, path="/apps/document-generator/")
 
         self.assertIn("app.document-generator.maverick_document_generator", [tool.tool_name for tool in tools])
+        self.assertIn("app.document-generator.document_generator_extract_text", [tool.tool_name for tool in tools])
         self.assertIn("app.document-generator.document-generator", [command.command_id for command in commands])
         self.assertIn("document-generator-docs", [skill.skill_id for skill in skills])
         self.assertEqual(frontend_status, 200)
@@ -167,6 +225,38 @@ class DocumentGeneratorAppTestCase(unittest.TestCase):
         self.assertEqual(cli_payload["status_code"], 200)
         self.assertEqual(mcp_payload["status_code"], 200)
         self.assertTrue((repo_root / "workspaces" / "default" / cli_payload["document"]["workspace_relative_path"]).is_file())
+
+    def test_mcp_extracts_text_from_uploaded_document(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        workspace_root = repo_root / "workspaces" / "default"
+        uploaded = workspace_root / "storage" / "uploaded" / "sample" / "sample.docx"
+        uploaded.parent.mkdir(parents=True, exist_ok=True)
+
+        source_doc = run_core_cli_command(
+            command_id="app.document-generator.document-generator",
+            context=CliInvocationContext(caller_kind="sandbox_agent", workspace_id="default", agent_id="tester", effective_mode="sandbox"),
+            arguments={
+                "action": "generate_document",
+                "spec": {"format": "docx", "title": "Sample", "sections": [{"heading": "Summary", "text": "Uploaded extraction text"}]},
+            },
+            app_store=state.app_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+        shutil.copyfile(workspace_root / source_doc["document"]["workspace_relative_path"], uploaded)
+
+        mcp_payload = call_mcp_tool(
+            tool_name="app.document-generator.document_generator_extract_text",
+            context=McpInvocationContext(caller_kind="sandbox_agent", workspace_id="default", agent_id="tester", effective_mode="sandbox"),
+            arguments={"workspace_relative_path": "storage/uploaded/sample/sample.docx"},
+            app_store=state.app_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+
+        self.assertEqual(mcp_payload["status_code"], 200)
+        self.assertIn("Uploaded extraction text", mcp_payload["text"])
 
 
 if __name__ == "__main__":

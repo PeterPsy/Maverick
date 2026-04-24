@@ -38,19 +38,20 @@ class Phase5AppContractTestCase(unittest.TestCase):
     def test_builtin_app_contracts_are_canonical_and_declare_live_data_events(self) -> None:
         apps_root = Path(__file__).resolve().parents[1] / "apps"
         expected_events = {
-            "agents": ["configuration"],
-            "app-store": ["state"],
+            "agents": ["configuration", "view-state"],
+            "app-store": ["state", "view-state"],
             "base-shell": [],
-            "chat": ["threads", "projects"],
-            "crm": ["records"],
+            "chat": ["threads", "projects", "view-state"],
+            "checklist": ["state", "view-state"],
+            "crm": ["records", "view-state"],
             "developer-kit": [],
-            "document-generator": ["documents"],
-            "dynamic-views": ["views"],
+            "document-generator": ["documents", "view-state"],
+            "dynamic-views": ["views", "view-state"],
             "gallery": ["files", "view-state"],
-            "gmail-app": ["accounts", "threads", "suggestions", "send-approvals", "sent-messages"],
-            "maverick-monitor": ["settings"],
+            "gmail-app": ["accounts", "threads", "suggestions", "send-approvals", "sent-messages", "view-state"],
+            "maverick-monitor": ["settings", "view-state"],
             "memory": ["graph", "view-state"],
-            "skills": ["skills"],
+            "skills": ["skills", "view-state"],
             "user-admin": [],
         }
 

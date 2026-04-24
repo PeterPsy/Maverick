@@ -170,6 +170,70 @@ def _filter_catalog_for_context(catalog: dict[str, object], context: RequestSess
     return {**catalog, "items": items, "count": len(items)}
 
 
+def _source_visible_for_context(context: RequestSession, contract: AppContractDescriptor) -> bool:
+    if context.user.platform_role == "admin":
+        return True
+    return user_can_mount_app(context.user, contract.visibility.platform_roles)
+
+
+def _source_surface_labels(contract: AppContractDescriptor) -> list[str]:
+    surfaces = []
+    if contract.entrypoints.frontend or contract.capabilities.views or contract.capabilities.view_surfaces:
+        surfaces.append("frontend")
+    if contract.entrypoints.backend:
+        surfaces.append("backend")
+    if contract.entrypoints.mcp or contract.capabilities.mcp_tools:
+        surfaces.append("mcp")
+    if contract.entrypoints.cli or contract.capabilities.cli_commands:
+        surfaces.append("cli")
+    if contract.capabilities.skills:
+        surfaces.append("skills")
+    if contract.widgets:
+        surfaces.append("widgets")
+    return surfaces
+
+
+def _server_apps_payload(state: PlatformState, context: RequestSession) -> dict[str, object]:
+    grouped: dict[str, list] = {}
+    for source in state.app_store.list_app_sources():
+        if not _source_visible_for_context(context, source.contract):
+            continue
+        grouped.setdefault(source.app_id, []).append(source)
+
+    items = []
+    for app_id, sources in sorted(grouped.items()):
+        ordered_sources = sorted(sources, key=lambda source: (source.updated_at, source.version, source.source_id))
+        latest = ordered_sources[-1]
+        items.append(
+            {
+                "app_id": app_id,
+                "name": latest.name,
+                "description": latest.description,
+                "publisher": latest.publisher,
+                "latest_version": latest.version,
+                "source_id": latest.source_id,
+                "source_kind": latest.source_kind,
+                "distribution": asdict(latest.contract.distribution),
+                "surfaces": _source_surface_labels(latest.contract),
+                "versions": [
+                    {
+                        "app_id": source.app_id,
+                        "name": source.name,
+                        "version": source.version,
+                        "description": source.description,
+                        "publisher": source.publisher,
+                        "source_id": source.source_id,
+                        "source_kind": source.source_kind,
+                        "distribution": asdict(source.contract.distribution),
+                        "surfaces": _source_surface_labels(source.contract),
+                    }
+                    for source in ordered_sources
+                ],
+            }
+        )
+    return {"items": items, "count": len(items)}
+
+
 def _installed_binding_visible_for_context(
     state: PlatformState,
     context: RequestSession,
@@ -386,6 +450,7 @@ def handle_app_store_api(
         "/api/app-store/install",
         "/api/app-store/install-local",
         "/api/app-store/installations",
+        "/api/app-store/server-apps",
         "/api/app-store/register-local",
         "/api/app-store/promote-local",
         "/api/app-store/delete-local",
@@ -408,6 +473,9 @@ def handle_app_store_api(
                 status=status_line(500),
             )
         return json_response(start_response, _filter_catalog_for_context(catalog, context))
+
+    if path == "/api/app-store/server-apps" and method == "GET":
+        return json_response(start_response, _server_apps_payload(state, context))
 
     if path == "/api/app-store/installations" and method == "GET":
         workspace_ids = _user_workspace_ids(state, context)

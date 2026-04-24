@@ -58,7 +58,19 @@ Installation-level app creation is reserved for explicit platform or store-app w
 
 Every generated app starts with a valid `app_contract.json`.
 
-The SDK validation path calls the same parser used by the app-hosting domain. The SDK must not maintain a second contract schema or duplicate validation rules.
+The SDK validation path calls the same parser used by the app-hosting domain. The SDK must not maintain a second contract schema or duplicate parser rules.
+
+After parsing, SDK validation also enforces source-level surface completeness for the official app contract. These checks make sure declared capabilities are backed by the corresponding source tree surfaces before an app can be registered, installed, or packaged through the SDK:
+
+- MCP tools require an MCP entrypoint, and an MCP entrypoint must declare the tools it exposes.
+- CLI commands require a CLI entrypoint, and a CLI entrypoint must declare the commands it exposes.
+- Declared views require a mounted frontend entrypoint.
+- Declared bundled skills must match direct `SKILL.md` templates under `entrypoints.skills_root`.
+- Apps with MCP support must expose the common `<app_id>_reference_manifest` tool, using underscores in the tool prefix.
+- Apps with `reference_entities` must expose reference manifest, search, resolve, and summarize tools through MCP, plus an equivalent CLI surface.
+- Apps with `reference_entities` must declare view surfaces for those entities.
+- Apps with `view_surfaces` must declare the shared `view-state` data event, the standard view-state actions, and matching MCP tools when MCP is exposed.
+- Declared data events require at least one executable backend, CLI, or MCP surface capable of emitting or acting on those events.
 
 The canonical flow is:
 
@@ -67,6 +79,8 @@ The canonical flow is:
 3. register workspace-local app project when applicable
 4. install workspace-local app when requested
 5. inspect app status and mounted surfaces
+
+Generated source is only the starting point. Before an app is considered complete in this repository, it must keep the contract, README, bundled skill declarations, official surface behavior, and automated smoke coverage aligned.
 
 ## Workspace SDK API And CLI Surface
 
@@ -116,6 +130,14 @@ The first SDK templates are:
 - `widget`: mounted frontend, backend, and a base-shell widget declaration
 - `react-vite`: mounted frontend app with React/Vite source, committed `frontend/dist` smoke output, and `lifecycle.rebuild` support through the official core frontend build operation
 - `entity-sqlite`: CRM-inspired SQLite entity app with backend, frontend, CLI, MCP, skill, lifecycle hooks, reference metadata, and generated entrypoint tests
+
+All first-party templates are expected to generate:
+
+- `README.md` with SDK flow commands
+- `tests/test_contract.py` or equivalent automated smoke coverage
+- honest contract metadata for bundled skills and declared surfaces
+- complete reference, CLI, MCP, view-surface, and `view-state` declarations when the template owns referenceable workspace records
+- explicit documentation when a template intentionally omits app-owned backend, hooks, or persisted view-state surfaces
 
 Templates are generated source, not runtime magic. A generated app should be understandable and editable without the SDK.
 

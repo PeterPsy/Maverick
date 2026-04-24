@@ -25,9 +25,11 @@ The current practical backend is Codex.
 Important implications:
 
 - local evaluation expects the Codex CLI to be available when testing Codex-backed runtime paths
+- Maverick-managed Codex agents use the workspace-selected Codex model and reasoning effort; the provider adapter discovers visible model options from `codex debug models` and writes the selected `model` and `model_reasoning_effort` into each runtime-scoped `CODEX_HOME/config.toml` instead of inheriting operator-home values
 - non-default workspaces are intended to remain sandbox-first
 - provider adapters may need helper binaries such as `rg`
 - network access for providers is not equivalent to unconstrained filesystem access
+- shell settings can list runtime sessions across workspaces visible to the authenticated user, terminate individual sessions, and clear visible session records in batch through controlled settings runtime-session endpoints
 
 ## What External Reviewers Should Know
 

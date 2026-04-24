@@ -83,9 +83,11 @@ class SkillsAppTestCase(unittest.TestCase):
         self.assertEqual(parsed.contract.entrypoints.frontend, "frontend/dist")
         self.assertIn("maverick_skills_app", parsed.contract.capabilities.mcp_tools)
         self.assertIn("skills_reference_manifest", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("skills_set_view_filter", parsed.contract.capabilities.mcp_tools)
         self.assertEqual(parsed.contract.capabilities.cli_commands, ["skills", "sync"])
-        self.assertEqual(parsed.contract.capabilities.skills, [])
+        self.assertIn("skills-ops", parsed.contract.capabilities.skills)
         self.assertIn("skill", {item.entity_type for item in parsed.contract.capabilities.reference_entities})
+        self.assertEqual(parsed.contract.capabilities.view_surfaces[0].view_id, "skills")
 
     def test_service_creates_updates_and_deletes_skill(self) -> None:
         service, _store = load_skills_backend_modules()

@@ -43,8 +43,8 @@ def terminate_runtime_session(
             )
             cancelled_turns += 1
 
-    if session.status in {"running", "stopping"}:
-        target_status = "stopped" if session.status == "stopping" else "stopping"
+    if session.status in {"created", "running", "stopping"}:
+        target_status = "stopped" if session.status in {"created", "stopping"} else "stopping"
         try:
             session = transition_runtime_session(
                 store,

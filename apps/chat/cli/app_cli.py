@@ -8,7 +8,17 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
-from chat_state import find_thread, list_projects, list_threads, read_state, threads_path
+from chat_state import (
+    clear_custom_view,
+    find_thread,
+    list_projects,
+    list_threads,
+    read_state,
+    set_custom_view,
+    set_view_filter,
+    threads_path,
+    write_state,
+)
 
 REFERENCE_MANIFEST = {
     "app_id": "chat",
@@ -54,7 +64,8 @@ def reference_items(state: dict, entity_type: str) -> list[dict]:
 
 payload = json.loads(sys.stdin.read() or "{}")
 arguments = payload.get("arguments") if isinstance(payload.get("arguments"), dict) else {}
-state = read_state(threads_path(Path(payload["data_root"])))
+path = threads_path(Path(payload["data_root"]))
+state = read_state(path)
 action = str(arguments.get("action") or "").strip()
 
 if action == "references.manifest":
@@ -81,6 +92,17 @@ elif action == "references.summarize":
         "safe_fields": {"title": (item or {}).get("title", ""), "entity_type": entity_type},
         "source_updated_at": (thread or {}).get("updated_at", ""),
     }
+elif action == "view_filter":
+    result = {"state": {"view_filter": state.get("preferences", {}).get("view_filter")}}
+elif action == "set_view_filter":
+    result = {"state": {"view_filter": set_view_filter(state, arguments)}, "app_events": [{"type": "maverick.app.data-changed", "resource": "view-state"}]}
+    write_state(path, state)
+elif action == "set_custom_view":
+    result = {"state": {"view_filter": set_custom_view(state, arguments)}, "app_events": [{"type": "maverick.app.data-changed", "resource": "view-state"}]}
+    write_state(path, state)
+elif action == "clear_custom_view":
+    result = {"state": {"view_filter": clear_custom_view(state)}, "app_events": [{"type": "maverick.app.data-changed", "resource": "view-state"}]}
+    write_state(path, state)
 else:
     result = {
         "thread_count": len(state.get("threads", [])),

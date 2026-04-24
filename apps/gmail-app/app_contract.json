@@ -28,6 +28,10 @@
       "gmail_app_list_relationship_suggestions",
       "gmail_app_mark_relationship_suggestion",
       "gmail_app_audit_recent",
+      "gmail_app_view_filter",
+      "gmail_app_set_view_filter",
+      "gmail_app_set_custom_view",
+      "gmail_app_clear_custom_view",
       "gmail_app_reference_manifest",
       "gmail_app_reference_search",
       "gmail_app_reference_resolve",
@@ -62,9 +66,46 @@
       {
         "resource": "sent-messages",
         "description": "Emitted when sent-message audit records change through official Gmail App surfaces."
+      },
+      {
+        "resource": "view-state",
+        "description": "Emitted when Gmail App inbox/thread filters or curated selections change through official surfaces."
       }
     ],
-    "view_surfaces": [],
+    "view_surfaces": [
+      {
+        "view_id": "gmail-app",
+        "display_name": "Gmail App",
+        "entity_types": [
+          "thread",
+          "message"
+        ],
+        "state_actions": [
+          {
+            "action": "view_filter",
+            "standard": true,
+            "description": "Read the current Gmail App inbox and thread browse state."
+          },
+          {
+            "action": "set_view_filter",
+            "standard": true,
+            "description": "Set Gmail App query, label, and unread filters."
+          },
+          {
+            "action": "set_custom_view",
+            "standard": true,
+            "description": "Show a curated set of Gmail thread and message references."
+          },
+          {
+            "action": "clear_custom_view",
+            "standard": true,
+            "description": "Return Gmail App to normal inbox browsing mode."
+          }
+        ],
+        "supports_custom_view": true,
+        "supports_filter_refinement": true
+      }
+    ],
     "reference_entities": [
       {
         "entity_type": "thread",

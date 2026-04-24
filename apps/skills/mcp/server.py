@@ -19,6 +19,10 @@ tool_actions = {
     "skills_reference_search": "references.search",
     "skills_reference_resolve": "references.resolve",
     "skills_reference_summarize": "references.summarize",
+    "skills_view_filter": "view_filter",
+    "skills_set_view_filter": "set_view_filter",
+    "skills_set_custom_view": "set_custom_view",
+    "skills_clear_custom_view": "clear_custom_view",
 }
 body = {"action": tool_actions.get(str(payload.get("tool_name") or ""), arguments.get("action") or "catalog"), **arguments}
 try:

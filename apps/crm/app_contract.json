@@ -45,7 +45,11 @@
     "data_events": [
       {
         "resource": "records",
-        "description": "Emitted when CRM accounts, contacts, deals, activities, relationships, or CRM view state change through official CRM surfaces."
+        "description": "Emitted when CRM accounts, contacts, deals, activities, or relationships change through official CRM surfaces."
+      },
+      {
+        "resource": "view-state",
+        "description": "Emitted when CRM filters or curated record selections change through official CRM surfaces."
       }
     ],
     "view_surfaces": [

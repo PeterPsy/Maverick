@@ -31,24 +31,24 @@ from store import (
 
 DATA_CHANGED_ACTIONS = {
     "add_activity",
-    "clear_custom_view",
     "create_account",
     "create_activity",
     "create_contact",
     "create_deal",
     "link",
     "link_entities",
-    "set_custom_view",
-    "set_view_filter",
     "update",
     "update_entity",
 }
+VIEW_STATE_ACTIONS = {"clear_custom_view", "set_custom_view", "set_view_filter"}
 
 
 def app_events_for_action(action: str) -> list[dict[str, str]]:
-    if action not in DATA_CHANGED_ACTIONS:
-        return []
-    return [{"type": "maverick.app.data-changed", "owner_app_id": "crm", "resource": "records"}]
+    if action in DATA_CHANGED_ACTIONS:
+        return [{"type": "maverick.app.data-changed", "owner_app_id": "crm", "resource": "records"}]
+    if action in VIEW_STATE_ACTIONS:
+        return [{"type": "maverick.app.data-changed", "owner_app_id": "crm", "resource": "view-state"}]
+    return []
 
 
 def action_from_tool(tool_name: str, fallback: str) -> str:

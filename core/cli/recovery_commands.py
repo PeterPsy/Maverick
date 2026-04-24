@@ -6,7 +6,8 @@ from pathlib import Path
 from typing import Any
 
 from core.apps.store import AppStore
-from core.cli.core_command_helpers import OPERATOR_FULL_ACCESS, OPERATOR_ONLY, WORKSPACE_SAFE, core_cli_command
+from core.cli.core_command_helpers import FULL_ACCESS_WORKSPACE, OPERATOR_ONLY, WORKSPACE_SAFE, core_cli_command
+from core.cli.errors import CliInvocationNotAllowedError
 from core.cli.models import CliCommandDefinition, CliInvocationContext
 from core.providers.provider_registry import ProviderRegistry
 from core.recovery.backend_service import restart_backend_service
@@ -57,6 +58,10 @@ def recovery_command_specs(
         }
 
     def _recovery_backend_restart_handler(arguments: dict[str, Any], context: CliInvocationContext) -> dict[str, Any]:
+        if context.caller_kind != "full_access_agent":
+            raise CliInvocationNotAllowedError("This CLI command is restricted to full-access runtime agents.")
+        if context.workspace_id != "default":
+            raise CliInvocationNotAllowedError("This CLI command is restricted to the default workspace.")
         result = restart_backend_service(
             service_name=str(arguments.get("service_name") or "maverick3-core.service"),
             health_url=str(arguments.get("health_url") or "http://127.0.0.1:8014/health"),
@@ -120,7 +125,7 @@ def recovery_command_specs(
     command_specs = [
         ("core.recovery.status", ["core", "recovery", "status"], "Inspect recovery status for one workspace or runtime session.", OPERATOR_ONLY, _recovery_status_handler),
         ("core.recovery.restart", ["core", "recovery", "restart"], "Execute one runtime-session restart recovery action when allowed.", WORKSPACE_SAFE, _recovery_restart_handler),
-        ("core.recovery.restart_backend", ["core", "recovery", "backend-restart"], "Restart the Maverick backend host service and verify its health.", OPERATOR_FULL_ACCESS, _recovery_backend_restart_handler),
+        ("core.recovery.restart_backend", ["core", "recovery", "backend-restart"], "Restart the Maverick backend host service and verify its health.", FULL_ACCESS_WORKSPACE, _recovery_backend_restart_handler),
         ("core.recovery.failed_start", ["core", "recovery", "failed-start"], "Record one failed-start diagnosis and plan recovery.", OPERATOR_ONLY, _recovery_failed_start_handler),
         ("core.recovery.health", ["core", "recovery", "health"], "Run one recovery health probe on demand.", OPERATOR_ONLY, _recovery_health_handler),
     ]

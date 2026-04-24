@@ -94,6 +94,9 @@ class MemoryAppTestCase(unittest.TestCase):
             [action.action for action in view_surface.state_actions],
             ["view_filter", "set_view_filter", "set_custom_view", "clear_custom_view"],
         )
+        self.assertTrue((MEMORY_ROOT / "frontend" / "src" / "MemoryApp.tsx").is_file())
+        dist_index = (MEMORY_ROOT / "frontend" / "dist" / "index.html").read_text(encoding="utf-8")
+        self.assertIn("/apps/memory/assets/", dist_index)
 
     def test_install_hook_is_idempotent_and_creates_schema(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

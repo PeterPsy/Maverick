@@ -19,7 +19,9 @@ function notifyShell(thread?: ChatThread, params: Record<string, string | boolea
     {
       type: "maverick.widget.open-app",
       app_id: "chat",
-      params: thread ? { thread_id: thread.thread_id } : { new_chat: true, new_chat_request_id: crypto.randomUUID(), ...params },
+      params: thread
+        ? { app_page: `threads/${thread.thread_id}` }
+        : { new_chat: true, new_chat_request_id: crypto.randomUUID(), ...params },
     },
     window.location.origin,
   );

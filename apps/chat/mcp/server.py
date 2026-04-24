@@ -8,7 +8,17 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
-from chat_state import find_thread, list_projects, list_threads, read_state, threads_path
+from chat_state import (
+    clear_custom_view,
+    find_thread,
+    list_projects,
+    list_threads,
+    read_state,
+    set_custom_view,
+    set_view_filter,
+    threads_path,
+    write_state,
+)
 
 REFERENCE_MANIFEST = {
     "app_id": "chat",
@@ -36,7 +46,8 @@ def reference_items(state: dict, entity_type: str) -> list[dict]:
 
 payload = json.loads(sys.stdin.read() or "{}")
 arguments = payload.get("arguments") if isinstance(payload.get("arguments"), dict) else {}
-state = read_state(threads_path(Path(payload["data_root"])))
+path = threads_path(Path(payload["data_root"]))
+state = read_state(path)
 tool_name = str(payload.get("tool_name") or "")
 
 if tool_name == "chat_reference_manifest":
@@ -59,6 +70,17 @@ elif tool_name == "chat_reference_summarize":
     thread = find_thread(state, entity_id) if entity_type == "thread" else None
     item = next((candidate for candidate in reference_items(state, entity_type) if candidate["entity_id"] == entity_id), None)
     result = {"summary": (thread or {}).get("system_prompt") or (item or {}).get("summary", ""), "safe_fields": {"title": (item or {}).get("title", ""), "entity_type": entity_type}, "source_updated_at": (thread or {}).get("updated_at", "")}
+elif tool_name == "chat_view_filter":
+    result = {"status_code": 200, "state": {"view_filter": state.get("preferences", {}).get("view_filter")}}
+elif tool_name == "chat_set_view_filter":
+    result = {"status_code": 200, "state": {"view_filter": set_view_filter(state, arguments)}, "app_events": [{"type": "maverick.app.data-changed", "resource": "view-state"}]}
+    write_state(path, state)
+elif tool_name == "chat_set_custom_view":
+    result = {"status_code": 200, "state": {"view_filter": set_custom_view(state, arguments)}, "app_events": [{"type": "maverick.app.data-changed", "resource": "view-state"}]}
+    write_state(path, state)
+elif tool_name == "chat_clear_custom_view":
+    result = {"status_code": 200, "state": {"view_filter": clear_custom_view(state)}, "app_events": [{"type": "maverick.app.data-changed", "resource": "view-state"}]}
+    write_state(path, state)
 elif tool_name == "threads.list":
     result = {"threads": state.get("threads", [])}
 elif tool_name == "message.send":

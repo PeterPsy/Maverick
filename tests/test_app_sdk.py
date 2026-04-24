@@ -13,11 +13,11 @@ import unittest
 
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
-from core.app_sdk.errors import AppSdkPathError
+from core.app_sdk.errors import AppSdkPathError, AppSdkValidationError
 from core.app_sdk.cli import main as app_sdk_cli_main
 from core.app_sdk.models import AppSdkCreateRequest
 from core.app_sdk.packaging import package_app_source
-from core.app_sdk.service import app_sdk_status, create_app_source, validate_app_source
+from core.app_sdk.service import app_sdk_status, create_app_source, register_local_app, validate_app_source
 from core.app_sdk.storage import ensure_json_state, safe_app_data_path
 from core.apps.contracts import parse_app_contract_file
 from core.shared.entrypoints import run_json_entrypoint
@@ -123,7 +123,19 @@ class MaverickAppSdkTestCase(unittest.TestCase):
                     self.assertTrue(parsed.contract.lifecycle.rebuild)
                 if template_id == "entity-sqlite":
                     self.assertEqual(parsed.contract.storage.storage_kind, "sqlite")
-                    self.assertEqual([entity.entity_type for entity in parsed.contract.capabilities.reference_entities], ["record"])
+                    self.assertEqual(
+                        [entity.entity_type for entity in parsed.contract.capabilities.reference_entities],
+                        ["record"],
+                    )
+                    self.assertIn("sdk_entity_sqlite_view_filter", parsed.contract.capabilities.mcp_tools)
+                    self.assertIn(
+                        "view-state",
+                        [event.resource for event in parsed.contract.capabilities.data_events],
+                    )
+                    self.assertEqual(
+                        [action.action for action in parsed.contract.capabilities.view_surfaces[0].state_actions],
+                        ["view_filter", "set_view_filter", "set_custom_view", "clear_custom_view"],
+                    )
                     self.assertTrue(parsed.contract.lifecycle.rebuild)
 
     def test_sdk_cli_create_register_install_status_and_app_cli_surface(self) -> None:
@@ -319,8 +331,19 @@ class MaverickAppSdkTestCase(unittest.TestCase):
                 "app_id": "sdk-crm-lite",
                 "workspace_id": "default",
                 "data_root": str(data_root),
-                "tool_name": "sdk-crm-lite_reference_manifest",
+                "tool_name": "sdk_crm_lite_reference_manifest",
                 "arguments": {},
+            },
+        )
+        mcp_view_state = run_json_entrypoint(
+            app_root / "mcp" / "server.py",
+            cwd=app_root,
+            payload={
+                "app_id": "sdk-crm-lite",
+                "workspace_id": "default",
+                "data_root": str(data_root),
+                "tool_name": "sdk_crm_lite_set_view_filter",
+                "arguments": {"query": "Acme", "entity_type": "account"},
             },
         )
 
@@ -330,6 +353,38 @@ class MaverickAppSdkTestCase(unittest.TestCase):
             [entity["entity_type"] for entity in mcp_manifest["entity_types"]],
             ["account", "contact", "deal"],
         )
+        self.assertEqual(mcp_view_state["state"]["view_filter"]["query"], "Acme")
+        self.assertEqual(mcp_view_state["app_events"][0]["resource"], "view-state")
+
+    def test_sdk_validation_enforces_reference_and_view_state_surface_completeness(self) -> None:
+        repo_root = self.make_repo_root()
+        store = self.make_store()
+        result = create_app_source(
+            AppSdkCreateRequest(
+                app_id="sdk-incomplete-crm",
+                template_id="entity-sqlite",
+                target_kind="workspace_local",
+                workspace_id="default",
+                entities=["account"],
+            ),
+            start_path=repo_root,
+        )
+        contract_path = Path(result.contract_path)
+        contract = json.loads(contract_path.read_text(encoding="utf-8"))
+        contract["capabilities"]["mcp_tools"].remove("sdk_incomplete_crm_set_view_filter")
+        contract["capabilities"]["data_events"] = [
+            event for event in contract["capabilities"]["data_events"] if event["resource"] != "view-state"
+        ]
+        contract_path.write_text(json.dumps(contract, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+
+        validation = validate_app_source(result.app_root)
+        issue_text = " ".join(issue.message for issue in validation.issues)
+
+        self.assertFalse(validation.valid)
+        self.assertIn("View surface `main` is missing matching MCP tools", issue_text)
+        self.assertIn("Apps with view_surfaces must declare a `view-state` data event", issue_text)
+        with self.assertRaises(AppSdkValidationError):
+            register_local_app(store, workspace_id="default", app_id="sdk-incomplete-crm", start_path=repo_root)
 
     def test_cli_wrapper_creates_workspace_app(self) -> None:
         repo_root = self.make_repo_root()

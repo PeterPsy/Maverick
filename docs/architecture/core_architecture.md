@@ -185,7 +185,7 @@ The installation-level `/apps` directory is the server-managed app store and tru
 
 It may contain built-in apps, commercial sealed apps, source-available store apps, and validated app bundles.
 
-Remote catalog ingestion is still a core app-hosting responsibility. The official public catalog defaults to `https://maverick-app-store.versy.ai` and may be overridden per installation with `MAVERICK_APP_STORE_URL`. The app-store UI may request installation or uninstall for selected workspaces, but the core must own the authenticated operation that downloads a remote bundle, verifies its checksum, stages it under `apps/_bundles/<app_id>/<version>/`, registers the source as an `external_bundle`, creates workspace bindings for the authorized target workspaces, reports current workspace installation state, reports workspace-local app projects for the selected workspace context, and removes bindings during uninstall without deleting app-owned data.
+Remote catalog ingestion is still a core app-hosting responsibility. The official public catalog defaults to `https://maverick-app-store.versy.ai` and may be overridden per installation with `MAVERICK_APP_STORE_URL`. The app-store UI may request installation or uninstall for selected workspaces, but the core must own the authenticated operation that downloads a remote bundle, verifies its checksum, stages it under `apps/_bundles/<app_id>/<version>/`, registers the source as an `external_bundle`, creates workspace bindings for the authorized target workspaces, reports current workspace installation state, reports installation-level server app sources whether or not they are installed in the current workspace, reports workspace-local app projects for the selected workspace context, and removes bindings during uninstall without deleting app-owned data.
 
 The workspace-level `workspaces/<workspace_id>/apps/` directory is editable workspace material.
 
@@ -532,10 +532,14 @@ The first shell-facing API slice is intentionally core-generic, not `base-shell`
 - `/api/admin/workspace-apps` exposes admin-only workspace app installation and enablement management
 - `/api/workspaces` and `/api/workspaces/active` expose workspace list, creation, and active workspace selection
 - `/api/apps` exposes enabled app registry records for the active workspace
-- `/api/app-store/apps`, `/api/app-store/installations`, `/api/app-store/install`, `/api/app-store/install-local`, and `/api/app-store/uninstall` expose authenticated catalog reads, installation state, remote app installation, workspace-local app installation, and workspace binding removal
+- `/api/app-store/apps`, `/api/app-store/server-apps`, `/api/app-store/installations`, `/api/app-store/install`, `/api/app-store/install-local`, and `/api/app-store/uninstall` expose authenticated remote catalog reads, installation-level server app source reads, workspace installation state, remote app installation, workspace-local app installation, and workspace binding removal
 - `/api/status` exposes platform status for the active workspace
 - `/api/providers/active` and `/api/runtime/status` expose active runtime provider and runtime sessions
 - `/api/settings/platform` exposes read-only platform/workspace/provider/runtime/recovery metadata for settings UI
+- `/api/settings/runtime-sessions` and `/api/settings/runtime-sessions/clear` expose the runtime-session inventory in the cleanup scope of the active workspace and the cleanup action used by shell settings workflows
+- when the active workspace is `default`, only a platform admin may use settings cleanup and the scope expands to every workspace on the server
+- when the active workspace is not `default`, cleanup stays limited to that active workspace and is available to platform admins plus admins of that workspace
+- cleanup is destructive by design: it removes linked chat thread records, runtime-session records, turns, events, processes, state, and the runtime session filesystem root
 - `/api/recovery/status` and `/api/recovery/health` expose operator recovery inspection, while `/api/recovery/restart-runtime` is the controlled runtime-restart action surfaced to trusted workspace callers through the core recovery flow
 
 These APIs are platform capabilities that any suitable shell app may consume.
@@ -553,6 +557,7 @@ An app that declares `visibility.platform_roles: ["admin"]` is not listed or mou
 
 The same visibility policy applies to App Store read surfaces.
 `/api/app-store/apps` must hide catalog entries whose declared visibility excludes the current user.
+`/api/app-store/server-apps` must hide registered server app sources whose resolved contract visibility excludes the current user, unless the user is a platform admin.
 `/api/app-store/installations` must hide installed and workspace-local app rows whose resolved app contract excludes the current user, unless the user can manage apps for that workspace.
 Workspace-local app projects without a workspace binding are management material and should be visible only to platform admins or workspace admins.
 
@@ -768,6 +773,8 @@ For the first hosted v3 wave, this means:
 
 The main core host should run through the ASGI platform host so HTTP and WebSocket traffic share the same `PlatformState` and persistence adapters.
 
+The ASGI host must implement `lifespan` shutdown so active mounted app backend subprocess trees are terminated cooperatively during service restarts instead of relying on `systemd` timeout kills.
+
 The WSGI host may remain useful for isolated local smoke checks, but it is not the production runtime host once WebSocket is part of the agent communication surface.
 
 `nginx` must forward `/ws/` and WebSocket-capable API routes such as `/api/apps/events/ws` with `Upgrade` and `Connection: upgrade` headers to the main core host.
@@ -963,7 +970,7 @@ Current first-use endpoints include:
 - `GET /api/runtime/sessions/<session_id>/events`
 - `GET /api/runtime/sessions/<session_id>/turns`
 - `POST /api/runtime/sessions/<session_id>/turns`
-- `POST /api/runtime/sessions/<session_id>/terminate`
+- `POST /api/runtime/sessions/<session_id>/cleanup`
 - `GET /api/runtime/turns/<turn_id>`
 - `POST /api/runtime/turns/<turn_id>/interrupt`
 - `WS /ws/runtime/sessions/<session_id>`
@@ -1115,6 +1122,14 @@ This home is operational provider state for one Maverick runtime session.
 
 It must live below the session runtime root, not in the workspace data plane and not inside the source repository.
 The session runtime root is `workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/`, so concurrent agents in the same workspace receive separate provider homes, temporary directories, copied runtime skills, and transient provider binaries.
+Runtime history and operational records for that agent session must also be partitioned there. The core stores per-session runtime records under the session root, including:
+
+- `events.json` for the persisted runtime event stream and chat transcript projection
+- `turns.json` for turn lifecycle records
+- `processes.json` for local process metadata
+- `state.json` for the mutable runtime state snapshot
+
+The core must not append every agent's history or operational records into installation-level shared JSON files because replay, cleanup, and restart recovery would degrade as total server history grows. Installation-level runtime persistence may retain lightweight indexes such as `sessions.json`, which is used to discover runtime sessions across workspaces.
 
 The source of Codex identity/configuration is configurable and path-agnostic:
 
@@ -1125,6 +1140,8 @@ The source of Codex identity/configuration is configurable and path-agnostic:
 The adapter may copy required files such as auth, version, installation identity, sanitized config, and rules.
 
 The sanitized runtime config must remove inherited MCP server and plugin sections from the operator Codex home. Maverick runtime sessions should not automatically expose user-global Codex connector apps such as GitHub, Gmail, Photoshop, AllTrails, or Notion unless Maverick explicitly materializes an allowed tool surface for that runtime.
+
+The Codex adapter owns Maverick's managed Codex model selection for runtime agents. It should discover the visible Codex model catalog through the configured Codex binary, expose the viable model and reasoning-effort options through generic provider settings, and write the workspace-selected `model` and `model_reasoning_effort` into each runtime-scoped Codex config instead of inheriting those values from the operator home. The initial preferred fallback is `gpt-5.5` with high reasoning, but the persisted workspace selection must not require code changes when Codex adds or removes visible models.
 
 The Codex app-server command for Maverick-managed runtimes must also disable Codex's built-in `apps` and `plugins` features. Runtime config preparation must write a managed Codex `[features]` section with `apps`, `plugins`, and `skill_mcp_dependency_install` disabled, instead of inheriting those feature switches from the operator home. Runtime-home preparation must remove plugin/app connector residue such as `plugins/`, `cache/codex_apps_tools/`, `.tmp/plugins/`, `.tmp/plugins.sha`, and `.tmp/app-server-remote-plugin-sync-v1` before launch so Codex does not attempt to start the `codex_apps` MCP bridge.
 
@@ -1250,10 +1267,11 @@ Deleting a chat thread is also a runtime ownership operation when the thread ref
 
 The chat app backend owns thread metadata and may return the linked runtime session id when a thread is deleted.
 It must not cause hidden app-specific side effects in the platform app mount.
-The caller should then use the generic runtime endpoint `POST /api/runtime/sessions/<session_id>/terminate`.
+The caller should then use the generic runtime endpoint `POST /api/runtime/sessions/<session_id>/cleanup`.
 
-The runtime endpoint must terminate any live provider subprocesses registered for that runtime session, cancel queued or active turns, and transition the runtime session to `stopped`.
-Process termination remains a core runtime responsibility, but it is exposed as a generic runtime operation rather than as Chat-specific platform-host behavior.
+The runtime cleanup endpoint must remove the runtime session completely.
+That includes terminating any live provider subprocesses registered for that runtime session, cancelling queued or active turns, deleting runtime-session records and runtime files, and removing any chat thread metadata linked to that runtime session through the official chat backend contract.
+Process termination remains a core runtime responsibility, but it is exposed as a generic runtime cleanup operation rather than as Chat-specific platform-host behavior.
 
 Therefore a persisted chat thread must not outlive its runtime event history in a way that silently appears as an empty new chat.
 
@@ -1505,6 +1523,8 @@ The first v3 implementation should also expose recovery through controlled CLI a
 - execute runtime restart through the runtime lifecycle when the platform can reach the runtime store
 - run on-demand runtime, provider, and app health probes
 - plan restart or repair-first recovery intents
+
+The explicit backend host restart surface is narrower than the rest of the recovery domain. `core.recovery.restart_backend` is reserved for runtime agents running in `full-access` inside the `default` workspace. It must not be invokable from non-default workspaces, and it is not a generic operator surface.
 
 App health probes should execute through the installed app's declared health contract or health hook when one exists. They should not depend on caller-supplied booleans as the source of truth for app health.
 

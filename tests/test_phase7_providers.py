@@ -109,6 +109,7 @@ class Phase7ProvidersTestCase(unittest.TestCase):
         self.assertEqual(len(definitions), 1)
         self.assertEqual(definitions[0].provider_id, "codex")
         self.assertEqual(definitions[0].kind, "runtime_backend")
+        self.assertEqual(definitions[0].default_model_family, "gpt-5.5")
         self.assertTrue(definitions[0].capabilities.supports_interactive_runtime)
 
     def test_application_bootstrap_registers_builtin_providers(self) -> None:
@@ -382,6 +383,7 @@ class Phase7ProvidersTestCase(unittest.TestCase):
             "\n".join(
                 [
                     'model = "gpt-5.4"',
+                    'model_reasoning_effort = "medium"',
                     "",
                     "[mcp_servers.legacy]",
                     'url = "http://127.0.0.1:8002/mcp/"',
@@ -401,6 +403,8 @@ class Phase7ProvidersTestCase(unittest.TestCase):
                     "skill_mcp_dependency_install = true",
                     "",
                     "[profiles.default]",
+                    'model = "gpt-5.4"',
+                    'model_reasoning_effort = "medium"',
                     'approval_policy = "never"',
                     "",
                 ]
@@ -437,7 +441,10 @@ class Phase7ProvidersTestCase(unittest.TestCase):
         self.assertFalse((runtime_home / "rules").is_symlink())
         self.assertFalse((runtime_home / "skills" / ".system" / "SKILL.md").exists())
         runtime_config = (runtime_home / "config.toml").read_text(encoding="utf-8")
-        self.assertIn('model = "gpt-5.4"', runtime_config)
+        self.assertIn('model = "gpt-5.5"', runtime_config)
+        self.assertIn('model_reasoning_effort = "high"', runtime_config)
+        self.assertNotIn('model = "gpt-5.4"', runtime_config)
+        self.assertNotIn('model_reasoning_effort = "medium"', runtime_config)
         self.assertIn("[profiles.default]", runtime_config)
         self.assertNotIn("[mcp_servers.legacy]", runtime_config)
         self.assertNotIn("127.0.0.1:8002", runtime_config)

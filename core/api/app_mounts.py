@@ -16,7 +16,7 @@ from core.apps.service import build_workspace_app_frontend
 from core.providers.service import resolve_provider_for_workspace
 from core.secrets.errors import SecretError
 from core.secrets.service import bind_app_secret, build_secret_ref, create_platform_secret, resolve_app_secret, rotate_platform_secret
-from core.shared.entrypoints import run_json_entrypoint
+from core.shared.entrypoints import EntrypointShutdownController, run_json_entrypoint
 from core.workspaces.paths import workspace_paths
 from core.identity.models import UserRecord
 
@@ -158,6 +158,7 @@ def handle_app_backend(
     user: UserRecord | None,
     start_path: Path,
     start_response: StartResponse,
+    shutdown_controller: EntrypointShutdownController | None = None,
 ) -> list[bytes]:
     """Execute one app backend entrypoint through the platform host."""
     method = environ.get("REQUEST_METHOD", "GET").upper()
@@ -203,6 +204,7 @@ def handle_app_backend(
                 "app_secrets": _resolve_app_secret_payload(state, workspace_id=workspace_id, app_id=app_id),
             },
             cwd=source_root,
+            shutdown_controller=shutdown_controller,
         )
     except Exception as error:
         return json_response(start_response, {"error": str(error)}, status=status_line(500))

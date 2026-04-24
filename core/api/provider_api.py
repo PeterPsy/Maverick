@@ -7,7 +7,7 @@ from dataclasses import asdict
 from core.api.http import StartResponse, json_response
 from core.api.platform_state import PlatformState
 from core.api.session_api import RequestSession, require_session
-from core.providers.models import ProviderDefinition, ProviderSelection
+from core.providers.models import ProviderDefinition, ProviderModelOption, ProviderReasoningOption, ProviderSelection
 from core.providers.service import configure_workspace_provider, list_available_providers, resolve_provider_for_workspace
 from core.runtime.runtime_session import RuntimeSessionRecord
 
@@ -22,8 +22,32 @@ def provider_payload(definition: ProviderDefinition) -> dict[str, object]:
         "status": definition.status,
         "capabilities": asdict(definition.capabilities),
         "default_model_family": definition.default_model_family,
+        "model_options": [provider_model_option_payload(option) for option in definition.model_options],
         "requires_credentials": definition.requires_credentials,
         "supported_execution_modes": list(definition.supported_execution_modes),
+    }
+
+
+def provider_reasoning_option_payload(option: ProviderReasoningOption) -> dict[str, object]:
+    """Return public reasoning-effort metadata."""
+    return {
+        "effort": option.effort,
+        "label": option.label,
+        "description": option.description,
+    }
+
+
+def provider_model_option_payload(option: ProviderModelOption) -> dict[str, object]:
+    """Return public provider model metadata."""
+    return {
+        "model_id": option.model_id,
+        "label": option.label,
+        "description": option.description,
+        "default_reasoning_effort": option.default_reasoning_effort,
+        "supported_reasoning_efforts": [
+            provider_reasoning_option_payload(reasoning)
+            for reasoning in option.supported_reasoning_efforts
+        ],
     }
 
 
@@ -38,6 +62,28 @@ def provider_selection_payload(selection: ProviderSelection | None) -> dict[str,
         "selection_scope": selection.selection_scope,
         "selection_reason": selection.selection_reason,
         "updated_at": selection.updated_at,
+        "model_id": selection.model_id,
+        "model_reasoning_effort": selection.model_reasoning_effort,
+    }
+
+
+def provider_model_settings_payload(definition: ProviderDefinition, selection: ProviderSelection | None) -> dict[str, object]:
+    """Return effective workspace model settings for a provider."""
+    selected_model_id = (None if selection is None else selection.model_id) or definition.default_model_family
+    model_option = next((option for option in definition.model_options if option.model_id == selected_model_id), None)
+    if model_option is None and definition.model_options:
+        model_option = next(
+            (option for option in definition.model_options if option.model_id == definition.default_model_family),
+            definition.model_options[0],
+        )
+        selected_model_id = model_option.model_id
+    selected_reasoning = None if selection is None else selection.model_reasoning_effort
+    if not selected_reasoning and model_option is not None:
+        selected_reasoning = model_option.default_reasoning_effort
+    return {
+        "selected_model_id": selected_model_id,
+        "selected_reasoning_effort": selected_reasoning,
+        "available_models": [provider_model_option_payload(option) for option in definition.model_options],
     }
 
 
@@ -64,6 +110,7 @@ def workspace_provider_status(state: PlatformState, *, workspace_id: str) -> dic
         "workspace_id": workspace_id,
         "active_provider": provider_payload(definition),
         "selection": provider_selection_payload(selection),
+        "model_settings": provider_model_settings_payload(definition, selection),
     }
 
 
@@ -95,11 +142,15 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
         provider_id = str(body.get("provider_id") or "").strip()
         if not provider_id:
             return json_response(start_response, {"error": "missing_provider_id"}, status="400 Bad Request")
+        model_id = str(body.get("model_id") or "").strip() or None
+        model_reasoning_effort = str(body.get("model_reasoning_effort") or "").strip() or None
         try:
             configure_workspace_provider(
                 state.provider_store,
                 workspace_id=context.workspace_id,
                 provider_id=provider_id,
+                model_id=model_id,
+                model_reasoning_effort=model_reasoning_effort,
                 observability_store=state.observability_store,
             )
         except Exception as error:

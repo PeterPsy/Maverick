@@ -29,6 +29,8 @@ class RuntimeBackendAdapter(Protocol):
         secret_env: dict[str, str] | None = None,
         credential_binding_id: str | None = None,
         resolved_secret_refs: list[str] | None = None,
+        model_id: str | None = None,
+        model_reasoning_effort: str | None = None,
     ) -> RuntimeBackendLaunchSpec:
         ...
 

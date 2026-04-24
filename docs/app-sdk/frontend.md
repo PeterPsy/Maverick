@@ -24,6 +24,30 @@ Mounted frontends call their app backend through:
 
 Do not call another app's private backend or private files directly. Use the owning app's official backend, CLI, or MCP surfaces.
 
+## Shell Route Contract
+
+Maverick has two different frontend URL families:
+
+- `/app/<app_id>/<app_page>` is the user-facing shell route. It selects the active app in `base-shell` and may be copied, reloaded, or used as a deep link.
+- `/apps/<app_id>/...` is the internal mounted frontend asset route used by shell iframes and direct app asset serving. Apps must not use it as the canonical user-facing navigation URL.
+
+Apps that want a stable page URL should send the page segment through shell navigation messages:
+
+```js
+window.parent?.postMessage(
+  {
+    type: "maverick.app.open-app",
+    app_id: "chat",
+    params: { app_page: "threads/<thread_id>" }
+  },
+  window.location.origin
+);
+```
+
+The shell renders that as `/app/chat/threads/<thread_id>` and sends the same `app_page` back to the mounted app with `maverick.app.navigate`.
+
+App page segments are app-owned. The core and shell do not interpret page semantics beyond selecting the app and forwarding `app_page`; each app is responsible for mapping its own page segments to internal state.
+
 ## Rebuild Rule
 
 If the app declares `lifecycle.rebuild: true`, frontend updates should be published through:

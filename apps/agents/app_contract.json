@@ -16,6 +16,10 @@
   "capabilities": {
     "mcp_tools": [
       "maverick_agents_app",
+      "agents_view_filter",
+      "agents_set_view_filter",
+      "agents_set_custom_view",
+      "agents_clear_custom_view",
       "agents_reference_manifest",
       "agents_reference_search",
       "agents_reference_resolve",
@@ -24,7 +28,9 @@
     "cli_commands": [
       "agents"
     ],
-    "skills": [],
+    "skills": [
+      "agents-ops"
+    ],
     "views": [
       "agents"
     ],
@@ -32,9 +38,46 @@
       {
         "resource": "configuration",
         "description": "Emitted when agent roles, agent types, or the common prompt change through official Agents app surfaces."
+      },
+      {
+        "resource": "view-state",
+        "description": "Emitted when Agents catalog view filters or custom selections change through official Agents app surfaces."
       }
     ],
-    "view_surfaces": [],
+    "view_surfaces": [
+      {
+        "view_id": "agents",
+        "display_name": "Agents",
+        "entity_types": [
+          "agent_type",
+          "role_prompt"
+        ],
+        "state_actions": [
+          {
+            "action": "view_filter",
+            "standard": true,
+            "description": "Read the current Agents catalog view state."
+          },
+          {
+            "action": "set_view_filter",
+            "standard": true,
+            "description": "Set the current Agents query and entity filter."
+          },
+          {
+            "action": "set_custom_view",
+            "standard": true,
+            "description": "Show a curated set of agent and role references."
+          },
+          {
+            "action": "clear_custom_view",
+            "standard": true,
+            "description": "Return Agents to normal catalog browsing mode."
+          }
+        ],
+        "supports_custom_view": true,
+        "supports_filter_refinement": true
+      }
+    ],
     "reference_entities": [
       {
         "entity_type": "agent_type",
@@ -72,7 +115,8 @@
     "primary_paths": [
       "data/agents/common_prompt.md",
       "data/agents/roles",
-      "data/agents/agent_types.json"
+      "data/agents/agent_types.json",
+      "data/agents/view_state.json"
     ],
     "indices": null,
     "supports_export": true,

@@ -74,10 +74,16 @@ class AgentsAppTestCase(unittest.TestCase):
         self.assertEqual(parsed.contract.entrypoints.backend, "backend/app_backend.py")
         self.assertEqual(parsed.contract.entrypoints.frontend, "frontend/dist")
         self.assertIn("maverick_agents_app", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("agents_set_view_filter", parsed.contract.capabilities.mcp_tools)
         self.assertIn("agents_reference_manifest", parsed.contract.capabilities.mcp_tools)
         self.assertEqual(parsed.contract.capabilities.cli_commands, ["agents"])
-        self.assertEqual(parsed.contract.capabilities.skills, [])
+        self.assertEqual(parsed.contract.capabilities.skills, ["agents-ops"])
         self.assertIn("agent_type", {item.entity_type for item in parsed.contract.capabilities.reference_entities})
+        self.assertEqual(parsed.contract.capabilities.view_surfaces[0].view_id, "agents")
+        self.assertEqual(
+            [item.action for item in parsed.contract.capabilities.view_surfaces[0].state_actions],
+            ["view_filter", "set_view_filter", "set_custom_view", "clear_custom_view"],
+        )
 
     def test_seed_defaults_create_all_roles_and_agent_types(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -141,6 +147,40 @@ class AgentsAppTestCase(unittest.TestCase):
             self.assertEqual(create_payload["agent_type"]["id"], "agent-type-custom-test")
             self.assertEqual(delete_status, 200)
             self.assertEqual(delete_payload, {"deleted": True})
+
+    def test_backend_persists_agents_view_filter_and_custom_view(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "agents"
+            seed_defaults(data_root)
+
+            filtered_status, filtered = handle_action(
+                data_root,
+                {"action": "set_view_filter", "query": "engineer", "entity_type": "agent_type"},
+            )
+            custom_status, custom = handle_action(
+                data_root,
+                {
+                    "action": "set_custom_view",
+                    "title": "Core builders",
+                    "refs": [
+                        {"entity_type": "agent_type", "entity_id": "agent-type-agent-builder"},
+                        {"entity_type": "role_prompt", "entity_id": "server-coding-engineer"},
+                    ],
+                },
+            )
+            read_status, view_state = handle_action(data_root, {"action": "view_filter"})
+            cleared_status, cleared = handle_action(data_root, {"action": "clear_custom_view"})
+
+            self.assertEqual(filtered_status, 200)
+            self.assertEqual(filtered["state"]["view_filter"]["query"], "engineer")
+            self.assertEqual(filtered["state"]["view_filter"]["entity_type"], "agent_type")
+            self.assertEqual(custom_status, 200)
+            self.assertEqual(custom["state"]["view_filter"]["mode"], "custom")
+            self.assertEqual(len(custom["state"]["view_filter"]["refs"]), 2)
+            self.assertEqual(read_status, 200)
+            self.assertEqual(view_state["state"]["view_filter"]["mode"], "custom")
+            self.assertEqual(cleared_status, 200)
+            self.assertEqual(cleared["state"]["view_filter"]["mode"], "search")
 
     def test_bootstrap_installs_agents_and_exposes_surfaces(self) -> None:
         repo_root = self.make_repo_root()

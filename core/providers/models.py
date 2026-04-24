@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal
 
@@ -13,6 +13,26 @@ ProviderKind = Literal["runtime_backend", "hosted_api"]
 ProviderStatus = Literal["active", "disabled", "experimental"]
 ProviderBindingStatus = Literal["active", "disabled"]
 ProviderSelectionScope = Literal["workspace_default"]
+
+
+@dataclass(frozen=True)
+class ProviderReasoningOption:
+    """One provider-supported reasoning effort for a model."""
+
+    effort: str
+    label: str
+    description: str | None = None
+
+
+@dataclass(frozen=True)
+class ProviderModelOption:
+    """One model option reported by a provider adapter."""
+
+    model_id: str
+    label: str
+    description: str | None
+    default_reasoning_effort: str | None
+    supported_reasoning_efforts: list[ProviderReasoningOption] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -45,6 +65,7 @@ class ProviderDefinition:
     supported_execution_modes: list[ExecutionMode]
     created_at: datetime
     updated_at: datetime
+    model_options: list[ProviderModelOption] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -73,6 +94,8 @@ class ProviderSelection:
     selection_reason: str
     created_at: datetime
     updated_at: datetime
+    model_id: str | None = None
+    model_reasoning_effort: str | None = None
 
 
 @dataclass(frozen=True)

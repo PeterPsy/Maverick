@@ -50,6 +50,7 @@ def render_template_files(request: AppSdkCreateRequest) -> dict[str, str]:
 
 def _contract_payload(request: AppSdkCreateRequest) -> dict[str, Any]:
     app_id = request.app_id
+    tool_prefix = app_id.replace("-", "_")
     has_backend = request.template_id in {"frontend-backend", "data-app", "widget"}
     if request.template_id in {"react-vite", "entity-sqlite"}:
         has_backend = True
@@ -95,14 +96,21 @@ def _contract_payload(request: AppSdkCreateRequest) -> dict[str, Any]:
         "capabilities": {
             "mcp_tools": (
                 [
-                    f"{app_id}_reference_manifest",
-                    f"{app_id}_list",
-                    f"{app_id}_create",
-                    f"{app_id}_get",
-                    f"{app_id}_search",
+                    f"{tool_prefix}_reference_manifest",
+                    f"{tool_prefix}_reference_search",
+                    f"{tool_prefix}_reference_resolve",
+                    f"{tool_prefix}_reference_summarize",
+                    f"{tool_prefix}_view_filter",
+                    f"{tool_prefix}_set_view_filter",
+                    f"{tool_prefix}_set_custom_view",
+                    f"{tool_prefix}_clear_custom_view",
+                    f"{tool_prefix}_list",
+                    f"{tool_prefix}_create",
+                    f"{tool_prefix}_get",
+                    f"{tool_prefix}_search",
                 ]
                 if is_entity
-                else [f"{app_id}_reference_manifest"] if has_agent else []
+                else [f"{tool_prefix}_reference_manifest"] if has_agent else []
             ),
             "cli_commands": [app_id] if has_agent else [],
             "skills": [f"{app_id}-ops"] if has_agent else [],
@@ -111,15 +119,46 @@ def _contract_payload(request: AppSdkCreateRequest) -> dict[str, Any]:
                 {
                     "resource": "records" if is_entity else "state",
                     "description": "Primary app records changed." if is_entity else "Primary app state changed.",
-                }
+                },
+                *(
+                    [
+                        {
+                            "resource": "view-state",
+                            "description": "Persisted app view state changed.",
+                        }
+                    ]
+                    if is_entity
+                    else []
+                ),
             ] if has_data_hooks else [],
             "view_surfaces": [
                 {
                     "view_id": "main",
                     "display_name": request.name or _title(app_id),
                     "entity_types": entities,
-                    "state_actions": [],
-                    "supports_custom_view": False,
+                    "state_actions": [
+                        {
+                            "action": "view_filter",
+                            "standard": True,
+                            "description": "Read the current persisted view filter.",
+                        },
+                        {
+                            "action": "set_view_filter",
+                            "standard": True,
+                            "description": "Persist a shared search/filter view state.",
+                        },
+                        {
+                            "action": "set_custom_view",
+                            "standard": True,
+                            "description": "Persist an explicit custom view selection.",
+                        },
+                        {
+                            "action": "clear_custom_view",
+                            "standard": True,
+                            "description": "Return the view to the standard search/filter mode.",
+                        },
+                    ],
+                    "supports_custom_view": True,
                     "supports_filter_refinement": True,
                 }
             ] if is_entity else [],

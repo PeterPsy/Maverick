@@ -17,7 +17,9 @@ from core.providers.service import configure_workspace_provider
 from core.recovery.backend_restart import recover_interrupted_runtime_turns_after_backend_restart
 from core.providers.store import MongoProviderStore, ProviderCollections
 from core.recovery.store import MongoRecoveryStore, RecoveryCollections
+from core.runtime.event_collection import RuntimeEventJsonCollection
 from core.runtime.event_bus import RuntimeEventBus
+from core.runtime.session_collection import RuntimeSessionJsonCollection
 from core.runtime.store import MongoRuntimeStore, RuntimeCollections
 from core.secrets.store import MongoSecretStore, SecretCollections
 from core.shared.in_memory_collection import InMemoryCollection
@@ -78,17 +80,41 @@ def bootstrap_platform_state(*, start_path: Path | None = None, now: datetime | 
         ProviderCollections(
             definitions=InMemoryCollection(),
             bindings=InMemoryCollection(),
-            selections=InMemoryCollection(),
+            selections=JsonFileCollection(control_state_root / "providers" / "selections.json"),
         )
     )
     runtime_state_root = control_state_root / "runtime"
+    runtime_turns = RuntimeSessionJsonCollection(start_path=repository_root, filename="turns.json")
+    runtime_events = RuntimeEventJsonCollection(start_path=repository_root)
+    runtime_processes = RuntimeSessionJsonCollection(start_path=repository_root, filename="processes.json")
+    runtime_states = RuntimeSessionJsonCollection(start_path=repository_root, filename="state.json")
+    _migrate_legacy_runtime_partition(
+        legacy_path=runtime_state_root / "turns.json",
+        collection=runtime_turns,
+        identity_field="turn_id",
+    )
+    _migrate_legacy_runtime_partition(
+        legacy_path=runtime_state_root / "events.json",
+        collection=runtime_events,
+        identity_field="event_id",
+    )
+    _migrate_legacy_runtime_partition(
+        legacy_path=runtime_state_root / "processes.json",
+        collection=runtime_processes,
+        identity_field="process_id",
+    )
+    _migrate_legacy_runtime_partition(
+        legacy_path=runtime_state_root / "states.json",
+        collection=runtime_states,
+        identity_field="session_id",
+    )
     runtime_store = MongoRuntimeStore(
         RuntimeCollections(
             sessions=JsonFileCollection(runtime_state_root / "sessions.json"),
-            turns=JsonFileCollection(runtime_state_root / "turns.json"),
-            events=JsonFileCollection(runtime_state_root / "events.json", append_only_upserts=True),
-            processes=JsonFileCollection(runtime_state_root / "processes.json"),
-            states=JsonFileCollection(runtime_state_root / "states.json"),
+            turns=runtime_turns,
+            events=runtime_events,
+            processes=runtime_processes,
+            states=runtime_states,
         )
     )
     runtime_event_bus = RuntimeEventBus()
@@ -122,13 +148,14 @@ def bootstrap_platform_state(*, start_path: Path | None = None, now: datetime | 
         provider_store=provider_store,
         now=now,
     )
-    configure_workspace_provider(
-        provider_store,
-        workspace_id="default",
-        provider_id="codex",
-        observability_store=observability_store,
-        now=now,
-    )
+    if provider_store.get_provider_selection("default") is None:
+        configure_workspace_provider(
+            provider_store,
+            workspace_id="default",
+            provider_id="codex",
+            observability_store=observability_store,
+            now=now,
+        )
     bootstrap_default_admin(
         identity_store,
         workspace_store,
@@ -152,3 +179,27 @@ def bootstrap_platform_state(*, start_path: Path | None = None, now: datetime | 
     )
     recover_interrupted_runtime_turns_after_backend_restart(state)
     return state
+
+
+def _migrate_legacy_runtime_partition(
+    *,
+    legacy_path: Path,
+    collection: RuntimeSessionJsonCollection,
+    identity_field: str,
+) -> None:
+    """Move legacy global runtime records into their owning session directory."""
+    legacy = JsonFileCollection(legacy_path)
+    documents = legacy.find({})
+    migrated = 0
+    for document in documents:
+        if not isinstance(document, dict):
+            continue
+        identity_value = document.get(identity_field)
+        session_id = document.get("session_id")
+        workspace_id = document.get("workspace_id")
+        if not isinstance(identity_value, str) or not isinstance(session_id, str) or not isinstance(workspace_id, str):
+            continue
+        collection.update_one({identity_field: identity_value}, {"$set": document}, upsert=True)
+        migrated += 1
+    if migrated:
+        legacy_path.write_text("[]\n", encoding="utf-8")

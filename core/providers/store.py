@@ -10,6 +10,8 @@ from core.providers.models import (
     ProviderCapabilitySet,
     ProviderCredentialBinding,
     ProviderDefinition,
+    ProviderModelOption,
+    ProviderReasoningOption,
     ProviderSelection,
 )
 
@@ -78,7 +80,21 @@ class MongoProviderStore:
     def _provider_definition(self, document: dict[str, Any]) -> ProviderDefinition:
         payload = dict(document)
         payload["capabilities"] = ProviderCapabilitySet(**payload["capabilities"])
+        payload["model_options"] = [
+            self._provider_model_option(item)
+            for item in payload.get("model_options", [])
+            if isinstance(item, dict)
+        ]
         return ProviderDefinition(**payload)
+
+    def _provider_model_option(self, document: dict[str, Any]) -> ProviderModelOption:
+        payload = dict(document)
+        payload["supported_reasoning_efforts"] = [
+            ProviderReasoningOption(**item)
+            for item in payload.get("supported_reasoning_efforts", [])
+            if isinstance(item, dict)
+        ]
+        return ProviderModelOption(**payload)
 
     def save_provider_definition(self, record: ProviderDefinition) -> ProviderDefinition:
         self.collections.definitions.update_one(

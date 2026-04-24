@@ -194,7 +194,7 @@ def transition_runtime_session(
     timestamp = now or utcnow()
     session = store.get_session(session_id)
     allowed: dict[RuntimeSessionStatus, set[RuntimeSessionStatus]] = {
-        "created": {"running", "failed"},
+        "created": {"running", "stopped", "failed"},
         "running": {"stopping", "stopped", "failed"},
         "stopping": {"stopped", "failed", "running"},
         "stopped": {"running"},

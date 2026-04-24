@@ -108,7 +108,7 @@ function persistWindows(storageKey: string, windows: ChatWindow[]) {
 }
 
 async function loadWidgetStateStorageKey(): Promise<string> {
-  const token = new URLSearchParams(window.location.search).get("context");
+  const token = widgetContextToken();
   if (!token) {
     return FALLBACK_WIDGET_STATE_STORAGE_KEY;
   }
@@ -123,6 +123,11 @@ async function loadWidgetStateStorageKey(): Promise<string> {
   } catch {
     return FALLBACK_WIDGET_STATE_STORAGE_KEY;
   }
+}
+
+function widgetContextToken(): string {
+  const hash = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash;
+  return new URLSearchParams(hash).get("context") || new URLSearchParams(window.location.search).get("context") || "";
 }
 
 function widgetSize(windows: ChatWindow[]) {

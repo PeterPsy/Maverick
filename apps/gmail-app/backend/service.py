@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
 from attachments import read_attachment_bytes
 from errors import GmailAppValidationError
 from gmail_client import client_from_body
-from gmail_models import email_domain
+from gmail_models import email_domain, utc_now
 from oauth_service import authorization_url, exchange_code, refresh_access_token
 from store import (
     consume_send_approval,
@@ -69,6 +70,9 @@ DATA_CHANGED_RESOURCES = {
     "suggestions.mark_reviewed": "suggestions",
     "send.request_approval": "send-approvals",
     "send.approved": "sent-messages",
+    "set_view_filter": "view-state",
+    "set_custom_view": "view-state",
+    "clear_custom_view": "view-state",
 }
 
 
@@ -77,6 +81,127 @@ def app_events_for_action(action: str) -> list[dict[str, str]]:
     if resource is None:
         return []
     return [{"type": "maverick.app.data-changed", "resource": resource}]
+
+
+def _state_path(data_root: Path) -> Path:
+    return data_root / "state.json"
+
+
+def _default_view_filter() -> dict[str, Any]:
+    return {
+        "mode": "search",
+        "query": "",
+        "label": "inbox",
+        "unread": "all",
+        "title": "",
+        "refs": [],
+        "updated_at": utc_now(),
+    }
+
+
+def _normalize_view_filter(raw_filter: object) -> dict[str, Any]:
+    if not isinstance(raw_filter, dict):
+        raw_filter = {}
+    label = str(raw_filter.get("label") or "inbox").strip().lower() or "inbox"
+    if label not in {"all", "inbox", "sent", "spam"}:
+        label = "inbox"
+    unread = str(raw_filter.get("unread") or "all").strip().lower() or "all"
+    if unread not in {"all", "unread", "read"}:
+        unread = "all"
+    refs = []
+    for item in raw_filter.get("refs") if isinstance(raw_filter.get("refs"), list) else []:
+        if not isinstance(item, dict):
+            continue
+        entity_type = str(item.get("entity_type") or "").strip()
+        entity_id = str(item.get("entity_id") or "").strip()
+        if entity_type in {"thread", "message"} and entity_id:
+            refs.append({"entity_type": entity_type, "entity_id": entity_id})
+    return {
+        "mode": "custom" if str(raw_filter.get("mode") or "") == "custom" else "search",
+        "query": str(raw_filter.get("query") or "").strip(),
+        "label": label,
+        "unread": unread,
+        "title": str(raw_filter.get("title") or "").strip(),
+        "refs": refs,
+        "updated_at": str(raw_filter.get("updated_at") or utc_now()),
+    }
+
+
+def _load_json_state(data_root: Path) -> dict[str, Any]:
+    path = _state_path(data_root)
+    if not path.is_file():
+        return {"schema_version": "1", "view_filter": _default_view_filter()}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    payload["schema_version"] = "1"
+    payload["view_filter"] = _normalize_view_filter(payload.get("view_filter"))
+    return payload
+
+
+def _save_json_state(data_root: Path, state: dict[str, Any]) -> dict[str, Any]:
+    data_root.mkdir(parents=True, exist_ok=True)
+    _state_path(data_root).write_text(json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return state
+
+
+def _view_state(data_root: Path) -> dict[str, Any]:
+    state = _load_json_state(data_root)
+    return {"view_filter": _save_json_state(data_root, state)["view_filter"]}
+
+
+def _set_view_filter(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
+    state = _load_json_state(data_root)
+    current = _normalize_view_filter(state.get("view_filter"))
+    preserve_custom = bool(body.get("preserve_custom")) and current.get("mode") == "custom"
+    state["view_filter"] = _normalize_view_filter(
+        {
+            "mode": "custom" if preserve_custom else "search",
+            "query": body.get("query") if "query" in body else current.get("query"),
+            "label": body.get("label") if "label" in body else current.get("label"),
+            "unread": body.get("unread") if "unread" in body else current.get("unread"),
+            "title": current.get("title") if preserve_custom else "",
+            "refs": current.get("refs") if preserve_custom else [],
+            "updated_at": utc_now(),
+        }
+    )
+    return {"view_filter": _save_json_state(data_root, state)["view_filter"]}
+
+
+def _set_custom_view(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
+    state = _load_json_state(data_root)
+    state["view_filter"] = _normalize_view_filter(
+        {
+            "mode": "custom",
+            "query": body.get("query"),
+            "label": body.get("label"),
+            "unread": body.get("unread"),
+            "title": body.get("title"),
+            "refs": body.get("refs") if isinstance(body.get("refs"), list) else [],
+            "updated_at": utc_now(),
+        }
+    )
+    return {"view_filter": _save_json_state(data_root, state)["view_filter"]}
+
+
+def _clear_custom_view(data_root: Path) -> dict[str, Any]:
+    state = _load_json_state(data_root)
+    current = _normalize_view_filter(state.get("view_filter"))
+    state["view_filter"] = _normalize_view_filter(
+        {
+            "mode": "search",
+            "query": current.get("query"),
+            "label": current.get("label"),
+            "unread": current.get("unread"),
+            "title": "",
+            "refs": [],
+            "updated_at": utc_now(),
+        }
+    )
+    return {"view_filter": _save_json_state(data_root, state)["view_filter"]}
 
 
 def action_from_tool(tool_name: str, fallback: str) -> str:
@@ -94,6 +219,10 @@ def action_from_tool(tool_name: str, fallback: str) -> str:
         "gmail_app_list_relationship_suggestions": "suggestions.list",
         "gmail_app_mark_relationship_suggestion": "suggestions.mark_reviewed",
         "gmail_app_audit_recent": "audit.recent",
+        "gmail_app_view_filter": "view_filter",
+        "gmail_app_set_view_filter": "set_view_filter",
+        "gmail_app_set_custom_view": "set_custom_view",
+        "gmail_app_clear_custom_view": "clear_custom_view",
         "gmail_app_reference_manifest": "references.manifest",
         "gmail_app_reference_search": "references.search",
         "gmail_app_reference_resolve": "references.resolve",
@@ -277,6 +406,14 @@ def handle_action(data_root: Path, body: dict[str, Any], *, workspace_id: str = 
         return 200, {"sent": record, "gmail": sent}
     if action == "audit.recent":
         return 200, {"events": list_audit(data_root, int(body.get("limit") or 20))}
+    if action == "view_filter":
+        return 200, {"state": _view_state(data_root)}
+    if action == "set_view_filter":
+        return 200, {"state": _set_view_filter(data_root, body)}
+    if action == "set_custom_view":
+        return 200, {"state": _set_custom_view(data_root, body)}
+    if action == "clear_custom_view":
+        return 200, {"state": _clear_custom_view(data_root)}
     if action == "references.manifest":
         return 200, REFERENCE_MANIFEST
     if action == "references.search":

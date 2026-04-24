@@ -4,6 +4,13 @@ Gmail App is a built-in Maverick v3 app for Google Workspace Gmail relationship 
 
 It lets a workspace user search and review Gmail threads, create relationship suggestions, expose Gmail threads/messages as durable references for other apps, prepare replies, and send email only after explicit approval.
 
+## Contract Notes
+
+- Frontend, backend, CLI, and MCP entrypoints are declared in `app_contract.json`.
+- The contract declares the bundled `gmail-app-ops` skill and the `thread` and `message` reference entities.
+- App-owned storage lives under `data/gmail-app/` for SQLite state and workflow metadata.
+- Persisted `view_surfaces` cover inbox/thread filters and curated email thread/message selections.
+
 ## Data Boundary
 
 Workspace data belongs under:
@@ -85,6 +92,16 @@ Avoid `https://mail.google.com/` unless a later written decision proves it is re
 Gmail read scopes can be restricted and may require Google verification or security assessment for production use.
 
 The current UI uses a browser-session OAuth flow. The Google OAuth client id, client secret, and access token are kept in `sessionStorage` for the active browser session and are not written to `data/gmail-app`. Long-lived refresh-token storage should move to the generic core app-scoped secrets surface before production use.
+
+## SDK Flow
+
+```bash
+./scripts/maverick app validate gmail-app --workspace default
+./scripts/maverick app register-local gmail-app --workspace default
+./scripts/maverick app install-local gmail-app --workspace default
+./scripts/maverick app status gmail-app --workspace default
+./scripts/maverick app package gmail-app --workspace default
+```
 
 ## Verification
 

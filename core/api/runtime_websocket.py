@@ -15,6 +15,7 @@ from core.api.platform_state import PlatformState
 from core.api.session_api import resolve_request_session
 from core.runtime.errors import RuntimeSessionNotFoundError
 from core.runtime.runtime_events import RuntimeEventRecord
+from core.shared.entrypoints import EntrypointShutdownController
 
 
 AsgiReceive = Callable[[], Awaitable[dict[str, Any]]]
@@ -117,6 +118,7 @@ async def stream_runtime_session_events(
     receive: AsgiReceive,
     send: AsgiSend,
     heartbeat_interval_seconds: float = 25.0,
+    shutdown_controller: EntrypointShutdownController | None = None,
 ) -> None:
     """Handle the canonical runtime WebSocket stream."""
     session_id = runtime_session_id_from_path(str(scope.get("path") or ""))
@@ -161,8 +163,12 @@ async def stream_runtime_session_events(
         while True:
             receive_task = asyncio.create_task(receive())
             event_task = asyncio.create_task(subscription.get())
+            shutdown_task = _shutdown_task(shutdown_controller)
             timeout = _seconds_until_heartbeat(last_heartbeat_at, heartbeat_interval_seconds)
-            done, pending = await asyncio.wait({receive_task, event_task}, timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
+            wait_tasks = {receive_task, event_task}
+            if shutdown_task is not None:
+                wait_tasks.add(shutdown_task)
+            done, pending = await asyncio.wait(wait_tasks, timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
             await _cancel_pending(pending)
 
             if not done:
@@ -171,6 +177,9 @@ async def stream_runtime_session_events(
                     await _send_json(send, {"type": "runtime.heartbeat", "session_id": session_id, "at": now})
                     last_heartbeat_at = now
                 continue
+
+            if shutdown_task is not None and shutdown_task in done:
+                return
 
             if receive_task in done:
                 incoming = receive_task.result()
@@ -210,3 +219,14 @@ def _handle_client_frame(frame: dict[str, Any], *, fallback_last_event_id: str |
         event_id = payload.get("last_event_id")
         return event_id if isinstance(event_id, str) and event_id else fallback_last_event_id
     return fallback_last_event_id
+
+
+def _shutdown_task(shutdown_controller: EntrypointShutdownController | None) -> asyncio.Task | None:
+    if shutdown_controller is None:
+        return None
+    return asyncio.create_task(_wait_for_shutdown(shutdown_controller))
+
+
+async def _wait_for_shutdown(shutdown_controller: EntrypointShutdownController) -> None:
+    while not shutdown_controller.is_shutting_down():
+        await asyncio.sleep(0.1)

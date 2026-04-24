@@ -41,12 +41,14 @@ class GmailAppTestCase(unittest.TestCase):
         self.assertIn("gmail_app_send_approved", parsed.contract.capabilities.mcp_tools)
         self.assertIn("gmail_app_oauth_exchange", parsed.contract.capabilities.mcp_tools)
         self.assertIn("gmail_app_latest_threads", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("gmail_app_set_view_filter", parsed.contract.capabilities.mcp_tools)
         self.assertIn("gmail_app_reference_manifest", parsed.contract.capabilities.mcp_tools)
         self.assertIn("gmail_app_reference_summarize", parsed.contract.capabilities.mcp_tools)
         self.assertEqual(parsed.contract.capabilities.cli_commands, ["gmail-app"])
         self.assertEqual(parsed.contract.storage.storage_kind, "sqlite")
         self.assertIn("data/gmail-app/gmail.sqlite", parsed.contract.storage.primary_paths)
         self.assertEqual({item.entity_type for item in parsed.contract.capabilities.reference_entities}, {"thread", "message"})
+        self.assertEqual(parsed.contract.capabilities.view_surfaces[0].view_id, "gmail-app")
 
     def test_install_hook_is_idempotent_and_creates_state(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

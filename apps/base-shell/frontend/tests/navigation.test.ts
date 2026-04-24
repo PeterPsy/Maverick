@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AppRegistryItem } from "../src/api";
-import { preferredActiveApp, shellVisibleApps } from "../src/navigation";
+import { parseShellAppRoute, preferredActiveApp, shellAppPath, shellVisibleApps } from "../src/navigation";
 
 function app(app_id: string, frontend_mount: string): AppRegistryItem {
   return {
@@ -28,7 +28,24 @@ describe("base-shell navigation", () => {
 
   it("prefers requested app, then chat, then first visible app", () => {
     expect(preferredActiveApp(registry, "docs")?.app_id).toBe("docs");
+    expect(preferredActiveApp(registry, "DOCS")?.app_id).toBe("docs");
     expect(preferredActiveApp(registry, "missing")?.app_id).toBe("chat");
     expect(preferredActiveApp([app("docs", "/apps/docs/")], null)?.app_id).toBe("docs");
+  });
+
+  it("parses user-facing app routes into app id and app page params", () => {
+    expect(parseShellAppRoute("/app/CRM/Contacts/Mattia-siciliano-234512/notes/latest", "?focus=activity")).toEqual({
+      appId: "CRM",
+      params: { app_page: "Contacts/Mattia-siciliano-234512/notes/latest", focus: "activity" },
+    });
+    expect(parseShellAppRoute("/")).toEqual({ appId: null, params: {} });
+  });
+
+  it("builds user-facing app routes without leaking transient command params", () => {
+    expect(shellAppPath("chat", { app_page: "threads/thread-123" })).toBe("/app/chat/threads/thread-123");
+    expect(shellAppPath("crm", { app_page: "Contacts/Mattia-siciliano-234512/notes/latest" })).toBe(
+      "/app/crm/Contacts/Mattia-siciliano-234512/notes/latest",
+    );
+    expect(shellAppPath("chat", { new_chat: true, new_chat_request_id: "request-1", workspace_id: "acme" })).toBe("/app/chat");
   });
 });

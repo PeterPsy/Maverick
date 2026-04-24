@@ -47,6 +47,10 @@
       {
         "resource": "state",
         "description": "Checklist state changed."
+      },
+      {
+        "resource": "view-state",
+        "description": "Checklist board filter or curated checklist selection changed."
       }
     ],
     "view_surfaces": [

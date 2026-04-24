@@ -14,7 +14,8 @@ type WidgetContext = {
 const PREVIEW_BYTES = 8 * 1024 * 1024;
 
 function contextToken() {
-  return new URLSearchParams(window.location.search).get('context') || '';
+  const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;
+  return new URLSearchParams(hash).get('context') || new URLSearchParams(window.location.search).get('context') || '';
 }
 
 async function loadWidgetContext(): Promise<WidgetContext> {

@@ -177,11 +177,7 @@ def chat_render(checklist: dict[str, Any]) -> dict[str, Any]:
         "kind": WIDGET_CONTENT_KIND,
         "legacy_kind": CHECKLIST_KIND,
         "memory": {"checklist_id": checklist["id"]},
-        "payload": {
-            "title": checklist["title"],
-            "summary": checklist["summary"],
-            "sections": deepcopy(checklist["sections"]),
-        },
+        "payload": {"id": checklist["id"]},
     }
 
 

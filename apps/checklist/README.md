@@ -2,6 +2,8 @@
 
 Workspace-local Maverick v3 port of the Maverick 2 `checklists` app.
 
+## Contract Notes
+
 The app keeps the v2 product contract:
 
 - legacy structured content kind: `design_checklist`
@@ -56,4 +58,4 @@ Use `maverick_tasklist` with:
 }
 ```
 
-The response includes `chat_render`, which a chat host can render with the `design-checklist` widget. The v3 widget registry uses `checklist.design`; `legacy_kind` preserves the Maverick 2 `design_checklist` identifier.
+The response includes `chat_render`, which a chat host can render with the `design-checklist` widget. The structured payload is intentionally minimal and carries only the checklist id; the widget resolves the full checklist state from the Checklist backend. The v3 widget registry uses `checklist.design`; `legacy_kind` preserves the Maverick 2 `design_checklist` identifier.

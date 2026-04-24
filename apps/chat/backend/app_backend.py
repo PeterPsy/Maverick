@@ -9,12 +9,16 @@ import sys
 from chat_state import (
     create_project,
     create_thread,
+    clear_custom_view,
     delete_thread,
+    delete_threads_by_runtime_session_ids,
     delete_project,
     find_thread,
     list_projects,
     list_threads,
     read_state,
+    set_custom_view,
+    set_view_filter,
     sidebar_snapshot,
     threads_path,
     update_project,
@@ -26,9 +30,13 @@ DATA_CHANGED_ACTIONS = {
     "threads.create",
     "threads.update",
     "threads.delete",
+    "threads.cleanup_runtime_sessions",
     "projects.create",
     "projects.update",
     "projects.delete",
+    "view_filter.set",
+    "view_filter.custom",
+    "view_filter.clear",
 }
 
 
@@ -37,6 +45,8 @@ def app_events_for_action(action: str) -> list[dict]:
         return [{"type": "maverick.app.data-changed", "resource": "threads"}]
     if action.startswith("projects.") and action in DATA_CHANGED_ACTIONS:
         return [{"type": "maverick.app.data-changed", "resource": "projects"}]
+    if action.startswith("view_filter.") and action in DATA_CHANGED_ACTIONS:
+        return [{"type": "maverick.app.data-changed", "resource": "view-state"}]
     return []
 
 
@@ -94,6 +104,30 @@ def main() -> None:
             },
         )
         return
+    if action == "threads.cleanup_runtime_sessions":
+        raw_ids = body.get("runtime_session_ids")
+        runtime_session_ids = [
+            str(session_id).strip()
+            for session_id in raw_ids
+            if str(session_id).strip()
+        ] if isinstance(raw_ids, list) else []
+        single_runtime_session_id = str(body.get("runtime_session_id") or "").strip()
+        if single_runtime_session_id:
+            runtime_session_ids.append(single_runtime_session_id)
+        deleted_threads = delete_threads_by_runtime_session_ids(state, runtime_session_ids)
+        if deleted_threads:
+            write_state(path, state)
+        _response(
+            200,
+            {
+                **sidebar_snapshot(state),
+                "deleted_threads": len(deleted_threads),
+                "deleted_thread_ids": [thread["thread_id"] for thread in deleted_threads],
+                "deleted_runtime_session_ids": [thread["runtime_session_id"] for thread in deleted_threads],
+                "_action": action,
+            },
+        )
+        return
     if action == "projects.list":
         _response(200, {"projects": list_projects(state), "threads": list_threads(state)})
         return
@@ -119,6 +153,24 @@ def main() -> None:
         return
     if action == "sidebar.snapshot":
         _response(200, sidebar_snapshot(state))
+        return
+    if action == "view_filter":
+        _response(200, {"state": {"view_filter": state.get("preferences", {}).get("view_filter")}})
+        return
+    if action == "set_view_filter":
+        view_filter = set_view_filter(state, body)
+        write_state(path, state)
+        _response(200, {"state": {"view_filter": view_filter}, "_action": "view_filter.set"})
+        return
+    if action == "set_custom_view":
+        view_filter = set_custom_view(state, body)
+        write_state(path, state)
+        _response(200, {"state": {"view_filter": view_filter}, "_action": "view_filter.custom"})
+        return
+    if action == "clear_custom_view":
+        view_filter = clear_custom_view(state)
+        write_state(path, state)
+        _response(200, {"state": {"view_filter": view_filter}, "_action": "view_filter.clear"})
         return
     if action == "health.check":
         path.parent.mkdir(parents=True, exist_ok=True)

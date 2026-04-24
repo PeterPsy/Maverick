@@ -139,7 +139,107 @@ def read_state(data_root: Path) -> dict:
 
 
 def write_state(data_root: Path, skills: list[dict]) -> None:
-    write_json(state_path(data_root), {"schema_version": SCHEMA_VERSION, "skills": skills})
+    current = read_json(state_path(data_root), {})
+    write_json(
+        state_path(data_root),
+        {
+            "schema_version": SCHEMA_VERSION,
+            "skills": skills,
+            "view_filter": normalize_view_filter(current.get("view_filter")),
+        },
+    )
+
+
+def default_view_filter() -> dict:
+    return {
+        "mode": "search",
+        "query": "",
+        "enabled": "all",
+        "title": "",
+        "refs": [],
+        "updated_at": now_timestamp(),
+    }
+
+
+def normalize_view_filter(raw_filter: object) -> dict:
+    if not isinstance(raw_filter, dict):
+        raw_filter = {}
+    enabled = str(raw_filter.get("enabled") or "all").strip().lower() or "all"
+    if enabled not in {"all", "enabled", "disabled"}:
+        enabled = "all"
+    refs = []
+    for item in raw_filter.get("refs") if isinstance(raw_filter.get("refs"), list) else []:
+        if not isinstance(item, dict):
+            continue
+        entity_id = str(item.get("entity_id") or "").strip()
+        if str(item.get("entity_type") or "") == "skill" and entity_id:
+            refs.append({"entity_type": "skill", "entity_id": entity_id})
+    return {
+        "mode": "custom" if str(raw_filter.get("mode") or "") == "custom" else "search",
+        "query": str(raw_filter.get("query") or "").strip(),
+        "enabled": enabled,
+        "title": str(raw_filter.get("title") or "").strip(),
+        "refs": refs,
+        "updated_at": str(raw_filter.get("updated_at") or now_timestamp()),
+    }
+
+
+def view_state(data_root: Path) -> dict:
+    state = read_state(data_root)
+    state["view_filter"] = normalize_view_filter(state.get("view_filter"))
+    write_json(state_path(data_root), state)
+    return {"view_filter": state["view_filter"]}
+
+
+def set_view_filter_payload(data_root: Path, payload: dict) -> dict:
+    state = read_state(data_root)
+    current = normalize_view_filter(state.get("view_filter"))
+    preserve_custom = bool(payload.get("preserve_custom")) and current.get("mode") == "custom"
+    state["view_filter"] = normalize_view_filter(
+        {
+            "mode": "custom" if preserve_custom else "search",
+            "query": payload.get("query") if "query" in payload else current.get("query"),
+            "enabled": payload.get("enabled") if "enabled" in payload else current.get("enabled"),
+            "title": current.get("title") if preserve_custom else "",
+            "refs": current.get("refs") if preserve_custom else [],
+            "updated_at": now_timestamp(),
+        }
+    )
+    write_json(state_path(data_root), state)
+    return {"view_filter": state["view_filter"]}
+
+
+def set_custom_view_payload(data_root: Path, payload: dict) -> dict:
+    state = read_state(data_root)
+    state["view_filter"] = normalize_view_filter(
+        {
+            "mode": "custom",
+            "query": payload.get("query"),
+            "enabled": payload.get("enabled"),
+            "title": payload.get("title"),
+            "refs": payload.get("refs") if isinstance(payload.get("refs"), list) else [],
+            "updated_at": now_timestamp(),
+        }
+    )
+    write_json(state_path(data_root), state)
+    return {"view_filter": state["view_filter"]}
+
+
+def clear_custom_view_payload(data_root: Path) -> dict:
+    state = read_state(data_root)
+    current = normalize_view_filter(state.get("view_filter"))
+    state["view_filter"] = normalize_view_filter(
+        {
+            "mode": "search",
+            "query": current.get("query"),
+            "enabled": current.get("enabled"),
+            "title": "",
+            "refs": [],
+            "updated_at": now_timestamp(),
+        }
+    )
+    write_json(state_path(data_root), state)
+    return {"view_filter": state["view_filter"]}
 
 
 def skill_summary(item: dict) -> dict:

@@ -10,6 +10,7 @@ from core.observability.service import record_platform_audit, record_platform_ev
 
 OPERATOR_ONLY = McpInvocationPolicy(True, False, False, False)
 OPERATOR_FULL_ACCESS = McpInvocationPolicy(True, False, True, True)
+FULL_ACCESS_WORKSPACE = McpInvocationPolicy(False, False, True, True)
 WORKSPACE_SAFE = McpInvocationPolicy(False, True, True, False)
 
 

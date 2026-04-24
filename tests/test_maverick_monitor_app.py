@@ -85,6 +85,12 @@ class MaverickMonitorAppTestCase(unittest.TestCase):
         self.assertEqual(parsed.contract.entrypoints.frontend, "frontend/dist")
         self.assertEqual(parsed.contract.capabilities.cli_commands, ["maverick-monitor"])
         self.assertEqual(parsed.contract.capabilities.mcp_tools, [])
+        self.assertEqual(parsed.contract.capabilities.view_surfaces[0].view_id, "maverick-monitor")
+        self.assertEqual(parsed.contract.capabilities.view_surfaces[0].entity_types, [])
+        self.assertEqual(
+            [action.action for action in parsed.contract.capabilities.view_surfaces[0].state_actions],
+            ["view_filter", "set_view_filter", "set_custom_view", "clear_custom_view"],
+        )
         self.assertEqual(parsed.contract.storage.primary_paths, ["data/maverick-monitor/state.json"])
 
     def test_backend_snapshot_reports_machine_workspace_and_service_metrics(self) -> None:
@@ -123,6 +129,33 @@ class MaverickMonitorAppTestCase(unittest.TestCase):
             self.assertEqual(result["status_code"], 200)
             self.assertEqual(result["json"]["state"]["selected_tab"], "processes")
             self.assertEqual(result["json"]["state"]["refresh_seconds"], 5)
+
+    def test_backend_updates_standard_view_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            workspace_root = Path(temp) / "maverick-v3" / "workspaces" / "default"
+            data_root = workspace_root / "data" / "maverick-monitor"
+
+            filtered = self.run_backend(
+                workspace_root=workspace_root,
+                data_root=data_root,
+                body={"action": "set_view_filter", "query": "chat", "selected_tab": "apps"},
+            )
+            custom = self.run_backend(
+                workspace_root=workspace_root,
+                data_root=data_root,
+                body={"action": "set_custom_view", "title": "App focus", "refs": [{"entity_id": "chat"}]},
+            )
+            cleared = self.run_backend(
+                workspace_root=workspace_root,
+                data_root=data_root,
+                body={"action": "clear_custom_view"},
+            )
+
+            self.assertEqual(filtered["json"]["state"]["view_filter"]["query"], "chat")
+            self.assertEqual(filtered["app_events"][0]["resource"], "view-state")
+            self.assertEqual(custom["json"]["state"]["view_filter"]["mode"], "custom")
+            self.assertEqual(custom["json"]["state"]["view_filter"]["title"], "App focus")
+            self.assertEqual(cleared["json"]["state"]["view_filter"]["mode"], "search")
 
     def test_bootstrap_registers_installs_and_mounts_monitor(self) -> None:
         repo_root = self.make_repo_root()

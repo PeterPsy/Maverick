@@ -12,7 +12,8 @@ type WidgetContext = {
 };
 
 function contextToken() {
-  return new URLSearchParams(window.location.search).get('context') || '';
+  const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;
+  return new URLSearchParams(hash).get('context') || new URLSearchParams(window.location.search).get('context') || '';
 }
 
 async function loadWidgetContext(): Promise<WidgetContext> {
@@ -97,4 +98,3 @@ function DynamicViewWidget() {
 }
 
 createRoot(document.getElementById('dynamic-view-widget-root') as HTMLElement).render(<DynamicViewWidget />);
-

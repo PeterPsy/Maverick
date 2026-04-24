@@ -18,6 +18,10 @@ tool_actions = {
     "app_store_reference_search": "references.search",
     "app_store_reference_resolve": "references.resolve",
     "app_store_reference_summarize": "references.summarize",
+    "app_store_view_filter": "view_filter",
+    "app_store_set_view_filter": "set_view_filter",
+    "app_store_set_custom_view": "set_custom_view",
+    "app_store_clear_custom_view": "clear_custom_view",
 }
 body = {"action": tool_actions.get(str(payload.get("tool_name") or ""), arguments.get("action") or "catalog"), **arguments}
 try:

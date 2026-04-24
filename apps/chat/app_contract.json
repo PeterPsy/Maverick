@@ -19,6 +19,10 @@
       "threads.create",
       "message.send",
       "turn.stop",
+      "chat_view_filter",
+      "chat_set_view_filter",
+      "chat_set_custom_view",
+      "chat_clear_custom_view",
       "chat_reference_manifest",
       "chat_reference_search",
       "chat_reference_resolve",
@@ -27,7 +31,9 @@
     "cli_commands": [
       "chat"
     ],
-    "skills": [],
+    "skills": [
+      "chat-ops"
+    ],
     "views": [
       "chat"
     ],
@@ -39,9 +45,46 @@
       {
         "resource": "projects",
         "description": "Emitted when chat projects change through official Chat app surfaces."
+      },
+      {
+        "resource": "view-state",
+        "description": "Emitted when Chat thread/project browse filters or curated selections change through official Chat app surfaces."
       }
     ],
-    "view_surfaces": [],
+    "view_surfaces": [
+      {
+        "view_id": "chat",
+        "display_name": "Chat",
+        "entity_types": [
+          "thread",
+          "project"
+        ],
+        "state_actions": [
+          {
+            "action": "view_filter",
+            "standard": true,
+            "description": "Read the current Chat thread and project browse state."
+          },
+          {
+            "action": "set_view_filter",
+            "standard": true,
+            "description": "Set Chat thread and project query filters."
+          },
+          {
+            "action": "set_custom_view",
+            "standard": true,
+            "description": "Show a curated set of Chat thread and project references."
+          },
+          {
+            "action": "clear_custom_view",
+            "standard": true,
+            "description": "Return Chat to normal thread and project browsing mode."
+          }
+        ],
+        "supports_custom_view": true,
+        "supports_filter_refinement": true
+      }
+    ],
     "reference_entities": [
       {
         "entity_type": "thread",

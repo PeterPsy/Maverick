@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import {
+  isRuntimeSessionUnavailableError,
   listRuntimeEvents,
   RuntimeEvent,
   runtimeEventFromWebSocketFrame,
@@ -15,6 +16,7 @@ import { eventsToMessages } from "../lib/transcript";
 type RuntimeEventsArgs = {
   runtimeSessionId: string | null;
   activeTurn: RuntimeTurn | null;
+  onRuntimeSessionUnavailable?: ((runtimeSessionId: string) => void) | null;
   setActiveTurn: Dispatch<SetStateAction<RuntimeTurn | null>>;
   setEvents: Dispatch<SetStateAction<RuntimeEvent[]>>;
   setError: Dispatch<SetStateAction<string | null>>;
@@ -57,6 +59,7 @@ export function applyRuntimeEventEffects(
 
 export function useRuntimeEvents({
   activeTurn,
+  onRuntimeSessionUnavailable,
   runtimeSessionId,
   setActiveTurn,
   setError,
@@ -64,9 +67,13 @@ export function useRuntimeEvents({
   setPendingUserMessages,
 }: RuntimeEventsArgs) {
   const activeTurnRef = useRef<RuntimeTurn | null>(activeTurn);
+  const onRuntimeSessionUnavailableRef = useRef<typeof onRuntimeSessionUnavailable>(onRuntimeSessionUnavailable);
   useEffect(() => {
     activeTurnRef.current = activeTurn;
   }, [activeTurn]);
+  useEffect(() => {
+    onRuntimeSessionUnavailableRef.current = onRuntimeSessionUnavailable;
+  }, [onRuntimeSessionUnavailable]);
 
   useEffect(() => {
     if (!runtimeSessionId) {
@@ -79,6 +86,21 @@ export function useRuntimeEvents({
     let reconnectTimer: number | null = null;
     let lastEventId: string | null = null;
     let socketOpened = false;
+    let unavailableReported = false;
+
+    function reportUnavailableSession() {
+      if (cancelled || unavailableReported) {
+        return;
+      }
+      unavailableReported = true;
+      stopHttpFallback();
+      if (reconnectTimer !== null) {
+        window.clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      setError(null);
+      onRuntimeSessionUnavailableRef.current?.(currentSessionId);
+    }
 
     function applyIncomingEvents(incoming: RuntimeEvent[]) {
       if (!incoming.length) {
@@ -102,6 +124,10 @@ export function useRuntimeEvents({
         applyIncomingEvents(runtimeEvents.items);
         setError(null);
       } catch (pollError) {
+        if (isRuntimeSessionUnavailableError(pollError, currentSessionId)) {
+          reportUnavailableSession();
+          return;
+        }
         if (!isTransientReplayError(pollError)) {
           setError(pollError instanceof Error ? pollError.message : "Unable to refresh runtime events.");
         }
@@ -167,7 +193,7 @@ export function useRuntimeEvents({
         }
       };
       socket.onclose = () => {
-        if (cancelled) {
+        if (cancelled || unavailableReported) {
           return;
         }
         if (!socketOpened) {

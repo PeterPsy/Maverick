@@ -71,19 +71,82 @@ export type ProviderStatus = {
     description: string;
     status: string;
     default_model_family: string | null;
+    model_options: ProviderModelOption[];
     capabilities: Record<string, boolean>;
   };
-  selection: Record<string, unknown> | null;
+  selection: {
+    workspace_id: string;
+    provider_id: string;
+    binding_id: string | null;
+    selection_scope: string;
+    selection_reason: string;
+    updated_at: string;
+    model_id: string | null;
+    model_reasoning_effort: string | null;
+  } | null;
+  model_settings: ProviderModelSettings;
+};
+
+export type ProviderReasoningOption = {
+  effort: string;
+  label: string;
+  description: string | null;
+};
+
+export type ProviderModelOption = {
+  model_id: string;
+  label: string;
+  description: string | null;
+  default_reasoning_effort: string | null;
+  supported_reasoning_efforts: ProviderReasoningOption[];
+};
+
+export type ProviderModelSettings = {
+  selected_model_id: string | null;
+  selected_reasoning_effort: string | null;
+  available_models: ProviderModelOption[];
+};
+
+export type RuntimeSessionItem = {
+  session_id: string;
+  workspace_id: string;
+  workspace_name?: string;
+  agent_id: string;
+  source_app_id?: string | null;
+  provider_id?: string | null;
+  provider_thread_id?: string | null;
+  status: string;
+  requested_mode?: string | null;
+  effective_mode: string;
+  started_at?: string | null;
+  updated_at?: string | null;
+  ended_at?: string | null;
+  last_progress_at: string | null;
 };
 
 export type RuntimeStatus = ProviderStatus & {
-  sessions: Array<{
+  sessions: RuntimeSessionItem[];
+  all_sessions?: RuntimeSessionItem[];
+  cleanup_allowed?: boolean;
+  cleanup_scope?: "none" | "workspace" | "server";
+};
+
+export type RuntimeCleanupPayload = {
+  cleared_sessions: number;
+  terminated_processes: number;
+  cancelled_turns: number;
+  deleted_threads: number;
+  deleted_thread_ids: string[];
+  runtime_roots_deleted: number;
+  deleted: Record<string, number>;
+  results: Array<{
     session_id: string;
-    agent_id: string;
-    status: string;
-    effective_mode: string;
-    last_progress_at: string | null;
+    workspace_id: string;
+    deleted: Record<string, number>;
+    deleted_threads: number;
+    runtime_root_deleted: boolean;
   }>;
+  sessions: RuntimeSessionItem[];
 };
 
 export type PlatformSettings = {
@@ -222,12 +285,36 @@ export function getActiveProvider(): Promise<ProviderStatus> {
   return requestJson<ProviderStatus>("/api/providers/active");
 }
 
+export function configureActiveProvider(payload: {
+  provider_id: string;
+  model_id?: string | null;
+  model_reasoning_effort?: string | null;
+}): Promise<ProviderStatus> {
+  return requestJson<ProviderStatus>("/api/providers/active", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
 export function getRuntimeStatus(): Promise<RuntimeStatus> {
   return requestJson<RuntimeStatus>("/api/runtime/status");
 }
 
 export function getPlatformSettings(): Promise<PlatformSettings> {
   return requestJson<PlatformSettings>("/api/settings/platform");
+}
+
+export function listRuntimeSessions(): Promise<{ items: RuntimeSessionItem[] }> {
+  return requestJson<{ items: RuntimeSessionItem[] }>("/api/settings/runtime-sessions");
+}
+
+export function clearRuntimeSessions(session_ids?: string[], reason = "base_shell_settings_cleared"): Promise<RuntimeCleanupPayload> {
+  return requestJson<RuntimeCleanupPayload>("/api/settings/runtime-sessions/clear", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session_ids, reason }),
+  });
 }
 
 export function listWidgets(host: string, contentKind: string): Promise<WidgetRegistryPayload> {

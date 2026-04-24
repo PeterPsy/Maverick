@@ -41,17 +41,19 @@ export type ChatSidebarPayload = {
   preferences?: Record<string, unknown>;
 };
 
-export type RuntimeTermination = {
+export type RuntimeCleanup = {
   session_id: string;
   found: boolean;
   terminated_processes: number;
   cancelled_turns: number;
+  deleted_threads?: number;
+  runtime_root_deleted?: boolean;
 };
 
 export type DeleteThreadPayload = ChatSidebarPayload & {
   deleted_thread_id?: string;
   deleted_runtime_session_id?: string;
-  runtime_termination?: RuntimeTermination;
+  runtime_cleanup?: RuntimeCleanup;
 };
 
 export type RuntimeSession = {
@@ -189,6 +191,18 @@ export type RuntimeSessionOptions = {
   skill_ids?: string[];
 };
 
+export class ApiError extends Error {
+  path: string;
+  status: number;
+
+  constructor(message: string, { path, status }: { path: string; status: number }) {
+    super(message);
+    this.name = "ApiError";
+    this.path = path;
+    this.status = status;
+  }
+}
+
 async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {
     credentials: "same-origin",
@@ -203,9 +217,22 @@ async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> 
     } catch {
       // Keep the HTTP fallback detail.
     }
-    throw new Error(detail);
+    throw new ApiError(detail, { path, status: response.status });
   }
   return (await response.json()) as T;
+}
+
+export function isRuntimeSessionUnavailableError(error: unknown, sessionId?: string): boolean {
+  if (!(error instanceof ApiError)) {
+    return false;
+  }
+  if (error.status !== 403 && error.status !== 404) {
+    return false;
+  }
+  const runtimePathPrefix = sessionId
+    ? `/api/runtime/sessions/${encodeURIComponent(sessionId)}`
+    : "/api/runtime/sessions/";
+  return error.path.startsWith(runtimePathPrefix);
 }
 
 export function listProviders(): Promise<ProviderPayload> {
@@ -277,8 +304,8 @@ export function getRuntimeSession(sessionId: string): Promise<RuntimeSession> {
   return requestJson<RuntimeSession>(`/api/runtime/sessions/${encodeURIComponent(sessionId)}`);
 }
 
-export function terminateRuntimeSession(sessionId: string, reason = "runtime_session_terminated"): Promise<RuntimeTermination> {
-  return requestJson<RuntimeTermination>(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/terminate`, {
+export function cleanupRuntimeSession(sessionId: string, reason = "runtime_session_cleaned"): Promise<RuntimeCleanup> {
+  return requestJson<RuntimeCleanup>(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/cleanup`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ reason }),
@@ -439,7 +466,7 @@ export async function deleteThread(threadId: string): Promise<ChatSidebarPayload
     body: JSON.stringify({ action: "threads.delete", thread_id: threadId }),
   });
   if (payload.deleted_runtime_session_id) {
-    payload.runtime_termination = await terminateRuntimeSession(payload.deleted_runtime_session_id, "chat_thread_deleted");
+    payload.runtime_cleanup = await cleanupRuntimeSession(payload.deleted_runtime_session_id, "chat_thread_deleted");
   }
   return payload;
 }

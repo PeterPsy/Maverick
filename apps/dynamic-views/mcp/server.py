@@ -19,6 +19,10 @@ tool_actions = {
     "dynamic_views_reference_search": "references.search",
     "dynamic_views_reference_resolve": "references.resolve",
     "dynamic_views_reference_summarize": "references.summarize",
+    "dynamic_views_view_filter": "view_filter",
+    "dynamic_views_set_view_filter": "set_view_filter",
+    "dynamic_views_set_custom_view": "set_custom_view",
+    "dynamic_views_clear_custom_view": "clear_custom_view",
 }
 body = {"action": tool_actions.get(str(payload.get("tool_name") or ""), arguments.get("action") or "list"), **arguments}
 try:

@@ -34,6 +34,8 @@ class ProviderSelectionService:
         workspace_id: str,
         provider_id: str,
         binding_id: str | None = None,
+        model_id: str | None = None,
+        model_reasoning_effort: str | None = None,
         selection_reason: str = "configured by control-plane policy",
         now: datetime | None = None,
     ) -> ProviderSelection:
@@ -60,6 +62,8 @@ class ProviderSelectionService:
             selection_reason=selection_reason,
             created_at=timestamp,
             updated_at=timestamp,
+            model_id=model_id,
+            model_reasoning_effort=model_reasoning_effort,
         )
         return self.store.save_provider_selection(selection)
 

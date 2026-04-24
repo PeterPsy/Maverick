@@ -295,7 +295,7 @@ export function WidgetSlot({
     return error ? <p className="bs-widget-slot__fallback">{error}</p> : null;
   }
 
-  const src = `${widget.frontend_mount}?context=${encodeURIComponent(contextToken)}`;
+  const src = `${widget.frontend_mount}#context=${encodeURIComponent(contextToken)}`;
   const isCollapsedOverlay = size === "overlay" && overlaySize.width === "3rem" && overlaySize.height === "3rem";
 
   return (

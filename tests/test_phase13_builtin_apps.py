@@ -23,10 +23,13 @@ from core.apps.contracts import (
     parse_app_contract_file,
     write_app_contract_file,
 )
-from core.apps.service import install_workspace_local_app, register_workspace_local_app_project_from_contract
+from core.apps.models import WorkspaceAppBindingRecord
+from core.apps.service import install_workspace_local_app, register_app_source_from_contract, register_workspace_local_app_project_from_contract
+from core.apps.store import AppCollections, MongoAppStore
 from core.cli.service import list_core_cli_commands
 from core.mcp.service import list_mcp_tools
 from core.recovery.backend_restart import BACKEND_RESTART_CONTINUATION_INPUT_TEXT
+from core.runtime.errors import RuntimeSessionNotFoundError, RuntimeTurnNotFoundError
 from core.runtime.service import (
     create_runtime_session,
     queue_runtime_turn,
@@ -35,6 +38,7 @@ from core.runtime.service import (
     transition_runtime_turn,
 )
 from core.skills.service import list_available_workspace_skills
+from core.shared.in_memory_collection import InMemoryCollection
 from core.workspaces.service import create_workspace, ensure_workspace_layout
 
 
@@ -45,10 +49,15 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
         repo_root = Path(temp_dir.name) / "maverick-v3"
-        for name in ("core", "apps", "workspaces", "scripts"):
+        for name in ("apps", "workspaces", "scripts"):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
         (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
+        shutil.copytree(
+            Path(__file__).resolve().parents[1] / "core",
+            repo_root / "core",
+            ignore=shutil.ignore_patterns("__pycache__"),
+        )
         source_apps_root = Path(__file__).resolve().parents[1] / "apps"
         shutil.copytree(
             source_apps_root / "base-shell",
@@ -143,6 +152,57 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
                     break
             if not parsed.contract.lifecycle.rebuild or not has_build_script:
                 missing.append(parsed.app_id)
+
+        self.assertEqual(missing, [])
+
+    def test_all_builtin_rebuildable_frontend_apps_expose_frontend_build_cli(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        source_apps_root = Path(__file__).resolve().parents[1] / "apps"
+        app_store = MongoAppStore(
+            AppCollections(
+                app_sources=InMemoryCollection(),
+                workspace_local_app_projects=InMemoryCollection(),
+                workspace_app_bindings=InMemoryCollection(),
+            )
+        )
+        for source_app_root in sorted(source_apps_root.iterdir()):
+            if not source_app_root.is_dir() or not (source_app_root / "app_contract.json").is_file():
+                continue
+            source = register_app_source_from_contract(
+                app_store,
+                source_kind="platform",
+                source_path=str(source_app_root),
+            )
+            app_store.save_workspace_app_binding(
+                WorkspaceAppBindingRecord(
+                    binding_id=f"default:{source.app_id}",
+                    workspace_id="default",
+                    app_id=source.app_id,
+                    source_record_id=source.source_id,
+                    source_kind=source.source_kind,
+                    status="enabled",
+                    active_version=source.version,
+                    data_root=f"workspaces/default/data/{source.app_id}",
+                    installed_at=source.created_at,
+                    updated_at=source.updated_at,
+                )
+            )
+
+        commands = {
+            command.command_id
+            for command in list_core_cli_commands(
+                app_store=app_store,
+                workspace_id="default",
+                start_path=repo_root,
+            )
+        }
+        expected = []
+        for contract_path in sorted(source_apps_root.glob("*/app_contract.json")):
+            parsed = parse_app_contract_file(contract_path.parent)
+            if parsed.contract.entrypoints.frontend is not None and parsed.contract.lifecycle.rebuild:
+                expected.append(f"app.{parsed.app_id}.frontend.build")
+
+        missing = [command_id for command_id in expected if command_id not in commands]
 
         self.assertEqual(missing, [])
 
@@ -312,11 +372,15 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
         app = PlatformHost(state, start_path=repo_root)
 
         status_root, body_root, _headers_root = self.invoke(app, path="/")
+        status_shell_deep_link, body_shell_deep_link, _headers_shell_deep_link = self.invoke(app, path="/app/chat/threads/thread-123")
         status_chat, body_chat, _headers_chat = self.invoke(app, path="/apps/chat/")
 
         self.assertEqual(status_root, 200)
+        self.assertEqual(status_shell_deep_link, 200)
         self.assertEqual(status_chat, 200)
         self.assertIn(b'id="root"', body_root)
+        self.assertIn(b'id="root"', body_shell_deep_link)
+        self.assertIn(b"/apps/base-shell/assets/index-", body_shell_deep_link)
         self.assertIn(b"/apps/base-shell/assets/index-", body_root)
         self.assertNotIn(b"Base shell app mounted by the core", body_root)
         self.assertNotIn(b'src="/apps/chat/"', body_root)
@@ -653,6 +717,9 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
     def test_chat_declares_base_shell_widgets(self) -> None:
         repo_root = self.make_repo_root()
         parsed = parse_app_contract_file(repo_root / "apps" / "chat")
+        self.assertIn("chat_set_view_filter", parsed.contract.capabilities.mcp_tools)
+        self.assertEqual(parsed.contract.capabilities.view_surfaces[0].view_id, "chat")
+        self.assertEqual(parsed.contract.capabilities.view_surfaces[0].entity_types, ["thread", "project"])
         widgets = {widget.widget_id: widget for widget in parsed.contract.widgets}
 
         self.assertIn("chat-sidebar", widgets)
@@ -746,7 +813,7 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
         self.assertIsNone(rename_payload["thread"]["project_id"])
         self.assertEqual(delete_payload["threads"], [])
 
-    def test_chat_thread_delete_exposes_runtime_session_for_generic_termination(self) -> None:
+    def test_chat_thread_delete_exposes_runtime_session_for_generic_cleanup(self) -> None:
         repo_root = self.make_repo_root()
         state = bootstrap_platform_state(start_path=repo_root)
         app = PlatformHost(state, start_path=repo_root)
@@ -779,24 +846,27 @@ class Phase13BuiltinAppsTestCase(unittest.TestCase):
             body={"action": "threads.delete", "thread_id": thread_id},
         )
         delete_payload = json.loads(delete_body.decode("utf-8"))
-        status_terminate, terminate_body, _terminate_headers = self.invoke(
+        status_cleanup, cleanup_body, _cleanup_headers = self.invoke(
             app,
-            path=f"/api/runtime/sessions/{session.session_id}/terminate",
+            path=f"/api/runtime/sessions/{session.session_id}/cleanup",
             method="POST",
             body={"reason": "chat_thread_deleted"},
             cookie=cookie,
         )
-        terminate_payload = json.loads(terminate_body.decode("utf-8"))
+        cleanup_payload = json.loads(cleanup_body.decode("utf-8"))
 
         self.assertEqual(status_thread, 201)
         self.assertEqual(status_delete, 200)
         self.assertEqual(delete_payload["deleted_runtime_session_id"], session.session_id)
-        self.assertNotIn("runtime_termination", delete_payload)
-        self.assertEqual(status_terminate, 200)
-        self.assertEqual(terminate_payload["session_id"], session.session_id)
-        self.assertEqual(terminate_payload["cancelled_turns"], 1)
-        self.assertEqual(state.runtime_store.get_session(session.session_id).status, "stopped")
-        self.assertEqual(state.runtime_store.get_turn(turn.turn_id).status, "cancelled")
+        self.assertNotIn("runtime_cleanup", delete_payload)
+        self.assertEqual(status_cleanup, 200)
+        self.assertEqual(cleanup_payload["session_id"], session.session_id)
+        self.assertEqual(cleanup_payload["cancelled_turns"], 1)
+        self.assertEqual(cleanup_payload["deleted"]["sessions"], 1)
+        with self.assertRaises(RuntimeSessionNotFoundError):
+            state.runtime_store.get_session(session.session_id)
+        with self.assertRaises(RuntimeTurnNotFoundError):
+            state.runtime_store.get_turn(turn.turn_id)
 
 
 if __name__ == "__main__":

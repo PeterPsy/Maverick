@@ -7,6 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 from errors import DocumentValidationError
+from extractors import extract_text_from_workspace_file
 from generators.docx_generator import generate_docx
 from generators.pdf_generator import generate_pdf
 from generators.pptx_generator import generate_pptx
@@ -19,7 +20,11 @@ from store import (
     safe_output_filename,
     save_job,
     seed_state,
+    clear_custom_view_payload,
+    set_custom_view_payload,
+    set_view_filter_payload,
     utc_now,
+    view_state,
 )
 
 
@@ -41,9 +46,11 @@ REFERENCE_MANIFEST = {
 
 
 def app_events_for_action(action: str) -> list[dict]:
-    if action != "generate_document":
-        return []
-    return [{"type": "maverick.app.data-changed", "resource": "documents"}]
+    if action == "generate_document":
+        return [{"type": "maverick.app.data-changed", "resource": "documents"}]
+    if action in {"set_view_filter", "set_custom_view", "clear_custom_view"}:
+        return [{"type": "maverick.app.data-changed", "resource": "view-state"}]
+    return []
 
 
 def _workspace_relative(path: Path, generated_root: Path) -> str:
@@ -106,16 +113,26 @@ def validate_spec(raw_spec: Any) -> dict[str, Any]:
     }
 
 
-def handle_action(data_root: Path, generated_root: Path, body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+def handle_action(data_root: Path, generated_root: Path, body: dict[str, Any], uploaded_root: Path | None = None) -> tuple[int, dict[str, Any]]:
     action = str(body.get("action") or "generate_document")
     if action == "generate_document":
         return 200, generate_document(data_root, generated_root, body.get("spec"))
     if action == "validate_spec":
         return 200, validate_spec(body.get("spec"))
+    if action == "extract_text":
+        return 200, extract_text_from_workspace_file(uploaded_root, generated_root, body)
     if action == "list_templates":
         return 200, {"templates": list_templates(data_root)}
     if action == "list_outputs":
         return 200, {"documents": list_jobs(data_root)}
+    if action == "view_filter":
+        return 200, {"state": view_state(data_root)}
+    if action == "set_view_filter":
+        return 200, {"state": set_view_filter_payload(data_root, body)}
+    if action == "set_custom_view":
+        return 200, {"state": set_custom_view_payload(data_root, body)}
+    if action == "clear_custom_view":
+        return 200, {"state": clear_custom_view_payload(data_root)}
     if action == "health.check":
         seed_state(data_root)
         generated_root.mkdir(parents=True, exist_ok=True)

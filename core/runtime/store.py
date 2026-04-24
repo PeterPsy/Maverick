@@ -32,6 +32,9 @@ class MongoCollection(Protocol):
     def update_one(self, query: dict[str, Any], update: dict[str, Any], *, upsert: bool = False) -> Any:
         ...
 
+    def delete_one(self, query: dict[str, Any]) -> Any:
+        ...
+
 
 @dataclass(frozen=True)
 class RuntimeCollections:
@@ -92,6 +95,9 @@ class RuntimeStore(Protocol):
     def get_state(self, session_id: str) -> RuntimeStateRecord:
         ...
 
+    def delete_session_records(self, session_id: str) -> dict[str, int]:
+        ...
+
 
 class MongoRuntimeStore:
     """Persist runtime-domain records in Mongo-style collections."""
@@ -114,6 +120,43 @@ class MongoRuntimeStore:
 
     def list_all_sessions(self) -> list[RuntimeSessionRecord]:
         return [RuntimeSessionRecord(**document) for document in self.collections.sessions.find({})]
+
+    def delete_session_records(self, session_id: str) -> dict[str, int]:
+        session_document = self.collections.sessions.find_one({"session_id": session_id}) or {}
+        workspace_id = session_document.get("workspace_id") if isinstance(session_document, dict) else None
+        deleted = {
+            "sessions": 1 if session_document else 0,
+            "turns": 0,
+            "events": 0,
+            "processes": 0,
+            "states": 0,
+        }
+        deleted["turns"] = _delete_session_records(
+            self.collections.turns,
+            session_id=session_id,
+            workspace_id=workspace_id,
+            identity_field="turn_id",
+        )
+        deleted["events"] = _delete_session_records(
+            self.collections.events,
+            session_id=session_id,
+            workspace_id=workspace_id,
+            identity_field="event_id",
+        )
+        deleted["processes"] = _delete_session_records(
+            self.collections.processes,
+            session_id=session_id,
+            workspace_id=workspace_id,
+            identity_field="process_id",
+        )
+        deleted["states"] = _delete_session_records(
+            self.collections.states,
+            session_id=session_id,
+            workspace_id=workspace_id,
+            identity_field="session_id",
+        )
+        self.collections.sessions.delete_one({"session_id": session_id})
+        return deleted
 
     def save_turn(self, record: RuntimeTurnRecord) -> RuntimeTurnRecord:
         self.collections.turns.update_one({"turn_id": record.turn_id}, {"$set": asdict(record)}, upsert=True)
@@ -168,3 +211,16 @@ def runtime_location(workspace_id: str, start_path=None) -> RuntimeLocation:
         workspace_id=workspace_id,
         path=workspace_runtime_root(workspace_id=workspace_id, start_path=start_path),
     )
+
+
+def _delete_session_records(collection: MongoCollection, *, session_id: str, workspace_id: str | None, identity_field: str) -> int:
+    delete_session_partition = getattr(collection, "delete_session_partition", None)
+    if callable(delete_session_partition):
+        return int(delete_session_partition(session_id=session_id, workspace_id=workspace_id))
+    deleted = 0
+    for document in collection.find({"session_id": session_id}):
+        identity_value = document.get(identity_field)
+        if isinstance(identity_value, str):
+            collection.delete_one({identity_field: identity_value})
+            deleted += 1
+    return deleted

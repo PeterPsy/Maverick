@@ -61,7 +61,7 @@ class GeneratedAppContractTest(unittest.TestCase):
         self.assertEqual(result["status_code"], 201)
         self.assertEqual(result["chat_render"]["kind"], "checklist.design")
         self.assertEqual(result["chat_render"]["legacy_kind"], "design_checklist")
-        self.assertEqual(result["chat_render"]["payload"]["sections"][0]["tasks"][0]["title"], "Define name")
+        self.assertEqual(result["chat_render"]["payload"]["id"], result["checklist"]["id"])
 
     def test_backend_updates_v2_style_sections(self) -> None:
         app_root = Path(__file__).resolve().parents[1]

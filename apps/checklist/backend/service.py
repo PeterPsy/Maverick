@@ -36,6 +36,8 @@ MUTATING_ACTIONS = {
     "add_item",
     "toggle_task",
     "toggle_item",
+}
+VIEW_STATE_ACTIONS = {
     "set_view_filter",
     "set_custom_view",
     "clear_custom_view",
@@ -149,9 +151,12 @@ def describe(data_root: Path) -> dict[str, Any]:
 
 def app_events_for_action(action: str) -> list[dict[str, str]]:
     """Return app data-change events for mutating actions."""
-    if action.strip().lower() not in MUTATING_ACTIONS:
-        return []
-    return [{"type": "maverick.app.data-changed", "owner_app_id": "checklist", "resource": "state"}]
+    normalized = action.strip().lower()
+    if normalized in MUTATING_ACTIONS:
+        return [{"type": "maverick.app.data-changed", "owner_app_id": "checklist", "resource": "state"}]
+    if normalized in VIEW_STATE_ACTIONS:
+        return [{"type": "maverick.app.data-changed", "owner_app_id": "checklist", "resource": "view-state"}]
+    return []
 
 
 def mcp_result_for_tool(data_root: Path, tool_name: str, arguments: dict[str, Any]) -> tuple[int, dict[str, Any]]:

@@ -425,7 +425,8 @@
       <main id="root" class="widget-error">Carico checklist...</main>
     </div>
     <script>
-      const token = new URLSearchParams(window.location.search).get("context") || "";
+      const hash = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash;
+      const token = new URLSearchParams(hash).get("context") || new URLSearchParams(window.location.search).get("context") || "";
       const APP_ID = "checklist";
       const WIDGET_ID = "design-checklist";
       const APP_EVENTS_WS_PATH = "/api/apps/events/ws";
@@ -556,6 +557,14 @@
               payload: snapshot
             });
             if (version === localVersion) {
+              const nextChecklist = result.checklist && typeof result.checklist === "object" ? result.checklist : null;
+              if (nextChecklist) {
+                debugLog("save.success", { checklistId, version, pendingFocus });
+                normalizeChecklistRecord(nextChecklist);
+                localVersion = 0;
+                render("Checklist salvata.");
+                return;
+              }
               const next = result.chat_render && result.chat_render.payload ? result.chat_render.payload : null;
               if (next) {
                 debugLog("save.success", { checklistId, version, pendingFocus });
@@ -705,7 +714,14 @@
       const normalizePayload = (content) => {
         const payload = content && typeof content.payload === "object" ? content.payload : {};
         const memory = content && typeof content.memory === "object" ? content.memory : {};
-        checklistId = typeof memory.checklist_id === "string" ? memory.checklist_id : "";
+        checklistId =
+          typeof payload.id === "string" && payload.id
+            ? payload.id
+            : typeof payload.checklist_id === "string" && payload.checklist_id
+              ? payload.checklist_id
+              : typeof memory.checklist_id === "string"
+                ? memory.checklist_id
+                : "";
         state = {
           title: String(payload.title || "Checklist"),
           summary: String(payload.summary || ""),
@@ -732,6 +748,13 @@
         }
         const context = await loadContext();
         normalizePayload(context.content || {});
+        if (checklistId) {
+          const result = await backend({ action: "read", id: checklistId });
+          normalizeChecklistRecord(result.checklist || {});
+          debugLog("refresh.success", { checklistId, mode: "context-read" });
+          render("Checklist aggiornata.");
+          return;
+        }
         debugLog("refresh.success", { checklistId, mode: "context" });
         render();
       };

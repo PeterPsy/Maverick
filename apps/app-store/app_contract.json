@@ -16,6 +16,10 @@
   "capabilities": {
     "mcp_tools": [
       "maverick_app_store",
+      "app_store_view_filter",
+      "app_store_set_view_filter",
+      "app_store_set_custom_view",
+      "app_store_clear_custom_view",
       "app_store_reference_manifest",
       "app_store_reference_search",
       "app_store_reference_resolve",
@@ -24,7 +28,9 @@
     "cli_commands": [
       "app-store"
     ],
-    "skills": [],
+    "skills": [
+      "app-store-ops"
+    ],
     "views": [
       "app-store"
     ],
@@ -32,9 +38,45 @@
       {
         "resource": "state",
         "description": "Emitted when pinned apps or remembered installs change through official App Store surfaces."
+      },
+      {
+        "resource": "view-state",
+        "description": "Emitted when App Store catalog filters or curated selections change through official App Store surfaces."
       }
     ],
-    "view_surfaces": [],
+    "view_surfaces": [
+      {
+        "view_id": "app-store",
+        "display_name": "App Store",
+        "entity_types": [
+          "installed_app"
+        ],
+        "state_actions": [
+          {
+            "action": "view_filter",
+            "standard": true,
+            "description": "Read the current App Store catalog view state."
+          },
+          {
+            "action": "set_view_filter",
+            "standard": true,
+            "description": "Set the App Store query and scope filter."
+          },
+          {
+            "action": "set_custom_view",
+            "standard": true,
+            "description": "Show a curated set of installed app references."
+          },
+          {
+            "action": "clear_custom_view",
+            "standard": true,
+            "description": "Return App Store to normal catalog browsing mode."
+          }
+        ],
+        "supports_custom_view": true,
+        "supports_filter_refinement": true
+      }
+    ],
     "reference_entities": [
       {
         "entity_type": "installed_app",

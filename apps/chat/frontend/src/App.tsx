@@ -7,6 +7,7 @@ import {
   AppReference,
   getAgentsCommonPrompt,
   getThread,
+  isRuntimeSessionUnavailableError,
   getRuntimeSession,
   getWidgetContext,
   interruptRuntimeTurn,
@@ -168,6 +169,7 @@ export function App({
 
   useRuntimeEvents({
     activeTurn,
+    onRuntimeSessionUnavailable: handleUnavailableRuntimeSession,
     runtimeSessionId: activeThread?.runtime_session_id || null,
     setActiveTurn,
     setError,
@@ -264,10 +266,18 @@ export function App({
           setActiveTurn(cachedHistory.activeTurn || inferActiveRuntimeTurn(cachedHistory.events, firstThread.runtime_session_id));
           void refreshRuntimeHistory(firstThread.runtime_session_id);
         } else {
-          const runtimeHistory = await fetchRuntimeHistory(firstThread.runtime_session_id);
-          setActiveSession(runtimeHistory.session);
-          setEvents(runtimeHistory.events);
-          setActiveTurn(runtimeHistory.activeTurn);
+          try {
+            const runtimeHistory = await fetchRuntimeHistory(firstThread.runtime_session_id);
+            setActiveSession(runtimeHistory.session);
+            setEvents(runtimeHistory.events);
+            setActiveTurn(runtimeHistory.activeTurn);
+          } catch (runtimeHistoryError) {
+            if (isRuntimeSessionUnavailableError(runtimeHistoryError, firstThread.runtime_session_id)) {
+              await handleUnavailableRuntimeSession(firstThread.runtime_session_id);
+            } else {
+              throw runtimeHistoryError;
+            }
+          }
         }
       } else {
         setActiveSession(null);
@@ -401,6 +411,31 @@ export function App({
     }
   }
 
+  async function handleUnavailableRuntimeSession(runtimeSessionId: string) {
+    if (!runtimeSessionId) {
+      return;
+    }
+    historyCacheRef.current.delete(runtimeSessionId);
+    clearRuntimeHistoryCache(runtimeHistoryCacheKey(navigationScope, runtimeSessionId));
+    if (activeRuntimeSessionIdRef.current === runtimeSessionId) {
+      activeRuntimeSessionIdRef.current = null;
+      setActiveSession(null);
+      setEvents([]);
+      setPendingUserMessages([]);
+      setFailedUserMessages([]);
+      setQueuedMessages([]);
+      setActiveTurn(null);
+    }
+    setThreads((current) =>
+      current.map((thread) => (thread.runtime_session_id === runtimeSessionId ? { ...thread, runtime_session_id: "", availability: "free" } : thread)),
+    );
+    setActiveThread((current) =>
+      current?.runtime_session_id === runtimeSessionId ? { ...current, runtime_session_id: "", availability: "free" } : current,
+    );
+    await refreshThreadsAfterDataChange("");
+    setError("This runtime session was cleaned and is no longer available.");
+  }
+
   async function handleSelectProvider(providerId: string) {
     setActiveProviderId(providerId);
     try {
@@ -483,6 +518,10 @@ export function App({
       setActiveTurn(runtimeHistory.activeTurn);
       setError(null);
     } catch (selectError) {
+      if (thread.runtime_session_id && isRuntimeSessionUnavailableError(selectError, thread.runtime_session_id)) {
+        await handleUnavailableRuntimeSession(thread.runtime_session_id);
+        return;
+      }
       setError(selectError instanceof Error ? selectError.message : "Unable to load thread.");
     } finally {
       if (historyRequestIdRef.current === requestId) {
@@ -492,15 +531,16 @@ export function App({
   }
 
   async function handleNavigationParams(params: Record<string, string | boolean | null>) {
-    const requestedThreadId = typeof params.thread_id === "string" ? params.thread_id : null;
-    const requestedRuntimeSessionId = typeof params.runtime_session_id === "string" ? params.runtime_session_id : null;
-    const newChatProjectId = scalarString(params.project_id) || null;
-    const runtimeThreadMetadata = runtimeSessionThreadMetadataFromParams(params);
-    const shouldCreateChat = params.new_chat === true || params.new_chat === "1";
+    const normalizedParams = normalizeChatRouteParams(params);
+    const requestedThreadId = typeof normalizedParams.thread_id === "string" ? normalizedParams.thread_id : null;
+    const requestedRuntimeSessionId = typeof normalizedParams.runtime_session_id === "string" ? normalizedParams.runtime_session_id : null;
+    const newChatProjectId = scalarString(normalizedParams.project_id) || null;
+    const runtimeThreadMetadata = runtimeSessionThreadMetadataFromParams(normalizedParams);
+    const shouldCreateChat = normalizedParams.new_chat === true || normalizedParams.new_chat === "1";
     debugThreadSync("app-navigation", {
       activeThreadId: activeThread?.thread_id || "",
       navigationScope,
-      params,
+      params: normalizedParams,
       requestedRuntimeSessionId,
       requestedThreadId,
       shouldCreateChat,
@@ -509,7 +549,7 @@ export function App({
     if (!requestedThreadId && !requestedRuntimeSessionId && !shouldCreateChat) {
       return;
     }
-    if (shouldCreateChat && !consumeNewChatRequest(params, consumedNewChatRequests.current, consumedLegacyNewChatRequest)) {
+    if (shouldCreateChat && !consumeNewChatRequest(normalizedParams, consumedNewChatRequests.current, consumedLegacyNewChatRequest)) {
       return;
     }
     setIsBootstrapping(true);
@@ -558,6 +598,12 @@ export function App({
       setQueuedMessages([]);
       setActiveTurn(runtimeHistory.activeTurn);
       notifyChatThreadsChanged({ active_thread_id: payload.thread.thread_id });
+    } catch (runtimeSessionError) {
+      if (isRuntimeSessionUnavailableError(runtimeSessionError, runtimeSessionId)) {
+        await handleUnavailableRuntimeSession(runtimeSessionId);
+        return;
+      }
+      throw runtimeSessionError;
     } finally {
       setIsHistoryLoading(false);
     }
@@ -610,6 +656,10 @@ export function App({
       setActiveTurn(runtimeHistory.activeTurn);
       setError(null);
     } catch (historyError) {
+      if (isRuntimeSessionUnavailableError(historyError, runtimeSessionId)) {
+        await handleUnavailableRuntimeSession(runtimeSessionId);
+        return;
+      }
       if (events.length === 0) {
         setError(historyError instanceof Error ? historyError.message : "Unable to refresh runtime history.");
       }
@@ -823,6 +873,21 @@ function runtimeSessionThreadMetadataFromParams(params: Record<string, string | 
   };
 }
 
+function normalizeChatRouteParams(params: Record<string, string | boolean | null>): Record<string, string | boolean | null> {
+  const appPage = scalarString(params.app_page);
+  if (!appPage) {
+    return params;
+  }
+  const [kind, id] = appPage.split("/").filter(Boolean);
+  if (kind === "threads" && id) {
+    return { ...params, thread_id: id };
+  }
+  if (kind === "runtime-sessions" && id) {
+    return { ...params, runtime_session_id: id };
+  }
+  return params;
+}
+
 function consumeNewChatRequest(
   params: Record<string, string | boolean | null>,
   consumedRequestIds: Set<string>,
@@ -844,7 +909,7 @@ function consumeNewChatRequest(
 }
 
 async function loadWidgetActiveAppContext(): Promise<ActiveAppContext | null> {
-  const token = new URLSearchParams(window.location.search).get("context");
+  const token = widgetContextToken();
   if (!token) {
     return null;
   }
@@ -854,6 +919,11 @@ async function loadWidgetActiveAppContext(): Promise<ActiveAppContext | null> {
   } catch {
     return null;
   }
+}
+
+function widgetContextToken(): string {
+  const hash = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash;
+  return new URLSearchParams(hash).get("context") || new URLSearchParams(window.location.search).get("context") || "";
 }
 
 async function loadDefaultSystemPrompt(activeApp: ActiveAppContext | null): Promise<string> {
@@ -965,6 +1035,14 @@ function persistRuntimeHistoryCache(storageKey: string, cacheEntry: RuntimeHisto
     );
   } catch {
     // History cache is an optimization for reloads; live HTTP/WebSocket history remains authoritative.
+  }
+}
+
+function clearRuntimeHistoryCache(storageKey: string) {
+  try {
+    window.sessionStorage.removeItem(storageKey);
+  } catch {
+    // Cache cleanup is best-effort and must not break live chat behavior.
   }
 }
 

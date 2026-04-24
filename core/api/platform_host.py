@@ -21,6 +21,7 @@ from core.api.settings_api import handle_settings_api
 from core.api.widget_api import handle_widget_api
 from core.api.workspace_files_api import handle_workspace_files_api
 from core.api.workspace_api import handle_workspace_api
+from core.shared.entrypoints import EntrypointShutdownController
 
 
 logger = logging.getLogger(__name__)
@@ -29,10 +30,18 @@ logger = logging.getLogger(__name__)
 class PlatformHost:
     """Serve the shell, mounted apps, and shell-facing core APIs."""
 
-    def __init__(self, state: PlatformState, *, workspace_id: str = "default", start_path: Path | None = None) -> None:
+    def __init__(
+        self,
+        state: PlatformState,
+        *,
+        workspace_id: str = "default",
+        start_path: Path | None = None,
+        shutdown_controller: EntrypointShutdownController | None = None,
+    ) -> None:
         self.state = state
         self.workspace_id = workspace_id
         self.start_path = start_path or state.repository_root
+        self.shutdown_controller = shutdown_controller
 
     def __call__(self, environ: dict, start_response: StartResponse) -> Iterable[bytes]:
         path = environ.get("PATH_INFO", "/")
@@ -95,7 +104,7 @@ class PlatformHost:
                     start_response,
                     {"items": enabled_app_items(self.state, workspace_id=workspace_id, start_path=self.start_path, user=user)},
                 )
-            if path == "/":
+            if path == "/" or path == "/app" or path.startswith("/app/"):
                 return handle_root_shell(
                     self.state,
                     workspace_id=workspace_id,
@@ -135,6 +144,7 @@ class PlatformHost:
                     user=user,
                     start_path=self.start_path,
                     start_response=start_response,
+                    shutdown_controller=self.shutdown_controller,
                 )
             return text_response(start_response, "Not found", status="404 Not Found")
         except Exception:

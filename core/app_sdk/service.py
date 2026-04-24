@@ -13,6 +13,7 @@ from core.app_sdk.models import (
     AppSdkValidationResult,
 )
 from core.app_sdk.templates import render_template_files
+from core.app_sdk.validation import validate_app_source_completeness
 from core.apps.contracts import APP_ID_PATTERN, parse_app_contract_file
 from core.apps.errors import AppHostingError
 from core.apps.paths import installed_app_root, workspace_apps_root
@@ -68,6 +69,7 @@ def validate_app_source(app_root: str | Path) -> AppSdkValidationResult:
                 message="Workspace-local apps must use source_access `editable`.",
             )
         )
+    issues.extend(validate_app_source_completeness(root, parsed))
     return AppSdkValidationResult(valid=not issues, app_id=parsed.app_id, app_root=str(root), issues=issues)
 
 
@@ -81,6 +83,7 @@ def register_local_app(
     """Register one workspace-local app project through generic app-hosting registration."""
     _validate_app_id(app_id)
     project_root = workspace_apps_root(workspace_id=workspace_id, start_path=start_path) / app_id
+    _raise_if_invalid(validate_app_source(project_root))
     record = register_workspace_local_app_project_from_contract(
         store,
         workspace_id=workspace_id,
@@ -105,6 +108,8 @@ def install_local_app(
 ) -> dict[str, str]:
     """Install one registered workspace-local app through generic app-hosting installation."""
     _validate_app_id(app_id)
+    project_root = workspace_apps_root(workspace_id=workspace_id, start_path=start_path) / app_id
+    _raise_if_invalid(validate_app_source(project_root))
     binding = install_workspace_local_app(
         store,
         workspace_id=workspace_id,
@@ -186,3 +191,10 @@ def _safe_child(root: Path, relative_path: str) -> Path:
 def _validate_app_id(app_id: str) -> None:
     if not APP_ID_PATTERN.fullmatch(app_id):
         raise AppSdkValidationError(f"App id `{app_id}` must use lowercase kebab-case.")
+
+
+def _raise_if_invalid(validation: AppSdkValidationResult) -> None:
+    if validation.valid:
+        return
+    details = "; ".join(f"{issue.field}: {issue.message}" for issue in validation.issues)
+    raise AppSdkValidationError(f"App source `{validation.app_root}` did not pass SDK validation: {details}")

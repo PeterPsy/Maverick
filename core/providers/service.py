@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from inspect import signature
 
 from core.observability.service import record_platform_audit, record_platform_event
 from core.providers.models import ProviderDefinition, ProviderSelection, RuntimeBackendLaunchSpec
@@ -64,6 +65,8 @@ def configure_workspace_provider(
     workspace_id: str,
     provider_id: str,
     binding_id: str | None = None,
+    model_id: str | None = None,
+    model_reasoning_effort: str | None = None,
     selection_reason: str = "configured by control-plane policy",
     registry: ProviderRegistry | None = None,
     codex_command: str = "codex",
@@ -73,11 +76,22 @@ def configure_workspace_provider(
     """Persist the selected runtime provider for one workspace."""
     active_registry = registry or builtin_provider_registry(codex_command=codex_command)
     register_builtin_providers(store, registry=active_registry, codex_command=codex_command)
+    normalized_model_id = str(model_id or "").strip() or None
+    normalized_reasoning_effort = str(model_reasoning_effort or "").strip() or None
+    adapter = active_registry.get_runtime_adapter(provider_id)
+    validate_model_settings = getattr(adapter, "validate_model_settings", None)
+    if callable(validate_model_settings):
+        normalized_model_id, normalized_reasoning_effort = validate_model_settings(
+            normalized_model_id,
+            normalized_reasoning_effort,
+        )
     service = ProviderSelectionService(store, active_registry)
     selection = service.configure_workspace_provider(
         workspace_id=workspace_id,
         provider_id=provider_id,
         binding_id=binding_id,
+        model_id=normalized_model_id,
+        model_reasoning_effort=normalized_reasoning_effort,
         selection_reason=selection_reason,
         now=now,
     )
@@ -90,7 +104,13 @@ def configure_workspace_provider(
             detail=f"Configured provider `{provider_id}` for workspace `{workspace_id}`.",
             workspace_id=workspace_id,
             provider_id=provider_id,
-            payload={"workspace_id": workspace_id, "provider_id": provider_id, "binding_id": selection.binding_id},
+            payload={
+                "workspace_id": workspace_id,
+                "provider_id": provider_id,
+                "binding_id": selection.binding_id,
+                "model_id": selection.model_id,
+                "model_reasoning_effort": selection.model_reasoning_effort,
+            },
         )
         record_platform_event(
             observability_store,
@@ -99,7 +119,13 @@ def configure_workspace_provider(
             source_domain="providers",
             workspace_id=workspace_id,
             provider_id=provider_id,
-            payload={"workspace_id": workspace_id, "provider_id": provider_id, "binding_id": selection.binding_id},
+            payload={
+                "workspace_id": workspace_id,
+                "provider_id": provider_id,
+                "binding_id": selection.binding_id,
+                "model_id": selection.model_id,
+                "model_reasoning_effort": selection.model_reasoning_effort,
+            },
         )
     return selection
 
@@ -180,12 +206,17 @@ def build_runtime_backend_launch_spec(
         credential_binding_id = binding.binding_id
         resolved_secret_refs.append(lease.secret_ref)
         secret_env["MAVERICK_PROVIDER_SECRET"] = lease.value
-    spec = adapter.build_launch_spec(
-        session,
-        secret_env=secret_env,
-        credential_binding_id=credential_binding_id,
-        resolved_secret_refs=resolved_secret_refs,
-    )
+    launch_kwargs = {
+        "secret_env": secret_env,
+        "credential_binding_id": credential_binding_id,
+        "resolved_secret_refs": resolved_secret_refs,
+    }
+    launch_parameters = signature(adapter.build_launch_spec).parameters
+    if "model_id" in launch_parameters:
+        launch_kwargs["model_id"] = None if selection is None else selection.model_id
+    if "model_reasoning_effort" in launch_parameters:
+        launch_kwargs["model_reasoning_effort"] = None if selection is None else selection.model_reasoning_effort
+    spec = adapter.build_launch_spec(session, **launch_kwargs)
     if observability_store is not None:
         record_platform_audit(
             observability_store,

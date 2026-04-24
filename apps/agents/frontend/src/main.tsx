@@ -50,6 +50,7 @@ function openChatForRuntimeSession(runtimeSessionId: string, agentType: AgentTyp
       type: 'maverick.app.open-app',
       app_id: 'chat',
       params: {
+        app_page: `runtime-sessions/${runtimeSessionId}`,
         runtime_session_id: runtimeSessionId,
         agent_type_id: agentType.id,
         agent_label: agentType.name,

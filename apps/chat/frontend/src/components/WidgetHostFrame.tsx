@@ -85,7 +85,7 @@ export function WidgetHostFrame({
   }, [state]);
 
   if (state.status === "ready") {
-    const src = `${state.widget.frontend_mount}?context=${encodeURIComponent(state.contextToken)}`;
+    const src = `${state.widget.frontend_mount}#context=${encodeURIComponent(state.contextToken)}`;
     return (
       <iframe
         className="chatapp-structured-widget"
@@ -99,6 +99,15 @@ export function WidgetHostFrame({
   }
 
   return <>{fallback(state)}</>;
+}
+
+function widgetContextTokenFromLocation(): string {
+  const hash = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash;
+  const hashToken = new URLSearchParams(hash).get("context");
+  if (hashToken) {
+    return hashToken;
+  }
+  return new URLSearchParams(window.location.search).get("context") || "";
 }
 
 function stableContentSignature(content: StructuredContent): string {

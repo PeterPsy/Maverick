@@ -19,7 +19,7 @@ from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
 from core.apps.contracts import parse_app_contract_file
 from core.apps.errors import WorkspaceAppBindingNotFoundError, WorkspaceLocalAppProjectNotFoundError
-from core.apps.service import register_workspace_local_app_project_from_contract
+from core.apps.service import register_app_source_from_contract, register_workspace_local_app_project_from_contract
 from core.cli.models import CliInvocationContext
 from core.cli.service import list_core_cli_commands, run_core_cli_command
 from core.mcp.models import McpInvocationContext
@@ -330,10 +330,16 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertEqual(parsed.contract.entrypoints.frontend, "frontend/dist")
         self.assertEqual(parsed.contract.entrypoints.backend, "backend/app_backend.py")
         self.assertIn("maverick_app_store", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("app_store_set_view_filter", parsed.contract.capabilities.mcp_tools)
         self.assertIn("app_store_reference_manifest", parsed.contract.capabilities.mcp_tools)
         self.assertEqual(parsed.contract.capabilities.cli_commands, ["app-store"])
         self.assertIn("installed_app", {item.entity_type for item in parsed.contract.capabilities.reference_entities})
-        self.assertEqual(parsed.contract.capabilities.skills, [])
+        self.assertEqual(parsed.contract.capabilities.skills, ["app-store-ops"])
+        self.assertEqual(parsed.contract.capabilities.view_surfaces[0].view_id, "app-store")
+        self.assertEqual(
+            [item.action for item in parsed.contract.capabilities.view_surfaces[0].state_actions],
+            ["view_filter", "set_view_filter", "set_custom_view", "clear_custom_view"],
+        )
         widgets = {widget.widget_id: widget for widget in parsed.contract.widgets}
         self.assertEqual(widgets["app-shortcuts"].host, "base-shell")
         self.assertEqual(widgets["app-shortcuts"].content_kinds, ["shell.sidebar.apps"])
@@ -367,6 +373,7 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertIn("text/html", headers["Content-Type"])
         self.assertIn(b"App Store", payload)
         self.assertIn(b"Catalog apps", payload)
+        self.assertIn(b"Server apps", payload)
         self.assertIn(b"Installed apps", payload)
         self.assertIn(b"Local apps", payload)
 
@@ -411,6 +418,7 @@ class AppStoreAppTestCase(unittest.TestCase):
         app = PlatformHost(state, start_path=repo_root)
 
         catalog_status, catalog_payload, _catalog_headers = self.invoke(app, path="/api/app-store/apps")
+        server_apps_status, server_apps_payload, _server_apps_headers = self.invoke(app, path="/api/app-store/server-apps")
         install_status, install_payload, _install_headers = self.invoke(
             app,
             path="/api/app-store/install",
@@ -420,8 +428,54 @@ class AppStoreAppTestCase(unittest.TestCase):
 
         self.assertEqual(catalog_status, 401)
         self.assertEqual(catalog_payload["error"], "authentication_required")
+        self.assertEqual(server_apps_status, 401)
+        self.assertEqual(server_apps_payload["error"], "authentication_required")
         self.assertEqual(install_status, 401)
         self.assertEqual(install_payload["error"], "authentication_required")
+
+    def test_server_apps_api_reports_uninstalled_server_sources(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        notes_root = repo_root / "apps" / "notes"
+        self.write_remote_app_contract(notes_root)
+        register_app_source_from_contract(
+            state.app_store,
+            source_kind="platform",
+            source_path=str(notes_root),
+        )
+        app = PlatformHost(state, start_path=repo_root)
+        cookie = self.login(app)
+
+        status, payload, _headers = self.invoke(app, path="/api/app-store/server-apps", cookie=cookie)
+        installations_status, installations, _installations_headers = self.invoke(
+            app,
+            path="/api/app-store/installations",
+            cookie=cookie,
+        )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(installations_status, 200)
+        server_app_ids = {item["app_id"] for item in payload["items"]}
+        installed_app_ids = {item["app_id"] for item in installations["items"]}
+        notes = next(item for item in payload["items"] if item["app_id"] == "notes")
+        self.assertIn("notes", server_app_ids)
+        self.assertNotIn("notes", installed_app_ids)
+        self.assertEqual(notes["source_kind"], "platform")
+        self.assertEqual(notes["latest_version"], "1.0.0")
+
+    def test_server_apps_api_hides_admin_only_sources_from_members(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+        admin_cookie = self.login(app)
+        member_cookie = self.create_member_user(app, admin_cookie)
+
+        status, payload, _headers = self.invoke(app, path="/api/app-store/server-apps", cookie=member_cookie)
+
+        self.assertEqual(status, 200)
+        server_app_ids = {item["app_id"] for item in payload["items"]}
+        self.assertIn("chat", server_app_ids)
+        self.assertNotIn("user-admin", server_app_ids)
 
     def test_catalog_api_hides_admin_only_apps_from_members(self) -> None:
         repo_root = self.make_repo_root()
@@ -961,6 +1015,56 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertEqual(initial["pinned_apps"], ["chat"])
         self.assertEqual(status_toggle, 200)
         self.assertEqual(toggled["state"]["pinned_apps"], ["chat", "agents"])
+
+    def test_app_store_backend_persists_catalog_view_state(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+        cookie = self.login(app)
+
+        filtered_status, filtered, _filtered_headers = self.invoke(
+            app,
+            path="/api/apps/app-store/backend",
+            method="POST",
+            body={"action": "set_view_filter", "query": "crm", "scope": "installed"},
+            cookie=cookie,
+        )
+        custom_status, custom, _custom_headers = self.invoke(
+            app,
+            path="/api/apps/app-store/backend",
+            method="POST",
+            body={
+                "action": "set_custom_view",
+                "title": "Core apps",
+                "refs": [{"entity_type": "installed_app", "entity_id": "chat"}],
+            },
+            cookie=cookie,
+        )
+        view_status, view_state, _view_headers = self.invoke(
+            app,
+            path="/api/apps/app-store/backend",
+            method="POST",
+            body={"action": "view_filter"},
+            cookie=cookie,
+        )
+        cleared_status, cleared, _cleared_headers = self.invoke(
+            app,
+            path="/api/apps/app-store/backend",
+            method="POST",
+            body={"action": "clear_custom_view"},
+            cookie=cookie,
+        )
+
+        self.assertEqual(filtered_status, 200)
+        self.assertEqual(filtered["state"]["view_filter"]["query"], "crm")
+        self.assertEqual(filtered["state"]["view_filter"]["scope"], "installed")
+        self.assertEqual(custom_status, 200)
+        self.assertEqual(custom["state"]["view_filter"]["mode"], "custom")
+        self.assertEqual(custom["state"]["view_filter"]["refs"], [{"entity_type": "installed_app", "entity_id": "chat"}])
+        self.assertEqual(view_status, 200)
+        self.assertEqual(view_state["state"]["view_filter"]["mode"], "custom")
+        self.assertEqual(cleared_status, 200)
+        self.assertEqual(cleared["state"]["view_filter"]["mode"], "search")
 
     def test_app_store_backend_uses_official_catalog_by_default(self) -> None:
         repo_root = self.make_repo_root()

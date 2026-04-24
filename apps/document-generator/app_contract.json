@@ -16,6 +16,11 @@
   "capabilities": {
     "mcp_tools": [
       "maverick_document_generator",
+      "document_generator_extract_text",
+      "document_generator_view_filter",
+      "document_generator_set_view_filter",
+      "document_generator_set_custom_view",
+      "document_generator_clear_custom_view",
       "document_generator_reference_manifest",
       "document_generator_reference_search",
       "document_generator_reference_resolve",
@@ -34,9 +39,45 @@
       {
         "resource": "documents",
         "description": "Emitted when generated document jobs or output files are created through official Document Generator surfaces."
+      },
+      {
+        "resource": "view-state",
+        "description": "Emitted when Document Generator job/template filters or curated selections change through official surfaces."
       }
     ],
-    "view_surfaces": [],
+    "view_surfaces": [
+      {
+        "view_id": "document-generator",
+        "display_name": "Document Generator",
+        "entity_types": [
+          "document"
+        ],
+        "state_actions": [
+          {
+            "action": "view_filter",
+            "standard": true,
+            "description": "Read the current Document Generator job and template browse state."
+          },
+          {
+            "action": "set_view_filter",
+            "standard": true,
+            "description": "Set Document Generator query and format filters."
+          },
+          {
+            "action": "set_custom_view",
+            "standard": true,
+            "description": "Show a curated set of generated document references."
+          },
+          {
+            "action": "clear_custom_view",
+            "standard": true,
+            "description": "Return Document Generator to normal job and template browsing mode."
+          }
+        ],
+        "supports_custom_view": true,
+        "supports_filter_refinement": true
+      }
+    ],
     "reference_entities": [
       {
         "entity_type": "document",

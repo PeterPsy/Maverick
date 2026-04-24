@@ -195,6 +195,142 @@
   padding: 0.9rem;
 }
 
+.bs-settings-provider-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(8rem, 0.55fr) auto;
+  gap: 0.65rem;
+  align-items: end;
+  margin-top: 0.85rem;
+}
+
+.bs-settings-field {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+  color: var(--maverick-text-soft);
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.bs-settings-field select {
+  width: 100%;
+  min-width: 0;
+  min-height: 2.1rem;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 0.65rem;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--maverick-text);
+  padding: 0.35rem 0.55rem;
+  font: inherit;
+  font-size: 0.75rem;
+  text-transform: none;
+}
+
+.bs-settings-field select:disabled {
+  opacity: 0.55;
+}
+
+.bs-settings-provider-error {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #ffb3bf;
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+.bs-runtime-session-panel {
+  margin-top: 0.85rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 0.75rem;
+}
+
+.bs-runtime-session-panel summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  color: var(--maverick-text);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.bs-runtime-session-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+  margin-top: 0.75rem;
+}
+
+.bs-runtime-session-progress {
+  display: inline-flex;
+  gap: 0.45rem;
+  align-items: center;
+  color: var(--maverick-text-muted);
+  font-size: 0.75rem;
+}
+
+.bs-runtime-session-progress progress {
+  width: 8rem;
+  height: 0.55rem;
+}
+
+.bs-runtime-session-list {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.75rem;
+}
+
+.bs-runtime-session-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.7rem;
+  padding: 0.65rem;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.bs-runtime-session-main {
+  display: grid;
+  gap: 0.22rem;
+  min-width: 0;
+}
+
+.bs-runtime-session-main strong,
+.bs-runtime-session-main span,
+.bs-runtime-session-main code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bs-runtime-session-main strong {
+  font-size: 0.82rem;
+}
+
+.bs-runtime-session-main span {
+  color: var(--maverick-text-muted);
+  font-size: 0.74rem;
+}
+
+.bs-runtime-session-main code {
+  color: var(--maverick-text-soft);
+  font-size: 0.7rem;
+}
+
+@media (max-width: 720px) {
+  .bs-settings-provider-form {
+    grid-template-columns: 1fr;
+  }
+
+  .bs-runtime-session-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 .bs-login {
   display: grid;
   place-items: center;

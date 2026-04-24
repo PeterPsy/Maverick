@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { RuntimeEvent, RuntimeWebSocketFrame } from "../api/client";
-import { runtimeEventFromWebSocketFrame, runtimeWebSocketUrl } from "../api/client";
+import { ApiError, isRuntimeSessionUnavailableError, runtimeEventFromWebSocketFrame, runtimeWebSocketUrl } from "../api/client";
 import { isTransientReplayError } from "../hooks/useRuntimeEvents";
 import { inferActiveRuntimeTurn, lastRuntimeEventId, mergeRuntimeEvents } from "./runtimeEvents";
 import { isNoisyRuntimeLabel, latestRuntimeStepLabel, runtimeStepLabel } from "./runtimeStepLabels";
@@ -134,6 +134,21 @@ describe("runtime websocket helpers", () => {
   it("classifies transient runtime replay failures", () => {
     expect(isTransientReplayError(new Error("Request failed 502: /api/runtime/sessions/session-1/events"))).toBe(true);
     expect(isTransientReplayError(new Error("Request failed 404: /api/runtime/sessions/session-1/events"))).toBe(false);
+  });
+
+  it("classifies unavailable runtime sessions from API errors", () => {
+    expect(
+      isRuntimeSessionUnavailableError(
+        new ApiError("runtime_session_not_found", { path: "/api/runtime/sessions/session-1/events", status: 404 }),
+        "session-1",
+      ),
+    ).toBe(true);
+    expect(
+      isRuntimeSessionUnavailableError(
+        new ApiError("forbidden", { path: "/api/runtime/sessions/session-2", status: 403 }),
+        "session-1",
+      ),
+    ).toBe(false);
   });
 
   it("filters provider stdin prompts from live runtime labels", () => {

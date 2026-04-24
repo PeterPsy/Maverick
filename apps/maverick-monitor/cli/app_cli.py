@@ -17,7 +17,7 @@ def main() -> None:
     workspace_root = Path(payload.get("workspace_root") or ".").resolve()
     data_root = Path(payload.get("data_root") or workspace_root / "data" / "maverick-monitor")
     action = str(arguments.get("action") or "snapshot")
-    status_code, result = handle_action(workspace_root=workspace_root, data_root=data_root, body={"action": action})
+    status_code, result = handle_action(workspace_root=workspace_root, data_root=data_root, body={**arguments, "action": action})
     response = {"status_code": status_code, "json": result}
     if status_code < 400:
         response["app_events"] = app_events_for_action(action)

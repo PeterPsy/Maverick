@@ -62,10 +62,14 @@ export function AppFrameHost({
 
   useEffect(() => {
     return connectAppEventSocket((event) => {
-      if (event.type !== "maverick.app.frontend-changed" || !event.owner_app_id) {
+      if (event.workspace_id && event.workspace_id !== activeWorkspaceId) {
         return;
       }
-      if (event.workspace_id && event.workspace_id !== activeWorkspaceId) {
+      if (event.type === "maverick.app.data-changed" && event.owner_app_id) {
+        window.postMessage(event, window.location.origin);
+        return;
+      }
+      if (event.type !== "maverick.app.frontend-changed" || !event.owner_app_id) {
         return;
       }
       const eventMountKey = `${activeWorkspaceId}:${event.owner_app_id}`;

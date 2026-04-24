@@ -22,7 +22,8 @@ class ChatWidgetHostingTests(unittest.TestCase):
         self.assertIn("message_id: messageId", host_source)
         self.assertIn("content,", host_source)
         self.assertIn("state.widget.frontend_mount", host_source)
-        self.assertIn("context=", host_source)
+        self.assertIn("#context=", host_source)
+        self.assertIn("window.location.hash", host_source)
 
     def test_chat_transcript_triggers_widget_previews_from_workspace_file_links(self) -> None:
         transcript_source = (REPO_ROOT / "apps/chat/frontend/src/lib/transcript.ts").read_text()

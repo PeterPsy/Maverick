@@ -1,21 +1,22 @@
 ---
 name: document-generator-docs
-description: "Use the Document Generator app CLI or MCP tool to create DOCX, PPTX, PDF, and XLSX files in workspace generated storage."
+description: "Use the Document Generator app CLI or MCP tool to create DOCX, PPTX, PDF, and XLSX files in workspace generated storage, or extract text from workspace documents."
 ---
 
 # Document Generator Docs
 
-Use this skill when a user asks an agent to create a document file.
+Use this skill when a user asks an agent to create a document file or read text from a workspace document.
 
 ## App Scripts
 
-The app exposes one official CLI command and one official MCP tool. Use those surfaces for real work.
+The app exposes one official CLI command plus MCP tools for generation, extraction, references, and view state. Use those surfaces for real work.
 
 Implementation scripts behind those surfaces:
 
 - CLI entrypoint: `<repo>/apps/document-generator/cli/app_cli.py`
 - MCP entrypoint: `<repo>/apps/document-generator/mcp/server.py`
 - shared service: `<repo>/apps/document-generator/backend/service.py`
+- text extractor: `<repo>/apps/document-generator/backend/extractors.py`
 - DOCX writer: `<repo>/apps/document-generator/backend/generators/docx_generator.py`
 - PPTX writer: `<repo>/apps/document-generator/backend/generators/pptx_generator.py`
 - PDF writer: `<repo>/apps/document-generator/backend/generators/pdf_generator.py`
@@ -30,6 +31,13 @@ Supported formats:
 - `docx`
 - `pptx`
 - `pdf`
+- `xlsx`
+
+Text extraction supports the same modern document formats:
+
+- `pdf`
+- `docx`
+- `pptx`
 - `xlsx`
 
 Do not request `xls`; this app intentionally supports only `xlsx` for spreadsheets.
@@ -164,6 +172,37 @@ Generate:
 ## MCP Procedure
 
 Use `app.document-generator.maverick_document_generator` with the same arguments as the CLI.
+
+For document text extraction, prefer:
+
+- CLI command `app.document-generator.document-generator` with action `extract_text`
+- MCP tool `app.document-generator.document_generator_extract_text`
+
+Extraction inputs should identify a workspace file under `storage/uploaded/` or `storage/generated/`:
+
+```json
+{
+  "action": "extract_text",
+  "workspace_relative_path": "storage/uploaded/file-id/example.pdf",
+  "max_chars": 50000
+}
+```
+
+Expected extraction shape:
+
+```json
+{
+  "status_code": 200,
+  "document": {
+    "format": "pdf",
+    "filename": "example.pdf",
+    "workspace_relative_path": "storage/uploaded/file-id/example.pdf"
+  },
+  "text": "Extracted document text...",
+  "text_length": 1234,
+  "truncated": false
+}
+```
 
 For discovery or follow-up references, use:
 

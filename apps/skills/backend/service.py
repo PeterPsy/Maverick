@@ -6,7 +6,18 @@ from pathlib import Path
 
 from models import DEFAULT_SKILL_CONTENT
 from seeds import seed_default_skills
-from store import delete_skill, ensure_data_root, get_skill, list_skills, save_skill, skill_markdown
+from store import (
+    clear_custom_view_payload,
+    delete_skill,
+    ensure_data_root,
+    get_skill,
+    list_skills,
+    save_skill,
+    set_custom_view_payload,
+    set_view_filter_payload,
+    skill_markdown,
+    view_state,
+)
 
 REFERENCE_MANIFEST = {
     "app_id": "skills",
@@ -17,12 +28,15 @@ REFERENCE_MANIFEST = {
 }
 
 DATA_CHANGED_ACTIONS = {"create_skill", "update_skill", "delete_skill", "sync_bundled_skills"}
+VIEW_STATE_ACTIONS = {"set_view_filter", "set_custom_view", "clear_custom_view"}
 
 
 def app_events_for_action(action: str) -> list[dict[str, str]]:
-    if action not in DATA_CHANGED_ACTIONS:
-        return []
-    return [{"type": "maverick.app.data-changed", "resource": "skills"}]
+    if action in DATA_CHANGED_ACTIONS:
+        return [{"type": "maverick.app.data-changed", "resource": "skills"}]
+    if action in VIEW_STATE_ACTIONS:
+        return [{"type": "maverick.app.data-changed", "resource": "view-state"}]
+    return []
 
 
 def catalog(data_root: Path) -> dict:
@@ -69,6 +83,14 @@ def handle_action(data_root: Path, body: dict) -> tuple[int, dict]:
         return 200, catalog(data_root)
     if action == "list_skills":
         return 200, {"skills": catalog(data_root)["skills"]}
+    if action == "view_filter":
+        return 200, {"state": view_state(data_root)}
+    if action == "set_view_filter":
+        return 200, {"state": set_view_filter_payload(data_root, body)}
+    if action == "set_custom_view":
+        return 200, {"state": set_custom_view_payload(data_root, body)}
+    if action == "clear_custom_view":
+        return 200, {"state": clear_custom_view_payload(data_root)}
     if action == "get_skill":
         skill_id = str(body.get("skill_id") or "")
         skill = get_skill(data_root, skill_id)

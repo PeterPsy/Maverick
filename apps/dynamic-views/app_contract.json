@@ -16,6 +16,10 @@
   "capabilities": {
     "mcp_tools": [
       "maverick_dynamic_views",
+      "dynamic_views_view_filter",
+      "dynamic_views_set_view_filter",
+      "dynamic_views_set_custom_view",
+      "dynamic_views_clear_custom_view",
       "dynamic_views_reference_manifest",
       "dynamic_views_reference_search",
       "dynamic_views_reference_resolve",
@@ -24,7 +28,9 @@
     "cli_commands": [
       "dynamic-views"
     ],
-    "skills": [],
+    "skills": [
+      "dynamic-views"
+    ],
     "views": [
       "dynamic-views"
     ],
@@ -32,9 +38,45 @@
       {
         "resource": "views",
         "description": "Emitted when persisted dynamic view instances change through official Dynamic Views surfaces."
+      },
+      {
+        "resource": "view-state",
+        "description": "Emitted when Dynamic Views library filters or curated selections change through official Dynamic Views surfaces."
       }
     ],
-    "view_surfaces": [],
+    "view_surfaces": [
+      {
+        "view_id": "dynamic-views",
+        "display_name": "Dynamic Views",
+        "entity_types": [
+          "view"
+        ],
+        "state_actions": [
+          {
+            "action": "view_filter",
+            "standard": true,
+            "description": "Read the current Dynamic Views library view state."
+          },
+          {
+            "action": "set_view_filter",
+            "standard": true,
+            "description": "Set Dynamic Views library query and status filters."
+          },
+          {
+            "action": "set_custom_view",
+            "standard": true,
+            "description": "Show a curated set of dynamic view references."
+          },
+          {
+            "action": "clear_custom_view",
+            "standard": true,
+            "description": "Return Dynamic Views to normal library browsing mode."
+          }
+        ],
+        "supports_custom_view": true,
+        "supports_filter_refinement": true
+      }
+    ],
     "reference_entities": [
       {
         "entity_type": "view",

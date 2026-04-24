@@ -51,7 +51,107 @@ def load_state(data_root: Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise DocumentValidationError("state.json must contain a JSON object.")
     payload.setdefault("schema_version", SCHEMA_VERSION)
+    payload.setdefault("view_filter", default_view_filter())
     return payload
+
+
+def save_state(data_root: Path, state: dict[str, Any]) -> dict[str, Any]:
+    data_root.mkdir(parents=True, exist_ok=True)
+    state["schema_version"] = SCHEMA_VERSION
+    state_path(data_root).write_text(json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return state
+
+
+def default_view_filter() -> dict[str, Any]:
+    return {
+        "mode": "search",
+        "query": "",
+        "format": "all",
+        "title": "",
+        "refs": [],
+        "updated_at": utc_now(),
+    }
+
+
+def normalize_view_filter(raw_filter: object) -> dict[str, Any]:
+    if not isinstance(raw_filter, dict):
+        raw_filter = {}
+    output_format = str(raw_filter.get("format") or "all").strip().lower() or "all"
+    if output_format not in {"all", "docx", "pptx", "pdf", "xlsx"}:
+        output_format = "all"
+    refs = []
+    for item in raw_filter.get("refs") if isinstance(raw_filter.get("refs"), list) else []:
+        if not isinstance(item, dict):
+            continue
+        entity_id = str(item.get("entity_id") or "").strip()
+        if str(item.get("entity_type") or "") == "document" and entity_id:
+            refs.append({"entity_type": "document", "entity_id": entity_id})
+    return {
+        "mode": "custom" if str(raw_filter.get("mode") or "") == "custom" else "search",
+        "query": str(raw_filter.get("query") or "").strip(),
+        "format": output_format,
+        "title": str(raw_filter.get("title") or "").strip(),
+        "refs": refs,
+        "updated_at": str(raw_filter.get("updated_at") or utc_now()),
+    }
+
+
+def view_state(data_root: Path) -> dict[str, Any]:
+    state = load_state(data_root)
+    state["view_filter"] = normalize_view_filter(state.get("view_filter"))
+    save_state(data_root, state)
+    return {"view_filter": state["view_filter"]}
+
+
+def set_view_filter_payload(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
+    state = load_state(data_root)
+    current = normalize_view_filter(state.get("view_filter"))
+    preserve_custom = bool(body.get("preserve_custom")) and current.get("mode") == "custom"
+    state["view_filter"] = normalize_view_filter(
+        {
+            "mode": "custom" if preserve_custom else "search",
+            "query": body.get("query") if "query" in body else current.get("query"),
+            "format": body.get("format") if "format" in body else current.get("format"),
+            "title": current.get("title") if preserve_custom else "",
+            "refs": current.get("refs") if preserve_custom else [],
+            "updated_at": utc_now(),
+        }
+    )
+    save_state(data_root, state)
+    return {"view_filter": state["view_filter"]}
+
+
+def set_custom_view_payload(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
+    state = load_state(data_root)
+    state["view_filter"] = normalize_view_filter(
+        {
+            "mode": "custom",
+            "query": body.get("query"),
+            "format": body.get("format"),
+            "title": body.get("title"),
+            "refs": body.get("refs") if isinstance(body.get("refs"), list) else [],
+            "updated_at": utc_now(),
+        }
+    )
+    save_state(data_root, state)
+    return {"view_filter": state["view_filter"]}
+
+
+def clear_custom_view_payload(data_root: Path) -> dict[str, Any]:
+    state = load_state(data_root)
+    current = normalize_view_filter(state.get("view_filter"))
+    state["view_filter"] = normalize_view_filter(
+        {
+            "mode": "search",
+            "query": current.get("query"),
+            "format": current.get("format"),
+            "title": "",
+            "refs": [],
+            "updated_at": utc_now(),
+        }
+    )
+    save_state(data_root, state)
+    return {"view_filter": state["view_filter"]}
 
 
 def seed_templates(data_root: Path) -> None:

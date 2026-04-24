@@ -190,6 +190,16 @@ Runtime session provider state must be partitioned below that root by runtime se
 ```
 
 Provider-specific homes such as Codex `CODEX_HOME`, runtime-local `TMPDIR`, copied runtime skills, and transient provider binaries live under the session runtime root. The workspace may contain hundreds or thousands of runtime session roots over time, but active provider state must not be shared between concurrent agents unless a provider adapter documents an explicit immutable cache.
+Runtime session history and operational records that belong to one agent must live inside that same session root so cleanup can remove one agent's files without scanning or rewriting shared cross-agent history files. This includes persisted runtime events, turn records, process records, and the mutable runtime state snapshot.
+
+```text
+/workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/events.json
+/workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/turns.json
+/workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/processes.json
+/workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/state.json
+```
+
+Installation-level runtime state under `.maverick/local-state/runtime/` may keep lightweight control-plane indexes such as `sessions.json`, but it must not be the append-only home for per-agent history.
 
 Runtime sessions may also contain provider-managed executable shims under:
 

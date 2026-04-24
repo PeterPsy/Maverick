@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from core.api.http import StartResponse, json_response, read_json_body, status_line
 from core.api.platform_state import PlatformState
+from core.api.runtime_cleanup import cleanup_runtime_session
 from core.api.session_api import RequestSession, require_session
 from core.providers.service import resolve_provider_for_runtime_session
 from core.providers.codex_app_server import interrupt_codex_app_server_turn
@@ -22,7 +23,6 @@ from core.runtime.service import (
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
-from core.runtime.session_termination import terminate_runtime_session
 from core.runtime.turn_submission import submit_runtime_turn, submit_runtime_turn_async
 
 
@@ -204,7 +204,7 @@ def _app_reference_payload(item: dict) -> dict[str, str]:
     return payload
 
 
-def _handle_session_terminate(
+def _handle_session_cleanup(
     state: PlatformState,
     context: RequestSession,
     session_id: str,
@@ -222,13 +222,11 @@ def _handle_session_terminate(
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
     if session.workspace_id != context.workspace_id:
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
-    reason = str(body.get("reason") or "").strip() or "runtime_session_terminated"
-    result = terminate_runtime_session(
-        state.runtime_store,
+    reason = str(body.get("reason") or "").strip() or "runtime_session_cleaned"
+    result = cleanup_runtime_session(
+        state,
         session_id=session_id,
         reason=reason,
-        event_bus=state.runtime_event_bus,
-        observability_store=state.observability_store,
         start_path=start_path,
     )
     return json_response(start_response, result)
@@ -291,8 +289,8 @@ def handle_runtime_api(state: PlatformState, environ: dict, start_response: Star
         return _handle_session_events(state, context, parts[1], start_response, start_path=start_path, query_string=query_string)
     if len(parts) == 3 and parts[0] == "sessions" and parts[2] == "turns":
         return _handle_session_turns(state, context, parts[1], method, body, start_response, start_path=start_path)
-    if len(parts) == 3 and parts[0] == "sessions" and parts[2] == "terminate":
-        return _handle_session_terminate(state, context, parts[1], method, body, start_response, start_path=start_path)
+    if len(parts) == 3 and parts[0] == "sessions" and parts[2] == "cleanup":
+        return _handle_session_cleanup(state, context, parts[1], method, body, start_response, start_path=start_path)
     if len(parts) == 2 and parts[0] == "turns" and method == "GET":
         return _handle_turn_item(state, context, parts[1], start_response)
     if len(parts) == 3 and parts[0] == "turns" and parts[2] == "interrupt" and method == "POST":

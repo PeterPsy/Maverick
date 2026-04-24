@@ -18,6 +18,7 @@ from store import (
     save_role,
     write_common_prompt,
 )
+from view_state import clear_custom_view_payload, load_view_state, set_custom_view_payload, set_view_filter_payload
 
 REFERENCE_MANIFEST = {
     "app_id": "agents",
@@ -37,12 +38,15 @@ DATA_CHANGED_ACTIONS = {
     "delete_agent_type",
     "set_common_prompt",
 }
+VIEW_STATE_ACTIONS = {"view_filter", "set_view_filter", "set_custom_view", "clear_custom_view"}
 
 
 def app_events_for_action(action: str) -> list[dict]:
-    if action not in DATA_CHANGED_ACTIONS:
-        return []
-    return [{"type": "maverick.app.data-changed", "resource": "configuration"}]
+    if action in DATA_CHANGED_ACTIONS:
+        return [{"type": "maverick.app.data-changed", "resource": "configuration"}]
+    if action in VIEW_STATE_ACTIONS:
+        return [{"type": "maverick.app.data-changed", "resource": "view-state"}]
+    return []
 
 
 def catalog(data_root: Path) -> dict:
@@ -177,6 +181,14 @@ def handle_action(data_root: Path, body: dict) -> tuple[int, dict]:
         return 200, {"common_prompt": write_common_prompt(data_root, str(body.get("prompt") or ""))}
     if action == "preview_prompt":
         return 200, prompt_preview(data_root, body)
+    if action == "view_filter":
+        return 200, {"state": load_view_state(data_root)}
+    if action == "set_view_filter":
+        return 200, {"state": set_view_filter_payload(data_root=data_root, query=body.get("query"), entity_type=body.get("entity_type"), preserve_custom=bool(body.get("preserve_custom")))}
+    if action == "set_custom_view":
+        return 200, {"state": set_custom_view_payload(data_root=data_root, title=body.get("title"), refs=body.get("refs"), query=body.get("query"), entity_type=body.get("entity_type"))}
+    if action == "clear_custom_view":
+        return 200, {"state": clear_custom_view_payload(data_root=data_root)}
     if action == "health.check":
         return 200, {"status": "ok", "data_root": str(data_root)}
     if action == "references.manifest":

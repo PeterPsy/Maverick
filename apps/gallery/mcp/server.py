@@ -19,6 +19,10 @@ tool_actions = {
     "gallery_reference_search": "references.search",
     "gallery_reference_resolve": "references.resolve",
     "gallery_reference_summarize": "references.summarize",
+    "gallery_view_filter": "view_filter",
+    "gallery_set_view_filter": "set_view_filter",
+    "gallery_set_custom_view": "set_custom_view",
+    "gallery_clear_custom_view": "clear_custom_view",
 }
 body = {"action": tool_actions.get(str(payload.get("tool_name") or ""), arguments.get("action") or "catalog"), **arguments}
 try:

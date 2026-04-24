@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from core.cli.errors import CliInvocationNotAllowedError
+from core.mcp.errors import McpInvocationNotAllowedError
 from tests.phase11_observability_helpers import *
 
 
@@ -136,7 +138,7 @@ class TestPhase11SecretRecoverySurfaces(Phase11ObservabilityBase):
     def test_cli_and_mcp_expose_explicit_backend_restart_surface(self) -> None:
         repo_root = self.make_repo_root()
 
-        cli_context = CliInvocationContext(caller_kind="operator", workspace_id="default", agent_id=None, effective_mode="full-access")
+        cli_context = CliInvocationContext(caller_kind="full_access_agent", workspace_id="default", agent_id="agent-1", effective_mode="full-access")
         with patch("core.cli.recovery_commands.restart_backend_service") as restart_backend:
             restart_backend.return_value.to_payload.return_value = {
                 "service_name": "maverick3-core.service",
@@ -159,7 +161,7 @@ class TestPhase11SecretRecoverySurfaces(Phase11ObservabilityBase):
         self.assertTrue(cli_result["restarted"])
         self.assertEqual(cli_result["command_id"], "core.recovery.restart_backend")
 
-        mcp_context = McpInvocationContext(caller_kind="operator", workspace_id="default", agent_id=None, effective_mode="full-access")
+        mcp_context = McpInvocationContext(caller_kind="full_access_agent", workspace_id="default", agent_id="agent-1", effective_mode="full-access")
         with patch("core.mcp.recovery_tools.restart_backend_service") as restart_backend:
             restart_backend.return_value.to_payload.return_value = {
                 "service_name": "maverick3-core.service",
@@ -180,3 +182,48 @@ class TestPhase11SecretRecoverySurfaces(Phase11ObservabilityBase):
                 start_path=repo_root,
             )
         self.assertTrue(mcp_result["restarted"])
+
+    def test_backend_restart_surface_rejects_operator_and_non_default_workspace(self) -> None:
+        repo_root = self.make_repo_root()
+
+        with self.assertRaises(CliInvocationNotAllowedError):
+            run_core_cli_command(
+                command_id="core.recovery.restart_backend",
+                context=CliInvocationContext(caller_kind="operator", workspace_id="default", agent_id=None, effective_mode="full-access"),
+                workspace_id="default",
+                start_path=repo_root,
+            )
+
+        with self.assertRaises(CliInvocationNotAllowedError):
+            run_core_cli_command(
+                command_id="core.recovery.restart_backend",
+                context=CliInvocationContext(
+                    caller_kind="full_access_agent",
+                    workspace_id="customer-a",
+                    agent_id="agent-2",
+                    effective_mode="full-access",
+                ),
+                workspace_id="customer-a",
+                start_path=repo_root,
+            )
+
+        with self.assertRaises(McpInvocationNotAllowedError):
+            call_mcp_tool(
+                tool_name="core.recovery.restart_backend",
+                context=McpInvocationContext(caller_kind="operator", workspace_id="default", agent_id=None, effective_mode="full-access"),
+                workspace_id="default",
+                start_path=repo_root,
+            )
+
+        with self.assertRaises(McpInvocationNotAllowedError):
+            call_mcp_tool(
+                tool_name="core.recovery.restart_backend",
+                context=McpInvocationContext(
+                    caller_kind="full_access_agent",
+                    workspace_id="customer-a",
+                    agent_id="agent-2",
+                    effective_mode="full-access",
+                ),
+                workspace_id="customer-a",
+                start_path=repo_root,
+            )

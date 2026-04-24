@@ -57,6 +57,26 @@ The contract describes what the app is and how it behaves.
 
 The core installation system decides where that app is known, installed, enabled, disabled, upgraded, uninstalled, or reattached.
 
+## User-Facing App Routes
+
+Mounted app frontends have a canonical user-facing shell route:
+
+```text
+/app/<app_id>/<app_page>
+```
+
+This route belongs to the base shell and is served by the configured root shell app. It selects an enabled app and forwards the optional app-owned page segment to the mounted iframe as `params.app_page` in the `maverick.app.navigate` message.
+
+The direct frontend mount remains:
+
+```text
+/apps/<app_id>/
+```
+
+That direct mount is an internal asset and iframe serving surface. It must remain available for app frontend assets, SPA fallback, widgets, and direct app availability checks, but it is not the canonical browser URL for workspace navigation.
+
+Apps own the structure and meaning of `<app_page>`. The platform must not hardcode every app's internal route tree. An app that exposes deep links should translate its own page segments, such as `threads/<thread_id>` or `runtime-sessions/<runtime_session_id>`, into its internal state after receiving `maverick.app.navigate`.
+
 ## App Distribution Sources
 
 Maverick v3 supports two canonical app source locations:
@@ -73,7 +93,7 @@ It may contain:
 - open-source or source-available apps distributed through the server app store
 - versioned app bundles validated by the core
 
-The Maverick App Store itself is also an app. Its UI, backend, CLI, MCP, skills, and workspace-owned state live under `apps/app-store` and `workspaces/<workspace_id>/data/app-store/`. It may present the remote catalog from the official default `https://maverick-app-store.versy.ai`, or from the installation override `MAVERICK_APP_STORE_URL`, show whether catalog apps are already installed in selected workspaces, show workspace-local app projects for the selected workspace context, open installed app frontends through generic shell navigation, and collect install, uninstall, complete workspace-local deletion, workspace assignment, and shortcut pinning choices, but it does not bypass platform boundaries: authenticated installation state reads, checksum verification, source registration, workspace-local project registration, workspace binding, workspace-local project deletion, and uninstall binding removal remain generic core app-hosting operations.
+The Maverick App Store itself is also an app. Its UI, backend, CLI, MCP, skills, and workspace-owned state live under `apps/app-store` and `workspaces/<workspace_id>/data/app-store/`. It may present the remote catalog from the official default `https://maverick-app-store.versy.ai`, or from the installation override `MAVERICK_APP_STORE_URL`, show installation-level server app sources that are not necessarily installed in the active workspace, show whether catalog apps are already installed in selected workspaces, show workspace-local app projects for the selected workspace context, open installed app frontends through generic shell navigation, and collect install, uninstall, complete workspace-local deletion, workspace assignment, and shortcut pinning choices, but it does not bypass platform boundaries: authenticated server source reads, authenticated installation state reads, checksum verification, source registration, workspace-local project registration, workspace binding, workspace-local project deletion, and uninstall binding removal remain generic core app-hosting operations.
 
 The workspace-level `workspaces/<workspace_id>/apps` directory is not the app store.
 
@@ -201,6 +221,23 @@ For a sealed commercial app:
 ```
 
 The core should enforce this at install, fork, upgrade, and workspace execution boundaries.
+
+## Completeness Baseline
+
+Contract validity is necessary but not sufficient.
+
+Every app tracked as a real Maverick product surface must also meet a repository completeness baseline:
+
+- a `README.md` in the app root describing the app purpose, declared surfaces, storage ownership, and SDK validation flow
+- at least one automated contract smoke check in the repository test suite
+- truthful `capabilities.skills` entries that match bundled skill template ids under `skills/` when `entrypoints.skills_root` is declared
+- documentation of intentional omissions when an app does not expose a backend, hooks, reference entities, data events, or persisted view surfaces
+
+This baseline keeps `app_contract.json`, the SDK, and human-facing documentation aligned.
+
+Host or control-plane-adjacent apps may intentionally expose fewer app-owned surfaces than stateful workspace apps, but the omission must be documented explicitly in the app README rather than left implicit.
+
+The SDK validation flow enforces the machine-checkable part of this baseline for source trees it creates, registers, installs, or packages. In addition to parsing the contract shape, SDK validation rejects app sources where declared CLI, MCP, frontend view, skills, reference-entity, view-state, or data-event capabilities do not line up with the corresponding entrypoints and standard contract conventions. Repository tests still cover the human-facing baseline items that cannot be inferred from the contract alone, such as README explanation quality and first-party smoke-test coverage.
 
 Upgrade and rebase are different operations.
 
@@ -705,6 +742,8 @@ The app frontend is not the core.
 But both live under the governance and routing model of the core.
 
 Mounted app backend requests are app-domain calls, not runtime turns.
+
+Mounted app backend entrypoints are still host-managed subprocess work. During ASGI host shutdown, the core must terminate any live mounted backend subprocess trees cooperatively so restarts do not depend on forced `systemd` kills.
 
 The platform host may provide workspace, data-root, request, and active-provider context to the backend entrypoint, but ordinary backend polling, CRUD, settings, and widget actions must not create runtime sessions, runtime turns, or runtime events. Runtime records are reserved for explicit runtime execution through the generic runtime APIs.
 

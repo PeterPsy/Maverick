@@ -73,20 +73,30 @@ If `maverick` is not available inside an agent runtime, the SDK runtime surface 
 
 ## Surface Discipline
 
-The SDK generates valid starting source trees, but developers still need to make the declared surfaces real.
+The SDK generates valid starting source trees and `maverick app validate` now blocks incomplete declared surfaces before SDK register, install, or package operations proceed. Developers still need to make the runtime behavior behind those surfaces real.
 
 Rules:
 
 - Do not leave `app_contract.json` ahead of the implementation.
+- Keep declared CLI, MCP, frontend view, skills, reference-entity, view-state, and data-event surfaces aligned with the matching entrypoints.
 - If you declare CLI commands, they must be discoverable through `maverick app <app_id> cli list --json`.
 - If you declare MCP tools, they must be discoverable through `maverick app <app_id> mcp list --json`.
 - If you declare `reference_entities`, implement matching reference behavior through manifest, search, resolve, and summarize actions.
-- If you declare `view_surfaces`, implement real persisted or derived view state plus the declared state actions.
+- If you declare `view_surfaces`, implement real persisted or derived view state plus the standard view-state actions and `view-state` data event.
 - If you declare `lifecycle.rebuild: true`, ship a real `package.json` build script and use the official frontend rebuild operation.
 - If app writes emit `app_events`, wire the frontend or widget to consume `maverick.app.data-changed` or `maverick.widget.data-changed` so mounted UI updates live.
 - If the frontend ships inline `<script>` blocks in HTML files, run `python3 scripts/check_inline_script_syntax.py ...` before considering the frontend done.
 
 The contract is an executable promise, not aspirational metadata.
+
+## Completeness Baseline
+
+In this repository, a valid app is not considered complete until:
+
+- the app root has a `README.md`
+- the test suite contains smoke coverage for the app contract
+- `capabilities.skills` matches bundled skill template ids when `skills/` exists
+- any intentional omission of backend, hooks, references, data events, or view surfaces is documented in the app README
 
 ## Workspace-Local App Flow
 

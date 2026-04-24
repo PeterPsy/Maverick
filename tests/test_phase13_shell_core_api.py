@@ -273,29 +273,184 @@ class ShellCoreApiTestCase(unittest.TestCase):
         state = bootstrap_platform_state(start_path=self.make_repo_root())
         app = PlatformHost(state, start_path=state.repository_root)
         cookie = self.login(app)
-        create_status, _created_session, _create_headers = self.invoke(
+        create_status, created_session, _create_headers = self.invoke(
             app,
             path="/api/runtime/sessions",
             method="POST",
             body={"agent_id": "chat"},
             cookie=cookie,
         )
+        status_create_workspace, created_workspace, _workspace_headers = self.invoke(
+            app,
+            path="/api/workspaces",
+            method="POST",
+            body={"name": "Runtime Lab"},
+            cookie=cookie,
+        )
+        create_other_status, other_session, _other_create_headers = self.invoke(
+            app,
+            path="/api/runtime/sessions",
+            method="POST",
+            body={"agent_id": "worker"},
+            cookie=cookie,
+        )
+        self.invoke(
+            app,
+            path="/api/apps/chat/backend",
+            method="POST",
+            body={"action": "threads.create", "runtime_session_id": other_session["session_id"], "title": "Runtime lab thread"},
+            cookie=cookie,
+        )
+        switch_status, _switch_payload, _switch_headers = self.invoke(
+            app,
+            path="/api/workspaces/active",
+            method="POST",
+            body={"workspace_id": "default"},
+            cookie=cookie,
+        )
+        self.invoke(
+            app,
+            path="/api/apps/chat/backend",
+            method="POST",
+            body={"action": "threads.create", "runtime_session_id": created_session["session_id"], "title": "Default thread"},
+            cookie=cookie,
+        )
+        Path(state.runtime_store.get_session(created_session["session_id"]).runtime_root).mkdir(parents=True, exist_ok=True)
+        Path(state.runtime_store.get_session(other_session["session_id"]).runtime_root).mkdir(parents=True, exist_ok=True)
 
         status_provider, provider, _provider_headers = self.invoke(app, path="/api/providers/active", cookie=cookie)
+        model_id = provider["model_settings"]["selected_model_id"]
+        model_option = next(option for option in provider["model_settings"]["available_models"] if option["model_id"] == model_id)
+        reasoning_effort = model_option["supported_reasoning_efforts"][-1]["effort"]
+        status_model_update, model_update, _model_update_headers = self.invoke(
+            app,
+            path="/api/providers/active",
+            method="POST",
+            body={"provider_id": "codex", "model_id": model_id, "model_reasoning_effort": reasoning_effort},
+            cookie=cookie,
+        )
         status_runtime, runtime, _runtime_headers = self.invoke(app, path="/api/runtime/status", cookie=cookie)
         status_settings, settings, _settings_headers = self.invoke(app, path="/api/settings/platform", cookie=cookie)
+        status_runtime_inventory, runtime_inventory, _inventory_headers = self.invoke(
+            app,
+            path="/api/settings/runtime-sessions",
+            cookie=cookie,
+        )
+        status_clear, clear_result, _clear_headers = self.invoke(
+            app,
+            path="/api/settings/runtime-sessions/clear",
+            method="POST",
+            body={"reason": "settings_clear_test"},
+            cookie=cookie,
+        )
         status_recovery, recovery, _recovery_headers = self.invoke(app, path="/api/recovery/status", cookie=cookie)
 
         self.assertEqual(create_status, 201)
+        self.assertEqual(status_create_workspace, 201)
+        self.assertEqual(created_workspace["workspace_id"], "runtime-lab")
+        self.assertEqual(create_other_status, 201)
+        self.assertEqual(other_session["workspace_id"], "runtime-lab")
+        self.assertEqual(switch_status, 200)
         self.assertEqual(status_provider, 200)
         self.assertEqual(provider["active_provider"]["provider_id"], "codex")
+        self.assertEqual(provider["model_settings"]["selected_model_id"], model_id)
+        self.assertTrue(provider["model_settings"]["available_models"])
+        self.assertEqual(status_model_update, 200)
+        self.assertEqual(model_update["selection"]["model_id"], model_id)
+        self.assertEqual(model_update["selection"]["model_reasoning_effort"], reasoning_effort)
         self.assertEqual(status_runtime, 200)
         self.assertGreaterEqual(len(runtime["sessions"]), 1)
         self.assertEqual(status_settings, 200)
         self.assertEqual(settings["provider"]["active_provider"]["label"], "Codex")
         self.assertEqual(settings["workspace"]["workspace_id"], "default")
+        self.assertTrue(settings["runtime"]["cleanup_allowed"])
+        self.assertEqual(settings["runtime"]["cleanup_scope"], "server")
+        self.assertEqual({item["workspace_id"] for item in settings["runtime"]["all_sessions"]}, {"default", "runtime-lab"})
+        self.assertEqual(status_runtime_inventory, 200)
+        self.assertEqual({item["workspace_id"] for item in runtime_inventory["items"]}, {"default", "runtime-lab"})
+        self.assertEqual(status_clear, 200)
+        self.assertEqual(clear_result["cleared_sessions"], 2)
+        self.assertEqual(clear_result["deleted_threads"], 2)
+        self.assertEqual(clear_result["runtime_roots_deleted"], 2)
+        self.assertEqual(clear_result["sessions"], [])
+        self.assertEqual(state.runtime_store.list_all_sessions(), [])
+        default_threads = json.loads((state.repository_root / "workspaces" / "default" / "data" / "chat" / "threads.json").read_text(encoding="utf-8"))
+        runtime_lab_threads = json.loads((state.repository_root / "workspaces" / "runtime-lab" / "data" / "chat" / "threads.json").read_text(encoding="utf-8"))
+        self.assertEqual(default_threads["threads"], [])
+        self.assertEqual(runtime_lab_threads["threads"], [])
+        self.assertFalse(Path(created_session["runtime_root"]).exists())
+        self.assertFalse(Path(other_session["runtime_root"]).exists())
         self.assertEqual(status_recovery, 200)
         self.assertEqual(recovery["workspace_id"], "default")
+
+    def test_workspace_admin_cleanup_is_limited_to_active_workspace(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=state.repository_root)
+        admin_cookie = self.login(app)
+
+        default_status, default_session, _ = self.invoke(
+            app,
+            path="/api/runtime/sessions",
+            method="POST",
+            body={"agent_id": "chat"},
+            cookie=admin_cookie,
+        )
+        create_workspace_status, created_workspace, _ = self.invoke(
+            app,
+            path="/api/workspaces",
+            method="POST",
+            body={"name": "Scoped Runtime Lab"},
+            cookie=admin_cookie,
+        )
+        workspace_session_status, workspace_session, _ = self.invoke(
+            app,
+            path="/api/runtime/sessions",
+            method="POST",
+            body={"agent_id": "worker"},
+            cookie=admin_cookie,
+        )
+        self.assertEqual(default_status, 201)
+        self.assertEqual(create_workspace_status, 201)
+        self.assertEqual(workspace_session_status, 201)
+
+        workspace_admin = create_user(
+            state.identity_store,
+            username="workspace.admin",
+            password="workspace-admin-pass",
+            platform_role="member",
+        )
+        ensure_workspace_membership(
+            state.workspace_store,
+            membership_id=f"{created_workspace['workspace_id']}:{workspace_admin.user_id}",
+            workspace_id=created_workspace["workspace_id"],
+            user_id=workspace_admin.user_id,
+            role="admin",
+        )
+        workspace_admin_cookie = self.login_as(app, username="workspace.admin", password="workspace-admin-pass")
+
+        status_settings, settings, _ = self.invoke(app, path="/api/settings/platform", cookie=workspace_admin_cookie)
+        status_runtime_inventory, runtime_inventory, _ = self.invoke(app, path="/api/settings/runtime-sessions", cookie=workspace_admin_cookie)
+        status_clear, clear_result, _ = self.invoke(
+            app,
+            path="/api/settings/runtime-sessions/clear",
+            method="POST",
+            body={"reason": "workspace_admin_cleanup"},
+            cookie=workspace_admin_cookie,
+        )
+
+        self.assertEqual(status_settings, 200)
+        self.assertEqual(settings["workspace"]["workspace_id"], created_workspace["workspace_id"])
+        self.assertTrue(settings["runtime"]["cleanup_allowed"])
+        self.assertEqual(settings["runtime"]["cleanup_scope"], "workspace")
+        self.assertEqual({item["workspace_id"] for item in settings["runtime"]["all_sessions"]}, {created_workspace["workspace_id"]})
+        self.assertEqual(status_runtime_inventory, 200)
+        self.assertEqual({item["workspace_id"] for item in runtime_inventory["items"]}, {created_workspace["workspace_id"]})
+        self.assertEqual(status_clear, 200)
+        self.assertEqual(clear_result["cleared_sessions"], 1)
+        self.assertEqual(clear_result["results"][0]["workspace_id"], created_workspace["workspace_id"])
+        self.assertIsNotNone(state.runtime_store.get_session(default_session["session_id"]))
+        self.assertEqual(state.runtime_store.list_sessions(created_workspace["workspace_id"]), [])
 
     def test_runtime_turn_api_executes_selected_provider_and_records_events(self) -> None:
         state = bootstrap_platform_state(start_path=self.make_repo_root())

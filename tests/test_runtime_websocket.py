@@ -18,6 +18,7 @@ from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
 from core.api.runtime_websocket import WEBSOCKET_UNAUTHORIZED, stream_runtime_session_events
 from core.runtime.service import create_runtime_session, record_runtime_event, transition_runtime_session
+from core.shared.entrypoints import EntrypointShutdownController
 
 
 class RuntimeWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
@@ -322,6 +323,79 @@ class RuntimeWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
 
         frames = [json.loads(item["text"]) for item in sent if item.get("type") == "websocket.send"]
         self.assertEqual(frames, [{"type": "maverick.app.data-changed", "owner_app_id": "crm", "resource": "records"}])
+
+    async def test_runtime_websocket_exits_when_host_shutdown_begins(self) -> None:
+        state = bootstrap_platform_state(start_path=self.make_repo_root())
+        cookie = self.login_cookie(state)
+        session = create_runtime_session(
+            state.runtime_store,
+            session_id=str(uuid4()),
+            workspace_id="default",
+            agent_id="chat",
+            requested_mode=None,
+            governance=state.workspace_store.get_governance("default"),
+            platform_allows_full_access=True,
+            start_path=state.repository_root,
+        )
+        transition_runtime_session(state.runtime_store, session_id=session.session_id, target_status="running")
+        controller = EntrypointShutdownController()
+        sent: list[dict] = []
+        receive_queue: asyncio.Queue[dict] = asyncio.Queue()
+        await receive_queue.put({"type": "websocket.connect"})
+
+        async def receive() -> dict:
+            return await receive_queue.get()
+
+        async def send(message: dict) -> None:
+            sent.append(message)
+
+        stream_task = asyncio.create_task(
+            stream_runtime_session_events(
+                state=state,
+                scope={
+                    "type": "websocket",
+                    "path": f"/ws/runtime/sessions/{session.session_id}",
+                    "query_string": b"",
+                    "headers": [(b"cookie", cookie.encode("latin1"))],
+                },
+                receive=receive,
+                send=send,
+                shutdown_controller=controller,
+            )
+        )
+        while not any(message.get("type") == "websocket.accept" for message in sent):
+            await asyncio.sleep(0)
+
+        controller.begin_shutdown()
+        await asyncio.wait_for(stream_task, timeout=2.0)
+
+    async def test_app_event_websocket_exits_when_host_shutdown_begins(self) -> None:
+        bus = AppEventBus()
+        controller = EntrypointShutdownController()
+        sent: list[dict] = []
+        receive_queue: asyncio.Queue[dict] = asyncio.Queue()
+        await receive_queue.put({"type": "websocket.connect"})
+
+        async def receive() -> dict:
+            return await receive_queue.get()
+
+        async def send(message: dict) -> None:
+            sent.append(message)
+
+        stream_task = asyncio.create_task(
+            stream_app_events(
+                bus=bus,
+                scope={"type": "websocket", "path": APP_EVENTS_WS_PATH},
+                receive=receive,
+                send=send,
+                shutdown_controller=controller,
+            )
+        )
+        while not any(message.get("type") == "websocket.accept" for message in sent):
+            await asyncio.sleep(0)
+
+        controller.begin_shutdown()
+        await asyncio.wait_for(stream_task, timeout=2.0)
 
 
 if __name__ == "__main__":

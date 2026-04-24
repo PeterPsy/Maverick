@@ -122,9 +122,12 @@ class DynamicViewsAppTestCase(unittest.TestCase):
         self.assertEqual(parsed.contract.entrypoints.frontend, "frontend/dist")
         self.assertIn("maverick_dynamic_views", parsed.contract.capabilities.mcp_tools)
         self.assertIn("dynamic_views_reference_manifest", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("dynamic_views_set_view_filter", parsed.contract.capabilities.mcp_tools)
         self.assertEqual(parsed.contract.capabilities.cli_commands, ["dynamic-views"])
         self.assertIn("view", {item.entity_type for item in parsed.contract.capabilities.reference_entities})
-        self.assertEqual(parsed.contract.capabilities.skills, [])
+        self.assertEqual(parsed.contract.capabilities.skills, ["dynamic-views"])
+        self.assertEqual(parsed.contract.capabilities.view_surfaces[0].view_id, "dynamic-views")
+        self.assertEqual(parsed.contract.capabilities.view_surfaces[0].entity_types, ["view"])
         self.assertEqual(len(parsed.contract.widgets), 1)
         widget = parsed.contract.widgets[0]
         self.assertEqual(widget.widget_id, "dynamic-view")

@@ -6,7 +6,8 @@ from pathlib import Path
 from typing import Any
 
 from core.apps.store import AppStore
-from core.mcp.core_tool_helpers import OPERATOR_FULL_ACCESS, OPERATOR_ONLY, WORKSPACE_SAFE, core_mcp_tool
+from core.mcp.core_tool_helpers import FULL_ACCESS_WORKSPACE, OPERATOR_ONLY, WORKSPACE_SAFE, core_mcp_tool
+from core.mcp.errors import McpInvocationNotAllowedError
 from core.mcp.models import McpInvocationContext, McpToolDefinition
 from core.providers.provider_registry import ProviderRegistry
 from core.recovery.backend_service import restart_backend_service
@@ -49,6 +50,10 @@ def recovery_tool_specs(
         return {"executed": True, "intent_id": intent.intent_id, "action": intent.action, "runtime_status": restarted.status}
 
     def _recovery_backend_restart_handler(arguments: dict[str, Any], context: McpInvocationContext) -> dict[str, Any]:
+        if context.caller_kind != "full_access_agent":
+            raise McpInvocationNotAllowedError("This MCP tool is restricted to full-access runtime agents.")
+        if context.workspace_id != "default":
+            raise McpInvocationNotAllowedError("This MCP tool is restricted to the default workspace.")
         result = restart_backend_service(
             service_name=str(arguments.get("service_name") or "maverick3-core.service"),
             health_url=str(arguments.get("health_url") or "http://127.0.0.1:8014/health"),
@@ -103,7 +108,7 @@ def recovery_tool_specs(
     tool_specs = [
         ("core.recovery.status", "Inspect recovery status for one workspace or runtime session.", OPERATOR_ONLY, _recovery_status_handler),
         ("core.recovery.restart", "Execute one runtime-session restart recovery action when allowed.", WORKSPACE_SAFE, _recovery_restart_handler),
-        ("core.recovery.restart_backend", "Restart the Maverick backend host service and verify its health.", OPERATOR_FULL_ACCESS, _recovery_backend_restart_handler),
+        ("core.recovery.restart_backend", "Restart the Maverick backend host service and verify its health.", FULL_ACCESS_WORKSPACE, _recovery_backend_restart_handler),
         ("core.recovery.failed_start", "Record one failed-start diagnosis and plan recovery.", OPERATOR_ONLY, _recovery_failed_start_handler),
         ("core.recovery.health", "Run one recovery health probe on demand.", OPERATOR_ONLY, _recovery_health_handler),
     ]

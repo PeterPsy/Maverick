@@ -297,7 +297,7 @@ class Phase13WidgetsTestCase(unittest.TestCase):
                 "owner_app_id": "checklists",
                 "widget_id": "design-checklist",
                 "message_id": "msg-1",
-                "content": {"kind": "checklist.design", "payload": {"title": "Plan"}},
+                "content": {"kind": "checklist.design", "payload": {"id": "check_demo1234"}},
             },
         )
         create_payload = json.loads(create_body.decode("utf-8"))

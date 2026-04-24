@@ -30,6 +30,7 @@
       </section>
       <nav class="store-tabs" aria-label="App Store sections">
         <button class="store-tab is-active" type="button" data-tab="catalog">Catalog apps</button>
+        <button class="store-tab" type="button" data-tab="server">Server apps</button>
         <button class="store-tab" type="button" data-tab="installed">Installed apps</button>
         <button class="store-tab" type="button" data-tab="local">Local apps</button>
       </nav>
@@ -42,6 +43,15 @@
           <div class="status-pill" id="statusText">Loading</div>
         </div>
         <div id="catalogGrid" class="app-list app-list--store"></div>
+      </section>
+      <section class="catalog-section store-panel" data-panel="server">
+        <div class="catalog-header">
+          <div>
+            <p class="section-label">Server</p>
+            <h2>Server apps</h2>
+          </div>
+        </div>
+        <div id="serverList" class="app-list app-list--server"></div>
       </section>
       <section class="catalog-section store-panel" data-panel="installed">
         <div class="catalog-header">

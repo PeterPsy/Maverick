@@ -14,6 +14,7 @@ Primary control-plane routes include:
 - `/api/workspaces/active`
 - `/api/apps`
 - `/api/app-store/apps`
+- `/api/app-store/server-apps`
 - `/api/app-store/installations`
 - `/api/app-store/install`
 - `/api/app-store/install-local`

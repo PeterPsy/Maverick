@@ -9,7 +9,7 @@ from typing import Any
 from urllib.parse import urljoin
 from urllib.request import urlopen
 
-from store import load_state, pinned_apps, remember_install, set_pinned_apps, toggle_pinned_app
+from store import clear_custom_view, load_state, pinned_apps, remember_install, set_custom_view, set_pinned_apps, set_view_filter, toggle_pinned_app, view_filter_state
 
 REFERENCE_MANIFEST = {
     "app_id": "app-store",
@@ -20,6 +20,7 @@ REFERENCE_MANIFEST = {
 }
 
 DATA_CHANGED_ACTIONS = {"pinned_apps.set", "pinned_apps.toggle", "remember_install"}
+VIEW_STATE_ACTIONS = {"view_filter", "set_view_filter", "set_custom_view", "clear_custom_view"}
 DEFAULT_CATALOG_URL = "https://maverick-app-store.versy.ai"
 
 
@@ -28,9 +29,11 @@ class AppStoreValidationError(ValueError):
 
 
 def app_events_for_action(action: str) -> list[dict]:
-    if action not in DATA_CHANGED_ACTIONS:
-        return []
-    return [{"type": "maverick.app.data-changed", "resource": "state"}]
+    if action in DATA_CHANGED_ACTIONS:
+        return [{"type": "maverick.app.data-changed", "resource": "state"}]
+    if action in VIEW_STATE_ACTIONS:
+        return [{"type": "maverick.app.data-changed", "resource": "view-state"}]
+    return []
 
 
 def catalog_url() -> str:
@@ -52,7 +55,23 @@ def handle_action(data_root: Path, body: dict[str, Any]) -> tuple[int, dict[str,
     if action == "state":
         return 200, {"state": load_state(data_root), "catalog_url": catalog_url()}
     if action == "catalog":
-        return 200, fetch_catalog()
+        return 200, {**fetch_catalog(), "state": load_state(data_root)}
+    if action == "view_filter":
+        return 200, {"state": {"view_filter": view_filter_state(data_root)}}
+    if action == "set_view_filter":
+        try:
+            state = set_view_filter(data_root, query=body.get("query"), scope=body.get("scope"), preserve_custom=bool(body.get("preserve_custom")))
+        except ValueError as error:
+            raise AppStoreValidationError(str(error)) from error
+        return 200, {"state": state}
+    if action == "set_custom_view":
+        try:
+            state = set_custom_view(data_root, title=body.get("title"), refs=body.get("refs"), query=body.get("query"), scope=body.get("scope"))
+        except ValueError as error:
+            raise AppStoreValidationError(str(error)) from error
+        return 200, {"state": state}
+    if action == "clear_custom_view":
+        return 200, {"state": clear_custom_view(data_root)}
     if action == "pinned_apps.list":
         return 200, {"pinned_apps": pinned_apps(data_root)}
     if action == "pinned_apps.set":

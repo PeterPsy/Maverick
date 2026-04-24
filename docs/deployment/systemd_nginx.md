@@ -50,6 +50,39 @@ Preflight checks are blocking for live apply. Missing systemd, nginx, certbot, C
 
 Post-apply health checks are also blocking. If any required health endpoint fails, the installer exits non-zero. Use `--skip-health-check` only when another supervisor is performing the same verification.
 
+## Interactive Prompt Guide
+
+For a public HTTPS deployment, most prompts should be accepted with Enter.
+Only type `yes` or `y` at confirmation prompts that explicitly show `[y/N]` or `[Y/n]`.
+
+Example command:
+
+```bash
+cd /home/ubuntu/projects/maverick-v3
+python3 scripts/install_maverick.py \
+  --hostname maverick.example.com \
+  --skip-bootstrap \
+  --skip-verify \
+  --install-root /home/ubuntu/projects/maverick-v3
+```
+
+Prompt answers:
+
+| Prompt | Correct response | Why |
+| --- | --- | --- |
+| `Install root [/home/ubuntu/projects/maverick-v3]:` | Press Enter. | The install root must match the checkout root. |
+| `Service user [ubuntu]:` | Press Enter. | The systemd unit should run as Linux user `ubuntu`; `yes` is not a valid service user unless that account exists. |
+| `Service group [ubuntu]:` | Press Enter. | The systemd unit should run as Linux group `ubuntu`; `yes` is not a valid service group unless that group exists. |
+| `Core bind host [127.0.0.1]:` | Press Enter. | The core should listen only locally; nginx exposes the public hostname. |
+| `Core port [8014]:` | Press Enter. | This is the default internal core port. |
+| `Rescue port [8015]:` | Press Enter. | This is the default internal rescue port. |
+| `Public scheme [https] (https/http):` | Press Enter. | Public deployments should use HTTPS. |
+| `Apply the rendered plan to the live system paths and manage services? [y/N]:` | Type `y` after reviewing the rendered plan. | This writes live systemd/nginx files and restarts services. |
+| `Request a TLS certificate with certbot now? [y/N]:` | Type `y` only when DNS points to this machine and ports `80/443` are open. | Certbot must reach the hostname over the public internet. |
+
+If a wrong value was entered at a prompt, press `Ctrl+C` and rerun the installer.
+Do not continue with a wrong `Service user`, `Service group`, or `Install root`.
+
 ## Minimum Hardening
 
 - bind the core service to `127.0.0.1`

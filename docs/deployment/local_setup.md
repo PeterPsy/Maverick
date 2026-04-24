@@ -57,6 +57,99 @@ Use `--install-root`, `--service-user`, `--service-group`, `--core-port`, `--res
 
 For live apply, missing required preflight tools fail before the installer writes live system paths. `--force` is reserved for operator-reviewed exceptions. Failed post-apply health checks also return a non-zero exit code; `--skip-health-check` must be explicit.
 
+## Human Install Walkthrough
+
+Use this sequence on a new machine when installing under `/home/ubuntu/projects/maverick-v3`.
+
+Clone the repository directly into the final install directory:
+
+```bash
+mkdir -p /home/ubuntu/projects
+cd /home/ubuntu/projects
+git clone https://github.com/PieroVersy/Maverick.git maverick-v3
+cd /home/ubuntu/projects/maverick-v3
+git checkout main
+```
+
+Bootstrap and verify:
+
+```bash
+./scripts/bootstrap_local.sh
+source .venv/bin/activate
+./scripts/verify_local.sh
+```
+
+The verification suite intentionally prints traceback logs for tests that simulate app crashes.
+Treat the run as successful only when the final summary says `OK`.
+
+Render first without touching live systemd or nginx:
+
+```bash
+python3 scripts/install_maverick.py \
+  --local-only \
+  --render-only \
+  --skip-bootstrap \
+  --skip-verify \
+  --install-root /home/ubuntu/projects/maverick-v3 \
+  --yes
+```
+
+For a local-only systemd install:
+
+```bash
+python3 scripts/install_maverick.py \
+  --local-only \
+  --skip-bootstrap \
+  --skip-verify \
+  --install-root /home/ubuntu/projects/maverick-v3 \
+  --yes
+```
+
+For a public hostname such as `maverick.example.com`, first make sure DNS points at the machine and ports `80` and `443` are reachable.
+Then run:
+
+```bash
+python3 scripts/install_maverick.py \
+  --hostname maverick.example.com \
+  --skip-bootstrap \
+  --skip-verify \
+  --install-root /home/ubuntu/projects/maverick-v3
+```
+
+When the installer prompts interactively, answer as follows:
+
+| Prompt | Answer |
+| --- | --- |
+| `Install root [/home/ubuntu/projects/maverick-v3]:` | Press Enter. The default must be the checkout root. |
+| `Service user [ubuntu]:` | Press Enter, unless the Linux service user is different. Do not type `yes`. |
+| `Service group [ubuntu]:` | Press Enter, unless the Linux service group is different. Do not type `yes`. |
+| `Core bind host [127.0.0.1]:` | Press Enter. Nginx is the public entrypoint. |
+| `Core port [8014]:` | Press Enter unless port `8014` is already used. |
+| `Rescue port [8015]:` | Press Enter unless port `8015` is already used. |
+| `Public scheme [https] (https/http):` | Press Enter for HTTPS. |
+| `Apply the rendered plan... [y/N]:` | Type `y` only after reviewing the plan. |
+| `Request a TLS certificate with certbot now? [y/N]:` | Type `y` only when DNS and ports `80/443` are ready. |
+
+After live apply, verify:
+
+```bash
+systemctl status --no-pager maverick3-core.service
+systemctl status --no-pager maverick3-rescue.service
+curl http://127.0.0.1:8014/health
+```
+
+For a public HTTPS install, also verify:
+
+```bash
+curl https://maverick.example.com/health
+```
+
+The generated bootstrap credentials and signing secrets are in:
+
+```bash
+.maverick/install/maverick3.env
+```
+
 ## Python Environment
 
 ```bash

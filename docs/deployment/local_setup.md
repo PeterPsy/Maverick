@@ -40,7 +40,7 @@ The default flow is interactive. It:
 For a non-interactive public install with defaults accepted:
 
 ```bash
-python3 scripts/install_maverick.py --hostname maverick.example.com --yes
+python3 scripts/install_maverick.py --hostname maverick.<host>.com --yes
 ```
 
 For a local-only install without nginx or TLS:
@@ -105,12 +105,12 @@ python3 scripts/install_maverick.py \
   --yes
 ```
 
-For a public hostname such as `maverick.example.com`, first make sure DNS points at the machine and ports `80` and `443` are reachable.
+For a public hostname such as `maverick.<host>.com`, first make sure DNS points at the machine and ports `80` and `443` are reachable.
 Then run:
 
 ```bash
 python3 scripts/install_maverick.py \
-  --hostname maverick.example.com \
+  --hostname maverick.<host>.com \
   --skip-bootstrap \
   --skip-verify \
   --install-root /home/ubuntu/projects/maverick-v3
@@ -141,7 +141,7 @@ curl http://127.0.0.1:8014/health
 For a public HTTPS install, also verify:
 
 ```bash
-curl https://maverick.example.com/health
+curl https://maverick.<host>.com/health
 ```
 
 The generated bootstrap credentials and signing secrets are in:

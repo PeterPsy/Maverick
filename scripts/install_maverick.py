@@ -35,7 +35,7 @@ from core.shared.installer import (  # noqa: E402
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--hostname", help="Public hostname for nginx/TLS, for example maverick.example.com.")
+    parser.add_argument("--hostname", help="Public hostname for nginx/TLS, for example maverick.<host>.com.")
     parser.add_argument("--public-scheme", default="https", choices=("http", "https"))
     parser.add_argument("--local-only", action="store_true", help="Skip nginx/TLS and keep the install local-only.")
     parser.add_argument("--install-root", type=Path, default=default_install_root(Path(__file__)))

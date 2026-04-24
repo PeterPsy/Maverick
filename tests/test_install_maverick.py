@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 from core.shared.installer import (
     InstallerConfig,
+    _ensure_symlink,
     _write_file,
     apply_install_plan,
     default_install_env_path,
@@ -370,6 +371,17 @@ class InstallerFlowTestCase(unittest.TestCase):
             self.assertEqual(len(commands), 1)
             self.assertEqual(commands[0][:4], ["install", "-D", "-m", "0644"])
             self.assertEqual(commands[0][-1], str(target))
+
+    def test_ensure_symlink_skips_when_link_and_target_are_same_path(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="maverick-install-") as temp_dir:
+            target = Path(temp_dir) / "maverick.conf"
+            target.write_text("nginx\n", encoding="utf-8")
+            commands: list[list[str]] = []
+
+            _ensure_symlink(target, target, run_command=commands.append)
+
+            self.assertEqual(commands, [])
+            self.assertFalse(target.is_symlink())
 
 
 if __name__ == "__main__":

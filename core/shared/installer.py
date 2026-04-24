@@ -408,6 +408,8 @@ def _write_file(path: Path, content: str, *, run_command: Any = None, mode: str 
 
 
 def _ensure_symlink(link_path: Path, target_path: Path, *, run_command: Any = None) -> None:
+    if _same_path(link_path, target_path):
+        return
     try:
         link_path.parent.mkdir(parents=True, exist_ok=True)
         if link_path.is_symlink() or link_path.exists():
@@ -417,6 +419,13 @@ def _ensure_symlink(link_path: Path, target_path: Path, *, run_command: Any = No
         runner = run_command or run_privileged_command
         runner(["mkdir", "-p", str(link_path.parent)])
         runner(["ln", "-sfn", str(target_path), str(link_path)])
+
+
+def _same_path(left: Path, right: Path) -> bool:
+    try:
+        return left.resolve(strict=False) == right.resolve(strict=False)
+    except OSError:
+        return str(left) == str(right)
 
 
 def _url_is_healthy(url: str, *, timeout_seconds: float) -> bool:

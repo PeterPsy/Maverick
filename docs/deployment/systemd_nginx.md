@@ -16,7 +16,7 @@ Run the installer to bootstrap, verify, render, and optionally apply the deploym
 
 ```bash
 cd /opt/maverick-v3
-python3 scripts/install_maverick.py --hostname maverick.example.com --install-root /opt/maverick-v3
+python3 scripts/install_maverick.py --hostname maverick.<host>.com --install-root /opt/maverick-v3
 ```
 
 `--install-root` currently must be the checkout root that the installer is running from.
@@ -63,7 +63,7 @@ Example command:
 ```bash
 cd /home/ubuntu/projects/maverick-v3
 python3 scripts/install_maverick.py \
-  --hostname maverick.example.com \
+  --hostname maverick.<host>.com \
   --skip-bootstrap \
   --skip-verify \
   --install-root /home/ubuntu/projects/maverick-v3

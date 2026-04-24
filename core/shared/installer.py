@@ -9,6 +9,7 @@ from pathlib import Path
 import shutil
 import secrets
 import subprocess
+import tempfile
 from typing import Any
 from urllib import error, request
 
@@ -205,16 +206,16 @@ def apply_install_plan(
 ) -> None:
     """Apply the rendered install plan to live system paths."""
     runner = run_command or run_privileged_command
-    _write_tree(rendered_files, source_root=config.systemd_dir, destination_root=config.live_systemd_dir)
+    _write_tree(rendered_files, source_root=config.systemd_dir, destination_root=config.live_systemd_dir, run_command=runner)
     if config.nginx_conf_path is not None and config.live_nginx_conf_path is not None:
         nginx_content = rendered_files.get(config.nginx_conf_path)
         if nginx_content is None and config.nginx_conf_path.is_file():
             nginx_content = config.nginx_conf_path.read_text(encoding="utf-8")
         if nginx_content is None:
             raise FileNotFoundError(f"Rendered nginx config missing at `{config.nginx_conf_path}`.")
-        _write_file(config.live_nginx_conf_path, nginx_content)
+        _write_file(config.live_nginx_conf_path, nginx_content, run_command=runner)
         if config.live_nginx_enabled_path is not None:
-            _ensure_symlink(config.live_nginx_enabled_path, config.live_nginx_conf_path)
+            _ensure_symlink(config.live_nginx_enabled_path, config.live_nginx_conf_path, run_command=runner)
     if config.acme_root is not None:
         runner(["mkdir", "-p", str(config.acme_root)])
     runner(["systemctl", "daemon-reload"])
@@ -358,24 +359,41 @@ def run_privileged_command(command: list[str]) -> None:
     subprocess.run(["sudo", *command], check=True)
 
 
-def _write_tree(files: dict[Path, str], *, source_root: Path, destination_root: Path) -> None:
+def _write_tree(files: dict[Path, str], *, source_root: Path, destination_root: Path, run_command: Any = None) -> None:
     for source_path, content in files.items():
         if not _is_relative_to(source_path, source_root):
             continue
         target_path = destination_root / source_path.relative_to(source_root)
-        _write_file(target_path, content)
+        _write_file(target_path, content, run_command=run_command)
 
 
-def _write_file(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
+def _write_file(path: Path, content: str, *, run_command: Any = None, mode: str = "0644") -> None:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+    except PermissionError:
+        runner = run_command or run_privileged_command
+        temporary_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile("w", encoding="utf-8", delete=False) as handle:
+                temporary_path = Path(handle.name)
+                handle.write(content)
+            runner(["install", "-D", "-m", mode, str(temporary_path), str(path)])
+        finally:
+            if temporary_path is not None and temporary_path.exists():
+                temporary_path.unlink()
 
 
-def _ensure_symlink(link_path: Path, target_path: Path) -> None:
-    link_path.parent.mkdir(parents=True, exist_ok=True)
-    if link_path.is_symlink() or link_path.exists():
-        link_path.unlink()
-    link_path.symlink_to(target_path)
+def _ensure_symlink(link_path: Path, target_path: Path, *, run_command: Any = None) -> None:
+    try:
+        link_path.parent.mkdir(parents=True, exist_ok=True)
+        if link_path.is_symlink() or link_path.exists():
+            link_path.unlink()
+        link_path.symlink_to(target_path)
+    except PermissionError:
+        runner = run_command or run_privileged_command
+        runner(["mkdir", "-p", str(link_path.parent)])
+        runner(["ln", "-sfn", str(target_path), str(link_path)])
 
 
 def _url_is_healthy(url: str, *, timeout_seconds: float) -> bool:

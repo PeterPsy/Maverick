@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 from core.shared.installer import (
     InstallerConfig,
+    _write_file,
     apply_install_plan,
     default_install_env_path,
     default_live_nginx_conf_path,
@@ -308,6 +309,18 @@ class InstallerFlowTestCase(unittest.TestCase):
             self.assertTrue(config.live_nginx_enabled_path.is_symlink())
             self.assertIn(["systemctl", "daemon-reload"], commands)
             self.assertIn(["systemctl", "reload", "nginx"], commands)
+
+    def test_write_file_uses_privileged_install_when_direct_write_is_denied(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="maverick-install-") as temp_dir:
+            target = Path(temp_dir) / "systemd" / "maverick3-core.service"
+            commands: list[list[str]] = []
+
+            with patch("pathlib.Path.write_text", side_effect=PermissionError):
+                _write_file(target, "unit\n", run_command=commands.append)
+
+            self.assertEqual(len(commands), 1)
+            self.assertEqual(commands[0][:4], ["install", "-D", "-m", "0644"])
+            self.assertEqual(commands[0][-1], str(target))
 
 
 if __name__ == "__main__":

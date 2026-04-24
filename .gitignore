@@ -36,7 +36,7 @@ provider-homes/
 !core/runtime/.gitkeep
 
 # Workspace runtime and agent-owned data
-workspaces/
+/workspaces/
 
 # Node / frontend
 node_modules/

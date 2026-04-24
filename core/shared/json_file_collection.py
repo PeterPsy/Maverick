@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime
+import fcntl
 import json
+import os
 from pathlib import Path
 from threading import RLock
+import tempfile
 from typing import Any
 
 
@@ -23,35 +26,44 @@ class JsonFileCollection:
 
     def find_one(self, query: dict[str, Any]) -> dict[str, Any] | None:
         with self._lock:
-            for document in self._read_documents():
-                if _matches(document, query):
-                    return deepcopy(document)
+            with self._process_lock(exclusive=False):
+                for document in self._read_documents():
+                    if _matches(document, query):
+                        return deepcopy(document)
         return None
 
     def find(self, query: dict[str, Any]) -> list[dict[str, Any]]:
         with self._lock:
-            return [deepcopy(document) for document in self._read_documents() if _matches(document, query)]
+            with self._process_lock(exclusive=False):
+                return [deepcopy(document) for document in self._read_documents() if _matches(document, query)]
 
     def update_one(self, query: dict[str, Any], update: dict[str, Any], *, upsert: bool = False) -> None:
         payload = deepcopy(update.get("$set", {}))
         with self._lock:
-            if self.append_only_upserts and upsert and query and _query_is_contained(query, payload):
-                self._append_document({**deepcopy(query), **payload})
-                return
-            documents = self._read_documents()
-            for index, document in enumerate(documents):
-                if _matches(document, query):
-                    documents[index] = {**document, **payload}
-                    self._write_documents(documents)
+            with self._process_lock(exclusive=True):
+                if self.append_only_upserts and upsert and query and _query_is_contained(query, payload):
+                    self._append_document({**deepcopy(query), **payload})
                     return
-            if upsert:
-                documents.append({**deepcopy(query), **payload})
-                self._write_documents(documents)
+                documents = self._read_documents()
+                for index, document in enumerate(documents):
+                    if _matches(document, query):
+                        documents[index] = {**document, **payload}
+                        self._write_documents(documents)
+                        return
+                if upsert:
+                    documents.append({**deepcopy(query), **payload})
+                    self._write_documents(documents)
 
     def delete_one(self, query: dict[str, Any]) -> None:
         with self._lock:
-            documents = [document for document in self._read_documents() if not _matches(document, query)]
-            self._write_documents(documents)
+            with self._process_lock(exclusive=True):
+                documents = [document for document in self._read_documents() if not _matches(document, query)]
+                self._write_documents(documents)
+
+    def _process_lock(self, *, exclusive: bool):
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path = self.path.with_name(f".{self.path.name}.lock")
+        return _FileLock(lock_path, exclusive=exclusive)
 
     def _read_documents(self) -> list[dict[str, Any]]:
         if not self.path.is_file():
@@ -66,9 +78,24 @@ class JsonFileCollection:
 
     def _write_documents(self, documents: list[dict[str, Any]]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        temporary_path = self.path.with_suffix(f"{self.path.suffix}.tmp")
-        temporary_path.write_text(json.dumps(documents, indent=2, default=_encode_document_value) + "\n", encoding="utf-8")
-        temporary_path.replace(self.path)
+        temporary_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                "w",
+                encoding="utf-8",
+                dir=self.path.parent,
+                prefix=f".{self.path.name}.",
+                suffix=".tmp",
+                delete=False,
+            ) as handle:
+                temporary_path = Path(handle.name)
+                handle.write(json.dumps(documents, indent=2, default=_encode_document_value) + "\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+            temporary_path.replace(self.path)
+        finally:
+            if temporary_path is not None and temporary_path.exists():
+                temporary_path.unlink()
 
     def _append_document(self, document: dict[str, Any]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -142,3 +169,25 @@ def _decode_document_value(value: dict[str, Any]) -> Any:
     if isinstance(timestamp, str) and len(value) == 1:
         return datetime.fromisoformat(timestamp)
     return value
+
+
+class _FileLock:
+    def __init__(self, path: Path, *, exclusive: bool) -> None:
+        self.path = path
+        self.exclusive = exclusive
+        self._handle = None
+
+    def __enter__(self):
+        self._handle = self.path.open("a+b")
+        operation = fcntl.LOCK_EX if self.exclusive else fcntl.LOCK_SH
+        fcntl.flock(self._handle.fileno(), operation)
+        return self
+
+    def __exit__(self, exc_type, exc, traceback) -> None:
+        if self._handle is None:
+            return
+        try:
+            fcntl.flock(self._handle.fileno(), fcntl.LOCK_UN)
+        finally:
+            self._handle.close()
+            self._handle = None

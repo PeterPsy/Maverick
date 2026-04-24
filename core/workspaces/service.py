@@ -134,17 +134,26 @@ def default_workspace_quota(workspace_id: str, now: datetime | None = None) -> W
 def ensure_default_workspace_record(store: WorkspaceStore, now: datetime | None = None) -> WorkspaceRecord:
     """Ensure the default workspace registry record exists."""
     timestamp = now or utcnow()
-    record = build_workspace_record(
-        workspace_id="default",
-        name="Default",
-        slug="default",
-        description="Default workspace for the current Maverick installation.",
-        created_by_user_id=None,
-        now=timestamp,
-    )
-    store.save_workspace(record)
-    store.save_governance(default_workspace_governance(workspace_id="default", now=timestamp))
-    store.save_quota(default_workspace_quota(workspace_id="default", now=timestamp))
+    try:
+        record = store.get_workspace("default")
+    except WorkspaceNotFoundError:
+        record = build_workspace_record(
+            workspace_id="default",
+            name="Default",
+            slug="default",
+            description="Default workspace for the current Maverick installation.",
+            created_by_user_id=None,
+            now=timestamp,
+        )
+        store.save_workspace(record)
+    try:
+        store.get_governance("default")
+    except WorkspaceNotFoundError:
+        store.save_governance(default_workspace_governance(workspace_id="default", now=timestamp))
+    try:
+        store.get_quota("default")
+    except WorkspaceNotFoundError:
+        store.save_quota(default_workspace_quota(workspace_id="default", now=timestamp))
     return record
 
 

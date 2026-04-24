@@ -11,7 +11,12 @@ from typing import Any
 
 
 def _secret() -> bytes:
-    return os.environ.get("MAVERICK3_WIDGET_CONTEXT_SECRET", "maverick3-dev-widget-context").encode("utf-8")
+    configured = os.environ.get("MAVERICK3_WIDGET_CONTEXT_SECRET", "").strip()
+    if configured:
+        return configured.encode("utf-8")
+    if os.environ.get("MAVERICK_ENV", "development").strip().lower() in {"development", "dev", "test"}:
+        return b"maverick3-dev-widget-context"
+    raise RuntimeError("MAVERICK3_WIDGET_CONTEXT_SECRET is required outside development mode.")
 
 
 def _encode_json(payload: dict[str, Any]) -> str:

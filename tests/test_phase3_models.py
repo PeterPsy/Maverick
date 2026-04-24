@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 import unittest
 
@@ -129,6 +130,20 @@ class Phase3ModelTestCase(unittest.TestCase):
         self.assertEqual(store.get_workspace("default").name, "Default")
         self.assertEqual(store.get_governance("default").workspace_id, "default")
         self.assertIsNone(store.get_quota("default").max_agent_instances)
+
+    def test_default_workspace_bootstrap_preserves_existing_governance_and_quota(self) -> None:
+        store = self.make_workspace_store()
+        ensure_default_workspace_record(store)
+        governance = replace(store.get_governance("default"), allow_custom_apps=False, allow_full_access_runtime=False)
+        quota = replace(store.get_quota("default"), max_agent_instances=1)
+        store.save_governance(governance)
+        store.save_quota(quota)
+
+        ensure_default_workspace_record(store)
+
+        self.assertFalse(store.get_governance("default").allow_custom_apps)
+        self.assertFalse(store.get_governance("default").allow_full_access_runtime)
+        self.assertEqual(store.get_quota("default").max_agent_instances, 1)
 
     def test_create_workspace_adds_registry_governance_and_quota(self) -> None:
         store = self.make_workspace_store()

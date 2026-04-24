@@ -17,6 +17,7 @@ from core.shared.installer import (  # noqa: E402
     InstallerConfig,
     apply_install_plan,
     check_health,
+    default_install_env_path,
     default_install_root,
     default_live_nginx_conf_path,
     default_live_nginx_enabled_path,
@@ -41,6 +42,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output-root", type=Path, default=None)
     parser.add_argument("--systemd-dir", type=Path, default=None, help="Render-only systemd output path.")
     parser.add_argument("--nginx-conf", type=Path, default=None, help="Render-only nginx config output path.")
+    parser.add_argument("--install-env", type=Path, default=None, help="Rendered service environment file path.")
     parser.add_argument("--live-systemd-dir", type=Path, default=default_live_systemd_dir())
     parser.add_argument("--live-nginx-conf", type=Path, default=None, help="Live nginx config path for apply.")
     parser.add_argument("--live-nginx-enabled", type=Path, default=None, help="Live nginx symlink path for apply.")
@@ -52,8 +54,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--rescue-port", type=int, default=8015)
     parser.add_argument("--skip-bootstrap", action="store_true")
     parser.add_argument("--skip-verify", action="store_true")
+    parser.add_argument("--build-frontends", action="store_true", help="Build app frontends during bootstrap.")
     parser.add_argument("--skip-tls", action="store_true", help="Skip the TLS certbot step.")
+    parser.add_argument("--skip-health-check", action="store_true", help="Skip final post-apply health checks.")
     parser.add_argument("--render-only", action="store_true", help="Only render files, do not offer live apply.")
+    parser.add_argument("--force", action="store_true", help="Continue despite blocking preflight errors.")
     parser.add_argument("--yes", action="store_true", help="Accept prompts and apply defaults non-interactively.")
     return parser.parse_args(argv)
 
@@ -64,8 +69,12 @@ def main(argv: list[str] | None = None) -> int:
     config = build_config(args, interactive=interactive)
 
     _print_plan(config)
-    warnings = preflight_check(config)
-    _print_preflight(warnings)
+    request_tls = not args.skip_tls and not config.local_only and config.public_scheme == "https" and config.hostname is not None
+    preflight = preflight_check(config, live_apply=not args.render_only, request_tls=request_tls)
+    _print_preflight(preflight.errors, preflight.warnings)
+    if preflight.errors and not args.force:
+        print("Preflight failed. Re-run with --force only if an operator has prepared equivalent dependencies.")
+        return 2
 
     run_install_steps(config)
     rendered = render_install_plan(config)
@@ -87,17 +96,23 @@ def main(argv: list[str] | None = None) -> int:
 
     apply_install_plan(config, rendered)
 
-    request_tls = (
+    should_request_tls = (
         not args.skip_tls
         and not config.local_only
         and config.public_scheme == "https"
         and config.hostname is not None
         and (args.yes or _confirm("Request a TLS certificate with certbot now?", default=False))
     )
-    if request_tls:
+    if should_request_tls:
         request_tls_certificate(config)
 
-    _print_health(check_health(config))
+    if not args.skip_health_check:
+        health = check_health(config)
+        _print_health(health)
+        if not all(health.values()):
+            print("Install applied, but at least one required health check failed.")
+            _print_summary(config)
+            return 3
     _print_summary(config)
     return 0
 
@@ -114,6 +129,12 @@ def build_config(args: argparse.Namespace, *, interactive: bool) -> InstallerCon
         local_only, hostname = _prompt_install_mode(default_hostname=hostname, default_local_only=local_only)
 
     install_root = _prompt_path("Install root", args.install_root.resolve(), interactive=interactive)
+    if install_root != repository_root:
+        raise SystemExit(
+            "--install-root must currently match the checkout root. "
+            "Clone Maverick directly into the intended install root, or use --install-root "
+            f"{repository_root}."
+        )
     service_user = _prompt_text("Service user", args.service_user, interactive=interactive)
     service_group = _prompt_text("Service group", args.service_group, interactive=interactive)
     bind_host = _prompt_text("Core bind host", args.bind_host, interactive=interactive)
@@ -128,6 +149,7 @@ def build_config(args: argparse.Namespace, *, interactive: bool) -> InstallerCon
 
     output_root = (args.output_root or default_output_root(repository_root)).resolve()
     systemd_dir = (args.systemd_dir or default_systemd_dir(output_root)).resolve()
+    install_env_path = (args.install_env or default_install_env_path(install_root)).resolve()
     nginx_conf_path = None if local_only else (args.nginx_conf or default_nginx_conf_path(output_root, hostname=hostname)).resolve()
     acme_root = None if local_only else (args.acme_root or Path("/var/www") / hostname).resolve()
     live_nginx_conf_path = None if local_only else (args.live_nginx_conf or default_live_nginx_conf_path(hostname=hostname)).resolve()
@@ -150,9 +172,11 @@ def build_config(args: argparse.Namespace, *, interactive: bool) -> InstallerCon
         acme_root=acme_root,
         systemd_dir=systemd_dir,
         nginx_conf_path=nginx_conf_path,
+        install_env_path=install_env_path,
         live_systemd_dir=args.live_systemd_dir.resolve(),
         live_nginx_conf_path=live_nginx_conf_path,
         live_nginx_enabled_path=live_nginx_enabled_path,
+        build_frontends=bool(args.build_frontends),
     )
 
 
@@ -240,6 +264,7 @@ def _print_plan(config: InstallerConfig) -> None:
     print(f"- Core bind: {config.bind_host}:{config.core_port}")
     print(f"- Rescue bind: {config.bind_host}:{config.rescue_port}")
     print(f"- Rendered systemd dir: {config.systemd_dir}")
+    print(f"- Service env file: {config.install_env_path}")
     if config.nginx_conf_path is not None:
         print(f"- Rendered nginx config: {config.nginx_conf_path}")
     print(f"- Live systemd dir: {config.live_systemd_dir}")
@@ -247,13 +272,18 @@ def _print_plan(config: InstallerConfig) -> None:
         print(f"- Live nginx config: {config.live_nginx_conf_path}")
 
 
-def _print_preflight(warnings: list[str]) -> None:
-    if not warnings:
+def _print_preflight(errors: list[str], warnings: list[str]) -> None:
+    if not errors and not warnings:
         print("Preflight checks passed.")
         return
-    print("Preflight warnings:")
-    for warning in warnings:
-        print(f"- {warning}")
+    if errors:
+        print("Preflight errors:")
+        for item in errors:
+            print(f"- {item}")
+    if warnings:
+        print("Preflight warnings:")
+        for warning in warnings:
+            print(f"- {warning}")
 
 
 def _print_health(results: dict[str, bool]) -> None:

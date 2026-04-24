@@ -29,6 +29,7 @@ The default flow is interactive. It:
 - runs the core verification suite
 - renders systemd units under `.maverick/install/systemd/`
 - renders nginx config under `.maverick/install/nginx/`
+- writes a service env file under `.maverick/install/maverick3.env`
 - writes `.maverick/install/install-manifest.json`
 - offers to apply the rendered plan to systemd and nginx
 - offers to request a TLS certificate with `certbot` for public `https` installs
@@ -48,7 +49,11 @@ python3 scripts/install_maverick.py --local-only
 
 Use `--render-only` when you only want the generated files without changing the live system.
 
-Use `--install-root`, `--service-user`, `--service-group`, `--core-port`, `--rescue-port`, `--bind-host`, `--output-root`, `--systemd-dir`, `--nginx-conf`, `--live-systemd-dir`, `--live-nginx-conf`, `--live-nginx-enabled`, and `--acme-root` to customize the flow.
+`--install-root` must currently match the checkout root. To install under `/opt/maverick-v3`, clone the repository there and run the installer from that checkout.
+
+Use `--install-root`, `--service-user`, `--service-group`, `--core-port`, `--rescue-port`, `--bind-host`, `--output-root`, `--systemd-dir`, `--nginx-conf`, `--install-env`, `--live-systemd-dir`, `--live-nginx-conf`, `--live-nginx-enabled`, and `--acme-root` to customize the flow.
+
+For live apply, missing required preflight tools fail before the installer writes live system paths. `--force` is reserved for operator-reviewed exceptions. Failed post-apply health checks also return a non-zero exit code; `--skip-health-check` must be explicit.
 
 ## Python Environment
 
@@ -93,9 +98,17 @@ To build every app frontend during bootstrap:
 MAVERICK_BUILD_FRONTENDS=1 ./scripts/bootstrap_local.sh
 ```
 
+The installer exposes the same path:
+
+```bash
+python3 scripts/install_maverick.py --local-only --build-frontends
+```
+
 ## Environment Variables
 
 Copy `.env.example` only as a local starting point. Do not commit `.env`.
+`scripts/run_local.sh` loads `.env` automatically when present.
+Systemd installs use the generated `.maverick/install/maverick3.env` file instead.
 
 Production-quality secret storage is not implemented yet. Do not put production OAuth credentials or API keys into the local bootstrap environment.
 

@@ -567,7 +567,8 @@ An installed workspace app has a binding in the workspace and can be managed by 
 
 For the local hosted deployment, the bootstrap admin username and password are supplied by `MAVERICK3_ADMIN_USERNAME` and `MAVERICK3_ADMIN_PASSWORD`.
 
-If those variables are absent, the development bootstrap falls back to `admin` / `maverick3`; public deployments should set explicit service-level environment values.
+The installer writes those values, plus runtime and widget signing secrets, into `.maverick/install/maverick3.env` and systemd units load that file through `EnvironmentFile=`.
+Static development defaults are permitted only when `MAVERICK_ENV` is `development`, `dev`, or `test`; non-development boots must provide explicit admin credentials and signing secrets.
 
 The shell may visually frame mounted app frontends, but it must not hardcode optional product apps that are not installed in the current workspace.
 

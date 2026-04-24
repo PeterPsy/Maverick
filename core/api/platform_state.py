@@ -156,11 +156,12 @@ def bootstrap_platform_state(*, start_path: Path | None = None, now: datetime | 
             observability_store=observability_store,
             now=now,
         )
+    admin_username, admin_password = _bootstrap_admin_credentials()
     bootstrap_default_admin(
         identity_store,
         workspace_store,
-        username=os.environ.get("MAVERICK3_ADMIN_USERNAME", "admin"),
-        password=os.environ.get("MAVERICK3_ADMIN_PASSWORD", "maverick3"),
+        username=admin_username,
+        password=admin_password,
         now=now,
     )
     state = PlatformState(
@@ -179,6 +180,22 @@ def bootstrap_platform_state(*, start_path: Path | None = None, now: datetime | 
     )
     recover_interrupted_runtime_turns_after_backend_restart(state)
     return state
+
+
+def _bootstrap_admin_credentials() -> tuple[str, str]:
+    username = os.environ.get("MAVERICK3_ADMIN_USERNAME", "").strip()
+    password = os.environ.get("MAVERICK3_ADMIN_PASSWORD", "").strip()
+    if username and password:
+        return username, password
+    if _allows_insecure_development_defaults():
+        return username or "admin", password or "maverick3"
+    raise RuntimeError(
+        "MAVERICK3_ADMIN_USERNAME and MAVERICK3_ADMIN_PASSWORD are required outside development mode."
+    )
+
+
+def _allows_insecure_development_defaults() -> bool:
+    return os.environ.get("MAVERICK_ENV", "development").strip().lower() in {"development", "dev", "test"}
 
 
 def _migrate_legacy_runtime_partition(

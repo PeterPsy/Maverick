@@ -59,7 +59,11 @@ def _sign(encoded_payload: str) -> str:
 
 def _secret() -> bytes:
     configured = os.environ.get("MAVERICK3_RUNTIME_API_SECRET", "").strip()
-    return (configured or "maverick-v3-local-runtime-api").encode("utf-8")
+    if configured:
+        return configured.encode("utf-8")
+    if os.environ.get("MAVERICK_ENV", "development").strip().lower() in {"development", "dev", "test"}:
+        return b"maverick-v3-local-runtime-api"
+    raise RuntimeError("MAVERICK3_RUNTIME_API_SECRET is required outside development mode.")
 
 
 def _base64_url(raw: bytes) -> str:

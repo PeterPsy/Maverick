@@ -8,6 +8,7 @@ User={{SERVICE_USER}}
 Group={{SERVICE_GROUP}}
 WorkingDirectory={{INSTALL_ROOT}}
 Environment=PYTHONUNBUFFERED=1
+EnvironmentFile={{ENV_FILE}}
 ExecStart={{INSTALL_ROOT}}/.venv/bin/python -m uvicorn core.api.asgi_application:app --host {{BIND_HOST}} --port {{CORE_PORT}}
 Restart=always
 RestartSec=3

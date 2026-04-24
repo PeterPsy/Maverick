@@ -38,13 +38,17 @@ export function GraphCanvas({
   const [viewport, setViewport] = useState<Viewport>({ scale: 1, offsetX: 0, offsetY: 0 });
   const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
 
-  const screenToWorld = useCallback((clientX: number, clientY: number) => {
+  const clientToWorld = useCallback((clientX: number, clientY: number, currentViewport: Viewport) => {
     const rect = canvasRef.current?.getBoundingClientRect();
     return {
-      x: (clientX - (rect?.left || 0) - viewport.offsetX) / viewport.scale,
-      y: (clientY - (rect?.top || 0) - viewport.offsetY) / viewport.scale,
+      x: (clientX - (rect?.left || 0) - currentViewport.offsetX) / currentViewport.scale,
+      y: (clientY - (rect?.top || 0) - currentViewport.offsetY) / currentViewport.scale,
     };
-  }, [viewport]);
+  }, []);
+
+  const screenToWorld = useCallback((clientX: number, clientY: number) => {
+    return clientToWorld(clientX, clientY, viewport);
+  }, [clientToWorld, viewport]);
 
   const nodeAt = useCallback((clientX: number, clientY: number) => {
     const point = screenToWorld(clientX, clientY);
@@ -171,6 +175,27 @@ export function GraphCanvas({
     };
   }, [draw, tick]);
 
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return undefined;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      setViewport((current) => {
+        const before = clientToWorld(event.clientX, event.clientY, current);
+        const factor = event.deltaY > 0 ? 0.92 : 1.08;
+        const scale = Math.max(0.45, Math.min(2.2, current.scale * factor));
+        const rect = canvas.getBoundingClientRect();
+        return {
+          scale,
+          offsetX: event.clientX - rect.left - before.x * scale,
+          offsetY: event.clientY - rect.top - before.y * scale,
+        };
+      });
+    };
+    canvas.addEventListener("wheel", onWheel, { passive: false });
+    return () => canvas.removeEventListener("wheel", onWheel);
+  }, [clientToWorld]);
+
   return (
     <main className="graph-stage">
       <div className="graph-toolbar">
@@ -207,18 +232,6 @@ export function GraphCanvas({
         }}
         onMouseUp={() => { dragRef.current = null; }}
         onMouseLeave={() => { dragRef.current = null; setHoverId(null); }}
-        onWheel={(event) => {
-          event.preventDefault();
-          const before = screenToWorld(event.clientX, event.clientY);
-          const factor = event.deltaY > 0 ? 0.92 : 1.08;
-          const scale = Math.max(0.45, Math.min(2.2, viewport.scale * factor));
-          const rect = canvasRef.current?.getBoundingClientRect();
-          setViewport({
-            scale,
-            offsetX: event.clientX - (rect?.left || 0) - before.x * scale,
-            offsetY: event.clientY - (rect?.top || 0) - before.y * scale,
-          });
-        }}
       />
       {!nodes.length && <div className="empty-state">No memory nodes yet</div>}
 

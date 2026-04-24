@@ -42,6 +42,9 @@ The generated `maverick3.env` file is loaded by the systemd units through `Envir
 It contains local bootstrap credentials and signing secrets and is written with mode `0600`.
 Keep it out of version control and rotate generated values before any longer-lived public exposure.
 
+For a first-time HTTPS install, the installer initially writes an HTTP nginx config that can pass `nginx -t` without existing certificates and serve the ACME challenge.
+After certbot obtains the certificate, the installer rewrites nginx with the final HTTPS config and reloads it.
+
 Use `--render-only` to stop after rendering.
 
 Use `--systemd-dir`, `--nginx-conf`, and `--install-env` to customize rendered output paths, and `--live-systemd-dir`, `--live-nginx-conf`, and `--live-nginx-enabled` to customize the live target paths used by apply.

@@ -19,7 +19,9 @@ from core.shared.installer import (
     default_nginx_conf_path,
     default_output_root,
     default_systemd_dir,
+    request_tls_certificate,
     render_install_plan,
+    render_nginx_config,
 )
 from scripts.install_maverick import build_config, main as installer_main, parse_args
 
@@ -67,9 +69,19 @@ class InstallerRenderingTestCase(unittest.TestCase):
         self.assertIn("MAVERICK3_ADMIN_PASSWORD=", env_file)
         self.assertIn("MAVERICK3_RUNTIME_API_SECRET=", env_file)
         self.assertIn("server_name maverick.example.test;", nginx_conf)
-        self.assertIn("ssl_certificate /etc/letsencrypt/live/maverick.example.test/fullchain.pem;", nginx_conf)
+        self.assertIn("location ^~ /.well-known/acme-challenge/", nginx_conf)
+        self.assertNotIn("ssl_certificate", nginx_conf)
         self.assertEqual(manifest["public_url"], "https://maverick.example.test")
         self.assertEqual(manifest["live_systemd_dir"], "/etc/systemd/system")
+
+    def test_render_nginx_config_can_force_https_after_certificate_request(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        config = self.make_config(repo_root, hostname="maverick.example.test", local_only=False)
+
+        nginx_conf = render_nginx_config(config, force_https=True)
+
+        self.assertIn("listen 443 ssl", nginx_conf)
+        self.assertIn("ssl_certificate /etc/letsencrypt/live/maverick.example.test/fullchain.pem;", nginx_conf)
 
     def test_render_install_plan_skips_nginx_for_local_only_mode(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
@@ -308,6 +320,43 @@ class InstallerFlowTestCase(unittest.TestCase):
             self.assertTrue(config.live_nginx_conf_path.is_file())
             self.assertTrue(config.live_nginx_enabled_path.is_symlink())
             self.assertIn(["systemctl", "daemon-reload"], commands)
+            self.assertIn(["systemctl", "reload", "nginx"], commands)
+
+    def test_request_tls_certificate_rewrites_nginx_with_https_after_certbot(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory(prefix="maverick-install-") as temp_dir:
+            temp_root = Path(temp_dir)
+            output_root = temp_root / "install"
+            live_nginx_conf = temp_root / "sites-available" / "maverick.example.test.conf"
+            config = InstallerConfig(
+                repository_root=repo_root,
+                install_root=repo_root,
+                output_root=output_root,
+                service_user="ubuntu",
+                service_group="ubuntu",
+                bind_host="127.0.0.1",
+                hostname="maverick.example.test",
+                public_scheme="https",
+                core_port=8014,
+                rescue_port=8015,
+                bootstrap=False,
+                verify=False,
+                local_only=False,
+                acme_root=temp_root / "acme",
+                systemd_dir=output_root / "systemd",
+                nginx_conf_path=output_root / "nginx" / "maverick.example.test.conf",
+                install_env_path=output_root / "maverick3.env",
+                live_systemd_dir=temp_root / "live-systemd",
+                live_nginx_conf_path=live_nginx_conf,
+                live_nginx_enabled_path=temp_root / "sites-enabled" / "maverick.example.test.conf",
+                build_frontends=False,
+            )
+            commands: list[list[str]] = []
+
+            request_tls_certificate(config, run_command=commands.append)
+
+            self.assertIn("ssl_certificate /etc/letsencrypt/live/maverick.example.test/fullchain.pem;", live_nginx_conf.read_text(encoding="utf-8"))
+            self.assertIn(["nginx", "-t"], commands)
             self.assertIn(["systemctl", "reload", "nginx"], commands)
 
     def test_write_file_uses_privileged_install_when_direct_write_is_denied(self) -> None:

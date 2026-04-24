@@ -64,30 +64,24 @@ class InstallerConfig:
 def render_install_plan(config: InstallerConfig) -> dict[Path, str]:
     """Render the systemd/nginx/install manifest files for one installer run."""
     templates_root = config.repository_root / "scripts" / "deploy"
-    substitutions = {
-        "{{SERVICE_USER}}": config.service_user,
-        "{{SERVICE_GROUP}}": config.service_group,
-        "{{INSTALL_ROOT}}": str(config.install_root),
-        "{{BIND_HOST}}": config.bind_host,
-        "{{CORE_PORT}}": str(config.core_port),
-        "{{RESCUE_PORT}}": str(config.rescue_port),
-        "{{HOSTNAME}}": config.hostname or "",
-        "{{ACME_ROOT}}": str(config.acme_root or Path("/var/www/localhost")),
-        "{{TLS_CERT_PATH}}": config.tls_certificate_path,
-        "{{TLS_CERT_KEY_PATH}}": config.tls_certificate_key_path,
-        "{{ENV_FILE}}": str(config.install_env_path),
-    }
+    substitutions = _template_substitutions(config)
 
     outputs: dict[Path, str] = {}
     for template_path in sorted((templates_root / "systemd").glob("*")):
         rendered = _render_template(template_path, substitutions)
         outputs[config.systemd_dir / template_path.name] = rendered
     if config.nginx_conf_path is not None:
-        rendered = _render_template(templates_root / "nginx" / "maverick.example.conf", substitutions)
-        outputs[config.nginx_conf_path] = rendered
+        outputs[config.nginx_conf_path] = render_nginx_config(config)
     outputs[config.install_env_path] = render_install_env_file(config)
     outputs[config.output_root / "install-manifest.json"] = json.dumps(build_install_manifest(config), indent=2) + "\n"
     return outputs
+
+
+def render_nginx_config(config: InstallerConfig, *, force_https: bool = False) -> str:
+    """Render nginx config that is safe before and after TLS certificates exist."""
+    templates_root = config.repository_root / "scripts" / "deploy" / "nginx"
+    template_name = "maverick.example.conf" if force_https or _tls_certificate_files_exist(config) else "maverick.http.conf"
+    return _render_template(templates_root / template_name, _template_substitutions(config))
 
 
 def render_install_env_file(config: InstallerConfig) -> str:
@@ -247,6 +241,10 @@ def request_tls_certificate(config: InstallerConfig, *, run_command: Any = None)
             config.hostname,
         ]
     )
+    if config.live_nginx_conf_path is not None:
+        _write_file(config.live_nginx_conf_path, render_nginx_config(config, force_https=True), run_command=runner)
+        if config.live_nginx_enabled_path is not None:
+            _ensure_symlink(config.live_nginx_enabled_path, config.live_nginx_conf_path, run_command=runner)
     runner(["nginx", "-t"])
     runner(["systemctl", "reload", "nginx"])
 
@@ -321,6 +319,31 @@ def _render_template(path: Path, substitutions: dict[str, str]) -> str:
     if unresolved:
         raise ValueError(f"Unresolved installer template placeholders in `{path}`.")
     return content
+
+
+def _template_substitutions(config: InstallerConfig) -> dict[str, str]:
+    return {
+        "{{SERVICE_USER}}": config.service_user,
+        "{{SERVICE_GROUP}}": config.service_group,
+        "{{INSTALL_ROOT}}": str(config.install_root),
+        "{{BIND_HOST}}": config.bind_host,
+        "{{CORE_PORT}}": str(config.core_port),
+        "{{RESCUE_PORT}}": str(config.rescue_port),
+        "{{HOSTNAME}}": config.hostname or "",
+        "{{ACME_ROOT}}": str(config.acme_root or Path("/var/www/localhost")),
+        "{{TLS_CERT_PATH}}": config.tls_certificate_path,
+        "{{TLS_CERT_KEY_PATH}}": config.tls_certificate_key_path,
+        "{{ENV_FILE}}": str(config.install_env_path),
+    }
+
+
+def _tls_certificate_files_exist(config: InstallerConfig) -> bool:
+    if config.public_scheme != "https" or not config.hostname:
+        return False
+    try:
+        return Path(config.tls_certificate_path).is_file() and Path(config.tls_certificate_key_path).is_file()
+    except OSError:
+        return False
 
 
 def _read_env_file(path: Path) -> dict[str, str]:

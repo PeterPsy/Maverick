@@ -569,6 +569,8 @@ For the local hosted deployment, the bootstrap admin username and password are s
 
 The installer writes those values, plus runtime and widget signing secrets, into `.maverick/install/maverick3.env` and systemd units load that file through `EnvironmentFile=`.
 Static development defaults are permitted only when `MAVERICK_ENV` is `development`, `dev`, or `test`; non-development boots must provide explicit admin credentials and signing secrets.
+At hosted startup, the bootstrap admin credential is reconciled against the configured `MAVERICK3_ADMIN_PASSWORD`: if the admin user already exists but its password credential is missing, uses an unsupported algorithm, or does not verify against the configured password, the core replaces that password credential with the configured install secret.
+This keeps the installer env file as the first-login credential source for local hosted installs and prevents stale local identity state from making a freshly generated install password unusable.
 
 The shell may visually frame mounted app frontends, but it must not hardcode optional product apps that are not installed in the current workspace.
 

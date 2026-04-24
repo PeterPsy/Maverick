@@ -7,7 +7,15 @@ from datetime import UTC, datetime, timedelta
 import unittest
 
 from core.execution_policy.service import resolve_workspace_execution_profile, resolve_workspace_runtime_boundary
-from core.identity.service import build_auth_session, build_password_credential, build_user_record, register_user
+from core.identity.errors import UserNotFoundError
+from core.identity.service import (
+    authenticate_password,
+    bootstrap_default_admin,
+    build_auth_session,
+    build_password_credential,
+    build_user_record,
+    register_user,
+)
 from core.identity.store import MongoIdentityStore, IdentityCollections
 from core.workspaces.models import WorkspaceRecord
 from core.workspaces.service import (
@@ -121,6 +129,26 @@ class Phase3ModelTestCase(unittest.TestCase):
 
         self.assertEqual(store.get_user("u1").username, "alice")
         self.assertEqual(store.get_password_credential("u1").algorithm, "pbkdf2_sha256")
+
+    def test_bootstrap_admin_password_tracks_supplied_install_secret(self) -> None:
+        identity_store = self.make_identity_store()
+        workspace_store = self.make_workspace_store()
+        bootstrap_default_admin(identity_store, workspace_store, username="admin", password="old-password")
+
+        bootstrap_default_admin(identity_store, workspace_store, username="admin", password="new-password")
+
+        self.assertEqual(authenticate_password(identity_store, username="admin", password="new-password").username, "admin")
+        with self.assertRaises(UserNotFoundError):
+            authenticate_password(identity_store, username="admin", password="old-password")
+
+    def test_bootstrap_admin_recreates_missing_password_credential(self) -> None:
+        identity_store = self.make_identity_store()
+        workspace_store = self.make_workspace_store()
+        identity_store.save_user(build_user_record(user_id="user:admin", username="admin", platform_role="admin"))
+
+        bootstrap_default_admin(identity_store, workspace_store, username="admin", password="install-password")
+
+        self.assertEqual(authenticate_password(identity_store, username="admin", password="install-password").username, "admin")
 
     def test_default_workspace_record_is_bootstrapped_immediately(self) -> None:
         store = self.make_workspace_store()

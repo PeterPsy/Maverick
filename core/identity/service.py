@@ -261,6 +261,8 @@ def bootstrap_default_admin(
             now=timestamp,
         )
         register_user(identity_store, user, credential)
+    else:
+        _ensure_bootstrap_admin_password(identity_store, user=user, password=password, now=timestamp)
 
     ensure_workspace_membership(
         workspace_store,
@@ -273,6 +275,22 @@ def bootstrap_default_admin(
     if get_active_workspace_for_user(workspace_store, user_id=user.user_id) is None:
         set_active_workspace_for_user(workspace_store, user_id=user.user_id, workspace_id="default", now=timestamp)
     return user
+
+
+def _ensure_bootstrap_admin_password(
+    identity_store: IdentityStore,
+    *,
+    user: UserRecord,
+    password: str,
+    now: datetime,
+) -> None:
+    try:
+        credential = identity_store.get_password_credential(user.user_id)
+    except UserNotFoundError:
+        set_user_password(identity_store, user_id=user.user_id, password=password, now=now)
+        return
+    if credential.algorithm != PASSWORD_ALGORITHM or not verify_password(password, credential.password_hash):
+        set_user_password(identity_store, user_id=user.user_id, password=password, now=now)
 
 
 def authenticate_password(identity_store: IdentityStore, *, username: str, password: str) -> UserRecord:

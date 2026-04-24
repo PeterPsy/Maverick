@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GraphCanvas } from "./components/GraphCanvas";
 import { LeftPanel, RightPanel } from "./components/SidePanels";
 import { labelForType } from "./format";
@@ -8,6 +8,7 @@ import type { GraphEdge, GraphNode, NodeDetails, ViewFilter } from "./types";
 const defaultDraft = { title: "", body: "", type: "note" };
 
 export function MemoryApp() {
+  const eventRefreshTimerRef = useRef<number | null>(null);
   const [nodes, setNodes] = useState<GraphNode[]>([]);
   const [edges, setEdges] = useState<GraphEdge[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -43,10 +44,10 @@ export function MemoryApp() {
     setEdges(payload.edges || []);
   }, []);
 
-  const refreshGraph = useCallback(async (override?: { query?: string; viewFilter?: ViewFilter }) => {
+  const refreshGraph = useCallback(async (override: { query: string; viewFilter: ViewFilter }) => {
     setStatus("Loading graph");
-    const effectiveQuery = override?.query ?? query;
-    const effectiveViewFilter = override?.viewFilter ?? viewFilter;
+    const effectiveQuery = override.query;
+    const effectiveViewFilter = override.viewFilter;
     const body: Record<string, unknown> = { action: "graph", query: effectiveQuery, limit: 220 };
     if (effectiveViewFilter.mode === "custom") {
       body.node_ids = effectiveViewFilter.refs.map((ref) => ref.entity_id).filter(Boolean);
@@ -54,7 +55,7 @@ export function MemoryApp() {
     const payload = await callMemory<{ nodes?: GraphNode[]; edges?: GraphEdge[] }>(body);
     hydrateGraph(payload);
     setStatus("Graph updated");
-  }, [hydrateGraph, query, viewFilter]);
+  }, [hydrateGraph]);
 
   const loadViewFilter = useCallback(async () => {
     const payload = await callMemory<{ state?: { view_filter?: ViewFilter } }>({ action: "view_filter" });
@@ -76,15 +77,29 @@ export function MemoryApp() {
     setStatus("Node ready");
   }, []);
 
-  const refreshFromEvents = useCallback(() => {
+  const refreshMemory = useCallback(() => {
     loadViewFilter()
       .then((next) => refreshGraph({ query: next.query, viewFilter: next }))
       .catch(() => setStatus("Refresh failed"));
   }, [loadViewFilter, refreshGraph]);
 
   useEffect(() => {
-    refreshFromEvents();
-  }, [refreshFromEvents]);
+    refreshMemory();
+  }, [refreshMemory]);
+
+  const scheduleEventRefresh = useCallback(() => {
+    if (eventRefreshTimerRef.current !== null) window.clearTimeout(eventRefreshTimerRef.current);
+    eventRefreshTimerRef.current = window.setTimeout(() => {
+      eventRefreshTimerRef.current = null;
+      refreshMemory();
+    }, 250);
+  }, [refreshMemory]);
+
+  useEffect(() => {
+    return () => {
+      if (eventRefreshTimerRef.current !== null) window.clearTimeout(eventRefreshTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     window.parent?.postMessage({ type: "maverick.app.ready", app_id: "memory" }, window.location.origin);
@@ -93,11 +108,11 @@ export function MemoryApp() {
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       if (event.origin !== window.location.origin || !event.data || typeof event.data !== "object") return;
-      if (event.data.type === "maverick.app.data-changed" && event.data.owner_app_id === "memory") refreshFromEvents();
+      if (event.data.type === "maverick.app.data-changed" && event.data.owner_app_id === "memory") scheduleEventRefresh();
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [refreshFromEvents]);
+  }, [scheduleEventRefresh]);
 
   useEffect(() => {
     if (!("WebSocket" in window)) return undefined;
@@ -114,7 +129,7 @@ export function MemoryApp() {
       socket.onmessage = (event) => {
         try {
           const payload = JSON.parse(event.data);
-          if (payload.type === "maverick.app.data-changed" && payload.owner_app_id === "memory") refreshFromEvents();
+          if (payload.type === "maverick.app.data-changed" && payload.owner_app_id === "memory") scheduleEventRefresh();
         } catch {
           // Ignore malformed event frames.
         }
@@ -131,9 +146,10 @@ export function MemoryApp() {
     return () => {
       closed = true;
       if (reconnectTimer !== null) window.clearTimeout(reconnectTimer);
+      if (eventRefreshTimerRef.current !== null) window.clearTimeout(eventRefreshTimerRef.current);
       socket?.close();
     };
-  }, [refreshFromEvents]);
+  }, [scheduleEventRefresh]);
 
   const relationships = useMemo(() => {
     if (!selectedId) return [];
@@ -160,7 +176,7 @@ export function MemoryApp() {
       type: draft.type,
     });
     setDraft({ ...defaultDraft, type: draft.type });
-    await refreshGraph();
+    await refreshGraph({ query, viewFilter });
     if (payload.node?.id) await selectNode(payload.node.id);
   }
 
@@ -197,7 +213,7 @@ export function MemoryApp() {
         onQueryChange={setQuery}
         onSearch={runSearch}
         onClearCustomView={clearCustomView}
-        onRefreshGraph={() => refreshGraph()}
+        onRefreshGraph={() => refreshGraph({ query, viewFilter })}
         onDraftChange={setDraft}
         onRemember={remember}
       />

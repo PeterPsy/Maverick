@@ -10,6 +10,7 @@ import shutil
 import secrets
 import subprocess
 import tempfile
+import time
 from typing import Any
 from urllib import error, request
 
@@ -249,20 +250,28 @@ def request_tls_certificate(config: InstallerConfig, *, run_command: Any = None)
     runner(["systemctl", "reload", "nginx"])
 
 
-def check_health(config: InstallerConfig, *, timeout_seconds: float = 5.0) -> dict[str, bool]:
+def check_health(
+    config: InstallerConfig,
+    *,
+    timeout_seconds: float = 5.0,
+    attempts: int = 8,
+    delay_seconds: float = 2.0,
+    sleep_func: Any = time.sleep,
+) -> dict[str, bool]:
     """Return local/public health availability after install."""
-    health: dict[str, bool] = {
-        f"http://{config.bind_host}:{config.core_port}/health": _url_is_healthy(
-            f"http://{config.bind_host}:{config.core_port}/health",
-            timeout_seconds=timeout_seconds,
-        )
-    }
+    urls = [f"http://{config.bind_host}:{config.core_port}/health"]
     if not config.local_only and config.hostname:
-        health[f"{config.public_scheme}://{config.hostname}/health"] = _url_is_healthy(
-            f"{config.public_scheme}://{config.hostname}/health",
+        urls.append(f"{config.public_scheme}://{config.hostname}/health")
+    return {
+        url: _url_becomes_healthy(
+            url,
             timeout_seconds=timeout_seconds,
+            attempts=attempts,
+            delay_seconds=delay_seconds,
+            sleep_func=sleep_func,
         )
-    return health
+        for url in urls
+    }
 
 
 def default_output_root(repository_root: Path) -> Path:
@@ -434,6 +443,23 @@ def _url_is_healthy(url: str, *, timeout_seconds: float) -> bool:
             return 200 <= response.status < 300
     except (error.URLError, TimeoutError, ValueError):
         return False
+
+
+def _url_becomes_healthy(
+    url: str,
+    *,
+    timeout_seconds: float,
+    attempts: int,
+    delay_seconds: float,
+    sleep_func: Any,
+) -> bool:
+    total_attempts = max(1, attempts)
+    for attempt in range(total_attempts):
+        if _url_is_healthy(url, timeout_seconds=timeout_seconds):
+            return True
+        if attempt < total_attempts - 1 and delay_seconds > 0:
+            sleep_func(delay_seconds)
+    return False
 
 
 def _is_relative_to(path: Path, root: Path) -> bool:

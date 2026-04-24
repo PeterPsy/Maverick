@@ -13,6 +13,7 @@ from core.shared.installer import (
     _ensure_symlink,
     _write_file,
     apply_install_plan,
+    check_health,
     default_install_env_path,
     default_live_nginx_conf_path,
     default_live_nginx_enabled_path,
@@ -92,6 +93,27 @@ class InstallerRenderingTestCase(unittest.TestCase):
 
         self.assertEqual(json.loads(rendered[config.output_root / "install-manifest.json"])["public_url"], "http://127.0.0.1:8014")
         self.assertIn(config.install_env_path, rendered)
+
+    def test_check_health_retries_until_public_url_is_ready(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        config = self.make_config(repo_root, hostname="maverick.example.test", local_only=False)
+        sleeps: list[float] = []
+
+        with patch(
+            "core.shared.installer._url_is_healthy",
+            side_effect=[True, False, False, True],
+        ) as mocked_probe:
+            result = check_health(
+                config,
+                attempts=3,
+                delay_seconds=0.25,
+                sleep_func=sleeps.append,
+            )
+
+        self.assertEqual(result["http://127.0.0.1:8014/health"], True)
+        self.assertEqual(result["https://maverick.example.test/health"], True)
+        self.assertEqual(mocked_probe.call_count, 4)
+        self.assertEqual(sleeps, [0.25, 0.25])
 
 
 class InstallerFlowTestCase(unittest.TestCase):

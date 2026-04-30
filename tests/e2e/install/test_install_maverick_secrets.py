@@ -27,6 +27,9 @@ from core.shared.installer import (
 from scripts.install_maverick import (
     INTERNAL_APPLY_ADMIN_PASSWORD_FLAG,
     _apply_initial_admin_password,
+    _mongodb_apt_repository_line,
+    _mongodb_endpoint,
+    _prepare_mongodb,
     _running_inside_install_venv,
     build_config,
     main as installer_main,
@@ -239,6 +242,44 @@ class InstallerSecretRenderingTestCase(unittest.TestCase):
                 self.assertTrue(_running_inside_install_venv(config))
             with patch("scripts.install_maverick.sys.prefix", "/usr"):
                 self.assertFalse(_running_inside_install_venv(config))
+
+    def test_prepare_mongodb_installs_local_service_when_unreachable(self) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+        config = replace(self.make_config(repo_root, install_root=repo_root), control_store="mongo")
+
+        with patch("scripts.install_maverick._mongodb_reachable", return_value=False), patch(
+            "scripts.install_maverick._install_or_start_local_mongodb"
+        ) as mocked_install, patch("scripts.install_maverick._mongodb_becomes_reachable", return_value=True):
+            _prepare_mongodb(config, assume_yes=True)
+
+        mocked_install.assert_called_once_with()
+
+    def test_prepare_mongodb_rejects_unreachable_remote_uri(self) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+        config = replace(
+            self.make_config(repo_root, install_root=repo_root),
+            control_store="mongo",
+            mongodb_uri="mongodb://db.example.test:27017/maverick",
+        )
+
+        with patch("scripts.install_maverick._mongodb_reachable", return_value=False), self.assertRaises(SystemExit):
+            _prepare_mongodb(config, assume_yes=True)
+
+    def test_mongodb_endpoint_parses_auth_and_port(self) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+        config = replace(
+            self.make_config(repo_root, install_root=repo_root),
+            mongodb_uri="mongodb://user:secret@127.0.0.1:27018/maverick",
+        )
+
+        endpoint = _mongodb_endpoint(config)
+
+        self.assertEqual(endpoint.host, "127.0.0.1")
+        self.assertEqual(endpoint.port, 27018)
+
+    def test_mongodb_repo_line_uses_supported_ubuntu_codename(self) -> None:
+        with patch("scripts.install_maverick._read_os_release", return_value={"ID": "ubuntu", "VERSION_CODENAME": "noble"}):
+            self.assertIn("noble/mongodb-org/8.0", _mongodb_apt_repository_line())
 
 
 if __name__ == "__main__":

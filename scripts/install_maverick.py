@@ -11,8 +11,12 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import shutil
+import socket
 import subprocess
 import sys
+import time
+from urllib.parse import urlparse
 
 if sys.version_info < (3, 12):
     sys.stderr.write(
@@ -45,6 +49,7 @@ from core.shared.installer import (  # noqa: E402
     preflight_check,
     render_install_plan,
     request_tls_certificate,
+    run_privileged_command,
     run_install_steps,
     write_install_plan,
 )
@@ -147,6 +152,7 @@ def main(argv: list[str] | None = None) -> int:
         _print_summary(config, live_applied=False, tls_requested=False)
         return 0
 
+    _prepare_mongodb(config, assume_yes=args.yes)
     _apply_initial_admin_password(config)
     apply_install_plan(config, rendered)
 
@@ -210,6 +216,167 @@ def _ensure_mongo_driver_available(config: InstallerConfig) -> None:
         cwd=config.repository_root,
         check=True,
     )
+
+
+def _prepare_mongodb(config: InstallerConfig, *, assume_yes: bool) -> None:
+    if config.control_store != "mongo":
+        return
+    endpoint = _mongodb_endpoint(config)
+    if _mongodb_reachable(endpoint):
+        return
+    if not _mongodb_endpoint_is_local(endpoint):
+        raise SystemExit(
+            f"MongoDB is not reachable at {endpoint.host}:{endpoint.port}. "
+            "Start the configured MongoDB server or choose the JSON control store."
+        )
+    if not assume_yes and not _confirm(
+        f"MongoDB is not reachable at {endpoint.host}:{endpoint.port}. Install/start local MongoDB now?",
+        default=True,
+    ):
+        raise SystemExit("MongoDB is required when Control store is mongo.")
+    _install_or_start_local_mongodb()
+    if not _mongodb_becomes_reachable(endpoint):
+        raise SystemExit(
+            f"MongoDB is still not reachable at {endpoint.host}:{endpoint.port} after install/start. "
+            "Check `systemctl status mongod`."
+        )
+
+
+def _install_or_start_local_mongodb() -> None:
+    if _start_mongodb_service():
+        return
+    if shutil.which("apt-get") is None:
+        raise SystemExit("Automatic MongoDB install currently requires apt-get. Install MongoDB manually or choose JSON.")
+    if _apt_package_available("mongodb-org"):
+        _install_mongodb_package()
+    else:
+        _configure_mongodb_apt_repository()
+        _install_mongodb_package()
+    if not _start_mongodb_service():
+        raise SystemExit("MongoDB was installed, but the mongod service did not start.")
+
+
+def _start_mongodb_service() -> bool:
+    if shutil.which("systemctl") is None:
+        return False
+    for service_name in ("mongod", "mongodb"):
+        if _run_privileged_command_no_check(["systemctl", "start", service_name]):
+            return True
+    return False
+
+
+def _apt_package_available(package: str) -> bool:
+    if shutil.which("apt-cache") is None:
+        return False
+    return subprocess.run(["apt-cache", "show", package], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0
+
+
+def _install_mongodb_package() -> None:
+    run_privileged_command(["apt-get", "update"])
+    run_privileged_command(["apt-get", "install", "-y", "mongodb-org"])
+
+
+def _configure_mongodb_apt_repository() -> None:
+    repo_line = _mongodb_apt_repository_line()
+    run_privileged_command(["apt-get", "update"])
+    run_privileged_command(["apt-get", "install", "-y", "curl", "gnupg"])
+    run_privileged_command(
+        [
+            "bash",
+            "-lc",
+            "curl -fsSL https://www.mongodb.org/static/pgp/server-8.0.asc "
+            "| gpg --dearmor --yes "
+            "| tee /usr/share/keyrings/mongodb-server-8.0.gpg >/dev/null",
+        ]
+    )
+    run_privileged_command(
+        [
+            "bash",
+            "-lc",
+            f"printf '%s\\n' {json.dumps(repo_line)} "
+            "> /etc/apt/sources.list.d/mongodb-org-8.0.list",
+        ]
+    )
+
+
+def _mongodb_apt_repository_line() -> str:
+    os_release = _read_os_release()
+    os_id = os_release.get("ID", "")
+    codename = os_release.get("VERSION_CODENAME", "")
+    arch_clause = "arch=amd64,arm64 "
+    if os_id == "ubuntu" and codename in {"focal", "jammy", "noble"}:
+        return (
+            f"deb [ {arch_clause}signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] "
+            f"https://repo.mongodb.org/apt/ubuntu {codename}/mongodb-org/8.0 multiverse"
+        )
+    if os_id == "debian" and codename in {"bullseye", "bookworm"}:
+        return (
+            "deb [ signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] "
+            f"https://repo.mongodb.org/apt/debian {codename}/mongodb-org/8.0 main"
+        )
+    raise SystemExit(
+        "Automatic MongoDB install supports Ubuntu focal/jammy/noble and Debian bullseye/bookworm. "
+        "Install MongoDB manually or choose JSON."
+    )
+
+
+def _read_os_release(path: Path = Path("/etc/os-release")) -> dict[str, str]:
+    values: dict[str, str] = {}
+    if not path.is_file():
+        return values
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if "=" not in line or line.startswith("#"):
+            continue
+        key, value = line.split("=", 1)
+        values[key] = value.strip().strip('"')
+    return values
+
+
+def _run_privileged_command_no_check(command: list[str]) -> bool:
+    try:
+        run_privileged_command(command)
+    except subprocess.CalledProcessError:
+        return False
+    return True
+
+
+class _MongoEndpoint:
+    def __init__(self, host: str, port: int) -> None:
+        self.host = host
+        self.port = port
+
+
+def _mongodb_endpoint(config: InstallerConfig) -> _MongoEndpoint:
+    parsed = urlparse(config.mongodb_uri)
+    netloc = parsed.netloc.split(",", 1)[0]
+    if "@" in netloc:
+        netloc = netloc.rsplit("@", 1)[1]
+    if netloc.startswith("["):
+        host, _, tail = netloc[1:].partition("]")
+        port = int(tail.removeprefix(":") or "27017")
+        return _MongoEndpoint(host=host, port=port)
+    host, _, port_text = netloc.partition(":")
+    return _MongoEndpoint(host=host or "127.0.0.1", port=int(port_text or "27017"))
+
+
+def _mongodb_endpoint_is_local(endpoint: _MongoEndpoint) -> bool:
+    return endpoint.host in {"localhost", "127.0.0.1", "::1"}
+
+
+def _mongodb_reachable(endpoint: _MongoEndpoint, *, timeout_seconds: float = 1.0) -> bool:
+    try:
+        with socket.create_connection((endpoint.host, endpoint.port), timeout=timeout_seconds):
+            return True
+    except OSError:
+        return False
+
+
+def _mongodb_becomes_reachable(endpoint: _MongoEndpoint) -> bool:
+    for _ in range(10):
+        if _mongodb_reachable(endpoint):
+            return True
+        time.sleep(1)
+    return False
 
 
 def _running_inside_install_venv(config: InstallerConfig) -> bool:

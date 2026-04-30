@@ -143,6 +143,8 @@ python3.12 scripts/install_maverick.py \
 
 When MongoDB authentication is enabled, the installer asks for the password once and stores it as an encrypted bootstrap secret. The rendered environment file contains only `MAVERICK_MONGODB_PASSWORD_REF`.
 
+When the MongoDB URI points to `localhost` or `127.0.0.1`, the installer can start or install the local MongoDB service on supported apt-based Linux hosts. Remote MongoDB servers must already be reachable.
+
 The installer requires the initial admin password for live installs. Maverick writes only the password hash to the selected identity store; it does not write the admin password to `.env` or `.env.maverick`.
 
 The selected adapter owns platform control-plane data such as users, sessions, workspace registry, workspace membership, app bindings, provider selections, runtime token metadata, and secret metadata/value envelopes.

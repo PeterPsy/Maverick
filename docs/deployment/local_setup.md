@@ -51,6 +51,8 @@ MAVERICK_MONGODB_PASSWORD_REF=platform:secret-alias/mongodb-password
 
 Do not put the MongoDB password in the MongoDB URI or in `.env.maverick`.
 
+When the selected MongoDB URI points to the local machine and MongoDB is not reachable, the installer can start the local `mongod` service or install MongoDB Community with apt on supported Ubuntu/Debian hosts. For remote MongoDB URIs, the installer does not provision infrastructure and requires the configured server to already be reachable.
+
 Secret values are encrypted by the core secret store. Hosted installs should load the secret-store key from a protected file:
 
 ```bash

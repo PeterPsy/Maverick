@@ -27,6 +27,7 @@ from core.shared.installer import (
 from scripts.install_maverick import (
     INTERNAL_APPLY_ADMIN_PASSWORD_FLAG,
     _apply_initial_admin_password,
+    _running_inside_install_venv,
     build_config,
     main as installer_main,
     parse_args,
@@ -229,6 +230,15 @@ class InstallerSecretRenderingTestCase(unittest.TestCase):
             [sys.executable, "-m", "pip", "install", "-e", ".[mongo]"],
         )
         self.assertEqual(mocked_run.call_args.kwargs["cwd"], repo_root)
+
+    def test_install_venv_detection_uses_python_prefix_not_resolved_executable(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="maverick-install-") as temp_dir:
+            repo_root = Path(temp_dir) / "repo"
+            config = self.make_config(repo_root, install_root=repo_root)
+            with patch("scripts.install_maverick.sys.prefix", str(repo_root / ".venv")):
+                self.assertTrue(_running_inside_install_venv(config))
+            with patch("scripts.install_maverick.sys.prefix", "/usr"):
+                self.assertFalse(_running_inside_install_venv(config))
 
 
 if __name__ == "__main__":

@@ -214,7 +214,7 @@ def _ensure_mongo_driver_available(config: InstallerConfig) -> None:
 
 def _running_inside_install_venv(config: InstallerConfig) -> bool:
     try:
-        return Path(sys.executable).resolve() == (config.repository_root / ".venv" / "bin" / "python").resolve()
+        return Path(sys.prefix).resolve() == (config.repository_root / ".venv").resolve()
     except OSError:
         return False
 

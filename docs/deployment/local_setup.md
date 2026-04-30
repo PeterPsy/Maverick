@@ -42,7 +42,7 @@ MAVERICK_CONTROL_STORE=mongo \
 MAVERICK_MONGODB_URI=mongodb://127.0.0.1:27017/maverick
 ```
 
-If MongoDB uses a password, enter the real password in the installer prompt. The installer stores it in the encrypted bootstrap secret store and writes only this ref to `.env.maverick`:
+For a local MongoDB service without authentication, leave `MongoDB username` empty during install. If MongoDB authentication is enabled, enter the username and real password in the installer prompts. The installer stores the password in the encrypted bootstrap secret store and writes only this ref to `.env.maverick`:
 
 ```bash
 MAVERICK_MONGODB_USERNAME=maverick

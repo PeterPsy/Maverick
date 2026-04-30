@@ -188,6 +188,22 @@ class InstallerSecretRenderingTestCase(unittest.TestCase):
         self.assertEqual(mocked_run.call_args_list[0].args[0], [str(repo_root / "scripts" / "bootstrap_local.sh")])
         self.assertEqual(mocked_run.call_args_list[0].kwargs["env"]["MAVERICK_PYPROJECT_EXTRAS"], "dev,mongo")
 
+    def test_interactive_mongo_defaults_to_no_username_for_local_service(self) -> None:
+        args = parse_args(["--local-only", "--control-store", "mongo", "--skip-bootstrap", "--skip-verify", "--render-only"])
+        prompts = [""] * 11
+
+        with patch("builtins.input", side_effect=prompts), patch(
+            "scripts.install_maverick.getpass.getpass",
+            return_value="",
+        ):
+            config = build_config(args, interactive=True)
+
+        self.assertEqual(config.control_store, "mongo")
+        self.assertEqual(config.admin_password, "")
+        self.assertEqual(config.mongodb_username, "")
+        self.assertEqual(config.mongodb_password, "")
+        self.assertEqual(config.mongodb_password_ref, "")
+
     def test_initial_admin_password_for_mongo_runs_inside_install_venv(self) -> None:
         with tempfile.TemporaryDirectory(prefix="maverick-install-") as temp_dir:
             repo_root = Path(temp_dir) / "repo"

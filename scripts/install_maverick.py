@@ -450,10 +450,12 @@ def build_config(args: argparse.Namespace, *, interactive: bool) -> InstallerCon
     if interactive and control_store == "mongo":
         mongodb_uri = _prompt_text("MongoDB URI", mongodb_uri, interactive=interactive)
         mongodb_database = _prompt_text("MongoDB database", mongodb_database, interactive=interactive)
-        mongodb_username = _prompt_text("MongoDB username", mongodb_username or "maverick", interactive=interactive)
-        mongodb_password = _prompt_password("MongoDB password", interactive=interactive)
+        mongodb_username = _prompt_optional_text("MongoDB username", mongodb_username, interactive=interactive)
+        mongodb_password = _prompt_password("MongoDB password", interactive=interactive) if mongodb_username else ""
         if mongodb_password and not mongodb_password_ref:
             mongodb_password_ref = DEFAULT_MONGODB_PASSWORD_REF
+        if mongodb_username and not (mongodb_password or mongodb_password_ref):
+            raise SystemExit("MongoDB password is required when MongoDB username is set.")
     public_scheme = args.public_scheme if local_only else _prompt_choice(
         "Public scheme",
         default=args.public_scheme,
@@ -542,6 +544,14 @@ def _prompt_text(label: str, default: str, *, interactive: bool) -> str:
     if not interactive:
         return default
     raw = input(f"{label} [{default}]: ").strip()
+    return raw or default
+
+
+def _prompt_optional_text(label: str, default: str, *, interactive: bool) -> str:
+    if not interactive:
+        return default
+    suffix = f" [{default}]" if default else " [empty for none]"
+    raw = input(f"{label}{suffix}: ").strip()
     return raw or default
 
 

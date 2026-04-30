@@ -141,7 +141,7 @@ python3.12 scripts/install_maverick.py \
   --mongodb-uri mongodb://127.0.0.1:27017/maverick
 ```
 
-When MongoDB authentication is enabled, the installer asks for the password once and stores it as an encrypted bootstrap secret. The rendered environment file contains only `MAVERICK_MONGODB_PASSWORD_REF`.
+For a local MongoDB service without authentication, leave `MongoDB username` empty during install. When MongoDB authentication is enabled, enter the username and real password; the installer stores the password as an encrypted bootstrap secret. The rendered environment file contains only `MAVERICK_MONGODB_PASSWORD_REF`, never the raw password.
 
 When the MongoDB URI points to `localhost` or `127.0.0.1`, the installer can start or install the local MongoDB service on supported apt-based Linux hosts. Remote MongoDB servers must already be reachable.
 

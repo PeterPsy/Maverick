@@ -122,6 +122,8 @@ class InstallerRenderingTestCase(unittest.TestCase):
 
         self.assertIn("listen 443 ssl", nginx_conf)
         self.assertIn("ssl_certificate /etc/letsencrypt/live/maverick.example.test/fullchain.pem;", nginx_conf)
+        self.assertIn("ssl_session_cache shared:MaverickSSL:10m;", nginx_conf)
+        self.assertNotIn("shared:SSL:", nginx_conf)
 
     def test_render_install_plan_can_force_https_nginx_for_externally_managed_tls(self) -> None:
         repo_root = Path(__file__).resolve().parents[3]

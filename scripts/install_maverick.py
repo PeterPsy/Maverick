@@ -56,6 +56,7 @@ from core.shared.installer import (  # noqa: E402
 
 INTERNAL_APPLY_ADMIN_PASSWORD_FLAG = "--_apply-initial-admin-password-from-stdin"
 TLS_FAILED_EXIT_CODE = 4
+LIVE_APPLY_FAILED_EXIT_CODE = 5
 CONFIG_PATH_FIELDS = {
     "repository_root",
     "install_root",
@@ -156,7 +157,12 @@ def main(argv: list[str] | None = None) -> int:
 
     _prepare_mongodb(config, assume_yes=args.yes)
     _apply_initial_admin_password(config)
-    apply_install_plan(config, rendered)
+    try:
+        apply_install_plan(config, rendered)
+    except subprocess.CalledProcessError as exc:
+        print(f"Live install apply failed with exit code {exc.returncode}.")
+        print("Rendered files were written, but systemd/nginx may be partially updated. Fix the reported command error and re-run the installer.")
+        return LIVE_APPLY_FAILED_EXIT_CODE
 
     if not args.skip_health_check:
         health = check_health(config)

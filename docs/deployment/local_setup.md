@@ -103,8 +103,10 @@ The default flow is interactive. It:
 - writes `.maverick/install/install-manifest.json`
 - requires the initial admin password before live apply
 - asks whether to apply the rendered plan to systemd and nginx, defaulting to yes
-- asks whether to request a TLS certificate with `certbot` for public `https` installs, defaulting to yes
 - runs final health checks
+- asks whether to request a TLS certificate with `certbot` for public `https` installs, defaulting to yes
+
+For public `https` installs, the installer applies systemd/nginx, checks the local core health endpoint, and then requests TLS. If Certbot is already running or DNS/port `80` is not ready, the installer exits non-zero with a TLS-specific message but leaves the applied services in place.
 
 For a non-interactive public install with defaults accepted:
 

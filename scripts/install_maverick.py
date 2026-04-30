@@ -55,6 +55,7 @@ from core.shared.installer import (  # noqa: E402
 )
 
 INTERNAL_APPLY_ADMIN_PASSWORD_FLAG = "--_apply-initial-admin-password-from-stdin"
+TLS_FAILED_EXIT_CODE = 4
 CONFIG_PATH_FIELDS = {
     "repository_root",
     "install_root",
@@ -140,7 +141,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Rendered install plan under {config.output_root}.")
 
     if args.render_only:
-        _print_summary(config, live_applied=False, tls_requested=False)
+        _print_summary(config, live_applied=False, tls_status="not requested")
         return 0
 
     apply_changes = args.yes or _confirm(
@@ -149,14 +150,22 @@ def main(argv: list[str] | None = None) -> int:
     )
     if not apply_changes:
         print("Skipped live apply. Services were not installed, nginx was not updated, and TLS was not requested.")
-        _print_summary(config, live_applied=False, tls_requested=False)
+        _print_summary(config, live_applied=False, tls_status="not requested")
         return 0
 
     _prepare_mongodb(config, assume_yes=args.yes)
     _apply_initial_admin_password(config)
     apply_install_plan(config, rendered)
 
-    tls_requested = False
+    if not args.skip_health_check:
+        health = check_health(config)
+        _print_health(health)
+        if not all(health.values()):
+            print("Install applied, but at least one required health check failed.")
+            _print_summary(config, live_applied=True, tls_status="not requested")
+            return 3
+
+    tls_status = "not requested"
     should_request_tls = (
         not args.skip_tls
         and not config.local_only
@@ -165,17 +174,18 @@ def main(argv: list[str] | None = None) -> int:
         and (args.yes or _confirm("Request a TLS certificate with certbot now?", default=True))
     )
     if should_request_tls:
-        request_tls_certificate(config)
-        tls_requested = True
+        try:
+            request_tls_certificate(config)
+        except subprocess.CalledProcessError as exc:
+            tls_status = "failed"
+            print(f"TLS certificate request failed with exit code {exc.returncode}.")
+            print("Live services and nginx were applied. Fix certbot/DNS/port 80/443, then re-run the installer or run certbot manually.")
+        else:
+            tls_status = "requested"
 
-    if not args.skip_health_check:
-        health = check_health(config)
-        _print_health(health)
-        if not all(health.values()):
-            print("Install applied, but at least one required health check failed.")
-            _print_summary(config, live_applied=True, tls_requested=tls_requested)
-            return 3
-    _print_summary(config, live_applied=True, tls_requested=tls_requested)
+    _print_summary(config, live_applied=True, tls_status=tls_status)
+    if tls_status == "failed":
+        return TLS_FAILED_EXIT_CODE
     return 0
 
 
@@ -664,7 +674,7 @@ def _print_health(results: dict[str, bool]) -> None:
         print(f"- {url}: {status}")
 
 
-def _print_summary(config: InstallerConfig, *, live_applied: bool, tls_requested: bool) -> None:
+def _print_summary(config: InstallerConfig, *, live_applied: bool, tls_status: str) -> None:
     if live_applied:
         print("Maverick live install flow complete.")
     else:
@@ -672,7 +682,7 @@ def _print_summary(config: InstallerConfig, *, live_applied: bool, tls_requested
     print(f"Rendered files: {config.output_root}")
     print(f"Public URL: {config.public_url}")
     if live_applied and config.public_scheme == "https" and not config.local_only:
-        print(f"TLS certificate requested: {'yes' if tls_requested else 'no'}")
+        print(f"TLS certificate: {tls_status}")
     print("Admin login:")
     print("  Username: admin")
     if config.admin_password:

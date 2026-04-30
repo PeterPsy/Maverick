@@ -6,6 +6,7 @@ VENV_DIR="${ROOT_DIR}/.venv"
 BUILD_FRONTENDS="${MAVERICK_BUILD_FRONTENDS:-0}"
 REBASE_LOCAL_STATE="${MAVERICK_REBASE_LOCAL_STATE_PATHS:-0}"
 PYTHON_BIN="${MAVERICK_PYTHON:-}"
+PYPROJECT_EXTRAS="${MAVERICK_PYPROJECT_EXTRAS:-dev}"
 
 for argument in "$@"; do
   case "${argument}" in
@@ -65,7 +66,7 @@ fi
 source "${VENV_DIR}/bin/activate"
 
 python3 -m pip install --upgrade pip
-python3 -m pip install -e ".[dev]"
+python3 -m pip install -e ".[${PYPROJECT_EXTRAS}]"
 
 if [[ ! -f "${ROOT_DIR}/.env" ]]; then
   python3 "${ROOT_DIR}/scripts/install_maverick.py" \

@@ -27,6 +27,7 @@ if str(REPOSITORY_ROOT) not in sys.path:
 from core.shared.installer import (  # noqa: E402
     DEFAULT_MONGODB_PASSWORD_REF,
     InstallerConfig,
+    apply_initial_admin_password,
     apply_install_plan,
     check_health,
     default_install_env_path,
@@ -106,38 +107,41 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Rendered install plan under {config.output_root}.")
 
     if args.render_only:
-        _print_summary(config)
+        _print_summary(config, live_applied=False, tls_requested=False)
         return 0
 
     apply_changes = args.yes or _confirm(
-        "Apply the rendered plan to the live system paths and manage services?",
-        default=False,
+        "Apply the rendered plan to live systemd/nginx paths and start services now?",
+        default=True,
     )
     if not apply_changes:
-        print("Skipped live apply. Rendered files are ready under the installer output directory.")
-        _print_summary(config)
+        print("Skipped live apply. Services were not installed, nginx was not updated, and TLS was not requested.")
+        _print_summary(config, live_applied=False, tls_requested=False)
         return 0
 
+    apply_initial_admin_password(config)
     apply_install_plan(config, rendered)
 
+    tls_requested = False
     should_request_tls = (
         not args.skip_tls
         and not config.local_only
         and config.public_scheme == "https"
         and config.hostname is not None
-        and (args.yes or _confirm("Request a TLS certificate with certbot now?", default=False))
+        and (args.yes or _confirm("Request a TLS certificate with certbot now?", default=True))
     )
     if should_request_tls:
         request_tls_certificate(config)
+        tls_requested = True
 
     if not args.skip_health_check:
         health = check_health(config)
         _print_health(health)
         if not all(health.values()):
             print("Install applied, but at least one required health check failed.")
-            _print_summary(config)
+            _print_summary(config, live_applied=True, tls_requested=tls_requested)
             return 3
-    _print_summary(config)
+    _print_summary(config, live_applied=True, tls_requested=tls_requested)
     return 0
 
 
@@ -170,6 +174,7 @@ def build_config(args: argparse.Namespace, *, interactive: bool) -> InstallerCon
         choices=("json", "mongo"),
         interactive=interactive,
     )
+    admin_password = _prompt_new_password("Admin password", interactive=interactive)
     json_control_store_root = args.json_control_store_root
     mongodb_uri = args.mongodb_uri
     mongodb_database = args.mongodb_database
@@ -233,6 +238,7 @@ def build_config(args: argparse.Namespace, *, interactive: bool) -> InstallerCon
         mongodb_username=mongodb_username,
         mongodb_password_ref=mongodb_password_ref,
         mongodb_password=mongodb_password,
+        admin_password=admin_password,
         secret_key_file=args.secret_key_file,
         bootstrap_secret_store_root=args.bootstrap_secret_store_root,
     )
@@ -283,6 +289,20 @@ def _prompt_password(label: str, *, interactive: bool) -> str:
     if not interactive:
         return ""
     return getpass.getpass(f"{label} [empty for none]: ").strip()
+
+
+def _prompt_new_password(label: str, *, interactive: bool) -> str:
+    if not interactive:
+        return ""
+    password = getpass.getpass(f"{label} [empty to set later]: ").strip()
+    if not password:
+        return ""
+    if len(password) < 8:
+        raise SystemExit(f"{label} must be at least 8 characters.")
+    confirmation = getpass.getpass(f"Confirm {label}: ").strip()
+    if password != confirmation:
+        raise SystemExit(f"{label} confirmation did not match.")
+    return password
 
 
 def _prompt_path(label: str, default: Path, *, interactive: bool) -> Path:
@@ -358,10 +378,22 @@ def _print_health(results: dict[str, bool]) -> None:
         print(f"- {url}: {status}")
 
 
-def _print_summary(config: InstallerConfig) -> None:
-    print("Maverick install flow complete.")
+def _print_summary(config: InstallerConfig, *, live_applied: bool, tls_requested: bool) -> None:
+    if live_applied:
+        print("Maverick live install flow complete.")
+    else:
+        print("Maverick render flow complete. Live services were not changed.")
     print(f"Rendered files: {config.output_root}")
     print(f"Public URL: {config.public_url}")
+    if live_applied and config.public_scheme == "https" and not config.local_only:
+        print(f"TLS certificate requested: {'yes' if tls_requested else 'no'}")
+    print("Admin login:")
+    print("  Username: admin")
+    if config.admin_password:
+        print("  Password: configured during install")
+    else:
+        print("  Password: set with operator recovery after install:")
+        print("    maverick core cli run core.identity.reset-admin-password --operator --username admin --password '<new-password>' --json")
 
 
 if __name__ == "__main__":

@@ -7,10 +7,14 @@ from pathlib import Path
 import tempfile
 import unittest
 
+from core.api.control_store import ControlStoreSettings, build_control_plane_collections
+from core.identity.service import authenticate_password
+from core.identity.store import IdentityDocumentStore
 from core.secrets.bootstrap import resolve_bootstrap_secret
 from core.shared.installer import (
     DEFAULT_MONGODB_PASSWORD_REF,
     InstallerConfig,
+    apply_initial_admin_password,
     default_install_env_path,
     default_live_systemd_dir,
     default_systemd_dir,
@@ -82,6 +86,35 @@ class InstallerSecretRenderingTestCase(unittest.TestCase):
                     },
                 ),
                 "super-secret-mongo-password",
+            )
+
+    def test_initial_admin_password_is_written_to_identity_store_not_env(self) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+        with tempfile.TemporaryDirectory(prefix="maverick-install-") as temp_dir:
+            install_root = Path(temp_dir)
+            config = replace(
+                self.make_config(repo_root, install_root=install_root),
+                json_control_store_root="control-plane/json",
+                admin_password="install-admin-password",
+            )
+
+            rendered = render_install_plan(config)
+            write_install_plan(rendered)
+            apply_initial_admin_password(config)
+            env_file = (install_root / ".env.maverick").read_text(encoding="utf-8")
+            collections = build_control_plane_collections(
+                ControlStoreSettings(kind="json", json_root=install_root / "control-plane" / "json")
+            )
+
+            self.assertNotIn("install-admin-password", env_file)
+            self.assertNotIn("MAVERICK_ADMIN_PASSWORD", env_file)
+            self.assertEqual(
+                authenticate_password(
+                    IdentityDocumentStore(collections.identity),
+                    username="admin",
+                    password="install-admin-password",
+                ).username,
+                "admin",
             )
 
 

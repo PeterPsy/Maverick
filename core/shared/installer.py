@@ -14,6 +14,9 @@ import time
 from typing import Any
 from urllib import error, request
 
+from core.api.control_store import ControlStoreSettings, build_control_plane_collections
+from core.identity.service import bootstrap_default_admin
+from core.identity.store import IdentityDocumentStore
 from core.shared.env_file import quote_env_value, read_env_file, unquote_env_value
 from core.secrets.errors import SecretNotFoundError
 from core.secrets.key_material import secret_store_key_from_text
@@ -21,6 +24,7 @@ from core.secrets.service import create_platform_secret
 from core.secrets.store import SecretCollections, SecretDocumentStore
 from core.shared.json_file_collection import JsonFileCollection
 from core.shared.repository import installation_paths
+from core.workspaces.store import WorkspaceDocumentStore
 
 DEFAULT_MONGODB_PASSWORD_REF = "platform:secret-alias/mongodb-password"
 
@@ -57,6 +61,7 @@ class InstallerConfig:
     mongodb_username: str = ""
     mongodb_password_ref: str = ""
     mongodb_password: str = ""
+    admin_password: str = ""
     secret_key_file: str = "data/bootstrap-secrets/secret-store.key"
     bootstrap_secret_store_root: str = "data/bootstrap-secrets"
     runtime_api_secret_ref: str = "platform:secret-alias/runtime-api-secret"
@@ -287,9 +292,54 @@ def run_install_steps(config: InstallerConfig) -> None:
         env = dict(os.environ)
         if config.build_frontends:
             env["MAVERICK_BUILD_FRONTENDS"] = "1"
+        if config.control_store == "mongo":
+            env["MAVERICK_PYPROJECT_EXTRAS"] = "dev,mongo"
         subprocess.run([str(repository_root / "scripts" / "bootstrap_local.sh")], cwd=repository_root, env=env, check=True)
     if config.verify:
         subprocess.run([str(repository_root / "scripts" / "verify_local.sh")], cwd=repository_root, check=True)
+
+
+def apply_initial_admin_password(config: InstallerConfig) -> None:
+    """Persist the optional initial admin password directly in the selected identity store."""
+    if not config.admin_password:
+        return
+    settings = ControlStoreSettings(
+        kind=config.control_store,
+        json_root=_install_relative_path(config, config.json_control_store_root),
+        mongo_uri=config.mongodb_uri,
+        mongo_database=config.mongodb_database,
+        mongo_username=config.mongodb_username or None,
+        mongo_password_ref=config.mongodb_password_ref or (DEFAULT_MONGODB_PASSWORD_REF if config.mongodb_password else None),
+    )
+    with _bootstrap_secret_environment(config):
+        collections = build_control_plane_collections(settings)
+        bootstrap_default_admin(
+            IdentityDocumentStore(collections.identity),
+            WorkspaceDocumentStore(collections.workspace),
+            username="admin",
+            password=config.admin_password,
+        )
+
+
+class _bootstrap_secret_environment:
+    def __init__(self, config: InstallerConfig) -> None:
+        self.values = {
+            "MAVERICK_SECRET_KEY_FILE": str(_install_relative_path(config, config.secret_key_file)),
+            "MAVERICK_BOOTSTRAP_SECRET_STORE_ROOT": str(_install_relative_path(config, config.bootstrap_secret_store_root)),
+        }
+        self.previous: dict[str, str | None] = {}
+
+    def __enter__(self) -> None:
+        for key, value in self.values.items():
+            self.previous[key] = os.environ.get(key)
+            os.environ[key] = value
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        for key, value in self.previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
 
 @dataclass(frozen=True)

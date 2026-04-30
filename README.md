@@ -57,6 +57,7 @@ Maverick is easiest to evaluate from a clean clone. The default setup is intenti
 - Node.js and npm
 - `bubblewrap` for sandbox verification
 - Codex CLI for the default Codex-backed runtime path
+- nginx, certbot, and systemd for public service installs with TLS
 - MongoDB only if you choose the MongoDB control-plane adapter
 
 The default control-plane adapter is JSON. A new install does not require MongoDB.
@@ -66,6 +67,12 @@ On Ubuntu, install the required Python and sandbox packages with:
 ```bash
 sudo apt-get update
 sudo apt-get install -y python3.12 python3.12-venv bubblewrap
+```
+
+For a public service install with nginx and HTTPS certificates, also install:
+
+```bash
+sudo apt-get install -y nginx certbot
 ```
 
 ### Local Evaluation
@@ -136,6 +143,8 @@ python3.12 scripts/install_maverick.py \
 
 When MongoDB authentication is enabled, the installer asks for the password once and stores it as an encrypted bootstrap secret. The rendered environment file contains only `MAVERICK_MONGODB_PASSWORD_REF`.
 
+The installer also asks for the initial admin password. Maverick writes only the password hash to the selected identity store; it does not write the admin password to `.env` or `.env.maverick`.
+
 The selected adapter owns platform control-plane data such as users, sessions, workspace registry, workspace membership, app bindings, provider selections, runtime token metadata, and secret metadata/value envelopes.
 
 `.maverick` is only rebuildable operating material. Deleting it should not delete users, workspace memberships, app bindings, provider/OAuth bindings, runtime token records, secret values, or workspace-owned app data.
@@ -148,6 +157,7 @@ After install, set or recover the admin password through the operator CLI:
 
 ```bash
 maverick core cli run core.identity.reset-admin-password \
+  --operator \
   --username admin \
   --password '<new-password>' \
   --json

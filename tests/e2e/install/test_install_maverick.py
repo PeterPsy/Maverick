@@ -191,7 +191,10 @@ class InstallerFlowTestCase(unittest.TestCase):
 
     def test_installer_main_prompts_for_hostname_when_missing(self) -> None:
         args = parse_args(["--skip-bootstrap", "--skip-verify", "--render-only"])
-        with patch("builtins.input", side_effect=["public", "maverick.example.test", "", "", "", "", "", "", "", "", ""]):
+        with patch("builtins.input", side_effect=["public", "maverick.example.test", "", "", "", "", "", "", "", "", ""]), patch(
+            "scripts.install_maverick.getpass.getpass",
+            return_value="",
+        ):
             config = build_config(args, interactive=True)
         self.assertEqual(config.hostname, "maverick.example.test")
         self.assertFalse(config.local_only)
@@ -289,6 +292,30 @@ class InstallerFlowTestCase(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertEqual(mocked_run.call_args_list[0].args[0], [str(repo_root / "scripts" / "bootstrap_local.sh")])
         self.assertEqual(mocked_run.call_args_list[0].kwargs["env"]["MAVERICK_BUILD_FRONTENDS"], "1")
+
+    def test_installer_main_installs_mongo_extra_when_mongo_control_store_is_selected(self) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+        with tempfile.TemporaryDirectory(prefix="maverick-install-") as temp_dir:
+            output_root = Path(temp_dir) / "install"
+            with patch("core.shared.installer.subprocess.run") as mocked_run:
+                exit_code = installer_main(
+                    [
+                        "--local-only",
+                        "--control-store",
+                        "mongo",
+                        "--output-root",
+                        str(output_root),
+                        "--install-env",
+                        str(output_root / "maverick.env"),
+                        "--render-only",
+                        "--yes",
+                        *self.secret_args(output_root),
+                    ]
+                )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(mocked_run.call_args_list[0].args[0], [str(repo_root / "scripts" / "bootstrap_local.sh")])
+        self.assertEqual(mocked_run.call_args_list[0].kwargs["env"]["MAVERICK_PYPROJECT_EXTRAS"], "dev,mongo")
 
     def test_installer_main_applies_live_plan_when_confirmed(self) -> None:
         with tempfile.TemporaryDirectory(prefix="maverick-install-") as temp_dir:

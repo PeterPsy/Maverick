@@ -10,6 +10,7 @@ Maverick is experimental. Use fake data and local-only networking.
 - Node.js and npm
 - `bubblewrap` on Linux for sandbox tests
 - Codex CLI for Codex-backed runtime sessions
+- `systemd`, nginx, and certbot for public service installs with TLS
 
 The clean-clone local bootstrap uses the JSON control-plane adapter by default.
 `.maverick` is rebuildable installation-local operating material, not the database. Deleting `.maverick` must not delete users, workspace membership, app bindings, provider/OAuth bindings, runtime token records, or secret values.
@@ -19,6 +20,12 @@ On Ubuntu, install Python 3.12 support and the sandbox dependency before running
 ```bash
 sudo apt-get update
 sudo apt-get install -y python3.12 python3.12-venv bubblewrap
+```
+
+For a public service install that should configure nginx and request HTTPS certificates, also install:
+
+```bash
+sudo apt-get install -y nginx certbot
 ```
 
 Default JSON control-plane state is stored outside `.maverick`:
@@ -54,10 +61,12 @@ MAVERICK_BOOTSTRAP_SECRET_STORE_ROOT=data/bootstrap-secrets
 `MAVERICK_SECRET_STORE_KEY` is only a development and compatibility fallback.
 The bootstrap secret store is only for pre-adapter infrastructure secrets such as MongoDB passwords and platform signing secrets. It uses the same core secret envelope as the control-plane secret store and must stay outside `.maverick`.
 
-The admin password is not a normal boot secret. New installs should boot with `MAVERICK_ADMIN_USERNAME` and without `MAVERICK_ADMIN_PASSWORD`; then an operator sets or recovers the password through the operator-only core CLI:
+The admin password is not a normal boot secret. The interactive installer asks for the initial admin password and writes only its hash to the selected identity store. It does not write `MAVERICK_ADMIN_PASSWORD` to `.env.maverick`.
+
+If the initial password is left empty, an operator can set or recover it later through the operator-only core CLI:
 
 ```bash
-maverick core cli run core.identity.reset-admin-password --username admin --password '<new-password>' --json
+maverick core cli run core.identity.reset-admin-password --operator --username admin --password '<new-password>' --json
 ```
 
 That command writes only the password hash to the durable identity store and revokes existing sessions for the admin user.
@@ -90,8 +99,8 @@ The default flow is interactive. It:
 - renders nginx config under `.maverick/install/nginx/`
 - writes a service env file outside `.maverick`, defaulting to `.env.maverick`
 - writes `.maverick/install/install-manifest.json`
-- offers to apply the rendered plan to systemd and nginx
-- offers to request a TLS certificate with `certbot` for public `https` installs
+- asks whether to apply the rendered plan to systemd and nginx, defaulting to yes
+- asks whether to request a TLS certificate with `certbot` for public `https` installs, defaulting to yes
 - runs final health checks
 
 For a non-interactive public install with defaults accepted:
@@ -181,9 +190,10 @@ When the installer prompts interactively, answer as follows:
 | `Core bind host [127.0.0.1]:` | Press Enter. Nginx is the public entrypoint. |
 | `Core port [8014]:` | Press Enter unless port `8014` is already used. |
 | `Rescue port [8015]:` | Press Enter unless port `8015` is already used. |
+| `Admin password [empty to set later]:` | Enter the first admin password, then confirm it. Leave empty only if you will use operator recovery later. |
 | `Public scheme [https] (https/http):` | Press Enter for HTTPS. |
-| `Apply the rendered plan... [y/N]:` | Type `y` only after reviewing the plan. |
-| `Request a TLS certificate with certbot now? [y/N]:` | Type `y` only when DNS and ports `80/443` are ready. |
+| `Apply the rendered plan... [Y/n]:` | Press Enter to install live systemd/nginx paths and start services. Type `n` for render-only behavior. |
+| `Request a TLS certificate with certbot now? [Y/n]:` | Press Enter only when DNS and ports `80/443` are ready. Type `n` to skip TLS for now. |
 
 After live apply, verify:
 

@@ -6,7 +6,11 @@ Most business operations are fragmented across SaaS tools, documents, inboxes, i
 
 Maverick is that place. It gives teams a workspace-isolated platform where apps, widgets, skills, providers, databases, CLI commands, and MCP tools are first-class building blocks for agentic operations.
 
+Everything you create is already connected. An app created in Maverick or installed from the App Store is not another isolated SaaS island: once enabled in a workspace, its declared surfaces become part of the same governed operating context that agents and other apps can discover and use. Agents can work through the apps, the apps can compose with each other, and the workspace stays the center of gravity.
+
 The goal is not to add another chat box on top of existing software. The goal is to make operational delegation practical: an AI agent should be able to understand the current workspace, use the right app, call the right tool, create or update the right data, and hand control back to humans when policy requires it.
+
+Adios fragmentation.
 
 Maverick is for teams building internal AI operations, agent-native business tools, self-hosted automation platforms, or company-specific AI workspaces.
 
@@ -17,6 +21,10 @@ Maverick is not production-ready yet. Use it for local evaluation, development, 
 ### Delegation over chat
 
 Chat is only one interface. Maverick treats AI as an operator that can work through apps, widgets, CLI commands, MCP tools, provider runtimes, and workspace-owned skills.
+
+### Everything connected by default
+
+Apps are not dead-end integrations. Every app created locally or installed from the App Store joins the workspace graph through explicit contracts, so agents and other apps can use its approved frontend, backend, CLI, MCP, widget, skill, reference, and lifecycle surfaces without custom glue code.
 
 ### Workspace isolation first
 
@@ -213,6 +221,8 @@ Apps are how Maverick grows. A CRM, memory graph, gallery, chat surface, admin p
 Apps live under `apps/<app_id>/` and are described by `app_contract.json`.
 
 An app can provide frontend, backend, CLI, MCP, lifecycle hooks, widgets, skills, reference entities, view surfaces, and storage behavior. Apps own their domain data and UI. The platform mounts and governs them through the app contract.
+
+That contract is what makes new software immediately useful to the rest of the workspace. A locally created app or an App Store install can expose tools to agents, widgets to other apps, skills to runtime sessions, and backend/CLI/MCP actions to the governed platform surface. The result is one centralized operating layer instead of another disconnected tool.
 
 ### Widgets
 

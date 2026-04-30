@@ -40,12 +40,12 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated: (session: Ex
     try {
       const session = await login(credential.trim(), password);
       if (!session.authenticated) {
-        setError("Accesso non riuscito.");
+        setError("Sign-in failed.");
         return;
       }
       onAuthenticated(session);
     } catch {
-      setError("Credenziali non valide.");
+      setError("Invalid credentials.");
     } finally {
       setIsSubmitting(false);
     }
@@ -65,7 +65,7 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated: (session: Ex
       <div className="bs-login__brand-strip">
         <BrandMark className="bs-login__brand-mark" variant="mark" />
       </div>
-      <section className="bs-login__stage" aria-label="Accesso Maverick">
+      <section className="bs-login__stage" aria-label="Maverick sign-in">
         <div className="bs-login__content">
           <form className="bs-login__form" onSubmit={submit}>
             <div className="bs-login__step" key={step}>
@@ -73,10 +73,10 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated: (session: Ex
                 {step === "email" ? (
                   <p>
                     <BrandMark className="bs-login__headline-logotype" variant="logotype" />
-                    <span>ti stava aspettando.</span>
+                    <span>was waiting for you.</span>
                   </p>
                 ) : (
-                  <p>Inserisci la password</p>
+                  <p>Enter your password</p>
                 )}
                 {step === "password" ? <span className="bs-login__credential">{credential.trim()}</span> : null}
               </div>
@@ -84,7 +84,7 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated: (session: Ex
               <div className="bs-login__fields">
                 {step === "email" ? (
                   <div className="bs-glass-field">
-                    <label className="bs-glass-field__floating" htmlFor="maverick-login-credential">Email o username</label>
+                    <label className="bs-glass-field__floating" htmlFor="maverick-login-credential">Email or username</label>
                     <span className="bs-glass-field__control">
                       <span className={`bs-glass-field__icon ${credential.length > 20 ? "is-compressed" : ""}`}>
                         <span className="material-symbols-rounded" aria-hidden="true">mail</span>
@@ -98,19 +98,19 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated: (session: Ex
                           setCredential(event.target.value);
                           setError(null);
                         }}
-                        placeholder="Email o username"
+                        placeholder="Email or username"
                         spellCheck={false}
                         type="text"
                         value={credential}
                       />
                       <button
-                        aria-label="Continua"
+                        aria-label="Continue"
                         className={`bs-glass-field__action ${canContinue ? "is-visible" : ""}`}
                         disabled={!canContinue}
                         type="submit"
                       >
                         <span className="material-symbols-rounded" aria-hidden="true">arrow_forward</span>
-                        <span>Continua</span>
+                        <span>Continue</span>
                       </button>
                     </span>
                   </div>
@@ -119,7 +119,7 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated: (session: Ex
                     <label className={`bs-glass-field__floating ${password ? "is-visible" : ""}`} htmlFor="maverick-login-password">Password</label>
                     <span className="bs-glass-field__control">
                       <button
-                        aria-label={showPassword ? "Nascondi password" : "Mostra password"}
+                        aria-label={showPassword ? "Hide password" : "Show password"}
                         className="bs-glass-field__icon bs-glass-field__toggle"
                         onClick={() => setShowPassword((value) => !value)}
                         type="button"
@@ -143,7 +143,7 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated: (session: Ex
                         value={password}
                       />
                       <button
-                        aria-label="Accedi"
+                        aria-label="Sign in"
                         className={`bs-glass-field__action ${canSubmit ? "is-visible" : ""}`}
                         disabled={!canSubmit || isSubmitting}
                         type="submit"
@@ -151,19 +151,19 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated: (session: Ex
                         {isSubmitting ? (
                           <>
                             <span className="bs-login__spinner" />
-                            <span>Accesso...</span>
+                            <span>Signing in...</span>
                           </>
                         ) : (
                           <>
                             <span className="material-symbols-rounded" aria-hidden="true">arrow_forward</span>
-                            <span>Accedi</span>
+                            <span>Sign in</span>
                           </>
                         )}
                       </button>
                     </span>
                     <button className="bs-login__back" onClick={goBackToEmail} type="button">
                       <span className="material-symbols-rounded" aria-hidden="true">arrow_back</span>
-                      Indietro
+                      Back
                     </button>
                   </div>
                 )}

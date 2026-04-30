@@ -23,6 +23,9 @@ Maverick is pre-release software. This roadmap is intentionally conservative and
 - Add public docs index, glossary, and app developer tutorial.
 - Add stronger dependency audit, SBOM generation, and release checks.
 - Add browser smoke tests for core shell and mounted apps.
+- Add public app surfaces for selected apps. Today all apps are internal-only and require an authenticated Maverick user.
+- Add more granular user permissions beyond workspace-level access, including per-surface or per-app authorization where needed.
+- Add additional AI provider adapters, including API-key model providers, Claude Code, and local open-source model runtimes.
 
 ## Later
 

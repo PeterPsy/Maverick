@@ -286,6 +286,6 @@ Use the checked-in wrapper for machine-readable discovery:
 
 ## Persistence
 
-The repository contains the directory layout for workspace-owned data. Runtime, app data, and local bootstrap state must not be committed.
+Bootstrap and runtime create the installation-local directory layout for workspace-owned data. Runtime, app data, and local bootstrap state must not be committed.
 
 Use fake local data until the production persistence and secret-storage hardening work is complete.

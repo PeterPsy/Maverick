@@ -28,7 +28,7 @@ def discover_repository_root(start_path: Path | None = None) -> Path:
     if current.is_file():
         current = current.parent
 
-    required_markers = {"AGENTS.md", "core", "apps", "workspaces"}
+    required_markers = {"AGENTS.md", "core", "apps"}
 
     for candidate in (current, *current.parents):
         if required_markers.issubset({path.name for path in candidate.iterdir()}):

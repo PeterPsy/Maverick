@@ -8,14 +8,14 @@ Define the target Maverick architecture where each workspace is a first-class is
 
 This document establishes the intended end state:
 
-- a top-level `workspaces/` directory exists alongside `core/` and `apps/`
+- a top-level `workspaces/` directory is materialized by bootstrap/runtime alongside `core/` and `apps/`
 - each workspace owns its own filesystem root
 - sandboxed agents can work freely inside their workspace root
 - sandboxed agents cannot directly write to `core/`, installation-level `apps/`, or other workspaces
 - interactions with platform capabilities outside the workspace root happen only through official platform interfaces such as MCP, CLI, and backend APIs
 - workspace memory, files, apps, and execution context remain confined to that workspace
 
-This is a core feature, even though the workspace directories live physically outside the core code tree.
+This is a core feature, even though the workspace directories live physically outside the core code tree. The repository must not require `workspaces/` to exist in a clean source checkout; it is generated installation-local state.
 
 ## Core Principle
 

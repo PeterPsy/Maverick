@@ -4,10 +4,11 @@ import json
 from pathlib import Path
 import re
 import subprocess
+import tempfile
 import tomllib
 import unittest
 
-from core.shared.repository import installation_paths
+from core.shared.repository import discover_repository_root, installation_paths
 
 
 class RepositoryConventionsTestCase(unittest.TestCase):
@@ -22,6 +23,19 @@ class RepositoryConventionsTestCase(unittest.TestCase):
         self.assertEqual(paths.apps_root, paths.repository_root / "apps")
         self.assertEqual(paths.workspaces_root, paths.repository_root / "workspaces")
         self.assertEqual(paths.architecture_docs_root, paths.repository_root / "docs" / "architecture")
+
+    def test_repository_root_discovery_does_not_require_generated_workspace_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = Path(temp_dir)
+            (repo_root / "AGENTS.md").write_text("test", encoding="utf-8")
+            (repo_root / "core").mkdir()
+            (repo_root / "apps").mkdir()
+            nested_path = repo_root / "core" / "shared" / "repository.py"
+            nested_path.parent.mkdir(parents=True, exist_ok=True)
+            nested_path.write_text("", encoding="utf-8")
+
+            self.assertEqual(discover_repository_root(start_path=nested_path), repo_root)
+            self.assertFalse((repo_root / "workspaces").exists())
 
     def test_open_source_setup_scripts_are_present_and_shell_valid(self) -> None:
         repo_root = installation_paths(start_path=Path(__file__)).repository_root
@@ -89,7 +103,7 @@ class RepositoryConventionsTestCase(unittest.TestCase):
         repo_root = installation_paths(start_path=Path(__file__)).repository_root
         pyproject = tomllib.loads((repo_root / "pyproject.toml").read_text(encoding="utf-8"))
 
-        self.assertEqual(pyproject["project"]["license"], "MIT")
+        self.assertEqual(pyproject["project"]["license"], {"text": "MIT"})
         self.assertEqual(pyproject["tool"]["setuptools"]["packages"]["find"]["include"], ["core*"])
         self.assertTrue(pyproject["tool"]["setuptools"]["packages"]["find"]["namespaces"])
 

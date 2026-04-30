@@ -1,0 +1,379 @@
+.bs-tutorial-dialog {
+  width: min(840px, 100%);
+  max-height: min(86vh, 920px);
+  padding: 0;
+  overflow: hidden;
+  background: #202020;
+}
+
+.bs-tutorial {
+  display: grid;
+  gap: 0;
+  min-height: 0;
+}
+
+.bs-tutorial__hero {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 420px;
+  padding: 2rem 1.5rem;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 14% 18%, rgba(255, 236, 120, 0.58), transparent 22%),
+    radial-gradient(circle at 82% 16%, rgba(186, 116, 255, 0.54), transparent 24%),
+    radial-gradient(circle at 72% 82%, rgba(36, 229, 255, 0.5), transparent 26%),
+    linear-gradient(130deg, #5fe2ff 0%, #3b82ff 26%, #7b5cff 52%, #c950ff 74%, #86efff 100%);
+  background-size: 190% 190%, 210% 210%, 210% 210%, 240% 240%;
+  background-position: 0% 0%, 100% 0%, 100% 100%, 0% 50%;
+  animation: bs-tutorial-hero-gradient 7.2s ease-in-out infinite alternate;
+}
+
+.bs-tutorial__hero-background,
+.bs-tutorial__hero-background-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.bs-tutorial__hero-background {
+  z-index: 0;
+}
+
+.bs-tutorial__hero-background-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.9), transparent 92%);
+  opacity: 0.18;
+}
+
+.bs-tutorial__close {
+  position: absolute;
+  top: 1.15rem;
+  right: 1.15rem;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  border: 1px solid rgba(18, 24, 35, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 250, 244, 0.88);
+  color: rgba(34, 34, 34, 0.82);
+  cursor: pointer;
+  box-shadow: 0 10px 24px rgba(38, 62, 93, 0.12);
+}
+
+.bs-tutorial__hero-card {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 1rem;
+  align-items: center;
+  width: min(460px, 100%);
+  padding: 1rem;
+  border: 1px solid rgba(233, 225, 214, 0.7);
+  border-radius: 30px;
+  background: rgba(255, 250, 244, 0.96);
+  box-shadow: 0 18px 42px rgba(53, 86, 124, 0.18);
+}
+
+.bs-tutorial__hero-media {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1 / 1;
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, rgba(240, 233, 214, 0.9), rgba(231, 216, 183, 0.94)),
+    #ece3cc;
+  box-shadow:
+    inset 0 0 0 1px rgba(162, 142, 111, 0.12),
+    0 10px 24px rgba(120, 101, 72, 0.14);
+}
+
+.bs-tutorial__hero-window {
+  width: 76%;
+  height: 70%;
+  padding: 0.5rem;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(197, 223, 237, 0.85));
+  box-shadow: 0 12px 24px rgba(87, 109, 135, 0.15);
+}
+
+.bs-tutorial__hero-window-bar {
+  display: flex;
+  gap: 0.22rem;
+  margin-bottom: 0.45rem;
+}
+
+.bs-tutorial__hero-window-bar span {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 999px;
+  background: rgba(63, 73, 89, 0.28);
+}
+
+.bs-tutorial__hero-window-screen {
+  position: relative;
+  overflow: hidden;
+  height: calc(100% - 0.85rem);
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, rgba(197, 229, 246, 0.95), rgba(236, 243, 247, 0.92)),
+    #d8e8f3;
+}
+
+.bs-tutorial__hero-window-screen.is-animated-background {
+  isolation: isolate;
+  background:
+    linear-gradient(180deg, rgba(7, 12, 24, 0.96), rgba(14, 19, 38, 0.98)),
+    #0b1020;
+}
+
+.bs-tutorial__hero-orb,
+.bs-tutorial__hero-grid,
+.bs-tutorial__hero-content {
+  position: absolute;
+  inset: 0;
+}
+
+.bs-tutorial__hero-orb {
+  inset: auto;
+  width: 72%;
+  aspect-ratio: 1;
+  border-radius: 999px;
+  filter: blur(18px);
+  opacity: 0.7;
+  will-change: transform, opacity;
+}
+
+.bs-tutorial__hero-orb--one {
+  top: -16%;
+  left: -12%;
+  background: rgba(88, 166, 255, 0.34);
+  animation: bs-tutorial-float-one 16s ease-in-out infinite alternate;
+}
+
+.bs-tutorial__hero-orb--two {
+  right: -18%;
+  bottom: -24%;
+  background: rgba(241, 90, 181, 0.28);
+  animation: bs-tutorial-float-two 18s ease-in-out infinite alternate;
+}
+
+.bs-tutorial__hero-orb--three {
+  top: 28%;
+  right: 8%;
+  width: 38%;
+  background: rgba(96, 229, 196, 0.2);
+  animation: bs-tutorial-float-three 14s ease-in-out infinite alternate;
+}
+
+.bs-tutorial__hero-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+  background-size: 18px 18px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.85), transparent 92%);
+  opacity: 0.22;
+}
+
+.bs-tutorial__hero-content {
+  z-index: 1;
+  display: grid;
+  align-content: end;
+  gap: 0.38rem;
+  padding: 0.85rem;
+}
+
+.bs-tutorial__hero-pill {
+  width: max-content;
+  max-width: 100%;
+  padding: 0.22rem 0.46rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(9, 14, 28, 0.52);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.52rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.bs-tutorial__hero-line {
+  display: block;
+  width: 100%;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.bs-tutorial__hero-line--strong {
+  width: 74%;
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.bs-tutorial__hero-line--short {
+  width: 46%;
+}
+
+.bs-tutorial__panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 1rem;
+  min-height: 0;
+  padding: 1.6rem 1.8rem 1.8rem;
+  background: #202020;
+}
+
+.bs-tutorial__hero-card-copy {
+  display: grid;
+  gap: 0.28rem;
+}
+
+.bs-tutorial__hero-card-eyebrow {
+  margin: 0;
+  color: #7b7b7b;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.bs-tutorial__hero-card-title {
+  margin: 0;
+  color: #232323;
+  font-size: 1.1rem;
+  line-height: 1.3;
+}
+
+.bs-tutorial__dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.bs-tutorial__dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  cursor: pointer;
+  transition:
+    transform 180ms ease,
+    background 180ms ease;
+}
+
+.bs-tutorial__dot.is-active {
+  background: rgba(255, 255, 255, 0.96);
+  transform: scale(1.15);
+}
+
+.bs-tutorial__copy {
+  display: grid;
+  gap: 0.75rem;
+  min-height: 0;
+}
+
+.bs-tutorial__title {
+  margin: 0;
+  color: #f5f5f5;
+  font-size: 1.15rem;
+  line-height: 1.28;
+}
+
+.bs-tutorial__description {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+.bs-tutorial__link {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 0.9rem;
+  text-decoration: underline;
+  text-underline-offset: 0.18rem;
+}
+
+.bs-tutorial__actions {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0.8rem;
+  margin-top: 0.4rem;
+}
+
+.bs-tutorial__actions .bs-ui-button--primary {
+  min-width: 180px;
+  justify-content: center;
+  background: #f5f5f5;
+  color: #232323;
+}
+
+.bs-tutorial__actions .bs-ui-button--primary:hover {
+  background: #ffffff;
+}
+
+@keyframes bs-tutorial-float-one {
+  from {
+    opacity: 0.5;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  to {
+    opacity: 0.78;
+    transform: translate3d(10%, 8%, 0) scale(1.08);
+  }
+}
+
+@keyframes bs-tutorial-float-two {
+  from {
+    opacity: 0.42;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  to {
+    opacity: 0.7;
+    transform: translate3d(-12%, -10%, 0) scale(1.12);
+  }
+}
+
+@keyframes bs-tutorial-float-three {
+  from {
+    opacity: 0.32;
+    transform: translate3d(0, 0, 0) scale(0.96);
+  }
+
+  to {
+    opacity: 0.58;
+    transform: translate3d(-10%, 6%, 0) scale(1.08);
+  }
+}
+
+@keyframes bs-tutorial-hero-gradient {
+  from {
+    background-position: 0% 0%, 100% 0%, 100% 100%, 0% 50%;
+  }
+
+  to {
+    background-position: 28% 22%, 68% 30%, 18% 74%, 100% 54%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bs-tutorial__hero,
+  .bs-tutorial__hero-orb {
+    animation: none;
+    transform: none;
+  }
+}

@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Maverick backend downtime watchdog every minute
+
+[Timer]
+OnBootSec=1min
+OnActiveSec=1min
+OnUnitActiveSec=1min
+AccuracySec=10s
+Unit=maverick-backend-watchdog.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,10 @@
+{
+  "commands": {
+    "sync": {
+      "required_platform_role": "admin",
+      "sandbox_agent_allowed": true,
+      "requires_workspace_context": true,
+      "requires_full_access": false
+    }
+  }
+}

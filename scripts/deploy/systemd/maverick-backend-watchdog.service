@@ -1,0 +1,15 @@
+[Unit]
+Description=Maverick backend downtime watchdog
+After=network.target maverick-rescue.service
+Wants=maverick-rescue.service
+
+[Service]
+Type=oneshot
+User={{SERVICE_USER}}
+Group={{SERVICE_GROUP}}
+WorkingDirectory={{INSTALL_ROOT}}
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile={{ENV_FILE}}
+Environment=MAVERICK_CORE_HEALTH_URL=http://{{BIND_HOST}}:{{CORE_PORT}}/health
+ExecStart={{INSTALL_ROOT}}/.venv/bin/python scripts/rescue_backend_watchdog.py
+TimeoutStartSec=infinity

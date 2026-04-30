@@ -1,0 +1,145 @@
+.bs-shell {
+  position: relative;
+  display: grid;
+  width: 100vw;
+  height: 100dvh;
+  min-height: 100vh;
+  overflow: hidden;
+  background: var(--maverick-bg);
+}
+
+.bs-workspace-view-shell {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  transition:
+    margin-left 180ms ease,
+    width 180ms ease;
+}
+
+.bs-shell.is-sidebar-mode-fixed:not(.is-mobile-layout) .bs-workspace-view-shell {
+  width: calc(100% - var(--bs-sidebar-rail-width, var(--maverick-sidebar-rail-width)) - var(--maverick-sidebar-details-width) - 2.85rem);
+  margin-left: calc(var(--bs-sidebar-rail-width, var(--maverick-sidebar-rail-width)) + var(--maverick-sidebar-details-width) + 2.85rem);
+}
+
+.bs-shell.is-mobile-layout.is-sidebar-open,
+.bs-shell.is-mobile-layout.is-sidebar-closing {
+  overscroll-behavior: none;
+}
+
+.bs-shell.is-mobile-layout.is-sidebar-open .bs-workspace-view-shell,
+.bs-shell.is-mobile-layout.is-sidebar-open .bs-workspace-app-frame,
+.bs-shell.is-mobile-layout.is-sidebar-closing .bs-workspace-view-shell,
+.bs-shell.is-mobile-layout.is-sidebar-closing .bs-workspace-app-frame {
+  pointer-events: none;
+  touch-action: none;
+  user-select: none;
+}
+
+.bs-shell-overlay-widgets {
+  position: fixed;
+  right: calc(env(safe-area-inset-right, 0px) + 1rem);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);
+  z-index: 34;
+  width: calc(100vw - 2rem);
+  height: min(38rem, calc(100dvh - 2rem));
+  pointer-events: none;
+}
+
+.bs-shell-overlay-widgets .bs-widget-slot {
+  pointer-events: auto;
+}
+
+.bs-widget-slot--overlay {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  display: block;
+  flex: none;
+  box-sizing: border-box;
+  max-width: calc(100vw - 2rem);
+  max-height: min(38rem, calc(100dvh - 2rem));
+  overflow: hidden;
+  border-radius: 22px;
+  transition:
+    width 160ms ease,
+    height 160ms ease;
+}
+
+.bs-widget-slot--overlay.is-collapsed {
+  border-radius: 14px;
+}
+
+.bs-widget-slot--overlay .bs-widget-slot__frame {
+  border-radius: inherit;
+}
+
+.bs-capture-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  cursor: crosshair;
+  background: rgba(0, 0, 0, 0.18);
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+}
+
+.bs-capture-overlay.is-busy {
+  cursor: wait;
+}
+
+.bs-capture-overlay__hint,
+.bs-capture-overlay__cancel {
+  position: fixed;
+  z-index: 2;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  background: rgba(20, 20, 20, 0.9);
+  color: var(--maverick-text);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.28);
+}
+
+.bs-capture-overlay__hint {
+  left: 50%;
+  top: calc(env(safe-area-inset-top, 0px) + 1rem);
+  max-width: min(32rem, calc(100vw - 2rem));
+  padding: 0.58rem 0.8rem;
+  transform: translateX(-50%);
+  font-size: 0.82rem;
+  font-weight: 750;
+  line-height: 1.35;
+  pointer-events: none;
+}
+
+.bs-capture-overlay__cancel {
+  right: calc(env(safe-area-inset-right, 0px) + 1rem);
+  top: calc(env(safe-area-inset-top, 0px) + 1rem);
+  min-height: 2.35rem;
+  padding: 0 0.78rem;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.bs-capture-overlay__rect {
+  position: fixed;
+  z-index: 1;
+  border: 2px solid rgba(248, 75, 120, 0.92);
+  border-radius: 10px;
+  background: rgba(248, 75, 120, 0.13);
+  pointer-events: none;
+}
+
+@media (max-width: 720px) {
+  .bs-shell-overlay-widgets {
+    right: calc(env(safe-area-inset-right, 0px) + 0.7rem);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 0.7rem);
+    width: min(23rem, calc(100vw - 1.4rem));
+    height: min(35rem, calc(100dvh - 1.4rem));
+  }
+}

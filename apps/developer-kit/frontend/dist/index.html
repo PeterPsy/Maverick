@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Developer Kit</title>
+    <style>
+      body { margin: 0; background: #111827; color: #f9fafb; font-family: Inter, system-ui, sans-serif; }
+      main { max-width: 980px; margin: 0 auto; padding: 32px; display: grid; gap: 20px; }
+      form, section { border: 1px solid #374151; border-radius: 8px; padding: 18px; background: #1f2937; }
+      label { display: grid; gap: 6px; margin: 10px 0; }
+      input, select, textarea, button { border: 1px solid #4b5563; border-radius: 6px; padding: 10px 12px; font: inherit; }
+      input, select, textarea { background: #030712; color: #f9fafb; }
+      button { background: #2dd4bf; color: #042f2e; font-weight: 700; cursor: pointer; }
+      pre { white-space: pre-wrap; overflow: auto; background: #030712; padding: 14px; border-radius: 6px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Developer Kit</h1>
+      <form id="create">
+        <label>App id <input name="app_id" required placeholder="my-workspace-app"></label>
+        <label>Name <input name="name" placeholder="My Workspace App"></label>
+        <label>Template
+          <select name="template_id">
+            <option value="entity-sqlite">entity-sqlite</option>
+            <option value="react-vite">react-vite</option>
+            <option value="data-app">data-app</option>
+            <option value="frontend-backend">frontend-backend</option>
+            <option value="agent-tool">agent-tool</option>
+            <option value="widget">widget</option>
+            <option value="minimal">minimal</option>
+          </select>
+        </label>
+        <label>Entities <input name="entities" placeholder="account, contact, deal"></label>
+        <label>Description <textarea name="description"></textarea></label>
+        <button>Create Source</button>
+      </form>
+      <section>
+        <button id="validate">Validate Last App</button>
+        <button id="register">Register Last App</button>
+        <button id="install">Install Last App</button>
+        <button id="status">Status Last App</button>
+        <button id="package">Package Last App</button>
+        <pre id="result"></pre>
+      </section>
+    </main>
+    <script>
+      let lastAppId = '';
+      async function callSdk(body) {
+        const response = await fetch('/api/app-sdk', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(body)
+        });
+        return response.json();
+      }
+      function show(value) {
+        document.getElementById('result').textContent = JSON.stringify(value, null, 2);
+      }
+      document.getElementById('create').onsubmit = async (event) => {
+        event.preventDefault();
+        const data = Object.fromEntries(new FormData(event.target).entries());
+        lastAppId = data.app_id;
+        data.action = 'create';
+        data.entities = String(data.entities || '').split(',').map((item) => item.trim()).filter(Boolean);
+        show(await callSdk(data));
+      };
+      document.getElementById('validate').onclick = async () => show(await callSdk({action: 'validate', app_id: lastAppId}));
+      document.getElementById('register').onclick = async () => show(await callSdk({action: 'register-local', app_id: lastAppId}));
+      document.getElementById('install').onclick = async () => show(await callSdk({action: 'install-local', app_id: lastAppId}));
+      document.getElementById('status').onclick = async () => show(await callSdk({action: 'status', app_id: lastAppId}));
+      document.getElementById('package').onclick = async () => show(await callSdk({action: 'package', app_id: lastAppId}));
+    </script>
+  </body>
+</html>

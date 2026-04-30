@@ -1,0 +1,17 @@
+[Unit]
+Description=Maverick rescue host
+After=network.target
+
+[Service]
+Type=simple
+User={{SERVICE_USER}}
+Group={{SERVICE_GROUP}}
+WorkingDirectory={{INSTALL_ROOT}}
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile={{ENV_FILE}}
+ExecStart={{INSTALL_ROOT}}/.venv/bin/python -m core.api.server --service rescue --host {{BIND_HOST}} --port {{RESCUE_PORT}}
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

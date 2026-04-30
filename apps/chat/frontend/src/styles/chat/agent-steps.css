@@ -1,0 +1,201 @@
+.chatapp-agent-step__badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.chatapp-agent-step {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.chatapp-agent-step__header {
+  display: flex;
+  align-items: center;
+}
+
+.chatapp-agent-step__body {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.chatapp-agent-step--thought .chatapp-agent-step__body {
+  color: var(--maverick-text-muted);
+}
+
+.chatapp-agent-step--tool .chatapp-agent-step__body,
+.chatapp-agent-step__tool {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.chatapp-agent-step__tool-entry {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.chatapp-agent-step__tool-entry + .chatapp-agent-step__tool-entry {
+  padding-top: 0.55rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.chatapp-agent-step__command-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.55rem;
+}
+
+.chatapp-agent-step__command {
+  display: block;
+  overflow-x: auto;
+  padding: 0.72rem 0.82rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--chatapp-control-radius);
+  background: var(--chatapp-glass-surface);
+  color: #f3f4f6;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.87rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.chatapp-agent-step__output {
+  overflow: auto;
+  margin: 0;
+  padding: 0.72rem 0.82rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--chatapp-control-radius);
+  background: var(--chatapp-glass-surface);
+  max-height: 18rem;
+}
+
+.chatapp-agent-step__output-shell {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.chatapp-agent-step__output-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: var(--chatapp-soft-surface);
+  color: var(--maverick-text-muted);
+  cursor: pointer;
+  transition:
+    color 140ms ease,
+    border-color 140ms ease,
+    background 140ms ease,
+    transform 180ms ease;
+}
+
+.chatapp-agent-step__output-toggle:hover {
+  color: var(--maverick-text);
+  border-color: rgba(255, 255, 255, 0.14);
+  background: var(--chatapp-soft-surface-hover);
+}
+
+.chatapp-agent-step__output-toggle svg {
+  display: none;
+}
+
+.chatapp-agent-step__output-toggle .material-symbols-rounded {
+  font-size: 1.15rem;
+  transition: transform 180ms ease;
+}
+
+.chatapp-agent-step__output-toggle.is-open .material-symbols-rounded {
+  transform: rotate(180deg);
+}
+
+.chatapp-agent-step__output code {
+  display: block;
+  padding: 0;
+  background: transparent;
+  color: var(--maverick-text-muted);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.84rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.chatapp-agent-step {
+  width: min(100%, 54rem);
+  padding: 0.72rem 0.82rem;
+  border: 1px solid rgba(255, 255, 255, 0.045);
+  border-radius: var(--chatapp-cell-radius);
+  background: var(--chatapp-soft-surface);
+  color: rgba(255, 255, 255, 0.62);
+  backdrop-filter: blur(26px);
+}
+
+.chatapp-agent-step--thought .chatapp-agent-step__body {
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.chatapp-agent-step__command,
+.chatapp-agent-step__output {
+  border-color: rgba(255, 255, 255, 0.065);
+  border-radius: 0.85rem;
+  background: rgba(0, 0, 0, 0.26);
+}
+
+.chatapp-agent-step__output-toggle {
+  border-color: rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.035);
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.chatapp-agent-step__output-toggle:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+}
+
+.chatapp-diff-list {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.chatapp-diff-card {
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 14px;
+  background: #191919;
+}
+
+.chatapp-diff-card__header {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+  padding: 0.65rem 0.8rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.chatapp-diff-card__icon {
+  color: #ffd39c;
+  font-size: 1rem;
+}
+
+.chatapp-diff-card__title {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chatapp-diff-card__body {
+  overflow: auto;
+  max-height: 20rem;
+}

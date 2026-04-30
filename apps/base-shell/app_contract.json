@@ -1,0 +1,123 @@
+{
+  "app_id": "base-shell",
+  "contract_version": "1.0",
+  "name": "Base Shell",
+  "version": "2.0.0",
+  "description": "Maverick product shell app that hosts enabled app frontends through the platform registry.",
+  "publisher": "maverick",
+  "minimum_core_version": "0.1.0",
+  "provides": [
+    {
+      "interface": "shell.host",
+      "version": "1",
+      "description": "Workspace shell host for app mounting and generic setup overlays.",
+      "surfaces": [
+        "cli",
+        "mcp",
+        "view"
+      ]
+    }
+  ],
+  "requires": [],
+  "distribution": {
+    "mode": "sealed",
+    "source_access": "none"
+  },
+  "visibility": {
+    "platform_roles": null
+  },
+  "permissions": {
+    "secrets": {
+      "read": [],
+      "write": []
+    },
+    "network": {
+      "outbound": []
+    },
+    "runtime": {
+      "create_sessions": false,
+      "cleanup_sessions": false
+    },
+    "host": {
+      "telemetry": false
+    }
+  },
+  "capabilities": {
+    "mcp_tools": [
+      "base_shell_reference_manifest",
+      "base_shell_reference_search",
+      "base_shell_reference_resolve",
+      "base_shell_reference_summarize"
+    ],
+    "cli_commands": [
+      "base-shell"
+    ],
+    "skills": [],
+    "views": [
+      "shell"
+    ],
+    "data_events": [],
+    "view_surfaces": [],
+    "reference_entities": []
+  },
+  "widgets": [],
+  "entrypoints": {
+    "mcp": "mcp/server.py",
+    "cli": "cli/app_cli.py",
+    "backend": null,
+    "frontend": "frontend/dist",
+    "skills_root": null,
+    "hooks": {}
+  },
+  "storage": {
+    "storage_kind": "json",
+    "data_schema_version": "2",
+    "primary_paths": [
+      "data/base-shell/preferences.json"
+    ],
+    "indices": null,
+    "supports_export": true,
+    "supports_import": true,
+    "supports_migrations": false
+  },
+  "compatibility": {
+    "workspace_modes": [
+      "sandbox"
+    ]
+  },
+  "hook_timeouts": {
+    "install_seconds": 60,
+    "upgrade_seconds": 120,
+    "migrate_seconds": 300,
+    "export_seconds": 120,
+    "import_seconds": 120,
+    "validate_after_import_seconds": 60,
+    "repair_after_import_seconds": 180,
+    "health_check_seconds": 30
+  },
+  "lifecycle": {
+    "install": false,
+    "upgrade": true,
+    "uninstall": false,
+    "migrate": false,
+    "export": false,
+    "import": false,
+    "validate_after_import": false,
+    "repair_after_import": false,
+    "health_check": false
+  },
+  "health_contract": {
+    "mode": "none",
+    "degraded_on_failure": true
+  },
+  "failure_semantics": {
+    "install_failure": "block_activation",
+    "migrate_failure": "preserve_data_mark_unhealthy",
+    "import_failure": "preserve_payload_mark_failed"
+  },
+  "rollback_support": {
+    "bundle": false,
+    "data": false,
+    "repair_only": false
+  }
+}

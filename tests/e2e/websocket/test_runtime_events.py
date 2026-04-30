@@ -1,0 +1,499 @@
+"""Tests for the runtime WebSocket host surface."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
+from io import BytesIO
+from pathlib import Path
+import asyncio, json, os, tempfile, unittest
+from uuid import uuid4
+
+from core.api.app_events import APP_EVENTS_WS_PATH, AppEventBus, stream_app_events
+from core.api.platform_host import PlatformHost
+from core.api.platform_state import bootstrap_platform_state
+from core.api.runtime_thread_websocket import stream_runtime_thread_events
+from core.api.runtime_websocket import WEBSOCKET_UNAUTHORIZED, stream_runtime_session_events
+from core.runtime.service import create_runtime_session, record_runtime_event, transition_runtime_session
+from core.shared.entrypoints import EntrypointShutdownController
+from tests.support.markers import slow_test_class
+
+
+@slow_test_class("slow websocket integration suite; run with scripts/test_suite.py --level slow")
+class RuntimeWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
+    """Verify runtime WebSocket streams are app-agnostic and workspace-scoped."""
+
+    def make_repo_root(self) -> Path:
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        repo_root = Path(temp_dir.name) / "maverick"
+        for name in ("core", "apps", "workspaces", "scripts"):
+            (repo_root / name).mkdir(parents=True, exist_ok=True)
+        (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
+        (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
+        return repo_root
+
+    def invoke(self, app, *, path: str, method: str = "GET", body: dict | None = None, cookie: str = "") -> tuple[int, dict, dict[str, str]]:
+        payload = json.dumps(body).encode("utf-8") if body is not None else b""
+        headers: dict[str, str] = {}
+        environ = {
+            "PATH_INFO": path,
+            "REQUEST_METHOD": method,
+            "CONTENT_LENGTH": str(len(payload)),
+            "CONTENT_TYPE": "application/json",
+            "QUERY_STRING": "",
+            "wsgi.input": BytesIO(payload),
+        }
+        if cookie:
+            environ["HTTP_COOKIE"] = cookie
+
+        def start_response(status: str, response_headers: list[tuple[str, str]]) -> None:
+            headers.update(dict(response_headers))
+            headers["__status__"] = status
+
+        body_bytes = b"".join(app(environ, start_response))
+        return int(headers["__status__"].split()[0]), json.loads(body_bytes.decode("utf-8")), headers
+
+    def login_cookie(self, state) -> str:
+        app = PlatformHost(state, start_path=state.repository_root)
+        status, _payload, headers = self.invoke(
+            app,
+            path="/api/auth/login",
+            method="POST",
+            body={
+                "username": os.environ.get("MAVERICK_ADMIN_USERNAME", "admin"),
+                "password": os.environ.get("MAVERICK_ADMIN_PASSWORD", "maverick"),
+            },
+        )
+        self.assertEqual(status, 200)
+        return headers["Set-Cookie"].split(";", 1)[0]
+
+    def create_session_with_events(self, state) -> tuple[str, list[str]]:
+        session = create_runtime_session(
+            state.runtime_store,
+            session_id=str(uuid4()),
+            workspace_id="default",
+            agent_id="test-agent",
+            requested_mode=None,
+            governance=state.workspace_store.get_governance("default"),
+            platform_allows_full_access=True,
+            start_path=state.repository_root,
+        )
+        transition_runtime_session(state.runtime_store, session_id=session.session_id, target_status="running")
+        first = record_runtime_event(
+            state.runtime_store,
+            event_id="event-1",
+            session_id=session.session_id,
+            turn_id="turn-1",
+            process_id=None,
+            plane="turn",
+            event_type="runtime.turn.started",
+            payload={},
+            now=datetime(2026, 4, 19, 10, 0, tzinfo=UTC),
+        )
+        second = record_runtime_event(
+            state.runtime_store,
+            event_id="event-2",
+            session_id=session.session_id,
+            turn_id="turn-1",
+            process_id=None,
+            plane="turn",
+            event_type="runtime.output.delta",
+            payload={"text": "hello"},
+            now=first.created_at + timedelta(milliseconds=1),
+        )
+        third = record_runtime_event(
+            state.runtime_store,
+            event_id="event-3",
+            session_id=session.session_id,
+            turn_id="turn-1",
+            process_id=None,
+            plane="turn",
+            event_type="runtime.turn.completed",
+            payload={},
+            now=second.created_at + timedelta(milliseconds=1),
+        )
+        return session.session_id, [first.event_id, second.event_id, third.event_id]
+
+    async def collect_websocket_messages(self, state, *, session_id: str, cookie: str, query_string: bytes = b"") -> list[dict]:
+        sent: list[dict] = []
+        received = [{"type": "websocket.connect"}, {"type": "websocket.disconnect"}]
+
+        async def receive() -> dict:
+            return received.pop(0)
+
+        async def send(message: dict) -> None:
+            sent.append(message)
+
+        await stream_runtime_session_events(
+            state=state,
+            scope={
+                "type": "websocket",
+                "path": f"/ws/runtime/sessions/{session_id}",
+                "query_string": query_string,
+                "headers": [(b"cookie", cookie.encode("latin1"))],
+            },
+            receive=receive,
+            send=send,
+        )
+        return sent
+
+    async def test_runtime_websocket_streams_ordered_persisted_events(self) -> None:
+        state = bootstrap_platform_state(start_path=self.make_repo_root())
+        cookie = self.login_cookie(state)
+        session_id, _event_ids = self.create_session_with_events(state)
+
+        sent = await self.collect_websocket_messages(state, session_id=session_id, cookie=cookie)
+
+        self.assertEqual(sent[0]["type"], "websocket.accept")
+        frames = [json.loads(item["text"]) for item in sent if item.get("type") == "websocket.send"]
+        self.assertEqual(frames[0]["type"], "runtime.snapshot")
+        self.assertEqual([event["event_id"] for event in frames[0]["events"]], ["event-1", "event-2", "event-3"])
+        self.assertEqual(frames[0]["events"][-1]["event_type"], "runtime.turn.completed")
+        self.assertEqual(frames[0]["last_event_id"], "event-3")
+
+    async def test_runtime_websocket_replays_after_last_seen_event_id(self) -> None:
+        state = bootstrap_platform_state(start_path=self.make_repo_root())
+        cookie = self.login_cookie(state)
+        session_id, _event_ids = self.create_session_with_events(state)
+
+        sent = await self.collect_websocket_messages(state, session_id=session_id, cookie=cookie, query_string=b"last_event_id=event-1")
+
+        frames = [json.loads(item["text"]) for item in sent if item.get("type") == "websocket.send"]
+        self.assertEqual(frames[0]["type"], "runtime.snapshot")
+        self.assertEqual([event["event_id"] for event in frames[0]["events"]], ["event-2", "event-3"])
+        self.assertEqual(frames[0]["last_event_id"], "event-3")
+
+    async def test_runtime_websocket_rejects_unauthenticated_clients(self) -> None:
+        state = bootstrap_platform_state(start_path=self.make_repo_root())
+        session_id, _event_ids = self.create_session_with_events(state)
+        sent: list[dict] = []
+
+        async def receive() -> dict:
+            return {"type": "websocket.connect"}
+
+        async def send(message: dict) -> None:
+            sent.append(message)
+
+        await stream_runtime_session_events(
+            state=state,
+            scope={
+                "type": "websocket",
+                "path": f"/ws/runtime/sessions/{session_id}",
+                "query_string": b"",
+                "headers": [],
+            },
+            receive=receive,
+            send=send,
+        )
+
+        self.assertEqual(sent, [{"type": "websocket.close", "code": WEBSOCKET_UNAUTHORIZED}])
+
+    async def test_runtime_websocket_sends_transport_heartbeat_without_runtime_event(self) -> None:
+        state = bootstrap_platform_state(start_path=self.make_repo_root())
+        cookie = self.login_cookie(state)
+        session = create_runtime_session(
+            state.runtime_store,
+            session_id=str(uuid4()),
+            workspace_id="default",
+            agent_id="test-agent",
+            requested_mode=None,
+            governance=state.workspace_store.get_governance("default"),
+            platform_allows_full_access=True,
+            start_path=state.repository_root,
+        )
+        transition_runtime_session(state.runtime_store, session_id=session.session_id, target_status="running")
+        sent: list[dict] = []
+        received = [{"type": "websocket.connect"}, {"type": "websocket.disconnect"}]
+
+        async def receive() -> dict:
+            return received.pop(0)
+
+        async def send(message: dict) -> None:
+            sent.append(message)
+
+        await stream_runtime_session_events(
+            state=state,
+            scope={
+                "type": "websocket",
+                "path": f"/ws/runtime/sessions/{session.session_id}",
+                "query_string": b"",
+                "headers": [(b"cookie", cookie.encode("latin1"))],
+            },
+            receive=receive,
+            send=send,
+            heartbeat_interval_seconds=0,
+        )
+
+        frames = [json.loads(item["text"]) for item in sent if item.get("type") == "websocket.send"]
+        self.assertEqual(frames[0]["type"], "runtime.snapshot")
+        self.assertEqual(frames[0]["session"]["session_id"], session.session_id)
+        self.assertEqual(frames[0]["events"], [])
+        self.assertIsNone(frames[0]["last_event_id"])
+        self.assertEqual(state.runtime_store.list_events(session.session_id), [])
+
+    async def test_runtime_websocket_pushes_live_events_without_replay_polling(self) -> None:
+        state = bootstrap_platform_state(start_path=self.make_repo_root())
+        cookie = self.login_cookie(state)
+        session = create_runtime_session(
+            state.runtime_store,
+            session_id=str(uuid4()),
+            workspace_id="default",
+            agent_id="test-agent",
+            requested_mode=None,
+            governance=state.workspace_store.get_governance("default"),
+            platform_allows_full_access=True,
+            start_path=state.repository_root,
+        )
+        transition_runtime_session(state.runtime_store, session_id=session.session_id, target_status="running")
+        sent: list[dict] = []
+        receive_queue: asyncio.Queue[dict] = asyncio.Queue()
+        await receive_queue.put({"type": "websocket.connect"})
+
+        async def receive() -> dict:
+            return await receive_queue.get()
+
+        async def send(message: dict) -> None:
+            sent.append(message)
+
+        stream_task = asyncio.create_task(
+            stream_runtime_session_events(
+                state=state,
+                scope={
+                    "type": "websocket",
+                    "path": f"/ws/runtime/sessions/{session.session_id}",
+                    "query_string": b"",
+                    "headers": [(b"cookie", cookie.encode("latin1"))],
+                },
+                receive=receive,
+                send=send,
+            )
+        )
+        while not any(message.get("type") == "websocket.accept" for message in sent):
+            await asyncio.sleep(0)
+
+        record_runtime_event(
+            state.runtime_store,
+            event_id="live-event-1",
+            session_id=session.session_id,
+            turn_id="turn-1",
+            process_id=None,
+            plane="turn",
+            event_type="runtime.output.delta",
+            payload={"text": "live"},
+            event_bus=state.runtime_event_bus,
+        )
+        while not any("live-event-1" in message.get("text", "") for message in sent):
+            await asyncio.sleep(0)
+        await receive_queue.put({"type": "websocket.disconnect"})
+        await stream_task
+
+        frames = [json.loads(item["text"]) for item in sent if item.get("type") == "websocket.send"]
+        event_frames = [frame for frame in frames if frame["type"] == "runtime.event"]
+        self.assertEqual([frame["event"]["event_id"] for frame in event_frames], ["live-event-1"])
+
+    async def test_runtime_thread_websocket_sends_initial_thread_snapshot(self) -> None:
+        state = bootstrap_platform_state(start_path=self.make_repo_root())
+        cookie = self.login_cookie(state)
+        session = create_runtime_session(
+            state.runtime_store,
+            session_id=str(uuid4()),
+            workspace_id="default",
+            agent_id="test-agent",
+            requested_mode=None,
+            governance=state.workspace_store.get_governance("default"),
+            platform_allows_full_access=True,
+            start_path=state.repository_root,
+        )
+        sent: list[dict] = []
+        received = [{"type": "websocket.connect"}, {"type": "websocket.disconnect"}]
+
+        async def receive() -> dict:
+            return received.pop(0)
+
+        async def send(message: dict) -> None:
+            sent.append(message)
+
+        await stream_runtime_thread_events(
+            state=state,
+            scope={
+                "type": "websocket",
+                "path": "/ws/runtime/threads",
+                "query_string": b"",
+                "headers": [(b"cookie", cookie.encode("latin1"))],
+            },
+            receive=receive,
+            send=send,
+        )
+
+        frames = [json.loads(item["text"]) for item in sent if item.get("type") == "websocket.send"]
+        self.assertEqual(frames[0]["type"], "runtime.thread.snapshot")
+        self.assertEqual([thread["runtime_session_id"] for thread in frames[0]["threads"]], [session.session_id])
+
+    async def test_runtime_thread_websocket_pushes_live_thread_changes(self) -> None:
+        state = bootstrap_platform_state(start_path=self.make_repo_root())
+        cookie = self.login_cookie(state)
+        app = PlatformHost(state, start_path=state.repository_root)
+        sent: list[dict] = []
+        receive_queue: asyncio.Queue[dict] = asyncio.Queue()
+        await receive_queue.put({"type": "websocket.connect"})
+
+        async def receive() -> dict:
+            return await receive_queue.get()
+
+        async def send(message: dict) -> None:
+            sent.append(message)
+
+        stream_task = asyncio.create_task(
+            stream_runtime_thread_events(
+                state=state,
+                scope={
+                    "type": "websocket",
+                    "path": "/ws/runtime/threads",
+                    "query_string": b"",
+                    "headers": [(b"cookie", cookie.encode("latin1"))],
+                },
+                receive=receive,
+                send=send,
+            )
+        )
+        while not any(message.get("type") == "websocket.accept" for message in sent):
+            await asyncio.sleep(0)
+
+        session = create_runtime_session(
+            state.runtime_store,
+            session_id=str(uuid4()),
+            workspace_id="default",
+            agent_id="test-agent",
+            requested_mode=None,
+            governance=state.workspace_store.get_governance("default"),
+            platform_allows_full_access=True,
+            start_path=state.repository_root,
+        )
+        status, payload, _headers = self.invoke(
+            app,
+            path="/api/runtime/threads",
+            method="POST",
+            body={"runtime_session_id": session.session_id, "title": "Live thread"},
+            cookie=cookie,
+        )
+        self.assertEqual(status, 201)
+        self.assertEqual(payload["thread"]["runtime_session_id"], session.session_id)
+
+        while not any("runtime.thread.changed" in message.get("text", "") for message in sent):
+            await asyncio.sleep(0)
+        await receive_queue.put({"type": "websocket.disconnect"})
+        await stream_task
+
+        frames = [json.loads(item["text"]) for item in sent if item.get("type") == "websocket.send"]
+        changed = [frame for frame in frames if frame["type"] == "runtime.thread.changed"]
+        self.assertEqual(changed[-1]["action"], "created")
+        self.assertEqual(changed[-1]["thread"]["runtime_session_id"], session.session_id)
+
+    async def test_app_event_websocket_pushes_data_changes_without_polling(self) -> None:
+        bus = AppEventBus()
+        sent: list[dict] = []
+        receive_queue: asyncio.Queue[dict] = asyncio.Queue()
+        await receive_queue.put({"type": "websocket.connect"})
+
+        async def receive() -> dict:
+            return await receive_queue.get()
+
+        async def send(message: dict) -> None:
+            sent.append(message)
+
+        stream_task = asyncio.create_task(
+            stream_app_events(
+                bus=bus,
+                scope={"type": "websocket", "path": APP_EVENTS_WS_PATH},
+                receive=receive,
+                send=send,
+            )
+        )
+        while not any(message.get("type") == "websocket.accept" for message in sent):
+            await asyncio.sleep(0)
+
+        bus.publish({"type": "maverick.app.data-changed", "owner_app_id": "sample-app", "resource": "records"})
+        while not any("maverick.app.data-changed" in message.get("text", "") for message in sent):
+            await asyncio.sleep(0)
+        await receive_queue.put({"type": "websocket.disconnect"})
+        await stream_task
+
+        frames = [json.loads(item["text"]) for item in sent if item.get("type") == "websocket.send"]
+        self.assertEqual(frames, [{"type": "maverick.app.data-changed", "owner_app_id": "sample-app", "resource": "records"}])
+
+    async def test_runtime_websocket_exits_when_host_shutdown_begins(self) -> None:
+        state = bootstrap_platform_state(start_path=self.make_repo_root())
+        cookie = self.login_cookie(state)
+        session = create_runtime_session(
+            state.runtime_store,
+            session_id=str(uuid4()),
+            workspace_id="default",
+            agent_id="test-agent",
+            requested_mode=None,
+            governance=state.workspace_store.get_governance("default"),
+            platform_allows_full_access=True,
+            start_path=state.repository_root,
+        )
+        transition_runtime_session(state.runtime_store, session_id=session.session_id, target_status="running")
+        controller = EntrypointShutdownController()
+        sent: list[dict] = []
+        receive_queue: asyncio.Queue[dict] = asyncio.Queue()
+        await receive_queue.put({"type": "websocket.connect"})
+
+        async def receive() -> dict:
+            return await receive_queue.get()
+
+        async def send(message: dict) -> None:
+            sent.append(message)
+
+        stream_task = asyncio.create_task(
+            stream_runtime_session_events(
+                state=state,
+                scope={
+                    "type": "websocket",
+                    "path": f"/ws/runtime/sessions/{session.session_id}",
+                    "query_string": b"",
+                    "headers": [(b"cookie", cookie.encode("latin1"))],
+                },
+                receive=receive,
+                send=send,
+                shutdown_controller=controller,
+            )
+        )
+        while not any(message.get("type") == "websocket.accept" for message in sent):
+            await asyncio.sleep(0)
+
+        controller.begin_shutdown()
+        await asyncio.wait_for(stream_task, timeout=2.0)
+
+    async def test_app_event_websocket_exits_when_host_shutdown_begins(self) -> None:
+        bus = AppEventBus()
+        controller = EntrypointShutdownController()
+        sent: list[dict] = []
+        receive_queue: asyncio.Queue[dict] = asyncio.Queue()
+        await receive_queue.put({"type": "websocket.connect"})
+
+        async def receive() -> dict:
+            return await receive_queue.get()
+
+        async def send(message: dict) -> None:
+            sent.append(message)
+
+        stream_task = asyncio.create_task(
+            stream_app_events(
+                bus=bus,
+                scope={"type": "websocket", "path": APP_EVENTS_WS_PATH},
+                receive=receive,
+                send=send,
+                shutdown_controller=controller,
+            )
+        )
+        while not any(message.get("type") == "websocket.accept" for message in sent):
+            await asyncio.sleep(0)
+
+        controller.begin_shutdown()
+        await asyncio.wait_for(stream_task, timeout=2.0)
+
+
+if __name__ == "__main__":
+    unittest.main()

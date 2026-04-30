@@ -1,0 +1,215 @@
+from __future__ import annotations
+
+from pathlib import Path
+from tempfile import TemporaryDirectory
+import unittest
+
+from core.apps.contracts import (
+    build_app_contract,
+    build_app_lifecycle,
+    build_parsed_app_contract,
+    build_provided_interface_declaration,
+    build_required_interface_declaration,
+    write_app_contract_file,
+)
+from core.apps.dependencies import resolve_app_dependencies, save_app_dependency_selection
+from core.apps.errors import AppHostingError
+from core.apps.service import install_store_app, register_app_source_from_contract, transition_workspace_app_status
+from core.cli.models import CliInvocationContext
+from core.cli.service import list_core_cli_commands, run_core_cli_command
+from tests.support.app_hosting import AppHostingTestBase
+
+
+class AppDependenciesTest(AppHostingTestBase):
+    def _write_app(self, root: Path, *, app_id: str, contract) -> Path:
+        app_root = root / "apps" / app_id
+        parsed = build_parsed_app_contract(
+            app_id=app_id,
+            name=app_id.title(),
+            version="1.0.0",
+            description=f"{app_id} app.",
+            publisher="vendor",
+            contract=contract,
+        )
+        write_app_contract_file(app_root, parsed)
+        return app_root
+
+    def _register_and_install(self, store, app_root: Path, *, workspace_id: str, start_path: Path) -> None:
+        source = register_app_source_from_contract(
+            store,
+            source_kind="platform",
+            source_path=str(app_root),
+        )
+        install_store_app(store, source_id=source.source_id, workspace_id=workspace_id, start_path=start_path)
+
+    def test_resolves_selected_provider_by_interface_not_app_id(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repo_root = self.make_repo_root(temp_dir)
+            store = self.make_store()
+            provider_root = self._write_app(
+                repo_root,
+                app_id="provider-one",
+                contract=build_app_contract(
+                    provides=[
+                        build_provided_interface_declaration(
+                            interface="agent.catalog",
+                            description="Agent catalog.",
+                            surfaces=[],
+                        )
+                    ],
+                    lifecycle=build_app_lifecycle(install=False),
+                ),
+            )
+            consumer_root = self._write_app(
+                repo_root,
+                app_id="consumer-one",
+                contract=build_app_contract(
+                    requires=[
+                        build_required_interface_declaration(
+                            alias="agent-provider",
+                            interface="agent.catalog",
+                            description="Agent provider.",
+                        )
+                    ],
+                    lifecycle=build_app_lifecycle(install=False),
+                ),
+            )
+            self._register_and_install(store, provider_root, workspace_id="default", start_path=repo_root)
+            self._register_and_install(store, consumer_root, workspace_id="default", start_path=repo_root)
+
+            unresolved = resolve_app_dependencies(
+                store,
+                workspace_id="default",
+                consumer_app_id="consumer-one",
+                start_path=repo_root,
+            )
+            self.assertEqual(unresolved["status"], "blocked")
+            self.assertEqual(unresolved["dependencies"][0]["status"], "unresolved")
+            self.assertEqual(unresolved["dependencies"][0]["candidates"][0]["app_id"], "provider-one")
+
+            resolved = save_app_dependency_selection(
+                store,
+                workspace_id="default",
+                consumer_app_id="consumer-one",
+                alias="agent-provider",
+                provider_app_ids=["provider-one"],
+                start_path=repo_root,
+            )
+            self.assertEqual(resolved["status"], "resolved")
+            self.assertEqual(resolved["dependencies"][0]["selected_provider_app_ids"], ["provider-one"])
+
+            commands = list_core_cli_commands(app_store=store, workspace_id="default", start_path=repo_root)
+            self.assertIn("app.consumer-one.dependencies", [command.command_id for command in commands])
+            cli_payload = run_core_cli_command(
+                command_id="app.consumer-one.dependencies",
+                context=CliInvocationContext(
+                    caller_kind="sandbox_agent",
+                    workspace_id="default",
+                    agent_id="agent-1",
+                    effective_mode="sandbox",
+                ),
+                app_store=store,
+                workspace_id="default",
+                start_path=repo_root,
+            )
+            self.assertEqual(cli_payload["status"], "resolved")
+
+    def test_reports_stale_selection_when_provider_is_disabled(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repo_root = self.make_repo_root(temp_dir)
+            store = self.make_store()
+            provider_root = self._write_app(
+                repo_root,
+                app_id="provider-one",
+                contract=build_app_contract(
+                    provides=[
+                        build_provided_interface_declaration(
+                            interface="file.catalog",
+                            description="File catalog.",
+                            surfaces=[],
+                        )
+                    ],
+                    lifecycle=build_app_lifecycle(install=False),
+                ),
+            )
+            consumer_root = self._write_app(
+                repo_root,
+                app_id="consumer-one",
+                contract=build_app_contract(
+                    requires=[
+                        build_required_interface_declaration(
+                            alias="file-provider",
+                            interface="file.catalog",
+                            description="File provider.",
+                        )
+                    ],
+                    lifecycle=build_app_lifecycle(install=False),
+                ),
+            )
+            self._register_and_install(store, provider_root, workspace_id="default", start_path=repo_root)
+            self._register_and_install(store, consumer_root, workspace_id="default", start_path=repo_root)
+            save_app_dependency_selection(
+                store,
+                workspace_id="default",
+                consumer_app_id="consumer-one",
+                alias="file-provider",
+                provider_app_ids=["provider-one"],
+                start_path=repo_root,
+            )
+            transition_workspace_app_status(
+                store,
+                workspace_id="default",
+                app_id="provider-one",
+                target_status="disabled",
+            )
+
+            payload = resolve_app_dependencies(
+                store,
+                workspace_id="default",
+                consumer_app_id="consumer-one",
+                start_path=repo_root,
+            )
+            self.assertEqual(payload["dependencies"][0]["status"], "stale")
+            self.assertEqual(payload["dependencies"][0]["stale_provider_app_ids"], ["provider-one"])
+
+    def test_reports_missing_provider_and_rejects_invalid_selection(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repo_root = self.make_repo_root(temp_dir)
+            store = self.make_store()
+            consumer_root = self._write_app(
+                repo_root,
+                app_id="consumer-one",
+                contract=build_app_contract(
+                    requires=[
+                        build_required_interface_declaration(
+                            alias="file-provider",
+                            interface="file.catalog",
+                            description="File provider.",
+                        )
+                    ],
+                    lifecycle=build_app_lifecycle(install=False),
+                ),
+            )
+            self._register_and_install(store, consumer_root, workspace_id="default", start_path=repo_root)
+
+            payload = resolve_app_dependencies(
+                store,
+                workspace_id="default",
+                consumer_app_id="consumer-one",
+                start_path=repo_root,
+            )
+            self.assertEqual(payload["status"], "blocked")
+            self.assertEqual(payload["dependencies"][0]["status"], "missing_provider")
+            with self.assertRaises(AppHostingError):
+                save_app_dependency_selection(
+                    store,
+                    workspace_id="default",
+                    consumer_app_id="consumer-one",
+                    alias="file-provider",
+                    provider_app_ids=["not-a-provider"],
+                    start_path=repo_root,
+                )
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,0 +1,9 @@
+{
+  "name": "@maverick/developer-kit",
+  "version": "0.1.0",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build-frontend.mjs"
+  }
+}

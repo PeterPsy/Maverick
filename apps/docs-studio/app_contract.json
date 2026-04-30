@@ -1,0 +1,189 @@
+{
+  "app_id": "docs-studio",
+  "contract_version": "1.0",
+  "name": "Docs Studio",
+  "version": "0.1.0",
+  "description": "A GitBook-inspired documentation studio for writing, previewing, and organizing polished workspace docs.",
+  "publisher": "workspace",
+  "minimum_core_version": "0.1.0",
+  "provides": [
+    {
+      "interface": "maverick.documentation",
+      "version": "1",
+      "description": "Targeted workspace documentation manifest, search, and Markdown page reads for agents.",
+      "surfaces": [
+        "mcp",
+        "cli",
+        "reference"
+      ]
+    }
+  ],
+  "requires": [],
+  "distribution": {
+    "mode": "source_available",
+    "source_access": "forkable"
+  },
+  "visibility": {
+    "platform_roles": null
+  },
+  "permissions": {
+    "secrets": {
+      "read": [],
+      "write": []
+    },
+    "network": {
+      "outbound": []
+    },
+    "runtime": {
+      "create_sessions": false,
+      "cleanup_sessions": false
+    },
+    "host": {
+      "telemetry": false
+    }
+  },
+  "capabilities": {
+    "mcp_tools": [
+      "docs_studio_docs_manifest",
+      "docs_studio_docs_search",
+      "docs_studio_docs_read",
+      "docs_studio_reference_manifest",
+      "docs_studio_reference_search",
+      "docs_studio_reference_resolve",
+      "docs_studio_reference_summarize",
+      "docs_studio_view_filter",
+      "docs_studio_set_view_filter",
+      "docs_studio_set_custom_view",
+      "docs_studio_clear_custom_view",
+      "docs_studio_state"
+    ],
+    "cli_commands": [
+      "docs-studio"
+    ],
+    "skills": [
+      "docs-studio-ops"
+    ],
+    "views": [
+      "main"
+    ],
+    "data_events": [
+      {
+        "resource": "state",
+        "description": "Primary app state changed."
+      },
+      {
+        "resource": "view-state",
+        "description": "Documentation browse filters and curated page selections changed."
+      }
+    ],
+    "view_surfaces": [
+      {
+        "view_id": "main",
+        "display_name": "Documentation Studio",
+        "entity_types": [
+          "doc_page"
+        ],
+        "state_actions": [
+          {
+            "action": "view_filter",
+            "standard": true,
+            "description": "Read the current documentation view filter."
+          },
+          {
+            "action": "set_view_filter",
+            "standard": true,
+            "description": "Set the current documentation search or section filter."
+          },
+          {
+            "action": "set_custom_view",
+            "standard": true,
+            "description": "Show a curated set of documentation pages."
+          },
+          {
+            "action": "clear_custom_view",
+            "standard": true,
+            "description": "Return Docs Studio to the default documentation tree."
+          }
+        ],
+        "supports_custom_view": true,
+        "supports_filter_refinement": true
+      }
+    ],
+    "reference_entities": [
+      {
+        "entity_type": "doc_page",
+        "display_name": "Documentation page",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      }
+    ]
+  },
+  "widgets": [],
+  "entrypoints": {
+    "hooks": {
+      "install": "hooks/install.py",
+      "migrate": "hooks/migrate.py",
+      "health_check": "hooks/health_check.py"
+    },
+    "backend": "backend/app_backend.py",
+    "frontend": "frontend/dist",
+    "mcp": "mcp/server.py",
+    "cli": "cli/app_cli.py",
+    "skills_root": "skills"
+  },
+  "storage": {
+    "storage_kind": "json+markdown",
+    "data_schema_version": "1",
+    "primary_paths": [
+      "data/docs-studio/state.json",
+      "data/docs-studio/pages/manifest.json",
+      "data/docs-studio/pages"
+    ],
+    "indices": null,
+    "supports_export": true,
+    "supports_import": true,
+    "supports_migrations": true
+  },
+  "compatibility": {
+    "workspace_modes": [
+      "sandbox"
+    ]
+  },
+  "hook_timeouts": {
+    "install_seconds": 60,
+    "upgrade_seconds": 120,
+    "migrate_seconds": 300,
+    "export_seconds": 120,
+    "import_seconds": 120,
+    "validate_after_import_seconds": 60,
+    "repair_after_import_seconds": 180,
+    "health_check_seconds": 30
+  },
+  "lifecycle": {
+    "install": true,
+    "upgrade": true,
+    "uninstall": false,
+    "migrate": true,
+    "export": false,
+    "import": false,
+    "validate_after_import": false,
+    "repair_after_import": false,
+    "health_check": true
+  },
+  "health_contract": {
+    "mode": "hook",
+    "degraded_on_failure": true
+  },
+  "failure_semantics": {
+    "install_failure": "block_activation",
+    "migrate_failure": "preserve_data_mark_unhealthy",
+    "import_failure": "preserve_payload_mark_failed"
+  },
+  "rollback_support": {
+    "bundle": false,
+    "data": false,
+    "repair_only": false
+  }
+}

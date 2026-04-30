@@ -1,0 +1,21 @@
+name: Documentation issue
+description: Report missing, stale, or confusing docs
+title: "[Docs]: "
+labels: ["docs"]
+body:
+  - type: input
+    id: page
+    attributes:
+      label: Document or page
+    validations:
+      required: true
+  - type: textarea
+    id: issue
+    attributes:
+      label: Problem
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested fix

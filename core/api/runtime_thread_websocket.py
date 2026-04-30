@@ -1,0 +1,170 @@
+"""Runtime thread WebSocket transport for workspace chat catalogs."""
+
+from __future__ import annotations
+
+import asyncio
+from contextlib import suppress
+from datetime import UTC, datetime
+import json
+from typing import TYPE_CHECKING, Any, Awaitable, Callable
+
+from core.api.http import json_default
+from core.api.session_api import resolve_request_session
+from core.runtime.runtime_session import RuntimeSessionRecord
+from core.runtime.runtime_threads import ensure_runtime_threads_for_sessions, thread_payload
+from core.shared.entrypoints import EntrypointShutdownController
+
+if TYPE_CHECKING:
+    from core.api.platform_state import PlatformState
+
+
+AsgiReceive = Callable[[], Awaitable[dict[str, Any]]]
+AsgiSend = Callable[[dict[str, Any]], Awaitable[None]]
+
+RUNTIME_THREADS_WS_PATH = "/ws/runtime/threads"
+WEBSOCKET_UNAUTHORIZED = 4401
+WEBSOCKET_NOT_FOUND = 4404
+
+
+def runtime_thread_websocket_manifest() -> dict[str, object]:
+    """Return the public runtime thread WebSocket surface for app authors."""
+    return {
+        "path": RUNTIME_THREADS_WS_PATH,
+        "transport": "websocket",
+        "primary_for": ["runtime_thread_catalog", "chat_thread_updates"],
+        "frames": {
+            "runtime.thread.snapshot": "current workspace runtime thread catalog",
+            "runtime.thread.changed": "one core-owned thread catalog mutation",
+            "runtime.thread.heartbeat": "transport keepalive frame",
+        },
+    }
+
+
+def encode_thread_websocket_frame(frame: dict[str, Any]) -> str:
+    """Serialize one WebSocket JSON frame."""
+    return json.dumps(frame, default=json_default, separators=(",", ":"))
+
+
+async def _send_json(send: AsgiSend, frame: dict[str, Any]) -> None:
+    await send({"type": "websocket.send", "text": encode_thread_websocket_frame(frame)})
+
+
+def _websocket_environ(scope: dict[str, Any]) -> dict[str, str]:
+    headers = {
+        key.decode("latin1").lower(): value.decode("latin1")
+        for key, value in scope.get("headers", [])
+    }
+    return {
+        "HTTP_COOKIE": headers.get("cookie", ""),
+        "PATH_INFO": str(scope.get("path") or ""),
+        "REQUEST_METHOD": "GET",
+        "QUERY_STRING": scope.get("query_string", b"").decode("latin1"),
+    }
+
+
+def runtime_thread_snapshot_frame(state: PlatformState, *, workspace_id: str) -> dict[str, Any]:
+    """Build the current workspace runtime thread catalog snapshot."""
+    sessions = state.runtime_store.list_sessions(workspace_id)
+    threads = ensure_runtime_threads_for_sessions(
+        state.runtime_store,
+        workspace_id=workspace_id,
+        sessions=sessions,
+        title_for_session=lambda session: _thread_title_for_session(state, session),
+    )
+    ordered = sorted(threads, key=lambda thread: thread.updated_at, reverse=True)
+    return {
+        "type": "runtime.thread.snapshot",
+        "workspace_id": workspace_id,
+        "threads": [thread_payload(thread) for thread in ordered],
+        "at": datetime.now(tz=UTC),
+    }
+
+
+def _thread_title_for_session(state: PlatformState, session: RuntimeSessionRecord) -> str:
+    turns = state.runtime_store.list_turns(session.session_id)
+    for turn in sorted(turns, key=lambda item: item.created_at):
+        title = str(turn.input_text or "").strip()
+        if title:
+            return title[:80]
+    return session.agent_id.strip() or "New chat"
+
+
+async def stream_runtime_thread_events(
+    *,
+    state: PlatformState,
+    scope: dict[str, Any],
+    receive: AsgiReceive,
+    send: AsgiSend,
+    heartbeat_interval_seconds: float = 25.0,
+    shutdown_controller: EntrypointShutdownController | None = None,
+) -> None:
+    """Handle the workspace runtime thread catalog WebSocket stream."""
+    if str(scope.get("path") or "") != RUNTIME_THREADS_WS_PATH:
+        await send({"type": "websocket.close", "code": WEBSOCKET_NOT_FOUND})
+        return
+    context = resolve_request_session(state, _websocket_environ(scope))
+    if context is None:
+        await send({"type": "websocket.close", "code": WEBSOCKET_UNAUTHORIZED})
+        return
+    workspace_id = context.workspace_id
+    subscription = state.runtime_thread_event_bus.subscribe(workspace_id)
+    last_heartbeat_at = datetime.now(tz=UTC)
+    try:
+        await send({"type": "websocket.accept", "subprotocol": None, "headers": []})
+        await _send_json(send, runtime_thread_snapshot_frame(state, workspace_id=workspace_id))
+        while True:
+            receive_task = asyncio.create_task(receive())
+            event_task = asyncio.create_task(subscription.get())
+            shutdown_task = _shutdown_task(shutdown_controller)
+            timeout = _seconds_until_heartbeat(last_heartbeat_at, heartbeat_interval_seconds)
+            wait_tasks = {receive_task, event_task}
+            if shutdown_task is not None:
+                wait_tasks.add(shutdown_task)
+            done, pending = await asyncio.wait(wait_tasks, timeout=timeout, return_when=asyncio.FIRST_COMPLETED)
+            await _cancel_pending(pending)
+
+            if not done:
+                now = datetime.now(tz=UTC)
+                if (now - last_heartbeat_at).total_seconds() >= heartbeat_interval_seconds:
+                    await _send_json(send, {"type": "runtime.thread.heartbeat", "workspace_id": workspace_id, "at": now})
+                    last_heartbeat_at = now
+                continue
+            if shutdown_task is not None and shutdown_task in done:
+                return
+            if receive_task in done:
+                incoming = receive_task.result()
+                if incoming and incoming.get("type") == "websocket.disconnect":
+                    return
+            if event_task in done:
+                event = event_task.result()
+                await _send_json(send, {"type": "runtime.thread.changed", **event})
+            now = datetime.now(tz=UTC)
+            if (now - last_heartbeat_at).total_seconds() >= heartbeat_interval_seconds:
+                await _send_json(send, {"type": "runtime.thread.heartbeat", "workspace_id": workspace_id, "at": now})
+                last_heartbeat_at = now
+    finally:
+        state.runtime_thread_event_bus.unsubscribe(subscription)
+
+
+def _seconds_until_heartbeat(last_heartbeat_at: datetime, heartbeat_interval_seconds: float) -> float:
+    elapsed = (datetime.now(tz=UTC) - last_heartbeat_at).total_seconds()
+    return max(0.0, heartbeat_interval_seconds - elapsed)
+
+
+async def _cancel_pending(tasks: set[asyncio.Task]) -> None:
+    for task in tasks:
+        task.cancel()
+    for task in tasks:
+        with suppress(asyncio.CancelledError):
+            await task
+
+
+def _shutdown_task(shutdown_controller: EntrypointShutdownController | None) -> asyncio.Task | None:
+    if shutdown_controller is None:
+        return None
+    return asyncio.create_task(_wait_for_shutdown(shutdown_controller))
+
+
+async def _wait_for_shutdown(shutdown_controller: EntrypointShutdownController) -> None:
+    while not shutdown_controller.is_shutting_down():
+        await asyncio.sleep(0.1)

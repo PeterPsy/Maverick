@@ -1,0 +1,93 @@
+.chatapp-prompt-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.chatapp-prompt-preview__section {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.025);
+  overflow: hidden;
+}
+
+.chatapp-prompt-preview__summary {
+  cursor: pointer;
+  padding: 0.8rem 0.95rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--maverick-text);
+  list-style: none;
+}
+
+.chatapp-prompt-preview__summary::-webkit-details-marker {
+  display: none;
+}
+
+.chatapp-prompt-preview__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0 0.95rem 0.95rem;
+}
+
+.chatapp-prompt-preview__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: baseline;
+  color: var(--maverick-text-muted);
+  font-size: 0.78rem;
+}
+
+.chatapp-prompt-preview__description {
+  margin: 0;
+  color: var(--maverick-text-soft);
+  line-height: 1.5;
+}
+
+.chatapp-prompt-preview__code {
+  margin: 0;
+  max-height: 22rem;
+  overflow: auto;
+  padding: 0.85rem;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--maverick-text);
+  font-size: 0.8rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.chatapp-prompt-preview__skill-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.chatapp-prompt-preview__skill-card {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 0.85rem;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.chatapp-prompt-preview__skill-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.chatapp-prompt-preview__skill-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}

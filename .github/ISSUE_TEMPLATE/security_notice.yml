@@ -1,0 +1,8 @@
+name: Security report
+description: Redirect vulnerability reports to the private process
+title: "[Security]: "
+labels: ["security"]
+body:
+  - type: markdown
+    attributes:
+      value: "Do not file public vulnerability details. Follow SECURITY.md and use the private reporting path."

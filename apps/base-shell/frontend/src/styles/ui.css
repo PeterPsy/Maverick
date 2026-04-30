@@ -1,0 +1,880 @@
+.bs-ui-button,
+.bs-ui-surface,
+.bs-ui-badge {
+  color: var(--maverick-text);
+}
+
+.bs-ui-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-weight: 750;
+}
+
+.bs-ui-button--sm {
+  min-height: 2rem;
+  padding: 0.38rem 0.72rem;
+  font-size: 0.72rem;
+}
+
+.bs-ui-button--md {
+  min-height: 2.4rem;
+  padding: 0.52rem 0.9rem;
+  font-size: 0.8rem;
+}
+
+.bs-ui-button--full {
+  width: 100%;
+}
+
+.bs-ui-button--primary {
+  background: linear-gradient(135deg, var(--maverick-primary), var(--maverick-primary-strong));
+  color: #fff;
+}
+
+.bs-ui-button--secondary {
+  border-color: var(--maverick-border-strong);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.bs-ui-button--ghost {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--maverick-text-muted);
+}
+
+.bs-ui-button:hover {
+  transform: translateY(-1px);
+}
+
+.bs-ui-button__spinner {
+  width: 0.8rem;
+  height: 0.8rem;
+  border: 2px solid rgba(255, 255, 255, 0.32);
+  border-top-color: #fff;
+  border-radius: 999px;
+  animation: bs-spin 0.8s linear infinite;
+}
+
+.bs-ui-surface {
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.bs-ui-surface--interactive:hover {
+  border-color: rgba(215, 36, 81, 0.24);
+  background: rgba(215, 36, 81, 0.11);
+}
+
+.bs-ui-badge {
+  display: inline-flex;
+  align-items: center;
+  width: max-content;
+  min-height: 1.55rem;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--maverick-text-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.bs-ui-badge--primary {
+  background: rgba(215, 36, 81, 0.14);
+  color: var(--maverick-text);
+}
+
+.bs-ui-badge--success {
+  background: rgba(51, 210, 137, 0.13);
+  color: #9ff0ca;
+}
+
+.bs-ui-badge--warning {
+  background: rgba(242, 177, 90, 0.14);
+  color: #ffd599;
+}
+
+.bs-ui-badge--danger {
+  background: rgba(255, 83, 105, 0.16);
+  color: #ffb3bf;
+}
+
+.bs-loading-panel__indicator {
+  margin-bottom: 0.7rem;
+}
+
+.bs-ui-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.bs-ui-dialog__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.62);
+  backdrop-filter: blur(10px);
+}
+
+.bs-ui-dialog__panel {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 1rem;
+  width: min(42rem, 100%);
+  max-height: min(42rem, calc(100dvh - 2rem));
+  overflow: auto;
+  padding: 1rem;
+  border: 1px solid var(--maverick-border-strong);
+  border-radius: 24px;
+  background: rgba(22, 22, 23, 0.96);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.45);
+}
+
+.bs-ui-dialog__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: start;
+}
+
+.bs-ui-dialog__eyebrow,
+.bs-dialog-card__eyebrow {
+  margin: 0 0 0.35rem;
+  color: var(--maverick-text-soft);
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.bs-ui-dialog__title,
+.bs-dialog-card__title {
+  margin: 0;
+}
+
+.bs-ui-dialog__description,
+.bs-dialog-card__copy {
+  margin: 0.35rem 0 0;
+  color: var(--maverick-text-muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.bs-ui-dialog__close {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 1.2rem;
+}
+
+.bs-dialog-grid,
+.bs-settings-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.bs-dialog-grid {
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+}
+
+.bs-dialog-grid .bs-ui-surface,
+.bs-settings-list .bs-ui-surface {
+  padding: 0.9rem;
+}
+
+.bs-settings-provider-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(8rem, 0.55fr) auto;
+  gap: 0.65rem;
+  align-items: end;
+  margin-top: 0.85rem;
+}
+
+.bs-settings-field {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+  color: var(--maverick-text-soft);
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.bs-settings-field select {
+  width: 100%;
+  min-width: 0;
+  min-height: 2.1rem;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 0.65rem;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--maverick-text);
+  padding: 0.35rem 0.55rem;
+  font: inherit;
+  font-size: 0.75rem;
+  text-transform: none;
+}
+
+.bs-settings-field select:disabled {
+  opacity: 0.55;
+}
+
+.bs-settings-provider-error {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #ffb3bf;
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+.bs-runtime-session-panel {
+  margin-top: 0.85rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 0.75rem;
+}
+
+.bs-runtime-session-panel summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  color: var(--maverick-text);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.bs-runtime-session-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+  margin-top: 0.75rem;
+}
+
+.bs-runtime-session-progress {
+  display: inline-flex;
+  gap: 0.45rem;
+  align-items: center;
+  color: var(--maverick-text-muted);
+  font-size: 0.75rem;
+}
+
+.bs-runtime-session-progress progress {
+  width: 8rem;
+  height: 0.55rem;
+}
+
+.bs-runtime-session-list {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.75rem;
+}
+
+.bs-runtime-session-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.7rem;
+  padding: 0.65rem;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.bs-runtime-session-main {
+  display: grid;
+  gap: 0.22rem;
+  min-width: 0;
+}
+
+.bs-runtime-session-main strong,
+.bs-runtime-session-main span,
+.bs-runtime-session-main code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bs-runtime-session-main strong {
+  font-size: 0.82rem;
+}
+
+.bs-runtime-session-main span {
+  color: var(--maverick-text-muted);
+  font-size: 0.74rem;
+}
+
+.bs-runtime-session-main code {
+  color: var(--maverick-text-soft);
+  font-size: 0.7rem;
+}
+
+@media (max-width: 720px) {
+  .bs-settings-provider-form {
+    grid-template-columns: 1fr;
+  }
+
+  .bs-runtime-session-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.bs-login {
+  --bs-login-foreground: #fff7fa;
+  --bs-login-muted: rgba(255, 247, 250, 0.68);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  width: 100%;
+  overflow: hidden;
+  background: #000;
+  color: var(--bs-login-foreground);
+}
+
+.bs-login-paper-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 48% 44%, rgba(255, 255, 255, 0.16), transparent 18rem),
+    linear-gradient(135deg, #000, #171717 45%, #050505);
+  pointer-events: none;
+}
+
+.bs-login-paper-bg.is-static {
+  background:
+    radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.18), transparent 18rem),
+    radial-gradient(circle at 62% 64%, rgba(248, 75, 120, 0.14), transparent 20rem),
+    linear-gradient(145deg, #050505, #1c1c1c 54%, #000);
+}
+
+.bs-login-paper-bg__shader {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.bs-login-paper-bg__shader canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.bs-login__brand-strip {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 1rem);
+  left: 50%;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  transform: translateX(-50%);
+  color: var(--bs-login-foreground);
+}
+
+.bs-login__stage {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 100dvh;
+  padding: 4.5rem 1rem 2rem;
+}
+
+.bs-login__brand-mark {
+  width: 2.15rem;
+  height: auto;
+}
+
+.bs-login__content {
+  display: grid;
+  place-items: center;
+  width: min(44rem, 100%);
+  margin-inline: auto;
+}
+
+.bs-login__form {
+  display: grid;
+  gap: 2rem;
+  justify-items: center;
+  width: 100%;
+  max-width: calc(100vw - 2rem);
+  animation: bs-login-rise 0.45s ease-out both;
+}
+
+.bs-login__step {
+  display: grid;
+  gap: 2rem;
+  justify-items: center;
+  width: 100%;
+  animation: bs-login-step 0.3s ease-out both;
+}
+
+.bs-login__headline {
+  display: grid;
+  justify-self: center;
+  place-items: center;
+  gap: 0.6rem;
+  min-height: 4.8rem;
+  max-width: calc(100vw - 2rem);
+  text-align: center;
+}
+
+.bs-login__headline p {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.26em;
+  flex-wrap: wrap;
+  width: 100%;
+  max-width: calc(100vw - 2rem);
+  margin: 0;
+  color: var(--bs-login-foreground);
+  font-family: var(--maverick-font);
+  font-size: 4rem;
+  font-weight: 300;
+  letter-spacing: 0;
+  line-height: 0.95;
+  text-align: center;
+  white-space: normal;
+}
+
+.bs-login__headline p > span {
+  min-width: 0;
+}
+
+.bs-login__headline-logotype {
+  width: auto;
+  height: clamp(2rem, 0.68em, 2.7rem);
+  max-width: min(20rem, calc(100vw - 2rem));
+}
+
+.bs-login__credential {
+  display: block;
+  max-width: min(18.75rem, calc(100vw - 2rem));
+  overflow: hidden;
+  color: var(--bs-login-muted);
+  font-size: 0.82rem;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bs-login__fields {
+  display: grid;
+  gap: 1.5rem;
+  width: min(24rem, 100%);
+}
+
+.bs-glass-field {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+
+.bs-glass-field__floating {
+  position: absolute;
+  top: -1.45rem;
+  left: 1rem;
+  z-index: 2;
+  color: var(--bs-login-muted);
+  font-size: 0.74rem;
+  font-weight: 750;
+  opacity: 0;
+  transform: translateY(0.35rem);
+  transition: opacity 260ms ease, transform 260ms ease;
+}
+
+.bs-glass-field:focus-within .bs-glass-field__floating,
+.bs-glass-field__floating.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.bs-glass-field__control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 3rem;
+  padding: 0.25rem;
+  border-radius: 999px;
+  background: linear-gradient(-75deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.19), rgba(255, 255, 255, 0.07));
+  box-shadow:
+    inset 0 0.125rem 0.125rem rgba(255, 255, 255, 0.08),
+    inset 0 -0.125rem 0.125rem rgba(0, 0, 0, 0.34),
+    0 0.25rem 0.125rem -0.125rem rgba(255, 255, 255, 0.22),
+    0 0 0.1rem 0.25rem inset rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(4px);
+  transition: box-shadow 400ms cubic-bezier(0.25, 1, 0.5, 1), transform 400ms cubic-bezier(0.25, 1, 0.5, 1), backdrop-filter 400ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.bs-glass-field__control::before,
+.bs-glass-field__control::after {
+  content: "";
+  position: absolute;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.bs-glass-field__control::before {
+  inset: -1px;
+  padding: 1px;
+  background:
+    conic-gradient(from var(--bs-login-angle, -75deg) at 50% 50%, rgba(255, 255, 255, 0.72), transparent 5% 40%, rgba(255, 255, 255, 0.72) 50%, transparent 60% 95%, rgba(255, 255, 255, 0.72)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04));
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  transition: --bs-login-angle 500ms ease;
+}
+
+.bs-glass-field__control::after {
+  inset: 1px;
+  background: linear-gradient(var(--bs-login-shine, -45deg), transparent 0%, rgba(255, 255, 255, 0.22) 42% 50%, transparent 58%);
+  background-position: 0% 50%;
+  background-size: 200% 200%;
+  mix-blend-mode: screen;
+  opacity: 0.5;
+  transition: background-position 500ms cubic-bezier(0.25, 1, 0.5, 1), --bs-login-shine 500ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.bs-glass-field:focus-within .bs-glass-field__control {
+  --bs-login-angle: -125deg;
+  --bs-login-shine: -15deg;
+  box-shadow:
+    inset 0 0.125rem 0.125rem rgba(255, 255, 255, 0.08),
+    inset 0 -0.125rem 0.125rem rgba(0, 0, 0, 0.28),
+    0 0.15rem 0.05rem -0.1rem rgba(255, 255, 255, 0.28),
+    0 0 0.05rem 0.1rem inset rgba(255, 255, 255, 0.2);
+  backdrop-filter: blur(0.01rem);
+}
+
+.bs-glass-field:focus-within .bs-glass-field__control::after {
+  background-position: 25% 50%;
+}
+
+.bs-glass-field__control input {
+  position: relative;
+  z-index: 1;
+  width: 0;
+  flex: 1;
+  min-width: 0;
+  height: 2.5rem;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--bs-login-foreground);
+  font: inherit;
+  font-size: 1rem;
+}
+
+.bs-glass-field__control input:focus-visible {
+  outline: 0;
+}
+
+.bs-glass-field__control input::placeholder {
+  color: var(--bs-login-muted);
+}
+
+.bs-glass-field__control input:-webkit-autofill,
+.bs-glass-field__control input:-webkit-autofill:hover,
+.bs-glass-field__control input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--bs-login-foreground);
+  box-shadow: 0 0 0 30px transparent inset;
+  caret-color: var(--bs-login-foreground);
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+.bs-glass-field__icon,
+.bs-glass-field__action {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  color: rgba(255, 247, 250, 0.84);
+}
+
+.bs-glass-field__icon {
+  padding-left: 0.25rem;
+  transition: width 300ms ease, padding 300ms ease, opacity 300ms ease;
+}
+
+.bs-glass-field__icon.is-compressed {
+  width: 0;
+  padding: 0;
+  opacity: 0;
+  overflow: hidden;
+}
+
+.bs-glass-field__icon .material-symbols-rounded,
+.bs-glass-field__action .material-symbols-rounded {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.bs-glass-field__toggle,
+.bs-glass-field__action {
+  border-radius: 999px;
+  background: transparent;
+}
+
+.bs-glass-field__toggle:hover,
+.bs-glass-field__toggle:focus-visible {
+  color: var(--bs-login-foreground);
+}
+
+.bs-glass-field__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.36rem;
+  width: 0;
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  opacity: 0;
+  color: rgba(255, 247, 250, 0.9);
+  font-size: 0.82rem;
+  font-weight: 800;
+  white-space: nowrap;
+  transition: min-width 300ms ease, opacity 300ms ease, padding 300ms ease, color 200ms ease, transform 200ms ease, background 200ms ease;
+}
+
+.bs-glass-field__action.is-visible {
+  width: auto;
+  min-width: 6.8rem;
+  padding: 0 0.85rem;
+  opacity: 1;
+}
+
+button.bs-glass-field__action.is-visible {
+  cursor: pointer;
+}
+
+button.bs-glass-field__action:not(:disabled) {
+  cursor: pointer;
+}
+
+.bs-glass-field__action.is-visible:hover {
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--bs-login-foreground);
+  transform: scale(0.96);
+}
+
+.bs-glass-field__toggle:focus-visible,
+.bs-glass-field__action:focus-visible,
+.bs-login__back:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.78);
+  outline-offset: 3px;
+}
+
+.bs-glass-field__action:disabled {
+  cursor: default;
+}
+
+.bs-login__spinner {
+  width: 1.05rem;
+  height: 1.05rem;
+  border: 2px solid rgba(255, 255, 255, 0.32);
+  border-top-color: var(--bs-login-foreground);
+  border-radius: 999px;
+  animation: bs-spin 0.8s linear infinite;
+}
+
+.bs-login__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 1rem;
+  padding: 0.2rem 0;
+  background: transparent;
+  color: rgba(255, 247, 250, 0.72);
+  font-size: 0.86rem;
+  font-weight: 700;
+  transition: color 180ms ease, transform 180ms ease;
+}
+
+.bs-login__back:hover {
+  color: var(--bs-login-foreground);
+  transform: translateX(-0.12rem);
+}
+
+.bs-login__back .material-symbols-rounded {
+  font-size: 1.05rem;
+}
+
+.bs-form-error {
+  width: min(24rem, 100%);
+  margin: 0;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid rgba(255, 83, 105, 0.38);
+  border-radius: 14px;
+  background: rgba(120, 12, 30, 0.34);
+  color: var(--bs-login-foreground);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-align: center;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.18);
+}
+
+@keyframes bs-login-rise {
+  from {
+    opacity: 0;
+    transform: translateY(0.45rem);
+    filter: blur(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes bs-login-step {
+  from {
+    opacity: 0;
+    transform: translateY(0.35rem);
+    filter: blur(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@media (max-width: 900px) {
+  .bs-login__headline {
+    min-height: 4.35rem;
+  }
+
+  .bs-login__headline p {
+    font-size: 3.2rem;
+    line-height: 1;
+  }
+
+  .bs-login__headline-logotype {
+    height: 2.1rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .bs-login__brand-mark {
+    width: 1.9rem;
+  }
+
+  .bs-login__headline {
+    min-height: 4rem;
+  }
+
+  .bs-login__headline p {
+    gap: 0.2em;
+    font-size: 2.55rem;
+    line-height: 1.02;
+  }
+
+  .bs-login__headline-logotype {
+    height: 1.7rem;
+  }
+}
+
+@media (max-width: 420px) {
+  .bs-login__headline p {
+    font-size: 2.25rem;
+  }
+
+  .bs-login__headline-logotype {
+    height: 1.45rem;
+  }
+
+  .bs-glass-field__action.is-visible {
+    min-width: 0;
+    padding: 0 0.75rem;
+  }
+
+  .bs-glass-field__action.is-visible > span:not(.material-symbols-rounded):not(.bs-login__spinner) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bs-login__form,
+  .bs-login__step,
+  .bs-login__spinner {
+    animation: none;
+  }
+
+  .bs-glass-field__floating,
+  .bs-glass-field__control,
+  .bs-glass-field__control::before,
+  .bs-glass-field__control::after,
+  .bs-glass-field__icon,
+  .bs-glass-field__action,
+  .bs-login__back {
+    transition: none;
+  }
+}
+
+.bs-settings-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.bs-settings-flag,
+.bs-settings-logout {
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
+.bs-settings-flag {
+  padding: 0.35rem 0.62rem;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--maverick-text-muted);
+}
+
+.bs-settings-flag.is-on {
+  background: rgba(51, 210, 137, 0.13);
+  color: #9ff0ca;
+}
+
+.bs-settings-logout {
+  min-height: 2.3rem;
+  background: rgba(255, 83, 105, 0.14);
+  color: #ffb3bf;
+}
+
+@keyframes bs-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

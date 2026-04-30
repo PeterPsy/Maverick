@@ -6,6 +6,10 @@ Most business operations are fragmented across SaaS tools, documents, inboxes, i
 
 Everything you create is already connected. An app created in Maverick or installed from the App Store is not another isolated SaaS island: once enabled in a workspace, its declared surfaces become part of the same context that agents and other apps can discover and use. Agents can work through the apps, the apps can compose with each other, and the workspace stays the center of gravity.
 
+<p align="center">
+  <img src="docs/assets/maverick-intro.gif" alt="Maverick product demo" width="720">
+</p>
+
 Adios fragmentation.
 
 Maverick is for teams building internal AI operations, agent-native business tools, self-hosted automation platforms, or company-specific AI workspaces.

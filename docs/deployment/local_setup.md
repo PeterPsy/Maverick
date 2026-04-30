@@ -238,6 +238,7 @@ curl http://127.0.0.1:8000/health
 ```
 
 `scripts/run_local.sh` is the development profile and defaults to port `8000`.
+`scripts/bootstrap_local.sh` creates a local `.env` when one does not already exist. The generated file includes the admin username and bootstrap secret refs, but not an admin password.
 The installer/systemd profile defaults to core port `8014` and rescue port `8015` to avoid clashing with a developer server.
 Use `--core-port` or `MAVERICK_PORT` when you need a different profile.
 
@@ -268,7 +269,7 @@ python3 scripts/install_maverick.py --local-only --build-frontends
 ## Environment Variables
 
 Copy `.env.example` only as a local starting point. Do not commit `.env`.
-`scripts/run_local.sh` loads `.env` automatically when present.
+`scripts/run_local.sh` loads `.env` automatically when present, otherwise it falls back to `.env.maverick`.
 Systemd installs use the generated `.env.maverick` file by default.
 
 Do not put production OAuth credentials or API keys into raw environment variables. Store them through the core secret domain and expose them to apps/providers only through secret refs and bindings.

@@ -240,7 +240,7 @@ def write_install_plan(files: dict[Path, str]) -> None:
     for path, content in files.items():
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
-        if path.name in {"maverick.env", ".env.maverick"}:
+        if path.name in {"maverick.env", ".env.maverick", ".env"}:
             path.chmod(0o600)
         if path.name == "secret-store.key" or path.parent.name == "bootstrap-secrets":
             path.chmod(0o600)

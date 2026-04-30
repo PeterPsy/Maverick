@@ -25,6 +25,7 @@ from core.shared.installer import (
     request_tls_certificate,
     render_install_plan,
     render_nginx_config,
+    write_install_plan,
 )
 from scripts.install_maverick import build_config, main as installer_main, parse_args
 
@@ -92,6 +93,14 @@ class InstallerRenderingTestCase(unittest.TestCase):
         self.assertNotIn("ssl_certificate", nginx_conf)
         self.assertEqual(manifest["public_url"], "https://maverick.example.test")
         self.assertEqual(manifest["live_systemd_dir"], "/etc/systemd/system")
+
+    def test_write_install_plan_restricts_development_env_file_permissions(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="maverick-install-") as temp_dir:
+            env_path = Path(temp_dir) / ".env"
+
+            write_install_plan({env_path: "MAVERICK_ADMIN_USERNAME=admin\n"})
+
+            self.assertEqual(env_path.stat().st_mode & 0o777, 0o600)
 
     def test_render_install_plan_can_select_mongo_control_store(self) -> None:
         repo_root = Path(__file__).resolve().parents[3]

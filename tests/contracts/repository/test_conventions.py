@@ -45,6 +45,14 @@ class RepositoryConventionsTestCase(unittest.TestCase):
             result = subprocess.run(["bash", "-n", str(script_path)], check=False, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, msg=f"{relative_path}: {result.stderr}")
 
+    def test_local_bootstrap_and_run_scripts_share_generated_env_contract(self) -> None:
+        repo_root = installation_paths(start_path=Path(__file__)).repository_root
+        bootstrap_script = (repo_root / "scripts" / "bootstrap_local.sh").read_text(encoding="utf-8")
+        run_script = (repo_root / "scripts" / "run_local.sh").read_text(encoding="utf-8")
+
+        self.assertIn('--install-env "${ROOT_DIR}/.env"', bootstrap_script)
+        self.assertIn('elif [[ -f "${ROOT_DIR}/.env.maverick" ]]', run_script)
+
     def test_workspace_hygiene_reporter_is_documented_and_machine_readable(self) -> None:
         repo_root = installation_paths(start_path=Path(__file__)).repository_root
         script_path = repo_root / "scripts" / "check_workspace_hygiene.py"

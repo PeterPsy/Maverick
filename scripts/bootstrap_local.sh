@@ -67,12 +67,27 @@ source "${VENV_DIR}/bin/activate"
 python3 -m pip install --upgrade pip
 python3 -m pip install -e ".[dev]"
 
+if [[ ! -f "${ROOT_DIR}/.env" ]]; then
+  python3 "${ROOT_DIR}/scripts/install_maverick.py" \
+    --local-only \
+    --skip-bootstrap \
+    --skip-verify \
+    --render-only \
+    --yes \
+    --install-env "${ROOT_DIR}/.env" \
+    --core-port "${MAVERICK_PORT:-8000}" \
+    >/dev/null
+fi
+
 if [[ "${BUILD_FRONTENDS}" == "1" ]]; then
   python3 "${ROOT_DIR}/scripts/build_app_frontends.py"
 fi
 
 cat <<EOF
 Bootstrap complete.
+
+Local environment file:
+  .env
 
 Activate the virtual environment:
   source .venv/bin/activate

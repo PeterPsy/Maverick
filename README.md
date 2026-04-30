@@ -1,14 +1,14 @@
-# Maverick
+# Maverick OS - Agentic AI Workspaces for Business
+
+<p align="center">
+  <img src="docs/assets/maverick-intro.gif" alt="Maverick product demo" width="720">
+</p>
 
 Maverick is an AI agentic operating system for companies that want to delegate real digital work to AI agents without losing ownership, boundaries, or extensibility.
 
 Most business operations are fragmented across SaaS tools, documents, inboxes, internal dashboards, scripts, credentials, and one-off automations. Maverick gives those pieces one governed operating layer: workspaces, apps, widgets, skills, providers, databases, CLI commands, and MCP tools become first-class building blocks for agentic operations.
 
 Everything you create is already connected. An app created in Maverick or installed from the App Store is not another isolated SaaS island: once enabled in a workspace, its declared surfaces become part of the same context that agents and other apps can discover and use. Agents can work through the apps, the apps can compose with each other, and the workspace stays the center of gravity.
-
-<p align="center">
-  <img src="docs/assets/maverick-intro.gif" alt="Maverick product demo" width="720">
-</p>
 
 Adios fragmentation.
 

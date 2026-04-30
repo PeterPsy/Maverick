@@ -99,7 +99,7 @@ MAVERICK_BOOTSTRAP_SECRET_STORE_ROOT=data/bootstrap-secrets
 
 The same core secret value envelope is used for app/provider/workspace secrets and for platform infrastructure secrets. Pre-adapter secrets that are needed before the configured control-plane adapter is reachable may be stored in a local bootstrap secret store, but they still use the core secret envelope and secret ref grammar.
 
-Admin passwords are identity credentials, not long-lived boot secrets. The installer may collect the initial admin password, but it writes only the password hash to the selected identity credential collection. Normal startup must not require or reset from a plaintext admin password once the admin user exists. Operator recovery uses `core.identity.reset-admin-password`, writes only a password hash to the identity credential collection, and revokes existing sessions for that user.
+Admin passwords are identity credentials, not long-lived boot secrets. Live installs require the initial admin password during the installer flow, but the installer writes only the password hash to the selected identity credential collection. Normal startup must not require or reset from a plaintext admin password once the admin user exists. Operator recovery uses `core.identity.reset-admin-password`, writes only a password hash to the identity credential collection, and revokes existing sessions for that user.
 
 Adapter migration is an explicit operator workflow owned by the core persistence surfaces.
 

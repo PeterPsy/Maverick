@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from core.api.control_store import ControlStoreSettings, build_control_plane_collections
 from core.identity.service import authenticate_password
@@ -21,9 +23,24 @@ from core.shared.installer import (
     render_install_plan,
     write_install_plan,
 )
+from scripts.install_maverick import (
+    INTERNAL_APPLY_ADMIN_PASSWORD_FLAG,
+    _apply_initial_admin_password,
+    build_config,
+    main as installer_main,
+    parse_args,
+)
 
 
 class InstallerSecretRenderingTestCase(unittest.TestCase):
+    def secret_args(self, output_root: Path) -> list[str]:
+        return [
+            "--secret-key-file",
+            str(output_root / "bootstrap-secrets" / "secret-store.key"),
+            "--bootstrap-secret-store-root",
+            str(output_root / "bootstrap-secrets"),
+        ]
+
     def make_config(self, repo_root: Path, *, install_root: Path) -> InstallerConfig:
         output_root = install_root / "install"
         return InstallerConfig(
@@ -116,6 +133,79 @@ class InstallerSecretRenderingTestCase(unittest.TestCase):
                 ).username,
                 "admin",
             )
+
+    def test_noninteractive_live_install_requires_admin_password_file(self) -> None:
+        args = parse_args(["--local-only", "--skip-bootstrap", "--skip-verify", "--yes"])
+
+        with self.assertRaises(SystemExit):
+            build_config(args, interactive=False)
+
+    def test_admin_password_file_configures_initial_password(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="maverick-install-") as temp_dir:
+            password_file = Path(temp_dir) / "admin-password.txt"
+            password_file.write_text("install-admin-password\n", encoding="utf-8")
+            args = parse_args(
+                [
+                    "--local-only",
+                    "--skip-bootstrap",
+                    "--skip-verify",
+                    "--yes",
+                    "--admin-password-file",
+                    str(password_file),
+                ]
+            )
+
+            config = build_config(args, interactive=False)
+
+        self.assertEqual(config.admin_password, "install-admin-password")
+
+    def test_installer_main_installs_mongo_extra_when_mongo_control_store_is_selected(self) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+        with tempfile.TemporaryDirectory(prefix="maverick-install-") as temp_dir:
+            output_root = Path(temp_dir) / "install"
+            with patch("core.shared.installer.subprocess.run") as mocked_run:
+                exit_code = installer_main(
+                    [
+                        "--local-only",
+                        "--control-store",
+                        "mongo",
+                        "--output-root",
+                        str(output_root),
+                        "--install-env",
+                        str(output_root / "maverick.env"),
+                        "--render-only",
+                        "--yes",
+                        *self.secret_args(output_root),
+                    ]
+                )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(mocked_run.call_args_list[0].args[0], [str(repo_root / "scripts" / "bootstrap_local.sh")])
+        self.assertEqual(mocked_run.call_args_list[0].kwargs["env"]["MAVERICK_PYPROJECT_EXTRAS"], "dev,mongo")
+
+    def test_initial_admin_password_for_mongo_runs_inside_install_venv(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="maverick-install-") as temp_dir:
+            repo_root = Path(temp_dir) / "repo"
+            install_root = repo_root
+            venv_python = repo_root / ".venv" / "bin" / "python"
+            venv_python.parent.mkdir(parents=True, exist_ok=True)
+            venv_python.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+            config = replace(
+                self.make_config(repo_root, install_root=install_root),
+                control_store="mongo",
+                admin_password="install-admin-password",
+            )
+
+            with patch("scripts.install_maverick.subprocess.run") as mocked_run:
+                _apply_initial_admin_password(config)
+
+        command = mocked_run.call_args.args[0]
+        payload = json.loads(mocked_run.call_args.kwargs["input"])
+        self.assertEqual(command[0], str(venv_python))
+        self.assertEqual(command[-1], INTERNAL_APPLY_ADMIN_PASSWORD_FLAG)
+        self.assertEqual(payload["control_store"], "mongo")
+        self.assertEqual(payload["admin_password"], "install-admin-password")
+        self.assertNotIn("install-admin-password", command)
 
 
 if __name__ == "__main__":

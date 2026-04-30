@@ -143,7 +143,7 @@ python3.12 scripts/install_maverick.py \
 
 When MongoDB authentication is enabled, the installer asks for the password once and stores it as an encrypted bootstrap secret. The rendered environment file contains only `MAVERICK_MONGODB_PASSWORD_REF`.
 
-The installer also asks for the initial admin password. Maverick writes only the password hash to the selected identity store; it does not write the admin password to `.env` or `.env.maverick`.
+The installer requires the initial admin password for live installs. Maverick writes only the password hash to the selected identity store; it does not write the admin password to `.env` or `.env.maverick`.
 
 The selected adapter owns platform control-plane data such as users, sessions, workspace registry, workspace membership, app bindings, provider selections, runtime token metadata, and secret metadata/value envelopes.
 
@@ -151,9 +151,18 @@ The selected adapter owns platform control-plane data such as users, sessions, w
 
 ### Admin Password
 
-Maverick treats the admin password as an identity credential, not as a long-lived boot secret. A normal install should not keep a plaintext admin password in `.env` or `.maverick`.
+Maverick treats the admin password as an identity credential, not as a long-lived boot secret. A normal install must set the first admin password during the installer flow and must not keep a plaintext admin password in `.env` or `.maverick`.
 
-After install, set or recover the admin password through the operator CLI:
+For non-interactive live installs, provide the initial password through a local file:
+
+```bash
+python3.12 scripts/install_maverick.py \
+  --hostname maverick.example.com \
+  --yes \
+  --admin-password-file /path/to/admin-password.txt
+```
+
+After install, rotate or recover the admin password through the operator CLI:
 
 ```bash
 maverick core cli run core.identity.reset-admin-password \

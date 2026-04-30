@@ -61,9 +61,9 @@ MAVERICK_BOOTSTRAP_SECRET_STORE_ROOT=data/bootstrap-secrets
 `MAVERICK_SECRET_STORE_KEY` is only a development and compatibility fallback.
 The bootstrap secret store is only for pre-adapter infrastructure secrets such as MongoDB passwords and platform signing secrets. It uses the same core secret envelope as the control-plane secret store and must stay outside `.maverick`.
 
-The admin password is not a normal boot secret. The interactive installer asks for the initial admin password and writes only its hash to the selected identity store. It does not write `MAVERICK_ADMIN_PASSWORD` to `.env.maverick`.
+The admin password is not a normal boot secret. Live installs require an initial admin password during the installer flow. The installer writes only its hash to the selected identity store and does not write `MAVERICK_ADMIN_PASSWORD` to `.env.maverick`.
 
-If the initial password is left empty, an operator can set or recover it later through the operator-only core CLI:
+After install, an operator can rotate or recover it later through the operator-only core CLI:
 
 ```bash
 maverick core cli run core.identity.reset-admin-password --operator --username admin --password '<new-password>' --json
@@ -99,6 +99,7 @@ The default flow is interactive. It:
 - renders nginx config under `.maverick/install/nginx/`
 - writes a service env file outside `.maverick`, defaulting to `.env.maverick`
 - writes `.maverick/install/install-manifest.json`
+- requires the initial admin password before live apply
 - asks whether to apply the rendered plan to systemd and nginx, defaulting to yes
 - asks whether to request a TLS certificate with `certbot` for public `https` installs, defaulting to yes
 - runs final health checks
@@ -106,7 +107,10 @@ The default flow is interactive. It:
 For a non-interactive public install with defaults accepted:
 
 ```bash
-python3.12 scripts/install_maverick.py --hostname maverick.<host>.com --yes
+python3.12 scripts/install_maverick.py \
+  --hostname maverick.<host>.com \
+  --yes \
+  --admin-password-file /path/to/admin-password.txt
 ```
 
 For a local-only install without nginx or TLS:
@@ -190,7 +194,7 @@ When the installer prompts interactively, answer as follows:
 | `Core bind host [127.0.0.1]:` | Press Enter. Nginx is the public entrypoint. |
 | `Core port [8014]:` | Press Enter unless port `8014` is already used. |
 | `Rescue port [8015]:` | Press Enter unless port `8015` is already used. |
-| `Admin password [empty to set later]:` | Enter the first admin password, then confirm it. Leave empty only if you will use operator recovery later. |
+| `Admin password:` | Enter the first admin password, then confirm it. The installer does not continue without it. |
 | `Public scheme [https] (https/http):` | Press Enter for HTTPS. |
 | `Apply the rendered plan... [Y/n]:` | Press Enter to install live systemd/nginx paths and start services. Type `n` for render-only behavior. |
 | `Request a TLS certificate with certbot now? [Y/n]:` | Press Enter only when DNS and ports `80/443` are ready. Type `n` to skip TLS for now. |

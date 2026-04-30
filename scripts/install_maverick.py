@@ -4,10 +4,13 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import fields
 import getpass
 import grp
+import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 
 if sys.version_info < (3, 12):
@@ -45,6 +48,20 @@ from core.shared.installer import (  # noqa: E402
     write_install_plan,
 )
 
+INTERNAL_APPLY_ADMIN_PASSWORD_FLAG = "--_apply-initial-admin-password-from-stdin"
+CONFIG_PATH_FIELDS = {
+    "repository_root",
+    "install_root",
+    "output_root",
+    "acme_root",
+    "systemd_dir",
+    "nginx_conf_path",
+    "install_env_path",
+    "live_systemd_dir",
+    "live_nginx_conf_path",
+    "live_nginx_enabled_path",
+}
+
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -75,6 +92,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="",
         help="Existing bootstrap secret ref for MongoDB password. Interactive installs usually ask for the password instead.",
     )
+    parser.add_argument(
+        "--admin-password-file",
+        type=Path,
+        default=None,
+        help="Read the initial admin password from a local file for non-interactive live installs.",
+    )
     parser.add_argument("--secret-key-file", default="data/bootstrap-secrets/secret-store.key")
     parser.add_argument("--bootstrap-secret-store-root", default="data/bootstrap-secrets")
     parser.add_argument("--skip-bootstrap", action="store_true")
@@ -89,7 +112,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = parse_args(argv)
+    tokens = list(sys.argv[1:] if argv is None else argv)
+    if tokens == [INTERNAL_APPLY_ADMIN_PASSWORD_FLAG]:
+        return _apply_initial_admin_password_from_stdin()
+
+    args = parse_args(tokens)
     interactive = not args.yes
     config = build_config(args, interactive=interactive)
 
@@ -119,7 +146,7 @@ def main(argv: list[str] | None = None) -> int:
         _print_summary(config, live_applied=False, tls_requested=False)
         return 0
 
-    apply_initial_admin_password(config)
+    _apply_initial_admin_password(config)
     apply_install_plan(config, rendered)
 
     tls_requested = False
@@ -143,6 +170,58 @@ def main(argv: list[str] | None = None) -> int:
             return 3
     _print_summary(config, live_applied=True, tls_requested=tls_requested)
     return 0
+
+
+def _apply_initial_admin_password(config: InstallerConfig) -> None:
+    if not config.admin_password:
+        return
+    if config.control_store != "mongo" or _running_inside_install_venv(config):
+        apply_initial_admin_password(config)
+        return
+    venv_python = config.repository_root / ".venv" / "bin" / "python"
+    if not venv_python.is_file():
+        raise RuntimeError(
+            "MongoDB installs must apply the initial admin password through the local virtualenv. "
+            "Run bootstrap first or rerun the installer without --skip-bootstrap."
+        )
+    subprocess.run(
+        [str(venv_python), str(Path(__file__).resolve()), INTERNAL_APPLY_ADMIN_PASSWORD_FLAG],
+        input=json.dumps(_config_to_payload(config)),
+        text=True,
+        check=True,
+    )
+
+
+def _apply_initial_admin_password_from_stdin() -> int:
+    payload = json.loads(sys.stdin.read())
+    apply_initial_admin_password(_config_from_payload(payload))
+    return 0
+
+
+def _running_inside_install_venv(config: InstallerConfig) -> bool:
+    try:
+        return Path(sys.executable).resolve() == (config.repository_root / ".venv" / "bin" / "python").resolve()
+    except OSError:
+        return False
+
+
+def _config_to_payload(config: InstallerConfig) -> dict[str, object]:
+    payload: dict[str, object] = {}
+    for item in fields(InstallerConfig):
+        value = getattr(config, item.name)
+        if item.name in CONFIG_PATH_FIELDS:
+            payload[item.name] = None if value is None else str(value)
+        else:
+            payload[item.name] = value
+    return payload
+
+
+def _config_from_payload(payload: dict[str, object]) -> InstallerConfig:
+    values = dict(payload)
+    for key in CONFIG_PATH_FIELDS:
+        if values.get(key) is not None:
+            values[key] = Path(str(values[key]))
+    return InstallerConfig(**values)
 
 
 def build_config(args: argparse.Namespace, *, interactive: bool) -> InstallerConfig:
@@ -174,7 +253,7 @@ def build_config(args: argparse.Namespace, *, interactive: bool) -> InstallerCon
         choices=("json", "mongo"),
         interactive=interactive,
     )
-    admin_password = _prompt_new_password("Admin password", interactive=interactive)
+    admin_password = _resolve_admin_password(args, interactive=interactive)
     json_control_store_root = args.json_control_store_root
     mongodb_uri = args.mongodb_uri
     mongodb_database = args.mongodb_database
@@ -291,18 +370,34 @@ def _prompt_password(label: str, *, interactive: bool) -> str:
     return getpass.getpass(f"{label} [empty for none]: ").strip()
 
 
-def _prompt_new_password(label: str, *, interactive: bool) -> str:
-    if not interactive:
+def _resolve_admin_password(args: argparse.Namespace, *, interactive: bool) -> str:
+    if args.admin_password_file is not None:
+        password = args.admin_password_file.read_text(encoding="utf-8").strip()
+        _validate_admin_password(password, label="Admin password file")
+        return password
+    if interactive:
+        return _prompt_new_password("Admin password", required=not args.render_only)
+    if args.render_only:
         return ""
-    password = getpass.getpass(f"{label} [empty to set later]: ").strip()
+    raise SystemExit("--admin-password-file is required for non-interactive live installs.")
+
+
+def _prompt_new_password(label: str, *, required: bool) -> str:
+    password = getpass.getpass(f"{label}: ").strip()
     if not password:
+        if required:
+            raise SystemExit(f"{label} is required.")
         return ""
-    if len(password) < 8:
-        raise SystemExit(f"{label} must be at least 8 characters.")
+    _validate_admin_password(password, label=label)
     confirmation = getpass.getpass(f"Confirm {label}: ").strip()
     if password != confirmation:
         raise SystemExit(f"{label} confirmation did not match.")
     return password
+
+
+def _validate_admin_password(password: str, *, label: str) -> None:
+    if len(password) < 8:
+        raise SystemExit(f"{label} must be at least 8 characters.")
 
 
 def _prompt_path(label: str, default: Path, *, interactive: bool) -> Path:
@@ -392,8 +487,7 @@ def _print_summary(config: InstallerConfig, *, live_applied: bool, tls_requested
     if config.admin_password:
         print("  Password: configured during install")
     else:
-        print("  Password: set with operator recovery after install:")
-        print("    maverick core cli run core.identity.reset-admin-password --operator --username admin --password '<new-password>' --json")
+        print("  Password: not applied in render-only mode")
 
 
 if __name__ == "__main__":

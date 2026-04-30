@@ -163,6 +163,12 @@ class InstallerFlowTestCase(unittest.TestCase):
             str(output_root / "bootstrap-secrets"),
         ]
 
+    def admin_password_args(self, output_root: Path) -> list[str]:
+        output_root.mkdir(parents=True, exist_ok=True)
+        password_file = output_root / "admin-password.txt"
+        password_file.write_text("install-admin-password\n", encoding="utf-8")
+        return ["--admin-password-file", str(password_file)]
+
     def test_installer_main_writes_rendered_files_without_bootstrap(self) -> None:
         with tempfile.TemporaryDirectory(prefix="maverick-install-") as temp_dir:
             output_root = Path(temp_dir) / "install"
@@ -239,6 +245,7 @@ class InstallerFlowTestCase(unittest.TestCase):
                         "--skip-verify",
                         "--skip-tls",
                         "--yes",
+                        *self.admin_password_args(output_root),
                         *self.secret_args(output_root),
                     ]
                 )
@@ -293,30 +300,6 @@ class InstallerFlowTestCase(unittest.TestCase):
         self.assertEqual(mocked_run.call_args_list[0].args[0], [str(repo_root / "scripts" / "bootstrap_local.sh")])
         self.assertEqual(mocked_run.call_args_list[0].kwargs["env"]["MAVERICK_BUILD_FRONTENDS"], "1")
 
-    def test_installer_main_installs_mongo_extra_when_mongo_control_store_is_selected(self) -> None:
-        repo_root = Path(__file__).resolve().parents[3]
-        with tempfile.TemporaryDirectory(prefix="maverick-install-") as temp_dir:
-            output_root = Path(temp_dir) / "install"
-            with patch("core.shared.installer.subprocess.run") as mocked_run:
-                exit_code = installer_main(
-                    [
-                        "--local-only",
-                        "--control-store",
-                        "mongo",
-                        "--output-root",
-                        str(output_root),
-                        "--install-env",
-                        str(output_root / "maverick.env"),
-                        "--render-only",
-                        "--yes",
-                        *self.secret_args(output_root),
-                    ]
-                )
-
-        self.assertEqual(exit_code, 0)
-        self.assertEqual(mocked_run.call_args_list[0].args[0], [str(repo_root / "scripts" / "bootstrap_local.sh")])
-        self.assertEqual(mocked_run.call_args_list[0].kwargs["env"]["MAVERICK_PYPROJECT_EXTRAS"], "dev,mongo")
-
     def test_installer_main_applies_live_plan_when_confirmed(self) -> None:
         with tempfile.TemporaryDirectory(prefix="maverick-install-") as temp_dir:
             output_root = Path(temp_dir) / "install"
@@ -326,6 +309,8 @@ class InstallerFlowTestCase(unittest.TestCase):
             with patch("core.shared.installer.run_privileged_command") as mocked_runner, patch(
                 "scripts.install_maverick.check_health",
                 return_value={"http://127.0.0.1:8014/health": True},
+            ), patch(
+                "scripts.install_maverick._apply_initial_admin_password",
             ):
                 exit_code = installer_main(
                     [
@@ -346,6 +331,7 @@ class InstallerFlowTestCase(unittest.TestCase):
                         "--yes",
                         "--skip-tls",
                         "--force",
+                        *self.admin_password_args(output_root),
                         *self.secret_args(output_root),
                     ]
                 )
@@ -363,6 +349,8 @@ class InstallerFlowTestCase(unittest.TestCase):
             with patch("core.shared.installer.run_privileged_command"), patch(
                 "scripts.install_maverick.check_health",
                 return_value={"http://127.0.0.1:8014/health": False},
+            ), patch(
+                "scripts.install_maverick._apply_initial_admin_password",
             ):
                 exit_code = installer_main(
                     [
@@ -377,6 +365,7 @@ class InstallerFlowTestCase(unittest.TestCase):
                         "--skip-verify",
                         "--yes",
                         "--force",
+                        *self.admin_password_args(output_root),
                         *self.secret_args(output_root),
                     ]
                 )

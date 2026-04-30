@@ -51,7 +51,9 @@ class RepositoryConventionsTestCase(unittest.TestCase):
         run_script = (repo_root / "scripts" / "run_local.sh").read_text(encoding="utf-8")
 
         self.assertIn('--install-env "${ROOT_DIR}/.env"', bootstrap_script)
+        self.assertIn('--install-env "${ROOT_DIR}/.env"', run_script)
         self.assertIn('elif [[ -f "${ROOT_DIR}/.env.maverick" ]]', run_script)
+        self.assertIn("MAVERICK_ADMIN_USERNAME is required.", run_script)
 
     def test_workspace_hygiene_reporter_is_documented_and_machine_readable(self) -> None:
         repo_root = installation_paths(start_path=Path(__file__)).repository_root

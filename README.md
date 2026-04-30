@@ -99,13 +99,13 @@ Most committed app frontend artifacts are already present. If you want to rebuil
 Use the installer when you want Maverick to behave more like a local service. It renders service files, local environment files, bootstrap secret refs, and an install manifest from one repeatable operator flow:
 
 ```bash
-python3 scripts/install_maverick.py --local-only
+python3.12 scripts/install_maverick.py --local-only
 ```
 
 You can inspect the generated plan without applying it:
 
 ```bash
-python3 scripts/install_maverick.py --local-only --render-only
+python3.12 scripts/install_maverick.py --local-only --render-only
 ```
 
 ### Hosted Evaluation
@@ -113,7 +113,7 @@ python3 scripts/install_maverick.py --local-only --render-only
 For a hostname-backed evaluation machine, run the installer with a public host:
 
 ```bash
-python3 scripts/install_maverick.py --hostname maverick.example.com
+python3.12 scripts/install_maverick.py --hostname maverick.example.com
 ```
 
 The installer can render and optionally apply systemd units, nginx configuration, and TLS setup. Keep this path for evaluation until the security roadmap says otherwise.
@@ -123,13 +123,13 @@ The installer can render and optionally apply systemd units, nginx configuration
 Maverick starts with JSON because it keeps the first install simple and portable:
 
 ```bash
-python3 scripts/install_maverick.py --control-store json
+python3.12 scripts/install_maverick.py --control-store json
 ```
 
 Use MongoDB when you want the control plane in a database service instead of local JSON collections:
 
 ```bash
-python3 scripts/install_maverick.py \
+python3.12 scripts/install_maverick.py \
   --control-store mongo \
   --mongodb-uri mongodb://127.0.0.1:27017/maverick
 ```

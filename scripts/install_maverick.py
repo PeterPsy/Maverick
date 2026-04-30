@@ -9,6 +9,16 @@ import os
 from pathlib import Path
 import sys
 
+if sys.version_info < (3, 12):
+    sys.stderr.write(
+        "Maverick installer requires Python 3.12 or newer.\n\n"
+        "Run it with Python 3.12 explicitly, for example:\n"
+        "  python3.12 scripts/install_maverick.py\n\n"
+        "After local bootstrap, you can also use:\n"
+        "  .venv/bin/python scripts/install_maverick.py\n"
+    )
+    raise SystemExit(1)
+
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 if str(REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(REPOSITORY_ROOT))

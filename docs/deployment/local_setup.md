@@ -63,8 +63,8 @@ That command writes only the password hash to the durable identity store and rev
 The installer also exposes the same choice:
 
 ```bash
-python3 scripts/install_maverick.py --control-store json
-python3 scripts/install_maverick.py --control-store mongo --mongodb-uri mongodb://127.0.0.1:27017/maverick
+python3.12 scripts/install_maverick.py --control-store json
+python3.12 scripts/install_maverick.py --control-store mongo --mongodb-uri mongodb://127.0.0.1:27017/maverick
 ```
 
 Adapter migrations run as one explicit operator workflow through core admin surfaces or the User Admin UI: dry-run the target, write every control-plane collection to the target adapter, update the service environment file, and restart with only one adapter mounted. Backend startup must not silently migrate or delete control-plane state.
@@ -76,7 +76,7 @@ For the first public release, the recommended path is local CLI-first setup, not
 For a fresh install, use the installer CLI:
 
 ```bash
-python3 scripts/install_maverick.py
+python3.12 scripts/install_maverick.py
 ```
 
 The default flow is interactive. It:
@@ -95,13 +95,13 @@ The default flow is interactive. It:
 For a non-interactive public install with defaults accepted:
 
 ```bash
-python3 scripts/install_maverick.py --hostname maverick.<host>.com --yes
+python3.12 scripts/install_maverick.py --hostname maverick.<host>.com --yes
 ```
 
 For a local-only install without nginx or TLS:
 
 ```bash
-python3 scripts/install_maverick.py --local-only
+python3.12 scripts/install_maverick.py --local-only
 ```
 
 Use `--render-only` when you only want the generated files without changing the live system.
@@ -138,7 +138,7 @@ Treat the run as successful only when the final summary says `OK`.
 Render first without touching live systemd or nginx:
 
 ```bash
-python3 scripts/install_maverick.py \
+python3.12 scripts/install_maverick.py \
   --local-only \
   --render-only \
   --skip-bootstrap \
@@ -150,7 +150,7 @@ python3 scripts/install_maverick.py \
 For a local-only systemd install:
 
 ```bash
-python3 scripts/install_maverick.py \
+python3.12 scripts/install_maverick.py \
   --local-only \
   --skip-bootstrap \
   --skip-verify \
@@ -162,7 +162,7 @@ For a public hostname such as `maverick.<host>.com`, first make sure DNS points 
 Then run:
 
 ```bash
-python3 scripts/install_maverick.py \
+python3.12 scripts/install_maverick.py \
   --hostname maverick.<host>.com \
   --skip-bootstrap \
   --skip-verify \
@@ -263,7 +263,7 @@ MAVERICK_BUILD_FRONTENDS=1 ./scripts/bootstrap_local.sh
 The installer exposes the same path:
 
 ```bash
-python3 scripts/install_maverick.py --local-only --build-frontends
+python3.12 scripts/install_maverick.py --local-only --build-frontends
 ```
 
 ## Environment Variables

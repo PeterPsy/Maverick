@@ -5,9 +5,18 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENV_DIR="${ROOT_DIR}/.venv"
 HOST="${MAVERICK_HOST:-127.0.0.1}"
 PORT="${MAVERICK_PORT:-8000}"
+PYTHON_BIN="${MAVERICK_PYTHON:-}"
 
 if [[ -d "${VENV_DIR}" ]]; then
   source "${VENV_DIR}/bin/activate"
+fi
+
+if [[ -z "${PYTHON_BIN}" ]]; then
+  if command -v python3.12 >/dev/null 2>&1; then
+    PYTHON_BIN="$(command -v python3.12)"
+  else
+    PYTHON_BIN="python3"
+  fi
 fi
 
 ENV_FILE=""
@@ -18,7 +27,7 @@ elif [[ -f "${ROOT_DIR}/.env.maverick" ]]; then
 fi
 
 if [[ -z "${ENV_FILE}" ]]; then
-  python3 "${ROOT_DIR}/scripts/install_maverick.py" \
+  "${PYTHON_BIN}" "${ROOT_DIR}/scripts/install_maverick.py" \
     --local-only \
     --skip-bootstrap \
     --skip-verify \

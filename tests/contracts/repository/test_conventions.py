@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import re
 import subprocess
+import sys
 import tempfile
 import tomllib
 import unittest
@@ -45,6 +46,16 @@ class RepositoryConventionsTestCase(unittest.TestCase):
             result = subprocess.run(["bash", "-n", str(script_path)], check=False, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, msg=f"{relative_path}: {result.stderr}")
 
+    def test_installer_script_is_executable_and_uses_supported_python(self) -> None:
+        repo_root = installation_paths(start_path=Path(__file__)).repository_root
+        script_path = repo_root / "scripts" / "install_maverick.py"
+        content = script_path.read_text(encoding="utf-8")
+
+        self.assertTrue(script_path.stat().st_mode & 0o111)
+        self.assertIn("sys.version_info < (3, 12)", content)
+        result = subprocess.run([sys.executable, str(script_path), "--help"], check=False, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+
     def test_local_bootstrap_and_run_scripts_share_generated_env_contract(self) -> None:
         repo_root = installation_paths(start_path=Path(__file__)).repository_root
         bootstrap_script = (repo_root / "scripts" / "bootstrap_local.sh").read_text(encoding="utf-8")
@@ -52,6 +63,7 @@ class RepositoryConventionsTestCase(unittest.TestCase):
 
         self.assertIn('--install-env "${ROOT_DIR}/.env"', bootstrap_script)
         self.assertIn('--install-env "${ROOT_DIR}/.env"', run_script)
+        self.assertIn('PYTHON_BIN="${MAVERICK_PYTHON:-}"', run_script)
         self.assertIn('elif [[ -f "${ROOT_DIR}/.env.maverick" ]]', run_script)
         self.assertIn("MAVERICK_ADMIN_USERNAME is required.", run_script)
 

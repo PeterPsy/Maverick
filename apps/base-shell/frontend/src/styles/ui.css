@@ -239,6 +239,34 @@
   line-height: 1.35;
 }
 
+.bs-provider-setup-dialog {
+  width: min(34rem, 100%);
+}
+
+.bs-provider-setup {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.bs-provider-setup__provider {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.9rem;
+}
+
+.bs-provider-setup__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(8rem, 0.58fr);
+  gap: 0.7rem;
+}
+
+.bs-provider-setup__status {
+  margin: 0;
+  color: var(--maverick-text-soft);
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
 .bs-runtime-session-panel {
   margin-top: 0.85rem;
   border-top: 1px solid rgba(255, 255, 255, 0.08);

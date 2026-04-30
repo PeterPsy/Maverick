@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getActiveProvider, getPlatformStatus, getSession, listApps, normalizeAppRegistryPayload } from "../src/api";
+import { buildProviderSetupDraft } from "../src/components/ProviderSetupDialog";
 
 describe("base-shell api normalization", () => {
   afterEach(() => {
@@ -80,5 +81,67 @@ describe("base-shell api normalization", () => {
 
     await expect(getSession()).resolves.toMatchObject({ authenticated: true, workspace_id: "default" });
     await expect(getActiveProvider()).resolves.toMatchObject({ active_provider: { provider_id: "codex" } });
+  });
+
+  it("prefills provider setup from available providers when no provider is active", () => {
+    const draft = buildProviderSetupDraft({
+      user: {
+        user_id: "user-admin",
+        username: "admin",
+        email: null,
+        display_name: null,
+        account_type: "standard",
+        platform_role: "admin",
+      },
+      workspace: {
+        workspace_id: "default",
+        name: "Default",
+        description: null,
+        status: "active",
+        governance: {},
+        quota: {},
+        is_active: true,
+      },
+      provider: {
+        workspace_id: "default",
+        active_provider: null,
+        selection: null,
+        model_settings: null,
+        blocked_reason: "no_provider_configured",
+        available_providers: [
+          {
+            provider_id: "codex",
+            label: "Codex",
+            description: "Codex runtime",
+            status: "available",
+            default_model_family: "gpt-5.2",
+            model_options: [
+              {
+                model_id: "gpt-5.2",
+                label: "GPT-5.2",
+                description: null,
+                default_reasoning_effort: "medium",
+                supported_reasoning_efforts: [],
+              },
+            ],
+            capabilities: {},
+          },
+        ],
+      },
+      runtime: {
+        workspace_id: "default",
+        active_provider: null,
+        selection: null,
+        model_settings: null,
+        sessions: [],
+      },
+      recovery: {},
+    });
+
+    expect(draft).toEqual({
+      providerId: "codex",
+      modelId: "gpt-5.2",
+      reasoningEffort: "medium",
+    });
   });
 });

@@ -4,6 +4,7 @@ import { cx } from "./cx";
 type DialogProps = {
   children: ReactNode;
   description?: string;
+  dismissible?: boolean;
   hideHeader?: boolean;
   onClose: () => void;
   open: boolean;
@@ -11,7 +12,7 @@ type DialogProps = {
   title: string;
 };
 
-export function Dialog({ children, description, hideHeader = false, onClose, open, panelClassName, title }: DialogProps) {
+export function Dialog({ children, description, dismissible = true, hideHeader = false, onClose, open, panelClassName, title }: DialogProps) {
   useEffect(() => {
     if (!open) {
       return undefined;
@@ -21,7 +22,7 @@ export function Dialog({ children, description, hideHeader = false, onClose, ope
     document.body.style.overflow = "hidden";
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (dismissible && event.key === "Escape") {
         onClose();
       }
     };
@@ -32,7 +33,7 @@ export function Dialog({ children, description, hideHeader = false, onClose, ope
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [onClose, open]);
+  }, [dismissible, onClose, open]);
 
   if (!open) {
     return null;
@@ -40,7 +41,13 @@ export function Dialog({ children, description, hideHeader = false, onClose, ope
 
   return (
     <div className="bs-ui-dialog" role="dialog" aria-modal="true" aria-label={title}>
-      <button aria-label="Chiudi finestra" className="bs-ui-dialog__backdrop" onClick={onClose} type="button" />
+      <button
+        aria-label="Chiudi finestra"
+        className="bs-ui-dialog__backdrop"
+        disabled={!dismissible}
+        onClick={dismissible ? onClose : undefined}
+        type="button"
+      />
       <div className={cx("bs-ui-dialog__panel", panelClassName)}>
         {!hideHeader ? (
           <div className="bs-ui-dialog__header">
@@ -49,9 +56,11 @@ export function Dialog({ children, description, hideHeader = false, onClose, ope
               <h3 className="bs-ui-dialog__title">{title}</h3>
               {description ? <p className="bs-ui-dialog__description">{description}</p> : null}
             </div>
-            <button aria-label="Chiudi finestra" className="bs-ui-dialog__close" onClick={onClose} type="button">
-              <span aria-hidden="true" className="material-symbols-rounded">close</span>
-            </button>
+            {dismissible ? (
+              <button aria-label="Chiudi finestra" className="bs-ui-dialog__close" onClick={onClose} type="button">
+                <span aria-hidden="true" className="material-symbols-rounded">close</span>
+              </button>
+            ) : null}
           </div>
         ) : null}
         {children}

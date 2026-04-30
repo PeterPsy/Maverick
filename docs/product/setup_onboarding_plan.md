@@ -1,16 +1,18 @@
 # Setup And Onboarding UI Plan
 
-Status: deferred until after the first public open source release checklist is complete.
+Status: full onboarding deferred; provider-first setup exists in `base-shell`.
 
 ## Goal
 
 Add a built-in setup or onboarding experience after the CLI-first local setup path is stable.
 
+The current product shell includes one narrow startup setup flow: when the active workspace has no configured runtime provider, `base-shell` prompts an authorized user to select the provider/model through the core provider API. That prompt prevents a fresh install from reaching Chat with a misleading empty provider state.
+
 ## Why Deferred
 
 The first public release still needs stronger setup docs, security messaging, ADRs, threat model coverage, and reference docs.
 
-An onboarding UI should not become the first bootstrap mechanism before those foundations settle.
+A broad onboarding UI should not become the first bootstrap mechanism before those foundations settle.
 
 ## Intended Scope
 

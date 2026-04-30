@@ -22,6 +22,7 @@ import { LoginScreen } from "./components/LoginScreen";
 import { Sidebar } from "./components/Sidebar";
 import { ShellOverlayWidgets } from "./components/ShellOverlayWidgets";
 import { ShellDialog, ShellDialogs } from "./components/ShellDialogs";
+import { ProviderSetupDialog } from "./components/ProviderSetupDialog";
 import { WorkspaceView } from "./components/WorkspaceView";
 
 export function AppShell() {
@@ -40,6 +41,7 @@ export function AppShell() {
   const [activeAppParams, setActiveAppParams] = useState<Record<string, string | boolean | null>>(initialRoute.params);
   const [isSidebarOpen, setIsSidebarOpen] = useState(initialSession.isSidebarOpen);
   const [activeDialog, setActiveDialog] = useState<ShellDialog>(null);
+  const [dismissedProviderSetupWorkspaceId, setDismissedProviderSetupWorkspaceId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const isMobileLayout = useMobileLayout();
@@ -154,7 +156,7 @@ export function AppShell() {
   }
 
   async function handleProviderModelSettingsChanged(modelId: string, reasoningEffort: string | null) {
-    const providerId = settings?.provider.active_provider.provider_id;
+    const providerId = settings?.provider.active_provider?.provider_id;
     if (!providerId) {
       throw new Error("Provider non caricato.");
     }
@@ -164,6 +166,16 @@ export function AppShell() {
       model_reasoning_effort: reasoningEffort,
     });
     setSettings(await getPlatformSettings());
+  }
+
+  async function handleInitialProviderConfigured(payload: {
+    provider_id: string;
+    model_id?: string | null;
+    model_reasoning_effort?: string | null;
+  }) {
+    await configureActiveProvider(payload);
+    setSettings(await getPlatformSettings());
+    setDismissedProviderSetupWorkspaceId(null);
   }
 
   async function handleClearRuntimeSessions(sessionIds?: string[]) {
@@ -189,6 +201,8 @@ export function AppShell() {
   }
 
   const activeWorkspaceId = status?.workspace_id || session.workspace_id;
+  const needsProviderSetup =
+    !!settings && !settings.provider.active_provider && dismissedProviderSetupWorkspaceId !== activeWorkspaceId;
 
   return (
     <main className={`bs-shell ${isSidebarOpen ? "is-sidebar-open" : ""} ${isMobileLayout ? "is-mobile-layout" : ""}`}>
@@ -228,6 +242,12 @@ export function AppShell() {
         onLogout={handleLogout}
         onClearRuntimeSessions={handleClearRuntimeSessions}
         onProviderModelSettingsChanged={handleProviderModelSettingsChanged}
+        settings={settings}
+      />
+      <ProviderSetupDialog
+        onClose={() => setDismissedProviderSetupWorkspaceId(activeWorkspaceId)}
+        onConfigure={handleInitialProviderConfigured}
+        open={needsProviderSetup}
         settings={settings}
       />
     </main>

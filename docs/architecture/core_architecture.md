@@ -606,6 +606,8 @@ These APIs are platform capabilities that any suitable shell app may consume.
 
 They do not make the core own shell UX, chat project organization, or app-specific settings panels.
 
+When `/api/settings/platform` reports `active_provider: null`, `base-shell` may show an initial provider setup dialog backed by `/api/providers/active`. That dialog is shell UX over generic provider-selection governance; it must not silently select a provider in browser state or make Chat own the workspace-wide provider choice.
+
 Admin-facing apps must still stay app-agnostic at the core boundary.
 
 For example, a `user-admin` app may provide the UI for creating users, resetting a user's password, changing platform roles, and assigning users to workspaces, but the records remain owned by the core identity and workspace governance domains.

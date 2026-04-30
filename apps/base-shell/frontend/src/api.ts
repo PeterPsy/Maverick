@@ -106,17 +106,20 @@ export type WorkspacesPayload = {
   active_workspace_id: string;
 };
 
+export type ProviderItem = {
+  provider_id: string;
+  label: string;
+  description: string;
+  status: string;
+  default_model_family: string | null;
+  model_options: ProviderModelOption[];
+  capabilities: Record<string, boolean>;
+};
+
 export type ProviderStatus = {
   workspace_id: string;
-  active_provider: {
-    provider_id: string;
-    label: string;
-    description: string;
-    status: string;
-    default_model_family: string | null;
-    model_options: ProviderModelOption[];
-    capabilities: Record<string, boolean>;
-  };
+  configured?: boolean;
+  active_provider: ProviderItem | null;
   selection: {
     workspace_id: string;
     provider_id: string;
@@ -127,7 +130,10 @@ export type ProviderStatus = {
     model_id: string | null;
     model_reasoning_effort: string | null;
   } | null;
-  model_settings: ProviderModelSettings;
+  model_settings: ProviderModelSettings | null;
+  blocked_reason?: string | null;
+  blocked_detail?: string | null;
+  available_providers?: ProviderItem[];
 };
 
 export type ProviderReasoningOption = {

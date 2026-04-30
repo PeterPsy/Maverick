@@ -1,53 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import { PlatformSettings, ProviderModelOption, ProviderReasoningOption } from "../api";
+import { PlatformSettings } from "../api";
 import { Button, Dialog, Surface } from "../ui";
 import { TutorialDialog } from "./TutorialDialog";
+import {
+  defaultReasoningForOption,
+  fallbackModelOption,
+  usableModelOptions,
+  withReasoningFallback,
+} from "./providerModelOptions";
 
 type ShellDialog = "settings" | "tutorial" | null;
 
 const ACTIVE_RUNTIME_STATUSES = new Set(["created", "running", "stopping"]);
-
-const FALLBACK_REASONING_OPTIONS: ProviderReasoningOption[] = [
-  { effort: "low", label: "Low", description: "Fast responses with lighter reasoning" },
-  { effort: "medium", label: "Mid", description: "Balanced reasoning depth" },
-  { effort: "high", label: "High", description: "Greater reasoning depth" },
-  { effort: "xhigh", label: "Extra high", description: "Maximum reasoning depth" },
-];
-
-function usableModelOptions(options: ProviderModelOption[] | null | undefined): ProviderModelOption[] {
-  return Array.isArray(options) ? options.filter((option) => !!option?.model_id) : [];
-}
-
-function defaultReasoningForOption(option: ProviderModelOption | null): string {
-  if (!option) {
-    return "";
-  }
-  if (option.default_reasoning_effort) {
-    return option.default_reasoning_effort;
-  }
-  return option.supported_reasoning_efforts[0]?.effort || "";
-}
-
-function withReasoningFallback(option: ProviderModelOption): ProviderModelOption {
-  if (option.supported_reasoning_efforts.length) {
-    return option;
-  }
-  return {
-    ...option,
-    default_reasoning_effort: option.default_reasoning_effort || "medium",
-    supported_reasoning_efforts: FALLBACK_REASONING_OPTIONS,
-  };
-}
-
-function fallbackModelOption(modelId: string, reasoningEffort: string): ProviderModelOption {
-  return {
-    model_id: modelId,
-    label: modelId,
-    description: "Workspace-selected Codex model.",
-    default_reasoning_effort: reasoningEffort || "medium",
-    supported_reasoning_efforts: FALLBACK_REASONING_OPTIONS,
-  };
-}
 
 export function ShellDialogs({
   activeDialog,

@@ -1131,6 +1131,8 @@ The `base-shell` port may retain shell-owned local preferences in the browser, s
 
 Those preferences are shell UI state only. They are not core workspace records, app installation state, provider configuration, or app-owned backend data.
 
+If the active workspace has no configured runtime provider, `base-shell` may open a startup provider setup dialog and persist the selected provider/model through the generic core provider API. This is workspace governance state, not shell-local preference and not chat-app state.
+
 Pinned app shortcuts are not shell-owned browser preferences. They are App Store app data, exposed through an App Store-owned sidebar widget that `base-shell` mounts through the generic widget registry.
 
 Mounted app frontends should be treated as stable app documents after first open.

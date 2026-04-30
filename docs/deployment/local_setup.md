@@ -107,6 +107,7 @@ The default flow is interactive. It:
 - asks whether to request a TLS certificate with `certbot` for public `https` installs, defaulting to yes
 
 For public `https` installs, the installer applies systemd/nginx, checks the local core health endpoint, and then requests TLS. If Certbot is already running or DNS/port `80` is not ready, the installer exits non-zero with a TLS-specific message but leaves the applied services in place.
+When `--skip-tls` is used with `--public-scheme https`, the installer assumes the certificate is managed externally or already exists, renders the HTTPS nginx server block directly, and lets `nginx -t` validate the referenced certificate files.
 
 For a non-interactive public install with defaults accepted:
 

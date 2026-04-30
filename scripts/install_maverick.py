@@ -136,7 +136,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     run_install_steps(config)
-    rendered = render_install_plan(config)
+    force_https_nginx = args.skip_tls and not config.local_only and config.public_scheme == "https"
+    rendered = render_install_plan(config, force_https_nginx=force_https_nginx)
     write_install_plan(rendered)
     print(f"Rendered install plan under {config.output_root}.")
 

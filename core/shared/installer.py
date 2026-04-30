@@ -86,7 +86,7 @@ class InstallerConfig:
         return f"/etc/letsencrypt/live/{self.hostname}/privkey.pem"
 
 
-def render_install_plan(config: InstallerConfig) -> dict[Path, str]:
+def render_install_plan(config: InstallerConfig, *, force_https_nginx: bool = False) -> dict[Path, str]:
     """Render the systemd/nginx/install manifest files for one installer run."""
     templates_root = config.repository_root / "scripts" / "deploy"
     substitutions = _template_substitutions(config)
@@ -97,7 +97,7 @@ def render_install_plan(config: InstallerConfig) -> dict[Path, str]:
         rendered = _render_template(template_path, substitutions)
         outputs[config.systemd_dir / template_path.name] = rendered
     if config.nginx_conf_path is not None:
-        outputs[config.nginx_conf_path] = render_nginx_config(config)
+        outputs[config.nginx_conf_path] = render_nginx_config(config, force_https=force_https_nginx)
     outputs[secret_key_path] = secret_key_content
     outputs.update(_render_bootstrap_secret_files(config, key_text=secret_key_content.strip()))
     outputs[config.install_env_path] = render_install_env_file(config)

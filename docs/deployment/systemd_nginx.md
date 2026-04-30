@@ -46,6 +46,7 @@ The backend watchdog also loads `.env.maverick`, but rescue authority comes from
 For a first-time HTTPS install, the installer initially writes an HTTP nginx config that can pass `nginx -t` without existing certificates and serve the ACME challenge.
 After certbot obtains the certificate, the installer rewrites nginx with the final HTTPS config and reloads it.
 The installer runs the local core health check before requesting TLS, so bind/port failures are reported even when Certbot is blocked by DNS, port `80`, or another active Certbot process.
+When an operator passes `--skip-tls` for a public HTTPS install, the installer assumes TLS is externally managed or already provisioned and renders the final HTTPS nginx config immediately.
 
 Use `--render-only` to stop after rendering.
 

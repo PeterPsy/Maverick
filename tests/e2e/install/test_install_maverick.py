@@ -123,6 +123,16 @@ class InstallerRenderingTestCase(unittest.TestCase):
         self.assertIn("listen 443 ssl", nginx_conf)
         self.assertIn("ssl_certificate /etc/letsencrypt/live/maverick.example.test/fullchain.pem;", nginx_conf)
 
+    def test_render_install_plan_can_force_https_nginx_for_externally_managed_tls(self) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+        config = self.make_config(repo_root, hostname="maverick.example.test", local_only=False)
+
+        rendered = render_install_plan(config, force_https_nginx=True)
+        nginx_conf = rendered[config.nginx_conf_path]
+
+        self.assertIn("listen 443 ssl", nginx_conf)
+        self.assertIn("ssl_certificate /etc/letsencrypt/live/maverick.example.test/fullchain.pem;", nginx_conf)
+
     def test_render_install_plan_skips_nginx_for_local_only_mode(self) -> None:
         repo_root = Path(__file__).resolve().parents[3]
         config = self.make_config(repo_root, hostname=None, local_only=True)

@@ -6,13 +6,20 @@ Maverick is experimental. Use fake data and local-only networking.
 
 ## Prerequisites
 
-- Python 3.12
+- Python 3.12, including the `venv` package
 - Node.js and npm
 - `bubblewrap` on Linux for sandbox tests
 - Codex CLI for Codex-backed runtime sessions
 
 The clean-clone local bootstrap uses the JSON control-plane adapter by default.
 `.maverick` is rebuildable installation-local operating material, not the database. Deleting `.maverick` must not delete users, workspace membership, app bindings, provider/OAuth bindings, runtime token records, or secret values.
+
+On Ubuntu, install Python 3.12 support before running bootstrap:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y python3.12 python3.12-venv
+```
 
 Default JSON control-plane state is stored outside `.maverick`:
 

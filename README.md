@@ -53,13 +53,20 @@ Maverick is easiest to evaluate from a clean clone. The default setup is intenti
 ### Requirements
 
 - Linux
-- Python 3.12
+- Python 3.12, including the `venv` package
 - Node.js and npm
 - `bubblewrap` for sandbox verification
 - Codex CLI for the default Codex-backed runtime path
 - MongoDB only if you choose the MongoDB control-plane adapter
 
 The default control-plane adapter is JSON. A new install does not require MongoDB.
+
+On Ubuntu, install Python 3.12 support with:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y python3.12 python3.12-venv
+```
 
 ### Local Evaluation
 

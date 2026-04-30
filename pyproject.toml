@@ -7,7 +7,7 @@ name = "maverick"
 version = "0.1.0"
 description = "Workspace-isolated AI operating environment for agent-powered apps."
 requires-python = ">=3.12"
-license = "MIT"
+license = {text = "MIT"}
 readme = "README.md"
 dependencies = [
     "uvicorn[standard]>=0.30",

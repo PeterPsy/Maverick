@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 import json
 from pathlib import Path
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -206,6 +207,28 @@ class InstallerSecretRenderingTestCase(unittest.TestCase):
         self.assertEqual(payload["control_store"], "mongo")
         self.assertEqual(payload["admin_password"], "install-admin-password")
         self.assertNotIn("install-admin-password", command)
+
+    def test_initial_admin_password_installs_mongo_extra_when_current_venv_lacks_driver(self) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+        config = replace(
+            self.make_config(repo_root, install_root=repo_root),
+            control_store="mongo",
+            admin_password="install-admin-password",
+        )
+
+        with patch("scripts.install_maverick._running_inside_install_venv", return_value=True), patch(
+            "scripts.install_maverick.importlib.util.find_spec",
+            return_value=None,
+        ), patch("scripts.install_maverick.subprocess.run") as mocked_run, patch(
+            "scripts.install_maverick.apply_initial_admin_password"
+        ):
+            _apply_initial_admin_password(config)
+
+        self.assertEqual(
+            mocked_run.call_args.args[0],
+            [sys.executable, "-m", "pip", "install", "-e", ".[mongo]"],
+        )
+        self.assertEqual(mocked_run.call_args.kwargs["cwd"], repo_root)
 
 
 if __name__ == "__main__":

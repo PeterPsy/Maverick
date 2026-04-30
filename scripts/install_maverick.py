@@ -7,6 +7,7 @@ import argparse
 from dataclasses import fields
 import getpass
 import grp
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -176,6 +177,7 @@ def _apply_initial_admin_password(config: InstallerConfig) -> None:
     if not config.admin_password:
         return
     if config.control_store != "mongo" or _running_inside_install_venv(config):
+        _ensure_mongo_driver_available(config)
         apply_initial_admin_password(config)
         return
     venv_python = config.repository_root / ".venv" / "bin" / "python"
@@ -194,8 +196,20 @@ def _apply_initial_admin_password(config: InstallerConfig) -> None:
 
 def _apply_initial_admin_password_from_stdin() -> int:
     payload = json.loads(sys.stdin.read())
-    apply_initial_admin_password(_config_from_payload(payload))
+    config = _config_from_payload(payload)
+    _ensure_mongo_driver_available(config)
+    apply_initial_admin_password(config)
     return 0
+
+
+def _ensure_mongo_driver_available(config: InstallerConfig) -> None:
+    if config.control_store != "mongo" or importlib.util.find_spec("pymongo") is not None:
+        return
+    subprocess.run(
+        [sys.executable, "-m", "pip", "install", "-e", ".[mongo]"],
+        cwd=config.repository_root,
+        check=True,
+    )
 
 
 def _running_inside_install_venv(config: InstallerConfig) -> bool:

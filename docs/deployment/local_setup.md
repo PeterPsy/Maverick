@@ -14,11 +14,11 @@ Maverick is experimental. Use fake data and local-only networking.
 The clean-clone local bootstrap uses the JSON control-plane adapter by default.
 `.maverick` is rebuildable installation-local operating material, not the database. Deleting `.maverick` must not delete users, workspace membership, app bindings, provider/OAuth bindings, runtime token records, or secret values.
 
-On Ubuntu, install Python 3.12 support before running bootstrap:
+On Ubuntu, install Python 3.12 support and the sandbox dependency before running bootstrap:
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y python3.12 python3.12-venv
+sudo apt-get install -y python3.12 python3.12-venv bubblewrap
 ```
 
 Default JSON control-plane state is stored outside `.maverick`:

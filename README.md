@@ -61,11 +61,11 @@ Maverick is easiest to evaluate from a clean clone. The default setup is intenti
 
 The default control-plane adapter is JSON. A new install does not require MongoDB.
 
-On Ubuntu, install Python 3.12 support with:
+On Ubuntu, install the required Python and sandbox packages with:
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y python3.12 python3.12-venv
+sudo apt-get install -y python3.12 python3.12-venv bubblewrap
 ```
 
 ### Local Evaluation

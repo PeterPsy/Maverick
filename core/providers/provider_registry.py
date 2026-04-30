@@ -1,0 +1,109 @@
+"""Provider registry and runtime adapter contracts."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Callable, Protocol
+
+from core.providers.errors import ProviderNotFoundError
+from core.providers.models import ProviderDefinition, RuntimeBackendLaunchSpec
+from core.runtime.runtime_session import RuntimeSessionRecord
+
+if TYPE_CHECKING:
+    from core.runtime.execution import RuntimeExecutionResult
+    from core.runtime.execution_events import RuntimeExecutionEventSink
+    from core.skills.models import SkillDefinition, SkillMaterialization
+
+
+class RuntimeBackendAdapter(Protocol):
+    """Contract implemented by concrete runtime backend adapters."""
+
+    def provider_definition(self) -> ProviderDefinition:
+        ...
+
+    def validate_backend(self) -> None:
+        ...
+
+    def build_launch_spec(
+        self,
+        session: RuntimeSessionRecord,
+        *,
+        secret_env: dict[str, str] | None = None,
+        credential_binding_id: str | None = None,
+        resolved_secret_refs: list[str] | None = None,
+        model_id: str | None = None,
+        model_reasoning_effort: str | None = None,
+    ) -> RuntimeBackendLaunchSpec:
+        ...
+
+    def prepare_runtime_skills(
+        self,
+        session: RuntimeSessionRecord,
+        skills: list["SkillDefinition"],
+    ) -> list["SkillMaterialization"]:
+        ...
+
+    def execute_turn(
+        self,
+        *,
+        session: RuntimeSessionRecord,
+        launch_spec: RuntimeBackendLaunchSpec,
+        input_text: str,
+        event_sink: "RuntimeExecutionEventSink | None" = None,
+        timeout_seconds: int | None = None,
+        on_provider_thread_id: Callable[[str], None] | None = None,
+        command_runner: Callable[..., Any] | None = None,
+    ) -> "RuntimeExecutionResult":
+        ...
+
+    def close_runtime(self, session_id: str) -> None:
+        ...
+
+    def interrupt_turn(self, session_id: str) -> bool:
+        ...
+
+    def build_recovery_command(
+        self,
+        *,
+        repository_root: Path,
+        model_id: str | None = None,
+        model_reasoning_effort: str | None = None,
+        command_override: str | None = None,
+    ) -> list[str]:
+        ...
+
+
+class ProviderRegistry:
+    """In-memory registry for provider definitions and runtime adapters."""
+
+    def __init__(self) -> None:
+        self._definitions: dict[str, ProviderDefinition] = {}
+        self._runtime_adapters: dict[str, RuntimeBackendAdapter] = {}
+
+    def register_provider_definition(self, definition: ProviderDefinition) -> ProviderDefinition:
+        """Register one provider definition without a runtime adapter."""
+        self._definitions[definition.provider_id] = definition
+        return definition
+
+    def register_runtime_adapter(self, adapter: RuntimeBackendAdapter) -> ProviderDefinition:
+        """Register one runtime backend adapter and its canonical definition."""
+        definition = adapter.provider_definition()
+        self._definitions[definition.provider_id] = definition
+        self._runtime_adapters[definition.provider_id] = adapter
+        return definition
+
+    def list_provider_definitions(self) -> list[ProviderDefinition]:
+        """Return all known provider definitions."""
+        return [self._definitions[provider_id] for provider_id in sorted(self._definitions)]
+
+    def get_provider_definition(self, provider_id: str) -> ProviderDefinition:
+        """Return one provider definition by canonical id."""
+        if provider_id not in self._definitions:
+            raise ProviderNotFoundError(f"Provider `{provider_id}` is not registered.")
+        return self._definitions[provider_id]
+
+    def get_runtime_adapter(self, provider_id: str) -> RuntimeBackendAdapter:
+        """Return the runtime backend adapter for one provider."""
+        if provider_id not in self._runtime_adapters:
+            raise ProviderNotFoundError(f"Runtime backend adapter `{provider_id}` is not registered.")
+        return self._runtime_adapters[provider_id]

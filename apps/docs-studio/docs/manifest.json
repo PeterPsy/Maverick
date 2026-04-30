@@ -1,0 +1,256 @@
+{
+  "schema_version": "1",
+  "sections": [
+    {
+      "id": "start-here",
+      "title": "Start here",
+      "pages": [
+        {
+          "id": "core-overview",
+          "title": "Core overview",
+          "icon": "core",
+          "summary": "A compact map of what the Maverick core owns and what belongs to apps.",
+          "source_path": "pages/start-here/core-overview.md"
+        },
+        {
+          "id": "development-workflow",
+          "title": "Development workflow",
+          "icon": "agreement",
+          "summary": "The working agreement for making safe, reviewable changes in Maverick.",
+          "source_path": "pages/start-here/development-workflow.md"
+        },
+        {
+          "id": "verification-checklist",
+          "title": "Verification checklist",
+          "icon": "check",
+          "summary": "Focused checks for core logic, app contracts, frontends, and generated artifacts.",
+          "source_path": "pages/start-here/verification-checklist.md"
+        }
+      ]
+    },
+    {
+      "id": "core-architecture",
+      "title": "Core architecture",
+      "pages": [
+        {
+          "id": "core-boundaries",
+          "title": "Core boundaries",
+          "icon": "core",
+          "summary": "The core is a headless platform layer, not a business application.",
+          "source_path": "pages/core-architecture/core-boundaries.md"
+        },
+        {
+          "id": "app-hosting",
+          "title": "App hosting",
+          "icon": "contract",
+          "summary": "How the core registers, installs, enables, and mounts apps without owning app behavior.",
+          "source_path": "pages/core-architecture/app-hosting.md"
+        },
+        {
+          "id": "runtime-and-providers",
+          "title": "Runtime and providers",
+          "icon": "bolt",
+          "summary": "Runtime sessions are core-owned; provider threads are backend-specific state.",
+          "source_path": "pages/core-architecture/runtime-and-providers.md"
+        },
+        {
+          "id": "core-domain-map",
+          "title": "Core domain map",
+          "icon": "core",
+          "summary": "A fuller explanation of the core domains, boundaries, and file ownership model.",
+          "source_path": "pages/core-architecture/core-domain-map.md"
+        },
+        {
+          "id": "core-control-plane",
+          "title": "Control plane versus data plane",
+          "icon": "workspace",
+          "summary": "How Maverick separates global control, workspace governance, and app-owned data.",
+          "source_path": "pages/core-architecture/core-control-plane.md"
+        },
+        {
+          "id": "core-recovery-observability",
+          "title": "Recovery and observability",
+          "icon": "shield",
+          "summary": "What the core should record, audit, and recover when runtime or app operations fail.",
+          "source_path": "pages/core-architecture/core-recovery-observability.md"
+        }
+      ]
+    },
+    {
+      "id": "workspace-model",
+      "title": "Workspace model",
+      "pages": [
+        {
+          "id": "workspace-root",
+          "title": "Workspace root",
+          "icon": "workspace",
+          "summary": "The workspace root is the tenant, filesystem, runtime, and app-data boundary.",
+          "source_path": "pages/workspace-model/workspace-root.md"
+        },
+        {
+          "id": "workspace-isolation",
+          "title": "Workspace isolation",
+          "icon": "shield",
+          "summary": "Sandboxed workspaces are bounded by their workspace root; default can be privileged by policy.",
+          "source_path": "pages/workspace-model/workspace-isolation.md"
+        },
+        {
+          "id": "workspace-files",
+          "title": "Files and gallery",
+          "icon": "doc",
+          "summary": "Workspace files are source-of-truth artifacts; indexes are derived metadata.",
+          "source_path": "pages/workspace-model/workspace-files.md"
+        }
+      ]
+    },
+    {
+      "id": "app-contracts",
+      "title": "App contracts",
+      "pages": [
+        {
+          "id": "contract-essentials",
+          "title": "Contract essentials",
+          "icon": "contract",
+          "summary": "The app contract is the executable promise between an app and the Maverick host.",
+          "source_path": "pages/app-contracts/contract-essentials.md"
+        },
+        {
+          "id": "surfaces-and-storage",
+          "title": "Surfaces and storage",
+          "icon": "palette",
+          "summary": "Apps declare frontend, backend, CLI, MCP, skills, widgets, hooks, storage, and lifecycle.",
+          "source_path": "pages/app-contracts/surfaces-and-storage.md"
+        },
+        {
+          "id": "cross-app-boundaries",
+          "title": "Cross-app boundaries",
+          "icon": "shield",
+          "summary": "Apps stay isolated; composition happens through the runtime, shell, references, widgets, CLI, or MCP.",
+          "source_path": "pages/app-contracts/cross-app-boundaries.md"
+        }
+      ]
+    },
+    {
+      "id": "surfaces",
+      "title": "App Surfaces",
+      "pages": [
+        {
+          "id": "surface-model",
+          "title": "Surface model",
+          "icon": "palette",
+          "summary": "The difference between frontend, backend, CLI, MCP, skills, widgets, hooks, and data events.",
+          "source_path": "pages/surfaces/surface-model.md"
+        },
+        {
+          "id": "http-cli-mcp",
+          "title": "HTTP, CLI, and MCP",
+          "icon": "contract",
+          "summary": "How core and app executable surfaces are discovered and invoked.",
+          "source_path": "pages/surfaces/http-cli-mcp.md"
+        },
+        {
+          "id": "reference-and-view-surfaces",
+          "title": "References and view state",
+          "icon": "doc",
+          "summary": "How apps expose stable entities and persisted view state without leaking private stores.",
+          "source_path": "pages/surfaces/reference-and-view-surfaces.md"
+        }
+      ]
+    },
+    {
+      "id": "sdk",
+      "title": "SDK",
+      "pages": [
+        {
+          "id": "sdk-overview",
+          "title": "SDK overview",
+          "icon": "agreement",
+          "summary": "The official path for creating, validating, registering, installing, and packaging apps.",
+          "source_path": "pages/sdk/sdk-overview.md"
+        },
+        {
+          "id": "sdk-templates",
+          "title": "SDK templates",
+          "icon": "doc",
+          "summary": "When to use minimal, React/Vite, data-app, widget, agent-tool, and entity-sqlite.",
+          "source_path": "pages/sdk/sdk-templates.md"
+        },
+        {
+          "id": "sdk-frontend-backend",
+          "title": "Frontend and backend",
+          "icon": "palette",
+          "summary": "How React/Vite frontends and JSON backend entrypoints should be shaped.",
+          "source_path": "pages/sdk/sdk-frontend-backend.md"
+        },
+        {
+          "id": "sdk-storage-packaging",
+          "title": "Storage and packaging",
+          "icon": "check",
+          "summary": "How SDK apps persist state, reject traversal, and package clean artifacts.",
+          "source_path": "pages/sdk/sdk-storage-packaging.md"
+        }
+      ]
+    },
+    {
+      "id": "app-ecosystem",
+      "title": "App ecosystem",
+      "pages": [
+        {
+          "id": "app-store",
+          "title": "App Store",
+          "icon": "contract",
+          "summary": "How remote catalog apps, server app sources, and workspace-local projects are managed.",
+          "source_path": "pages/app-ecosystem/app-store.md"
+        },
+        {
+          "id": "widgets",
+          "title": "Widgets",
+          "icon": "palette",
+          "summary": "How embeddable visual surfaces work without app-to-app source imports.",
+          "source_path": "pages/app-ecosystem/widgets.md"
+        },
+        {
+          "id": "cross-app-interfaces",
+          "title": "Cross-app interfaces",
+          "icon": "shield",
+          "summary": "How apps declare and consume capabilities by type without coupling to private data.",
+          "source_path": "pages/app-ecosystem/cross-app-interfaces.md"
+        }
+      ]
+    },
+    {
+      "id": "providers",
+      "title": "Providers",
+      "pages": [
+        {
+          "id": "provider-architecture",
+          "title": "Provider architecture",
+          "icon": "bolt",
+          "summary": "The provider abstraction supports runtime-style backends and hosted API-style providers.",
+          "source_path": "pages/providers/provider-architecture.md"
+        },
+        {
+          "id": "codex-provider",
+          "title": "Codex provider",
+          "icon": "core",
+          "summary": "The current concrete runtime backend and the constraints that keep it workspace-safe.",
+          "source_path": "pages/providers/codex-provider.md"
+        },
+        {
+          "id": "future-providers",
+          "title": "Claude Code, Gemini CLI, OSS, and API-key models",
+          "icon": "spark",
+          "summary": "How future providers fit the same abstraction without changing app architecture.",
+          "source_path": "pages/providers/future-providers.md"
+        },
+        {
+          "id": "provider-credentials",
+          "title": "Provider credentials and secrets",
+          "icon": "shield",
+          "summary": "How provider API keys and runtime credentials should be represented safely.",
+          "source_path": "pages/providers/provider-credentials.md"
+        }
+      ]
+    }
+  ]
+}

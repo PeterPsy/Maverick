@@ -1,0 +1,1893 @@
+# App Contract Architecture
+
+Date: 2026-04-17
+
+## Purpose
+
+Define the standard contract that every Maverick app must follow.
+
+This contract does not impose the internal data model of an app.
+
+The official App SDK is documented separately in `docs/architecture/app_sdk_architecture.md`.
+The SDK may generate and validate app contracts, but `app_contract.json` remains the source of truth and the core contract parser remains the enforcement point.
+
+It defines the minimum platform-facing structure needed so that apps remain:
+
+- installable
+- governable
+- workspace-scoped
+- isolated from each other
+- compatible with a headless core
+
+## Core Principle
+
+Every app must have:
+
+- a stable identity
+- a workspace-owned data root
+- a declared capability surface
+- a declared lifecycle
+- a clear boundary toward the core and toward other apps
+
+The platform must not force all apps into the same internal schema.
+
+The platform must require every app to describe how it behaves.
+
+Frontend rebuildability is derived from the frontend entrypoint and source tree, not a lifecycle flag.
+Apps with a declared frontend must provide a real source build that can regenerate the declared frontend artifact.
+Apps without a frontend do not expose the frontend rebuild operation.
+
+## Contract Versus Installation State
+
+The app contract is not the same thing as app installation state.
+
+Maverick should distinguish clearly between:
+
+- app source or project material
+- app distribution artifact
+- app contract metadata
+- app installation state in the core
+- app enablement state inside one workspace
+
+Examples:
+
+- a server-installed app store artifact may carry valid contract metadata before it is enabled in any workspace
+- a workspace-local app project may exist under `workspaces/<workspace_id>/apps/` before it becomes an active capability
+- an app may be installed but not enabled in a given workspace
+
+In workspace-facing surfaces, "installed" means the workspace has a binding to an app source and app-owned data may exist under `data/<local_app_id>/`. "Enabled" means that binding is actively mounted by the core. Disabled installed apps remain manageable by admins but are not shown to workspace users and are not mounted.
+
+The contract describes what the app is and how it behaves.
+
+The core installation system decides where that app is known, installed, enabled, disabled, upgraded, uninstalled, or reattached.
+
+## User-Facing App Routes
+
+Mounted app frontends have a canonical user-facing shell route:
+
+```text
+/app/<local_app_id>/<app_page>
+```
+
+This route belongs to the base shell and is served by the configured root shell app. It selects an enabled workspace app binding by its local mount id and forwards the optional app-owned page segment to the mounted iframe as `params.app_page` in the `maverick.app.navigate` message.
+
+The direct frontend mount remains:
+
+```text
+/apps/<local_app_id>/
+```
+
+That direct mount is an internal asset and iframe serving surface. It must remain available for app frontend assets, SPA fallback, widgets, and direct app availability checks, but it is not the canonical browser URL for workspace navigation.
+
+The public app id declared by the app artifact and the local app id used for one workspace binding are separate identities:
+
+- `public_app_id` is the catalog or source identity declared by the app contract and used for distribution, upgrade lineage, compatibility, and publisher ownership.
+- `local_app_id` is the workspace binding and mount identity chosen for one installation of that app in a workspace.
+- `mount_app_id` is the concrete route namespace exposed by the core host, normally equal to `local_app_id`.
+
+For built-in apps these values may be equal, but the architecture must not rely on that. A workspace may install two compatible forks or versions of the same public app under different local ids, and app contracts must not hardcode the local id they will be mounted under.
+
+Apps own the structure and meaning of `<app_page>`. The platform must not hardcode every app's internal route tree. An app that exposes deep links should translate its own page segments, such as `threads/<thread_id>` or `runtime-sessions/<runtime_session_id>`, into its internal state after receiving `maverick.app.navigate`.
+
+## App Distribution Sources
+
+Maverick supports two canonical app source locations:
+
+- installation-level app artifacts under `/apps`
+- workspace-local app projects under `workspaces/<workspace_id>/apps`
+
+The installation-level `/apps` directory is the server's app store, trusted bundle cache, and platform-installed app area.
+
+It may contain:
+
+- built-in platform apps such as `base-shell` and `chat`
+- closed commercial apps distributed as sealed artifacts
+- open-source or source-available apps distributed through the server app store
+- versioned app bundles validated by the core
+
+The Maverick App Store itself is also an app. Its UI, backend, CLI, MCP, skills, and workspace-owned state live under `apps/app-store` and `workspaces/<workspace_id>/data/app-store/`. It may present the remote catalog only through core-owned App Store APIs such as `/api/app-store/apps`; the app backend must not fetch the public catalog or submission transport directly. It may show installation-level server app sources that are not necessarily installed in the active workspace, show whether catalog apps are already installed in selected workspaces, show workspace-local app projects for the selected workspace context, open installed app frontends through generic shell navigation, and collect install, uninstall, complete workspace-local deletion, workspace assignment, and shortcut pinning choices, but it does not bypass platform boundaries: remote catalog retrieval, public submission transport, authenticated server source reads, authenticated installation state reads, checksum verification, source registration, workspace-local project registration, workspace binding, workspace-local project deletion, and uninstall binding removal remain generic core app-hosting operations.
+
+The workspace-level `workspaces/<workspace_id>/apps` directory is not the app store.
+
+It contains:
+
+- apps created directly inside that workspace
+- app projects under development for that workspace
+- workspace-local forks of store-installed apps
+- agent-modified app source material scoped to that workspace
+
+Installing an app from the server app store should create a workspace app binding.
+
+It should not automatically copy the app's full source tree into the workspace.
+
+Copying app source into `workspaces/<workspace_id>/apps/<app_id>/` should happen only when:
+
+- the app is declared `source_available` with `source_access: forkable`
+- the user or an authorized agent explicitly creates a workspace-local fork
+- the app was born as a workspace-local project
+
+Workspace app bindings and workspace-local projects are different concepts.
+
+The binding says the workspace can use an app capability.
+
+The workspace-local project says the workspace owns editable app source material.
+
+Workspace-facing aggregate surfaces must degrade per app when a binding points to source material that is no longer available.
+
+For example, `/api/apps`, `/api/status`, and widget discovery must skip an unavailable enabled app and continue returning the remaining workspace capabilities. Direct mounts for that unavailable app should return an app-unavailable response instead of leaking a filesystem exception or failing the whole shell.
+
+Hosted app isolation must treat unexpected app-hosting faults the same way operationally. If one app surface raises an unclassified exception during contract resolution, registry serialization, or frontend serving, the core must log it, exclude only that app from aggregate workspace surfaces, and keep the rest of the shell responsive. A direct shell mount failure for the configured root shell should degrade to `503 shell_unavailable`; a direct mount for any other app should degrade to `404 app_unavailable`. An unexpected exception must not bubble out of the hosted platform request path and take down the backend process.
+
+Built-in app bootstrap follows the same workspace-local isolation rule for declared compatibility. When a built-in app contract supports only a subset of workspace execution modes, the core must register the installation-level source but skip that app only for incompatible workspace bindings. A full-access workspace may still host sandbox-compatible apps; `full-access` in `compatibility.workspace_modes` is reserved for apps that require host/operator access and makes those apps ineligible for sandbox workspaces. A full-access-only operator app must not prevent sandbox workspaces from bootstrapping compatible shell and workspace apps.
+
+Complete deletion is intentionally narrower than uninstall.
+
+Uninstall removes only the workspace binding and preserves app-owned data by default. Complete deletion is valid for workspace-local app projects, where the workspace owns the app source. It must remove the workspace binding if present, delete `workspaces/<workspace_id>/data/<app_id>/`, delete the project directory under `workspaces/<workspace_id>/apps/<app_id>/`, and remove the workspace-local project record so the app no longer appears in the workspace-local catalog. Platform store apps and remote catalog entries are not deleted through a workspace-local delete action because their source is installation-level or external catalog state rather than workspace-owned material.
+
+Workspace-local discovery must be diagnosable. When the core scans `workspaces/<workspace_id>/apps/<app_id>/` and finds an `app_contract.json` that fails contract validation, the project must be reported to App Store management surfaces as an invalid local project with the validation error. Invalid projects must not silently disappear from the local app list because workspace-only agents need the parser error in order to repair the app contract.
+
+The core exposes a generic workspace-local registration surface for app projects born inside a workspace:
+
+```text
+POST /api/app-store/register-local
+```
+
+The request identifies an `app_id` and one owning workspace. The core resolves the project root as `workspaces/<workspace_id>/apps/<app_id>`, validates the canonical `app_contract.json`, and persists the workspace-local project record. This is distinct from installation:
+
+- registration makes the local project known to the app-hosting control plane
+- `POST /api/app-store/install-local` creates the workspace binding and enables the app
+- complete deletion removes the binding, app-owned data, project source, and project registration
+
+Workspace members may use workspace-local registration and installation when workspace governance allows custom apps and app installation. Platform admins and workspace admins may manage local projects when app installation is allowed. Remote catalog app installation and complete deletion of workspace-local project source remain app-management operations and must not be broadened by this workspace-local policy.
+
+## Distribution Mutability
+
+An app contract should declare its distribution and mutability expectations.
+
+The recommended distribution modes are:
+
+- `sealed`
+- `source_available`
+- `workspace_local`
+
+`sealed` apps are installed as non-editable artifacts.
+
+They may expose frontend, backend, MCP, and CLI surfaces, plus bundled skill templates, but their app source is not workspace-editable.
+
+This is the correct mode for commercial closed-source apps, signed vendor bundles, and apps distributed only as runtime artifacts.
+
+`source_available` apps are distributed by the server app store with source material available for inspection or forking.
+
+They can still run from the installation-level artifact while remaining centrally governed.
+
+If a workspace needs to customize the app, the core should create a workspace-local fork under `workspaces/<workspace_id>/apps/<app_id>/`.
+
+`workspace_local` apps originate inside a workspace and are editable workspace material.
+
+They may later be promoted into an installation-level distribution channel, but that promotion is an explicit packaging step, not an implicit side effect of local development.
+
+The first promotion flow is admin-only and control-plane owned:
+
+- source project stays in `workspaces/<workspace_id>/apps/<app_id>/`
+- promotion copies the full app directory into installation-level `apps/<app_id>/`
+- the copied contract is rewritten for the selected installation distribution:
+  - `sealed` -> `distribution.mode: sealed`, `source_access: none`
+  - `forkable` -> `distribution.mode: source_available`, `source_access: forkable`
+- the copied app is then registered as an installation-level `platform` source
+
+Promotion ownership is separate from contract distribution metadata:
+
+- the workspace-local project record persists its creator as the project owner
+- the first successful promotion claims that installation-level `app_id` for that owner
+- later promotions of the same `app_id` are treated as server-wide updates, not as a second independent app
+- only the original promoted-app owner may publish updates for that `app_id`
+- if another workspace forks and customizes the app, it must change the `app_id` before promotion so the result is a separate installation-level app
+- promotion must report a clear blocked reason when an existing installation-level `app_id` belongs to a different owner
+
+Promotion must never mutate the original workspace-local project in place.
+
+The app contract should make source access explicit.
+
+Source mutability is app-level distribution metadata, not actor-specific metadata.
+
+The contract should not declare separate actor-scoped mutability fields.
+
+If a source is editable, it is editable because its distribution mode and source access permit workspace-local editing under platform policy.
+
+If a source is not editable, neither users nor agents should bypass that through a contract field.
+
+For example:
+
+```json
+"distribution": {
+  "mode": "source_available",
+  "source_access": "forkable"
+}
+```
+
+For a sealed commercial app:
+
+```json
+"distribution": {
+  "mode": "sealed",
+  "source_access": "none"
+}
+```
+
+The core should enforce this at install, fork, upgrade, and workspace execution boundaries.
+
+## Completeness Baseline
+
+Contract validity is necessary but not sufficient.
+
+Every app tracked as a real Maverick product surface must also meet a repository completeness baseline:
+
+- a `README.md` in the app root describing the app purpose, declared surfaces, storage ownership, and SDK validation flow
+- at least one automated contract smoke check in the repository test suite
+- truthful `capabilities.skills` entries that match bundled skill template ids under `skills/` when `entrypoints.skills_root` is declared
+- documentation of intentional omissions when an app does not expose a backend, hooks, reference entities, data events, or persisted view surfaces
+
+This baseline keeps `app_contract.json`, the SDK, and human-facing documentation aligned.
+
+Host or control-plane-adjacent apps may intentionally expose fewer app-owned surfaces than stateful workspace apps, but the omission must be documented explicitly in the app README rather than left implicit.
+
+The SDK validation flow enforces the machine-checkable part of this baseline for source trees it creates, registers, installs, or packages. In addition to parsing the contract shape, SDK validation rejects app sources where declared CLI, MCP, frontend view, skills, reference-entity, view-state, or data-event capabilities do not line up with the corresponding entrypoints and standard contract conventions. Repository tests still cover the human-facing baseline items that cannot be inferred from the contract alone, such as README explanation quality and first-party smoke-test coverage.
+
+Upgrade and rebase are different operations.
+
+Normal upgrade should preserve a workspace-local fork and upgrade only against the fork's own source unless the operator explicitly requests a rebase to a store source.
+
+That rebase must still target the same `app_id`.
+
+The core must reject any upgrade or rebase that attempts to move a workspace binding for one app onto a source artifact for a different app.
+
+## Canonical Contract File
+
+The platform should treat the app contract file as the source of truth for executable app metadata.
+
+The recommended canonical file is:
+
+```text
+<app_root>/app_contract.json
+```
+
+The contract parser is strict for the declared contract version. Unknown root fields and unknown fields inside modeled sections such as `capabilities`, `entrypoints`, `storage`, `permissions`, lifecycle metadata, health metadata, rollback metadata, and widget declarations are validation errors rather than ignored extensions. Future extensions must be added to the versioned schema intentionally so app authors cannot declare apparently enforceable fields that the core silently drops during normalization.
+
+Installation-level built-in app discovery should be contract-driven.
+
+The platform may scan the installation-level `/apps` directory for app roots that contain a valid `app_contract.json`. This keeps first-boot app registration independent from hardcoded app id lists while still requiring every executable app to pass the same contract validation.
+
+Discovering an app contract does not make the app's business data part of the core. It only makes the app source eligible for registration, installation, and workspace binding through generic app-hosting flows.
+
+Examples:
+
+```text
+/apps/checklists/app_contract.json
+/apps/vendor-reporting/app_contract.json
+/workspaces/acme/apps/notes/app_contract.json
+```
+
+The core may persist a normalized snapshot of this contract in control-plane records for listing, auditing, or operator inspection.
+
+That snapshot is not the authoritative source for executable contract behavior.
+
+Install, reinstall, upgrade, validate, repair, export, import, and health decisions should resolve from the contract file in the app source root so the platform does not drift away from the app artifact it is actually operating.
+
+## Required App Identity
+
+Every app artifact must declare at least:
+
+- `app_id`
+- `name`
+- `version`
+- `description`
+- `publisher`
+- `provides`
+- `requires`
+- `capabilities`
+
+In the public contract file, `app_id` is the artifact's public app id. The normalized contract snapshot may also expose this as `public_app_id` to avoid confusing it with workspace-local binding ids.
+
+Workspace installation records must carry the local identities separately:
+
+- `public_app_id` from the source contract
+- `local_app_id` for the workspace binding and app-owned data namespace
+- `mount_app_id` for mounted HTTP, WebSocket, CLI, MCP, and widget route namespaces when it differs from `local_app_id`
+- source or binding metadata that links the local install to the installation-level artifact, workspace-local project, fork, or external bundle
+
+This identity separation is required for:
+
+- install flows
+- update flows
+- UI listing
+- audit
+- compatibility checks
+- workspace governance
+- multiple local installations or forks of the same public app
+
+The canonical public format for contract `app_id` and for local binding ids is lowercase kebab-case.
+
+Examples:
+
+- `restaurant-manager`
+- `table-ops`
+- `memory`
+
+Do not use underscores or mixed-case forms in the public contract file.
+
+When docs or examples use `data/<app_id>/` in a workspace context, `app_id` means the local workspace app id unless the text explicitly says `public_app_id`.
+
+## Workspace Data Ownership
+
+Every app installed in a workspace owns its data under:
+
+```text
+/workspaces/<workspace_id>/data/<app_id>/
+```
+
+This path is the owned data namespace for the app inside that workspace.
+
+The core should expose a canonical path helper for this namespace so apps and platform code resolve the same app-owned data root deterministically.
+
+The app may choose its own internal storage shape within that root.
+
+Examples:
+
+- SQLite database
+- DuckDB database
+- JSON document layout
+- JSONL append-only logs
+- directory-per-record layout
+- mixed storage models
+
+## Storage Declaration
+
+An app should declare its storage model in a minimal explicit way.
+
+The declaration should include at least:
+
+- `storage_kind`
+- primary storage paths or directories
+- index storage mode if indices are used
+- whether migrations are supported
+- whether export/import is supported
+
+Example values for `storage_kind`:
+
+- `sqlite`
+- `duckdb`
+- `json`
+- `jsonl`
+- `mixed`
+
+This declaration exists for transparency and tooling support, not to constrain the app's internal schema.
+
+If the app uses indices, it should also declare whether they are:
+
+- `embedded`
+- `file_based`
+
+## Recommended Storage Choices
+
+The platform should recommend:
+
+- `SQLite` as the default embedded database for most stateful apps
+- `DuckDB` for analytics-heavy local apps
+- `JSON` or `JSONL` for simple config, manifest, snapshot, or log-oriented data
+
+The app developer chooses the internal structure.
+
+The platform only standardizes where the app owns that structure.
+
+## Embedded App Databases
+
+If an app uses a database, the preferred model is an embedded database inside the app's workspace-owned data root.
+
+Examples:
+
+```text
+/workspaces/acme/data/checklists/app.db
+/workspaces/acme/data/table_manager/app.db
+/workspaces/acme/data/reports/analytics.duckdb
+```
+
+This database belongs to the app, not to the core platform.
+
+## Core Database Versus App Database
+
+The core platform database and app-owned storage must remain conceptually separate.
+
+The core database is for platform concerns such as:
+
+- auth
+- users
+- workspace registry
+- memberships
+- global audit
+- platform installation state
+- indexing and retrieval metadata
+- operational and control-plane state
+
+App-owned data should not be forced into the core database by default.
+
+## Capability Surface
+
+Every app should declare what it exposes to the platform and to the workspace.
+
+Examples:
+
+- MCP tools
+- CLI commands
+- skills
+- views
+- embeddable widgets
+- import/export hooks
+- health or maintenance hooks
+
+This declaration allows the platform to:
+
+- render app UI correctly
+- call app tools safely
+- understand which app owns which kind of content
+- understand which surface should be used for a given operation
+
+### Visibility Declaration
+
+App visibility is a platform policy hint declared in the app contract and enforced by the core host.
+
+The canonical optional shape is:
+
+```json
+"visibility": {
+  "platform_roles": ["admin"],
+  "workspace_roles": ["admin"],
+  "capabilities": ["manage_runtime_sessions"]
+}
+```
+
+Rules:
+
+- omitted `visibility`, or visibility with no role or capability restrictions, means the app is visible to every authenticated workspace member
+- `platform_roles` is a list of global platform roles, initially `admin` or `member`, and is reserved for platform-wide authority
+- `workspace_roles` is a list of active workspace membership roles, initially `admin` or `member`, and is the normal way to expose workspace-admin surfaces to a user who is not a platform admin
+- `capabilities` is a list of named workspace or platform capabilities enforced by the core visibility policy; unsupported capability names fail closed for non-platform callers
+- visibility affects app registry responses, mounted frontend/backend access, widgets, CLI discovery/invocation, MCP discovery/invocation, and compact app discovery
+- visibility also affects user-facing App Store catalog, installed-app, and workspace-local app listings
+- visibility does not move business logic into the core
+- visibility must not be implemented as app-specific conditionals such as `if app_id == "user-admin"`
+
+App Store management views may show restricted apps to users who can manage apps for the relevant workspace, such as platform admins or workspace admins.
+
+Users without app-management authority should see only apps they can actually mount or use. Workspace-local projects that are not installed are management material and should not be listed to ordinary members.
+
+An admin tool app can therefore be a normal sealed app under installation-level `/apps/<public_app_id>/` while user records, platform roles, sessions, memberships, and workspace governance remain core-owned control-plane state.
+
+The recommended mental model is:
+
+- `mcp/` = structured tool surface
+- `cli/` = command-oriented local surface
+- `skills/` = procedural skill templates that the Skills app can copy into workspace data
+
+Important distinction:
+
+- `mcp/` and `cli/` are executable capability surfaces
+- `skills/` is an instructional asset layer
+- `skills/` is not a runtime interface, security boundary, or governance surface by itself
+- runtime agents may use only workspace-owned skill copies under `data/skills/skills/`
+
+### Referenceable Entity Declaration
+
+Some apps own business objects that other apps may need to reference without taking ownership of their data.
+
+Examples:
+
+- Gallery owns uploaded files and generated artifacts.
+- Chat owns projects and chat-specific UI state; core runtime owns chat thread records and transcript events.
+- Agents owns agent types, agent instances, and prompt material.
+- A record-centric app may own accounts, contacts, deals, activities, and relationships.
+- Memory may link these records into a workspace knowledge graph.
+
+The app contract may declare referenceable entity metadata under `capabilities`. The supported optional shape is:
+
+```json
+"capabilities": {
+  "mcp_tools": [
+    "records_reference_manifest",
+    "records_reference_search",
+    "records_reference_resolve",
+    "records_reference_summarize"
+  ],
+  "cli_commands": [
+    "records"
+  ],
+  "reference_entities": [
+    {
+      "entity_type": "contact",
+      "display_name": "Contact",
+      "searchable": true,
+      "resolvable": true,
+      "summarizable": true,
+      "deep_link_supported": true
+    }
+  ]
+}
+```
+
+This declaration is metadata, not data access.
+
+Rules:
+
+- the owning app remains the source of truth for the entity
+- the referencing app stores only stable references and derived context it owns
+- the core must not read app-private data to resolve references
+- the core must not implement app-specific reference logic
+- referenceable entities must have stable `app_id`, `entity_type`, and `entity_id` identity
+- safe summaries must omit private fields the owning app does not intend to expose
+- authorization remains governed by the core and by the owning app surface being called
+
+Reference lookup behavior belongs to the owning app's CLI and MCP surfaces. A common convention should be used so apps such as Memory can consume references without app-specific integrations:
+
+```text
+<app_id>_reference_manifest
+<app_id>_reference_search
+<app_id>_reference_resolve
+<app_id>_reference_summarize
+```
+
+CLI commands should mirror the same behavior for lightweight, low-context local access:
+
+```text
+<app_id> references manifest
+<app_id> references search --type <entity_type> --query "..."
+<app_id> references resolve --type <entity_type> --id <entity_id>
+<app_id> references summarize --type <entity_type> --id <entity_id> --purpose memory_retrieval
+```
+
+The CLI surface is useful for runtime agents because it can be faster and avoids loading large MCP tool descriptions into context. MCP remains the structured tool surface and should expose equivalent behavior when the app supports references.
+
+Every app should expose at least a reference manifest through CLI and MCP. Apps with no referenceable entities should return an empty `entity_types` list. Search, resolve, and summarize may return a structured unsupported response when the manifest is empty. Apps with real workspace objects should implement all four reference operations.
+
+Apps that declare `reference_entities` must expose matching CLI or MCP reference behavior through the manifest, search, resolve, and summarize convention. A record-centric app may let Memory store a durable reference to a contact or deal while the owning app remains the source of truth for the structured business record.
+
+### Live Data Event Declaration
+
+Apps with mutable workspace data should declare the app-owned resources that emit live UI invalidation events under `capabilities.data_events`:
+
+```json
+"capabilities": {
+  "data_events": [
+    {
+      "resource": "records",
+      "description": "Emitted when the app's business records change through official app surfaces."
+    }
+  ]
+}
+```
+
+This declaration tells agents and host surfaces which app resources may publish the standard `maverick.app.data-changed` event. It is not a data subscription implementation by itself.
+
+Rules:
+
+- app data changes must go through official app backend, MCP, CLI, or lifecycle surfaces
+- direct writes into `data/<app_id>` are repair operations, not normal product behavior, because they bypass live events
+- write actions that mutate a declared resource may return `maverick.app.data-changed` with `resource`; the core stamps the current app as `owner_app_id`
+- the core must ignore app-returned events whose type is not allowed for that surface or whose `resource` is not declared in `capabilities.data_events`
+- mounted app frontends should listen on the core app-event WebSocket and refresh only the affected app/resource
+- frontends must not use periodic polling as their default live-update mechanism
+- app frontends that render generic runtime sessions for user-visible UI state must use the core runtime WebSocket snapshot and live frames; HTTP runtime reads are diagnostics or explicit operator refresh surfaces, not product bootstrap or realtime fallback paths
+- chat-style runtime frontends must treat the core runtime thread as the user-visible conversation record and maintain a strict one-thread-per-runtime-session invariant; they must not create app-owned placeholder conversations without a runtime session and must delete conversations through the core runtime thread cleanup surface so the provider process and session root are removed with the thread
+- `resource` values are lowercase slugs owned by the app contract
+- apps may declare multiple resources when different UI regions can update independently
+
+A record-centric app may declare `records` because accounts, contacts, deals, activities, relationships, and view state all affect the visible record surfaces.
+
+### Runtime Event Hooks
+
+Apps that create runtime sessions and need app-owned state to follow terminal runtime turns may opt in with an entrypoint hook:
+
+```json
+"entrypoints": {
+  "hooks": {
+    "runtime_event": "backend/app_backend.py"
+  }
+}
+```
+
+The core invokes this hook only for runtime sessions whose `source_app_id` matches the enabled workspace app binding. The hook receives terminal runtime events such as `runtime.turn.completed` and `runtime.turn.failed`, plus the `runtime_session_id`, `turn_id`, terminal status, final output text when available, and failure reason when available. Direct runtime turn submissions against a source-app session and backend restart recovery both dispatch a non-terminal `runtime.turn.queued` event when the core queues a new turn, so the source app can keep its app-owned projection pointing at the active turn before a later terminal event arrives.
+
+This hook is for app-owned projection state, not for changing the core runtime source of truth. For example, Fleet uses it to mark the matching workflow node complete and perform the same downstream handoff it would perform through `fleet_run_handoff`, even when no frontend is open. If a loop exit has already stopped the run, the app must not queue downstream work from the terminal event.
+
+Runtime event hooks are opt-in. The core must not call every source app backend for every turn, and apps must not read runtime persistence files directly to discover terminal status.
+
+### App Runtime Requests
+
+Apps that declare `permissions.runtime.create_sessions: true` may ask the platform host to create or reuse runtime sessions and submit asynchronous turns by returning a generic `runtime_session_requests` list from an app backend or hook result. The core applies these requests as platform runtime operations; it does not interpret app-owned workflow concepts such as Fleet nodes, edges, handoff text, loop goals, or queue state.
+
+Each request may include `agent_id`, optional `runtime_session_id`, `system_prompt` or a generic dependency-backed `system_prompt_request`, `skill_ids`, `input_text`, `app_references`, and a callback action. The platform stamps the created session with the requesting app as `source_app_id`, submits the turn through the core runtime, and invokes the app callback with the created `runtime_session_id` and `turn_id` or an error. The callback lets the app persist its own projection state without the core writing app-owned data.
+
+Apps may also return `runtime_turn_interrupt_requests` for turns that belong to a runtime session sourced by that same app. The core validates workspace and source-app ownership, performs the generic interrupt operation, records the runtime terminal event, and dispatches the same source-app runtime event hook. The app still owns any product-level decision to mark its own node, job, or workflow as stopped or failed.
+
+This is the correct boundary for headless app-owned orchestration. For example, Fleet decides which workflow node is ready and returns a runtime request for that node; the core only creates the runtime session/turn and calls Fleet back with the runtime identifiers. If Fleet later receives a terminal runtime event, Fleet decides whether to hand off, stop for a loop exit, or request the next runtime turn.
+
+Backend recovery may invoke a declared app hook such as `backend_recovery` on enabled apps. A hosted backend may also invoke a declared `background_tick` hook periodically for active workspaces. These hooks follow the same rule: they may return generic runtime requests, but all app-specific recovery, scheduling, and orchestration decisions remain inside the app backend.
+
+### View Composition Surface Declaration
+
+Referenceable entities let apps such as Memory understand and link app-owned records. Some apps also need to render a curated set of their own records in UI after an agent or another app has selected relevant references.
+
+This is a separate app-owned surface. The core must not decide which business records, message threads, Memory nodes, or Gallery files belong in a view. The selecting agent or app composes stable references by using reference surfaces, then asks the owning app UI to render that set through a declared view composition surface.
+
+Apps that support externally composed views may declare view surfaces under `capabilities.view_surfaces`:
+
+```json
+"capabilities": {
+  "views": ["gallery"],
+  "reference_entities": [
+    {
+      "entity_type": "file",
+      "display_name": "Workspace File",
+      "searchable": true,
+      "resolvable": true,
+      "summarizable": true,
+      "deep_link_supported": true
+    }
+  ],
+  "view_surfaces": [
+    {
+      "view_id": "gallery",
+      "display_name": "Gallery",
+      "entity_types": ["file"],
+      "state_actions": [
+        {
+          "action": "view_filter",
+          "standard": true,
+          "description": "Read the current Gallery view state without scanning workspace storage."
+        },
+        {
+          "action": "set_view_filter",
+          "standard": true,
+          "description": "Set keyword, role, and kind filters for the Gallery view."
+        },
+        {
+          "action": "set_custom_view",
+          "standard": true,
+          "description": "Show a curated set of Gallery file references."
+        },
+        {
+          "action": "clear_custom_view",
+          "standard": true,
+          "description": "Return Gallery to normal search mode."
+        },
+        {
+          "action": "toggle_preview_density",
+          "standard": false,
+          "description": "Example of an app-specific Gallery view enhancement."
+        }
+      ],
+      "supports_custom_view": true,
+      "supports_filter_refinement": true
+    }
+  ]
+}
+```
+
+Rules:
+
+- `view_id` must identify a mounted app view declared in `capabilities.views`
+- `entity_types` must reference entity types declared in `capabilities.reference_entities`
+- each `state_actions` entry must declare an `action`, a boolean `standard`, and a human-readable `description`
+- `standard: true` means the action follows a Maverick-wide view-composition semantic contract and agents may call it consistently across apps that declare it
+- `standard: false` means the action is app-specific; agents may use it only after reading that app's declaration and should not assume other apps expose the same behavior
+- the owning app stores and interprets its own view state under `data/<app_id>/`
+- `set_custom_view` should accept a title plus stable references for the declared entity types
+- `set_view_filter` may refine the current custom view when the app supports filter refinement
+- `clear_custom_view` should return the app to its normal view mode
+- the core validates only the contract shape and invokes declared app entrypoints; it does not inspect app-owned view state or app business records
+
+The shared standard action names mirror the reference convention:
+
+```text
+view_filter
+set_view_filter
+set_custom_view
+clear_custom_view
+```
+
+Concrete CLI and MCP command syntax may remain app-specific while `standard: true` action names and payload semantics stay common. Apps can add richer UI operations by declaring additional `standard: false` actions. Apps such as Gallery and Memory implement these standard view surfaces: agents can build a custom Gallery file view, record-centric view, or Memory graph view from topic search, Memory context, record references, message references, or any other app-owned evidence without the rendering app needing to know why those records were selected.
+
+A record-centric app can declare the same standard view actions for `account`, `contact`, `deal`, and `activity` references. Its custom view payload stores typed refs such as:
+
+```json
+{
+  "action": "set_custom_view",
+  "title": "Acme pursuit",
+  "refs": [
+    {"app_id": "records", "entity_type": "account", "entity_id": "account_123"},
+    {"app_id": "records", "entity_type": "deal", "entity_id": "deal_456"}
+  ]
+}
+```
+
+## Mounted App Model
+
+In Maverick, everything above the core should be treated as an app.
+
+This includes:
+
+- end-user apps such as `chat`
+- operator-facing apps
+- agent-facing capability apps
+- shell apps that host or frame other app frontends
+
+The core does not become the UI product itself.
+
+The core is the platform host that mounts app surfaces.
+
+Each app may expose one or more of these surface families:
+
+- `frontend/`
+- `backend/`
+- `mcp/`
+- `cli/`
+- `skills/`
+
+The app contract should describe which of these surfaces exist and how the core should mount them.
+
+This means an app is not limited to being:
+
+- only a visual frontend
+- only an API backend
+- only an agent tool surface
+
+One app may expose all of them at the same time.
+
+It is not required that every app expose all of them.
+
+The rule is:
+
+- every app must declare its real surfaces explicitly
+- the core mounts only the surfaces actually declared by that app
+
+Examples:
+
+- `chat` may expose a frontend for the user, a backend for app-specific server logic, MCP tools for agents, CLI commands for operators or agents, and bundled skill templates that the Skills app can copy into workspace data
+- `base-shell` may expose a frontend shell that hosts the frontend of other apps while still being itself only another app mounted by the core
+
+The core remains responsible for:
+
+- installation
+- enablement
+- mounting
+- auth and session context
+- workspace context
+- policy enforcement
+- lifecycle orchestration
+
+The app remains responsible for:
+
+- its own domain model
+- its own frontend behavior
+- its own backend logic
+- its own CLI and MCP behavior
+- its own workspace-owned data under `data/<app_id>/`
+
+## Frontend And Backend Surfaces
+
+An app may ship a standalone frontend and a standalone backend while still being mounted by the core.
+
+The intended model is:
+
+- the core is the public platform host
+- the core exposes mounted app routes
+- the frontend of the app is served to the user through the platform host
+- the backend of the app is routed through the platform host
+
+The app backend is not the core.
+
+The app frontend is not the core.
+
+But both live under the governance and routing model of the core.
+
+Mounted app backend requests are app-domain calls, not runtime turns.
+
+Mounted app backend entrypoints are still host-managed subprocess work. During ASGI host shutdown, the core must terminate any live mounted backend subprocess trees cooperatively so restarts do not depend on forced `systemd` kills.
+
+The platform host may provide workspace, data-root, request, and active-provider context to the backend entrypoint, but ordinary backend polling, CRUD, settings, and widget actions must not create runtime sessions, runtime turns, or runtime events. Runtime records are reserved for explicit runtime execution through the generic runtime APIs.
+
+For the first deployment model, the simplest canonical shape is:
+
+- `/` for the platform host or shell entrypoint
+- `/apps/<local_app_id>/...` for mounted app frontend routes
+- `/api/apps/<local_app_id>/...` for mounted app backend routes
+- `MCP` and `CLI` surfaces mounted by the core from the same app contract
+
+The exact production routing layer may be implemented behind `nginx`, but the mount model should remain canonical at the platform level.
+
+## Human Surface Versus Agent Surface
+
+The same app may need to serve both humans and agents.
+
+The intended split is:
+
+- `frontend/` for human-facing visual interaction
+- `backend/` for app-specific server logic
+- `mcp/` and `cli/` for agent and operator execution surfaces
+- `skills/` for skill templates owned by the app source but copied into workspace Skills app data before runtime use
+
+This is a core design principle.
+
+Apps in Maverick are not just mini-sites.
+
+They are platform extensions that can be:
+
+- visual
+- executable
+- agent-usable
+- operator-usable
+
+at the same time.
+
+## Frontend Hosting Apps
+
+Some apps may primarily act as host shells for other app frontends.
+
+This is still an app concern, not a core concern.
+
+For example, a `base-shell` app may:
+
+- expose the main frontend shell
+- provide layout, app navigation, and visual composition
+- mount or frame the frontend routes of other enabled apps
+
+That does not make `base-shell` part of the core.
+
+It remains an app mounted by the core like every other app.
+
+This rule matters because the Maverick product shell should still be replaceable, versionable, and governable as an app.
+
+## Secret references
+
+If an app depends on external credentials or provider secrets, the app may declare secret references as part of its configuration model.
+
+The app does not own the secret values themselves.
+
+The app only owns the references it expects to use.
+
+Secret values remain under platform control and must not be stored inside the app-owned workspace data root.
+
+Mounted app backends may request app-scoped secret writes through the generic entrypoint result contract. The core persists or rotates the raw value in the platform secret store, binds it to the current `(workspace_id, app_id, logical_name)`, strips the raw write from the HTTP response, and returns only non-sensitive metadata. On later mounted backend, CLI, or MCP calls, the core may deliver only secrets bound to that same app scope through the entrypoint payload. App CLI and MCP entrypoints must consume that delivered `app_secrets` payload; they must not import core secret-store internals, read configured control-plane secret collections directly, or reconstruct secret values from control-plane files.
+
+This capability is provider-agnostic. OAuth providers, token shapes, refresh semantics, and account metadata remain app-owned behavior.
+
+## Operational Permissions
+
+Capabilities describe what an app can expose. Permissions describe what the platform may allow that app surface to do.
+
+Every app that needs privileged operational behavior should declare those needs explicitly instead of relying on hidden code paths or broad backend trust.
+
+The contract supports a required, strict `permissions` section for platform-governed operations such as:
+
+- app-scoped secret read or write requests
+- outbound network access classes or allowed hosts
+- host telemetry, process, or filesystem inspection outside the workspace data root
+- runtime session creation, interrupt, cleanup, or recovery actions
+- workspace file read/write outside the app-owned data root
+- app backend subprocess execution requirements
+- lifecycle hooks that mutate app data, workspace storage, or platform state
+
+Permissions are requests, not authority by themselves. The core must combine declared permissions with workspace governance, user/session authority, source trust level, and execution mode before mounting or invoking the surface.
+
+Apps that do not declare a permission in that section must be treated as not needing it. The core fails closed for unknown permission fields and for privileged operations attempted without a matching declaration.
+
+Example shape:
+
+```json
+"permissions": {
+  "secrets": {
+    "read": ["oauth_account"],
+    "write": ["oauth_account"]
+  },
+  "network": {
+    "outbound": ["api.vendor.example"]
+  },
+  "runtime": {
+    "create_sessions": false,
+    "cleanup_sessions": true
+  },
+  "host": {
+    "telemetry": false
+  }
+}
+```
+
+## Lifecycle Declaration
+
+Every app should declare which lifecycle operations it supports.
+
+Examples:
+
+- install
+- uninstall
+- upgrade
+- migrate
+- export
+- import
+- validate after import
+- repair after import
+- health check
+- runtime session cleanup
+- data cleanup
+
+The goal is not to force every hook to exist.
+
+The goal is to make lifecycle behavior explicit and automatable.
+
+Lifecycle and cleanup hooks are app-owned behavior declared in the contract and invoked by the core only through generic lifecycle orchestration.
+
+The core must not hardcode one app, such as Chat, into runtime cleanup. If app-owned metadata or files need cleanup when a runtime session is deleted, the app declares a lifecycle or capability hook such as `runtime_session_cleanup`, and the core invokes every enabled app that declares that hook with a generic context containing `workspace_id`, `local_app_id`, `public_app_id`, `runtime_session_id`, and canonical runtime paths. The app decides how to clean its own records under `data/<local_app_id>/`.
+
+Cleanup hooks must be idempotent, bounded by hook timeout, and authorized by the same app contract and workspace governance rules as other lifecycle hooks.
+
+## Executable Contract Requirements
+
+To be a real platform contract, the app contract should also declare executable integration details.
+
+At minimum, the contract should support:
+
+- `contract_version`
+- `minimum_core_version`
+- `entrypoints`
+- `permissions`
+- `hook_timeouts`
+- `failure_semantics`
+- `compatibility`
+- `health_contract`
+- `rollback_support`
+
+### Contract version
+
+The app contract should declare its own contract schema version.
+
+This allows the core to evolve contract handling safely over time.
+
+### Minimum core version
+
+The app contract should declare the minimum core version required to install or run the app.
+
+This allows deterministic compatibility checks during install and upgrade.
+
+### App interfaces and cross-app dependencies
+
+Apps may declare platform-visible interfaces with top-level `provides` and `requires` arrays.
+
+`provides` describes interface types the app can satisfy. It is not a dependency on a specific consumer app.
+
+```json
+"provides": [
+  {
+    "interface": "file.catalog",
+    "version": "1",
+    "description": "Lists workspace files exposed by this app.",
+    "surfaces": ["backend", "reference"]
+  }
+]
+```
+
+`requires` describes interface types the app needs from whichever enabled provider app the workspace selects.
+
+```json
+"requires": [
+  {
+    "alias": "file-providers",
+    "interface": "file.catalog",
+    "version": "^1",
+    "required": true,
+    "cardinality": "many",
+    "description": "File catalog providers available to this workflow app."
+  }
+]
+```
+
+Rules:
+
+- interface identifiers use dotted lowercase names such as `agent.catalog`, `file.preview`, or `file.content.write`
+- version requirements support exact versions and compatible major ranges such as `^1`
+- `cardinality: "one"` requires exactly one selected provider; `cardinality: "many"` allows multiple selected providers
+- optional requirements may be left unset without blocking app launch
+- `surfaces` must reference surfaces the provider contract actually exposes
+- consumers must refer to dependency selections by alias, not by hardcoded app id
+
+The core resolves these declarations against enabled workspace app bindings and stores only workspace-scoped provider selections. It does not know the product semantics of `agents`, `gallery`, `drive`, or any other app.
+
+The base shell owns the human setup flow for unresolved dependencies. It can show candidate provider apps filtered by interface type and persist the selected provider app ids through the generic core dependency API. Mounted apps receive the resolved dependency payload through shell messages and may also read it from the generic dependency API.
+
+### Entrypoints
+
+The contract should declare the entrypoints for the executable app surfaces it actually supports.
+
+Examples:
+
+- MCP server entrypoint
+- CLI entrypoint
+- backend entrypoint
+- frontend entrypoint or frontend asset root
+- lifecycle hook entrypoints
+- health check entrypoint
+
+`skills/` does not need an execution entrypoint in the same sense.
+
+It should instead declare where its instructional assets live.
+
+For the first local implementation, executable app entrypoints use a deterministic subprocess convention:
+
+- the core resolves the declared entrypoint path inside the app root
+- the core invokes that entrypoint as a local executable script with the current core interpreter
+- the core passes a JSON payload on standard input
+- the entrypoint returns a JSON object on standard output
+
+This convention applies to app-owned MCP and CLI entrypoints in the initial implementation.
+The core-provided payload is the authority for `workspace_id`, `app_id`, runtime context, data roots, generated/uploaded storage roots, and delivered app-scoped secrets. App entrypoints must reject missing required context instead of falling back to a workspace such as `default`, and they must not trust caller arguments or HTTP bodies for platform-owned context fields.
+
+For mounted frontend and backend surfaces, the same principle applies:
+
+- the contract must declare what the surface root or entrypoint is
+- the core must mount it explicitly
+- the app must not rely on implicit repo conventions unknown to the platform
+
+For the first implementation, it is acceptable for the frontend declaration to identify either:
+
+- a frontend asset root
+- a frontend build output root
+- a frontend dev or preview entrypoint
+
+and for the backend declaration to identify either:
+
+- a callable entrypoint script
+- or a backend surface root that the core knows how to host
+
+The important rule is not the packaging style.
+
+The important rule is that the mount contract is explicit and comes from the app contract.
+
+### Frontend distribution artifacts
+
+For apps that ship a frontend, the contract should distinguish between source and served artifact when that distinction matters.
+
+Simple apps may point `entrypoints.frontend` directly at a static asset root.
+
+Buildable apps such as React/Vite apps should declare the production build output as the mounted surface.
+
+The source root may remain available for development, fork, audit, or agent customization only when the distribution mode allows it.
+
+Recommended production shape:
+
+```text
+apps/<app_id>/
+  app_contract.json
+  frontend/
+    src/
+    dist/
+```
+
+In that shape, the platform host should mount `frontend/dist/`, not the TypeScript source tree.
+
+For the first real `base-shell` port, `frontend/dist` is the canonical production mount target.
+
+The `base-shell` source may use React, TypeScript, and Vite internally, but the core must only serve the declared static build output.
+
+For sealed built-in apps, the repository may keep both the app source needed to rebuild the artifact and the generated `frontend/dist` artifact used by the hosted core.
+
+The generated artifact is part of the app store payload, not part of the core package.
+
+The build source remains app-owned and must not introduce framework-specific assumptions into the core host.
+
+For the first frontend build operation, the core supports app sources that declare a frontend entrypoint and contain a `package.json` with a real `build` script either at the app root or at the frontend source root. The core runs the build from that package root only through an authenticated full-access or operator-authorized host path, verifies that the declared frontend artifact root exists, and only then emits `maverick.app.frontend-changed`.
+
+Mounted app registry, frontend documents, and backend routes are authenticated workspace surfaces. Anonymous requests may load the root shell, the configured root-shell app document, and session endpoints, but `/api/status`, `/api/apps`, direct non-shell app document mounts such as `/apps/<app_id>/`, and `/api/apps/<app_id>/backend` require a valid user session. App and widget frontend HTML documents must be served with `Cache-Control: no-store` because they point at the current built asset hashes and must not pin clients to obsolete bundles after an official frontend rebuild. Static built frontend assets under `/apps/<app_id>/assets/...` and non-HTML static files emitted into the frontend artifact root are public cacheable artifacts and must not contain user, workspace, secret, or app-data payloads. They may be served with cross-origin headers so sandboxed iframes, widget iframes, and Vite-generated `crossorigin` module/style tags can load the app bundle without needing session cookies on every asset request. Workspace-local editable backend entrypoints are additionally workspace-admin gated until a dedicated app backend sandbox/governance model is available.
+
+The `base-shell` UI/UX is the visual and interaction reference for the mounted shell.
+
+The shell should preserve the intended shell experience, layout behavior, sidebar composition, workspace/app panels, and responsive behavior where those concepts are still valid.
+
+The `base-shell` intentionally does not include a topbar. Provider, runtime, workspace, and status metadata must be exposed through generic settings or app-owned surfaces instead of leaving a hidden topbar component behind.
+
+The shell must not preserve obsolete runtime coupling, app-specific API assumptions, auth shortcuts, or non-contract manifest formats.
+
+The shell attaches only to platform protocols such as:
+
+- `/api/session`, `/api/auth/login`, and `/api/auth/logout` for session state
+- `/api/workspaces` and `/api/workspaces/active` for workspace selection
+- `/api/apps` for enabled app registry data
+- `/api/status` for platform status
+- `/api/providers/active` and `/api/runtime/status` for runtime provider indicators
+- `/api/settings/platform` for generic settings metadata
+- `/api/recovery/status` and related recovery routes for operator status where appropriate
+- mounted app frontend routes under `/apps/<local_app_id>/`
+- mounted app backend routes under `/api/apps/<local_app_id>/...`
+
+The shell must derive app navigation from registry records such as `local_app_id`, `public_app_id`, `name`, `description`, `views`, `frontend_mount`, `backend_mount`, and optional icon or logo metadata.
+
+The `base-shell` port may retain shell-owned local preferences in the browser, such as the last active app and sidebar state.
+
+Those preferences are shell UI state only. They are not core workspace records, app installation state, provider configuration, or app-owned backend data.
+
+Pinned app shortcuts are not shell-owned browser preferences. They are App Store app data, exposed through an App Store-owned sidebar widget that `base-shell` mounts through the generic widget registry.
+
+Mounted app frontends should be treated as stable app documents after first open.
+
+The shell should not force internal app navigation by mutating iframe `src` with app-owned query parameters.
+
+Instead, host apps should keep the iframe mounted and send a generic browser message:
+
+```json
+{
+  "type": "maverick.app.navigate",
+  "app_id": "chat",
+  "params": {
+    "thread_id": "thread_123"
+  }
+}
+```
+
+Rules:
+
+- `type` identifies the generic host-to-app lifecycle message
+- `app_id` must match the target mounted app
+- `params` contains only explicit scalar navigation data
+
+Mounted app frontends should acknowledge readiness with the matching app-owned lifecycle message:
+
+```json
+{
+  "type": "maverick.app.ready",
+  "app_id": "chat"
+}
+```
+
+The host should resend the latest pending navigation params for that app when it receives `maverick.app.ready`, but repeated readiness messages for the same app, frame, and navigation signature must not fan out duplicate navigation deliveries.
+
+This avoids losing navigation requests when an app iframe is freshly mounted after login, logout, refresh, or recovery and the host message arrives before the app has installed its listener.
+- the host may know the target `app_id`, but must not know app-private storage or route internals
+- the receiving app owns interpretation of `params`
+- the receiving app must ignore messages from unexpected origins
+
+The initial iframe URL remains the registry-provided `frontend_mount`.
+
+Shell-mounted app and widget iframes may use browser sandboxing, but they must preserve access to their own mounted frontend assets. The shell sandbox must include `allow-same-origin` so app documents can behave as same-origin clients for core APIs. Without that token, the browser assigns the iframe an opaque `null` origin, authenticated same-origin API calls fail as CORS/401 errors, and targeted `postMessage` delivery to the mounted app or widget can fail. The static asset route still needs to tolerate opaque `null` origins because old mounted frames, widget frames, or browser module/style CORS behavior may request `/apps/<local_app_id>/assets/...` without session cookies; those asset responses should be cross-origin readable and must never carry user-specific data.
+
+The shell must notify mounted app and widget iframes when their host surface becomes visible or hidden by sending `maverick.app.visibility-changed`. App frontends must treat hidden as a signal to suspend nonessential intervals, runtime replay, and background refresh. Hidden iframes may keep state in memory, but they must not continue live polling as if they were the active work surface.
+
+Apps that declare a frontend entrypoint may be rebuilt through the official core app-hosting frontend build operation when they provide a real build script. After a successful rebuild, the core publishes `maverick.app.frontend-changed` on the app event WebSocket. The shell should react to that event by remounting only the affected app iframe and shell-hosted widget iframes owned by that app with a shell-owned cache-busting query parameter. This refresh path is for updated frontend artifacts after rebuilds. It must not be used for app-owned internal navigation, must not poll mounted frontend documents, and must not require a full shell page reload for already-mounted app or widget iframes.
+
+This avoids unnecessary reloads, keeps app state alive, and preserves a clean core/app boundary.
+
+Shell panels that configure users, retrieval, notifications, backend restarts, or chat internals should live behind their own app contracts or generic core surfaces, not hardcoded inside `base-shell`.
+
+When capabilities become available, they should be exposed through their own app contracts or generic core surfaces, then discovered or mounted by `base-shell` through the same registry-driven mechanism.
+
+The initial shell may include login, workspace selection, provider/runtime indicators, and generic settings only because those are backed by generic core APIs rather than shell-private backend assumptions.
+
+Chat projects and project action buttons must not be implemented in `base-shell`; they belong to the chat app.
+
+It must not create fake installed state for product apps that are not present in the registry.
+
+The core remains responsible for routing, install state, enablement, policy, and app registry data.
+
+The shell remains responsible only for visual composition and user interaction.
+
+The contract may start with a simple path:
+
+```json
+"entrypoints": {
+  "frontend": "frontend/dist"
+}
+```
+
+As the contract matures, frontend declarations may become structured:
+
+```json
+"entrypoints": {
+  "frontend": {
+    "kind": "static_build",
+    "source": "frontend",
+    "mount": "frontend/dist",
+    "spa_fallback": true
+  }
+}
+```
+
+The core must remain frontend-framework agnostic.
+
+It should not know whether a build artifact came from React, Vue, Svelte, static HTML, or another frontend stack.
+
+It should only know how to mount the declared frontend artifact.
+
+## Embeddable Widget Surfaces
+
+Some apps may expose small visual surfaces intended to be embedded inside another app's UI.
+
+The first known case is chat structured content:
+
+- the runtime emits or stores a structured message payload
+- the payload has a stable `kind`
+- an installed app declares that it can render that `kind`
+- the chat app renders the matching app-owned widget surface
+
+App-owned surfaces may return a generic `chat_render` object when they create or recall content meant for chat. The runtime bridge treats that as structured output by copying `chat_render.kind` and `chat_render.payload` into provider-agnostic structured content. Agent-message completions may also return the same envelope, or a direct `structured_content` envelope with the same `kind` and `payload`, and the runtime bridge must normalize both forms identically. Host apps still discover renderers through the widget registry; `chat_render` is not permission for Chat to special-case the producing app.
+
+This is an app surface model, not app-to-app communication.
+
+The embedding app does not import source code from the widget owner.
+
+The embedded widget does not call private APIs of the embedding app.
+
+The core remains responsible for:
+
+- validating the widget declaration in the app contract
+- publishing enabled widget metadata through the app registry
+- mounting or routing the widget surface according to workspace enablement
+- enforcing auth, workspace context, and install state before a widget can load
+
+Host apps may forward generic app data invalidation messages to widgets when the invalidation belongs to the widget owner.
+
+Core-owned runtime data should use core realtime transports instead of app invalidation messages. For example, Chat full app and widgets subscribe to `WS /ws/runtime/threads` for initial and live thread catalog state; active thread selection can be mirrored with an app-owned UI message such as `maverick.chat.active-thread-changed`, but the thread records themselves must not be refreshed through `maverick.app.data-changed`.
+
+A shell-hosted floating widget follows the same rule. The shell may reserve a visual overlay slot, such as a bottom-right holder, but the embedded app still owns the widget declaration, renderer, backend actions, and persisted state. The shell selects the widget through the registry by `host` and `content_kind`; it must not import the widget owner's source or call private app APIs.
+
+When a shell overlay widget needs awareness of the user's current work surface, the shell may pass the currently mounted app as explicit widget context. That context should include registry-level metadata only, such as app id, name, description, and views. The shell should suppress a widget whose owner app is already the mounted app, because embedding an app's helper inside that same app usually duplicates the active experience.
+
+A floating widget may be only a thin app-owned frame around the owning app's normal frontend. For example, a chat-owned floating assistant can render the normal Chat app inside a collapsible widget frame. Frame-level controls such as choosing the active core runtime thread or creating a new empty chat may live in that widget frame, while composer behavior, Markdown rendering, attachments, and transcript rendering stay in the Chat app instead of being copied into a separate mini-chat implementation. Runtime ownership stays in the core.
+
+If a shell-hosted widget needs to attach a screenshot of the currently visible work surface, the widget may request a shell-mediated area capture. The shell owns the drag-selection overlay and returns a generic image file to the requesting widget. This capture path must not inspect the mounted app iframe DOM; it is a visual fallback that works across apps without app-specific selection protocols.
+
+This is not direct app-to-app communication: the shell only relays a generic invalidation event and does not read or write app data.
+
+The app that owns the widget remains responsible for:
+
+- rendering the widget frontend
+- interpreting the structured payload it supports
+- calling its own backend, MCP, or CLI surfaces for widget actions
+- storing widget-owned state under `data/<widget_app_id>/`
+
+The embedding app remains responsible for:
+
+- deciding where the widget appears in its own UI
+- passing the structured payload and host context to the widget
+- providing a safe fallback if no matching widget exists
+- avoiding direct imports from the widget app
+
+For chat, this means compile-time imports such as:
+
+```text
+../../*/chat/*widget.tsx
+```
+
+must not be introduced.
+
+That pattern makes the chat app aware of other apps' source trees and breaks the standalone app boundary.
+
+The model should be registry-driven.
+
+An app contract may declare widgets with a structure like:
+
+```json
+"widgets": [
+  {
+    "widget_id": "design-checklist",
+    "host": "chat",
+    "content_kinds": ["checklist.design"],
+    "frontend": {
+      "kind": "iframe",
+      "mount": "frontend/dist/widgets/design-checklist",
+      "spa_fallback": true
+    },
+    "actions": {
+      "backend": true,
+      "mcp": false,
+      "cli": false
+    }
+  }
+]
+```
+
+The exact schema can evolve, but the stable concepts are:
+
+- `widget_id` identifies the widget inside its owning app
+- `host` identifies the host UI family it is designed for, such as `chat`
+- `content_kinds` declares which structured payload kinds it can render
+- `frontend` declares how the core can mount it
+- `actions` declares which official surfaces the widget may use for mutations
+
+Initial contract validation rules:
+
+- `widget_id` must be unique within the owning app contract
+- `widget_id` must be a stable slug and must not contain path traversal
+- `host` must be a stable slug such as `chat`
+- every `content_kind` must be a non-empty dotted string such as `checklist.design`
+- `frontend.kind` initially supports only `iframe`
+- `frontend.mount` must be a relative path under the app source root and should normally point under `frontend/dist`
+- `frontend.spa_fallback` controls whether missing widget frontend paths fall back to the widget `index.html`
+- `actions.backend`, `actions.mcp`, and `actions.cli` may only be true when the owning app declares the corresponding surface
+- widget declarations must not name files, routes, or storage locations owned by the embedding app
+- widget declarations are ignored unless the owning app is installed and enabled in the current workspace
+
+If multiple installed apps declare widgets for the same `host` and `content_kind`, the host must use deterministic registry ordering or a workspace preference.
+
+The default fallback must always exist.
+
+For chat, the fallback is a generic structured message card that shows the payload in a readable form.
+
+### Widget Runtime Contract
+
+An embedded widget should receive only explicit host context.
+
+Recommended initial context:
+
+```json
+{
+  "workspace_id": "acme",
+  "host_app_id": "chat",
+  "owner_app_id": "checklists",
+  "widget_id": "design-checklist",
+  "message_id": "msg_123",
+  "content": {
+    "kind": "checklist.design",
+    "payload": {}
+  }
+}
+```
+
+For iframe-based widgets, the context may be passed by:
+
+- signed context token returned by the core widget context endpoint
+- initial `postMessage`
+- backend bootstrap endpoint scoped to the mounted widget
+
+The widget must not receive broad app registry data unless it needs it and the core explicitly exposes it.
+
+The initial core implementation uses:
+
+- `GET /api/apps/widgets?host=<host>&content_kind=<kind>` for workspace-scoped widget discovery
+- `GET /api/apps/widgets/<owner_app_id>/<widget_id>/frontend/...` for controlled iframe frontend mounting
+- `POST /api/apps/widgets/context` to create a signed context token after validating workspace, authenticated user, requested host surface, widget owner, widget id, and content kind
+- `GET /api/apps/widgets/context/<token>` to read the explicit context from the widget iframe without exposing source paths or registry internals
+
+Widgets are reusable app-owned surfaces. Any authenticated app frontend may discover a compatible widget and request a context token for the widget's declared host surface and content kind. The signed context token is not proof of the requester app's identity: it must not include or imply `requester_app_id`, and widget owners must treat `host_app_id` as the requested compatible surface, not as an attested caller. The registry endpoint must not mint reusable requester capabilities, and mounted app backend responses must not cause the core to sign widget contexts as a side effect.
+
+The widget frontend document route is a controlled authenticated mount. Static non-HTML files below that widget frontend mount, such as `styles.css`, `main.js`, fonts, or images, follow the same public-cacheable rule as app frontend assets: they must not contain user-specific data and may be served with cross-origin headers so sandboxed widget iframes can load their own bundle without per-asset session cookies.
+
+Widget actions should go to the widget owner's own backend or tool surface.
+
+For example, a checklist widget embedded in chat should persist checklist edits through the `checklists` app, not through the `chat` app.
+
+This preserves app ownership:
+
+- chat owns the message container
+- checklists owns checklist data and checklist widget behavior
+- core owns registry, routing, auth, and workspace context
+
+### Widget Core Implementation Plan
+
+The core implementation should be generic and not reference `chat`, `checklists`, or any specific widget owner.
+
+Required core pieces:
+
+- extend app contract models with `WidgetDeclaration`, `WidgetFrontendDeclaration`, and `WidgetActionDeclaration`
+- extend the contract parser, serializer, and validator to round-trip and reject invalid widget declarations
+- expose widget declarations through app source records and parsed workspace app surfaces
+- add a workspace-scoped widget registry service that indexes only enabled app bindings
+- add collision and ordering rules for same `host` and `content_kind`
+- add `GET /api/apps/widgets?host=<host>&content_kind=<kind>` for registry discovery
+- add a widget frontend mount route that serves the owning app's declared widget mount, not the embedding app's source
+- add a widget bootstrap/context route or signed context token so iframe widgets receive only explicit host context
+- enforce auth, active workspace, app installation state, and app enabled state on all widget routes
+- include widget metadata in app registry responses only where useful and without leaking unrelated app internals
+- add observability events for widget registry lookup, widget mount success, and policy denial
+
+Required tests:
+
+- contract parser accepts a valid widget declaration
+- contract parser rejects duplicate widget ids
+- contract parser rejects path traversal in widget mounts
+- registry lists only widgets from enabled apps in the active workspace
+- registry filters by `host` and `content_kind`
+- disabled/uninstalled apps do not expose widgets
+- widget mount serves the owner app's frontend artifact
+- host apps cannot import or resolve widget owner source paths through the registry payload
+- policy denial returns a clear error for unavailable widgets
+
+Required chat-side work after the core is ready:
+
+- remove compile-time widget import models
+- keep generic structured-message fallback rendering
+- call the widget registry by `host=chat` and message `content.kind`
+- embed compatible widgets through iframe-mounted widget routes
+- pass only explicit widget context, never app source paths
+- route widget actions to the widget owner's official surfaces
+
+The chat app must treat widget hosting as a generic host responsibility.
+
+It must not maintain a built-in list of widget owners or known structured content kinds.
+For every structured message, chat resolves widgets by `host=chat` and the message's `content.kind`, selects the deterministic first registry match, creates an explicit widget context token, and mounts the owner app's declared iframe route.
+
+If no enabled app declares a compatible widget, chat renders the same generic structured-content fallback card for every kind.
+
+Agents are not required to emit widget JSON for common file preview flows.
+
+When an agent answer contains a normal Markdown link, URL, or plain text reference to workspace storage under `storage/generated/` or `storage/uploaded/`, the chat transcript layer may synthesize an internal structured content item with `kind: "workspace.file.preview"` and a payload containing the normalized `workspace_relative_path`.
+
+That synthesized item follows the same widget registry path as any other structured message:
+
+- chat asks the core for `host=chat` and `content_kind=workspace.file.preview`
+- the enabled widget owner renders the preview
+- the original agent text remains ordinary Markdown
+- local filesystem paths are not exposed to iframe widgets
+
+The same widget mechanism is also the correct way for a shell variant to host chat navigation. The default `base-shell` sidebar only mounts the app-shortcuts widget slot and does not reserve a second slot for chat navigation.
+
+The shell must not import chat sidebar components or own chat projects.
+
+For shells that choose to expose chat navigation:
+
+- the shell renders a generic sidebar widget slot for chat navigation
+- the slot discovers widgets with `host=base-shell` and a shell sidebar content kind
+- `chat` declares a widget such as `chat-sidebar`
+- the widget frontend is served from the chat app's own `frontend/dist/widgets/chat-sidebar`
+- project actions go through the chat app backend, while thread create, rename, move, delete, and delete-all actions go through core runtime thread APIs; frontends may implement delete-all as repeated per-thread core deletes when they need progress feedback for runtime cleanup
+- project and thread settings panels are rendered by the chat widget, not by the shell
+- optional shell navigation uses browser messaging from the iframe to ask the host to open the `chat` app with explicit scalar params such as a thread id or a new-chat request
+- the shell forwards those scalar params to the mounted chat app through `maverick.app.navigate` without reloading the chat iframe
+- shell-hosted widget slots must include the active workspace id in the signed widget context and remount the widget iframe when the active workspace changes
+- a widget must never keep showing app-owned data loaded under a previous workspace after the host has switched workspace context
+- host apps should hide iframe widget slots without unmounting them when a temporary shell panel closes, unless a widget explicitly asks to be reset
+
+This preserves the visual layout while moving ownership to the app boundary:
+
+- shell layout and app mounting belong to `base-shell`
+- chat projects and chat list state belong to `chat`
+- widget discovery, auth, workspace context, and controlled frontend mount belong to the core
+
+### Backend distribution artifacts
+
+Backend surfaces should follow the same principle.
+
+The app contract declares the backend surface, but the core should not depend on the app's internal framework.
+
+Examples of backend surface kinds that may be supported over time:
+
+- local subprocess JSON entrypoint
+- subprocess HTTP service
+- packaged local service
+- remote backend reference governed by platform policy
+
+For the first implementation wave, app-owned backend entrypoints may remain local and platform-managed.
+
+Sealed apps may provide only packaged backend artifacts.
+
+Source-available or workspace-local apps may provide editable backend source that is built or launched according to a declared backend contract.
+
+## Real Example: Base Shell And Chat
+
+The following is a concrete example of the intended model.
+
+```text
+/apps/
+  base-shell/
+    app_contract.json
+    frontend/
+    backend/
+    mcp/
+    cli/
+    skills/
+  chat/
+    app_contract.json
+    frontend/
+    backend/
+    mcp/
+    cli/
+    skills/
+```
+
+In this example:
+
+- `base-shell` is the mounted shell app
+- `chat` is another mounted app
+- both are apps
+- neither is the core
+
+The hosted platform route `/` may be configured to serve a root shell app.
+The local hosted default is `base-shell`, but that is a platform configuration value, not a special app identity in the app contract model.
+
+The user may reach:
+
+- `/apps/base-shell/` to load the shell frontend
+- `/apps/chat/` to load the chat frontend directly
+- `/api/apps/chat/...` for chat backend operations
+
+Agents may use:
+
+- chat MCP tools
+- chat CLI commands
+- workspace-owned skill copies seeded from chat skill templates
+
+The core decides whether executable MCP and CLI surfaces are available in the current workspace. Runtime skills are selected from the workspace Skills app catalog.
+
+The `base-shell` app may visually host the `chat` frontend.
+
+That does not change ownership:
+
+- shell composition belongs to `base-shell`
+- chat functionality belongs to `chat`
+- installation, policy, and mounting belong to the core
+
+For the first hosted wave, the minimal built-in set is:
+
+- `base-shell` as the mounted frontend shell app
+- `chat` as the first full app with frontend, backend, MCP, CLI, and skills
+
+`memory` and `agents` remain later-wave apps even though the architecture is already shaped to host them the same way.
+
+### Hook versioning
+
+Lifecycle hooks should be versioned by the app contract and resolved explicitly by the core.
+
+The core should not guess hook names or infer hook behavior from arbitrary files.
+
+### Hook timeouts
+
+The contract should allow explicit timeout declarations for operations such as:
+
+- install
+- upgrade
+- migrate
+- export
+- import
+- validate after import
+- repair after import
+- health check
+
+This prevents non-deterministic hangs during platform lifecycle operations.
+
+### Failure semantics
+
+The contract should explicitly declare failure expectations for critical operations.
+
+Examples:
+
+- install failure blocks activation
+- migrate failure leaves existing data intact and marks the app unhealthy
+- import failure preserves imported payload until operator action
+- health failure marks the app degraded rather than deleting data
+
+### Compatibility
+
+The contract should declare compatibility constraints such as:
+
+- supported core versions
+- supported workspace execution modes if relevant
+- required provider or secret capabilities if relevant
+
+### Health contract
+
+The contract should define how the core checks whether the app is healthy.
+
+This may include:
+
+- a health command
+- a health MCP route
+- a validation hook
+- a storage integrity check
+
+### Rollback support
+
+The contract should explicitly state whether the app supports:
+
+- bundle rollback
+- data rollback
+- repair-only recovery
+
+If rollback is unsupported, that should be declared rather than implied.
+
+## Example Contract
+
+The following example shows the kind of app contract Maverick should expect at platform level.
+
+```json
+{
+  "app_id": "restaurant-manager",
+  "public_app_id": "restaurant-manager",
+  "contract_version": "1.0",
+  "name": "Restaurant Manager",
+  "version": "1.2.0",
+  "description": "Manage rooms, tables, reservations, and service state inside a workspace.",
+  "publisher": "third-party-dev",
+  "minimum_core_version": "1.0.0",
+  "provides": [
+    {
+      "interface": "restaurant.records",
+      "version": "1",
+      "description": "Restaurant records and references.",
+      "surfaces": ["backend", "mcp", "cli", "reference"]
+    }
+  ],
+  "requires": [],
+  "distribution": {
+    "mode": "source_available",
+    "source_access": "forkable"
+  },
+  "capabilities": {
+    "mcp_tools": [
+      "tables.list",
+      "tables.update",
+      "reservations.create",
+      "reservations.update",
+      "restaurant_manager_reference_manifest",
+      "restaurant_manager_reference_search",
+      "restaurant_manager_reference_resolve",
+      "restaurant_manager_reference_summarize"
+    ],
+    "cli_commands": [
+      "tables",
+      "reservations",
+      "health",
+      "restaurant-manager"
+    ],
+    "skills": [],
+    "views": [
+      "floor_map",
+      "reservation_board"
+    ],
+    "reference_entities": [
+      {
+        "entity_type": "reservation",
+        "display_name": "Reservation",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      }
+    ]
+  },
+  "widgets": [
+    {
+      "widget_id": "reservation-summary",
+      "host": "chat",
+      "content_kinds": ["restaurant.reservation_summary"],
+      "frontend": {
+        "kind": "iframe",
+        "mount": "frontend/dist/widgets/reservation-summary"
+      },
+      "actions": {
+        "backend": true,
+        "mcp": false,
+        "cli": false
+      }
+    }
+  ],
+  "entrypoints": {
+    "frontend": "frontend/dist",
+    "backend": "backend/app_backend.py",
+    "mcp": "backend/mcp/server.py",
+    "cli": "backend/cli/app_cli.py",
+    "hooks": {
+      "install": "backend/lifecycle/install.py",
+      "migrate": "backend/lifecycle/migrate.py",
+      "health_check": "backend/lifecycle/health.py"
+    }
+  },
+  "storage": {
+    "storage_kind": "sqlite",
+    "primary_paths": [
+      "data/restaurant-manager/app.db"
+    ],
+    "indices": {
+      "kind": "embedded"
+    },
+    "supports_export": true,
+    "supports_import": true,
+    "supports_migrations": true
+  },
+  "permissions": {
+    "secrets": {
+      "read": [],
+      "write": []
+    },
+    "network": {
+      "outbound": []
+    },
+    "runtime": {
+      "create_sessions": false,
+      "cleanup_sessions": false
+    },
+    "host": {
+      "telemetry": false
+    }
+  },
+  "compatibility": {
+    "workspace_modes": ["sandbox"]
+  },
+  "hook_timeouts": {
+    "install_seconds": 60,
+    "migrate_seconds": 300,
+    "health_check_seconds": 30,
+    "export_seconds": 120,
+    "import_seconds": 120
+  },
+  "lifecycle": {
+    "install": true,
+    "upgrade": true,
+    "uninstall": true,
+    "migrate": true,
+    "export": true,
+    "import": true,
+    "validate_after_import": true,
+    "repair_after_import": false,
+    "runtime_session_cleanup": false,
+    "data_cleanup": true,
+    "health_check": true
+  },
+  "health_contract": {
+    "mode": "hook",
+    "degraded_on_failure": true
+  },
+  "failure_semantics": {
+    "install_failure": "block_activation",
+    "migrate_failure": "preserve_data_mark_unhealthy",
+    "import_failure": "preserve_payload_mark_failed"
+  },
+  "rollback_support": {
+    "bundle": true,
+    "data": false
+  }
+}
+```
+
+This example does not define the internal schema of the app database.
+
+That remains the responsibility of the app developer.
+
+The contract only defines what the platform needs to know in order to:
+
+- install the app
+- understand where the app owns its data
+- understand what the app exposes
+- manage lifecycle operations coherently
+- resolve entrypoints deterministically
+- enforce compatibility rules deterministically
+- apply timeouts and failure semantics deterministically
+
+An app may expose capabilities through more than one official surface:
+
+- `mcp/`
+- `cli/`
+- `skills/`
+
+Only `mcp/` and `cli/` are executable surfaces.
+
+The contract declares which surfaces the app exposes, but the platform still decides how they are hosted:
+
+- MCP and CLI are mounted through core-managed platform hosts
+- app source skills are templates, not directly visible runtime skills
+- the Skills app copies bundled skill templates into workspace-owned editable skill data
+- provider-specific runtime installation of enabled workspace skill assets, optionally narrowed by explicit session skill ids, is handled by the selected provider adapter
+
+Workspace agents and users must invoke core-owned and app-owned CLI and MCP capabilities through scoped core-managed workspace surfaces, not by discovering or executing files under installation-level `apps/<public_app_id>/`.
+Discovery must be narrow by default so agents do not pull every command from every installed app into context.
+
+The compact installed-app discovery shape is:
+
+```text
+maverick apps list --json
+```
+
+Core CLI discovery and invocation use:
+
+```text
+maverick core cli list --json
+maverick core cli inspect <command_id> --json
+maverick core cli run <command_id> ...
+```
+
+App CLI discovery and invocation use:
+
+```text
+maverick app <app_id> cli list --json
+maverick app <app_id> cli inspect <command_name> --json
+maverick app <app_id> cli run <command_name> ...
+```
+
+Core MCP discovery and invocation use:
+
+```text
+maverick core mcp list --json
+maverick core mcp inspect <tool_name> --json
+maverick core mcp call <tool_name> ...
+```
+
+App MCP discovery and invocation use:
+
+```text
+maverick app <app_id> mcp list --json
+maverick app <app_id> mcp inspect <tool_name> --json
+maverick app <app_id> mcp call <tool_name> ...
+```
+
+The wrapper resolves the current workspace, checks the enabled app registry, applies CLI or MCP invocation policy, resolves the app-owned data root when applicable, and then executes the declared entrypoint through the platform host.
+Sandboxed workspace agents therefore do not need to know where an app source artifact lives outside the workspace.
+
+When app-owned MCP tools are surfaced through the platform, the host may apply namespacing to avoid collisions with core-owned assets or assets from other apps.
+
+## Core Boundary Rule
+
+Apps must not directly modify:
+
+- core platform code
+- other apps' data roots
+- other workspaces
+- platform database internals that are not part of the app contract
+
+Apps interact with the core through declared MCP, CLI, or backend interfaces.
+
+## Cross-App Boundary Rule
+
+Apps do not read or write another app's internal data files or embedded databases directly.
+
+Apps do not depend on a specific app id when they need another app capability.
+
+Cross-app composition is allowed only through declared app interfaces and official platform-hosted surfaces:
+
+- the provider app declares an interface in `provides`
+- the consumer app declares an interface requirement in `requires`
+- the workspace selects the concrete enabled provider app or apps through shell-managed setup
+- the consumer calls the selected provider through official backend, CLI, MCP, reference, view, or widget surfaces
+
+Composition may also happen through agents or runtime orchestration when that is the product behavior, but the same rule applies: agents and apps use official surfaces rather than another app's private files.
+
+This preserves:
+
+- modularity
+- ownership clarity
+- future portability
+- app isolation inside the workspace
+
+## Example Mental Model
+
+The correct mental model is similar to an iPhone-style app container:
+
+- the core is the platform
+- the workspace is the tenant boundary
+- `data/<app_id>/` is the app's owned data namespace inside that workspace
+
+The app developer is free to choose how the app stores its own data inside that container.
+
+## Decision Summary
+
+The standard Maverick app contract should require:
+
+- stable app identity
+- workspace-owned storage under `data/<app_id>/`
+- explicit storage declaration
+- explicit capability declaration
+- explicit lifecycle declaration
+- no direct access to other apps' internal storage
+- no direct coupling to core database internals as the default app data model

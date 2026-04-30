@@ -1,0 +1,24 @@
+{
+  "name": "maverick",
+  "version": "0.1.0",
+  "description": "Workspace-isolated AI operating environment for agent-powered apps.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "python3 -m unittest discover -s tests -p 'test_*.py'",
+    "test:python": "python3 -m unittest discover -s tests -p 'test_*.py'",
+    "check:python": "python3 -m compileall core tests scripts && python3 scripts/check_unused_imports.py"
+  },
+  "keywords": [
+    "agents",
+    "workspace",
+    "apps",
+    "ai"
+  ],
+  "author": "Maverick contributors",
+  "license": "MIT",
+  "type": "commonjs"
+}

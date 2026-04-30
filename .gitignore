@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+.codex
+.maverick/
+.maverick/local-state/
+
+# Local databases and app-owned storage
+*.db
+*.sqlite
+*.sqlite3
+*.duckdb
+tmp/cleanup-backups/
+
+# Logs and runtime state
+logs/
+data/control-plane/
+data/bootstrap-secrets/
+tmp/
+output/
+runtime/
+*.log
+runtime-transcripts/
+provider-homes/
+
+# Keep the core runtime package in the repository
+!core/runtime/
+!core/runtime/.gitkeep
+
+# Workspace runtime and agent-owned data
+/workspaces/
+
+# Node / frontend
+node_modules/
+dist/
+build/
+!apps/*/frontend/dist/
+!apps/*/frontend/dist/**
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/

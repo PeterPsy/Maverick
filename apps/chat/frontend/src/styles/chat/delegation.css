@@ -1,0 +1,317 @@
+.chatapp-bubble.is-delegation-status {
+  margin-right: auto;
+  margin-left: 0;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.chatapp-delegation-status {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.chatapp-delegation-status__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: max-content;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.52);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 400;
+  transition: color 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.chatapp-delegation-status__toggle:hover {
+  color: rgba(255, 255, 255, 0.66);
+}
+
+.chatapp-delegation-status__chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 0.95rem;
+  height: 0.95rem;
+  color: rgba(255, 255, 255, 0.44);
+  transition:
+    transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.chatapp-delegation-status__chevron.is-expanded {
+  transform: rotate(180deg);
+}
+
+.chatapp-delegation-status__chevron svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.chatapp-delegation-status__toggle-label {
+  line-height: 1.1;
+  font-size: 0.8rem;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+
+.chatapp-delegation-status__body {
+  display: grid;
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    grid-template-rows 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.chatapp-delegation-status__body.is-collapsed {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transform: translateY(-0.2rem);
+}
+
+.chatapp-delegation-status__body-inner {
+  min-height: 0;
+  overflow: hidden;
+  display: grid;
+  gap: 0.18rem;
+}
+
+.chatapp-system-update.chatapp-system-update--delegation {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: max-content;
+  max-width: 100%;
+  justify-self: start;
+  padding: 0.16rem 0.32rem;
+  border: 0;
+  border-radius: 0.6rem;
+  background: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+  box-shadow: none;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 400;
+  line-height: 1.1;
+  letter-spacing: 0.01em;
+  text-align: left;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+
+.chatapp-system-update.chatapp-system-update--delegation .chatapp-system-update__icon {
+  color: currentColor;
+}
+
+.chatapp-system-update.chatapp-system-update--delegation .chatapp-system-update__label {
+  color: currentColor;
+}
+
+.chatapp-system-update.chatapp-system-update--delegation:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.chatapp-system-update.chatapp-system-update--delegation:focus-visible {
+  outline: none;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08);
+}
+
+.chatapp-system-update.chatapp-system-update--delegation[aria-current="page"] {
+  background: transparent;
+}
+
+.chatapp-system-update.chatapp-system-update--delegation-running,
+.chatapp-system-update.chatapp-system-update--delegation-working,
+.chatapp-system-update.chatapp-system-update--delegation-thinking,
+.chatapp-system-update.chatapp-system-update--delegation-connecting,
+.chatapp-system-update.chatapp-system-update--delegation-queued,
+.chatapp-system-update.chatapp-system-update--delegation-stopped,
+.chatapp-system-update.chatapp-system-update--delegation-deleted,
+.chatapp-system-update.chatapp-system-update--delegation-unknown {
+  color: #66b3ff;
+}
+
+.chatapp-system-update.chatapp-system-update--delegation-offline .chatapp-system-update__icon {
+  color: rgba(255, 255, 255, 0.38);
+}
+
+.chatapp-system-update.chatapp-system-update--delegation-offline {
+  color: rgba(255, 255, 255, 0.38);
+}
+
+.chatapp-status-icon__ring,
+.chatapp-status-icon__accent,
+.chatapp-status-icon__dot,
+.chatapp-status-icon__bar {
+  stroke: currentColor;
+  fill: currentColor;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.chatapp-status-icon__ring {
+  fill: none;
+  opacity: 0.72;
+}
+
+.chatapp-status-icon__ring--spin {
+  stroke-dasharray: 26 14;
+  animation: chatapp-status-spin 1.15s linear infinite;
+}
+
+.chatapp-status-icon__ring--pulse {
+  fill: none;
+  animation: chatapp-status-pulse 1.3s ease-in-out infinite;
+}
+
+.chatapp-status-icon__ring--pulse-delay {
+  fill: none;
+  opacity: 0.66;
+  animation: chatapp-status-pulse 1.3s ease-in-out infinite 0.24s;
+}
+
+.chatapp-status-icon__ring--dim {
+  opacity: 0.46;
+}
+
+.chatapp-status-icon__dot--one {
+  animation: chatapp-status-dot 1.2s ease-in-out infinite;
+}
+
+.chatapp-status-icon__dot--two {
+  animation: chatapp-status-dot 1.2s ease-in-out infinite 0.16s;
+}
+
+.chatapp-status-icon__dot--three {
+  animation: chatapp-status-dot 1.2s ease-in-out infinite 0.32s;
+}
+
+.chatapp-status-icon__bar--one {
+  animation: chatapp-status-bar 0.9s ease-in-out infinite;
+}
+
+.chatapp-status-icon__bar--two {
+  animation: chatapp-status-bar 0.9s ease-in-out infinite 0.14s;
+}
+
+.chatapp-status-icon__bar--three {
+  animation: chatapp-status-bar 0.9s ease-in-out infinite 0.28s;
+}
+
+.chatapp-status-icon__accent--draw {
+  stroke-dasharray: 6 6;
+  animation: chatapp-status-draw 1.2s ease-in-out infinite;
+}
+
+.chatapp-status-icon__accent--blink,
+.chatapp-status-icon__accent--blink-soft {
+  animation: chatapp-status-blink 1.2s ease-in-out infinite;
+}
+
+.chatapp-status-icon__accent--blink-soft {
+  animation-duration: 1.8s;
+  opacity: 0.72;
+}
+
+@keyframes chatapp-status-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes chatapp-status-pulse {
+  0%,
+  100% {
+    opacity: 0.34;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes chatapp-status-dot {
+  0%,
+  70%,
+  100% {
+    opacity: 0.34;
+    transform: translateY(0) scale(0.88);
+  }
+  35% {
+    opacity: 1;
+    transform: translateY(-1px) scale(1.02);
+  }
+}
+
+@keyframes chatapp-status-bar {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scaleY(0.72);
+  }
+  50% {
+    opacity: 1;
+    transform: scaleY(1.08);
+  }
+}
+
+@keyframes chatapp-status-draw {
+  0% {
+    stroke-dashoffset: 12;
+    opacity: 0.5;
+  }
+  50% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: -12;
+    opacity: 0.5;
+  }
+}
+
+@keyframes chatapp-status-blink {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chatapp-delegation-status__toggle,
+  .chatapp-delegation-status__chevron,
+  .chatapp-delegation-status__body {
+    transition: none;
+  }
+
+  .chatapp-status-icon__ring--spin,
+  .chatapp-status-icon__ring--pulse,
+  .chatapp-status-icon__ring--pulse-delay,
+  .chatapp-status-icon__dot--one,
+  .chatapp-status-icon__dot--two,
+  .chatapp-status-icon__dot--three,
+  .chatapp-status-icon__bar--one,
+  .chatapp-status-icon__bar--two,
+  .chatapp-status-icon__bar--three,
+  .chatapp-status-icon__accent--draw,
+  .chatapp-status-icon__accent--blink,
+  .chatapp-status-icon__accent--blink-soft {
+    animation: none;
+  }
+}

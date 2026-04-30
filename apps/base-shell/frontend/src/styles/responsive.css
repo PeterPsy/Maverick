@@ -1,0 +1,63 @@
+@media (max-width: 760px) {
+  :root {
+    --maverick-sidebar-width: min(21rem, calc(100vw - 1rem));
+  }
+
+  .bs-app-grid-panel,
+  .bs-empty-panel {
+    padding-left: 0.75rem;
+  }
+
+  .bs-sidebar {
+    left: 0.5rem;
+    right: 0.5rem;
+    width: auto;
+  }
+
+  .bs-tutorial {
+    gap: 0;
+    grid-template-rows: auto minmax(0, 1fr);
+    height: 100%;
+  }
+
+  .bs-tutorial__hero {
+    min-height: 320px;
+    padding: 1.5rem 1rem;
+  }
+
+  .bs-tutorial__hero-card {
+    grid-template-columns: 1fr;
+    width: min(360px, 100%);
+  }
+
+  .bs-tutorial__panel {
+    min-height: 0;
+    padding: 1.35rem 1rem 1.2rem;
+  }
+
+  .bs-tutorial-dialog {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr);
+    width: min(100%, calc(100vw - 0.5rem));
+    height: min(calc(100dvh - 0.5rem), 100%);
+    max-height: min(calc(100dvh - 0.5rem), 100%);
+  }
+
+  .bs-tutorial__copy {
+    overflow: auto;
+    padding-right: 0.15rem;
+  }
+
+  .bs-tutorial__actions {
+    position: sticky;
+    bottom: 0;
+    grid-template-columns: 1fr;
+    padding-top: 0.4rem;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    background: linear-gradient(180deg, rgba(32, 32, 32, 0), #202020 28%);
+  }
+
+  .bs-tutorial__actions .bs-ui-button--primary {
+    width: 100%;
+  }
+}

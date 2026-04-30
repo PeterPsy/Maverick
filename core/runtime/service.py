@@ -1,0 +1,32 @@
+"""Runtime-domain service facade."""
+
+from __future__ import annotations
+
+from core.runtime.lifecycle import (
+    create_child_runtime_session,
+    create_runtime_process,
+    create_runtime_session,
+    queue_runtime_turn,
+    record_runtime_event,
+    reconcile_runtime_session_policy,
+    transition_runtime_process,
+    transition_runtime_session,
+    transition_runtime_turn,
+    utcnow,
+)
+from core.runtime.routing import build_runtime_routing, resolve_runtime
+
+__all__ = [
+    "build_runtime_routing",
+    "create_child_runtime_session",
+    "create_runtime_process",
+    "create_runtime_session",
+    "queue_runtime_turn",
+    "record_runtime_event",
+    "reconcile_runtime_session_policy",
+    "resolve_runtime",
+    "transition_runtime_process",
+    "transition_runtime_session",
+    "transition_runtime_turn",
+    "utcnow",
+]

@@ -1,0 +1,216 @@
+{
+  "app_id": "app-store",
+  "contract_version": "1.0",
+  "name": "App Store",
+  "version": "0.1.0",
+  "description": "Authenticated Maverick app catalog for installing system apps into selected workspaces.",
+  "publisher": "maverick",
+  "minimum_core_version": "0.1.0",
+  "provides": [
+    {
+      "interface": "app.catalog",
+      "version": "1",
+      "description": "Installed, installable, and workspace-local app catalog.",
+      "surfaces": [
+        "backend",
+        "cli",
+        "mcp",
+        "reference",
+        "view"
+      ]
+    },
+    {
+      "interface": "app.installation",
+      "version": "1",
+      "description": "App installation and workspace-local app management operations.",
+      "surfaces": [
+        "backend",
+        "cli",
+        "mcp"
+      ]
+    }
+  ],
+  "requires": [],
+  "distribution": {
+    "mode": "sealed",
+    "source_access": "none"
+  },
+  "visibility": {
+    "platform_roles": null
+  },
+  "permissions": {
+    "secrets": {
+      "read": [],
+      "write": []
+    },
+    "network": {
+      "outbound": [
+        "maverick-app-store.versy.ai"
+      ]
+    },
+    "runtime": {
+      "create_sessions": false,
+      "cleanup_sessions": false
+    },
+    "host": {
+      "telemetry": false
+    }
+  },
+  "capabilities": {
+    "mcp_tools": [
+      "maverick_app_store",
+      "app_store_view_filter",
+      "app_store_set_view_filter",
+      "app_store_set_custom_view",
+      "app_store_clear_custom_view",
+      "app_store_reference_manifest",
+      "app_store_reference_search",
+      "app_store_reference_resolve",
+      "app_store_reference_summarize"
+    ],
+    "cli_commands": [
+      "app-store"
+    ],
+    "skills": [
+      "app-store-ops"
+    ],
+    "views": [
+      "app-store"
+    ],
+    "data_events": [
+      {
+        "resource": "state",
+        "description": "Emitted when pinned apps or remembered installs change through official App Store surfaces."
+      },
+      {
+        "resource": "view-state",
+        "description": "Emitted when App Store catalog filters or curated selections change through official App Store surfaces."
+      }
+    ],
+    "view_surfaces": [
+      {
+        "view_id": "app-store",
+        "display_name": "App Store",
+        "entity_types": [
+          "installed_app"
+        ],
+        "state_actions": [
+          {
+            "action": "view_filter",
+            "standard": true,
+            "description": "Read the current App Store catalog view state."
+          },
+          {
+            "action": "set_view_filter",
+            "standard": true,
+            "description": "Set the App Store query and scope filter."
+          },
+          {
+            "action": "set_custom_view",
+            "standard": true,
+            "description": "Show a curated set of installed app references."
+          },
+          {
+            "action": "clear_custom_view",
+            "standard": true,
+            "description": "Return App Store to normal catalog browsing mode."
+          }
+        ],
+        "supports_custom_view": true,
+        "supports_filter_refinement": true
+      }
+    ],
+    "reference_entities": [
+      {
+        "entity_type": "installed_app",
+        "display_name": "Installed App",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      }
+    ]
+  },
+  "widgets": [
+    {
+      "widget_id": "app-shortcuts",
+      "host": "base-shell",
+      "content_kinds": [
+        "shell.sidebar.apps"
+      ],
+      "frontend": {
+        "kind": "iframe",
+        "mount": "frontend/dist/widgets/app-shortcuts",
+        "spa_fallback": true
+      },
+      "actions": {
+        "backend": true,
+        "mcp": false,
+        "cli": false
+      }
+    }
+  ],
+  "entrypoints": {
+    "mcp": "mcp/server.py",
+    "cli": "cli/app_cli.py",
+    "backend": "backend/app_backend.py",
+    "frontend": "frontend/dist",
+    "skills_root": "skills",
+    "hooks": {
+      "install": "hooks/install.py",
+      "migrate": "hooks/migrate.py",
+      "health_check": "hooks/health_check.py"
+    }
+  },
+  "storage": {
+    "storage_kind": "json",
+    "data_schema_version": "1",
+    "primary_paths": [
+      "data/app-store/state.json"
+    ],
+    "indices": null,
+    "supports_export": true,
+    "supports_import": true,
+    "supports_migrations": true
+  },
+  "compatibility": {
+    "workspace_modes": [
+      "sandbox"
+    ]
+  },
+  "hook_timeouts": {
+    "install_seconds": 60,
+    "upgrade_seconds": 120,
+    "migrate_seconds": 300,
+    "export_seconds": 120,
+    "import_seconds": 120,
+    "validate_after_import_seconds": 60,
+    "repair_after_import_seconds": 180,
+    "health_check_seconds": 30
+  },
+  "lifecycle": {
+    "install": true,
+    "upgrade": true,
+    "uninstall": false,
+    "migrate": true,
+    "export": false,
+    "import": false,
+    "validate_after_import": false,
+    "repair_after_import": false,
+    "health_check": true
+  },
+  "health_contract": {
+    "mode": "hook",
+    "degraded_on_failure": true
+  },
+  "failure_semantics": {
+    "install_failure": "block_activation",
+    "migrate_failure": "preserve_data_mark_unhealthy",
+    "import_failure": "preserve_payload_mark_failed"
+  },
+  "rollback_support": {
+    "bundle": false,
+    "data": false,
+    "repair_only": false
+  }
+}

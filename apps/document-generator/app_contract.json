@@ -1,0 +1,199 @@
+{
+  "app_id": "document-generator",
+  "contract_version": "1.0",
+  "name": "Document Generator",
+  "version": "0.1.0",
+  "description": "Agent-facing document generation app for DOCX, PPTX, PDF, and XLSX outputs.",
+  "publisher": "maverick",
+  "minimum_core_version": "0.1.0",
+  "provides": [
+    {
+      "interface": "document.generate",
+      "version": "1",
+      "description": "Document generation for DOCX, PPTX, PDF, XLSX, and related artifacts.",
+      "surfaces": [
+        "cli",
+        "mcp",
+        "reference",
+        "view"
+      ]
+    },
+    {
+      "interface": "document.artifact",
+      "version": "1",
+      "description": "Generated document artifact catalog and references.",
+      "surfaces": [
+        "cli",
+        "mcp",
+        "reference",
+        "view"
+      ]
+    }
+  ],
+  "requires": [],
+  "distribution": {
+    "mode": "sealed",
+    "source_access": "none"
+  },
+  "visibility": {
+    "platform_roles": null
+  },
+  "permissions": {
+    "secrets": {
+      "read": [],
+      "write": []
+    },
+    "network": {
+      "outbound": []
+    },
+    "runtime": {
+      "create_sessions": false,
+      "cleanup_sessions": false
+    },
+    "host": {
+      "telemetry": false
+    }
+  },
+  "capabilities": {
+    "mcp_tools": [
+      "maverick_document_generator",
+      "document_generator_extract_text",
+      "document_generator_view_filter",
+      "document_generator_set_view_filter",
+      "document_generator_set_custom_view",
+      "document_generator_clear_custom_view",
+      "document_generator_reference_manifest",
+      "document_generator_reference_search",
+      "document_generator_reference_resolve",
+      "document_generator_reference_summarize"
+    ],
+    "cli_commands": [
+      "document-generator"
+    ],
+    "skills": [
+      "document-generator-docs"
+    ],
+    "views": [
+      "document-generator"
+    ],
+    "data_events": [
+      {
+        "resource": "documents",
+        "description": "Emitted when generated document jobs or output files are created through official Document Generator surfaces."
+      },
+      {
+        "resource": "view-state",
+        "description": "Emitted when Document Generator job/template filters or curated selections change through official surfaces."
+      }
+    ],
+    "view_surfaces": [
+      {
+        "view_id": "document-generator",
+        "display_name": "Document Generator",
+        "entity_types": [
+          "document"
+        ],
+        "state_actions": [
+          {
+            "action": "view_filter",
+            "standard": true,
+            "description": "Read the current Document Generator job and template browse state."
+          },
+          {
+            "action": "set_view_filter",
+            "standard": true,
+            "description": "Set Document Generator query and format filters."
+          },
+          {
+            "action": "set_custom_view",
+            "standard": true,
+            "description": "Show a curated set of generated document references."
+          },
+          {
+            "action": "clear_custom_view",
+            "standard": true,
+            "description": "Return Document Generator to normal job and template browsing mode."
+          }
+        ],
+        "supports_custom_view": true,
+        "supports_filter_refinement": true
+      }
+    ],
+    "reference_entities": [
+      {
+        "entity_type": "document",
+        "display_name": "Generated Document",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      }
+    ]
+  },
+  "widgets": [],
+  "entrypoints": {
+    "mcp": "mcp/server.py",
+    "cli": "cli/app_cli.py",
+    "backend": "backend/app_backend.py",
+    "frontend": "frontend/dist",
+    "skills_root": "skills",
+    "hooks": {
+      "install": "hooks/install.py",
+      "migrate": "hooks/migrate.py",
+      "health_check": "hooks/health_check.py"
+    }
+  },
+  "storage": {
+    "storage_kind": "json",
+    "data_schema_version": "1",
+    "primary_paths": [
+      "data/document-generator/state.json",
+      "data/document-generator/templates",
+      "data/document-generator/jobs"
+    ],
+    "indices": null,
+    "supports_export": true,
+    "supports_import": false,
+    "supports_migrations": true
+  },
+  "compatibility": {
+    "workspace_modes": [
+      "sandbox"
+    ]
+  },
+  "hook_timeouts": {
+    "install_seconds": 60,
+    "upgrade_seconds": 120,
+    "migrate_seconds": 300,
+    "export_seconds": 120,
+    "import_seconds": 120,
+    "validate_after_import_seconds": 60,
+    "repair_after_import_seconds": 180,
+    "health_check_seconds": 30
+  },
+  "lifecycle": {
+    "install": true,
+    "upgrade": true,
+    "uninstall": false,
+    "migrate": true,
+    "export": false,
+    "import": false,
+    "validate_after_import": false,
+    "repair_after_import": false,
+    "health_check": true
+  },
+  "health_contract": {
+    "mode": "hook",
+    "degraded_on_failure": true
+  },
+  "failure_semantics": {
+    "install_failure": "block_activation",
+    "migrate_failure": "preserve_data_mark_unhealthy",
+    "import_failure": "preserve_payload_mark_failed"
+  },
+  "rollback_support": {
+    "bundle": false,
+    "data": false,
+    "repair_only": false
+  }
+}

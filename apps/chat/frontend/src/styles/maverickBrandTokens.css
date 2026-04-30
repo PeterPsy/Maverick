@@ -1,0 +1,457 @@
+:root {
+  /* Dark palette */
+  --maverick-dark-bg-0: #050505;
+  --maverick-dark-bg-1: #000000;
+  --maverick-dark-surface-1: rgba(255, 255, 255, 0.03);
+  --maverick-dark-surface-2: rgba(255, 255, 255, 0.05);
+  --maverick-dark-surface-3: rgba(255, 255, 255, 0.07);
+  --maverick-dark-overlay: rgba(0, 0, 0, 0.35);
+  --maverick-dark-border-soft: rgba(255, 255, 255, 0.06);
+  --maverick-dark-border-hover: rgba(255, 255, 255, 0.1);
+  --maverick-dark-divider: rgba(255, 255, 255, 0.08);
+  --maverick-dark-text-1: #f2f2f2;
+  --maverick-dark-text-2: #a7a7a7;
+  --maverick-dark-text-3: #7a7a7a;
+
+  /* Light palette */
+  --maverick-light-bg-0: #f9fafb;
+  --maverick-light-bg-1: #ffffff;
+  --maverick-light-surface-1: #ffffff;
+  --maverick-light-surface-2: #f3f4f6;
+  --maverick-light-surface-3: #e5e7eb;
+  --maverick-light-overlay: rgba(255, 255, 255, 0.8);
+  --maverick-light-border-soft: rgba(0, 0, 0, 0.06);
+  --maverick-light-border-hover: rgba(0, 0, 0, 0.1);
+  --maverick-light-divider: rgba(0, 0, 0, 0.08);
+  --maverick-light-text-1: #0b0b0b;
+  --maverick-light-text-2: #4b5563;
+  --maverick-light-text-3: #9ca3af;
+
+  /* Brand scale */
+  --maverick-text-on-brand: #ffffff;
+  --maverick-brand-300: #ff6f94;
+  --maverick-brand-400: #f84b78;
+  --maverick-brand-500: #d72451;
+  --maverick-brand-600: #b81e44;
+  --maverick-brand-700: #8f1735;
+  --maverick-glow-brand-strong: rgba(215, 36, 81, 0.18);
+  --maverick-glow-brand-soft: rgba(215, 36, 81, 0.12);
+
+  /* Editorial accents */
+  --maverick-dark-accent-pink: #f472b6;
+  --maverick-dark-accent-violet: #a78bfa;
+  --maverick-dark-accent-indigo: #6366f1;
+  --maverick-light-accent-pink: #db2777;
+  --maverick-light-accent-violet: #7c3aed;
+  --maverick-light-accent-indigo: #4f46e5;
+
+  /* Status */
+  --maverick-dark-success: #3fe58a;
+  --maverick-dark-warning: #ffb44a;
+  --maverick-dark-danger: #f87171;
+  --maverick-light-success: #16a34a;
+  --maverick-light-warning: #d97706;
+  --maverick-light-danger: #dc2626;
+
+  /* Shared focus */
+  --maverick-dark-focus-ring: rgba(215, 36, 81, 0.3);
+  --maverick-light-focus-ring: rgba(215, 36, 81, 0.4);
+
+  /* Hero landing motion/surface */
+  --maverick-hero-dark-shadow-soft: 0 20px 60px rgba(0, 0, 0, 0.55);
+  --maverick-hero-dark-shadow-hover: 0 25px 80px rgba(0, 0, 0, 0.65);
+  --maverick-hero-dark-shadow-brand-button: 0 20px 60px rgba(215, 36, 81, 0.3);
+  --maverick-hero-dark-shadow-brand-button-hover: 0 25px 70px rgba(215, 36, 81, 0.35);
+  --maverick-hero-dark-chip-brand-border: rgba(215, 36, 81, 0.3);
+  --maverick-hero-dark-chip-brand-bg: rgba(215, 36, 81, 0.12);
+  --maverick-hero-dark-chip-brand-text: #ffe8ee;
+  --maverick-hero-dark-atmosphere:
+    radial-gradient(circle at 70% 75%, rgba(215, 36, 81, 0.18), transparent 55%),
+    radial-gradient(circle at 50% 12%, rgba(167, 139, 250, 0.12), transparent 48%);
+
+  --maverick-hero-light-shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.05);
+  --maverick-hero-light-shadow-hover: 0 12px 28px rgba(0, 0, 0, 0.08);
+  --maverick-hero-light-shadow-brand-button: 0 10px 24px rgba(215, 36, 81, 0.2);
+  --maverick-hero-light-shadow-brand-button-hover: 0 12px 26px rgba(215, 36, 81, 0.24);
+  --maverick-hero-light-chip-brand-border: rgba(215, 36, 81, 0.22);
+  --maverick-hero-light-chip-brand-bg: rgba(215, 36, 81, 0.08);
+  --maverick-hero-light-chip-brand-text: var(--maverick-brand-600);
+
+  /* Branding guidelines motion/surface */
+  --maverick-branding-dark-shadow-soft: 0 20px 60px rgba(0, 0, 0, 0.55);
+  --maverick-branding-dark-shadow-hover: 0 25px 70px rgba(0, 0, 0, 0.62);
+  --maverick-branding-dark-shadow-brand-button: 0 16px 50px rgba(215, 36, 81, 0.3);
+  --maverick-branding-dark-shadow-brand-button-hover: 0 20px 60px rgba(215, 36, 81, 0.35);
+  --maverick-branding-dark-chip-brand-border: rgba(215, 36, 81, 0.3);
+  --maverick-branding-dark-chip-brand-bg: rgba(215, 36, 81, 0.12);
+  --maverick-branding-dark-chip-brand-text: #ffe8ee;
+  --maverick-branding-dark-atmosphere:
+    radial-gradient(circle at 76% 74%, rgba(215, 36, 81, 0.18), transparent 58%),
+    radial-gradient(circle at 30% 18%, rgba(167, 139, 250, 0.12), transparent 44%);
+
+  --maverick-branding-light-shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.05);
+  --maverick-branding-light-shadow-hover: 0 12px 30px rgba(0, 0, 0, 0.08);
+  --maverick-branding-light-shadow-brand-button: 0 10px 24px rgba(215, 36, 81, 0.2);
+  --maverick-branding-light-shadow-brand-button-hover: 0 12px 28px rgba(215, 36, 81, 0.24);
+  --maverick-branding-light-chip-brand-border: rgba(215, 36, 81, 0.22);
+  --maverick-branding-light-chip-brand-bg: rgba(215, 36, 81, 0.08);
+  --maverick-branding-light-chip-brand-text: var(--maverick-brand-600);
+
+  /* Shared atmosphere */
+  --maverick-light-atmosphere:
+    radial-gradient(circle at 58% 34%, rgba(215, 36, 81, 0.05), transparent 60%),
+    radial-gradient(circle at 26% 72%, rgba(124, 58, 237, 0.03), transparent 62%);
+  --maverick-dark-vignette: radial-gradient(circle at 50% 45%, transparent 42%, rgba(0, 0, 0, 0.72) 100%);
+  --maverick-light-vignette: linear-gradient(180deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0));
+
+  /* Preview gradients (playbook previews only) */
+  --maverick-gradient-preview-brand-tonal: linear-gradient(90deg, #b81e44 0%, #d72451 52%, #f84b78 100%);
+  --maverick-gradient-preview-brand-violet-soft: linear-gradient(90deg, rgba(215, 36, 81, 0.78) 0%, rgba(167, 139, 250, 0.7) 100%);
+  --maverick-gradient-preview-light-radial: radial-gradient(circle at 30% 50%, rgba(215, 36, 81, 0.2), rgba(249, 250, 251, 0.85) 70%);
+  --maverick-gradient-preview-brand-cyan: linear-gradient(90deg, #d72451 0%, #00e5ff 100%);
+
+  /* Radius scale */
+  --maverick-radius-sm: 0.375rem;
+  --maverick-radius-md: 0.5rem;
+  --maverick-radius-lg: 0.75rem;
+  --maverick-radius-xl: 1rem;
+  --maverick-radius-2xl: 1rem;
+  --maverick-radius-full: 9999px;
+
+  /* Spacing scale */
+  --maverick-space-0: 0rem;
+  --maverick-space-0-5: 0.125rem;
+  --maverick-space-1: 0.25rem;
+  --maverick-space-1-5: 0.375rem;
+  --maverick-space-2: 0.5rem;
+  --maverick-space-2-5: 0.625rem;
+  --maverick-space-3: 0.75rem;
+  --maverick-space-4: 1rem;
+  --maverick-space-5: 1.25rem;
+  --maverick-space-6: 1.5rem;
+  --maverick-space-7: 1.75rem;
+  --maverick-space-8: 2rem;
+  --maverick-space-9: 2.25rem;
+  --maverick-space-10: 2.5rem;
+  --maverick-space-11: 2.75rem;
+  --maverick-space-12: 3rem;
+  --maverick-space-16: 4rem;
+  --maverick-space-20: 5rem;
+  --maverick-space-24: 6rem;
+  --maverick-space-32: 8rem;
+  --maverick-space-36: 9rem;
+  --maverick-space-56: 14rem;
+
+  /* Typography */
+  --maverick-font-family-base: Inter, "Söhne", "Avenir Next", "Segoe UI", sans-serif;
+  --maverick-type-size-11: 0.6875rem;
+  --maverick-type-size-xs: 0.75rem;
+  --maverick-type-size-sm: 0.875rem;
+  --maverick-type-size-base: 1rem;
+  --maverick-type-size-lg: 1.125rem;
+  --maverick-type-size-xl: 1.25rem;
+  --maverick-type-size-2xl: 1.5rem;
+  --maverick-type-size-3xl: 1.875rem;
+  --maverick-type-size-4xl: 2.25rem;
+  --maverick-type-size-5xl: 3rem;
+  --maverick-type-size-6xl: 3.75rem;
+  --maverick-line-height-body: 1.45;
+  --maverick-line-height-tight: 1.25;
+  --maverick-line-height-relaxed: 1.625;
+  --maverick-line-height-102: 1.02;
+  --maverick-line-height-103: 1.03;
+  --maverick-line-height-104: 1.04;
+  --maverick-line-height-105: 1.05;
+  --maverick-tracking-tight: -0.025em;
+  --maverick-tracking-wide: 0.025em;
+  --maverick-tracking-12: 0.12em;
+  --maverick-tracking-16: 0.16em;
+  --maverick-tracking-18: 0.18em;
+  --maverick-tracking-20: 0.2em;
+
+  /* Motion */
+  --maverick-motion-ease-premium: cubic-bezier(0.22, 1, 0.36, 1);
+  --maverick-motion-duration-fast: 180ms;
+  --maverick-motion-duration-ui: 200ms;
+  --maverick-motion-duration-standard: 300ms;
+  --maverick-motion-duration-enter: 700ms;
+  --maverick-motion-duration-theme: 220ms;
+  --maverick-motion-duration-carousel: 360ms;
+  --maverick-motion-duration-float: 6s;
+  --maverick-motion-delay-float-alt: -2.6s;
+  --maverick-motion-duration-pulse-ring: 4.5s;
+  --maverick-motion-duration-spinner: 0.75s;
+  --maverick-motion-duration-mesh: 12s;
+  --maverick-motion-duration-poster: 10s;
+  --maverick-motion-duration-burst: 1.1s;
+  --maverick-motion-duration-preview-hover: 700ms;
+  --maverick-motion-duration-preview-entrance: 740ms;
+  --maverick-motion-duration-preview-easing: 820ms;
+  --maverick-motion-delay-none: 0ms;
+  --maverick-observer-reveal-threshold: 0.14;
+  --maverick-observer-reveal-root-margin-bottom: -40px;
+  --maverick-reveal-offset-y: 0.75rem;
+
+  /* Layout and dimensions */
+  --maverick-layout-min-width: 320px;
+  --maverick-layout-max-content-hero: 1100px;
+  --maverick-layout-max-content-branding: 1120px;
+  --maverick-layout-max-prose: 52ch;
+  --maverick-layout-max-prose-narrow: 44ch;
+  --maverick-layout-max-prose-compact: 34ch;
+  --maverick-layout-max-prose-hero: 20ch;
+  --maverick-layout-min-height-screen: 100vh;
+  --maverick-layout-min-height-state: 70vh;
+  --maverick-layout-min-height-hero-collage: 560px;
+  --maverick-layout-grid-branding-hero: 1fr 1.02fr;
+  --maverick-layout-grid-hero-main: 1fr 1.04fr;
+  --maverick-layout-grid-architecture: 0.9fr 1.1fr;
+  --maverick-layout-grid-showcase: 1.2fr 0.8fr;
+  --maverick-layout-grid-listing-toolbar: 1.2fr auto;
+  --maverick-layout-grid-listing-featured: 1.05fr 0.95fr;
+  --maverick-layout-grid-motion: 1.15fr 0.85fr;
+  --maverick-layout-grid-screenshot: 0.95fr 1.25fr 0.95fr;
+  --maverick-layout-grid-matrix: 1.1fr 1.2fr 1fr 1.6fr;
+  --maverick-layout-grid-banner-card: 92px 1fr auto;
+  --maverick-layout-grid-event-card: 84px 1fr;
+  --maverick-layout-width-matrix-min: 860px;
+  --maverick-layout-width-select-min: 220px;
+  --maverick-position-half: 50%;
+  --maverick-size-header-height: 4rem;
+  --maverick-size-control-height: 2.5rem;
+  --maverick-size-search-height: var(--maverick-size-control-height);
+  --maverick-size-video-card-height: 380px;
+  --maverick-size-360: 360px;
+  --maverick-size-product-card-height: 360px;
+  --maverick-size-listing-featured-height: 320px;
+  --maverick-size-community-ring: 360px;
+  --maverick-size-card-width-sm: 13rem;
+  --maverick-size-card-width-md: 16rem;
+  --maverick-size-card-min-sm: 290px;
+  --maverick-size-card-min-md: 330px;
+  --maverick-size-card-min-lg: 360px;
+  --maverick-size-icon-sm: 1rem;
+  --maverick-size-icon-md: 1.75rem;
+  --maverick-size-icon-lg: 2rem;
+  --maverick-size-icon-xl: 2.5rem;
+  --maverick-size-wave: 72%;
+  --maverick-width-hero-collage: 88%;
+  --maverick-offset-wave-branding-bottom: -6%;
+  --maverick-offset-wave-branding-right: -16%;
+  --maverick-offset-wave-hero-bottom: -10%;
+  --maverick-offset-wave-hero-right: -18%;
+  --maverick-offset-wave-community-bottom: -14%;
+  --maverick-offset-wave-motion-bottom: -16%;
+  --maverick-blur-soft: 10px;
+  --maverick-blur-fine: 1px;
+  --maverick-orb-blur: 46px;
+  --maverick-opacity-wave: 0.25;
+  --maverick-opacity-wave-strong: 0.3;
+  --maverick-layer-raised: 1;
+  --maverick-shadow-focus-ring: 0 0 0 4px var(--focus-ring);
+  --maverick-shadow-focus-ring-md: 0 0 0 3px var(--focus-ring);
+  --maverick-shadow-focus-ring-sm: 0 0 0 2px var(--focus-ring);
+  --maverick-motion-ease-soft: ease-in-out;
+  --maverick-motion-ease-linear: linear;
+  --maverick-motion-float-offset-y: -6px;
+  --maverick-motion-mesh-scale-end: 1.02;
+  --maverick-motion-preview-hover-offset-x: 4px;
+  --maverick-motion-preview-hover-scale: 1.04;
+  --maverick-motion-preview-saturate-end: 1.08;
+  --maverick-motion-preview-entrance-offset-y: 12px;
+  --maverick-motion-preview-stage-min-height: 38px;
+  --maverick-motion-preview-track-height: 2px;
+  --maverick-motion-preview-dot-size: 0.72rem;
+  --maverick-motion-preview-chip-min-width: 98px;
+  --maverick-motion-preview-chip-padding-y: 0.3rem;
+  --maverick-motion-preview-chip-padding-x: 0.75rem;
+  --maverick-motion-preview-chip-font-size: 0.7rem;
+  --maverick-motion-preview-plate-height: 28px;
+  --maverick-motion-preview-plate-radius: 0.6rem;
+  --maverick-motion-preview-dot-shift: calc(100% - var(--maverick-motion-preview-dot-size));
+  --maverick-size-spinner: 2.4rem;
+  --maverick-size-spinner-small: 1.2rem;
+  --maverick-size-otp-slot: 2.55rem;
+  --maverick-type-size-otp: 1.1rem;
+  --maverick-branding-orb-brand-size: min(50vw, 680px);
+  --maverick-branding-orb-violet-size: min(42vw, 520px);
+  --maverick-branding-orb-brand-right: -10%;
+  --maverick-branding-orb-brand-top: 24%;
+  --maverick-branding-orb-violet-left: -6%;
+  --maverick-branding-orb-violet-bottom: 6%;
+  --maverick-branding-wave-width: 130%;
+  --maverick-branding-wave-height: 54%;
+  --maverick-branding-wave-left: -15%;
+  --maverick-branding-wave-top: -14%;
+  --maverick-branding-wave-bottom: -18%;
+  --maverick-branding-wave-rotate-top: 2deg;
+  --maverick-branding-wave-rotate-bottom: -3deg;
+  --maverick-branding-wave-opacity: 0.16;
+  --maverick-branding-wave-opacity-strong: 0.24;
+  --maverick-border-width: 1px;
+  --maverick-shadow-brand-500-20-ring: 0 0 0 4px var(--maverick-mix-brand-500-20);
+  --maverick-shadow-brand-500-26-soft: 0 8px 22px var(--maverick-mix-brand-500-26);
+  --maverick-pulse-ring-spread-10: 10px;
+  --maverick-pulse-ring-spread-12: 12px;
+  --maverick-pulse-ring-spread-18: 18px;
+  --maverick-pulse-ring-spread-22: 22px;
+  --maverick-pulse-ring-spread-42: 42px;
+  --maverick-mix-brand-500-20: color-mix(in srgb, var(--brand-500) 20%, transparent);
+  --maverick-mix-brand-500-8: color-mix(in srgb, var(--brand-500) 8%, transparent);
+  --maverick-mix-brand-500-26: color-mix(in srgb, var(--brand-500) 26%, transparent);
+  --maverick-mix-brand-500-32: color-mix(in srgb, var(--brand-500) 32%, transparent);
+  --maverick-mix-brand-500-35: color-mix(in srgb, var(--brand-500) 35%, transparent);
+  --maverick-mix-brand-500-36: color-mix(in srgb, var(--brand-500) 36%, transparent);
+  --maverick-mix-brand-500-42: color-mix(in srgb, var(--brand-500) 42%, transparent);
+  --maverick-mix-brand-500-55: color-mix(in srgb, var(--brand-500) 55%, transparent);
+  --maverick-mix-brand-500-62: color-mix(in srgb, var(--brand-500) 62%, transparent);
+  --maverick-mix-brand-500-72: color-mix(in srgb, var(--brand-500) 72%, transparent);
+  --maverick-mix-brand-500-12: color-mix(in srgb, var(--brand-500) 12%, transparent);
+  --maverick-mix-brand-600-84: color-mix(in srgb, var(--brand-600) 84%, transparent);
+  --maverick-mix-brand-700-88: color-mix(in srgb, var(--brand-700) 88%, transparent);
+  --maverick-mix-bg-1-8: color-mix(in srgb, var(--bg-1) 8%, transparent);
+  --maverick-mix-bg-1-28: color-mix(in srgb, var(--bg-1) 28%, transparent);
+  --maverick-mix-bg-1-35: color-mix(in srgb, var(--bg-1) 35%, transparent);
+  --maverick-mix-bg-1-45: color-mix(in srgb, var(--bg-1) 45%, transparent);
+  --maverick-mix-bg-1-78: color-mix(in srgb, var(--bg-1) 78%, transparent);
+  --maverick-mix-bg-1-82: color-mix(in srgb, var(--bg-1) 82%, transparent);
+  --maverick-mix-bg-1-88: color-mix(in srgb, var(--bg-1) 88%, transparent);
+  --maverick-mix-bg-1-90: color-mix(in srgb, var(--bg-1) 90%, transparent);
+  --maverick-mix-bg-0-76: color-mix(in srgb, var(--bg-0) 76%, transparent);
+  --maverick-mix-surface-1-76: color-mix(in srgb, var(--surface-1) 76%, transparent);
+  --maverick-mix-surface-1-85: color-mix(in srgb, var(--surface-1) 85%, transparent);
+  --maverick-mix-surface-1-86: color-mix(in srgb, var(--surface-1) 86%, var(--brand-500) 14%);
+  --maverick-mix-surface-1-90: color-mix(in srgb, var(--surface-1) 90%, transparent);
+  --maverick-mix-surface-2-74: color-mix(in srgb, var(--surface-2) 74%, transparent);
+  --maverick-mix-surface-3-70: color-mix(in srgb, var(--surface-3) 70%, transparent);
+  --maverick-mix-surface-3-72: color-mix(in srgb, var(--surface-3) 72%, transparent);
+  --maverick-mix-divider-80: color-mix(in srgb, var(--divider) 80%, transparent);
+  --maverick-mix-text-1-8: color-mix(in srgb, var(--text-1) 8%, transparent);
+  --maverick-mix-text-2-90: color-mix(in srgb, var(--text-2) 90%, transparent);
+  --maverick-mix-text-on-brand-20: color-mix(in srgb, var(--text-on-brand) 20%, transparent);
+  --maverick-mix-text-on-brand-30: color-mix(in srgb, var(--text-on-brand) 30%, transparent);
+  --maverick-mix-text-on-brand-82: color-mix(in srgb, var(--text-on-brand) 82%, transparent);
+  --maverick-mix-text-on-brand-85: color-mix(in srgb, var(--text-on-brand) 85%, transparent);
+  --maverick-mix-text-on-brand-88: color-mix(in srgb, var(--text-on-brand) 88%, transparent);
+  --maverick-mix-success-14: color-mix(in srgb, var(--success) 14%, transparent);
+  --maverick-mix-success-16: color-mix(in srgb, var(--success) 16%, transparent);
+  --maverick-mix-danger-10: color-mix(in srgb, var(--danger) 10%, transparent);
+  --maverick-mix-danger-12: color-mix(in srgb, var(--danger) 12%, transparent);
+  --maverick-mix-danger-14: color-mix(in srgb, var(--danger) 14%, transparent);
+  --maverick-mix-danger-16: color-mix(in srgb, var(--danger) 16%, transparent);
+  --maverick-mix-danger-18: color-mix(in srgb, var(--danger) 18%, transparent);
+  --maverick-mix-danger-45: color-mix(in srgb, var(--danger) 45%, transparent);
+  --maverick-mix-danger-72-on-brand: color-mix(in srgb, var(--danger) 72%, var(--text-on-brand));
+  --maverick-mix-accent-violet-22: color-mix(in srgb, var(--accent-violet) 22%, transparent);
+  --maverick-mix-accent-violet-30: color-mix(in srgb, var(--accent-violet) 30%, transparent);
+  --maverick-mix-accent-violet-38: color-mix(in srgb, var(--accent-violet) 38%, transparent);
+  --maverick-mix-accent-indigo-22: color-mix(in srgb, var(--accent-indigo) 22%, transparent);
+  --maverick-mix-accent-pink-24: color-mix(in srgb, var(--accent-pink) 24%, transparent);
+  --maverick-gradient-chip-brand: linear-gradient(90deg, var(--brand-600), var(--brand-500));
+  --maverick-gradient-preview-investment-explainer:
+    linear-gradient(120deg, var(--maverick-mix-brand-700-88), var(--maverick-mix-brand-500-62), var(--maverick-mix-accent-indigo-22));
+  --maverick-gradient-preview-open-house:
+    linear-gradient(140deg, var(--maverick-mix-brand-600-84), var(--maverick-mix-brand-500-72), var(--maverick-mix-accent-pink-24));
+  --maverick-gradient-motion-plate:
+    linear-gradient(110deg, color-mix(in srgb, var(--brand-600) 52%, transparent), color-mix(in srgb, var(--accent-violet) 42%, transparent));
+  --maverick-motion-lift-y: -2px;
+  --maverick-rotate-soft-negative: -3deg;
+  --maverick-rotate-soft-positive: 2deg;
+}
+
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+  --bg-0: var(--maverick-light-bg-0);
+  --bg-1: var(--maverick-light-bg-1);
+  --surface-1: var(--maverick-light-surface-1);
+  --surface-2: var(--maverick-light-surface-2);
+  --surface-3: var(--maverick-light-surface-3);
+  --overlay: var(--maverick-light-overlay);
+  --border-soft: var(--maverick-light-border-soft);
+  --border-hover: var(--maverick-light-border-hover);
+  --divider: var(--maverick-light-divider);
+  --text-1: var(--maverick-light-text-1);
+  --text-2: var(--maverick-light-text-2);
+  --text-3: var(--maverick-light-text-3);
+  --brand-300: var(--maverick-brand-300);
+  --brand-400: var(--maverick-brand-400);
+  --brand-500: var(--maverick-brand-500);
+  --brand-600: var(--maverick-brand-600);
+  --brand-700: var(--maverick-brand-700);
+  --text-on-brand: var(--maverick-text-on-brand);
+  --accent-pink: var(--maverick-light-accent-pink);
+  --accent-violet: var(--maverick-light-accent-violet);
+  --accent-indigo: var(--maverick-light-accent-indigo);
+  --success: var(--maverick-light-success);
+  --warning: var(--maverick-light-warning);
+  --danger: var(--maverick-light-danger);
+  --focus-ring: var(--maverick-light-focus-ring);
+
+  --surface-solid-1: color-mix(in srgb, var(--bg-1) 96%, var(--surface-2) 4%);
+  --surface-solid-2: color-mix(in srgb, var(--surface-2) 85%, var(--bg-1) 15%);
+  --surface-solid-3: color-mix(in srgb, var(--surface-3) 86%, var(--bg-1) 14%);
+  --surface-hover: color-mix(in srgb, var(--surface-2) 68%, var(--surface-3) 32%);
+  --surface-brand-soft: color-mix(in srgb, var(--brand-500) 8%, var(--surface-1));
+  --surface-brand-soft-strong: color-mix(in srgb, var(--brand-500) 12%, var(--surface-1));
+  --surface-danger-soft: color-mix(in srgb, var(--danger) 10%, var(--surface-1));
+  --surface-success-soft: color-mix(in srgb, var(--success) 12%, var(--surface-1));
+  --surface-warning-soft: color-mix(in srgb, var(--warning) 12%, var(--surface-1));
+  --border-brand-soft: color-mix(in srgb, var(--brand-500) 30%, transparent);
+  --border-danger-soft: color-mix(in srgb, var(--danger) 32%, transparent);
+  --border-success-soft: color-mix(in srgb, var(--success) 34%, transparent);
+  --border-warning-soft: color-mix(in srgb, var(--warning) 34%, transparent);
+  --shadow-soft: 0 12px 32px rgba(15, 23, 42, 0.08);
+  --shadow-lifted: 0 20px 48px rgba(15, 23, 42, 0.14);
+  --shadow-brand: 0 14px 34px color-mix(in srgb, var(--brand-500) 22%, transparent);
+  --gradient-brand: linear-gradient(135deg, var(--brand-600), var(--brand-500));
+  --gradient-surface: linear-gradient(165deg, var(--surface-1), var(--surface-2));
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg-0: var(--maverick-dark-bg-0);
+  --bg-1: var(--maverick-dark-bg-1);
+  --surface-1: var(--maverick-dark-surface-1);
+  --surface-2: var(--maverick-dark-surface-2);
+  --surface-3: var(--maverick-dark-surface-3);
+  --overlay: var(--maverick-dark-overlay);
+  --border-soft: var(--maverick-dark-border-soft);
+  --border-hover: var(--maverick-dark-border-hover);
+  --divider: var(--maverick-dark-divider);
+  --text-1: var(--maverick-dark-text-1);
+  --text-2: var(--maverick-dark-text-2);
+  --text-3: var(--maverick-dark-text-3);
+  --brand-300: var(--maverick-brand-300);
+  --brand-400: var(--maverick-brand-400);
+  --brand-500: var(--maverick-brand-500);
+  --brand-600: var(--maverick-brand-600);
+  --brand-700: var(--maverick-brand-700);
+  --text-on-brand: var(--maverick-text-on-brand);
+  --accent-pink: var(--maverick-dark-accent-pink);
+  --accent-violet: var(--maverick-dark-accent-violet);
+  --accent-indigo: var(--maverick-dark-accent-indigo);
+  --success: var(--maverick-dark-success);
+  --warning: var(--maverick-dark-warning);
+  --danger: var(--maverick-dark-danger);
+  --focus-ring: var(--maverick-dark-focus-ring);
+
+  --surface-solid-1: color-mix(in srgb, var(--bg-1) 90%, var(--text-1) 10%);
+  --surface-solid-2: color-mix(in srgb, var(--bg-1) 84%, var(--text-1) 16%);
+  --surface-solid-3: color-mix(in srgb, var(--bg-1) 76%, var(--text-1) 24%);
+  --surface-hover: color-mix(in srgb, var(--surface-solid-2) 85%, var(--text-1) 15%);
+  --surface-brand-soft: color-mix(in srgb, var(--brand-500) 14%, var(--surface-solid-1));
+  --surface-brand-soft-strong: color-mix(in srgb, var(--brand-500) 18%, var(--surface-solid-1));
+  --surface-danger-soft: color-mix(in srgb, var(--danger) 14%, var(--surface-solid-1));
+  --surface-success-soft: color-mix(in srgb, var(--success) 14%, var(--surface-solid-1));
+  --surface-warning-soft: color-mix(in srgb, var(--warning) 14%, var(--surface-solid-1));
+  --border-brand-soft: color-mix(in srgb, var(--brand-500) 36%, transparent);
+  --border-danger-soft: color-mix(in srgb, var(--danger) 40%, transparent);
+  --border-success-soft: color-mix(in srgb, var(--success) 40%, transparent);
+  --border-warning-soft: color-mix(in srgb, var(--warning) 40%, transparent);
+  --shadow-soft: 0 14px 38px rgba(0, 0, 0, 0.45);
+  --shadow-lifted: 0 24px 54px rgba(0, 0, 0, 0.58);
+  --shadow-brand: 0 16px 40px color-mix(in srgb, var(--brand-500) 34%, transparent);
+  --gradient-brand: linear-gradient(135deg, var(--brand-700), var(--brand-500));
+  --gradient-surface: linear-gradient(165deg, var(--surface-solid-2), var(--surface-solid-1));
+}

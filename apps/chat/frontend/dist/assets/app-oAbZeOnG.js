@@ -1,0 +1,1 @@
+import{c as o,j as t,R as r}from"./client-BSToCCgi.js";import{A as e}from"./main-D7YVCz9j.js";import"./useRuntimeEvents-KDpCooks.js";import"./useRuntimeThreads-DLbU5SyP.js";o.createRoot(document.getElementById("root")).render(t.jsx(r.StrictMode,{children:t.jsx(e,{})}));

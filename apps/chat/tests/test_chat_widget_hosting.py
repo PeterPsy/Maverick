@@ -1,0 +1,83 @@
+from __future__ import annotations
+
+import unittest
+from pathlib import Path
+
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+class ChatWidgetHostingTests(unittest.TestCase):
+    def test_chat_declares_fleet_runtime_text_widget(self) -> None:
+        contract_source = (REPO_ROOT / "apps/chat/app_contract.json").read_text()
+        vite_source = (REPO_ROOT / "apps/chat/vite.config.ts").read_text()
+        widget_source = (REPO_ROOT / "apps/chat/frontend/src/widgets/runtime-text/main.tsx").read_text()
+        widget_styles = (REPO_ROOT / "apps/chat/frontend/src/widgets/runtime-text/styles.css").read_text()
+
+        self.assertIn('"widget_id": "chat-runtime-text"', contract_source)
+        self.assertIn('"host": "fleet"', contract_source)
+        self.assertIn('"chat.runtime.text.preview"', contract_source)
+        self.assertIn('"widgets/runtime-text/index": "frontend/widgets/runtime-text/index.html"', vite_source)
+        self.assertIn("useRuntimeEvents", widget_source)
+        self.assertIn("getWidgetContext", widget_source)
+        self.assertIn("eventsToMessages(events)", widget_source)
+        self.assertNotIn("latestRuntimeStepLabel", widget_source)
+        self.assertNotIn("Working", widget_source)
+        self.assertNotIn("agent_label", widget_source)
+        self.assertNotIn("chat-runtime-text__agent", widget_source)
+        self.assertNotIn("chat-runtime-text__status", widget_source)
+        self.assertNotIn("sendRuntimeTurn", widget_source)
+        self.assertNotIn("createRuntimeSession", widget_source)
+        self.assertNotIn("fetch(", widget_source)
+        self.assertIn("overflow: hidden;", widget_styles)
+        self.assertIn("overflow-y: auto;", widget_styles)
+        self.assertNotIn("chat-runtime-text__agent", widget_styles)
+        self.assertNotIn("chat-runtime-text__status", widget_styles)
+
+    def test_chat_structured_messages_use_generic_widget_host(self) -> None:
+        structured_source = (REPO_ROOT / "apps/chat/frontend/src/components/StructuredContentMessage.tsx").read_text()
+        host_source = (REPO_ROOT / "apps/chat/frontend/src/components/WidgetHostFrame.tsx").read_text()
+
+        self.assertIn("<WidgetHostFrame", structured_source)
+        self.assertIn('hostAppId="chat"', structured_source)
+        self.assertIn("listWidgets(hostAppId, content.kind)", host_source)
+        self.assertIn("createWidgetContext", host_source)
+        self.assertIn("host_app_id: hostAppId", host_source)
+        self.assertIn("owner_app_id: widget.owner_app_id", host_source)
+        self.assertIn("widget_id: widget.widget_id", host_source)
+        self.assertIn("message_id: messageId", host_source)
+        self.assertIn("content,", host_source)
+        self.assertIn("state.widget.frontend_mount", host_source)
+        self.assertIn("#context=", host_source)
+        self.assertIn("window.location.hash", host_source)
+
+    def test_chat_transcript_triggers_widget_previews_from_workspace_file_links(self) -> None:
+        transcript_source = (REPO_ROOT / "apps/chat/frontend/src/lib/transcript.ts").read_text()
+        preview_source = (REPO_ROOT / "apps/chat/frontend/src/lib/linkPreviews.ts").read_text()
+
+        self.assertRegex(transcript_source, r"structuredContentFromAgentLinks\((text|finalText)\)")
+        self.assertIn('kind: "workspace.file.preview"', preview_source)
+        self.assertIn("workspace_relative_path", preview_source)
+        self.assertIn("generated|uploaded", preview_source)
+
+    def test_chat_widget_host_has_no_widget_owner_imports(self) -> None:
+        host_source = (REPO_ROOT / "apps/chat/frontend/src/components/WidgetHostFrame.tsx").read_text()
+
+        self.assertNotIn("gallery", host_source.lower())
+        self.assertNotIn("checklist", host_source.lower())
+        self.assertNotIn("../../", host_source)
+        self.assertNotIn("/apps/", host_source)
+        self.assertNotIn("apps/", host_source)
+
+    def test_chat_widget_host_keeps_iframe_stable_across_transcript_rerenders(self) -> None:
+        host_source = (REPO_ROOT / "apps/chat/frontend/src/components/WidgetHostFrame.tsx").read_text()
+
+        self.assertIn("key={`${hostAppId}:${messageId}:${state.widget.owner_app_id}:${state.widget.widget_id}:${state.contextToken}`}", host_source)
+        self.assertIn("stableContentSignature(content)", host_source)
+        self.assertIn("[contentSignature, hostAppId, messageId]", host_source)
+        self.assertNotIn("[content, hostAppId, messageId]", host_source)
+        self.assertIn("if (!cancelled)", host_source)
+
+
+if __name__ == "__main__":
+    unittest.main()

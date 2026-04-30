@@ -1,0 +1,39 @@
+name: Bug report
+description: Report a reproducible Maverick bug
+title: "[Bug]: "
+labels: ["needs reproduction"]
+body:
+  - type: markdown
+    attributes:
+      value: "Do not report vulnerabilities here. Follow SECURITY.md."
+  - type: input
+    id: version
+    attributes:
+      label: Commit or version
+      description: Include the commit SHA if possible.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Provide a clean sequence from a fresh state.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python, Node, browser, sandbox availability, provider CLI.

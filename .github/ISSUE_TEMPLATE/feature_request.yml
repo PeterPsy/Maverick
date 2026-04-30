@@ -1,0 +1,34 @@
+name: Feature request
+description: Propose a scoped Maverick feature
+title: "[Feature]: "
+labels: ["help wanted"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user or developer problem should this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: Describe the smallest useful solution.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - core
+        - runtime
+        - workspace isolation
+        - app SDK
+        - built-in app
+        - frontend
+        - docs
+        - security
+    validations:
+      required: true

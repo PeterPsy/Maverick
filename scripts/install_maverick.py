@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import getpass
 import grp
 import os
 from pathlib import Path
@@ -24,6 +25,7 @@ if str(REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(REPOSITORY_ROOT))
 
 from core.shared.installer import (  # noqa: E402
+    DEFAULT_MONGODB_PASSWORD_REF,
     InstallerConfig,
     apply_install_plan,
     check_health,
@@ -67,7 +69,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--mongodb-uri", default="mongodb://127.0.0.1:27017/maverick")
     parser.add_argument("--mongodb-database", default="maverick")
     parser.add_argument("--mongodb-username", default="")
-    parser.add_argument("--mongodb-password-ref", default="")
+    parser.add_argument(
+        "--mongodb-password-ref",
+        default="",
+        help="Existing bootstrap secret ref for MongoDB password. Interactive installs usually ask for the password instead.",
+    )
     parser.add_argument("--secret-key-file", default="data/bootstrap-secrets/secret-store.key")
     parser.add_argument("--bootstrap-secret-store-root", default="data/bootstrap-secrets")
     parser.add_argument("--skip-bootstrap", action="store_true")
@@ -169,6 +175,7 @@ def build_config(args: argparse.Namespace, *, interactive: bool) -> InstallerCon
     mongodb_database = args.mongodb_database
     mongodb_username = args.mongodb_username
     mongodb_password_ref = args.mongodb_password_ref
+    mongodb_password = ""
     if interactive and control_store == "json":
         json_control_store_root = _prompt_text(
             "JSON control store root",
@@ -178,8 +185,10 @@ def build_config(args: argparse.Namespace, *, interactive: bool) -> InstallerCon
     if interactive and control_store == "mongo":
         mongodb_uri = _prompt_text("MongoDB URI", mongodb_uri, interactive=interactive)
         mongodb_database = _prompt_text("MongoDB database", mongodb_database, interactive=interactive)
-        mongodb_username = _prompt_text("MongoDB username", mongodb_username, interactive=interactive)
-        mongodb_password_ref = _prompt_text("MongoDB password secret ref", mongodb_password_ref, interactive=interactive)
+        mongodb_username = _prompt_text("MongoDB username", mongodb_username or "maverick", interactive=interactive)
+        mongodb_password = _prompt_password("MongoDB password", interactive=interactive)
+        if mongodb_password and not mongodb_password_ref:
+            mongodb_password_ref = DEFAULT_MONGODB_PASSWORD_REF
     public_scheme = args.public_scheme if local_only else _prompt_choice(
         "Public scheme",
         default=args.public_scheme,
@@ -223,6 +232,7 @@ def build_config(args: argparse.Namespace, *, interactive: bool) -> InstallerCon
         mongodb_database=mongodb_database,
         mongodb_username=mongodb_username,
         mongodb_password_ref=mongodb_password_ref,
+        mongodb_password=mongodb_password,
         secret_key_file=args.secret_key_file,
         bootstrap_secret_store_root=args.bootstrap_secret_store_root,
     )
@@ -267,6 +277,12 @@ def _prompt_text(label: str, default: str, *, interactive: bool) -> str:
         return default
     raw = input(f"{label} [{default}]: ").strip()
     return raw or default
+
+
+def _prompt_password(label: str, *, interactive: bool) -> str:
+    if not interactive:
+        return ""
+    return getpass.getpass(f"{label} [empty for none]: ").strip()
 
 
 def _prompt_path(label: str, default: Path, *, interactive: bool) -> Path:

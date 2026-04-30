@@ -15,11 +15,14 @@ from typing import Any
 from urllib import error, request
 
 from core.shared.env_file import quote_env_value, read_env_file, unquote_env_value
+from core.secrets.errors import SecretNotFoundError
 from core.secrets.key_material import secret_store_key_from_text
 from core.secrets.service import create_platform_secret
 from core.secrets.store import SecretCollections, SecretDocumentStore
 from core.shared.json_file_collection import JsonFileCollection
 from core.shared.repository import installation_paths
+
+DEFAULT_MONGODB_PASSWORD_REF = "platform:secret-alias/mongodb-password"
 
 
 @dataclass(frozen=True)
@@ -53,6 +56,7 @@ class InstallerConfig:
     mongodb_database: str = "maverick"
     mongodb_username: str = ""
     mongodb_password_ref: str = ""
+    mongodb_password: str = ""
     secret_key_file: str = "data/bootstrap-secrets/secret-store.key"
     bootstrap_secret_store_root: str = "data/bootstrap-secrets"
     runtime_api_secret_ref: str = "platform:secret-alias/runtime-api-secret"
@@ -122,12 +126,13 @@ def render_install_env_file(config: InstallerConfig) -> str:
         "MAVERICK_APP_STORE_URL": existing.get("MAVERICK_APP_STORE_URL") or "https://maverick-app-store.versy.ai",
     }
     if config.control_store == "mongo":
+        mongodb_password_ref = config.mongodb_password_ref or (DEFAULT_MONGODB_PASSWORD_REF if config.mongodb_password else "")
         values["MAVERICK_MONGODB_URI"] = config.mongodb_uri
         values["MAVERICK_MONGODB_DATABASE"] = config.mongodb_database
         if config.mongodb_username:
             values["MAVERICK_MONGODB_USERNAME"] = config.mongodb_username
-        if config.mongodb_password_ref:
-            values["MAVERICK_MONGODB_PASSWORD_REF"] = config.mongodb_password_ref
+        if mongodb_password_ref:
+            values["MAVERICK_MONGODB_PASSWORD_REF"] = mongodb_password_ref
     if existing.get("MAVERICK_CODEX_COMMAND"):
         values["MAVERICK_CODEX_COMMAND"] = existing["MAVERICK_CODEX_COMMAND"]
     if existing.get("MAVERICK_BACKEND_RESCUE_COMMAND"):
@@ -158,7 +163,7 @@ def _render_bootstrap_secret_files(config: InstallerConfig, *, key_text: str) ->
         "values": root / "values.json",
         "bindings": root / "bindings.json",
     }
-    if all(path.is_file() for path in paths.values()):
+    if all(path.is_file() for path in paths.values()) and not config.mongodb_password:
         return {path: path.read_text(encoding="utf-8") for path in paths.values()}
 
     existing = read_env_file(config.install_env_path)
@@ -174,24 +179,53 @@ def _render_bootstrap_secret_files(config: InstallerConfig, *, key_text: str) ->
             ),
             key_loader=lambda: secret_store_key_from_text(key_text),
         )
-        create_platform_secret(
+        for name, path in paths.items():
+            if path.is_file():
+                (temp_root / f"{name}.json").write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+        _ensure_platform_secret(
             store,
             label="Runtime API Secret",
             raw_value=runtime_raw_value,
             alias=_alias_from_secret_ref(config.runtime_api_secret_ref),
         )
-        create_platform_secret(
+        _ensure_platform_secret(
             store,
             label="Widget Context Secret",
             raw_value=widget_raw_value,
             alias=_alias_from_secret_ref(config.widget_context_secret_ref),
         )
-        (temp_root / "bindings.json").write_text("[]\n", encoding="utf-8")
+        if config.mongodb_password:
+            _ensure_platform_secret(
+                store,
+                label="MongoDB Password",
+                raw_value=config.mongodb_password,
+                alias=_alias_from_secret_ref(config.mongodb_password_ref or DEFAULT_MONGODB_PASSWORD_REF),
+                rotate=True,
+            )
+        if not (temp_root / "bindings.json").is_file():
+            (temp_root / "bindings.json").write_text("[]\n", encoding="utf-8")
         return {
             paths["secrets"]: (temp_root / "secrets.json").read_text(encoding="utf-8"),
             paths["values"]: (temp_root / "values.json").read_text(encoding="utf-8"),
             paths["bindings"]: (temp_root / "bindings.json").read_text(encoding="utf-8"),
         }
+
+
+def _ensure_platform_secret(
+    store: SecretDocumentStore,
+    *,
+    label: str,
+    raw_value: str,
+    alias: str,
+    rotate: bool = False,
+) -> None:
+    try:
+        record = store.get_secret_by_alias(alias)
+    except SecretNotFoundError:
+        create_platform_secret(store, label=label, raw_value=raw_value, alias=alias)
+        return
+    if rotate:
+        store.save_secret_value(secret_id=record.secret_id, raw_value=raw_value)
 
 
 def _alias_from_secret_ref(secret_ref: str) -> str:

@@ -134,6 +134,8 @@ python3.12 scripts/install_maverick.py \
   --mongodb-uri mongodb://127.0.0.1:27017/maverick
 ```
 
+When MongoDB authentication is enabled, the installer asks for the password once and stores it as an encrypted bootstrap secret. The rendered environment file contains only `MAVERICK_MONGODB_PASSWORD_REF`.
+
 The selected adapter owns platform control-plane data such as users, sessions, workspace registry, workspace membership, app bindings, provider selections, runtime token metadata, and secret metadata/value envelopes.
 
 `.maverick` is only rebuildable operating material. Deleting it should not delete users, workspace memberships, app bindings, provider/OAuth bindings, runtime token records, secret values, or workspace-owned app data.

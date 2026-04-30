@@ -73,7 +73,7 @@ MAVERICK_MONGODB_URI=mongodb://127.0.0.1:27017/maverick
 MAVERICK_MONGODB_DATABASE=maverick
 ```
 
-If MongoDB authentication is enabled, the URI should not contain the raw password. Use a username plus secret ref:
+If MongoDB authentication is enabled, the URI should not contain the raw password. The installer asks for the password once, stores it in the encrypted bootstrap secret store, and writes only a username plus secret ref:
 
 ```bash
 MAVERICK_MONGODB_USERNAME=maverick

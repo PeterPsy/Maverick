@@ -130,6 +130,48 @@ def handle_root_shell(
         return json_response(start_response, {"error": "shell_unavailable"}, status="503 Service Unavailable")
 
 
+def handle_root_shell_static_asset(
+    state: PlatformState,
+    *,
+    workspace_id: str,
+    root_shell_app_id: str,
+    subpath: str,
+    start_path: Path,
+    start_response: StartResponse,
+) -> list[bytes]:
+    """Serve a public root-level asset emitted by the configured shell frontend."""
+    try:
+        _binding, source_root, parsed = resolve_app_surface(
+            state,
+            workspace_id=workspace_id,
+            app_id=root_shell_app_id,
+            start_path=start_path,
+        )
+    except WorkspaceAppBindingNotFoundError:
+        return json_response(start_response, {"error": "shell_not_installed"}, status="404 Not Found")
+    except AppHostingError:
+        return json_response(start_response, {"error": "shell_unavailable"}, status="503 Service Unavailable")
+    frontend = parsed.contract.entrypoints.frontend
+    if frontend is None:
+        return text_response(start_response, "Shell frontend not found", status="404 Not Found")
+    try:
+        return serve_frontend(
+            start_response,
+            frontend_root=(source_root / frontend).resolve(),
+            subpath=subpath,
+            spa_fallback=False,
+            cross_origin=True,
+        )
+    except Exception:
+        logger.exception(
+            "Root shell `%s` in workspace `%s` failed while serving root asset `%s`.",
+            root_shell_app_id,
+            workspace_id,
+            subpath,
+        )
+        return json_response(start_response, {"error": "shell_unavailable"}, status="503 Service Unavailable")
+
+
 def handle_app_frontend(
     state: PlatformState,
     *,

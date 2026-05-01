@@ -515,6 +515,23 @@ class BuiltinAppsTestCase(unittest.TestCase):
         self.assertIn(b'id="root"', body_chat)
         self.assertIn(b"/apps/chat/assets/app-", body_chat)
 
+    def test_platform_host_serves_root_shell_pwa_assets_without_session(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+
+        status_manifest, manifest_body, manifest_headers = self.invoke(app, path="/manifest.webmanifest")
+        status_worker, worker_body, worker_headers = self.invoke(app, path="/sw.js")
+
+        self.assertEqual(status_manifest, 200)
+        self.assertEqual(status_worker, 200)
+        self.assertEqual(manifest_headers["Cache-Control"], "public, max-age=31536000, immutable")
+        self.assertEqual(worker_headers["Cache-Control"], "public, max-age=31536000, immutable")
+        self.assertEqual(manifest_headers["Access-Control-Allow-Origin"], "*")
+        self.assertEqual(worker_headers["Access-Control-Allow-Origin"], "*")
+        self.assertIn(b'"name"', manifest_body)
+        self.assertIn(b"maverick-base-shell", worker_body)
+
     def test_app_backend_calls_do_not_create_runtime_turns(self) -> None:
         repo_root = self.make_repo_root()
         state = bootstrap_platform_state(start_path=repo_root)

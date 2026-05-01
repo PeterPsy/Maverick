@@ -1519,6 +1519,7 @@ In this example:
 
 The hosted platform route `/` may be configured to serve a root shell app.
 The local hosted default is `base-shell`, but that is a platform configuration value, not a special app identity in the app contract model.
+Root-level browser assets required by that shell, such as `/manifest.webmanifest` and `/sw.js`, may be served from the configured root shell app's frontend artifact without making that app a core dependency.
 
 The user may reach:
 

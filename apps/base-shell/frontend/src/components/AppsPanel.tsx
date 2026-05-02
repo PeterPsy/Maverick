@@ -1,6 +1,6 @@
 import { AppRegistryItem } from "../api";
 import { appStatusTone, shellVisibleApps } from "../navigation";
-import { Badge, Button, EmptyPanel, LoadingPanel } from "../ui";
+import { Badge, Button, EmptyPanel } from "../ui";
 import { AppLogo } from "./AppLogo";
 
 export function AppsPanel({
@@ -16,7 +16,7 @@ export function AppsPanel({
 }) {
   const visibleApps = shellVisibleApps(apps);
   if (isLoading) {
-    return <LoadingPanel description="Recupero il registry corrente del sistema." title="Carico le app installate" />;
+    return <section className="bs-app-grid-panel" aria-busy="true" aria-label="Caricamento app" />;
   }
   if (error) {
     return <EmptyPanel description={error} title="Impossibile leggere il registry app" />;

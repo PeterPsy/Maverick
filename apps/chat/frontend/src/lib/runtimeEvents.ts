@@ -87,9 +87,6 @@ function turnStatusFromEvent(eventType: string): RuntimeTurn["status"] | null {
   if (eventType === "runtime.turn.completed") {
     return "completed";
   }
-  if (eventType === "runtime.output.final") {
-    return "completed";
-  }
   if (eventType === "runtime.turn.failed") {
     return "failed";
   }

@@ -11,6 +11,7 @@ from core.providers.errors import ProviderError
 from core.runtime.errors import RuntimeTurnNotFoundError
 from core.runtime.service import record_runtime_event, transition_runtime_turn
 from core.runtime.store import MAX_RUNTIME_EVENTS_PER_SESSION
+from core.runtime.thread_catalog_events import set_thread_availability
 from core.runtime.turn_submission import _complete_output_text, submit_runtime_turn_async
 
 if TYPE_CHECKING:
@@ -111,7 +112,7 @@ def recover_interrupted_runtime_turns_after_backend_restart(
                 failure_reason=failure_reason,
             )
             closed_turns += 1
-            record_runtime_event(
+            event = record_runtime_event(
                 state.runtime_store,
                 event_id=str(uuid4()),
                 session_id=session.session_id,
@@ -126,6 +127,13 @@ def recover_interrupted_runtime_turns_after_backend_restart(
                     "max_resume_attempts": MAX_BACKEND_RESTART_RESUME_ATTEMPTS_PER_SESSION if is_recovery_resume_turn else None,
                 },
                 event_bus=state.runtime_event_bus,
+            )
+            set_thread_availability(
+                state,
+                workspace_id=updated.workspace_id,
+                runtime_session_id=session.session_id,
+                availability="free",
+                now=event.created_at,
             )
             dispatch_source_app_runtime_event(
                 state,
@@ -264,6 +272,13 @@ def _close_non_terminal_turns_with_terminal_events(state: "PlatformState", *, se
             current_status=turn.status,
             target_status=target_status,
             failure_reason=_failure_reason_from_terminal_event(terminal_event),
+        )
+        set_thread_availability(
+            state,
+            workspace_id=updated.workspace_id,
+            runtime_session_id=session_id,
+            availability="free",
+            now=terminal_event.created_at,
         )
         closed += 1
         canonical_event_type = f"runtime.turn.{updated.status}"

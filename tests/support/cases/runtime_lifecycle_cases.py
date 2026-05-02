@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 import subprocess
 import tempfile
@@ -28,9 +28,17 @@ from core.runtime.event_collection import RuntimeEventJsonCollection
 from core.runtime.process_control import register_runtime_process
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_thread import RuntimeThreadRecord
+from core.runtime.runtime_threads import (
+    create_runtime_thread,
+    list_runtime_threads,
+    mark_runtime_thread_user_message,
+    update_runtime_thread,
+    update_runtime_thread_availability,
+)
 from core.runtime.session_collection import RuntimeSessionJsonCollection
 from core.runtime.session_termination import terminate_runtime_session
 from core.runtime.store import MAX_RUNTIME_EVENTS_PER_SESSION, RuntimeDocumentStore, RuntimeCollections
+from core.runtime.thread_catalog_events import mark_thread_user_message_queued, set_thread_availability
 from core.runtime.turn_submission import _complete_output_text, _missing_final_suffix, release_idle_runtime_processes
 from core.runtime.workspace_collection import WorkspaceRuntimeJsonCollection
 from core.shared.json_file_collection import JsonFileCollection
@@ -43,6 +51,14 @@ class PruneReadErrorCollection(FakeCollection):
 
     def find(self, query: dict) -> list[dict]:
         raise ValueError("Unable to read malformed JSON collection")
+
+
+class CapturingThreadEventBus:
+    def __init__(self) -> None:
+        self.events: list[dict] = []
+
+    def publish(self, *, workspace_id: str, event: dict) -> None:
+        self.events.append({"workspace_id": workspace_id, **event})
 
 
 class RuntimeLifecycleTestCase(unittest.TestCase):
@@ -424,6 +440,410 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
         self.assertEqual(second_store.list_threads("acme")[0].thread_id, "thread-1")
         self.assertTrue((repo_root / "workspaces" / "acme" / "runtime" / "threads.json").is_file())
         self.assertFalse((repo_root / ".maverick" / "local-state" / "runtime" / "threads.json").exists())
+
+    def test_runtime_threads_are_ordered_by_latest_user_message_only(self) -> None:
+        store = self.make_store()
+        repo_root = self.make_repo_root()
+        now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
+        create_runtime_session(
+            store,
+            session_id="session-a",
+            workspace_id="acme",
+            agent_id="agent-1",
+            now=now,
+            start_path=repo_root,
+        )
+        create_runtime_session(
+            store,
+            session_id="session-b",
+            workspace_id="acme",
+            agent_id="agent-1",
+            now=now,
+            start_path=repo_root,
+        )
+        create_runtime_thread(
+            store,
+            workspace_id="acme",
+            thread_id="thread-a",
+            runtime_session_id="session-a",
+            title="A",
+            now=now,
+        )
+        create_runtime_thread(
+            store,
+            workspace_id="acme",
+            thread_id="thread-b",
+            runtime_session_id="session-b",
+            title="B",
+            now=now + timedelta(minutes=1),
+        )
+
+        mark_runtime_thread_user_message(
+            store,
+            workspace_id="acme",
+            runtime_session_id="session-a",
+            now=now + timedelta(minutes=2),
+        )
+        update_runtime_thread(
+            store,
+            thread_id="thread-b",
+            workspace_id="acme",
+            updates={"availability": "busy"},
+            now=now + timedelta(minutes=3),
+        )
+
+        self.assertEqual(
+            [thread.thread_id for thread in list_runtime_threads(store, workspace_id="acme")],
+            ["thread-a", "thread-b"],
+        )
+
+    def test_runtime_thread_list_backfills_latest_user_message_from_turns(self) -> None:
+        store = self.make_store()
+        repo_root = self.make_repo_root()
+        now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
+        session_a = create_runtime_session(
+            store,
+            session_id="session-a",
+            workspace_id="acme",
+            agent_id="agent-1",
+            now=now,
+            start_path=repo_root,
+        )
+        session_b = create_runtime_session(
+            store,
+            session_id="session-b",
+            workspace_id="acme",
+            agent_id="agent-1",
+            now=now,
+            start_path=repo_root,
+        )
+        create_runtime_thread(
+            store,
+            workspace_id="acme",
+            thread_id="thread-a",
+            runtime_session_id=session_a.session_id,
+            title="A",
+            now=now,
+        )
+        create_runtime_thread(
+            store,
+            workspace_id="acme",
+            thread_id="thread-b",
+            runtime_session_id=session_b.session_id,
+            title="B",
+            now=now + timedelta(minutes=3),
+        )
+        latest_turn = queue_runtime_turn(
+            store,
+            turn_id="turn-a",
+            session_id=session_a.session_id,
+            input_text="newer work",
+            now=now + timedelta(minutes=5),
+        )
+
+        threads = list_runtime_threads(store, workspace_id="acme")
+
+        self.assertEqual([thread.thread_id for thread in threads], ["thread-a", "thread-b"])
+        self.assertEqual(threads[0].last_user_message_at, latest_turn.created_at)
+
+    def test_runtime_thread_user_message_updates_recency_and_busyness_together(self) -> None:
+        store = self.make_store()
+        repo_root = self.make_repo_root()
+        now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
+        create_runtime_session(
+            store,
+            session_id="session-a",
+            workspace_id="acme",
+            agent_id="agent-1",
+            now=now,
+            start_path=repo_root,
+        )
+        create_runtime_thread(
+            store,
+            workspace_id="acme",
+            thread_id="thread-a",
+            runtime_session_id="session-a",
+            title="A",
+            now=now,
+        )
+        queue_runtime_turn(
+            store,
+            turn_id="turn-a",
+            session_id="session-a",
+            input_text="hello",
+            now=now + timedelta(seconds=30),
+        )
+
+        queued_at = now + timedelta(minutes=1)
+        queued = mark_runtime_thread_user_message(
+            store,
+            workspace_id="acme",
+            runtime_session_id="session-a",
+            now=queued_at,
+        )
+
+        self.assertIsNotNone(queued)
+        self.assertEqual(queued.availability, "queued")
+        self.assertEqual(queued.last_user_message_at, queued_at)
+
+        free = update_runtime_thread_availability(
+            store,
+            workspace_id="acme",
+            runtime_session_id="session-a",
+            availability="free",
+            now=queued_at + timedelta(minutes=1),
+        )
+
+        self.assertIsNotNone(free)
+        self.assertEqual(free.availability, "free")
+        self.assertEqual(free.last_user_message_at, queued_at)
+
+    def test_runtime_thread_list_reconciles_stale_busyness_from_turns(self) -> None:
+        store = self.make_store()
+        repo_root = self.make_repo_root()
+        now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
+        session = create_runtime_session(
+            store,
+            session_id="session-a",
+            workspace_id="acme",
+            agent_id="agent-1",
+            now=now,
+            start_path=repo_root,
+        )
+        create_runtime_thread(
+            store,
+            workspace_id="acme",
+            thread_id="thread-a",
+            runtime_session_id=session.session_id,
+            title="A",
+            now=now,
+        )
+        update_runtime_thread_availability(
+            store,
+            workspace_id="acme",
+            runtime_session_id=session.session_id,
+            availability="active",
+            now=now + timedelta(minutes=1),
+        )
+
+        self.assertEqual(list_runtime_threads(store, workspace_id="acme")[0].availability, "free")
+
+        turn = queue_runtime_turn(store, turn_id="turn-a", session_id=session.session_id, input_text="hello")
+        self.assertEqual(list_runtime_threads(store, workspace_id="acme")[0].availability, "queued")
+
+        transition_runtime_turn(store, turn_id=turn.turn_id, target_status="active")
+        self.assertEqual(list_runtime_threads(store, workspace_id="acme")[0].availability, "active")
+
+        transition_runtime_turn(store, turn_id=turn.turn_id, target_status="completed")
+        self.assertEqual(list_runtime_threads(store, workspace_id="acme")[0].availability, "free")
+
+    def test_thread_catalog_event_creates_missing_thread_before_marking_busy(self) -> None:
+        store = self.make_store()
+        repo_root = self.make_repo_root()
+        event_bus = CapturingThreadEventBus()
+        now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
+        session = create_runtime_session(
+            store,
+            session_id="session-a",
+            workspace_id="acme",
+            agent_id="agent-1",
+            now=now,
+            start_path=repo_root,
+        )
+        turn = queue_runtime_turn(
+            store,
+            turn_id="turn-a",
+            session_id=session.session_id,
+            input_text="work on this",
+            now=now + timedelta(seconds=1),
+        )
+        state = SimpleNamespace(runtime_store=store, runtime_thread_event_bus=event_bus)
+
+        thread = mark_thread_user_message_queued(
+            state,
+            workspace_id="acme",
+            runtime_session_id=session.session_id,
+            now=turn.created_at,
+        )
+
+        self.assertIsNotNone(thread)
+        assert thread is not None
+        self.assertEqual(thread.thread_id, session.session_id)
+        self.assertEqual(thread.title, "work on this")
+        self.assertEqual(thread.availability, "queued")
+        self.assertEqual(thread.last_user_message_at, turn.created_at)
+        self.assertEqual(event_bus.events[-1]["thread"]["availability"], "queued")
+
+    def test_thread_catalog_free_update_reconciles_other_queued_turns(self) -> None:
+        store = self.make_store()
+        repo_root = self.make_repo_root()
+        event_bus = CapturingThreadEventBus()
+        now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
+        session = create_runtime_session(
+            store,
+            session_id="session-a",
+            workspace_id="acme",
+            agent_id="agent-1",
+            now=now,
+            start_path=repo_root,
+        )
+        first = queue_runtime_turn(store, turn_id="turn-a", session_id=session.session_id, input_text="first", now=now)
+        second = queue_runtime_turn(store, turn_id="turn-b", session_id=session.session_id, input_text="second", now=now + timedelta(seconds=1))
+        create_runtime_thread(
+            store,
+            workspace_id="acme",
+            thread_id="thread-a",
+            runtime_session_id=session.session_id,
+            title="A",
+            now=now,
+        )
+        transition_runtime_turn(store, turn_id=first.turn_id, target_status="active")
+        transition_runtime_turn(store, turn_id=first.turn_id, target_status="completed")
+        state = SimpleNamespace(runtime_store=store, runtime_thread_event_bus=event_bus)
+
+        updated = set_thread_availability(
+            state,
+            workspace_id="acme",
+            runtime_session_id=session.session_id,
+            availability="free",
+            now=now + timedelta(seconds=2),
+        )
+
+        self.assertIsNotNone(updated)
+        assert updated is not None
+        self.assertEqual(second.status, "queued")
+        self.assertEqual(updated.availability, "queued")
+        self.assertEqual(event_bus.events[-1]["thread"]["availability"], "queued")
+
+    def test_thread_catalog_event_preserves_user_renamed_title(self) -> None:
+        store = self.make_store()
+        repo_root = self.make_repo_root()
+        event_bus = CapturingThreadEventBus()
+        now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
+        session = create_runtime_session(
+            store,
+            session_id="session-a",
+            workspace_id="acme",
+            agent_id="agent-1",
+            now=now,
+            start_path=repo_root,
+        )
+        queue_runtime_turn(
+            store,
+            turn_id="turn-a",
+            session_id=session.session_id,
+            input_text="first prompt should not replace title",
+            now=now + timedelta(seconds=1),
+        )
+        create_runtime_thread(
+            store,
+            workspace_id="acme",
+            thread_id="thread-a",
+            runtime_session_id=session.session_id,
+            title="Original title",
+            now=now,
+        )
+        update_runtime_thread(
+            store,
+            thread_id="thread-a",
+            workspace_id="acme",
+            updates={"title": "User renamed title"},
+            now=now + timedelta(seconds=2),
+        )
+        state = SimpleNamespace(runtime_store=store, runtime_thread_event_bus=event_bus)
+
+        updated = set_thread_availability(
+            state,
+            workspace_id="acme",
+            runtime_session_id=session.session_id,
+            availability="queued",
+            now=now + timedelta(seconds=3),
+        )
+
+        self.assertIsNotNone(updated)
+        assert updated is not None
+        self.assertEqual(updated.title, "User renamed title")
+        self.assertEqual(store.get_thread("thread-a").title, "User renamed title")
+        self.assertEqual(event_bus.events[-1]["thread"]["title"], "User renamed title")
+
+    def test_thread_catalog_user_message_uses_active_availability_without_downgrade(self) -> None:
+        store = self.make_store()
+        repo_root = self.make_repo_root()
+        event_bus = CapturingThreadEventBus()
+        now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
+        session = create_runtime_session(
+            store,
+            session_id="session-a",
+            workspace_id="acme",
+            agent_id="agent-1",
+            now=now,
+            start_path=repo_root,
+        )
+        first = queue_runtime_turn(store, turn_id="turn-a", session_id=session.session_id, input_text="first", now=now)
+        transition_runtime_turn(store, turn_id=first.turn_id, target_status="active")
+        second = queue_runtime_turn(
+            store,
+            turn_id="turn-b",
+            session_id=session.session_id,
+            input_text="second",
+            now=now + timedelta(seconds=1),
+        )
+        create_runtime_thread(
+            store,
+            workspace_id="acme",
+            thread_id="thread-a",
+            runtime_session_id=session.session_id,
+            title="A",
+            now=now,
+        )
+        state = SimpleNamespace(runtime_store=store, runtime_thread_event_bus=event_bus)
+
+        updated = mark_thread_user_message_queued(
+            state,
+            workspace_id="acme",
+            runtime_session_id=session.session_id,
+            now=second.created_at,
+        )
+
+        self.assertIsNotNone(updated)
+        assert updated is not None
+        self.assertEqual(updated.availability, "active")
+        self.assertEqual(store.get_thread("thread-a").availability, "active")
+        self.assertEqual(event_bus.events[-1]["thread"]["availability"], "active")
+
+    def test_thread_patch_does_not_mutate_core_owned_availability(self) -> None:
+        store = self.make_store()
+        repo_root = self.make_repo_root()
+        now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
+        create_runtime_session(
+            store,
+            session_id="session-a",
+            workspace_id="acme",
+            agent_id="agent-1",
+            now=now,
+            start_path=repo_root,
+        )
+        create_runtime_thread(
+            store,
+            workspace_id="acme",
+            thread_id="thread-a",
+            runtime_session_id="session-a",
+            title="A",
+            now=now,
+        )
+
+        updated = update_runtime_thread(
+            store,
+            thread_id="thread-a",
+            workspace_id="acme",
+            updates={"availability": "active"},
+            now=now + timedelta(minutes=1),
+        )
+
+        self.assertIsNotNone(updated)
+        assert updated is not None
+        self.assertEqual(updated.availability, "free")
+        self.assertEqual(updated.updated_at, now)
 
     def test_runtime_session_collection_rejects_non_array_payload(self) -> None:
         repo_root = self.make_repo_root()

@@ -674,12 +674,17 @@ class ShellCoreApiTestCase(unittest.TestCase):
                 path=f"/api/runtime/sessions/{session['session_id']}/events",
                 cookie=cookie,
             )
+            status_threads, threads, _thread_headers = self.invoke(app, path="/api/runtime/threads", cookie=cookie)
 
         self.assertEqual(status_session, 201)
         self.assertEqual(session["provider_id"], "codex")
         self.assertEqual(status_turn, 201)
         self.assertEqual(turn_payload["turn"]["status"], "completed")
         self.assertEqual(status_events, 200)
+        self.assertEqual(status_threads, 200)
+        self.assertEqual(threads["threads"][0]["runtime_session_id"], session["session_id"])
+        self.assertEqual(threads["threads"][0]["availability"], "free")
+        self.assertIsNotNone(threads["threads"][0]["last_user_message_at"])
         event_types = [event["event_type"] for event in events["items"]]
         self.assertIn("runtime.turn.queued", event_types)
         self.assertIn("runtime.step.updated", event_types)
@@ -759,6 +764,11 @@ class ShellCoreApiTestCase(unittest.TestCase):
                 time.sleep(0.05)
             self.assertIn("runtime.turn.completed", event_types)
             self.assertIn("runtime.output.final", event_types)
+            status_threads, threads, _thread_headers = self.invoke(app, path="/api/runtime/threads", cookie=cookie)
+
+            self.assertEqual(status_threads, 200)
+            self.assertEqual(threads["threads"][0]["runtime_session_id"], session["session_id"])
+            self.assertEqual(threads["threads"][0]["availability"], "free")
 
     def test_workspace_file_upload_persists_under_workspace_storage(self) -> None:
         repo_root = self.make_repo_root()

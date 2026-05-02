@@ -32,7 +32,7 @@ body,
 body {
   margin: 0;
   overflow: hidden;
-  background: #0f0f10;
+  background: var(--maverick-bg);
   color: var(--maverick-text);
   font-family: var(--maverick-font);
 }

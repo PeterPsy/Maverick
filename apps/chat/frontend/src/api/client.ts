@@ -30,6 +30,7 @@ export type ChatThread = {
   availability: string;
   created_at: string;
   updated_at: string;
+  last_user_message_at?: string | null;
 };
 
 export type ChatProject = {
@@ -125,6 +126,34 @@ export type ChatMessage = {
   toolCalls?: ToolCallMessage[];
   step?: RuntimeStepMessage;
 };
+
+function threadTimestamp(value: string | null | undefined): number {
+  if (!value) {
+    return 0;
+  }
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export function orderChatThreads(threads: ChatThread[]): ChatThread[] {
+  return threads
+    .slice()
+    .sort((left, right) => {
+      const leftUserMessageAt = threadTimestamp(left.last_user_message_at);
+      const rightUserMessageAt = threadTimestamp(right.last_user_message_at);
+      const leftHasUserMessage = leftUserMessageAt > 0;
+      const rightHasUserMessage = rightUserMessageAt > 0;
+      if (leftHasUserMessage !== rightHasUserMessage) {
+        return rightHasUserMessage ? 1 : -1;
+      }
+      const leftRecency = leftHasUserMessage ? leftUserMessageAt : threadTimestamp(left.created_at);
+      const rightRecency = rightHasUserMessage ? rightUserMessageAt : threadTimestamp(right.created_at);
+      if (leftRecency !== rightRecency) {
+        return rightRecency - leftRecency;
+      }
+      return left.thread_id.localeCompare(right.thread_id);
+    });
+}
 
 export type AppReference = {
   type: "app";
@@ -424,7 +453,7 @@ export async function listChatProjects(): Promise<ChatProjectsPayload> {
 
 async function withChatProjects<T extends { threads: ChatThread[] }>(payload: T): Promise<T & { projects: ChatProject[]; preferences?: Record<string, unknown> }> {
   const projectsPayload = await listChatProjects();
-  return { ...payload, ...projectsPayload };
+  return { ...payload, threads: orderChatThreads(payload.threads || []), ...projectsPayload };
 }
 
 export async function createThread(
@@ -454,7 +483,6 @@ export async function updateThread(payload: {
   system_prompt?: string;
   project_id?: string | null;
   archived?: boolean;
-  availability?: string;
 }): Promise<{ thread: ChatThread; threads: ChatThread[]; projects?: ChatProject[] }> {
   const response = await requestJson<{ thread: ChatThread; threads: ChatThread[] }>(`/api/runtime/threads/${encodeURIComponent(payload.thread_id)}`, {
     method: "PATCH",

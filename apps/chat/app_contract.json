@@ -140,6 +140,23 @@
       }
     },
     {
+      "widget_id": "chat-sidebar-footer",
+      "host": "base-shell",
+      "content_kinds": [
+        "shell.sidebar.footer"
+      ],
+      "frontend": {
+        "kind": "iframe",
+        "mount": "frontend/dist/widgets/chat-sidebar-footer",
+        "spa_fallback": true
+      },
+      "actions": {
+        "backend": true,
+        "mcp": false,
+        "cli": false
+      }
+    },
+    {
       "widget_id": "chat-floating",
       "host": "base-shell",
       "content_kinds": [

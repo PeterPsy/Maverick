@@ -7,6 +7,7 @@ from uuid import uuid4
 from core.runtime.errors import RuntimeSessionNotFoundError, RuntimeTransitionError
 from core.runtime.event_bus import RuntimeEventBus
 from core.runtime.process_control import terminate_runtime_processes
+from core.runtime.runtime_threads import runtime_thread_availability_for_session, update_runtime_thread_availability
 from core.runtime.service import record_runtime_event, transition_runtime_session, transition_runtime_turn
 from core.runtime.store import RuntimeStore
 
@@ -42,6 +43,13 @@ def terminate_runtime_session(
                 event_bus=event_bus,
             )
             cancelled_turns += 1
+    if cancelled_turns:
+        update_runtime_thread_availability(
+            store,
+            workspace_id=session.workspace_id,
+            runtime_session_id=session_id,
+            availability=runtime_thread_availability_for_session(store, runtime_session_id=session_id),
+        )
 
     if session.status in {"created", "running", "stopping"}:
         target_status = "stopped" if session.status in {"created", "stopping"} else "stopping"

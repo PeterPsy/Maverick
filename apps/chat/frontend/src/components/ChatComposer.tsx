@@ -531,7 +531,7 @@ export function ChatComposer({
                 aria-disabled={disabled}
                 className={`chat-ui-input chat-ui-input--textarea chatapp-composer__field chatapp-composer__editor ${value ? "" : "is-empty"}`}
                 contentEditable={!disabled}
-                data-placeholder="Fai una domanda a Maverick..."
+                data-placeholder="Scrivi a Maverick..."
                 onClick={(event) => syncCaret(event.currentTarget)}
                 onDragLeave={() => setIsDraggingFiles(false)}
                 onDragOver={onDragOver}

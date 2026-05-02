@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import type { CSSProperties, FocusEvent as ReactFocusEvent, MouseEvent as ReactMouseEvent, TouchEvent as ReactTouchEvent } from "react";
 import { AppRegistryItem, SessionUser, WorkspaceItem } from "../api";
-import { shellVisibleApps } from "../navigation";
+import { shellAppRailApps, shellVisibleApps } from "../navigation";
 import type { SidebarMode } from "../session";
 import { AppLogo } from "./AppLogo";
 import { BrandMark } from "./BrandMark";
@@ -59,10 +59,10 @@ export function Sidebar({
 }) {
   const closeSwipeStartRef = useRef<TrackedSwipe | null>(null);
   const visibleAppsById = new Map(shellVisibleApps(apps).map((app) => [app.app_id, app]));
-  const pinnedApps = pinnedAppIds.map((appId) => visibleAppsById.get(appId)).filter((app): app is AppRegistryItem => Boolean(app));
+  const railApps = shellAppRailApps(apps, pinnedAppIds);
   const activeApp = activeAppId ? visibleAppsById.get(activeAppId) || null : null;
-  const isInitialLoading = isLoading && pinnedApps.length === 0;
-  const railMetrics = sidebarRailMetrics(isInitialLoading ? 4 : pinnedApps.length + 1);
+  const isInitialLoading = isLoading && railApps.length === 0;
+  const railMetrics = sidebarRailMetrics(isInitialLoading ? 4 : railApps.length + 1);
   const isDetailLayerOpen = isOpen || isPinned;
 
   function handlePointerEnter() {
@@ -128,7 +128,7 @@ export function Sidebar({
     }
   }
 
-  function renderPinnedAppRail(extraClassName = "") {
+  function renderPinnedAppRail(extraClassName = "", appsToRender = railApps) {
     const className = extraClassName ? `bs-sidebar__rail-apps ${extraClassName}` : "bs-sidebar__rail-apps";
     if (isInitialLoading) {
       return (
@@ -143,12 +143,12 @@ export function Sidebar({
     }
     return (
       <div className={className} role="list">
-        {pinnedApps.map((app) => (
+        {appsToRender.map((app) => (
           <div className="bs-sidebar__rail-item" key={app.app_id} role="listitem">
             <button
               aria-current={activeAppId === app.app_id ? "page" : undefined}
               aria-label={app.name}
-              className={`bs-sidebar__rail-button ${activeAppId === app.app_id ? "is-active" : ""}`}
+              className={sidebarRailButtonClassName(app.app_id, activeAppId)}
               onClick={() => handleOpenApp(app.app_id)}
               title={app.name}
               type="button"
@@ -197,17 +197,24 @@ export function Sidebar({
       <div className="bs-sidebar__details" aria-hidden={!isDetailLayerOpen}>
         <div className="bs-sidebar__top-overlay">
           <div className="bs-sidebar__header">
-            {activeApp ? <AppLogo app={activeApp} className="bs-sidebar__brand-mark" /> : <BrandMark className="bs-sidebar__brand-mark" />}
+            {activeApp ? (
+              <AppLogo app={activeApp} className="bs-sidebar__brand-mark" />
+            ) : isLoading ? (
+              <span className="bs-sidebar__brand-mark bs-sidebar__brand-mark-skeleton" aria-hidden="true" />
+            ) : (
+              <BrandMark className="bs-sidebar__brand-mark" />
+            )}
             <WorkspaceSwitcher
               activeWorkspaceId={activeWorkspaceId}
               canCreateWorkspace={user?.platform_role === "admin"}
+              isLoading={isLoading}
               onChanged={onWorkspaceChanged}
               workspaces={workspaces}
             />
           </div>
 
           <div className="bs-sidebar__mobile-apps" aria-label="Applicazioni pinnate" data-no-sidebar-swipe="">
-            {renderPinnedAppRail("bs-sidebar__rail-apps--mobile")}
+            {renderPinnedAppRail("bs-sidebar__rail-apps--mobile", sidebarMobileRailApps(railApps, activeAppId))}
           </div>
         </div>
 
@@ -216,41 +223,56 @@ export function Sidebar({
           content={{ is_mobile_layout: isMobileLayout, user: user?.username || null }}
           contentKind="shell.sidebar.primary"
           hostAppId="base-shell"
-          label="Chat projects and conversations"
+          label="App sidebar content"
           onCloseSidebar={onClose}
           onOpenApp={onOpenApp}
+          preferredOwnerAppId={activeAppId}
         />
 
-        <div className="bs-sidebar__shell-controls">
-          {!isMobileLayout ? (
-            <div className="bs-sidebar__mode-switcher" aria-label="Sidebar mode">
-              <button
-                aria-label="Solo app in overlay"
-                aria-pressed={mode === "rail"}
-                className={`bs-sidebar__mode-button ${mode === "rail" ? "is-active" : ""}`}
-                onClick={() => onModeChange("rail")}
-                title="Solo app in overlay"
-                type="button"
-              >
-                <span aria-hidden="true" className="material-symbols-rounded">dock_to_left</span>
+        <div className="bs-sidebar__bottom-fixed">
+          <WidgetSlot
+            activeWorkspaceId={activeWorkspaceId}
+            content={{ is_mobile_layout: isMobileLayout, placement: "sidebar-footer", user: user?.username || null }}
+            contentKind="shell.sidebar.footer"
+            hostAppId="base-shell"
+            label="App sidebar footer"
+            onCloseSidebar={onClose}
+            onOpenApp={onOpenApp}
+            preferredOwnerAppId={activeAppId}
+            size="compact"
+          />
+
+          <div className="bs-sidebar__shell-controls">
+            {!isMobileLayout ? (
+              <div className="bs-sidebar__mode-switcher" aria-label="Sidebar mode">
+                <button
+                  aria-label="Solo app in overlay"
+                  aria-pressed={mode === "rail"}
+                  className={`bs-sidebar__mode-button ${mode === "rail" ? "is-active" : ""}`}
+                  onClick={() => onModeChange("rail")}
+                  title="Solo app in overlay"
+                  type="button"
+                >
+                  <span aria-hidden="true" className="material-symbols-rounded">dock_to_left</span>
+                </button>
+                <button
+                  aria-label="Sidebar fissa"
+                  aria-pressed={mode === "fixed"}
+                  className={`bs-sidebar__mode-button ${mode === "fixed" ? "is-active" : ""}`}
+                  onClick={() => onModeChange("fixed")}
+                  title="Sidebar fissa"
+                  type="button"
+                >
+                  <span aria-hidden="true" className="material-symbols-rounded">left_panel_close</span>
+                </button>
+              </div>
+            ) : null}
+            {!isPinned && !isMobileLayout ? (
+              <button aria-label="Chiudi pannello laterale" className="bs-panel-minimize" onClick={onClose} title="Chiudi pannello laterale" type="button">
+                <span aria-hidden="true" className="material-symbols-rounded">chevron_left</span>
               </button>
-              <button
-                aria-label="Sidebar fissa"
-                aria-pressed={mode === "fixed"}
-                className={`bs-sidebar__mode-button ${mode === "fixed" ? "is-active" : ""}`}
-                onClick={() => onModeChange("fixed")}
-                title="Sidebar fissa"
-                type="button"
-              >
-                <span aria-hidden="true" className="material-symbols-rounded">left_panel_close</span>
-              </button>
-            </div>
-          ) : null}
-          {!isPinned && !isMobileLayout ? (
-            <button aria-label="Chiudi pannello laterale" className="bs-panel-minimize" onClick={onClose} title="Chiudi pannello laterale" type="button">
-              <span aria-hidden="true" className="material-symbols-rounded">chevron_left</span>
-            </button>
-          ) : null}
+            ) : null}
+          </div>
         </div>
       </div>
     </aside>
@@ -283,4 +305,21 @@ export function sidebarRailMetrics(appCount: number): CSSProperties {
     "--bs-sidebar-icon-size": `${iconSize}rem`,
     "--bs-sidebar-rail-width": `${railWidth}rem`,
   } as CSSProperties;
+}
+
+export function sidebarMobileRailApps(railApps: AppRegistryItem[], activeAppId: string | null): AppRegistryItem[] {
+  if (!activeAppId) {
+    return railApps;
+  }
+  const normalizedActiveAppId = activeAppId.toLowerCase();
+  return railApps.filter((app) => app.app_id.toLowerCase() !== normalizedActiveAppId);
+}
+
+export function sidebarRailButtonClassName(appId: string, activeAppId: string | null): string {
+  return [
+    "bs-sidebar__rail-button",
+    activeAppId === appId ? "is-active" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 }

@@ -477,6 +477,10 @@
     max-width: 100%;
   }
 
+  .chatapp-bubble.is-human {
+    padding: 0;
+  }
+
   .chatapp-inter-agent-message__meta {
     gap: 0.35rem;
   }
@@ -528,6 +532,28 @@
 
   .chatapp-chat-scroll__inner {
     padding-bottom: calc(var(--chatapp-composer-overlay-height, 0px) + 1rem);
+  }
+
+  .chatapp-transcript-skeleton {
+    gap: 0.7rem;
+    width: 100%;
+    padding-block: 0.15rem;
+  }
+
+  .chatapp-transcript-skeleton__bubble--agent {
+    width: 100%;
+  }
+
+  .chatapp-transcript-skeleton .chatapp-transcript-skeleton__bubble.chatapp-transcript-skeleton__bubble--human {
+    width: 100%;
+    max-width: 100%;
+    margin-left: 0;
+    align-self: stretch;
+  }
+
+  .chatapp-transcript-skeleton__bubble--agent .chatapp-agent-block {
+    min-height: clamp(5.1rem, 12vh, 7rem);
+    padding: 0.78rem 0.82rem;
   }
 
   .chatapp-composer .chatapp-form-stack {
@@ -591,7 +617,9 @@
   }
 
   .chatapp-composer-queue {
-    padding: 0.5rem 0.58rem;
+    width: 100%;
+    padding: 0.78rem 0.85rem;
+    border-radius: var(--chatapp-cell-radius);
   }
 
   .chatapp-composer-queue__eyebrow {
@@ -661,17 +689,64 @@
   .chatapp-bubble.is-inter-agent {
     width: fit-content;
     max-width: calc(100vw - 1.4rem);
+    border-radius: 16px;
+  }
+
+  .chatapp-bubble.is-human {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .chatapp-bubble.is-inter-agent {
+    padding: 0.68rem 0.78rem;
+  }
+
+  .chatapp-human-message {
     padding: 0.68rem 0.78rem;
     border-radius: 16px;
   }
 
+  .chatapp-message-copy-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
   .chatapp-bubble__meta {
+    align-items: center;
+    gap: 0.24rem;
     margin-top: 0.25rem;
   }
 
+  .chatapp-bubble.has-mobile-message-footer > .chatapp-bubble__meta {
+    display: none;
+  }
+
+  .chatapp-message-mobile-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.24rem;
+    min-height: 1.05rem;
+  }
+
+  .chatapp-human-message .chatapp-message-mobile-footer .chatapp-bubble__time {
+    color: rgba(10, 10, 11, 0.48);
+  }
+
   .chatapp-message-action--copy {
+    align-self: flex-end;
     opacity: 1;
     pointer-events: auto;
+  }
+
+  .chatapp-message-copy-row > .chatapp-message-action--copy {
+    display: none;
+  }
+
+  .chatapp-message-action--copy-meta {
+    display: inline-flex;
   }
 
   .chatapp-agent-block__body ul,
@@ -1109,5 +1184,171 @@
   .chatapp-mention-panel--app-picker {
     left: 0.7rem;
     right: 0.7rem;
+  }
+
+  .chatapp-composer {
+    padding: 0.34rem 0.5rem;
+  }
+
+  .chatapp-composer__input-shell {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "tools field actions";
+    align-items: center;
+    gap: 0.28rem;
+    min-height: 2.48rem;
+  }
+
+  .chatapp-composer__text-area {
+    grid-area: field;
+    padding: 0 0.18rem;
+  }
+
+  .chatapp-composer .chat-ui-input.chatapp-composer__editor {
+    min-height: 2.1rem;
+    max-height: 2.1rem;
+    overflow: hidden;
+    white-space: nowrap;
+    line-height: 2.1rem;
+  }
+
+  .chatapp-composer__toolbar {
+    display: contents;
+  }
+
+  .chatapp-composer__tools {
+    grid-area: tools;
+    gap: 0.12rem;
+    flex-wrap: nowrap;
+    align-self: center;
+  }
+
+  .chatapp-attachment-picker {
+    gap: 0.12rem;
+    height: 2rem;
+    padding-bottom: 0;
+  }
+
+  .chatapp-composer__actions {
+    grid-area: actions;
+    gap: 0.12rem;
+    align-self: center;
+  }
+
+  .chatapp-composer__tool-button,
+  .chatapp-attachment-picker__trigger {
+    flex: 0 0 2rem;
+    width: 2rem;
+    min-width: 2rem;
+    height: 2rem;
+    min-height: 2rem;
+    line-height: 1;
+  }
+
+  .chatapp-composer__icon-action,
+  .chatapp-composer__icon-action.is-stop {
+    flex: 0 0 2rem;
+    min-width: 2rem;
+    max-width: 2rem;
+    height: 2rem;
+    min-height: 2rem;
+    width: 2rem;
+    padding: 0;
+    line-height: 1;
+  }
+
+  .chatapp-composer:focus-within .chatapp-composer__input-shell,
+  .chatapp-composer:has(.chatapp-composer__icon-action:active) .chatapp-composer__input-shell,
+  .chatapp-composer:has(.chatapp-composer__tool-button:active) .chatapp-composer__input-shell,
+  .chatapp-composer:has(.chatapp-attachment-picker__trigger:active) .chatapp-composer__input-shell,
+  .chatapp-composer:has(.chatapp-composer__input-shell.has-app-picker) .chatapp-composer__input-shell,
+  .chatapp-composer:has(.chatapp-attachment-strip) .chatapp-composer__input-shell,
+  .chatapp-composer:has(.chatapp-composer-queue) .chatapp-composer__input-shell,
+  .chatapp-composer:has(.chatapp-composer__error) .chatapp-composer__input-shell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "field"
+      "toolbar";
+    align-items: stretch;
+    gap: 0;
+    min-height: 0;
+  }
+
+  .chatapp-composer:focus-within .chatapp-composer__text-area,
+  .chatapp-composer:has(.chatapp-composer__icon-action:active) .chatapp-composer__text-area,
+  .chatapp-composer:has(.chatapp-composer__tool-button:active) .chatapp-composer__text-area,
+  .chatapp-composer:has(.chatapp-attachment-picker__trigger:active) .chatapp-composer__text-area,
+  .chatapp-composer:has(.chatapp-composer__input-shell.has-app-picker) .chatapp-composer__text-area,
+  .chatapp-composer:has(.chatapp-attachment-strip) .chatapp-composer__text-area,
+  .chatapp-composer:has(.chatapp-composer-queue) .chatapp-composer__text-area,
+  .chatapp-composer:has(.chatapp-composer__error) .chatapp-composer__text-area {
+    padding: 0.9rem 0.9rem 0.75rem;
+  }
+
+  .chatapp-composer:focus-within .chat-ui-input.chatapp-composer__editor,
+  .chatapp-composer:has(.chatapp-composer__icon-action:active) .chat-ui-input.chatapp-composer__editor,
+  .chatapp-composer:has(.chatapp-composer__tool-button:active) .chat-ui-input.chatapp-composer__editor,
+  .chatapp-composer:has(.chatapp-attachment-picker__trigger:active) .chat-ui-input.chatapp-composer__editor,
+  .chatapp-composer:has(.chatapp-composer__input-shell.has-app-picker) .chat-ui-input.chatapp-composer__editor,
+  .chatapp-composer:has(.chatapp-attachment-strip) .chat-ui-input.chatapp-composer__editor,
+  .chatapp-composer:has(.chatapp-composer-queue) .chat-ui-input.chatapp-composer__editor,
+  .chatapp-composer:has(.chatapp-composer__error) .chat-ui-input.chatapp-composer__editor {
+    min-height: 54px;
+    max-height: 180px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    line-height: 1.55;
+  }
+
+  .chatapp-composer:focus-within .chatapp-composer__toolbar,
+  .chatapp-composer:has(.chatapp-composer__icon-action:active) .chatapp-composer__toolbar,
+  .chatapp-composer:has(.chatapp-composer__tool-button:active) .chatapp-composer__toolbar,
+  .chatapp-composer:has(.chatapp-attachment-picker__trigger:active) .chatapp-composer__toolbar,
+  .chatapp-composer:has(.chatapp-composer__input-shell.has-app-picker) .chatapp-composer__toolbar,
+  .chatapp-composer:has(.chatapp-attachment-strip) .chatapp-composer__toolbar,
+  .chatapp-composer:has(.chatapp-composer-queue) .chatapp-composer__toolbar,
+  .chatapp-composer:has(.chatapp-composer__error) .chatapp-composer__toolbar {
+    grid-area: toolbar;
+    display: flex;
+  }
+
+  .chatapp-composer:focus-within .chatapp-composer__tools,
+  .chatapp-composer:has(.chatapp-composer__icon-action:active) .chatapp-composer__tools,
+  .chatapp-composer:has(.chatapp-composer__tool-button:active) .chatapp-composer__tools,
+  .chatapp-composer:has(.chatapp-attachment-picker__trigger:active) .chatapp-composer__tools,
+  .chatapp-composer:has(.chatapp-composer__input-shell.has-app-picker) .chatapp-composer__tools,
+  .chatapp-composer:has(.chatapp-attachment-strip) .chatapp-composer__tools,
+  .chatapp-composer:has(.chatapp-composer-queue) .chatapp-composer__tools,
+  .chatapp-composer:has(.chatapp-composer__error) .chatapp-composer__tools {
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    align-self: auto;
+  }
+
+  .chatapp-composer:focus-within .chatapp-composer__actions,
+  .chatapp-composer:has(.chatapp-composer__icon-action:active) .chatapp-composer__actions,
+  .chatapp-composer:has(.chatapp-composer__tool-button:active) .chatapp-composer__actions,
+  .chatapp-composer:has(.chatapp-attachment-picker__trigger:active) .chatapp-composer__actions,
+  .chatapp-composer:has(.chatapp-composer__input-shell.has-app-picker) .chatapp-composer__actions,
+  .chatapp-composer:has(.chatapp-attachment-strip) .chatapp-composer__actions,
+  .chatapp-composer:has(.chatapp-composer-queue) .chatapp-composer__actions,
+  .chatapp-composer:has(.chatapp-composer__error) .chatapp-composer__actions {
+    gap: 0.35rem;
+    align-self: auto;
+  }
+
+  .chatapp-composer:focus-within .chatapp-composer__icon-action,
+  .chatapp-composer:has(.chatapp-composer__icon-action:active) .chatapp-composer__icon-action,
+  .chatapp-composer:has(.chatapp-composer__tool-button:active) .chatapp-composer__icon-action,
+  .chatapp-composer:has(.chatapp-attachment-picker__trigger:active) .chatapp-composer__icon-action,
+  .chatapp-composer:has(.chatapp-composer__input-shell.has-app-picker) .chatapp-composer__icon-action,
+  .chatapp-composer:has(.chatapp-attachment-strip) .chatapp-composer__icon-action,
+  .chatapp-composer:has(.chatapp-composer-queue) .chatapp-composer__icon-action,
+  .chatapp-composer:has(.chatapp-composer__error) .chatapp-composer__icon-action {
+    flex: 0 0 auto;
+    min-height: 2.2rem;
+    max-width: none;
+    height: auto;
+    width: auto;
+    padding: 0 0.8rem;
   }
 }

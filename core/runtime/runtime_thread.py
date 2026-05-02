@@ -24,3 +24,4 @@ class RuntimeThreadRecord:
     availability: str
     created_at: datetime
     updated_at: datetime
+    last_user_message_at: datetime | None = None

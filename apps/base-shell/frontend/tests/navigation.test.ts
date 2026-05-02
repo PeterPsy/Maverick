@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { AppRegistryItem } from "../src/api";
-import { parseShellAppRoute, preferredActiveApp, shellAppPath, shellVisibleApps } from "../src/navigation";
+import {
+  initialShellLaunchRoute,
+  isInitialChatLaunchRoute,
+  parseShellAppRoute,
+  preferredActiveApp,
+  shellAppPath,
+  shellAppRailApps,
+  shellVisibleApps,
+} from "../src/navigation";
 
 function app(app_id: string, frontend_mount: string): AppRegistryItem {
   return {
@@ -21,17 +29,28 @@ function app(app_id: string, frontend_mount: string): AppRegistryItem {
   };
 }
 
-const registry = [app("base-shell", "/apps/base-shell/"), app("chat", "/apps/chat/"), app("docs", "/apps/docs/"), app("headless", "")];
+const registry = [
+  app("base-shell", "/apps/base-shell/"),
+  app("app-store", "/apps/app-store/"),
+  app("chat", "/apps/chat/"),
+  app("docs", "/apps/docs/"),
+  app("headless", ""),
+];
 
 describe("base-shell navigation", () => {
   it("shows only mountable non-shell apps", () => {
-    expect(shellVisibleApps(registry).map((item) => item.app_id)).toEqual(["chat", "docs"]);
+    expect(shellVisibleApps(registry).map((item) => item.app_id)).toEqual(["app-store", "chat", "docs"]);
   });
 
-  it("prefers requested app, then chat, then first visible app", () => {
+  it("keeps App Store in the app rail without duplicating pinned entries", () => {
+    expect(shellAppRailApps(registry, ["chat"]).map((item) => item.app_id)).toEqual(["chat", "app-store"]);
+    expect(shellAppRailApps(registry, ["app-store", "chat"]).map((item) => item.app_id)).toEqual(["chat", "app-store"]);
+  });
+
+  it("prefers requested app, then App Store, then first visible app", () => {
     expect(preferredActiveApp(registry, "docs")?.app_id).toBe("docs");
     expect(preferredActiveApp(registry, "DOCS")?.app_id).toBe("docs");
-    expect(preferredActiveApp(registry, "missing")?.app_id).toBe("chat");
+    expect(preferredActiveApp(registry, "missing")?.app_id).toBe("app-store");
     expect(preferredActiveApp([app("docs", "/apps/docs/")], null)?.app_id).toBe("docs");
   });
 
@@ -41,6 +60,21 @@ describe("base-shell navigation", () => {
       params: { app_page: "Contacts/Mattia-siciliano-234512/notes/latest", focus: "activity" },
     });
     expect(parseShellAppRoute("/")).toEqual({ appId: null, params: {} });
+  });
+
+  it("treats the empty shell route and empty chat route as the new chat launch screen", () => {
+    expect(isInitialChatLaunchRoute(parseShellAppRoute("/"))).toBe(true);
+    expect(isInitialChatLaunchRoute(parseShellAppRoute("/app/chat"))).toBe(true);
+    expect(isInitialChatLaunchRoute(parseShellAppRoute("/app/chat/threads/thread-123"))).toBe(false);
+    expect(isInitialChatLaunchRoute(parseShellAppRoute("/app/docs"))).toBe(false);
+
+    expect(initialShellLaunchRoute(parseShellAppRoute("/app/chat"), () => "request-1")).toEqual({
+      appId: "chat",
+      params: {
+        new_chat: true,
+        new_chat_request_id: "request-1",
+      },
+    });
   });
 
   it("builds user-facing app routes without leaking transient command params", () => {

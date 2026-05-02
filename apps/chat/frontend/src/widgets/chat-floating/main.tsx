@@ -5,25 +5,26 @@ import type { ChatThread } from "../../api/client";
 import { deleteThread, getWidgetContext, updateThread } from "../../api/client";
 import { useRuntimeThreads } from "../../hooks/useRuntimeThreads";
 import { isThreadBusy } from "../chat-sidebar/sections";
+import { floatingWidgetSize } from "./floatingLayout";
 import "../../styles/main.css";
 import "./styles.css";
 
-const EXPANDED_HEIGHT = "min(38rem, calc(100dvh - 2rem))";
-const EXPANDED_WIDTH_REM = 25;
-const COLLAPSED_WIDTH_REM = 3;
-const WINDOW_GAP_REM = 0.75;
 const WIDGET_STATE_STORAGE_KEY_PREFIX = "maverick.chat.floating-widget.state.v1";
 const FALLBACK_WIDGET_STATE_STORAGE_KEY = `${WIDGET_STATE_STORAGE_KEY_PREFIX}:global`;
 const THREAD_SYNC_DEBUG_STORAGE_KEY = "maverick.chat.debug.thread-sync";
 
 type ChatWindow = {
+  draftProjectId: string | null;
   id: string;
+  isDraft: boolean;
   isCollapsed: boolean;
   threadId: string;
 };
 
 type PersistedChatWindow = {
+  draftProjectId?: string | null;
   id: string;
+  isDraft?: boolean;
   isCollapsed: boolean;
   threadId: string;
 };
@@ -33,9 +34,11 @@ type PersistedWidgetState = {
   windows: PersistedChatWindow[];
 };
 
-function createWindow(threadId = ""): ChatWindow {
+function createWindow(threadId = "", isDraft = false, draftProjectId: string | null = null): ChatWindow {
   return {
+    draftProjectId,
     id: `window-${crypto.randomUUID()}`,
+    isDraft,
     isCollapsed: false,
     threadId,
   };
@@ -43,7 +46,9 @@ function createWindow(threadId = ""): ChatWindow {
 
 function windowFromPersistedState(windowItem: PersistedChatWindow): ChatWindow {
   return {
+    draftProjectId: typeof windowItem.draftProjectId === "string" ? windowItem.draftProjectId : null,
     id: windowItem.id,
+    isDraft: windowItem.isDraft === true,
     isCollapsed: windowItem.isCollapsed,
     threadId: windowItem.threadId,
   };
@@ -73,7 +78,9 @@ function readPersistedWindowsFromKey(storageKey: string): ChatWindow[] | null {
           return null;
         }
         return windowFromPersistedState({
+          draftProjectId: typeof windowItem.draftProjectId === "string" ? windowItem.draftProjectId : null,
           id,
+          isDraft: windowItem.isDraft === true,
           isCollapsed: windowItem.isCollapsed === true,
           threadId: typeof windowItem.threadId === "string" ? windowItem.threadId : "",
         });
@@ -94,7 +101,9 @@ function persistWindows(storageKey: string, windows: ChatWindow[]) {
     const payload: PersistedWidgetState = {
       version: 1,
       windows: windows.map((windowItem) => ({
+        draftProjectId: windowItem.draftProjectId,
         id: windowItem.id,
+        isDraft: windowItem.isDraft,
         isCollapsed: windowItem.isCollapsed,
         threadId: windowItem.threadId,
       })),
@@ -128,21 +137,10 @@ function widgetContextToken(): string {
   return new URLSearchParams(hash).get("context") || new URLSearchParams(window.location.search).get("context") || "";
 }
 
-function widgetSize(windows: ChatWindow[]) {
-  const expandedCount = windows.filter((windowItem) => !windowItem.isCollapsed).length;
-  const collapsedCount = windows.length - expandedCount;
-  const gapCount = Math.max(0, windows.length - 1);
-  const width = `min(calc(${expandedCount * EXPANDED_WIDTH_REM + collapsedCount * COLLAPSED_WIDTH_REM + gapCount * WINDOW_GAP_REM}rem), calc(100vw - 2rem))`;
-  return {
-    height: expandedCount > 0 ? EXPANDED_HEIGHT : "3rem",
-    width,
-  };
-}
-
 function postWidgetSize(windows: ChatWindow[]) {
   window.parent?.postMessage(
     {
-      ...widgetSize(windows),
+      ...floatingWidgetSize(windows),
       type: "maverick.widget.resize",
       owner_app_id: "chat",
       widget_id: "chat-floating",
@@ -239,19 +237,52 @@ function ChatFloatingMount() {
 
   function setWindowThread(windowId: string, threadId: string) {
     debugThreadSync("set-window-thread", { threadId, windowId });
-    setWindows((current) => current.map((windowItem) => (windowItem.id === windowId && windowItem.threadId !== threadId ? { ...windowItem, threadId } : windowItem)));
+    setWindows((current) =>
+      current.map((windowItem) =>
+        windowItem.id === windowId && (windowItem.threadId !== threadId || windowItem.isDraft)
+          ? { ...windowItem, draftProjectId: null, isDraft: false, threadId }
+          : windowItem,
+      ),
+    );
   }
 
   function setWindowCollapsed(windowId: string, isCollapsed: boolean) {
     setWindows((current) => current.map((windowItem) => (windowItem.id === windowId ? { ...windowItem, isCollapsed } : windowItem)));
   }
 
+  function closeWindow(windowId: string) {
+    setWindows((current) => {
+      if (current.length <= 1) {
+        return current.map((windowItem) => (windowItem.id === windowId ? { ...windowItem, isCollapsed: true } : windowItem));
+      }
+      return current.filter((windowItem) => windowItem.id !== windowId);
+    });
+  }
+
+  function createDraftChat(windowId: string, projectId: string | null = null) {
+    debugThreadSync("create-draft-chat", { projectId, windowId });
+    const nextWindow = createWindow("", true, projectId);
+    setWindows((current) => [...current, nextWindow]);
+  }
+
   function selectThread(windowId: string, threadId: string) {
     debugThreadSync("select-thread", { threadId, windowId });
-    setWindowThread(windowId, threadId);
-    if (threadId) {
-      navigateChat(windowId, { thread_id: threadId });
+    if (!threadId) {
+      return;
     }
+    const currentWindows = windowsRef.current;
+    const sourceWindow = currentWindows.find((windowItem) => windowItem.id === windowId);
+    if (sourceWindow?.threadId === threadId && !sourceWindow.isDraft) {
+      return;
+    }
+    const existingWindow = currentWindows.find((windowItem) => windowItem.threadId === threadId && !windowItem.isDraft);
+    if (existingWindow) {
+      setWindows((current) =>
+        current.map((windowItem) => (windowItem.id === existingWindow.id ? { ...windowItem, isCollapsed: false } : windowItem)),
+      );
+      return;
+    }
+    setWindows((current) => [...current, createWindow(threadId)]);
   }
 
   async function renameThread(threadId: string, title: string) {
@@ -275,7 +306,9 @@ function ChatFloatingMount() {
       {windows.map((windowItem) => (
         <ChatFloatingWindow
           key={windowItem.id}
+          onClose={closeWindow}
           onCollapseChange={setWindowCollapsed}
+          onCreateDraftChat={createDraftChat}
           onRemoveThread={removeThread}
           onRenameThread={renameThread}
           onSelectThread={selectThread}
@@ -288,14 +321,18 @@ function ChatFloatingMount() {
 }
 
 function ChatFloatingWindow({
+  onClose,
   onCollapseChange,
+  onCreateDraftChat,
   onRemoveThread,
   onRenameThread,
   onSelectThread,
   threads,
   windowItem,
 }: {
+  onClose: (windowId: string) => void;
   onCollapseChange: (windowId: string, isCollapsed: boolean) => void;
+  onCreateDraftChat: (windowId: string, projectId: string | null) => void;
   onRemoveThread: (windowId: string, thread: ChatThread) => void;
   onRenameThread: (threadId: string, title: string) => Promise<void>;
   onSelectThread: (windowId: string, threadId: string) => void;
@@ -307,6 +344,7 @@ function ChatFloatingWindow({
   const [isThreadMenuOpen, setIsThreadMenuOpen] = useState(false);
   const threadMenuRef = useRef<HTMLDivElement | null>(null);
   const activeThread = threads.find((thread) => thread.thread_id === windowItem.threadId) || null;
+  const isActiveThreadBusy = Boolean(activeThread && isThreadBusy(activeThread));
 
   useEffect(() => {
     if (!isThreadMenuOpen) {
@@ -361,11 +399,13 @@ function ChatFloatingWindow({
   return (
     <>
       <button
-        aria-label="Apri chat"
-        className={`chat-floating-widget-launcher ${windowItem.isCollapsed ? "" : "is-hidden"}`}
+        aria-busy={isActiveThreadBusy || undefined}
+        aria-label={isActiveThreadBusy ? "Apri chat in corso" : "Apri chat"}
+        className={`chat-floating-widget-launcher ${windowItem.isCollapsed ? "" : "is-hidden"} ${isActiveThreadBusy ? "is-busy" : ""}`}
         onClick={() => onCollapseChange(windowItem.id, false)}
         type="button"
       >
+        {isActiveThreadBusy ? <BusyChatGlow /> : null}
         <span aria-hidden="true" className="material-symbols-rounded">
           forum
         </span>
@@ -378,12 +418,12 @@ function ChatFloatingWindow({
                 aria-expanded={isThreadMenuOpen}
                 aria-haspopup="menu"
                 aria-label="Scegli chat"
-                className={`chat-floating-thread-menu__trigger ${activeThread && isThreadBusy(activeThread) ? "is-busy" : ""}`}
+                className={`chat-floating-thread-menu__trigger ${isActiveThreadBusy ? "is-busy" : ""}`}
                 disabled={threads.length === 0}
                 onClick={() => setIsThreadMenuOpen((current) => !current)}
                 type="button"
               >
-                {activeThread && isThreadBusy(activeThread) ? <BusyChatGlow /> : null}
+                {isActiveThreadBusy ? <BusyChatGlow /> : null}
                 <span className="chat-floating-thread-menu__trigger-title">{activeThread?.title || "New chat"}</span>
                 <span aria-hidden="true" className="material-symbols-rounded chat-floating-thread-menu__chevron">
                   expand_more
@@ -462,14 +502,42 @@ function ChatFloatingWindow({
               ) : null}
             </div>
           </div>
-          <button aria-label="Collassa chat" className="chat-floating-widget-shell__button" onClick={() => onCollapseChange(windowItem.id, true)} type="button">
-            <span aria-hidden="true" className="material-symbols-rounded">
-              keyboard_arrow_down
-            </span>
-          </button>
+          <div className="chat-floating-widget-shell__actions">
+            <button
+              aria-label="Nuova chat"
+              className="chat-floating-widget-shell__button"
+              onClick={() => onCreateDraftChat(windowItem.id, activeThread?.project_id || null)}
+              type="button"
+            >
+              <span aria-hidden="true" className="material-symbols-rounded">
+                add
+              </span>
+            </button>
+            <button aria-label="Collassa chat" className="chat-floating-widget-shell__button" onClick={() => onCollapseChange(windowItem.id, true)} type="button">
+              <span aria-hidden="true" className="material-symbols-rounded">
+                keyboard_arrow_down
+              </span>
+            </button>
+            <button
+              aria-label="Chiudi chat"
+              className="chat-floating-widget-shell__button chat-floating-widget-shell__button--danger chat-floating-widget-shell__button--close"
+              onClick={() => onClose(windowItem.id)}
+              type="button"
+            >
+              <span aria-hidden="true" className="material-symbols-rounded">
+                close
+              </span>
+            </button>
+          </div>
         </header>
         <div className="chat-floating-widget-shell__body">
-          <App enablePageCapture navigationScope={windowItem.id} threadId={windowItem.threadId} />
+          <App
+            enablePageCapture
+            navigationScope={windowItem.id}
+            newChatProjectId={windowItem.draftProjectId}
+            newChatRequestId={windowItem.isDraft ? windowItem.id : null}
+            threadId={windowItem.threadId}
+          />
         </div>
       </section>
     </>
@@ -492,6 +560,12 @@ function BusyChatGlow() {
 function reconcileWindowsWithThreads(windows: ChatWindow[], threads: ChatThread[], preferredThreadId = "", navigationScope = "") {
   const firstThreadId = threads[0]?.thread_id || "";
   return windows.map((windowItem) => {
+    if (windowItem.isDraft && (!navigationScope || windowItem.id !== navigationScope)) {
+      return windowItem;
+    }
+    if (windowItem.isDraft && navigationScope === windowItem.id && !preferredThreadId) {
+      return windowItem;
+    }
     if (!navigationScope) {
       return windowItem.threadId && threads.some((thread) => thread.thread_id === windowItem.threadId) ? windowItem : { ...windowItem, threadId: firstThreadId };
     }
@@ -504,7 +578,7 @@ function reconcileWindowsWithThreads(windows: ChatWindow[], threads: ChatThread[
         : windowItem.threadId && threads.some((thread) => thread.thread_id === windowItem.threadId)
           ? windowItem.threadId
           : firstThreadId;
-    return { ...windowItem, threadId: nextThreadId };
+    return { ...windowItem, draftProjectId: null, isDraft: false, threadId: nextThreadId };
   });
 }
 

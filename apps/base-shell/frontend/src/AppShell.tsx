@@ -16,7 +16,15 @@ import {
   switchWorkspace,
   WorkspaceItem,
 } from "./api";
-import { currentShellAppRoute, preferredActiveApp, pushShellAppRoute, replaceShellAppRoute, shellVisibleApps } from "./navigation";
+import {
+  currentShellAppRoute,
+  initialShellLaunchRoute,
+  isInitialChatLaunchRoute,
+  preferredActiveApp,
+  pushShellAppRoute,
+  replaceShellAppRoute,
+  shellAppRailApps,
+} from "./navigation";
 import { readShellSession, writeShellSession } from "./session";
 import type { SidebarMode } from "./session";
 import { useMobileLayout } from "./hooks/useMobileLayout";
@@ -32,7 +40,9 @@ const MOBILE_SIDEBAR_TRANSITION_MS = 220;
 export function AppShell() {
   const initialSession = useMemo(() => readShellSession(), []);
   const initialRoute = useMemo(() => currentShellAppRoute(), []);
-  const initialActiveAppId = useMemo(() => initialRoute.appId || initialSession.activeAppId, [initialRoute.appId, initialSession.activeAppId]);
+  const isInitialChatLaunch = useMemo(() => isInitialChatLaunchRoute(initialRoute), [initialRoute]);
+  const initialLaunchRoute = useMemo(() => initialShellLaunchRoute(initialRoute), [initialRoute]);
+  const initialActiveAppId = initialLaunchRoute.appId || initialSession.activeAppId;
   const [apps, setApps] = useState<AppRegistryItem[]>([]);
   const [pinnedAppIds, setPinnedAppIds] = useState<string[]>(["chat"]);
   const [status, setStatus] = useState<PlatformStatus | null>(null);
@@ -40,9 +50,9 @@ export function AppShell() {
   const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>([]);
   const [settings, setSettings] = useState<PlatformSettings | null>(null);
   const [activeAppId, setActiveAppId] = useState<string | null>(initialActiveAppId);
-  const [activeAppParams, setActiveAppParams] = useState<Record<string, string | boolean | null>>(initialRoute.params);
-  const [sidebarMode, setSidebarMode] = useState<SidebarMode>(initialSession.sidebarMode);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(initialSession.sidebarMode === "fixed" ? true : initialSession.isSidebarOpen);
+  const [activeAppParams, setActiveAppParams] = useState<Record<string, string | boolean | null>>(initialLaunchRoute.params);
+  const [sidebarMode, setSidebarMode] = useState<SidebarMode>(isInitialChatLaunch ? "rail" : initialSession.sidebarMode);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(isInitialChatLaunch ? false : initialSession.sidebarMode === "fixed" ? true : initialSession.isSidebarOpen);
   const [isSidebarClosing, setIsSidebarClosing] = useState(false);
   const [activeDialog, setActiveDialog] = useState<ShellDialog>(null);
   const [dismissedProviderSetupWorkspaceId, setDismissedProviderSetupWorkspaceId] = useState<string | null>(null);
@@ -166,7 +176,12 @@ export function AppShell() {
     return () => window.removeEventListener("message", handleAppDataChanged);
   }, []);
 
-  const activeApp = preferredActiveApp(apps, activeAppId);
+  const registryActiveApp = preferredActiveApp(apps, activeAppId);
+  const provisionalActiveApp = useMemo(
+    () => (isLoading && activeAppId ? provisionalMountedApp(activeAppId) : null),
+    [activeAppId, isLoading],
+  );
+  const activeApp = registryActiveApp ?? provisionalActiveApp;
 
   useEffect(() => {
     function handlePopState() {
@@ -294,8 +309,7 @@ export function AppShell() {
   const activeWorkspaceId = status?.workspace_id || session.workspace_id;
   const needsProviderSetup =
     !!settings && !settings.provider.active_provider && dismissedProviderSetupWorkspaceId !== activeWorkspaceId;
-  const visiblePinnedAppIds = new Set(pinnedAppIds);
-  const shellSidebarMetrics = sidebarRailMetrics(shellVisibleApps(apps).filter((app) => visiblePinnedAppIds.has(app.app_id)).length + 1);
+  const shellSidebarMetrics = sidebarRailMetrics(shellAppRailApps(apps, pinnedAppIds).length + 1);
 
   return (
     <main
@@ -350,4 +364,23 @@ export function AppShell() {
       />
     </main>
   );
+}
+
+function provisionalMountedApp(appId: string): AppRegistryItem {
+  return {
+    app_id: appId,
+    name: appId,
+    version: "",
+    description: "",
+    publisher: "",
+    status: "enabled",
+    distribution_mode: "",
+    source_access: "",
+    views: [],
+    provides: [],
+    requires: [],
+    logo: null,
+    frontend_mount: `/apps/${encodeURIComponent(appId)}/`,
+    backend_mount: "",
+  };
 }

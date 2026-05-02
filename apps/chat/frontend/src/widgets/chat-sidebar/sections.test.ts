@@ -17,6 +17,7 @@ function thread(overrides: Partial<ChatThread> = {}): ChatThread {
     availability: "free",
     created_at: "2026-04-19T00:00:00.000Z",
     updated_at: "2026-04-19T00:00:01.000Z",
+    last_user_message_at: null,
     ...overrides,
   };
 }

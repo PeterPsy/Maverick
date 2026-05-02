@@ -34,6 +34,49 @@ class ChatWidgetHostingTests(unittest.TestCase):
         self.assertNotIn("chat-runtime-text__agent", widget_styles)
         self.assertNotIn("chat-runtime-text__status", widget_styles)
 
+    def test_chat_declares_separate_shell_sidebar_primary_and_footer_widgets(self) -> None:
+        contract_source = (REPO_ROOT / "apps/chat/app_contract.json").read_text()
+        vite_source = (REPO_ROOT / "apps/chat/vite.config.ts").read_text()
+        sidebar_source = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/main.tsx").read_text()
+        footer_source = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar-footer/main.tsx").read_text()
+
+        self.assertIn('"widget_id": "chat-sidebar"', contract_source)
+        self.assertIn('"shell.sidebar.primary"', contract_source)
+        self.assertIn('"widget_id": "chat-sidebar-footer"', contract_source)
+        self.assertIn('"shell.sidebar.footer"', contract_source)
+        self.assertIn('"widgets/chat-sidebar-footer/index": "frontend/widgets/chat-sidebar-footer/index.html"', vite_source)
+        self.assertNotIn("bs-chat-sidebar-footer", sidebar_source)
+        self.assertNotIn("Nuova chat</span>", sidebar_source)
+        self.assertIn("bs-chat-sidebar-footer__new-chat", footer_source)
+        self.assertIn("Nuova chat</span>", footer_source)
+        self.assertIn("maverick.widget.open-app", footer_source)
+        self.assertIn("new_chat_request_id", footer_source)
+
+    def test_chat_sidebar_project_button_creates_without_opening_settings_panel(self) -> None:
+        sidebar_source = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/main.tsx").read_text()
+        sidebar_styles = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/styles.css").read_text()
+
+        self.assertIn('const payload = await createProject("New project");', sidebar_source)
+        self.assertIn("updateFromSidebarPayload(payload, setProjects);", sidebar_source)
+        self.assertIn("onClick={() => addProject()}", sidebar_source)
+        self.assertNotIn("addProject(panelPositionFromTrigger", sidebar_source)
+        self.assertNotIn("setPanel(position ? { kind: \"project\", project: payload.project, position } : null);", sidebar_source)
+        self.assertNotIn("SettingsPanel", sidebar_source)
+        self.assertNotIn("bs-sidebar-floating-panel", sidebar_styles)
+
+    def test_chat_sidebar_project_actions_are_inline(self) -> None:
+        sidebar_source = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/main.tsx").read_text()
+        sidebar_styles = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/styles.css").read_text()
+
+        self.assertIn("const [editingProject, setEditingProject]", sidebar_source)
+        self.assertIn("cancelProjectEditFromOutside", sidebar_source)
+        self.assertIn("startProjectEdit(project);", sidebar_source)
+        self.assertIn('{isEditingProject ? "check" : "more_horiz"}', sidebar_source)
+        self.assertIn('{isEditingProject ? "delete" : "add"}', sidebar_source)
+        self.assertIn("bs-chat-folder__title-input", sidebar_source)
+        self.assertIn(".bs-chat-folder.is-project-editing .bs-folder-menu__trigger", sidebar_styles)
+        self.assertNotIn("panelPositionFromTrigger", sidebar_source)
+
     def test_chat_structured_messages_use_generic_widget_host(self) -> None:
         structured_source = (REPO_ROOT / "apps/chat/frontend/src/components/StructuredContentMessage.tsx").read_text()
         host_source = (REPO_ROOT / "apps/chat/frontend/src/components/WidgetHostFrame.tsx").read_text()

@@ -18,6 +18,7 @@ export function WidgetSlot({
   label,
   onCloseSidebar,
   onOpenApp,
+  preferredOwnerAppId,
   size = "fill",
 }: {
   activeAppId?: string | null;
@@ -28,6 +29,7 @@ export function WidgetSlot({
   label: string;
   onCloseSidebar?: () => void;
   onOpenApp: (appId: string, params?: Record<string, string | boolean | null>) => void;
+  preferredOwnerAppId?: string | null;
   size?: "compact" | "fill" | "overlay";
 }) {
   const [widget, setWidget] = useState<WidgetRegistryItem | null>(null);
@@ -55,7 +57,7 @@ export function WidgetSlot({
     async function loadWidget() {
       try {
         const registry = await listWidgets(hostAppId, contentKind);
-        const selected = registry.items[0] || null;
+        const selected = selectPreferredWidget(registry.items, preferredOwnerAppId);
         if (!selected) {
           if (!cancelled) {
             setWidget(null);
@@ -88,7 +90,7 @@ export function WidgetSlot({
     return () => {
       cancelled = true;
     };
-  }, [activeWorkspaceId, contentKind, hostAppId]);
+  }, [activeWorkspaceId, contentKind, hostAppId, preferredOwnerAppId, size]);
 
   function postWidgetContextChanged() {
     if (!widget) {
@@ -341,13 +343,19 @@ export function WidgetSlot({
 
   const src = widgetFrameSrc(widget.frontend_mount, contextToken, frameRevision);
   const isCollapsedOverlay = size === "overlay" && overlaySize.width === "3rem" && overlaySize.height === "3rem";
+  const slotStyle =
+    size === "overlay"
+      ? overlaySize
+      : size === "compact"
+        ? { height: "2.65rem", maxHeight: "2.65rem", minHeight: "2.65rem" }
+        : undefined;
 
   return (
     <>
       <section
         className={`bs-widget-slot bs-widget-slot--${size}${isCollapsedOverlay ? " is-collapsed" : ""}`}
         aria-label={label}
-        style={size === "overlay" ? overlaySize : undefined}
+        style={slotStyle}
       >
         <iframe
           className="bs-widget-slot__frame"
@@ -378,6 +386,16 @@ export function WidgetSlot({
       ) : null}
     </>
   );
+}
+
+export function selectPreferredWidget(
+  widgets: WidgetRegistryItem[],
+  preferredOwnerAppId?: string | null,
+): WidgetRegistryItem | null {
+  if (!preferredOwnerAppId) {
+    return widgets[0] || null;
+  }
+  return widgets.find((item) => item.owner_app_id === preferredOwnerAppId) || null;
 }
 
 function widgetFrameSrc(frontendMount: string, contextToken: string, revision: number): string {

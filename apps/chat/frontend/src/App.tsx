@@ -15,6 +15,7 @@ import {
   RuntimeEvent,
   RuntimeSession,
   RuntimeTurn,
+  orderChatThreads,
   selectProvider,
   sendRuntimeTurn,
   updateThread,
@@ -24,11 +25,18 @@ import { ChatTranscript } from "./components/ChatTranscript";
 import { useComposerAttachments } from "./hooks/useComposerAttachments";
 import { useRuntimeEvents } from "./hooks/useRuntimeEvents";
 import { useRuntimeThreads } from "./hooks/useRuntimeThreads";
+import { useShellSidebarSwipe } from "./hooks/useShellSidebarSwipe";
 import { hasInvalidAttachments } from "./lib/attachments";
 import { appReferencesFromText } from "./lib/mentions";
 import type { MentionItem } from "./lib/mentions";
 import { PendingMessage, QueuedMessage, uploadComposerAttachment } from "./lib/messageState";
 import { mergeRuntimeEvents } from "./lib/runtimeEvents";
+import {
+  deleteStoredRuntimeTranscript,
+  readStoredRuntimeTranscript,
+  type RuntimeTranscriptCacheEntry,
+  writeStoredRuntimeTranscript,
+} from "./lib/runtimeTranscriptCache";
 import { latestRuntimeStepLabel } from "./lib/runtimeStepLabels";
 import { openChatRootRouteInShell, openChatThreadRouteInShell } from "./lib/shellNavigation";
 import { findThreadByRuntimeSession } from "./lib/threadNavigation";
@@ -77,15 +85,25 @@ const MESSAGE_HISTORY_LIMIT = 50;
 const QUEUED_MESSAGES_STORAGE_PREFIX = "maverick.chat.queued-messages.v1";
 const THREAD_SYNC_DEBUG_STORAGE_KEY = "maverick.chat.debug.thread-sync";
 
+function isThreadAvailabilityBusy(availability: string) {
+  return availability === "busy" || availability === "queued" || availability === "active";
+}
+
 export function App({
   enablePageCapture = false,
   navigationScope = "",
+  newChatProjectId = null,
+  newChatRequestId = null,
   threadId = null,
 }: {
   enablePageCapture?: boolean;
   navigationScope?: string;
+  newChatProjectId?: string | null;
+  newChatRequestId?: string | null;
   threadId?: string | null;
 } = {}) {
+  useShellSidebarSwipe();
+
   const [providers, setProviders] = useState<ProviderItem[]>([]);
   const [activeProviderId, setActiveProviderId] = useState("");
   const [threads, setThreads] = useState<ChatThread[]>([]);
@@ -102,6 +120,7 @@ export function App({
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [threadsLoaded, setThreadsLoaded] = useState(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [hasLoadedHistory, setHasLoadedHistory] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [composerError, setComposerError] = useState<string | null>(null);
@@ -111,11 +130,10 @@ export function App({
   const consumedLegacyNewChatRequest = useRef(false);
   const initialSelectionHandledRef = useRef(false);
   const navigationRequestRef = useRef<string | null>(null);
-  const lastPublishedRuntimeBusyState = useRef<string | null>(null);
-  const availabilitySyncRequestRef = useRef(0);
   const hasHydratedQueuedMessagesRef = useRef(false);
   const suppressedExternalThreadIdRef = useRef<string | null>(null);
   const activeRuntimeSessionIdRef = useRef<string | null>(null);
+  const runtimeTranscriptCacheRef = useRef<Map<string, RuntimeTranscriptCacheEntry>>(new Map());
   const dockedComposerRef = useRef<HTMLDivElement | null>(null);
   const [dockedComposerHeight, setDockedComposerHeight] = useState(144);
 
@@ -150,8 +168,10 @@ export function App({
   const executionMode = activeSession?.effective_mode === "sandbox" || activeSession?.effective_mode === "full-access" ? activeSession.effective_mode : null;
   const canStopTurn = activeTurn?.status === "queued" || activeTurn?.status === "active";
   const isRuntimeBusy = canStopTurn;
-  const isEmptyChatView = Boolean(draftChat) && messages.length === 0 && !isRuntimeBusy && !isBootstrapping && !isHistoryLoading && !error;
-  const isThreadLoading = isBootstrapping || isHistoryLoading;
+  const isTranscriptHistoryPending = Boolean(activeThread?.runtime_session_id && !hasLoadedHistory && messages.length === 0);
+  const isEmptyChatView =
+    Boolean(draftChat) && messages.length === 0 && !isRuntimeBusy && !isBootstrapping && !isHistoryLoading && !isTranscriptHistoryPending && !error;
+  const isThreadLoading = isBootstrapping || isHistoryLoading || isTranscriptHistoryPending;
   const chatMainStyle = isEmptyChatView
     ? undefined
     : ({
@@ -191,7 +211,10 @@ export function App({
   useRuntimeEvents({
     activeTurn,
     onRuntimeSessionUnavailable: handleUnavailableRuntimeSession,
-    onRuntimeSnapshot: () => setIsHistoryLoading(false),
+    onRuntimeSnapshot: () => {
+      setHasLoadedHistory(true);
+      setIsHistoryLoading(false);
+    },
     runtimeSessionId: activeThread?.runtime_session_id || null,
     setActiveSession,
     setActiveTurn,
@@ -207,49 +230,33 @@ export function App({
   });
 
   useEffect(() => {
+    setActiveThread((current) => {
+      if (!current) {
+        return current;
+      }
+      return threads.find((thread) => thread.thread_id === current.thread_id) || current;
+    });
+  }, [threads]);
+
+  useEffect(() => {
     const runtimeSessionId = activeThread?.runtime_session_id;
     activeRuntimeSessionIdRef.current = runtimeSessionId || null;
   }, [activeThread?.runtime_session_id]);
 
   useEffect(() => {
-    if (!activeThread) {
-      lastPublishedRuntimeBusyState.current = null;
+    const runtimeSessionId = activeThread?.runtime_session_id;
+    if (!runtimeSessionId) {
       return;
     }
-    if (navigationScope && threadId && activeThread.thread_id !== threadId) {
-      debugThreadSync("app-skip-stale-thread-publication", {
-        activeThreadId: activeThread.thread_id,
-        navigationScope,
-        threadId,
-      });
-      return;
-    }
-    const publicationKey = `${activeThread.thread_id}:${isRuntimeBusy ? "busy" : "free"}`;
-    if (lastPublishedRuntimeBusyState.current === publicationKey) {
-      return;
-    }
-    lastPublishedRuntimeBusyState.current = publicationKey;
-    const nextAvailability = isRuntimeBusy ? "busy" : "free";
-    const currentThreadId = activeThread.thread_id;
-    if (activeThread.availability !== nextAvailability) {
-      const requestId = availabilitySyncRequestRef.current + 1;
-      availabilitySyncRequestRef.current = requestId;
-      void updateThread({ thread_id: currentThreadId, availability: nextAvailability })
-        .then((payload) => {
-          if (availabilitySyncRequestRef.current !== requestId) {
-            return;
-          }
-          setThreads(payload.threads);
-          setActiveThread((current) => (current?.thread_id === payload.thread.thread_id ? payload.thread : current));
-          notifyActiveThreadChanged(payload.thread.thread_id);
-        })
-        .catch((syncError) => {
-          setError((current) => current || (syncError instanceof Error ? syncError.message : "Unable to sync thread availability."));
-        });
-      return;
-    }
-    notifyActiveThreadChanged(currentThreadId);
-  }, [activeThread?.availability, activeThread?.thread_id, isRuntimeBusy]);
+    const cacheEntry = {
+      activeSession,
+      activeTurn,
+      events,
+      hasLoadedHistory: hasLoadedHistory || events.length > 0,
+    };
+    runtimeTranscriptCacheRef.current.set(runtimeSessionId, cacheEntry);
+    writeStoredRuntimeTranscript(runtimeSessionId, cacheEntry);
+  }, [activeSession, activeThread?.runtime_session_id, activeTurn, events, hasLoadedHistory]);
 
   async function loadInitialState() {
     setIsBootstrapping(true);
@@ -281,6 +288,12 @@ export function App({
   async function selectInitialThread() {
     try {
       const query = new URLSearchParams(window.location.search);
+      if (newChatRequestId) {
+        createDraftChat({ activeAppContext, projectId: newChatProjectId });
+        setQueuedMessages(readPersistedQueuedMessages(queueStorageKey(navigationScope, null)));
+        setError(null);
+        return;
+      }
       if (query.get("new_chat") === "1") {
         createDraftChat({ activeAppContext, projectId: query.get("project_id") });
         setQueuedMessages(readPersistedQueuedMessages(queueStorageKey(navigationScope, null)));
@@ -403,10 +416,13 @@ export function App({
     if (!runtimeSessionId) {
       return;
     }
+    runtimeTranscriptCacheRef.current.delete(runtimeSessionId);
+    deleteStoredRuntimeTranscript(runtimeSessionId);
     if (activeRuntimeSessionIdRef.current === runtimeSessionId) {
       activeRuntimeSessionIdRef.current = null;
       setActiveSession(null);
       setEvents([]);
+      setHasLoadedHistory(false);
       setPendingUserMessages([]);
       setFailedUserMessages([]);
       setQueuedMessages([]);
@@ -437,6 +453,7 @@ export function App({
     setDraftChat(null);
     setActiveSession(null);
     setEvents([]);
+    setHasLoadedHistory(false);
     setPendingUserMessages([]);
     setFailedUserMessages([]);
     setQueuedMessages([]);
@@ -446,6 +463,7 @@ export function App({
   }
 
   function createDraftChat({ activeAppContext: activeAppContextOverride, projectId = null, resetView = true }: CreateChatOptions = {}) {
+    initialSelectionHandledRef.current = true;
     debugThreadSync("app-create-draft-chat-start", {
       activeThreadId: activeThread?.thread_id || "",
       navigationScope,
@@ -460,6 +478,7 @@ export function App({
     setDraftChat({ projectId, systemPrompt: "" });
     setActiveSession(null);
     setEvents([]);
+    setHasLoadedHistory(false);
     setActiveTurn(null);
     if (resetView) {
       setPendingUserMessages([]);
@@ -496,6 +515,7 @@ export function App({
     setDraftChat(null);
     setActiveSession(session);
     setEvents([]);
+    setHasLoadedHistory(false);
     if (resetView) {
       setPendingUserMessages([]);
       setFailedUserMessages([]);
@@ -512,17 +532,42 @@ export function App({
     return payload.thread;
   }
 
+  function cachedTranscriptForThread(thread: ChatThread | null) {
+    if (!thread?.runtime_session_id) {
+      return null;
+    }
+    const cachedTranscript = runtimeTranscriptCacheRef.current.get(thread.runtime_session_id);
+    if (cachedTranscript) {
+      return cachedTranscript;
+    }
+    const storedTranscript = readStoredRuntimeTranscript(thread.runtime_session_id);
+    if (storedTranscript) {
+      runtimeTranscriptCacheRef.current.set(thread.runtime_session_id, storedTranscript);
+    }
+    return storedTranscript;
+  }
+
+  function cachedActiveTurnForThread(thread: ChatThread | null, cachedTranscript: RuntimeTranscriptCacheEntry | null) {
+    if (!thread || !cachedTranscript?.activeTurn || !isThreadAvailabilityBusy(thread.availability)) {
+      return null;
+    }
+    return cachedTranscript.activeTurn;
+  }
+
   async function selectThreadWithoutHttp(thread: ChatThread | null) {
-    setIsHistoryLoading(Boolean(thread?.runtime_session_id));
+    const cachedTranscript = cachedTranscriptForThread(thread);
+    const cachedHistoryLoaded = Boolean(cachedTranscript && (cachedTranscript.hasLoadedHistory || cachedTranscript.events.length > 0));
+    setIsHistoryLoading(Boolean(thread?.runtime_session_id && !cachedHistoryLoaded));
     setActiveThread(thread);
     setDraftChat(null);
     activeRuntimeSessionIdRef.current = thread?.runtime_session_id || null;
-    setActiveSession(null);
-    setEvents([]);
+    setActiveSession(cachedTranscript?.activeSession ?? null);
+    setEvents(cachedTranscript?.events ?? []);
+    setHasLoadedHistory(cachedHistoryLoaded);
     setPendingUserMessages([]);
     setFailedUserMessages([]);
     setQueuedMessages([]);
-    setActiveTurn(null);
+    setActiveTurn(cachedActiveTurnForThread(thread, cachedTranscript));
     if (!thread?.runtime_session_id) {
       setIsHistoryLoading(false);
     }
@@ -623,6 +668,7 @@ export function App({
       activeRuntimeSessionIdRef.current = runtimeSessionId;
       setActiveSession(null);
       setEvents([]);
+      setHasLoadedHistory(false);
       setPendingUserMessages([]);
       setFailedUserMessages([]);
       setQueuedMessages([]);
@@ -750,13 +796,28 @@ export function App({
       setActiveSession(response.session);
       setActiveTurn(response.turn);
       setEvents((current) => mergeRuntimeEvents(current, response.events));
+      const userMessageAt = response.turn.created_at || new Date().toISOString();
+      const optimisticThread = {
+        ...thread,
+        availability: response.turn.status === "queued" || response.turn.status === "active" ? response.turn.status : "free",
+        last_user_message_at: userMessageAt,
+      };
+      setActiveThread((current) => (current?.thread_id === optimisticThread.thread_id ? { ...current, ...optimisticThread } : optimisticThread));
+      setThreads((current) => upsertOrderedThread(current, optimisticThread));
       if (response.turn.status !== "queued" && response.turn.status !== "active") {
         setPendingUserMessages((current) => current.filter((item) => item.clientMessageId !== message.clientMessageId));
       }
       if (events.length === 0 && thread.title === "New chat") {
         const updated = await updateThread({ thread_id: thread.thread_id, title: firstUserTitle(message.content) });
-        setActiveThread(updated.thread);
-        setThreads(updated.threads);
+        const titledThread = { ...updated.thread, last_user_message_at: updated.thread.last_user_message_at || userMessageAt };
+        setActiveThread(titledThread);
+        setThreads(
+          orderChatThreads(
+            updated.threads.map((item) =>
+              item.thread_id === titledThread.thread_id ? { ...item, last_user_message_at: item.last_user_message_at || userMessageAt } : item,
+            ),
+          ),
+        );
       }
     } catch (sendError) {
       setError(sendError instanceof Error ? sendError.message : "Unable to send message.");
@@ -857,9 +918,8 @@ export function App({
               </div>
             ) : (
               <ChatTranscript
-                activeThread={activeThread}
                 error={error}
-                isLoading={isRuntimeBusy || isBootstrapping || isHistoryLoading}
+                isLoading={isRuntimeBusy || isThreadLoading}
                 loadingLabel={loadingLabel}
                 mentionItems={mentionItems}
                 messages={messages}
@@ -895,6 +955,13 @@ export function App({
       </section>
     </main>
   );
+}
+
+function upsertOrderedThread(threads: ChatThread[], thread: ChatThread) {
+  const nextThreads = threads.some((item) => item.thread_id === thread.thread_id)
+    ? threads.map((item) => (item.thread_id === thread.thread_id ? { ...item, ...thread } : item))
+    : [thread, ...threads];
+  return orderChatThreads(nextThreads);
 }
 
 function runtimeSessionThreadMetadataFromParams(params: Record<string, string | boolean | null>): RuntimeSessionThreadMetadata {

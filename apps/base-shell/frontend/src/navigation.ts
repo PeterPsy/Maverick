@@ -8,11 +8,22 @@ export type ShellAppRoute = {
 };
 
 const APP_ROUTE_PREFIX = "/app";
+export const CHAT_APP_ID = "chat";
 export const APP_STORE_APP_ID = "app-store";
 const NON_URL_APP_PARAMS = new Set(["app_page", "workspace_id", "new_chat", "new_chat_request_id"]);
 
 export function shellVisibleApps(apps: AppRegistryItem[]): AppRegistryItem[] {
   return apps.filter((app) => app.app_id !== "base-shell" && Boolean(app.frontend_mount));
+}
+
+export function shellAppRailApps(apps: AppRegistryItem[], pinnedAppIds: string[]): AppRegistryItem[] {
+  const visibleAppsById = new Map(shellVisibleApps(apps).map((app) => [app.app_id, app]));
+  const appStore = visibleAppsById.get(APP_STORE_APP_ID) ?? null;
+  const pinnedApps = pinnedAppIds
+    .filter((appId) => appId.toLowerCase() !== APP_STORE_APP_ID)
+    .map((appId) => visibleAppsById.get(appId))
+    .filter((app): app is AppRegistryItem => Boolean(app));
+  return appStore ? [...pinnedApps, appStore] : pinnedApps;
 }
 
 export function findRegistryApp(apps: AppRegistryItem[], appId: string | null): AppRegistryItem | null {
@@ -25,6 +36,29 @@ export function findRegistryApp(apps: AppRegistryItem[], appId: string | null): 
 
 export function preferredActiveApp(apps: AppRegistryItem[], requestedAppId: string | null): AppRegistryItem | null {
   return findRegistryApp(apps, requestedAppId) ?? findRegistryApp(apps, APP_STORE_APP_ID) ?? shellVisibleApps(apps)[0] ?? null;
+}
+
+export function isInitialChatLaunchRoute(route: ShellAppRoute): boolean {
+  if (!route.appId) {
+    return true;
+  }
+  return route.appId.toLowerCase() === CHAT_APP_ID && Object.keys(route.params).length === 0;
+}
+
+export function initialShellLaunchRoute(
+  route: ShellAppRoute,
+  createRequestId: () => string = createNavigationRequestId,
+): ShellAppRoute {
+  if (!isInitialChatLaunchRoute(route)) {
+    return route;
+  }
+  return {
+    appId: CHAT_APP_ID,
+    params: {
+      new_chat: true,
+      new_chat_request_id: createRequestId(),
+    },
+  };
 }
 
 export function parseShellAppRoute(pathname: string, search = ""): ShellAppRoute {
@@ -117,4 +151,11 @@ function decodePathSegment(segment: string): string {
   } catch {
     return segment;
   }
+}
+
+function createNavigationRequestId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }

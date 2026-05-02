@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import { ChatThread, RuntimeThreadWebSocketFrame, runtimeThreadWebSocketUrl } from "../api/client";
+import { ChatThread, orderChatThreads, RuntimeThreadWebSocketFrame, runtimeThreadWebSocketUrl } from "../api/client";
 
 type RuntimeThreadsArgs = {
   onSnapshot?: (() => void) | null;
@@ -26,7 +26,7 @@ export function useRuntimeThreads({ onSnapshot, setError, setThreads }: RuntimeT
     let lastFrameAt = Date.now();
 
     function applyThreads(threads: ChatThread[]) {
-      setThreads(threads || []);
+      setThreads(orderChatThreads(threads || []));
     }
 
     function connect() {

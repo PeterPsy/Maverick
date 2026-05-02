@@ -3,11 +3,13 @@ import { createWorkspace, switchWorkspace, WorkspaceItem } from "../api";
 export function WorkspaceSwitcher({
   activeWorkspaceId,
   canCreateWorkspace,
+  isLoading = false,
   onChanged,
   workspaces,
 }: {
   activeWorkspaceId: string;
   canCreateWorkspace: boolean;
+  isLoading?: boolean;
   onChanged: () => void;
   workspaces: WorkspaceItem[];
 }) {
@@ -26,6 +28,19 @@ export function WorkspaceSwitcher({
     }
     await createWorkspace(name.trim());
     onChanged();
+  }
+
+  if (isLoading) {
+    return (
+      <div className="bs-workspace-switcher" aria-hidden="true">
+        <div className="bs-workspace-switcher__row">
+          <div className="bs-workspace-switcher__select-frame bs-workspace-switcher__skeleton-frame">
+            <span className="bs-workspace-switcher__skeleton-line" />
+          </div>
+          {canCreateWorkspace ? <span className="bs-workspace-switcher__create bs-workspace-switcher__skeleton-button" /> : null}
+        </div>
+      </div>
+    );
   }
 
   return (

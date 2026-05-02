@@ -52,9 +52,11 @@
   }
 
   .bs-sidebar__details {
+    --bs-sidebar-top-fade-height: calc(env(safe-area-inset-top, 0px) + 8.2rem);
+    --bs-sidebar-bottom-fade-height: calc(env(safe-area-inset-bottom, 0px) + 4.2rem);
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
     gap: 0;
     width: 100%;
     max-width: 100%;
@@ -77,13 +79,10 @@
   .bs-sidebar__top-overlay {
     grid-row: 1;
     grid-column: 1;
+    align-self: start;
     min-width: 0;
     max-width: 100%;
     z-index: 4;
-  }
-
-  .bs-sidebar__top-overlay::before {
-    inset: 0 0 -1.45rem;
   }
 
   .bs-sidebar__header {
@@ -97,7 +96,7 @@
   }
 
   .bs-sidebar__details > .bs-widget-slot--fill {
-    grid-row: 1 / -1;
+    grid-row: 1;
     grid-column: 1;
     z-index: 1;
     width: 100%;
@@ -107,8 +106,11 @@
     min-height: 0;
   }
 
-  .bs-sidebar__details::before {
-    display: none;
+  .bs-sidebar__bottom-fixed {
+    grid-row: 1;
+    grid-column: 1;
+    align-self: end;
+    z-index: 4;
   }
 
   .bs-widget-slot__frame {
@@ -150,8 +152,7 @@
   }
 
   .bs-sidebar__rail-button,
-  .bs-app-logo--rail,
-  .bs-sidebar__rail-skeleton-logo {
+  .bs-app-logo--rail {
     width: 3rem;
     height: 3rem;
     min-width: 3rem;

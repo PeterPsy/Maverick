@@ -13,7 +13,6 @@ import {
 } from "../../api/client";
 import { useRuntimeThreads } from "../../hooks/useRuntimeThreads";
 import { useShellSidebarCloseSwipe } from "../../hooks/useShellSidebarSwipe";
-import { FloatingPanel, FloatingPanelPosition, SettingsPanel } from "./SettingsPanel";
 import { buildSections, isThreadBusy } from "./sections";
 import { ThreadInlineActions } from "./ThreadInlineActions";
 import "./styles.css";
@@ -35,18 +34,6 @@ function notifyShell(thread?: ChatThread, params: Record<string, string | boolea
 
 function updateFromSidebarPayload(payload: { projects?: ChatProject[] }, setProjects: (projects: ChatProject[]) => void) {
   setProjects(payload.projects || []);
-}
-
-function panelPositionFromTrigger(trigger: HTMLElement) {
-  const triggerRect = trigger.getBoundingClientRect();
-  const estimatedPanelHeight = 300;
-  const viewportPadding = 8;
-  const preferredTop = triggerRect.bottom + 6;
-  const maxTop = Math.max(viewportPadding, window.innerHeight - estimatedPanelHeight - viewportPadding);
-  return {
-    top: Math.min(Math.max(viewportPadding, preferredTop), maxTop),
-    right: Math.max(4, window.innerWidth - triggerRect.right),
-  };
 }
 
 function isMobileLayoutContext(context: unknown) {
@@ -80,11 +67,12 @@ function ChatSidebarWidget() {
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [expandedThreadId, setExpandedThreadId] = useState<string | null>(null);
   const [expandedThreadTitle, setExpandedThreadTitle] = useState("");
-  const [panel, setPanel] = useState<FloatingPanel | null>(null);
+  const [editingProject, setEditingProject] = useState<{ projectId: string; name: string } | null>(null);
   const [isShellMobileLayout, setIsShellMobileLayout] = useState(isMobileLayoutViewport);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const editingProjectRef = useRef<HTMLElement | null>(null);
   const touchThreadPointerStartRef = useRef<{ threadId: string; x: number; y: number } | null>(null);
   const touchSelectedThreadIdRef = useRef<string | null>(null);
   const touchSelectedThreadResetRef = useRef<number | null>(null);
@@ -145,12 +133,27 @@ function ChatSidebarWidget() {
     return () => window.removeEventListener("message", handleShellMessage);
   }, []);
 
+  useEffect(() => {
+    if (!editingProject) {
+      return;
+    }
+    function cancelProjectEditFromOutside(event: PointerEvent) {
+      const target = event.target;
+      if (target instanceof Node && editingProjectRef.current?.contains(target)) {
+        return;
+      }
+      setEditingProject(null);
+    }
+    document.addEventListener("pointerdown", cancelProjectEditFromOutside);
+    return () => document.removeEventListener("pointerdown", cancelProjectEditFromOutside);
+  }, [editingProject?.projectId]);
+
   async function createChat(projectId: string | null = null) {
     setIsPending(true);
     setActiveThreadId(null);
     setExpandedThreadId(null);
     setExpandedThreadTitle("");
-    setPanel(null);
+    setEditingProject(null);
     setError(null);
     notifyShell(undefined, { project_id: projectId });
     setIsPending(false);
@@ -166,7 +169,7 @@ function ChatSidebarWidget() {
       setActiveThreadId(payload.thread.thread_id);
       setExpandedThreadId(null);
       setExpandedThreadTitle("");
-      setPanel(null);
+      setEditingProject(null);
       setError(null);
     } catch (moveError) {
       setError(moveError instanceof Error ? moveError.message : "Unable to move chat.");
@@ -229,12 +232,12 @@ function ChatSidebarWidget() {
     selectThread(thread);
   }
 
-  async function addProject(position?: FloatingPanelPosition) {
+  async function addProject() {
     setIsPending(true);
     try {
       const payload = await createProject("New project");
       updateFromSidebarPayload(payload, setProjects);
-      setPanel(position ? { kind: "project", project: payload.project, position } : null);
+      setEditingProject(null);
       setError(null);
     } catch (projectError) {
       setError(projectError instanceof Error ? projectError.message : "Unable to create project.");
@@ -248,13 +251,13 @@ function ChatSidebarWidget() {
     updateFromSidebarPayload(payload, setProjects);
     setExpandedThreadId(null);
     setExpandedThreadTitle("");
-    setPanel(null);
+    setEditingProject(null);
   }
 
   async function removeProject(projectId: string) {
     const payload = await deleteProject(projectId);
     updateFromSidebarPayload(payload, setProjects);
-    setPanel(null);
+    setEditingProject(null);
   }
 
   async function renameThread(threadId: string, title: string, projectId: string | null) {
@@ -263,7 +266,7 @@ function ChatSidebarWidget() {
     setActiveThreadId(payload.thread.thread_id);
     setExpandedThreadId(null);
     setExpandedThreadTitle("");
-    setPanel(null);
+    setEditingProject(null);
   }
 
   async function removeThread(threadId: string) {
@@ -276,17 +279,60 @@ function ChatSidebarWidget() {
       setExpandedThreadId(null);
       setExpandedThreadTitle("");
     }
-    setPanel(null);
+    setEditingProject(null);
+  }
+
+  function startProjectEdit(project: ChatProject) {
+    setExpandedThreadId(null);
+    setExpandedThreadTitle("");
+    setEditingProject({ projectId: project.project_id, name: project.name });
+    setError(null);
+  }
+
+  function cancelProjectEdit() {
+    setEditingProject(null);
+  }
+
+  async function saveProjectEdit() {
+    if (!editingProject) {
+      return;
+    }
+    const nextName = editingProject.name.trim();
+    if (!nextName) {
+      setError("Project name cannot be empty.");
+      return;
+    }
+    const project = projects.find((item) => item.project_id === editingProject.projectId);
+    if (project?.name === nextName) {
+      setEditingProject(null);
+      return;
+    }
+    setIsPending(true);
+    try {
+      await renameProject(editingProject.projectId, nextName);
+      setError(null);
+    } catch (projectError) {
+      setError(projectError instanceof Error ? projectError.message : "Unable to save project.");
+    } finally {
+      setIsPending(false);
+    }
+  }
+
+  async function removeEditingProject(projectId: string) {
+    setIsPending(true);
+    try {
+      await removeProject(projectId);
+      setError(null);
+    } catch (projectError) {
+      setError(projectError instanceof Error ? projectError.message : "Unable to delete project.");
+    } finally {
+      setIsPending(false);
+    }
   }
 
   function closeExpandedThread() {
     setExpandedThreadId(null);
     setExpandedThreadTitle("");
-  }
-
-  function createChatInCurrentContext() {
-    const activeThread = activeThreadId ? threads.find((thread) => thread.thread_id === activeThreadId) : undefined;
-    void createChat(activeThread?.project_id || null);
   }
 
   return (
@@ -299,10 +345,41 @@ function ChatSidebarWidget() {
         ) : (
           sections.map((section) => {
             const isCollapsed = collapsedSections[section.id] ?? false;
+            const isEditingProject = editingProject?.projectId === section.projectId;
+            const editingName = isEditingProject ? editingProject.name : section.title;
             return (
-              <section className={`bs-chat-folder ${isCollapsed ? "is-collapsed" : ""}`} key={section.id}>
-                <div className="bs-chat-folder__header">
-                  <p className="bs-chat-folder__title">{section.title}</p>
+              <section className={`bs-chat-folder ${isCollapsed ? "is-collapsed" : ""} ${isEditingProject ? "is-project-editing" : ""}`} key={section.id}>
+                <div
+                  className="bs-chat-folder__header"
+                  ref={(element) => {
+                    if (isEditingProject) {
+                      editingProjectRef.current = element;
+                    }
+                  }}
+                >
+                  {isEditingProject ? (
+                    <span className="bs-chat-folder__title-input-frame">
+                      <input
+                        aria-label={`Rinomina progetto ${section.title}`}
+                        autoFocus
+                        className="bs-chat-folder__title-input"
+                        onChange={(event) => setEditingProject({ projectId: editingProject.projectId, name: event.target.value })}
+                        onKeyDown={(event) => {
+                          if (event.key === "Escape") {
+                            event.preventDefault();
+                            cancelProjectEdit();
+                          }
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            void saveProjectEdit();
+                          }
+                        }}
+                        value={editingName}
+                      />
+                    </span>
+                  ) : (
+                    <p className="bs-chat-folder__title">{section.title}</p>
+                  )}
                   <div className="bs-chat-folder__header-actions">
                     <button
                       aria-expanded={!isCollapsed}
@@ -316,13 +393,20 @@ function ChatSidebarWidget() {
                     </button>
                     {section.canManage ? (
                       <button
-                        aria-label={`Nuova chat in ${section.title}`}
-                        className="bs-chat-folder__action-button"
-                        onClick={() => createChat(section.projectId)}
-                        title="Nuova chat"
+                        aria-label={isEditingProject ? `Elimina progetto ${section.title}` : `Nuova chat in ${section.title}`}
+                        className={`bs-chat-folder__action-button ${isEditingProject ? "is-danger" : ""}`}
+                        disabled={isPending}
+                        onClick={() => {
+                          if (isEditingProject && section.projectId) {
+                            void removeEditingProject(section.projectId);
+                            return;
+                          }
+                          void createChat(section.projectId);
+                        }}
+                        title={isEditingProject ? "Elimina progetto" : "Nuova chat"}
                         type="button"
                       >
-                        <span aria-hidden="true" className="material-symbols-rounded">add</span>
+                        <span aria-hidden="true" className="material-symbols-rounded">{isEditingProject ? "delete" : "add"}</span>
                       </button>
                     ) : null}
                     {!section.canManage ? (
@@ -330,7 +414,7 @@ function ChatSidebarWidget() {
                         aria-label="Nuovo progetto"
                         className="bs-chat-folder__action-button"
                         disabled={isPending}
-                        onClick={(event) => addProject(panelPositionFromTrigger(event.currentTarget))}
+                        onClick={() => addProject()}
                         title="Nuovo progetto"
                         type="button"
                       >
@@ -339,17 +423,24 @@ function ChatSidebarWidget() {
                     ) : null}
                     {section.canManage ? (
                       <button
-                        aria-label={`Azioni per il progetto ${section.title}`}
+                        aria-label={isEditingProject ? `Salva modifiche a ${section.title}` : `Modifica progetto ${section.title}`}
                         className="bs-instance-menu__trigger bs-folder-menu__trigger"
-                        onClick={(event) => {
+                        disabled={isPending || (isEditingProject && !editingName.trim())}
+                        onClick={() => {
                           const project = projects.find((item) => item.project_id === section.projectId);
-                          if (project) {
-                            setPanel({ kind: "project", project, position: panelPositionFromTrigger(event.currentTarget) });
+                          if (!project) {
+                            return;
                           }
+                          if (isEditingProject) {
+                            void saveProjectEdit();
+                            return;
+                          }
+                          startProjectEdit(project);
                         }}
+                        title={isEditingProject ? "Salva" : "Modifica progetto"}
                         type="button"
                       >
-                        <span aria-hidden="true" className="material-symbols-rounded">more_horiz</span>
+                        <span aria-hidden="true" className="material-symbols-rounded">{isEditingProject ? "check" : "more_horiz"}</span>
                       </button>
                     ) : null}
                   </div>
@@ -409,7 +500,7 @@ function ChatSidebarWidget() {
                                 aria-label={`Modifica ${thread.title}`}
                                 className="bs-instance-menu__trigger"
                                 onClick={() => {
-                                  setPanel(null);
+                                  setEditingProject(null);
                                   setExpandedThreadId((current) => {
                                     if (current === thread.thread_id) {
                                       setExpandedThreadTitle("");
@@ -447,27 +538,6 @@ function ChatSidebarWidget() {
           })
         )}
       </div>
-      <div className="bs-chat-sidebar-footer">
-        <button
-          aria-label="Nuova chat"
-          className="bs-chat-sidebar-footer__new-chat"
-          disabled={isPending || isInitialLoading}
-          onClick={createChatInCurrentContext}
-          type="button"
-        >
-          <span aria-hidden="true" className="material-symbols-rounded">add</span>
-          <span>Nuova chat</span>
-        </button>
-      </div>
-      {panel ? (
-        <SettingsPanel
-          onClose={() => setPanel(null)}
-          onCreateChat={createChat}
-          onDeleteProject={removeProject}
-          onRenameProject={renameProject}
-          panel={panel}
-        />
-      ) : null}
     </main>
   );
 }

@@ -77,13 +77,33 @@
   display: inline-flex;
   align-items: center;
   gap: 0.6rem;
-  color: var(--maverick-text-muted);
+  color: rgba(255, 255, 255, 0.66);
   font-size: 0.9rem;
 }
 
 .chatapp-pending-turn__label {
+  display: inline-block;
   font-weight: 600;
   letter-spacing: 0.01em;
+  color: transparent;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.48) 0%, rgba(255, 255, 255, 0.68) 34%, #ffffff 50%, rgba(255, 255, 255, 0.68) 66%, rgba(255, 255, 255, 0.48) 100%);
+  background-size: 230% 100%;
+  background-position: 130% 50%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  animation: chatapp-thinking-text-flow 1.85s ease-in-out infinite;
+}
+
+.chatapp-pending-turn__icon {
+  color: #ffffff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chatapp-pending-turn__label {
+    color: rgba(255, 255, 255, 0.66);
+    background: none;
+    animation: none;
+  }
 }
 
 .chatapp-diff-card {

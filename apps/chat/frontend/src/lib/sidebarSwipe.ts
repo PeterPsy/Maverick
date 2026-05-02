@@ -8,10 +8,10 @@ export type SidebarSwipeViewport = {
   height: number;
 };
 
-const CENTER_X_MIN = 0.25;
-const CENTER_X_MAX = 0.75;
-const CENTER_Y_MIN = 0.2;
-const CENTER_Y_MAX = 0.8;
+const LEFT_SWIPE_X_MIN = 0.04;
+const LEFT_SWIPE_X_MAX = 0.55;
+const SWIPE_Y_MIN = 0.2;
+const SWIPE_Y_MAX = 0.8;
 const MIN_HORIZONTAL_DISTANCE = 72;
 const MAX_VERTICAL_DRIFT = 48;
 
@@ -19,10 +19,10 @@ export function startsInSidebarSwipeZone(point: SidebarSwipePoint, viewport: Sid
   if (viewport.width <= 0 || viewport.height <= 0) {
     return false;
   }
-  const minX = viewport.width * CENTER_X_MIN;
-  const maxX = viewport.width * CENTER_X_MAX;
-  const minY = viewport.height * CENTER_Y_MIN;
-  const maxY = viewport.height * CENTER_Y_MAX;
+  const minX = viewport.width * LEFT_SWIPE_X_MIN;
+  const maxX = viewport.width * LEFT_SWIPE_X_MAX;
+  const minY = viewport.height * SWIPE_Y_MIN;
+  const maxY = viewport.height * SWIPE_Y_MAX;
   return point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY;
 }
 

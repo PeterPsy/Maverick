@@ -49,6 +49,10 @@
   pointer-events: none;
 }
 
+.bs-shell.is-sidebar-mode-fixed:not(.is-mobile-layout) .bs-shell-overlay-widgets {
+  z-index: 70;
+}
+
 .bs-shell-overlay-widgets .bs-widget-slot {
   pointer-events: auto;
 }

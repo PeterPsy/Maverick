@@ -173,6 +173,33 @@ export type RuntimeSessionItem = {
   last_progress_at: string | null;
 };
 
+export type RuntimeThreadItem = {
+  thread_id: string;
+  runtime_session_id: string;
+  title: string;
+  source_app_id: string;
+  availability: string;
+  created_at: string;
+  updated_at: string;
+  last_user_message_at?: string | null;
+};
+
+export type RuntimeThreadWebSocketFrame =
+  | {
+      type: "runtime.thread.snapshot";
+      workspace_id: string;
+      threads: RuntimeThreadItem[];
+    }
+  | {
+      type: "runtime.thread.changed";
+      workspace_id: string;
+      action: string;
+      threads: RuntimeThreadItem[];
+      thread?: RuntimeThreadItem;
+      deleted_thread_ids?: string[];
+      deleted_runtime_session_ids?: string[];
+    };
+
 export type RuntimeStatus = ProviderStatus & {
   sessions: RuntimeSessionItem[];
   all_sessions?: RuntimeSessionItem[];
@@ -469,6 +496,11 @@ export function clearRuntimeSessions(session_ids?: string[], reason = "base_shel
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ session_ids, reason }),
   });
+}
+
+export function runtimeThreadWebSocketUrl(): string {
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return `${protocol}//${window.location.host}/ws/runtime/threads`;
 }
 
 export function listWidgets(host: string, contentKind: string): Promise<WidgetRegistryPayload> {

@@ -10,15 +10,17 @@ type PanelAnchor = {
 };
 
 type ToolCallInlineMessageProps = {
+  createdAt?: string;
   defaultExpanded?: boolean;
   toolCalls: ToolCallMessage[];
 };
 
-export function ToolCallInlineMessage({ defaultExpanded = true, toolCalls }: ToolCallInlineMessageProps) {
+export function ToolCallInlineMessage({ createdAt, defaultExpanded = true, toolCalls }: ToolCallInlineMessageProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [selectedTool, setSelectedTool] = useState<ToolCallMessage | null>(null);
   const [panelAnchor, setPanelAnchor] = useState<PanelAnchor | null>(null);
   const toolCount = toolCalls.length;
+  const timestamp = toolTimestamp(createdAt, toolCalls);
 
   useEffect(() => {
     setIsExpanded(defaultExpanded);
@@ -31,6 +33,11 @@ export function ToolCallInlineMessage({ defaultExpanded = true, toolCalls }: Too
           <span className="material-symbols-rounded">expand_more</span>
         </span>
         <span className="chatapp-tool-inline__toggle-label">Tool Used{toolCount > 1 ? ` (${toolCount})` : ""}</span>
+        {timestamp ? (
+          <time className="chatapp-tool-inline__time" dateTime={createdAt || toolCalls.find((toolCall) => toolCall.createdAt)?.createdAt}>
+            {timestamp}
+          </time>
+        ) : null}
       </button>
       <div className={`chatapp-tool-inline__body ${isExpanded ? "" : "is-collapsed"}`}>
         <div className="chatapp-tool-inline__body-inner">
@@ -277,6 +284,11 @@ function stringValue(value: unknown): string {
 
 function arrayRecords(value: unknown): Record<string, unknown>[] {
   return Array.isArray(value) ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object" && !Array.isArray(item)) : [];
+}
+
+function toolTimestamp(createdAt: string | undefined, toolCalls: ToolCallMessage[]): string {
+  const firstToolTimestamp = toolCalls.find((toolCall) => toolCall.createdAt)?.createdAt;
+  return formatToolTime(createdAt || firstToolTimestamp || "");
 }
 
 function formatToolTime(value: string): string {

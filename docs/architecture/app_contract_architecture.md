@@ -1445,16 +1445,20 @@ That synthesized item follows the same widget registry path as any other structu
 - the original agent text remains ordinary Markdown
 - local filesystem paths are not exposed to iframe widgets
 
-The same widget mechanism is also the correct way for a shell variant to host chat navigation. The default `base-shell` sidebar only mounts the app-shortcuts widget slot and does not reserve a second slot for chat navigation.
+The same widget mechanism is also the correct way for the shell to host app-specific sidebar content. The default `base-shell` owns only the fixed sidebar frame and mounts standard app-owned slots for the active app.
 
-The shell must not import chat sidebar components or own chat projects.
+The shell must not import app sidebar components or own app-domain sidebar state such as chat projects.
 
-For shells that choose to expose chat navigation:
+For apps that expose content in the `base-shell` sidebar:
 
-- the shell renders a generic sidebar widget slot for chat navigation
-- the slot discovers widgets with `host=base-shell` and a shell sidebar content kind
-- `chat` declares a widget such as `chat-sidebar`
-- the widget frontend is served from the chat app's own `frontend/dist/widgets/chat-sidebar`
+- the shell renders `shell.sidebar.primary` as the central modular sidebar body
+- the shell renders `shell.sidebar.footer` as a compact app-owned action area inside the shell's fixed footer
+- sidebar slots discover widgets with `host=base-shell` and the requested shell sidebar content kind
+- sidebar slots prefer the widget whose `owner_app_id` matches the active app id and remain empty when the active app does not declare a matching widget
+- the shell does not render a generic loading skeleton inside app-owned sidebar slots; each owning app must render the skeleton or loading state for its own sidebar widget
+- `chat` declares `chat-sidebar` for `shell.sidebar.primary`
+- `chat` declares `chat-sidebar-footer` for `shell.sidebar.footer`, so "new chat" remains Chat-owned instead of becoming shell logic
+- each widget frontend is served from the owning app's own declared widget mount, such as Chat's `frontend/dist/widgets/chat-sidebar` or `frontend/dist/widgets/chat-sidebar-footer`
 - project actions go through the chat app backend, while thread create, rename, move, delete, and delete-all actions go through core runtime thread APIs; frontends may implement delete-all as repeated per-thread core deletes when they need progress feedback for runtime cleanup
 - project and thread settings panels are rendered by the chat widget, not by the shell
 - optional shell navigation uses browser messaging from the iframe to ask the host to open the `chat` app with explicit scalar params such as a thread id or a new-chat request
@@ -1466,7 +1470,8 @@ For shells that choose to expose chat navigation:
 This preserves the visual layout while moving ownership to the app boundary:
 
 - shell layout and app mounting belong to `base-shell`
-- chat projects and chat list state belong to `chat`
+- sidebar body and footer contents belong to the active app that declares those widgets
+- chat projects, chat list state, and "new chat" behavior belong to `chat`
 - widget discovery, auth, workspace context, and controlled frontend mount belong to the core
 
 ### Backend distribution artifacts

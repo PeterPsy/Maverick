@@ -80,7 +80,7 @@ describe("runtime websocket helpers", () => {
     expect(activeTurn).toBeNull();
   });
 
-  it("treats final runtime output as terminal when a completed event is missing", () => {
+  it("keeps a turn active until a canonical terminal turn event arrives", () => {
     const activeTurn = inferActiveRuntimeTurn(
       [
         { ...event("queued", "2026-04-19T10:00:00Z"), event_type: "runtime.turn.queued", payload: { input_text: "work" } },
@@ -90,14 +90,14 @@ describe("runtime websocket helpers", () => {
       "session-1",
     );
 
-    expect(activeTurn).toBeNull();
+    expect(activeTurn).toMatchObject({ turn_id: "turn-1", status: "active" });
   });
 
   it("does not let a late started event reactivate a terminal turn", () => {
     const activeTurn = inferActiveRuntimeTurn(
       [
         { ...event("queued", "2026-04-19T10:00:00Z"), event_type: "runtime.turn.queued", payload: { input_text: "work" } },
-        { ...event("final", "2026-04-19T10:00:01Z"), event_type: "runtime.output.final", payload: { text: "done" } },
+        { ...event("completed", "2026-04-19T10:00:01Z"), event_type: "runtime.turn.completed", payload: {} },
         { ...event("started", "2026-04-19T10:00:01Z"), event_type: "runtime.turn.started" },
       ],
       "session-1",

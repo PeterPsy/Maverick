@@ -17,8 +17,9 @@
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
-  width: max-content;
+  width: 100%;
   max-width: 100%;
+  min-width: 0;
   padding: 0;
   border: 0;
   background: transparent;
@@ -70,10 +71,20 @@
 }
 
 .chatapp-tool-inline__toggle-label {
+  min-width: 0;
   line-height: 1.1;
   font-size: 0.8rem;
   font-weight: 400;
   letter-spacing: 0.01em;
+}
+
+.chatapp-tool-inline__time {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: rgba(255, 255, 255, 0.34);
+  font-size: 0.68rem;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .chatapp-tool-inline__body {
@@ -191,11 +202,13 @@
 }
 
 @keyframes chatapp-tool-inline-pulse {
+
   0%,
   100% {
     opacity: 0.45;
     transform: scale(0.96);
   }
+
   50% {
     opacity: 1;
     transform: scale(1.04);
@@ -385,6 +398,7 @@
     opacity: 0;
     transform: translateY(-0.18rem);
   }
+
   100% {
     opacity: 1;
     transform: translateY(0);
@@ -399,6 +413,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   .chatapp-tool-inline__toggle,
   .chatapp-tool-inline__chevron,
   .chatapp-tool-inline__body {
@@ -468,7 +483,6 @@
   isolation: isolate;
   overflow: hidden;
   display: grid;
-  gap: 0.55rem;
   width: min(100%, 54rem);
   padding: 0.82rem;
   border: 1px solid rgba(255, 255, 255, 0.055);

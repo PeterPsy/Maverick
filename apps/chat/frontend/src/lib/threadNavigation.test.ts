@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { ChatThread } from "../api/client";
+import { ChatThread, orderChatThreads } from "../api/client";
 import { findThreadByRuntimeSession } from "./threadNavigation";
 
-function thread(threadId: string, runtimeSessionId: string): ChatThread {
+function thread(threadId: string, runtimeSessionId: string, overrides: Partial<ChatThread> = {}): ChatThread {
   return {
     thread_id: threadId,
     runtime_session_id: runtimeSessionId,
@@ -17,6 +17,8 @@ function thread(threadId: string, runtimeSessionId: string): ChatThread {
     availability: "active",
     created_at: "2026-04-19T00:00:00Z",
     updated_at: "2026-04-19T00:00:00Z",
+    last_user_message_at: null,
+    ...overrides,
   };
 }
 
@@ -27,5 +29,24 @@ describe("findThreadByRuntimeSession", () => {
 
   it("returns null when the session has not been attached to a thread", () => {
     expect(findThreadByRuntimeSession([thread("thread-1", "session-1")], "session-2")).toBeNull();
+  });
+});
+
+describe("orderChatThreads", () => {
+  it("ignores updated_at changes from selection and uses the latest user message", () => {
+    const ordered = orderChatThreads([
+      thread("selected", "session-selected", {
+        created_at: "2026-04-19T09:00:00Z",
+        updated_at: "2026-04-19T12:00:00Z",
+        last_user_message_at: "2026-04-19T09:30:00Z",
+      }),
+      thread("latest-user-message", "session-latest", {
+        created_at: "2026-04-19T08:00:00Z",
+        updated_at: "2026-04-19T10:00:00Z",
+        last_user_message_at: "2026-04-19T11:00:00Z",
+      }),
+    ]);
+
+    expect(ordered.map((item) => item.thread_id)).toEqual(["latest-user-message", "selected"]);
   });
 });

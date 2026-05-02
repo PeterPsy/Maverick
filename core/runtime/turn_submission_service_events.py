@@ -12,6 +12,7 @@ from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.service import record_runtime_event, transition_runtime_turn
+from core.runtime.thread_catalog_events import set_thread_availability
 
 if TYPE_CHECKING:
     from core.api.platform_state import PlatformState
@@ -74,12 +75,19 @@ def _complete_turn_from_exit_code(
         payload={"provider_id": provider_id, "exit_code": exit_code},
         event_bus=state.runtime_event_bus,
     )
+    set_thread_availability(
+        state,
+        workspace_id=turn.workspace_id,
+        runtime_session_id=session_id,
+        availability="free",
+        now=event.created_at,
+    )
     return turn, event
 
 
 
 def _record_turn_failed(state: PlatformState, *, session_id: str, turn_id: str, provider_id: str, error: str) -> RuntimeEventRecord:
-    return record_runtime_event(
+    event = record_runtime_event(
         state.runtime_store,
         event_id=str(uuid4()),
         session_id=session_id,
@@ -89,6 +97,15 @@ def _record_turn_failed(state: PlatformState, *, session_id: str, turn_id: str, 
         payload={"error": error, "provider_id": provider_id},
         event_bus=state.runtime_event_bus,
     )
+    turn = state.runtime_store.get_turn(turn_id)
+    set_thread_availability(
+        state,
+        workspace_id=turn.workspace_id,
+        runtime_session_id=session_id,
+        availability="free",
+        now=event.created_at,
+    )
+    return event
 
 
 

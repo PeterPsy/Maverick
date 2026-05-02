@@ -14,6 +14,7 @@ export function useShellSidebarSwipe() {
     ignoreTarget: isInteractiveTarget,
     isSwipe: isSidebarOpenSwipe,
     message: OPEN_SIDEBAR_MESSAGE,
+    preventHorizontalDefault: true,
   });
 }
 

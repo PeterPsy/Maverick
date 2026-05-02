@@ -311,7 +311,9 @@
 
 .chatapp-chat-scroll__inner--skeleton {
   display: grid;
+  justify-items: stretch;
   align-items: stretch;
+  align-content: stretch;
 }
 
 .chatapp-history-loader {

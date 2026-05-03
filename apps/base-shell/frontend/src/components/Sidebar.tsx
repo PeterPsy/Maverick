@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import type { CSSProperties, FocusEvent as ReactFocusEvent, MouseEvent as ReactMouseEvent, TouchEvent as ReactTouchEvent } from "react";
 import { AppRegistryItem, SessionUser, WorkspaceItem } from "../api";
+import { isHorizontalIntent, isSidebarCloseSwipe, type SidebarSwipePoint } from "../lib/sidebarSwipe";
 import { shellAppRailApps, shellVisibleApps } from "../navigation";
 import type { SidebarMode } from "../session";
 import { AppLogo } from "./AppLogo";
@@ -8,20 +9,13 @@ import { BrandMark } from "./BrandMark";
 import { WidgetSlot } from "./WidgetSlot";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
-type SwipePoint = {
-  x: number;
-  y: number;
-};
-
-type TrackedSwipe = SwipePoint & {
+type TrackedSwipe = SidebarSwipePoint & {
   id: number;
 };
 
-const SIDEBAR_SWIPE_MIN_DISTANCE = 72;
-const SIDEBAR_SWIPE_MAX_VERTICAL_DRIFT = 48;
-
 export function Sidebar({
   activeAppId,
+  activeAppParams,
   apps,
   activeWorkspaceId,
   isLoading = false,
@@ -36,10 +30,12 @@ export function Sidebar({
   onOpenSettings,
   onWorkspaceChanged,
   pinnedAppIds,
+  railMetrics,
   user,
   workspaces,
 }: {
   activeAppId: string | null;
+  activeAppParams: Record<string, string | boolean | null>;
   apps: AppRegistryItem[];
   activeWorkspaceId: string;
   isOpen: boolean;
@@ -54,6 +50,7 @@ export function Sidebar({
   onOpenSettings: () => void;
   onWorkspaceChanged: () => void;
   pinnedAppIds: string[];
+  railMetrics: CSSProperties;
   user: SessionUser | null;
   workspaces: WorkspaceItem[];
 }) {
@@ -62,7 +59,6 @@ export function Sidebar({
   const railApps = shellAppRailApps(apps, pinnedAppIds);
   const activeApp = activeAppId ? visibleAppsById.get(activeAppId) || null : null;
   const isInitialLoading = isLoading && railApps.length === 0;
-  const railMetrics = sidebarRailMetrics(isInitialLoading ? 4 : railApps.length + 1);
   const isDetailLayerOpen = isOpen || isPinned;
 
   function handlePointerEnter() {
@@ -220,7 +216,7 @@ export function Sidebar({
 
         <WidgetSlot
           activeWorkspaceId={activeWorkspaceId}
-          content={{ is_mobile_layout: isMobileLayout, user: user?.username || null }}
+          content={{ active_app_id: activeAppId, active_app_params: activeAppParams, is_mobile_layout: isMobileLayout, user: user?.username || null }}
           contentKind="shell.sidebar.primary"
           hostAppId="base-shell"
           label="App sidebar content"
@@ -232,7 +228,7 @@ export function Sidebar({
         <div className="bs-sidebar__bottom-fixed">
           <WidgetSlot
             activeWorkspaceId={activeWorkspaceId}
-            content={{ is_mobile_layout: isMobileLayout, placement: "sidebar-footer", user: user?.username || null }}
+            content={{ active_app_id: activeAppId, active_app_params: activeAppParams, is_mobile_layout: isMobileLayout, placement: "sidebar-footer", user: user?.username || null }}
             contentKind="shell.sidebar.footer"
             hostAppId="base-shell"
             label="App sidebar footer"
@@ -279,32 +275,11 @@ export function Sidebar({
   );
 }
 
-function isSidebarCloseSwipe(start: SwipePoint, end: SwipePoint): boolean {
-  const deltaX = end.x - start.x;
-  const deltaY = Math.abs(end.y - start.y);
-  return deltaX <= -SIDEBAR_SWIPE_MIN_DISTANCE && deltaY <= SIDEBAR_SWIPE_MAX_VERTICAL_DRIFT;
-}
-
-function isHorizontalIntent(start: SwipePoint, current: SwipePoint): boolean {
-  const deltaX = Math.abs(current.x - start.x);
-  const deltaY = Math.abs(current.y - start.y);
-  return deltaX > 12 && deltaX > deltaY;
-}
-
 function isSidebarSwipeIgnoredTarget(target: EventTarget): boolean {
   if (!(target instanceof Element)) {
     return false;
   }
   return Boolean(target.closest("input, textarea, select, [contenteditable='true'], .bs-sidebar__mobile-apps, [data-no-sidebar-swipe]"));
-}
-
-export function sidebarRailMetrics(appCount: number): CSSProperties {
-  const iconSize = appCount <= 5 ? 3 : appCount <= 7 ? 2.8 : appCount <= 9 ? 2.55 : appCount <= 12 ? 2.3 : 2.05;
-  const railWidth = iconSize + 0.95;
-  return {
-    "--bs-sidebar-icon-size": `${iconSize}rem`,
-    "--bs-sidebar-rail-width": `${railWidth}rem`,
-  } as CSSProperties;
 }
 
 export function sidebarMobileRailApps(railApps: AppRegistryItem[], activeAppId: string | null): AppRegistryItem[] {

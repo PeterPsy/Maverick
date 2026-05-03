@@ -31,3 +31,11 @@ export type Catalog = {
 export type Preview = {
   rendered: string;
 };
+
+export type AgentEdits = {
+  name: string;
+  description: string;
+  instructions: string;
+  commonPrompt: string;
+  skillIds: string[];
+};

@@ -1,0 +1,318 @@
+.agent-bento-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-auto-rows: minmax(196px, auto);
+  gap: 14px;
+}
+
+.bento-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--maverick-border);
+  border-radius: var(--maverick-card-radius);
+  background: var(--maverick-glass-surface);
+  box-shadow: var(--maverick-glass-edge);
+  backdrop-filter: blur(26px);
+  isolation: isolate;
+  padding: 18px;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.bento-card::before {
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--maverick-glass-highlight);
+  opacity: 0.7;
+  pointer-events: none;
+  content: "";
+}
+
+.bento-card:hover {
+  border-color: var(--maverick-border-strong);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.bento-card-agent {
+  grid-column: 1 / span 2;
+  grid-row: 1 / span 2;
+}
+
+.bento-card-role {
+  grid-column: 3 / span 2;
+  grid-row: 1;
+}
+
+.bento-card-trace {
+  grid-column: 3 / span 2;
+  grid-row: 2;
+}
+
+.bento-card-instructions {
+  grid-column: 5 / span 2;
+  grid-row: 1 / span 2;
+}
+
+.bento-card-common {
+  grid-column: 1 / span 3;
+  grid-row: 3 / span 2;
+}
+
+.bento-card-skills {
+  grid-column: 4 / span 3;
+  grid-row: 3 / span 2;
+  height: 406px;
+}
+
+.bento-card-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.bento-card-topline > span,
+.skill-collapsible summary > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.46rem;
+  min-width: 0;
+  color: var(--maverick-text);
+  font-size: 0.76rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.bento-card-topline strong {
+  overflow: hidden;
+  color: var(--maverick-text-muted);
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bento-card-body {
+  display: grid;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.bento-card-body.compact {
+  flex: 0 0 auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.bento-card-agent .bento-card-body {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.bento-card-agent label,
+.bento-card-instructions,
+.bento-card-common {
+  min-height: 0;
+}
+
+.bento-card-agent label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.44rem;
+}
+
+.bento-card-agent label:last-child {
+  flex: 1;
+  min-height: 0;
+}
+
+.bento-kpi {
+  display: grid;
+  gap: 0.38rem;
+  min-width: 0;
+}
+
+.bento-kpi span {
+  color: var(--maverick-text-muted);
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.bento-kpi strong {
+  overflow: hidden;
+  font-size: 1.05rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bento-visual {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-height: 112px;
+}
+
+.prompt-signal {
+  position: relative;
+  min-height: 132px;
+}
+
+.prompt-signal-orbit {
+  position: absolute;
+  width: 132px;
+  height: 132px;
+  border: 1px solid var(--maverick-border-strong);
+  border-radius: 999px;
+}
+
+.prompt-signal-orbit::before,
+.prompt-signal-orbit::after {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--maverick-accent);
+  content: "";
+}
+
+.prompt-signal-orbit::before {
+  top: -4px;
+  left: 48px;
+}
+
+.prompt-signal-orbit::after {
+  right: 14px;
+  bottom: 12px;
+  opacity: 0.55;
+}
+
+.prompt-signal-core {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 86px;
+  height: 86px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--maverick-control-radius);
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--maverick-text);
+  font-size: 1.8rem;
+  font-weight: 900;
+}
+
+.trace-meter {
+  position: relative;
+  align-items: end;
+  gap: 8px;
+  min-height: 96px;
+  overflow: hidden;
+}
+
+.trace-meter span {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.trace-meter span.is-active {
+  background: var(--maverick-accent);
+  box-shadow: 0 0 24px rgba(255, 255, 255, 0.18);
+}
+
+.trace-sweep {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.72), transparent);
+}
+
+.role-flow {
+  justify-content: flex-start;
+  gap: 14px;
+  min-height: 92px;
+}
+
+.role-flow-node {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 62px;
+  height: 62px;
+  border: 1px solid var(--maverick-border-strong);
+  border-radius: var(--maverick-control-radius);
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--maverick-text);
+  font-weight: 900;
+}
+
+.role-flow-lines {
+  display: grid;
+  flex: 1;
+  gap: 9px;
+  min-width: 0;
+}
+
+.role-flow-lines span {
+  display: block;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+@media (max-width: 900px) {
+  .agent-bento-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: auto;
+  }
+
+  .bento-card-agent,
+  .bento-card-role,
+  .bento-card-trace,
+  .bento-card-instructions,
+  .bento-card-common,
+  .bento-card-skills {
+    grid-column: span 2;
+    grid-row: auto;
+  }
+
+  .bento-card-common,
+  .bento-card-skills {
+    height: 360px;
+    min-height: 360px;
+  }
+}
+
+@media (max-width: 620px) {
+  .agent-bento-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .bento-card-agent,
+  .bento-card-role,
+  .bento-card-trace,
+  .bento-card-instructions,
+  .bento-card-common,
+  .bento-card-skills {
+    grid-column: 1;
+  }
+
+  .bento-card-body.compact {
+    grid-template-columns: 1fr;
+  }
+
+  .bento-card-topline {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

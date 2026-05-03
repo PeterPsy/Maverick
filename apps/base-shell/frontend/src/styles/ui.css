@@ -32,8 +32,8 @@
 }
 
 .bs-ui-button--primary {
-  background: linear-gradient(135deg, var(--maverick-primary), var(--maverick-primary-strong));
-  color: #fff;
+  background: var(--maverick-accent);
+  color: var(--maverick-text-on-accent);
 }
 
 .bs-ui-button--secondary {
@@ -66,8 +66,8 @@
 }
 
 .bs-ui-surface--interactive:hover {
-  border-color: rgba(215, 36, 81, 0.24);
-  background: rgba(215, 36, 81, 0.11);
+  border-color: var(--maverick-accent-hover);
+  background: var(--maverick-accent-soft);
 }
 
 .bs-ui-badge {
@@ -85,8 +85,8 @@
 }
 
 .bs-ui-badge--primary {
-  background: rgba(215, 36, 81, 0.14);
-  color: var(--maverick-text);
+  background: var(--maverick-accent-soft);
+  color: var(--maverick-accent);
 }
 
 .bs-ui-badge--success {
@@ -358,7 +358,7 @@
 .bs-login-paper-bg.is-static {
   background:
     radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.18), transparent 18rem),
-    radial-gradient(circle at 62% 64%, rgba(248, 75, 120, 0.14), transparent 20rem),
+    radial-gradient(circle at 62% 64%, var(--maverick-accent-soft), transparent 20rem),
     linear-gradient(145deg, #050505, #1c1c1c 54%, #000);
 }
 

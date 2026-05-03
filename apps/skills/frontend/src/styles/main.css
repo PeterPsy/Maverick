@@ -126,7 +126,7 @@ h3 {
   text-transform: uppercase;
 }
 
-.skills-titlebar-actions > span,
+.skills-titlebar-actions>span,
 .meta-grid div,
 .source-band,
 .skills-error,
@@ -142,7 +142,7 @@ h3 {
   gap: 0.45rem;
 }
 
-.skills-titlebar-actions > span {
+.skills-titlebar-actions>span {
   width: max-content;
   padding: 0.28rem 0.6rem;
   color: var(--skill-muted);
@@ -255,7 +255,6 @@ h3 {
 
 .detail-header {
   padding-bottom: 8px;
-  border-bottom: 1px solid var(--skill-border);
 }
 
 .detail-header p {
@@ -446,6 +445,7 @@ pre {
 }
 
 @media (max-width: 620px) {
+
   .skills-sidebar,
   .skills-detail {
     padding: 18px;

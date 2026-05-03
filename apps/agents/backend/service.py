@@ -38,7 +38,7 @@ DATA_CHANGED_ACTIONS = {
     "delete_agent_type",
     "set_common_prompt",
 }
-VIEW_STATE_ACTIONS = {"view_filter", "set_view_filter", "set_custom_view", "clear_custom_view"}
+VIEW_STATE_ACTIONS = {"set_view_filter", "set_custom_view", "clear_custom_view"}
 
 
 def app_events_for_action(action: str) -> list[dict]:

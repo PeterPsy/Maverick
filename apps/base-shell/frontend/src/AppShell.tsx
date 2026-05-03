@@ -28,8 +28,10 @@ import {
 import { readShellSession, writeShellSession } from "./session";
 import type { SidebarMode } from "./session";
 import { useMobileLayout } from "./hooks/useMobileLayout";
+import { useMobileSidebarOpenSwipe } from "./hooks/useMobileSidebarOpenSwipe";
+import { useSidebarRailMetrics } from "./hooks/useSidebarRailMetrics";
 import { LoginScreen } from "./components/LoginScreen";
-import { Sidebar, sidebarRailMetrics } from "./components/Sidebar";
+import { Sidebar } from "./components/Sidebar";
 import { ShellOverlayWidgets } from "./components/ShellOverlayWidgets";
 import { ShellDialog, ShellDialogs } from "./components/ShellDialogs";
 import { ProviderSetupDialog } from "./components/ProviderSetupDialog";
@@ -61,6 +63,9 @@ export function AppShell() {
   const isMobileLayout = useMobileLayout();
   const isSidebarPinned = sidebarMode === "fixed" && !isMobileLayout;
   const sidebarCloseTimerRef = useRef<number | null>(null);
+  const railApps = shellAppRailApps(apps, pinnedAppIds);
+  const shellRailItemCount = isLoading && railApps.length === 0 ? 4 : railApps.length + 1;
+  const shellSidebarMetrics = useSidebarRailMetrics(shellRailItemCount, isMobileLayout);
 
   function clearSidebarClosing() {
     if (sidebarCloseTimerRef.current !== null) {
@@ -103,6 +108,11 @@ export function AppShell() {
       window.location.origin,
     );
   }
+
+  useMobileSidebarOpenSwipe({
+    enabled: isMobileLayout && !isSidebarPinned && !isSidebarOpen && !isSidebarClosing,
+    onOpen: openSidebar,
+  });
 
   async function loadShellState() {
     setIsLoading(true);
@@ -309,7 +319,6 @@ export function AppShell() {
   const activeWorkspaceId = status?.workspace_id || session.workspace_id;
   const needsProviderSetup =
     !!settings && !settings.provider.active_provider && dismissedProviderSetupWorkspaceId !== activeWorkspaceId;
-  const shellSidebarMetrics = sidebarRailMetrics(shellAppRailApps(apps, pinnedAppIds).length + 1);
 
   return (
     <main
@@ -328,8 +337,12 @@ export function AppShell() {
           onOpenSidebar={openSidebar}
         />
       </div>
+      {isMobileLayout && !isSidebarPinned && !isSidebarOpen && !isSidebarClosing ? (
+        <div aria-hidden="true" className="bs-mobile-sidebar-swipe-edge" />
+      ) : null}
       <Sidebar
         activeAppId={activeApp?.app_id ?? activeAppId}
+        activeAppParams={activeAppParams}
         activeWorkspaceId={activeWorkspaceId}
         apps={apps}
         isLoading={isLoading}
@@ -344,6 +357,7 @@ export function AppShell() {
         onOpenSettings={() => setActiveDialog("settings")}
         onWorkspaceChanged={loadShellState}
         pinnedAppIds={pinnedAppIds}
+        railMetrics={shellSidebarMetrics}
         user={session.user}
         workspaces={workspaces}
       />

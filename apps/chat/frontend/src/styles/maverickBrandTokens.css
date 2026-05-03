@@ -27,15 +27,15 @@
   --maverick-light-text-2: #4b5563;
   --maverick-light-text-3: #9ca3af;
 
-  /* Brand scale */
-  --maverick-text-on-brand: #ffffff;
-  --maverick-brand-300: #ff6f94;
-  --maverick-brand-400: #f84b78;
-  --maverick-brand-500: #d72451;
-  --maverick-brand-600: #b81e44;
-  --maverick-brand-700: #8f1735;
-  --maverick-glow-brand-strong: rgba(215, 36, 81, 0.18);
-  --maverick-glow-brand-soft: rgba(215, 36, 81, 0.12);
+  /* Primary accent */
+  --maverick-text-on-brand: #0a0a0b;
+  --maverick-brand-300: #ffffff;
+  --maverick-brand-400: #ffffff;
+  --maverick-brand-500: #ffffff;
+  --maverick-brand-600: #ffffff;
+  --maverick-brand-700: #ffffff;
+  --maverick-glow-brand-strong: color-mix(in srgb, var(--maverick-brand-500) 18%, transparent);
+  --maverick-glow-brand-soft: color-mix(in srgb, var(--maverick-brand-500) 12%, transparent);
 
   /* Editorial accents */
   --maverick-dark-accent-pink: #f472b6;
@@ -54,61 +54,61 @@
   --maverick-light-danger: #dc2626;
 
   /* Shared focus */
-  --maverick-dark-focus-ring: rgba(215, 36, 81, 0.3);
-  --maverick-light-focus-ring: rgba(215, 36, 81, 0.4);
+  --maverick-dark-focus-ring: rgba(255, 255, 255, 0.32);
+  --maverick-light-focus-ring: rgba(10, 10, 11, 0.28);
 
   /* Hero landing motion/surface */
   --maverick-hero-dark-shadow-soft: 0 20px 60px rgba(0, 0, 0, 0.55);
   --maverick-hero-dark-shadow-hover: 0 25px 80px rgba(0, 0, 0, 0.65);
-  --maverick-hero-dark-shadow-brand-button: 0 20px 60px rgba(215, 36, 81, 0.3);
-  --maverick-hero-dark-shadow-brand-button-hover: 0 25px 70px rgba(215, 36, 81, 0.35);
-  --maverick-hero-dark-chip-brand-border: rgba(215, 36, 81, 0.3);
-  --maverick-hero-dark-chip-brand-bg: rgba(215, 36, 81, 0.12);
-  --maverick-hero-dark-chip-brand-text: #ffe8ee;
+  --maverick-hero-dark-shadow-brand-button: 0 20px 60px color-mix(in srgb, var(--maverick-brand-500) 18%, transparent);
+  --maverick-hero-dark-shadow-brand-button-hover: 0 25px 70px color-mix(in srgb, var(--maverick-brand-500) 22%, transparent);
+  --maverick-hero-dark-chip-brand-border: color-mix(in srgb, var(--maverick-brand-500) 34%, transparent);
+  --maverick-hero-dark-chip-brand-bg: color-mix(in srgb, var(--maverick-brand-500) 12%, transparent);
+  --maverick-hero-dark-chip-brand-text: #ffffff;
   --maverick-hero-dark-atmosphere:
-    radial-gradient(circle at 70% 75%, rgba(215, 36, 81, 0.18), transparent 55%),
+    radial-gradient(circle at 70% 75%, color-mix(in srgb, var(--maverick-brand-500) 14%, transparent), transparent 55%),
     radial-gradient(circle at 50% 12%, rgba(167, 139, 250, 0.12), transparent 48%);
 
   --maverick-hero-light-shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.05);
   --maverick-hero-light-shadow-hover: 0 12px 28px rgba(0, 0, 0, 0.08);
-  --maverick-hero-light-shadow-brand-button: 0 10px 24px rgba(215, 36, 81, 0.2);
-  --maverick-hero-light-shadow-brand-button-hover: 0 12px 26px rgba(215, 36, 81, 0.24);
-  --maverick-hero-light-chip-brand-border: rgba(215, 36, 81, 0.22);
-  --maverick-hero-light-chip-brand-bg: rgba(215, 36, 81, 0.08);
+  --maverick-hero-light-shadow-brand-button: 0 10px 24px color-mix(in srgb, var(--maverick-brand-500) 18%, transparent);
+  --maverick-hero-light-shadow-brand-button-hover: 0 12px 26px color-mix(in srgb, var(--maverick-brand-500) 22%, transparent);
+  --maverick-hero-light-chip-brand-border: color-mix(in srgb, var(--maverick-brand-500) 28%, transparent);
+  --maverick-hero-light-chip-brand-bg: color-mix(in srgb, var(--maverick-brand-500) 10%, transparent);
   --maverick-hero-light-chip-brand-text: var(--maverick-brand-600);
 
   /* Branding guidelines motion/surface */
   --maverick-branding-dark-shadow-soft: 0 20px 60px rgba(0, 0, 0, 0.55);
   --maverick-branding-dark-shadow-hover: 0 25px 70px rgba(0, 0, 0, 0.62);
-  --maverick-branding-dark-shadow-brand-button: 0 16px 50px rgba(215, 36, 81, 0.3);
-  --maverick-branding-dark-shadow-brand-button-hover: 0 20px 60px rgba(215, 36, 81, 0.35);
-  --maverick-branding-dark-chip-brand-border: rgba(215, 36, 81, 0.3);
-  --maverick-branding-dark-chip-brand-bg: rgba(215, 36, 81, 0.12);
-  --maverick-branding-dark-chip-brand-text: #ffe8ee;
+  --maverick-branding-dark-shadow-brand-button: 0 16px 50px color-mix(in srgb, var(--maverick-brand-500) 18%, transparent);
+  --maverick-branding-dark-shadow-brand-button-hover: 0 20px 60px color-mix(in srgb, var(--maverick-brand-500) 22%, transparent);
+  --maverick-branding-dark-chip-brand-border: color-mix(in srgb, var(--maverick-brand-500) 34%, transparent);
+  --maverick-branding-dark-chip-brand-bg: color-mix(in srgb, var(--maverick-brand-500) 12%, transparent);
+  --maverick-branding-dark-chip-brand-text: #ffffff;
   --maverick-branding-dark-atmosphere:
-    radial-gradient(circle at 76% 74%, rgba(215, 36, 81, 0.18), transparent 58%),
+    radial-gradient(circle at 76% 74%, color-mix(in srgb, var(--maverick-brand-500) 14%, transparent), transparent 58%),
     radial-gradient(circle at 30% 18%, rgba(167, 139, 250, 0.12), transparent 44%);
 
   --maverick-branding-light-shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.05);
   --maverick-branding-light-shadow-hover: 0 12px 30px rgba(0, 0, 0, 0.08);
-  --maverick-branding-light-shadow-brand-button: 0 10px 24px rgba(215, 36, 81, 0.2);
-  --maverick-branding-light-shadow-brand-button-hover: 0 12px 28px rgba(215, 36, 81, 0.24);
-  --maverick-branding-light-chip-brand-border: rgba(215, 36, 81, 0.22);
-  --maverick-branding-light-chip-brand-bg: rgba(215, 36, 81, 0.08);
+  --maverick-branding-light-shadow-brand-button: 0 10px 24px color-mix(in srgb, var(--maverick-brand-500) 18%, transparent);
+  --maverick-branding-light-shadow-brand-button-hover: 0 12px 28px color-mix(in srgb, var(--maverick-brand-500) 22%, transparent);
+  --maverick-branding-light-chip-brand-border: color-mix(in srgb, var(--maverick-brand-500) 28%, transparent);
+  --maverick-branding-light-chip-brand-bg: color-mix(in srgb, var(--maverick-brand-500) 10%, transparent);
   --maverick-branding-light-chip-brand-text: var(--maverick-brand-600);
 
   /* Shared atmosphere */
   --maverick-light-atmosphere:
-    radial-gradient(circle at 58% 34%, rgba(215, 36, 81, 0.05), transparent 60%),
+    radial-gradient(circle at 58% 34%, color-mix(in srgb, var(--maverick-brand-500) 5%, transparent), transparent 60%),
     radial-gradient(circle at 26% 72%, rgba(124, 58, 237, 0.03), transparent 62%);
   --maverick-dark-vignette: radial-gradient(circle at 50% 45%, transparent 42%, rgba(0, 0, 0, 0.72) 100%);
   --maverick-light-vignette: linear-gradient(180deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0));
 
   /* Preview gradients (playbook previews only) */
-  --maverick-gradient-preview-brand-tonal: linear-gradient(90deg, #b81e44 0%, #d72451 52%, #f84b78 100%);
-  --maverick-gradient-preview-brand-violet-soft: linear-gradient(90deg, rgba(215, 36, 81, 0.78) 0%, rgba(167, 139, 250, 0.7) 100%);
-  --maverick-gradient-preview-light-radial: radial-gradient(circle at 30% 50%, rgba(215, 36, 81, 0.2), rgba(249, 250, 251, 0.85) 70%);
-  --maverick-gradient-preview-brand-cyan: linear-gradient(90deg, #d72451 0%, #00e5ff 100%);
+  --maverick-gradient-preview-brand-tonal: linear-gradient(90deg, var(--maverick-brand-500) 0%, var(--maverick-brand-500) 100%);
+  --maverick-gradient-preview-brand-violet-soft: linear-gradient(90deg, color-mix(in srgb, var(--maverick-brand-500) 70%, transparent) 0%, rgba(167, 139, 250, 0.7) 100%);
+  --maverick-gradient-preview-light-radial: radial-gradient(circle at 30% 50%, color-mix(in srgb, var(--maverick-brand-500) 18%, transparent), rgba(249, 250, 251, 0.85) 70%);
+  --maverick-gradient-preview-brand-cyan: linear-gradient(90deg, var(--maverick-brand-500) 0%, #00e5ff 100%);
 
   /* Radius scale */
   --maverick-radius-sm: 0.375rem;

@@ -39,6 +39,19 @@
   user-select: none;
 }
 
+.bs-mobile-sidebar-swipe-edge {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 39;
+  width: calc(env(safe-area-inset-left, 0px) + min(4rem, max(1.75rem, 16vw)));
+  background: transparent;
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+}
+
 .bs-shell-overlay-widgets {
   position: fixed;
   right: calc(env(safe-area-inset-right, 0px) + 1rem);
@@ -133,9 +146,9 @@
 .bs-capture-overlay__rect {
   position: fixed;
   z-index: 1;
-  border: 2px solid rgba(248, 75, 120, 0.92);
+  border: 2px solid var(--maverick-accent);
   border-radius: 10px;
-  background: rgba(248, 75, 120, 0.13);
+  background: var(--maverick-accent-soft);
   pointer-events: none;
 }
 

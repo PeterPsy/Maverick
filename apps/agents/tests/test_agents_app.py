@@ -25,7 +25,7 @@ AGENTS_BACKEND = Path(__file__).resolve().parents[1] / "backend"
 sys.path.insert(0, str(AGENTS_BACKEND))
 
 from seeds import seed_defaults
-from service import handle_action
+from service import app_events_for_action, handle_action
 from store import delete_role, list_agent_types, list_roles
 
 
@@ -91,6 +91,11 @@ class AgentsAppTestCase(unittest.TestCase):
         self.assertIn("agents_reference_manifest", parsed.contract.capabilities.mcp_tools)
         self.assertEqual(parsed.contract.capabilities.cli_commands, ["agents"])
         self.assertEqual(parsed.contract.capabilities.skills, ["agents-ops"])
+        self.assertIn("widget", parsed.contract.provides[0].surfaces)
+        self.assertEqual(
+            {widget.widget_id for widget in parsed.contract.widgets},
+            {"agents-sidebar", "agents-sidebar-footer"},
+        )
         self.assertIn("agent_type", {item.entity_type for item in parsed.contract.capabilities.reference_entities})
         self.assertEqual(parsed.contract.capabilities.view_surfaces[0].view_id, "agents")
         self.assertEqual(
@@ -180,6 +185,22 @@ class AgentsAppTestCase(unittest.TestCase):
         self.assertNotIn("default_execution_mode", frontend_types)
         self.assertNotIn("execution_mode_policy", frontend_types)
 
+    def test_frontend_uses_shell_sidebar_widgets(self) -> None:
+        app_root = Path(__file__).resolve().parents[1]
+        frontend_app = (app_root / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
+        sidebar_widget = (app_root / "frontend" / "src" / "widgets" / "agents-sidebar" / "main.tsx").read_text(encoding="utf-8")
+        footer_widget = (app_root / "frontend" / "src" / "widgets" / "agents-sidebar-footer" / "main.tsx").read_text(encoding="utf-8")
+
+        self.assertNotIn("<AgentsSidebar", frontend_app)
+        self.assertIn("maverick.app.navigate", frontend_app)
+        self.assertIn("maverick.app.selection-changed", (app_root / "frontend" / "src" / "lib" / "activeAgentSelection.ts").read_text(encoding="utf-8"))
+        self.assertIn("agentTypeIdFromWidgetContext", sidebar_widget)
+        self.assertIn("useShellSidebarCloseSwipe", sidebar_widget)
+        self.assertIn("maverick.widget.open-app", sidebar_widget)
+        self.assertIn("agent-types/${agentTypeId}", sidebar_widget)
+        self.assertIn("maverick.shell.sidebar.close", sidebar_widget)
+        self.assertIn("new_agent_request_id", footer_widget)
+
     def test_backend_persists_agents_view_filter_and_custom_view(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             data_root = Path(temp) / "agents"
@@ -213,6 +234,10 @@ class AgentsAppTestCase(unittest.TestCase):
             self.assertEqual(view_state["state"]["view_filter"]["mode"], "custom")
             self.assertEqual(cleared_status, 200)
             self.assertEqual(cleared["state"]["view_filter"]["mode"], "search")
+
+    def test_reading_agents_view_filter_does_not_emit_data_changed_event(self) -> None:
+        self.assertEqual(app_events_for_action("view_filter"), [])
+        self.assertEqual(app_events_for_action("set_view_filter"), [{"type": "maverick.app.data-changed", "resource": "view-state"}])
 
     @integration_test("agents platform integration suite; run with scripts/test_suite.py --level integration")
     def test_bootstrap_installs_agents_and_exposes_surfaces(self) -> None:

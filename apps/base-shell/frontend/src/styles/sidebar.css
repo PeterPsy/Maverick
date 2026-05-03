@@ -173,13 +173,20 @@
   justify-content: center;
   gap: 0.32rem;
   min-height: 0;
-  overflow: visible;
+  max-height: 100%;
+  overflow-x: visible;
+  overflow-y: var(--bs-sidebar-rail-apps-overflow-y, visible);
   overscroll-behavior: contain;
   padding: 0;
+  scrollbar-width: none;
 }
 
 .bs-sidebar__rail-apps.is-loading {
   pointer-events: none;
+}
+
+.bs-sidebar__rail-apps::-webkit-scrollbar {
+  display: none;
 }
 
 .bs-sidebar__mobile-apps {

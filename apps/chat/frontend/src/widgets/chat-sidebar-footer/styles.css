@@ -2,7 +2,8 @@
   color-scheme: dark;
   --maverick-text: #ececec;
   --maverick-text-muted: rgba(236, 236, 236, 0.64);
-  --maverick-primary: #d72451;
+  --maverick-accent: #ffffff;
+  --maverick-text-on-accent: #0a0a0b;
   --chat-sidebar-cell-radius: 22px;
   --chat-sidebar-composer-border: rgba(255, 255, 255, 0.05);
   --chat-sidebar-composer-surface: rgba(12, 12, 14, 0.58);

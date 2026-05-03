@@ -9,6 +9,11 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     rollupOptions: {
+      input: {
+        app: 'frontend/index.html',
+        'widgets/agents-sidebar/index': 'frontend/widgets/agents-sidebar/index.html',
+        'widgets/agents-sidebar-footer/index': 'frontend/widgets/agents-sidebar-footer/index.html'
+      },
       output: {
         entryFileNames: 'assets/app-[hash].js',
         chunkFileNames: 'assets/[name]-[hash].js',

@@ -677,6 +677,7 @@ If the product shell needs to show app shortcuts in its sidebar, it must do so b
 The intended sidebar shape is:
 
 - `base-shell` owns the fixed sidebar frame: current app icon, workspace selector, mobile app rail, responsive layout, overlay behavior, scroll containment, fades, and shell mode controls
+- `base-shell` owns mobile sidebar gestures, including opening from a left-edge swipe over mounted app iframes and closing the open sidebar with the opposite swipe
 - `shell.sidebar.primary` is the app-owned central sidebar body for the active app only
 - `shell.sidebar.footer` is an app-owned compact footer action area for the active app only, positioned inside the fixed shell footer above shell mode controls
 - `base-shell` chooses sidebar widgets by matching `owner_app_id` to the active app id; if the active app has no matching widget for a sidebar slot, that slot stays empty rather than falling back to another app's widget

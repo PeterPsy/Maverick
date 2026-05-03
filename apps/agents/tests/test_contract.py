@@ -26,6 +26,15 @@ class AgentsContractTest(unittest.TestCase):
         surface_ids = {surface["view_id"] for surface in contract["capabilities"]["view_surfaces"]}
         self.assertEqual({"agents"}, surface_ids)
 
+        widgets = {widget["widget_id"]: widget for widget in contract["widgets"]}
+        self.assertEqual({"agents-sidebar", "agents-sidebar-footer"}, set(widgets))
+        self.assertEqual("base-shell", widgets["agents-sidebar"]["host"])
+        self.assertEqual(["shell.sidebar.primary"], widgets["agents-sidebar"]["content_kinds"])
+        self.assertEqual("frontend/dist/widgets/agents-sidebar", widgets["agents-sidebar"]["frontend"]["mount"])
+        self.assertEqual("base-shell", widgets["agents-sidebar-footer"]["host"])
+        self.assertEqual(["shell.sidebar.footer"], widgets["agents-sidebar-footer"]["content_kinds"])
+        self.assertEqual("frontend/dist/widgets/agents-sidebar-footer", widgets["agents-sidebar-footer"]["frontend"]["mount"])
+
         event_resources = {event["resource"] for event in contract["capabilities"]["data_events"]}
         self.assertIn("configuration", event_resources)
         self.assertIn("view-state", event_resources)

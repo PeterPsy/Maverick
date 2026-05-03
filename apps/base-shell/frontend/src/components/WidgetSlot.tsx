@@ -1,6 +1,7 @@
 import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
 import { createWidgetContext, listWidgets, WidgetRegistryItem } from "../api";
 import { MAVERICK_IFRAME_SANDBOX, postMaverickFrameVisibility, postToMaverickFrame } from "../iframePolicy";
+import { widgetSelectionChangedMessage } from "../lib/widgetSelectionMessages";
 
 type CaptureRect = {
   height: number;
@@ -141,6 +142,7 @@ export function WidgetSlot({
         navigation_scope?: string;
         params?: Record<string, string | boolean | null>;
         resource?: string;
+        selection?: Record<string, string | boolean | null>;
         type?: string;
         widget_id?: string;
         width?: string;
@@ -190,6 +192,10 @@ export function WidgetSlot({
             owner_app_id: payload.owner_app_id,
           },
         );
+      }
+      const selectionMessage = widgetSelectionChangedMessage(payload, widget?.owner_app_id);
+      if (selectionMessage) {
+        postToMaverickFrame(widgetFrameRef.current, selectionMessage);
       }
       if (payload.type === "maverick.app.data-changed" && payload.owner_app_id === widget?.owner_app_id) {
         postToMaverickFrame(

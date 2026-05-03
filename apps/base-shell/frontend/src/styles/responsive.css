@@ -63,10 +63,7 @@
     min-width: 0;
     height: 100dvh;
     padding:
-      calc(env(safe-area-inset-top, 0px) + 1rem)
-      calc(env(safe-area-inset-right, 0px) + 1rem)
-      calc(env(safe-area-inset-bottom, 0px) + 1rem)
-      calc(env(safe-area-inset-left, 0px) + 1rem);
+      calc(env(safe-area-inset-top, 0px) + 1rem) calc(env(safe-area-inset-right, 0px) + 1rem) calc(env(safe-area-inset-bottom, 0px) + 1rem) calc(env(safe-area-inset-left, 0px) + 1rem);
     border: 0;
     border-radius: 0;
     background: rgb(12, 12, 14);
@@ -95,7 +92,7 @@
     max-width: 100%;
   }
 
-  .bs-sidebar__details > .bs-widget-slot--fill {
+  .bs-sidebar__details>.bs-widget-slot--fill {
     grid-row: 1;
     grid-column: 1;
     z-index: 1;
@@ -120,10 +117,7 @@
   .bs-sidebar.is-closed .bs-sidebar__details {
     width: 100%;
     padding:
-      calc(env(safe-area-inset-top, 0px) + 1rem)
-      calc(env(safe-area-inset-right, 0px) + 1rem)
-      calc(env(safe-area-inset-bottom, 0px) + 1rem)
-      calc(env(safe-area-inset-left, 0px) + 1rem);
+      calc(env(safe-area-inset-top, 0px) + 1rem) calc(env(safe-area-inset-right, 0px) + 1rem) calc(env(safe-area-inset-bottom, 0px) + 1rem) calc(env(safe-area-inset-left, 0px) + 1rem);
     opacity: 1;
     visibility: visible;
   }
@@ -138,7 +132,6 @@
     display: flex;
     flex-direction: row;
     justify-content: flex-start;
-    gap: 0.48rem;
     max-width: 100%;
     min-width: 0;
     overflow-x: auto;

@@ -64,8 +64,8 @@
   max-width: min(84%, 46rem);
   padding: 0.8rem 0.95rem;
   border-radius: var(--chatapp-cell-radius);
-  background: color-mix(in srgb, var(--maverick-primary) 18%, #1f2430 82%);
-  border: 1px solid color-mix(in srgb, var(--maverick-primary) 38%, transparent);
+  background: color-mix(in srgb, var(--maverick-accent) 8%, #1f2430 92%);
+  border: 1px solid color-mix(in srgb, var(--maverick-accent) 22%, transparent);
   color: #eef3ff;
 }
 
@@ -266,7 +266,7 @@
 
 .chatapp-agent-block__body blockquote {
   padding-left: 0.85rem;
-  border-left: 3px solid rgba(215, 36, 81, 0.48);
+  border-left: 3px solid var(--maverick-accent-hover);
   color: var(--maverick-text-soft);
 }
 
@@ -505,7 +505,7 @@
 }
 
 .chatapp-bubble a {
-  color: var(--maverick-primary);
+  color: var(--maverick-accent);
   text-decoration: underline;
   text-underline-offset: 0.15em;
 }
@@ -544,7 +544,7 @@
 
 .chatapp-bubble blockquote {
   padding-left: 0.9rem;
-  border-left: 3px solid rgba(215, 36, 81, 0.32);
+  border-left: 3px solid var(--maverick-accent-hover);
   color: var(--maverick-text-muted);
 }
 
@@ -611,8 +611,8 @@
   min-height: 1.05rem;
 }
 
-.chatapp-bubble.has-mobile-message-footer > .chatapp-bubble__meta,
-.chatapp-message-copy-row > .chatapp-message-action--copy {
+.chatapp-bubble.has-mobile-message-footer>.chatapp-bubble__meta,
+.chatapp-message-copy-row>.chatapp-message-action--copy {
   display: none;
 }
 
@@ -913,7 +913,7 @@
 .chatapp-transcript-skeleton {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: clamp(0.72rem, 1.4vh, 1.05rem);
   width: 100%;
   min-height: 100%;

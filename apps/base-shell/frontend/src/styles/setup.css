@@ -44,7 +44,7 @@
 }
 
 .bs-dependency-launcher:hover {
-  border-color: rgba(215, 36, 81, 0.34);
+  border-color: var(--maverick-accent-hover);
   background: rgba(28, 26, 28, 0.96);
 }
 
@@ -88,7 +88,7 @@
   place-items: center;
   padding: clamp(1rem, 4vw, 3rem);
   background:
-    radial-gradient(circle at 50% 35%, rgba(215, 36, 81, 0.13), transparent 36rem),
+    radial-gradient(circle at 50% 35%, var(--maverick-accent-soft), transparent 36rem),
     rgba(10, 10, 11, 0.78);
   color: var(--maverick-text);
   backdrop-filter: blur(12px);
@@ -124,8 +124,8 @@
   width: 2.5rem;
   height: 2.5rem;
   border-radius: 12px;
-  background: rgba(215, 36, 81, 0.16);
-  color: #ff8fab;
+  background: var(--maverick-accent-soft);
+  color: var(--maverick-accent);
 }
 
 .bs-dependency-panel__close {
@@ -213,8 +213,8 @@
 }
 
 .bs-dependency-candidate:hover {
-  border-color: rgba(215, 36, 81, 0.28);
-  background: rgba(215, 36, 81, 0.1);
+  border-color: var(--maverick-accent-hover);
+  background: var(--maverick-accent-soft);
 }
 
 .bs-dependency-candidate input {

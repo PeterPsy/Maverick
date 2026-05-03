@@ -24,7 +24,7 @@
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--maverick-secondary);
+  color: var(--maverick-accent);
   cursor: pointer;
   font-size: 0.88rem;
   font-weight: 600;
@@ -180,12 +180,12 @@
 
 .chatapp-composer__icon-action.is-send {
   border-color: transparent;
-  background: var(--maverick-primary);
-  color: var(--text-on-brand);
+  background: var(--maverick-accent);
+  color: var(--maverick-text-on-accent);
 }
 
 .chatapp-composer__icon-action.is-send:hover:not(:disabled) {
-  background: var(--maverick-primary-strong);
+  background: var(--maverick-accent-strong);
 }
 
 .chatapp-composer .chat-ui-button {
@@ -857,9 +857,9 @@
 }
 
 .chatapp-sidebar-toggle:hover {
-  border-color: rgba(215, 36, 81, 0.24);
-  background: rgba(215, 36, 81, 0.1);
-  color: #ffe8ee;
+  border-color: var(--maverick-accent-hover);
+  background: var(--maverick-accent-soft);
+  color: var(--maverick-accent);
 }
 
 .chatapp-sidebar-toggle--floating {

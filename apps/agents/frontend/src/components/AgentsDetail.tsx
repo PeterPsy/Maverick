@@ -1,4 +1,7 @@
-import type { AgentType, Catalog, Role, SkillSummary } from '../types';
+import { useEffect, useMemo, useState } from 'react';
+import { motion } from 'framer-motion';
+import { Bot, FileText, Gauge, Puzzle, Save, ScrollText, Trash2, UserRound } from 'lucide-react';
+import type { AgentEdits, AgentType, Catalog, Role, SkillSummary } from '../types';
 
 type AgentsDetailProps = {
   catalog: Catalog;
@@ -6,12 +9,111 @@ type AgentsDetailProps = {
   selectedAgentType?: AgentType;
   selectedRole?: Role;
   preview: string;
-  savingPrompt: boolean;
+  previewLoading?: boolean;
+  savingEdits: boolean;
   onDeleteAgentType: () => void;
-  onSaveAgentType: () => void;
-  onSaveRole: () => void;
-  onSaveCommonPrompt: () => void;
+  onSaveEdits: (edits: AgentEdits) => void;
 };
+
+function cardAnimation(delay = 0) {
+  return {
+    initial: { opacity: 0, y: 18 },
+    animate: { opacity: 1, y: 0 },
+    transition: { duration: 0.32, delay }
+  };
+}
+
+function PromptSignal({ label }: { label: string }) {
+  return (
+    <div className="bento-visual prompt-signal" aria-hidden="true">
+      <motion.div
+        className="prompt-signal-orbit"
+        animate={{ rotate: 360 }}
+        transition={{ duration: 18, repeat: Infinity, ease: 'linear' }}
+      />
+      <motion.div
+        className="prompt-signal-core"
+        animate={{ scale: [1, 1.08, 1] }}
+        transition={{ duration: 2.2, repeat: Infinity, ease: [0.16, 1, 0.3, 1] }}
+      >
+        {label.slice(0, 2).toUpperCase()}
+      </motion.div>
+    </div>
+  );
+}
+
+function RoleFlow({ roleName }: { roleName: string }) {
+  const initials = roleName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase();
+
+  return (
+    <div className="bento-visual role-flow" aria-hidden="true">
+      <motion.div
+        className="role-flow-node role-flow-primary"
+        animate={{ scale: [1, 1.08, 1] }}
+        transition={{ duration: 2.4, repeat: Infinity, ease: [0.16, 1, 0.3, 1] }}
+      >
+        {initials || 'R'}
+      </motion.div>
+      <div className="role-flow-lines">
+        {[0, 1, 2].map((item) => (
+          <motion.span
+            key={item}
+            animate={{ opacity: [0.28, 0.9, 0.28], width: ['42%', '100%', '58%'] }}
+            transition={{ duration: 1.8, repeat: Infinity, delay: item * 0.18, ease: [0.16, 1, 0.3, 1] }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TraceMeter({ traceVerbosity }: { traceVerbosity: string }) {
+  const steps = traceVerbosity === 'verbose' ? 5 : traceVerbosity === 'compact' ? 3 : 2;
+
+  return (
+    <div className="bento-visual trace-meter" aria-hidden="true">
+      {[0, 1, 2, 3, 4].map((item) => (
+        <motion.span
+          key={item}
+          className={item < steps ? 'is-active' : ''}
+          animate={{ height: item < steps ? [22, 36, 26] : 18 }}
+          transition={{ duration: 1.8, repeat: Infinity, delay: item * 0.12, ease: [0.16, 1, 0.3, 1] }}
+        />
+      ))}
+      <motion.div
+        className="trace-sweep"
+        animate={{ x: ['-120%', '120%'] }}
+        transition={{ duration: 2.1, repeat: Infinity, ease: [0.16, 1, 0.3, 1] }}
+      />
+    </div>
+  );
+}
+
+function skillMatchesSearch(skill: SkillSummary, query: string) {
+  if (!query) return true;
+  const queryParts = query.split(/[^a-z0-9]+/).filter(Boolean);
+  const skillParts = `${skill.name} ${skill.id} ${skill.description}`
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+  return queryParts.every((queryPart) => skillParts.some((skillPart) => skillPart.startsWith(queryPart)));
+}
+
+function effectiveSkillIds(agentType: AgentType, skills: SkillSummary[]) {
+  return agentType.skill_ids.length ? agentType.skill_ids : skills.map((skill) => skill.id);
+}
+
+function sameSet(left: string[], right: string[]) {
+  if (left.length !== right.length) return false;
+  const rightSet = new Set(right);
+  return left.every((item) => rightSet.has(item));
+}
 
 export function AgentsDetail({
   catalog,
@@ -19,107 +121,213 @@ export function AgentsDetail({
   selectedAgentType,
   selectedRole,
   preview,
-  savingPrompt,
+  previewLoading = false,
+  savingEdits,
   onDeleteAgentType,
-  onSaveAgentType,
-  onSaveRole,
-  onSaveCommonPrompt
+  onSaveEdits
 }: AgentsDetailProps) {
+  const [skillSearch, setSkillSearch] = useState('');
+  const [agentName, setAgentName] = useState('');
+  const [agentDescription, setAgentDescription] = useState('');
+  const [roleInstructions, setRoleInstructions] = useState('');
+  const [commonPrompt, setCommonPrompt] = useState('');
+  const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
+  const initialSkillIds = useMemo(
+    () => (selectedAgentType ? effectiveSkillIds(selectedAgentType, skills) : []),
+    [selectedAgentType, skills]
+  );
+
+  useEffect(() => {
+    if (!selectedAgentType || !selectedRole) {
+      setAgentName('');
+      setAgentDescription('');
+      setRoleInstructions('');
+      setCommonPrompt(catalog.common_prompt);
+      setSelectedSkillIds([]);
+      return;
+    }
+    setAgentName(selectedAgentType.name);
+    setAgentDescription(selectedAgentType.description);
+    setRoleInstructions(selectedRole.instructions);
+    setCommonPrompt(catalog.common_prompt);
+    setSelectedSkillIds(effectiveSkillIds(selectedAgentType, skills));
+    setSkillSearch('');
+  }, [catalog.common_prompt, selectedAgentType, selectedRole, skills]);
+
   if (!selectedAgentType || !selectedRole) {
     return <div className="empty-state">No agent type selected.</div>;
+  }
+
+  const selectedSkillCount = selectedSkillIds.length;
+  const normalizedSkillSearch = skillSearch.trim().toLowerCase();
+  const visibleSkillCount = skills.filter((skill) => skillMatchesSearch(skill, normalizedSkillSearch)).length;
+  const hasEdits =
+    agentName !== selectedAgentType.name ||
+    agentDescription !== selectedAgentType.description ||
+    roleInstructions !== selectedRole.instructions ||
+    commonPrompt !== catalog.common_prompt ||
+    !sameSet(selectedSkillIds, initialSkillIds);
+
+  function toggleSkill(skillId: string, checked: boolean) {
+    setSelectedSkillIds((current) => {
+      if (checked) {
+        return current.includes(skillId) ? current : [...current, skillId];
+      }
+      return current.filter((item) => item !== skillId);
+    });
+  }
+
+  function saveEdits() {
+    if (!hasEdits || savingEdits) return;
+    onSaveEdits({
+      name: agentName,
+      description: agentDescription,
+      instructions: roleInstructions,
+      commonPrompt,
+      skillIds: selectedSkillIds
+    });
   }
 
   return (
     <>
       <header className="detail-header">
-        <div>
+        <div className="detail-title-block">
           <h2>{selectedAgentType.name}</h2>
+          <span className="detail-title-separator" aria-hidden="true" />
           <p>{selectedAgentType.description}</p>
         </div>
         <div className="action-group">
           <button className="danger-action" onClick={onDeleteAgentType}>
-            <span className="material-symbols-rounded" aria-hidden="true">delete</span>
+            <Trash2 size={16} aria-hidden="true" />
             Delete Agent
+          </button>
+          <button className="primary-action" onClick={saveEdits} disabled={!hasEdits || savingEdits}>
+            <Save size={16} aria-hidden="true" />
+            {savingEdits ? 'Saving Edits' : 'Save Edits'}
           </button>
         </div>
       </header>
 
-      <div className="meta-grid">
-        <div><span>Role</span><strong>{selectedRole.name}</strong></div>
-        <div><span>Trace</span><strong>{selectedAgentType.trace_verbosity}</strong></div>
+      <div className="agent-bento-grid">
+        <motion.section className="bento-card bento-card-agent" {...cardAnimation()}>
+          <div className="bento-card-topline">
+            <span><Bot size={15} aria-hidden="true" /> Agent Type</span>
+          </div>
+          <PromptSignal label={selectedAgentType.name} />
+          <div className="bento-card-body">
+            <label>
+              Name
+              <input value={agentName} onChange={(event) => setAgentName(event.target.value)} />
+            </label>
+            <label>
+              Description
+              <textarea value={agentDescription} onChange={(event) => setAgentDescription(event.target.value)} />
+            </label>
+          </div>
+        </motion.section>
+
+        <motion.section className="bento-card bento-card-role" {...cardAnimation(0.05)}>
+          <div className="bento-card-topline">
+            <span><UserRound size={15} aria-hidden="true" /> Role</span>
+            <strong>{selectedRole.name}</strong>
+          </div>
+          <RoleFlow roleName={selectedRole.name} />
+          <div className="bento-card-body compact">
+            <div className="bento-kpi">
+              <span>Instructions</span>
+              <strong>{selectedRole.instructions.trim().split(/\s+/).filter(Boolean).length} words</strong>
+            </div>
+            <div className="bento-kpi">
+              <span>Status</span>
+              <strong>{selectedAgentType.enabled ? 'Enabled' : 'Disabled'}</strong>
+            </div>
+          </div>
+        </motion.section>
+
+        <motion.section className="bento-card bento-card-trace" {...cardAnimation(0.1)}>
+          <div className="bento-card-topline">
+            <span><Gauge size={15} aria-hidden="true" /> Trace</span>
+            <strong>{selectedAgentType.trace_verbosity}</strong>
+          </div>
+          <TraceMeter traceVerbosity={selectedAgentType.trace_verbosity} />
+        </motion.section>
+
+        <motion.section className="bento-card bento-card-instructions" {...cardAnimation(0.15)}>
+          <div className="bento-card-topline">
+            <span><ScrollText size={15} aria-hidden="true" /> Role Instructions</span>
+          </div>
+          <textarea value={roleInstructions} onChange={(event) => setRoleInstructions(event.target.value)} />
+        </motion.section>
+
+        <motion.section className="bento-card bento-card-common" {...cardAnimation(0.2)}>
+          <div className="bento-card-topline">
+            <span><FileText size={15} aria-hidden="true" /> Common Prompt</span>
+          </div>
+          <textarea value={commonPrompt} onChange={(event) => setCommonPrompt(event.target.value)} />
+        </motion.section>
+
+        <motion.section className="bento-card bento-card-skills" {...cardAnimation(0.25)}>
+          <div className="bento-card-topline">
+            <span><Puzzle size={15} aria-hidden="true" /> Skills</span>
+            <strong>{selectedSkillCount} installed</strong>
+          </div>
+          <div className="skill-scroll-shell">
+            <div className="skill-search-frame">
+              <span className="material-symbols-rounded" aria-hidden="true">search</span>
+              <input
+                aria-label="Search skills"
+                className="skill-search-input"
+                id="skill-search"
+                type="search"
+                value={skillSearch}
+                onChange={(event) => setSkillSearch(event.target.value)}
+                placeholder="Search skills"
+              />
+            </div>
+            <div className="skill-picker agent-skill-picker">
+              {skills.length ? (
+                skills.map((skill) => (
+                  <label
+                    className={`skill-choice ${skillMatchesSearch(skill, normalizedSkillSearch) ? '' : 'is-filtered-out'}`}
+                    key={`${selectedAgentType.id}-${skill.id}`}
+                  >
+                    <input
+                      type="checkbox"
+                      name="agent-skill"
+                      value={skill.id}
+                      checked={selectedSkillIds.includes(skill.id)}
+                      onChange={(event) => toggleSkill(skill.id, event.target.checked)}
+                    />
+                    <span>
+                      <strong>{skill.name}</strong>
+                      <small>{skill.description || skill.id}</small>
+                    </span>
+                  </label>
+                ))
+              ) : (
+                <div className="empty-state compact">No workspace skills available.</div>
+              )}
+              {skills.length && !visibleSkillCount ? <div className="empty-state compact">No skills match this search.</div> : null}
+            </div>
+          </div>
+        </motion.section>
       </div>
 
-      <section className="editor-band">
+      <section className="editor-band prompt-review-band">
         <div className="band-heading">
-          <h3>Agent Type</h3>
-          <button onClick={onSaveAgentType}>
-            <span className="material-symbols-rounded" aria-hidden="true">save</span>
-            Save
-          </button>
+          <h3>Prompt Preview</h3>
         </div>
-        <input id="agent-type-name" key={`${selectedAgentType.id}-name`} defaultValue={selectedAgentType.name} />
-        <textarea id="agent-type-description" key={`${selectedAgentType.id}-description`} defaultValue={selectedAgentType.description} />
+        {previewLoading ? (
+          <div className="agents-preview-skeleton" role="status" aria-label="Loading prompt preview">
+            <span className="agents-preview-skeleton__line agents-preview-skeleton__line--wide" />
+            <span className="agents-preview-skeleton__line agents-preview-skeleton__line--medium" />
+            <span className="agents-preview-skeleton__line agents-preview-skeleton__line--short" />
+            <span className="agents-preview-skeleton__line agents-preview-skeleton__line--wide" />
+          </div>
+        ) : (
+          <pre>{preview}</pre>
+        )}
       </section>
-
-      <section className="editor-band">
-        <div className="band-heading">
-          <h3>Role Instructions</h3>
-          <button onClick={onSaveRole}>
-            <span className="material-symbols-rounded" aria-hidden="true">save</span>
-            Save
-          </button>
-        </div>
-        <textarea id="role-instructions" key={selectedRole.id} defaultValue={selectedRole.instructions} />
-      </section>
-
-      <section className="editor-band">
-        <div className="band-heading">
-          <h3>Common Prompt</h3>
-          <button onClick={onSaveCommonPrompt} disabled={savingPrompt}>
-            <span className="material-symbols-rounded" aria-hidden="true">{savingPrompt ? 'progress_activity' : 'save'}</span>
-            {savingPrompt ? 'Saving' : 'Save'}
-          </button>
-        </div>
-        <textarea id="common-prompt" defaultValue={catalog.common_prompt} />
-      </section>
-
-      <section className="editor-band">
-        <h3>Prompt Preview</h3>
-        <pre>{preview}</pre>
-      </section>
-
-      <details className="editor-band skill-collapsible agent-skill-collapsible">
-        <summary>
-          <span>Skills</span>
-          <small>{selectedAgentType.skill_ids.length || skills.length} installed</small>
-        </summary>
-        <div className="skill-picker agent-skill-picker">
-          {skills.length ? (
-            skills.map((skill) => (
-              <label className="skill-choice" key={`${selectedAgentType.id}-${skill.id}`}>
-                <input
-                  type="checkbox"
-                  name="agent-skill"
-                  value={skill.id}
-                  defaultChecked={selectedAgentType.skill_ids.length ? selectedAgentType.skill_ids.includes(skill.id) : true}
-                />
-                <span>
-                  <strong>{skill.name}</strong>
-                  <small>{skill.description || skill.id}</small>
-                </span>
-              </label>
-            ))
-          ) : (
-            <div className="empty-state">No workspace skills available.</div>
-          )}
-        </div>
-        <div className="skill-footer">
-          <button onClick={onSaveAgentType}>
-            <span className="material-symbols-rounded" aria-hidden="true">save</span>
-            Save Skills
-          </button>
-        </div>
-      </details>
     </>
   );
 }

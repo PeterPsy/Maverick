@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { callBackend, callSkillsBackend } from './api';
 import { AgentsDetail } from './components/AgentsDetail';
-import { AgentsSidebar } from './components/AgentsSidebar';
+import { DeleteAgentTypeDialog } from './components/DeleteAgentTypeDialog';
 import { NewAgentModal } from './components/NewAgentModal';
-import type { AgentType, Catalog, Preview, SkillSummary } from './types';
+import { agentTypeIdFromParams, scalarString, shouldOpenNewAgent } from './lib/agentNavigationParams';
+import { notifyActiveAgentSelection } from './lib/activeAgentSelection';
+import type { AgentEdits, Catalog, Preview, SkillSummary } from './types';
 
 const emptyCatalog: Catalog = { common_prompt: '', roles: [], agent_types: [] };
 
@@ -15,114 +17,225 @@ function slugify(value: string) {
   return slug || 'custom-agent';
 }
 
+function initialAgentTypeId() {
+  const query = new URLSearchParams(window.location.search);
+  return query.get('agent_type_id') || '';
+}
+
+function sameSet(left: string[], right: string[]) {
+  if (left.length !== right.length) return false;
+  const rightSet = new Set(right);
+  return left.every((item) => rightSet.has(item));
+}
+
+function selectedAgentTypeIdFromCatalog(catalog: Catalog, currentAgentTypeId: string, preferredAgentTypeId?: string) {
+  if (preferredAgentTypeId && catalog.agent_types.some((item) => item.id === preferredAgentTypeId)) {
+    return preferredAgentTypeId;
+  }
+  if (currentAgentTypeId && catalog.agent_types.some((item) => item.id === currentAgentTypeId)) {
+    return currentAgentTypeId;
+  }
+  return catalog.agent_types[0]?.id || '';
+}
+
 export function App() {
   const [catalog, setCatalog] = useState<Catalog>(emptyCatalog);
   const [selectedAgentTypeId, setSelectedAgentTypeId] = useState('');
-  const [query, setQuery] = useState('');
   const [preview, setPreview] = useState('');
+  const [previewLoadingAgentTypeId, setPreviewLoadingAgentTypeId] = useState('');
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [error, setError] = useState('');
-  const [savingPrompt, setSavingPrompt] = useState(false);
+  const [isCatalogLoading, setIsCatalogLoading] = useState(true);
+  const [hasLoadedCatalog, setHasLoadedCatalog] = useState(false);
+  const [savingEdits, setSavingEdits] = useState(false);
   const [creatingAgent, setCreatingAgent] = useState(false);
   const [newAgentModalOpen, setNewAgentModalOpen] = useState(false);
+  const [agentTypePendingDelete, setAgentTypePendingDelete] = useState<{ id: string; name: string } | null>(null);
+  const [deletingAgentType, setDeletingAgentType] = useState(false);
+  const consumedNewAgentRequests = useRef<Set<string>>(new Set());
+  const consumedLegacyNewAgentRequest = useRef(false);
+  const previewCacheRef = useRef<Map<string, string>>(new Map());
+  const selectedAgentTypeIdRef = useRef('');
 
   async function refresh(preferredAgentTypeId?: string) {
-    const [next, skillCatalog] = await Promise.all([
-      callBackend<Catalog>({ action: 'catalog' }),
-      callSkillsBackend<{ skills: SkillSummary[] }>({ action: 'catalog' })
-    ]);
-    setCatalog(next);
-    setSkills(skillCatalog.skills.filter((skill) => skill.enabled));
-    setSelectedAgentTypeId((current) => {
-      if (preferredAgentTypeId && next.agent_types.some((item) => item.id === preferredAgentTypeId)) {
-        return preferredAgentTypeId;
-      }
-      if (current && next.agent_types.some((item) => item.id === current)) {
-        return current;
-      }
-      return next.agent_types[0]?.id || '';
-    });
+    setIsCatalogLoading(true);
+    try {
+      const [next, skillCatalog] = await Promise.all([
+        callBackend<Catalog>({ action: 'catalog' }),
+        callSkillsBackend<{ skills: SkillSummary[] }>({ action: 'catalog' })
+      ]);
+      const nextSelectedAgentTypeId = selectedAgentTypeIdFromCatalog(next, selectedAgentTypeIdRef.current, preferredAgentTypeId);
+      selectedAgentTypeIdRef.current = nextSelectedAgentTypeId;
+      setCatalog(next);
+      setSkills(skillCatalog.skills.filter((skill) => skill.enabled));
+      setSelectedAgentTypeId(nextSelectedAgentTypeId);
+      setHasLoadedCatalog(true);
+      return nextSelectedAgentTypeId;
+    } finally {
+      setIsCatalogLoading(false);
+    }
+  }
+
+  async function refreshPreview(agentTypeId: string, options: { showCached?: boolean } = {}) {
+    const cachedPreview = previewCacheRef.current.get(agentTypeId);
+    if (options.showCached !== false && cachedPreview !== undefined) {
+      setPreview(cachedPreview);
+      setPreviewLoadingAgentTypeId('');
+    } else {
+      setPreview('');
+      setPreviewLoadingAgentTypeId(agentTypeId);
+    }
+    const payload = await callBackend<Preview>({ action: 'preview_prompt', agent_type_id: agentTypeId });
+    previewCacheRef.current.set(agentTypeId, payload.rendered);
+    if (selectedAgentTypeIdRef.current === agentTypeId) {
+      setPreview(payload.rendered);
+      setPreviewLoadingAgentTypeId('');
+    }
   }
 
   useEffect(() => {
-    refresh().catch((err: Error) => setError(err.message));
+    refresh(initialAgentTypeId()).catch((err: Error) => setError(err.message));
   }, []);
+
+  useEffect(() => {
+    selectedAgentTypeIdRef.current = selectedAgentTypeId;
+  }, [selectedAgentTypeId]);
+
+  useEffect(() => {
+    window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'agents' }, window.location.origin);
+  }, []);
+
+  useEffect(() => {
+    function handleShellMessage(event: MessageEvent) {
+      if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') {
+        return;
+      }
+      const payload = event.data as {
+        app_id?: string;
+        owner_app_id?: string;
+        params?: Record<string, string | boolean | null>;
+        resource?: string;
+        type?: string;
+      };
+      if (payload.type === 'maverick.app.navigate' && (!payload.app_id || payload.app_id === 'agents')) {
+        void handleNavigationParams(payload.params || {});
+        return;
+      }
+      if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === 'agents' && payload.resource === 'configuration') {
+        previewCacheRef.current.clear();
+        void refresh(selectedAgentTypeIdRef.current)
+          .then((nextSelectedAgentTypeId) => {
+            if (nextSelectedAgentTypeId) {
+              return refreshPreview(nextSelectedAgentTypeId, { showCached: false });
+            }
+            return undefined;
+          })
+          .catch((err: Error) => setError(err.message));
+      }
+    }
+
+    window.addEventListener('message', handleShellMessage);
+    return () => window.removeEventListener('message', handleShellMessage);
+  }, [catalog.agent_types, selectedAgentTypeId]);
 
   useEffect(() => {
     if (!selectedAgentTypeId) {
       setPreview('');
+      setPreviewLoadingAgentTypeId('');
       return;
     }
-    callBackend<Preview>({ action: 'preview_prompt', agent_type_id: selectedAgentTypeId })
-      .then((payload) => setPreview(payload.rendered))
-      .catch((err: Error) => setError(err.message));
+    notifyActiveAgentSelection(selectedAgentTypeId);
+    refreshPreview(selectedAgentTypeId)
+      .catch((err: Error) => {
+        if (selectedAgentTypeIdRef.current === selectedAgentTypeId) {
+          setPreviewLoadingAgentTypeId('');
+          setError(err.message);
+        }
+      });
   }, [selectedAgentTypeId]);
-
-  const filteredAgentTypes = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    if (!needle) return catalog.agent_types;
-    return catalog.agent_types.filter((item) => `${item.name} ${item.description} ${item.role_id}`.toLowerCase().includes(needle));
-  }, [catalog.agent_types, query]);
 
   const selectedAgentType = catalog.agent_types.find((item) => item.id === selectedAgentTypeId);
   const selectedRole = catalog.roles.find((role) => role.id === selectedAgentType?.role_id);
+  const shouldShowDetailSkeleton = isCatalogLoading && !hasLoadedCatalog && !catalog.agent_types.length && !catalog.roles.length && !skills.length && !error;
+  const isPreviewLoading = Boolean(selectedAgentTypeId && previewLoadingAgentTypeId === selectedAgentTypeId && !preview);
 
-  async function saveCommonPrompt() {
-    setSavingPrompt(true);
+  async function handleNavigationParams(params: Record<string, string | boolean | null>) {
+    const requestedAgentTypeId = agentTypeIdFromParams(params);
+    if (requestedAgentTypeId) {
+      if (catalog.agent_types.some((item) => item.id === requestedAgentTypeId)) {
+        setSelectedAgentTypeId(requestedAgentTypeId);
+      } else {
+        await refresh(requestedAgentTypeId);
+      }
+    }
+    if (!shouldOpenNewAgent(params)) {
+      return;
+    }
+    const requestId = scalarString(params.new_agent_request_id);
+    if (requestId) {
+      if (consumedNewAgentRequests.current.has(requestId)) {
+        return;
+      }
+      consumedNewAgentRequests.current.add(requestId);
+    } else if (consumedLegacyNewAgentRequest.current) {
+      return;
+    } else {
+      consumedLegacyNewAgentRequest.current = true;
+    }
+    setNewAgentModalOpen(true);
+  }
+
+  async function saveEdits(edits: AgentEdits) {
+    if (!selectedAgentType || !selectedRole) return;
+    setSavingEdits(true);
     setError('');
     try {
-      const prompt = (document.getElementById('common-prompt') as HTMLTextAreaElement | null)?.value || '';
-      await callBackend({ action: 'set_common_prompt', prompt });
-      await refresh();
+      const implicitSkillIds = selectedAgentType.skill_ids.length ? selectedAgentType.skill_ids : skills.map((skill) => skill.id);
+      const skillIdsChanged = !sameSet(edits.skillIds, implicitSkillIds);
+      const operations: Promise<unknown>[] = [];
+
+      if (
+        edits.name !== selectedAgentType.name ||
+        edits.description !== selectedAgentType.description ||
+        skillIdsChanged
+      ) {
+        operations.push(
+          callBackend({
+            action: 'update_agent_type',
+            id: selectedAgentType.id,
+            role_id: selectedAgentType.role_id,
+            name: edits.name,
+            description: edits.description,
+            skill_ids: skillIdsChanged ? edits.skillIds : selectedAgentType.skill_ids,
+            trace_verbosity: selectedAgentType.trace_verbosity,
+            enabled: selectedAgentType.enabled
+          })
+        );
+      }
+      if (edits.instructions !== selectedRole.instructions) {
+        operations.push(
+          callBackend({
+            action: 'update_role',
+            id: selectedRole.id,
+            name: selectedRole.name,
+            description: selectedRole.description,
+            instructions: edits.instructions
+          })
+        );
+      }
+      if (edits.commonPrompt !== catalog.common_prompt) {
+        operations.push(callBackend({ action: 'set_common_prompt', prompt: edits.commonPrompt }));
+      }
+      if (operations.length) {
+        await Promise.all(operations);
+        previewCacheRef.current.clear();
+        await refresh(selectedAgentType.id);
+        await refreshPreview(selectedAgentType.id, { showCached: false });
+      }
     } catch (err) {
       setError((err as Error).message);
     } finally {
-      setSavingPrompt(false);
-    }
-  }
-
-  async function saveAgentType() {
-    if (!selectedAgentType) return;
-    setError('');
-    try {
-      const name = (document.getElementById('agent-type-name') as HTMLInputElement | null)?.value || selectedAgentType.name;
-      const description =
-        (document.getElementById('agent-type-description') as HTMLTextAreaElement | null)?.value || selectedAgentType.description;
-      const selectedSkillIds = Array.from(document.querySelectorAll<HTMLInputElement>('input[name="agent-skill"]:checked')).map(
-        (input) => input.value
-      );
-      await callBackend({
-        action: 'update_agent_type',
-        id: selectedAgentType.id,
-        role_id: selectedAgentType.role_id,
-        name,
-        description,
-        skill_ids: selectedSkillIds,
-        trace_verbosity: selectedAgentType.trace_verbosity,
-        enabled: selectedAgentType.enabled
-      });
-      await refresh();
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  }
-
-  async function saveRole() {
-    if (!selectedRole) return;
-    setError('');
-    try {
-      const instructions =
-        (document.getElementById('role-instructions') as HTMLTextAreaElement | null)?.value || selectedRole.instructions;
-      await callBackend({
-        action: 'update_role',
-        id: selectedRole.id,
-        name: selectedRole.name,
-        description: selectedRole.description,
-        instructions
-      });
-      await refresh();
-    } catch (err) {
-      setError((err as Error).message);
+      setSavingEdits(false);
     }
   }
 
@@ -151,7 +264,6 @@ export function App() {
         trace_verbosity: 'compact',
         enabled: true
       });
-      setQuery('');
       setNewAgentModalOpen(false);
       await refresh(agentTypeId);
     } catch (err) {
@@ -163,43 +275,44 @@ export function App() {
 
   async function deleteAgentType() {
     if (!selectedAgentType) return;
-    const confirmed = window.confirm(`Delete ${selectedAgentType.name}?`);
-    if (!confirmed) return;
+    setAgentTypePendingDelete({ id: selectedAgentType.id, name: selectedAgentType.name });
+  }
+
+  async function confirmDeleteAgentType() {
+    if (!agentTypePendingDelete) return;
+    setDeletingAgentType(true);
     setError('');
     try {
-      await callBackend({ action: 'delete_agent_type', agent_type_id: selectedAgentType.id });
+      await callBackend({ action: 'delete_agent_type', agent_type_id: agentTypePendingDelete.id });
+      setAgentTypePendingDelete(null);
       await refresh();
     } catch (err) {
+      setAgentTypePendingDelete(null);
       setError((err as Error).message);
+    } finally {
+      setDeletingAgentType(false);
     }
   }
 
   return (
     <main className="agents-shell">
-      <AgentsSidebar
-        catalog={catalog}
-        query={query}
-        selectedAgentTypeId={selectedAgentTypeId}
-        filteredAgentTypes={filteredAgentTypes}
-        onCreate={() => setNewAgentModalOpen(true)}
-        onSetQuery={setQuery}
-        onSelectAgentType={setSelectedAgentTypeId}
-      />
-
       <section className="agents-detail">
         {error ? <div className="agents-error">{error}</div> : null}
-        <AgentsDetail
-          catalog={catalog}
-          skills={skills}
-          selectedAgentType={selectedAgentType}
-          selectedRole={selectedRole}
-          preview={preview}
-          savingPrompt={savingPrompt}
-          onDeleteAgentType={deleteAgentType}
-          onSaveAgentType={saveAgentType}
-          onSaveRole={saveRole}
-          onSaveCommonPrompt={saveCommonPrompt}
-        />
+        {shouldShowDetailSkeleton ? (
+          <AgentsDetailSkeleton />
+        ) : (
+          <AgentsDetail
+            catalog={catalog}
+            skills={skills}
+            selectedAgentType={selectedAgentType}
+            selectedRole={selectedRole}
+            preview={preview}
+            previewLoading={isPreviewLoading}
+            savingEdits={savingEdits}
+            onDeleteAgentType={deleteAgentType}
+            onSaveEdits={saveEdits}
+          />
+        )}
       </section>
       <NewAgentModal
         open={newAgentModalOpen}
@@ -210,6 +323,65 @@ export function App() {
         }}
         onCreate={createAgentFromModal}
       />
+      {agentTypePendingDelete ? (
+        <DeleteAgentTypeDialog
+          agentName={agentTypePendingDelete.name}
+          deleting={deletingAgentType}
+          onCancel={() => {
+            if (!deletingAgentType) setAgentTypePendingDelete(null);
+          }}
+          onConfirm={confirmDeleteAgentType}
+        />
+      ) : null}
     </main>
+  );
+}
+
+function AgentsDetailSkeleton() {
+  return (
+    <div className="agents-detail-skeleton" role="status" aria-label="Loading agents">
+      <header className="detail-header agents-detail-skeleton__header" aria-hidden="true">
+        <span className="agents-detail-skeleton__line agents-detail-skeleton__line--title" />
+        <span className="agents-detail-skeleton__line agents-detail-skeleton__line--subtitle" />
+        <span className="agents-detail-skeleton__actions">
+          <span />
+          <span />
+        </span>
+      </header>
+      <div className="agent-bento-grid agents-detail-skeleton__grid" aria-hidden="true">
+        <section className="bento-card bento-card-agent agents-detail-skeleton__card">
+          <span className="agents-detail-skeleton__line agents-detail-skeleton__line--small" />
+          <span className="agents-detail-skeleton__visual" />
+          <span className="agents-detail-skeleton__field" />
+          <span className="agents-detail-skeleton__field agents-detail-skeleton__field--tall" />
+        </section>
+        <section className="bento-card bento-card-role agents-detail-skeleton__card">
+          <span className="agents-detail-skeleton__line agents-detail-skeleton__line--medium" />
+          <span className="agents-detail-skeleton__rows" />
+        </section>
+        <section className="bento-card bento-card-trace agents-detail-skeleton__card">
+          <span className="agents-detail-skeleton__line agents-detail-skeleton__line--short" />
+          <span className="agents-detail-skeleton__bars" />
+        </section>
+        <section className="bento-card bento-card-instructions agents-detail-skeleton__card">
+          <span className="agents-detail-skeleton__line agents-detail-skeleton__line--medium" />
+          <span className="agents-detail-skeleton__field agents-detail-skeleton__field--fill" />
+        </section>
+        <section className="bento-card bento-card-common agents-detail-skeleton__card">
+          <span className="agents-detail-skeleton__line agents-detail-skeleton__line--medium" />
+          <span className="agents-detail-skeleton__field agents-detail-skeleton__field--fill" />
+        </section>
+        <section className="bento-card bento-card-skills agents-detail-skeleton__card">
+          <span className="agents-detail-skeleton__line agents-detail-skeleton__line--medium" />
+          <span className="agents-detail-skeleton__skill" />
+          <span className="agents-detail-skeleton__skill" />
+          <span className="agents-detail-skeleton__skill agents-detail-skeleton__skill--short" />
+        </section>
+      </div>
+      <section className="editor-band prompt-review-band agents-detail-skeleton__preview" aria-hidden="true">
+        <span className="agents-detail-skeleton__line agents-detail-skeleton__line--medium" />
+        <span className="agents-detail-skeleton__field agents-detail-skeleton__field--preview" />
+      </section>
+    </div>
   );
 }

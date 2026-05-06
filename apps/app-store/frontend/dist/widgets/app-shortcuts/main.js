@@ -82,7 +82,7 @@ function renderEmpty(message) {
 function render(apps) {
   list.replaceChildren();
   if (!apps.length) {
-    renderEmpty("Nessuna app fissata.");
+    renderEmpty("No pinned apps.");
     return;
   }
   apps.forEach((app) => {

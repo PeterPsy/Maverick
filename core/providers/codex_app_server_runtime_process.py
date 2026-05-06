@@ -7,7 +7,7 @@ import queue
 import subprocess
 import threading
 import time
-from typing import Callable
+from typing import Any, Callable
 
 from core.providers.models import RuntimeBackendLaunchSpec
 from core.runtime.execution_events import RuntimeExecutionEventSink
@@ -87,18 +87,19 @@ def execute_codex_app_server_turn(
             "process_returncode": runtime.process.poll(),
         },
     )
-    turn = _send_request(
-        runtime,
-        "turn/start",
-        {
-            "threadId": provider_thread_id,
-            "input": [{"type": "text", "text": input_text}],
-            "approvalPolicy": "never",
-            "sandboxPolicy": _turn_sandbox_policy(launch_spec),
-            "cwd": launch_spec.working_directory,
-        },
-        timeout=20.0,
-    ).get("turn")
+    params: dict[str, Any] = {
+        "threadId": provider_thread_id,
+        "input": [{"type": "text", "text": input_text}],
+        "approvalPolicy": "never",
+        "cwd": _provider_working_directory(launch_spec),
+    }
+    sandbox_policy = _turn_sandbox_policy(launch_spec)
+    if sandbox_policy is not None:
+        params["sandboxPolicy"] = sandbox_policy
+    permission_profile = _turn_permission_profile(launch_spec)
+    if permission_profile is not None:
+        params["permissionProfile"] = permission_profile
+    turn = _send_request(runtime, "turn/start", params, timeout=20.0).get("turn")
     if isinstance(turn, dict):
         provider_turn_id = str(turn.get("id") or "").strip()
         if provider_turn_id:

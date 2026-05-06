@@ -180,6 +180,7 @@ class CodexCommandMixin:
             return command
         sandbox_launcher = (runtime_bin or runtime_root / "bin") / "workspace_sandbox.py"
         dependency_args = self._dependency_root_args(host_command)
+        shell_dependency_args = self._runtime_shell_dependency_args(runtime_bin or runtime_root / "bin")
         host_command_path = Path(host_command)
         if self._is_standalone_codex_binary(host_command_path):
             sandbox_command = runtime_root / "bin" / "codex"
@@ -188,6 +189,7 @@ class CodexCommandMixin:
             rg = self._vendored_codex_tool_binary(host_command_path, "rg")
             if rg is not None:
                 dependency_args.extend(["--dependency-file", f"{rg}={runtime_root / 'bin' / 'rg'}"])
+        dependency_args.extend(shell_dependency_args)
         return [
             sys.executable,
             str(sandbox_launcher),
@@ -199,6 +201,14 @@ class CodexCommandMixin:
             "--",
             *command,
         ]
+
+
+
+    def _runtime_shell_dependency_args(self, runtime_bin: Path) -> list[str]:
+        runtime_shell = runtime_bin / "sh"
+        if not runtime_shell.is_file():
+            return []
+        return ["--dependency-file", f"{runtime_shell}=/bin/sh"]
 
 
 

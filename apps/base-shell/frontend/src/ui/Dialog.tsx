@@ -42,7 +42,7 @@ export function Dialog({ children, description, dismissible = true, hideHeader =
   return (
     <div className="bs-ui-dialog" role="dialog" aria-modal="true" aria-label={title}>
       <button
-        aria-label="Chiudi finestra"
+        aria-label="Close window"
         className="bs-ui-dialog__backdrop"
         disabled={!dismissible}
         onClick={dismissible ? onClose : undefined}
@@ -57,7 +57,7 @@ export function Dialog({ children, description, dismissible = true, hideHeader =
               {description ? <p className="bs-ui-dialog__description">{description}</p> : null}
             </div>
             {dismissible ? (
-              <button aria-label="Chiudi finestra" className="bs-ui-dialog__close" onClick={onClose} type="button">
+              <button aria-label="Close window" className="bs-ui-dialog__close" onClick={onClose} type="button">
                 <span aria-hidden="true" className="material-symbols-rounded">close</span>
               </button>
             ) : null}

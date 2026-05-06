@@ -839,10 +839,10 @@
         <div>
           <p class="checklist-eyebrow">Workspace app</p>
           <h1>Checklist board</h1>
-          <p>Checklist salvate con card ridimensionabili e widget coerente.</p>
+          <p>Saved checklists with resizable cards and a consistent widget.</p>
         </div>
         <div class="hero__actions">
-          <button aria-label="Crea checklist" class="checklist-ui-button checklist-ui-button--secondary checklist-ui-button--icon" id="create-empty" type="button">
+          <button aria-label="Create checklist" class="checklist-ui-button checklist-ui-button--secondary checklist-ui-button--icon" id="create-empty" type="button">
             <svg fill="none" viewBox="0 0 24 24">
               <path d="M12 5v14M5 12h14" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
             </svg>
@@ -884,7 +884,7 @@
         });
         const data = await response.json();
         if (!response.ok || data.error) {
-          throw new Error(data.detail || data.error || "Errore checklist");
+          throw new Error(data.detail || data.error || "Checklist error");
         }
         return data;
       };
@@ -1146,7 +1146,7 @@
             ...(item.sections || []),
             {
               id: sectionId,
-              title: "Nuova sezione",
+              title: "New section",
               tasks: [{ id: nextTempId("task"), title: "", checked: false }]
             }
           ];
@@ -1208,7 +1208,7 @@
                 data-field="section-title"
                 data-checklist="${esc(item.id)}"
                 data-section="${esc(section.id)}"
-                placeholder="Nuova sezione"
+                placeholder="New section"
                 value="${esc(section.title || "")}">
             </div>
             <div class="checklist-checklist-card__rows">
@@ -1228,11 +1228,11 @@
                       data-checklist="${esc(item.id)}"
                       data-section="${esc(section.id)}"
                       data-task="${esc(task.id)}"
-                      placeholder="Nuovo task"
+                      placeholder="New task"
                       value="${esc(task.title || "")}">
                   </span>
                   <button
-                    aria-label="Elimina task"
+                    aria-label="Delete task"
                     class="checklist-checklist-row__delete"
                     data-remove-task="true"
                     data-checklist="${esc(item.id)}"
@@ -1268,7 +1268,7 @@
                 class="checklist-editor-input checklist-checklist-card__hint checklist-checklist-card__hint-input"
                 data-field="summary"
                 data-checklist="${esc(item.id)}"
-                placeholder="Aggiungi un sommario"
+                placeholder="Add a summary"
                 value="${esc(item.summary || "")}">
             </div>
           </div>
@@ -1281,8 +1281,8 @@
           board.innerHTML = `
             <div class="checklist-chat-empty">
               <div class="checklist-ui-surface checklist-chat-empty__panel">
-                <p class="checklist-empty-panel__title">Nessuna checklist</p>
-                <p class="checklist-empty-panel__description">Crea la prima checklist oppure richiama il tool MCP checklist_tasklist.</p>
+                <p class="checklist-empty-panel__title">No checklists</p>
+                <p class="checklist-empty-panel__description">Create the first checklist or call the checklist_tasklist MCP tool.</p>
               </div>
             </div>`;
           return;
@@ -1301,14 +1301,14 @@
               style="${bodyMaxHeight}"
             >
               <div class="checklist-checklists-board__item-meta">
-                <span>${esc(formatUpdatedAt(item.updated_at || item.created_at) || "Senza data")}</span>
+                <span>${esc(formatUpdatedAt(item.updated_at || item.created_at) || "No date")}</span>
                 <div class="checklist-checklists-board__item-actions">
-                  <button aria-label="Nuova sezione" class="checklist-checklists-board__icon-action" data-add-section="${esc(item.id)}" type="button">
+                  <button aria-label="New section" class="checklist-checklists-board__icon-action" data-add-section="${esc(item.id)}" type="button">
                     <svg fill="none" viewBox="0 0 24 24">
                       <path d="M12 5v14M5 12h14" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
                     </svg>
                   </button>
-                  <button aria-label="Elimina checklist" class="checklist-checklists-board__icon-action" data-delete="${esc(item.id)}" type="button">
+                  <button aria-label="Delete checklist" class="checklist-checklists-board__icon-action" data-delete="${esc(item.id)}" type="button">
                     <svg fill="none" viewBox="0 0 24 24">
                       <path d="M4 7h16M9 7V5h6v2M10 11v6M14 11v6M7 7l1 12h8l1-12" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
                     </svg>
@@ -1316,14 +1316,14 @@
                 </div>
               </div>
               <div class="checklist-checklists-board__item-card">${renderCard(item)}</div>
-              ${isMobile ? "" : `<button aria-label="Ridimensiona checklist" class="checklist-checklists-board__resize" data-resize="${esc(item.id)}" type="button"></button>`}
+              ${isMobile ? "" : `<button aria-label="Resize checklist" class="checklist-checklists-board__resize" data-resize="${esc(item.id)}" type="button"></button>`}
             </article>`;
         }).join("");
         requestAnimationFrame(applyBoardMasonryLayout);
       };
 
       const renderError = (error) => {
-        document.getElementById("board").innerHTML = `<div class="checklist-ui-surface checklist-chat-empty__panel"><p class="checklist-empty-panel__title">Errore checklist</p><p class="checklist-empty-panel__description">${esc(error.message)}</p></div>`;
+        document.getElementById("board").innerHTML = `<div class="checklist-ui-surface checklist-chat-empty__panel"><p class="checklist-empty-panel__title">Checklist error</p><p class="checklist-empty-panel__description">${esc(error.message)}</p></div>`;
       };
 
       const load = async () => {

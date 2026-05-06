@@ -7,6 +7,7 @@ from tests.support.cases import authorization_integration_cases as cases
 
 _SELECTED = {
     'test_runtime_owner_and_workspace_admin_boundaries_are_enforced',
+    'test_app_created_runtime_session_is_owned_by_calling_workspace_member',
     'test_member_cannot_mint_runtime_operation_grant_from_http_body',
     'test_cross_workspace_runtime_operations_do_not_leak_authority',
     'test_runtime_cli_derives_mode_from_session_not_client_payload',

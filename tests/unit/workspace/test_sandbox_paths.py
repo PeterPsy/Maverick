@@ -139,7 +139,6 @@ class WorkspaceSandboxTest(unittest.TestCase):
                     "-c",
                     (
                         "set -eu; "
-                        f"export PATH={runtime_bin}:$PATH; "
                         "command -v rg; "
                         "rg workspace-only-needle .; "
                         f"if rg outside-only-needle {outside_file} 2>/dev/null; then exit 42; fi"

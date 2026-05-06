@@ -36,6 +36,7 @@ def apply_app_runtime_requests(
     data_root: str,
     parsed: ParsedAppContract,
     start_path: Path,
+    actor_user_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """Create runtime sessions/turns requested by an app through a generic result envelope."""
     requests = _pop_runtime_requests(result)
@@ -61,6 +62,7 @@ def apply_app_runtime_requests(
                 data_root=data_root,
                 parsed=parsed,
                 start_path=start_path,
+                actor_user_id=actor_user_id,
             )
         )
     if not isinstance(interrupt_requests, list):
@@ -113,6 +115,7 @@ def _apply_one_runtime_request(
     data_root: str,
     parsed: ParsedAppContract,
     start_path: Path,
+    actor_user_id: str | None,
 ) -> dict[str, Any]:
     request_id = _text(request.get("request_id")) or str(uuid4())
     callback = request.get("callback") if isinstance(request.get("callback"), dict) else {}
@@ -129,6 +132,7 @@ def _apply_one_runtime_request(
             app_id=app_id,
             parsed=parsed,
             start_path=start_path,
+            actor_user_id=actor_user_id,
         )
         input_text = _long_text(request.get("input_text"))
         if not input_text:
@@ -205,6 +209,7 @@ def _runtime_session_for_request(
     app_id: str,
     parsed: ParsedAppContract,
     start_path: Path,
+    actor_user_id: str | None,
 ):
     existing_session_id = _text(request.get("runtime_session_id"))
     if existing_session_id:
@@ -236,8 +241,8 @@ def _runtime_session_for_request(
         system_prompt=system_prompt,
         skill_ids=_list_of_text(request.get("skill_ids")),
         source_app_id=app_id,
-        owner_user_id=None,
-        created_by_user_id=None,
+        owner_user_id=actor_user_id,
+        created_by_user_id=actor_user_id,
         grants=[],
         governance=state.workspace_store.get_governance(workspace_id),
         platform_allows_full_access=workspace_id == "default",

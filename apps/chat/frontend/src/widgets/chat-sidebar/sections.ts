@@ -25,7 +25,7 @@ export function buildSections(projects: ChatProject[], threads: ChatThread[]): F
     sections.unshift({
       id: "unassigned",
       projectId: null,
-      title: "Senza progetto",
+      title: "No project",
       canManage: false,
       items: unassigned,
     });

@@ -25,14 +25,14 @@ export function AppDependencySetup({
   if (isLoading) {
     return (
       <div className="bs-dependency-overlay">
-        <LoadingPanel description="Controllo le interfacce richieste da questa app." title="Setup app" />
+        <LoadingPanel description="Checking the interfaces required by this app." title="Setup app" />
       </div>
     );
   }
   if (error) {
     return (
       <div className="bs-dependency-overlay">
-        <EmptyPanel description={error} title="Setup non disponibile" />
+        <EmptyPanel description={error} title="Setup unavailable" />
       </div>
     );
   }
@@ -40,13 +40,13 @@ export function AppDependencySetup({
     return null;
   }
   return (
-    <div className="bs-dependency-overlay" role="dialog" aria-label="Setup dipendenze app">
+    <div className="bs-dependency-overlay" role="dialog" aria-label="App dependency setup">
       <section className="bs-dependency-panel">
         <header className="bs-dependency-panel__header">
           <span className="material-symbols-rounded" aria-hidden="true">hub</span>
           <span>
-            <p className="bs-eyebrow">{dependencies.status === "resolved" ? "Collegamenti app" : "Setup richiesto"}</p>
-            <h2>Collega le app provider</h2>
+            <p className="bs-eyebrow">{dependencies.status === "resolved" ? "App connections" : "Setup required"}</p>
+            <h2>Connect provider apps</h2>
           </span>
           <DependencyPanelCloseButton isVisible={isOpen && dependencies.status === "resolved"} onClose={onClose} />
         </header>
@@ -76,7 +76,7 @@ function DependencyPanelCloseButton({
     return null;
   }
   return (
-    <button className="bs-dependency-panel__close" onClick={onClose} type="button" aria-label="Chiudi collegamenti app" title="Chiudi">
+    <button className="bs-dependency-panel__close" onClick={onClose} type="button" aria-label="Close app connections" title="Close">
       <span className="material-symbols-rounded" aria-hidden="true">close</span>
     </button>
   );
@@ -105,7 +105,7 @@ function DependencyRow({
       <p>{item.description}</p>
       {item.blocked_reason ? <p className="bs-dependency-row__reason">{item.blocked_reason}</p> : null}
       {item.stale_provider_app_ids.length ? (
-        <p className="bs-dependency-row__reason">Selezioni non più valide: {item.stale_provider_app_ids.join(", ")}</p>
+        <p className="bs-dependency-row__reason">Selections no longer valid: {item.stale_provider_app_ids.join(", ")}</p>
       ) : null}
       {item.candidates.length ? (
         <div className="bs-dependency-candidates">
@@ -141,7 +141,7 @@ function DependencyRow({
         </div>
       ) : (
         <Button onClick={() => onOpenAppStore(item.interface)} size="sm" variant="primary">
-          Apri App Store
+          Open App Store
         </Button>
       )}
     </article>

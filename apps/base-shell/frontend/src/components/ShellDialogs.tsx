@@ -74,10 +74,10 @@ export function ShellDialogs({
     (draftModelId !== selectedModel || draftReasoningEffort !== selectedReasoning);
   const cleanupScopeLabel =
     cleanupScope === "server"
-      ? "Scope: tutto il server"
+      ? "Scope: whole server"
       : cleanupScope === "workspace"
-        ? "Scope: workspace attivo"
-        : "Pulizia agent non consentita in questo workspace";
+        ? "Scope: active workspace"
+        : "Agent cleanup is not allowed in this workspace";
 
   function handleModelChange(modelId: string) {
     const option = modelOptions.find((item) => item.model_id === modelId) || null;
@@ -94,7 +94,7 @@ export function ShellDialogs({
     try {
       await onProviderModelSettingsChanged(draftModelId, draftReasoningEffort || null);
     } catch (error) {
-      setProviderError(error instanceof Error ? error.message : "Impossibile aggiornare il modello.");
+      setProviderError(error instanceof Error ? error.message : "Unable to update the model.");
     } finally {
       setIsSavingProvider(false);
     }
@@ -109,7 +109,7 @@ export function ShellDialogs({
     try {
       await onClearRuntimeSessions([sessionId]);
     } catch (error) {
-      setRuntimeCleanupError(error instanceof Error ? error.message : "Impossibile pulire l'agente.");
+      setRuntimeCleanupError(error instanceof Error ? error.message : "Unable to clean up the agent.");
     } finally {
       setCleaningSessionIds((current) => {
         const next = new Set(current);
@@ -129,7 +129,7 @@ export function ShellDialogs({
       await onClearRuntimeSessions(runtimeSessions.map((session) => session.session_id));
       setBatchProgress({ completed: runtimeSessions.length, total: runtimeSessions.length, current: null });
     } catch (error) {
-      setRuntimeCleanupError(error instanceof Error ? error.message : "Impossibile pulire gli agenti.");
+      setRuntimeCleanupError(error instanceof Error ? error.message : "Unable to clean up the agents.");
     } finally {
       setBatchProgress(null);
     }
@@ -139,26 +139,26 @@ export function ShellDialogs({
     <>
       <TutorialDialog onClose={onClose} open={activeDialog === "tutorial"} />
       <Dialog
-        description="Stato reale letto dalle API core. In default un platform admin pulisce tutto il server; negli altri workspace la pulizia resta locale al workspace attivo."
+        description="Live status read from the core APIs. In default, a platform admin cleans up the whole server; in other workspaces cleanup stays local to the active workspace."
         onClose={onClose}
         open={activeDialog === "settings"}
         title="Settings"
       >
         <div className="bs-settings-list">
           <Surface>
-            <p className="bs-dialog-card__eyebrow">Utente</p>
-            <h4 className="bs-dialog-card__title">{settings?.user.display_name || settings?.user.username || "Non disponibile"}</h4>
+            <p className="bs-dialog-card__eyebrow">User</p>
+            <h4 className="bs-dialog-card__title">{settings?.user.display_name || settings?.user.username || "Unavailable"}</h4>
             <p className="bs-dialog-card__copy">{settings?.user.platform_role || "member"} · {settings?.workspace.name || "Workspace"}</p>
           </Surface>
           <Surface>
             <p className="bs-dialog-card__eyebrow">Provider</p>
-            <h4 className="bs-dialog-card__title">{provider?.label || "Provider non caricato"}</h4>
+            <h4 className="bs-dialog-card__title">{provider?.label || "Provider not loaded"}</h4>
             <p className="bs-dialog-card__copy">
-              {selectedModel || "model"} · {selectedReasoning || "reasoning"} · {activeRuntimeSessions.length} attive / {runtimeSessions.length} in scope
+              {selectedModel || "model"} · {selectedReasoning || "reasoning"} · {activeRuntimeSessions.length} active / {runtimeSessions.length} in scope
             </p>
             <div className="bs-settings-provider-form">
               <label className="bs-settings-field">
-                <span>Modello</span>
+                <span>Model</span>
                 <select
                   disabled={!modelOptions.length || isSavingProvider}
                   onChange={(event) => handleModelChange(event.target.value)}
@@ -186,13 +186,13 @@ export function ShellDialogs({
                 </select>
               </label>
               <Button disabled={!canSaveProvider} loading={isSavingProvider} onClick={saveProviderSettings} size="sm">
-                Salva
+                Save
               </Button>
               {providerError ? <p className="bs-settings-provider-error">{providerError}</p> : null}
             </div>
             <details className="bs-runtime-session-panel">
               <summary>
-                <span>Sessioni runtime</span>
+                <span>Runtime sessions</span>
                 <span>{runtimeSessions.length}</span>
               </summary>
               <div className="bs-runtime-session-toolbar">
@@ -204,7 +204,7 @@ export function ShellDialogs({
                   size="sm"
                   variant="ghost"
                 >
-                  Pulisci tutte
+                  Clean up all
                 </Button>
                 {batchProgress ? (
                   <div className="bs-runtime-session-progress" role="status">
@@ -215,7 +215,7 @@ export function ShellDialogs({
                   </div>
                 ) : null}
               </div>
-              {!cleanupAllowed ? <p className="bs-settings-provider-error">Solo gli admin autorizzati possono pulire gli agenti in questo scope.</p> : null}
+              {!cleanupAllowed ? <p className="bs-settings-provider-error">Only authorized admins can clean up agents in this scope.</p> : null}
               <div className="bs-runtime-session-list">
                 {runtimeSessions.length ? runtimeSessions.map((session) => {
                   const isCleaning = cleaningSessionIds.has(session.session_id);
@@ -233,11 +233,11 @@ export function ShellDialogs({
                         size="sm"
                         variant="ghost"
                       >
-                        Pulisci
+                        Clean up
                       </Button>
                     </div>
                   );
-                }) : <p className="bs-dialog-card__copy">Nessuna sessione runtime.</p>}
+                }) : <p className="bs-dialog-card__copy">No runtime sessions.</p>}
               </div>
               {runtimeCleanupError ? <p className="bs-settings-provider-error">{runtimeCleanupError}</p> : null}
             </details>

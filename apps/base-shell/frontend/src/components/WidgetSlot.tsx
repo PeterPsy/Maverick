@@ -82,7 +82,7 @@ export function WidgetSlot({
         if (!cancelled) {
           setWidget(null);
           setContextToken(null);
-          setError(loadError instanceof Error ? loadError.message : "Widget non disponibile.");
+          setError(loadError instanceof Error ? loadError.message : "Widget unavailable.");
         }
       }
     }
@@ -382,11 +382,11 @@ export function WidgetSlot({
           role="presentation"
         >
           <div className="bs-capture-overlay__hint">
-            {isCaptureBusy ? "Preparazione screenshot..." : "Trascina per catturare un'area. Esc annulla."}
+            {isCaptureBusy ? "Preparing screenshot..." : "Drag to capture an area. Esc cancels."}
           </div>
           {captureDraft ? <div className="bs-capture-overlay__rect" style={captureRectStyle(captureDraft)} /> : null}
           <button className="bs-capture-overlay__cancel" onClick={cancelCapture} onPointerDown={(event) => event.stopPropagation()} type="button">
-            Annulla
+            Cancel
           </button>
         </div>
       ) : null}

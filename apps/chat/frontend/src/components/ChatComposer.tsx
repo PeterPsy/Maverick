@@ -531,7 +531,7 @@ export function ChatComposer({
                 aria-disabled={disabled}
                 className={`chat-ui-input chat-ui-input--textarea chatapp-composer__field chatapp-composer__editor ${value ? "" : "is-empty"}`}
                 contentEditable={!disabled}
-                data-placeholder="Scrivi a Maverick..."
+                data-placeholder="Write to Maverick..."
                 onClick={(event) => syncCaret(event.currentTarget)}
                 onDragLeave={() => setIsDraggingFiles(false)}
                 onDragOver={onDragOver}
@@ -562,7 +562,7 @@ export function ChatComposer({
                 <button
                   aria-expanded={showAppPicker}
                   aria-haspopup="listbox"
-                  aria-label="App citabili"
+                  aria-label="Mentionable apps"
                   className={`chatapp-composer__tool-button ${showAppPicker ? "is-active" : ""}`}
                   disabled={disabled}
                   onClick={() => setShowAppPicker((current) => !current)}
@@ -648,8 +648,8 @@ function MentionPanel({
   }, [activeIndex]);
 
   return (
-    <div className={`chatapp-mention-panel ${className}`} ref={ref} role="listbox" aria-label={kind === "app" ? "Suggerimenti app" : "Suggerimenti skill"}>
-      <div className="chatapp-mention-panel__header">{kind === "app" ? "App citabili" : "Skill"}</div>
+    <div className={`chatapp-mention-panel ${className}`} ref={ref} role="listbox" aria-label={kind === "app" ? "App suggestions" : "Skill suggestions"}>
+      <div className="chatapp-mention-panel__header">{kind === "app" ? "Mentionable apps" : "Skill"}</div>
       {items.length ? (
         items.map((item, index) => (
           <button
@@ -672,7 +672,7 @@ function MentionPanel({
           </button>
         ))
       ) : (
-        <div className="chatapp-mention-panel__empty">Nessun risultato per {query.trim() || "questo riferimento"}</div>
+        <div className="chatapp-mention-panel__empty">No results for {query.trim() || "this reference"}</div>
       )}
     </div>
   );
@@ -700,16 +700,16 @@ function ComposerActions({
         </button>
       ) : null}
       <button
-        aria-label={isSending ? "Metti in coda il messaggio" : "Invia messaggio"}
+        aria-label={isSending ? "Queue message" : "Send message"}
         className="chatapp-composer__icon-action is-send"
         disabled={!canSend}
-        title={isSending ? "Metti in coda" : "Invia"}
+        title={isSending ? "Queue" : "Send"}
         type="submit"
       >
         <span aria-hidden="true" className="material-symbols-rounded">
           send
         </span>
-        <span className="chatapp-composer__send-label">Invia</span>
+        <span className="chatapp-composer__send-label">Send</span>
       </button>
     </div>
   );
@@ -724,7 +724,7 @@ function DropOverlay() {
             add
           </span>
         </span>
-        <span>Rilascia il tuo file qui per allegarlo in chat</span>
+        <span>Drop your file here to attach it to the chat</span>
       </div>
     </div>
   );
@@ -737,8 +737,8 @@ function QueuedMessageNotice({ queuedCount, queuedPreview }: { queuedCount: numb
   return (
     <div className="chatapp-composer-queue" aria-live="polite">
       <div className="chatapp-composer-queue__eyebrow">
-        <strong>{queuedCount} messaggi in coda</strong>
-        <span>Invio automatico dopo il turn attivo</span>
+        <strong>{queuedCount} messages queued</strong>
+        <span>Sends automatically after the active turn</span>
       </div>
       {queuedPreview ? <div className="chatapp-composer-queue__preview">{queuedPreview}</div> : null}
     </div>

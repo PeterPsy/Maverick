@@ -339,7 +339,7 @@ describe("runtime event transcript projection", () => {
       event({
         event_id: "delta-1",
         event_type: "runtime.output.delta",
-        payload: { text: "Controllo i file." },
+        payload: { text: "Checking files." },
         created_at: "2026-04-19T00:00:02.000Z",
       }),
       event({
@@ -352,7 +352,7 @@ describe("runtime event transcript projection", () => {
 
     expect(messages).toMatchObject([
       { id: "turn-1:tools:0", role: "tool", toolCalls: [{ id: "tool-1" }] },
-      { role: "agent", content: "Controllo i file.", status: "pending" },
+      { role: "agent", content: "Checking files.", status: "pending" },
       { id: "turn-1:tools:1", role: "tool", toolCalls: [{ id: "tool-2" }] },
     ]);
   });

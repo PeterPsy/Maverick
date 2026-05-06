@@ -102,7 +102,7 @@ export function ProviderSetupDialog({
         model_reasoning_effort: draft.reasoningEffort || null,
       });
     } catch (setupError) {
-      setError(setupError instanceof Error ? setupError.message : "Impossibile configurare il provider.");
+      setError(setupError instanceof Error ? setupError.message : "Unable to configure the provider.");
     } finally {
       setIsSaving(false);
     }
@@ -110,19 +110,19 @@ export function ProviderSetupDialog({
 
   return (
     <Dialog
-      description="Scegli il backend AI del workspace prima di usare Chat o gli agenti."
+      description="Choose the workspace AI backend before using Chat or agents."
       dismissible={isDismissible}
       onClose={onClose}
       open={open}
       panelClassName="bs-provider-setup-dialog"
-      title="Configura provider AI"
+      title="Configure AI provider"
     >
       <div className="bs-provider-setup">
         <Surface className="bs-provider-setup__provider">
           <label className="bs-settings-field">
             <span>Provider</span>
             <select disabled={!providers.length || isSaving} onChange={(event) => updateProvider(event.target.value)} value={draft.providerId}>
-              {providers.length ? null : <option value="">Nessun provider disponibile</option>}
+              {providers.length ? null : <option value="">No provider available</option>}
               {providers.map((item) => (
                 <option key={item.provider_id} value={item.provider_id}>
                   {item.label || item.provider_id}
@@ -136,7 +136,7 @@ export function ProviderSetupDialog({
         </Surface>
         <div className="bs-provider-setup__grid">
           <label className="bs-settings-field">
-            <span>Modello</span>
+            <span>Model</span>
             <select disabled={!modelOptions.length || isSaving} onChange={(event) => updateModel(event.target.value)} value={draft.modelId}>
               {modelOptions.length ? null : <option value="">Default provider</option>}
               {modelOptions.map((option) => (
@@ -163,11 +163,11 @@ export function ProviderSetupDialog({
           </label>
         </div>
         {settings?.provider.blocked_reason ? (
-          <p className="bs-provider-setup__status">Stato provider: {settings.provider.blocked_reason.replaceAll("_", " ")}</p>
+          <p className="bs-provider-setup__status">Provider status: {settings.provider.blocked_reason.replaceAll("_", " ")}</p>
         ) : null}
         {error ? <p className="bs-settings-provider-error">{error}</p> : null}
         <Button disabled={!canSubmit} loading={isSaving} onClick={submitProviderSetup} variant="primary">
-          Attiva provider
+          Activate provider
         </Button>
       </div>
     </Dialog>

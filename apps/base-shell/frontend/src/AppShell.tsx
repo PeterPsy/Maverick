@@ -141,7 +141,7 @@ export function AppShell() {
       setSettings(platformSettings);
       setError(null);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Errore sconosciuto.");
+      setError(loadError instanceof Error ? loadError.message : "Unknown error.");
     } finally {
       setIsLoading(false);
     }
@@ -274,7 +274,7 @@ export function AppShell() {
   async function handleProviderModelSettingsChanged(modelId: string, reasoningEffort: string | null) {
     const providerId = settings?.provider.active_provider?.provider_id;
     if (!providerId) {
-      throw new Error("Provider non caricato.");
+      throw new Error("Provider not loaded.");
     }
     await configureActiveProvider({
       provider_id: providerId,

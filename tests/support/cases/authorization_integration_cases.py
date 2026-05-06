@@ -19,6 +19,7 @@ from core.apps.contracts import (
     build_app_contract,
     build_app_entrypoints,
     build_app_lifecycle,
+    build_app_permissions,
     build_parsed_app_contract,
     build_provided_interface_declaration,
     build_required_interface_declaration,
@@ -228,6 +229,45 @@ class AuthorizationIntegrationTestCase(unittest.TestCase):
                 start_path=repo_root,
             )
 
+    def install_runtime_owner_probe_app(self, state, repo_root: Path, *, workspace_id: str) -> None:
+        app_root = repo_root / "apps" / "runtime-owner-probe"
+        (app_root / "backend").mkdir(parents=True, exist_ok=True)
+        (app_root / "backend" / "app.py").write_text(
+            "import json\n"
+            "print(json.dumps({\n"
+            "  'ok': True,\n"
+            "  'runtime_session_requests': [{\n"
+            "    'request_id': 'runtime-owner-request',\n"
+            "    'agent_id': 'chat',\n"
+            "    'input_text': 'hello from app'\n"
+            "  }]\n"
+            "}))\n",
+            encoding="utf-8",
+        )
+        parsed = build_parsed_app_contract(
+            app_id="runtime-owner-probe",
+            name="Runtime Owner Probe",
+            version="1.0.0",
+            description="Runtime owner regression app.",
+            publisher="maverick",
+            contract=build_app_contract(
+                permissions=build_app_permissions(runtime_create_sessions=True),
+                entrypoints=build_app_entrypoints(backend="backend/app.py"),
+            ),
+        )
+        write_app_contract_file(app_root, parsed)
+        source = register_app_source_from_contract(
+            state.app_store,
+            source_kind="platform",
+            source_path=str(app_root),
+        )
+        install_store_app(
+            state.app_store,
+            source_id=source.source_id,
+            workspace_id=workspace_id,
+            start_path=repo_root,
+        )
+
     def test_workspace_admin_controls_provider_selection_governance_and_membership(self) -> None:
         repo_root = self.make_repo_root()
         state = bootstrap_platform_state(start_path=repo_root)
@@ -340,6 +380,64 @@ class AuthorizationIntegrationTestCase(unittest.TestCase):
         self.assertEqual(other_cleanup["error"], "runtime_session_cleanup_forbidden")
         self.assertEqual(status_admin_cleanup, 200)
         self.assertEqual(admin_cleanup["session_id"], session["session_id"])
+
+    def test_app_created_runtime_session_is_owned_by_calling_workspace_member(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=state.repository_root)
+        admin_cookie = self.login_admin(app)
+        status_create, workspace, _ = self.invoke(
+            app,
+            path="/api/workspaces",
+            method="POST",
+            body={"name": "App Runtime Owner Lab"},
+            cookie=admin_cookie,
+        )
+        self.assertEqual(status_create, 201)
+        member, _workspace_admin = self.create_workspace_users(state, workspace["workspace_id"])
+        member_cookie = self.login(app, username="member.a", password="member-pass")
+        self.install_runtime_owner_probe_app(state, repo_root, workspace_id=workspace["workspace_id"])
+
+        def fake_submit_runtime_turn_async(state_arg, *, session, input_text, **_kwargs):
+            turn = queue_runtime_turn(
+                state_arg.runtime_store,
+                turn_id="turn-app-owned-by-member",
+                session_id=session.session_id,
+                input_text=input_text,
+            )
+            return turn, []
+
+        with patch("core.apps.runtime_requests.submit_runtime_turn_async", side_effect=fake_submit_runtime_turn_async):
+            status_backend, backend_payload, _ = self.invoke(
+                app,
+                path="/api/apps/runtime-owner-probe/backend",
+                method="POST",
+                body={},
+                cookie=member_cookie,
+            )
+
+        self.assertEqual(status_backend, 200)
+        runtime_result = backend_payload["runtime_request_results"][0]
+        session_id = runtime_result["runtime_session_id"]
+        self.assertEqual(runtime_result["turn_id"], "turn-app-owned-by-member")
+        session = state.runtime_store.get_session(session_id)
+        self.assertEqual(session.owner_user_id, member.user_id)
+        self.assertEqual(session.created_by_user_id, member.user_id)
+
+        with (
+            patch("core.api.runtime_api.interrupt_runtime_provider_turn", return_value=True),
+            patch("core.api.runtime_api.dispatch_source_app_runtime_event", return_value=None),
+        ):
+            status_interrupt, interrupt_payload, _ = self.invoke(
+                app,
+                path="/api/runtime/turns/turn-app-owned-by-member/interrupt",
+                method="POST",
+                body={},
+                cookie=member_cookie,
+            )
+
+        self.assertEqual(status_interrupt, 200)
+        self.assertTrue(interrupt_payload["interrupted"])
 
     def test_member_cannot_mint_runtime_operation_grant_from_http_body(self) -> None:
         repo_root = self.make_repo_root()

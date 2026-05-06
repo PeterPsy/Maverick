@@ -11,7 +11,7 @@ from unittest.mock import patch
 from core.providers.models import ProviderCapabilitySet, ProviderDefinition, RuntimeBackendLaunchSpec
 from core.providers.provider_codex import CodexProviderAdapter, build_codex_definition
 from core.providers.provider_codex import _codex_app_server_command
-from core.providers.codex_app_server import _turn_sandbox_policy
+from core.providers.codex_app_server import _turn_permission_profile, _turn_sandbox_policy
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.service import configure_workspace_provider
 from core.providers.store import ProviderDocumentStore, ProviderCollections
@@ -38,15 +38,12 @@ class RuntimeExecutionCommandTest(unittest.TestCase):
         self.assertEqual(command, ["/usr/bin/codex", "app-server", "--listen", "stdio://"])
         self.assertNotIn("exec", command)
 
-    def test_turn_sandbox_policy_carries_readable_and_writable_roots(self) -> None:
+    def test_turn_sandbox_configuration_delegates_filesystem_to_external_sandbox(self) -> None:
         session = _session("sandbox")
-        policy = _turn_sandbox_policy(_launch_spec(session))
+        launch_spec = _launch_spec(session)
 
-        self.assertEqual(policy["type"], "workspaceWrite")
-        self.assertTrue(policy["networkAccess"])
-        self.assertEqual(policy["readOnlyAccess"], {"type": "restricted", "includePlatformDefaults": False, "readableRoots": [session.workspace_root]})
-        self.assertNotIn("readableRoots", policy)
-        self.assertEqual(policy["writableRoots"], [session.workspace_root])
+        self.assertEqual(_turn_sandbox_policy(launch_spec), {"type": "externalSandbox", "networkAccess": "enabled"})
+        self.assertIsNone(_turn_permission_profile(launch_spec))
 
     def test_codex_execution_uses_persistent_app_server_thread(self) -> None:
         temp_dir = tempfile.TemporaryDirectory()
@@ -73,6 +70,9 @@ class RuntimeExecutionCommandTest(unittest.TestCase):
         self.assertEqual([event.event_type for event in emitted], ["runtime.output.delta"])
         self.assertEqual(emitted[0].payload["text"], "hello")
         self.assertEqual(FakeCodexProcess.requests[-3:], ["initialize", "thread/start", "turn/start"])
+        self.assertEqual(FakeCodexProcess.turn_start_params["sandboxPolicy"], {"type": "externalSandbox", "networkAccess": "enabled"})
+        self.assertNotIn("permissionProfile", FakeCodexProcess.turn_start_params)
+        self.assertNotIn("readOnlyAccess", json.dumps(FakeCodexProcess.turn_start_params))
 
     def test_codex_execution_removes_provider_generated_system_skills_before_thread_start(self) -> None:
         temp_dir = tempfile.TemporaryDirectory()
@@ -467,6 +467,7 @@ class FakeStdin:
                 FakeCodexProcess.system_skills_present_at_thread_start = (Path(FakeCodexProcess.codex_home) / "skills" / ".system").exists()
             self.stdout.put({"jsonrpc": "2.0", "id": request_id, "result": {"thread": {"id": "thread-1"}}})
         elif method == "turn/start":
+            FakeCodexProcess.turn_start_params = payload["params"]
             self.stdout.put({"jsonrpc": "2.0", "id": request_id, "result": {"turn": {"id": "turn-1"}}})
             self.stdout.put({"jsonrpc": "2.0", "method": "turn/started", "params": {"turn": {"id": "turn-1"}}})
             self.stdout.put({"jsonrpc": "2.0", "method": "item/agentMessage/delta", "params": {"itemId": "item-1", "delta": "hello"}})
@@ -479,11 +480,13 @@ class FakeStdin:
 
 class FakeCodexProcess:
     requests: list[str] = []
+    turn_start_params: dict = {}
     codex_home: str | None = None
     system_skills_present_at_thread_start = False
 
     def __init__(self, *args, **kwargs) -> None:
         FakeCodexProcess.requests = []
+        FakeCodexProcess.turn_start_params = {}
         FakeCodexProcess.codex_home = str(kwargs.get("env", {}).get("CODEX_HOME") or "").strip() or None
         FakeCodexProcess.system_skills_present_at_thread_start = False
         self.stdout = FakeStdout()

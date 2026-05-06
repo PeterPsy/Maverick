@@ -41,7 +41,7 @@ def main(argv: list[str] | None = None) -> int:
         print(_help_text(args))
         return 0
 
-    state = bootstrap_platform_state(start_path=repository_root)
+    state = bootstrap_platform_state(start_path=repository_root, apply_bootstrap_admin_password=False)
     result = run_cli_json(args, state=state, repository_root=state.repository_root)
     print(json.dumps(result, indent=2, ensure_ascii=True))
     return 0

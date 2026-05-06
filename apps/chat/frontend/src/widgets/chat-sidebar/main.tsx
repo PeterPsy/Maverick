@@ -391,7 +391,7 @@ function ChatSidebarWidget() {
                   {isEditingProject ? (
                     <span className="bs-chat-folder__title-input-frame">
                       <input
-                        aria-label={`Rinomina progetto ${section.title}`}
+                        aria-label={`Rename project ${section.title}`}
                         autoFocus
                         className="bs-chat-folder__title-input"
                         onChange={(event) => setEditingProject({ projectId: editingProject.projectId, name: event.target.value })}
@@ -414,7 +414,7 @@ function ChatSidebarWidget() {
                   <div className="bs-chat-folder__header-actions">
                     <button
                       aria-expanded={!isCollapsed}
-                      aria-label={`${isCollapsed ? "Mostra" : "Nascondi"} chat del progetto ${section.title}`}
+                      aria-label={`${isCollapsed ? "Show" : "Hide"} project chats ${section.title}`}
                       className={`bs-chat-folder__toggle ${isCollapsed ? "is-collapsed" : ""}`}
                       onClick={() => setCollapsedSections((current) => ({ ...current, [section.id]: !(current[section.id] ?? false) }))}
                       type="button"
@@ -424,7 +424,7 @@ function ChatSidebarWidget() {
                     </button>
                     {section.canManage ? (
                       <button
-                        aria-label={isEditingProject ? `Elimina progetto ${section.title}` : `Nuova chat in ${section.title}`}
+                        aria-label={isEditingProject ? `Delete project ${section.title}` : `New chat in ${section.title}`}
                         className={`bs-chat-folder__action-button ${isEditingProject ? "is-danger" : ""}`}
                         disabled={isPending || isDeletingAnyProject}
                         onClick={() => {
@@ -434,7 +434,7 @@ function ChatSidebarWidget() {
                           }
                           void createChat(section.projectId);
                         }}
-                        title={isEditingProject ? "Elimina progetto" : "Nuova chat"}
+                        title={isEditingProject ? "Delete project" : "New chat"}
                         type="button"
                       >
                         <span aria-hidden="true" className="material-symbols-rounded">{isEditingProject ? "delete" : "add"}</span>
@@ -442,13 +442,13 @@ function ChatSidebarWidget() {
                     ) : null}
                     {!isEditingProject ? (
                       <button
-                        aria-label={`Elimina tutte le chat in ${section.title}`}
+                        aria-label={`Delete all chats in ${section.title}`}
                         className="bs-chat-folder__action-button is-danger"
                         disabled={isPending || isDeletingAnyProject || section.items.length === 0}
                         onClick={() => {
                           void deleteProjectThreads(section.id, section.items);
                         }}
-                        title="Elimina chat del progetto"
+                        title="Delete project chats"
                         type="button"
                       >
                         <span aria-hidden="true" className="material-symbols-rounded">delete_sweep</span>
@@ -456,11 +456,11 @@ function ChatSidebarWidget() {
                     ) : null}
                     {!section.canManage ? (
                       <button
-                        aria-label="Nuovo progetto"
+                        aria-label="New project"
                         className="bs-chat-folder__action-button"
                         disabled={isPending || isDeletingAnyProject}
                         onClick={() => addProject()}
-                        title="Nuovo progetto"
+                        title="New project"
                         type="button"
                       >
                         <span aria-hidden="true" className="material-symbols-rounded">create_new_folder</span>
@@ -468,7 +468,7 @@ function ChatSidebarWidget() {
                     ) : null}
                     {section.canManage ? (
                       <button
-                        aria-label={isEditingProject ? `Salva modifiche a ${section.title}` : `Modifica progetto ${section.title}`}
+                        aria-label={isEditingProject ? `Save changes to ${section.title}` : `Edit project ${section.title}`}
                         className="bs-instance-menu__trigger bs-folder-menu__trigger"
                         disabled={isPending || isDeletingAnyProject || (isEditingProject && !editingName.trim())}
                         onClick={() => {
@@ -482,7 +482,7 @@ function ChatSidebarWidget() {
                           }
                           startProjectEdit(project);
                         }}
-                        title={isEditingProject ? "Salva" : "Modifica progetto"}
+                        title={isEditingProject ? "Save" : "Edit project"}
                         type="button"
                       >
                         <span aria-hidden="true" className="material-symbols-rounded">{isEditingProject ? "check" : "more_horiz"}</span>
@@ -493,7 +493,7 @@ function ChatSidebarWidget() {
                 {deleteProgress ? (
                   <div className="bs-chat-folder__delete-progress" role="status" aria-live="polite">
                     <div className="bs-chat-folder__delete-progress-copy">
-                      <span>Eliminazione chat</span>
+                      <span>Deleting chats</span>
                       <strong>{deleteProgress.deleted}/{deleteProgress.total}</strong>
                     </div>
                     <div className="bs-chat-folder__delete-progress-track">
@@ -520,7 +520,7 @@ function ChatSidebarWidget() {
                               {isExpanded ? (
                                 <span className="bs-chat-list__title-input-frame">
                                   <input
-                                    aria-label={`Modifica titolo ${thread.title}`}
+                                    aria-label={`Edit title ${thread.title}`}
                                     autoFocus
                                     className="bs-chat-list__title-input"
                                     onChange={(event) => setExpandedThreadTitle(event.target.value)}
@@ -550,13 +550,13 @@ function ChatSidebarWidget() {
                               )}
                             </div>
                             {section.projectId !== thread.project_id ? (
-                              <button aria-label={`Sposta ${thread.title} in ${section.title}`} className="bs-instance-menu__trigger" onClick={() => moveThread(thread, section.projectId)} type="button">
+                              <button aria-label={`Move ${thread.title} to ${section.title}`} className="bs-instance-menu__trigger" onClick={() => moveThread(thread, section.projectId)} type="button">
                                 <span aria-hidden="true" className="material-symbols-rounded">drive_file_move</span>
                               </button>
                             ) : (
                               <button
                                 aria-expanded={isExpanded}
-                                aria-label={`Modifica ${thread.title}`}
+                                aria-label={`Edit ${thread.title}`}
                                 className="bs-instance-menu__trigger"
                                 onClick={() => {
                                   setEditingProject(null);
@@ -588,7 +588,7 @@ function ChatSidebarWidget() {
                         );
                       })
                     ) : (
-                      <p className="bs-chat-folder__empty">Nessuna chat in questo progetto.</p>
+                      <p className="bs-chat-folder__empty">No chats in this project.</p>
                     )}
                   </div>
                 ) : null}

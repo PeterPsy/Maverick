@@ -140,10 +140,10 @@ export function ChatTranscript({
                     </div>
                     {message.content ? (
                       <button
-                        aria-label="Copia messaggio"
+                        aria-label="Copy message"
                         className="chatapp-message-action chatapp-message-action--icon chatapp-message-action--copy"
                         onClick={() => void copyMessage(message.content)}
-                        title="Copia"
+                        title="Copy"
                         type="button"
                       >
                         <span aria-hidden="true" className="material-symbols-rounded">
@@ -196,14 +196,14 @@ export function ChatTranscript({
                   <section className="chatapp-agent-block chatapp-agent-block--action">
                     <div className="chatapp-message-copy-row chatapp-message-copy-row--agent">
                       <div className="chatapp-agent-block__body">
-                        <MarkdownMessage content={visibleContent || "_Nessun output testuale._"} />
+                        <MarkdownMessage content={visibleContent || "_No text output._"} />
                       </div>
                       {message.content ? (
                         <button
-                          aria-label="Copia messaggio"
+                          aria-label="Copy message"
                           className="chatapp-message-action chatapp-message-action--icon chatapp-message-action--copy"
                           onClick={() => void copyMessage(message.content)}
-                          title="Copia"
+                          title="Copy"
                           type="button"
                         >
                           <span aria-hidden="true" className="material-symbols-rounded">
@@ -214,7 +214,7 @@ export function ChatTranscript({
                     </div>
                     {message.content.length > 3200 ? (
                       <button className="chatapp-message-action" onClick={() => toggleExpanded(message.id)} type="button">
-                        {expandedMessages.has(message.id) ? "Comprimi output" : "Espandi output completo"}
+                        {expandedMessages.has(message.id) ? "Collapse output" : "Expand full output"}
                       </button>
                     ) : null}
                     <MessageFooter content={message.content} createdAt={message.createdAt} onCopy={copyMessage} />
@@ -225,10 +225,10 @@ export function ChatTranscript({
                 <div className="chatapp-bubble__meta">
                   {message.content && (message.role === "human" || message.role === "agent") ? (
                     <button
-                      aria-label="Copia messaggio"
+                      aria-label="Copy message"
                       className="chatapp-message-action chatapp-message-action--icon chatapp-message-action--copy chatapp-message-action--copy-meta"
                       onClick={() => void copyMessage(message.content)}
-                      title="Copia"
+                      title="Copy"
                       type="button"
                     >
                       <span aria-hidden="true" className="material-symbols-rounded">
@@ -262,7 +262,7 @@ export function ChatTranscript({
         ) : null}
       </div>
       {showScrollJump ? (
-        <button className="chatapp-chat-scroll-jump" onClick={scrollToBottom} type="button" aria-label="Vai all'ultimo messaggio">
+        <button className="chatapp-chat-scroll-jump" onClick={scrollToBottom} type="button" aria-label="Go to latest message">
           <span aria-hidden="true" className="material-symbols-rounded">
             arrow_downward
           </span>
@@ -285,10 +285,10 @@ function MessageFooter({
     <div className="chatapp-message-mobile-footer">
       {content ? (
         <button
-          aria-label="Copia messaggio"
+          aria-label="Copy message"
           className="chatapp-message-action chatapp-message-action--icon chatapp-message-action--copy"
           onClick={() => void onCopy(content)}
-          title="Copia"
+          title="Copy"
           type="button"
         >
           <span aria-hidden="true" className="material-symbols-rounded">

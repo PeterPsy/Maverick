@@ -89,8 +89,8 @@ def _ensure_provider_thread(
 def _thread_params(*, session: RuntimeSessionRecord, launch_spec: RuntimeBackendLaunchSpec) -> dict[str, Any]:
     return {
         "approvalPolicy": "never",
-        "cwd": launch_spec.working_directory,
-        "sandbox": "danger-full-access" if launch_spec.execution_mode == "full-access" else "read-only",
+        "cwd": _provider_working_directory(launch_spec),
+        "sandbox": "danger-full-access" if launch_spec.execution_mode == "full-access" else "workspace-write",
         "developerInstructions": session.system_prompt or "",
         "config": {"mcp_servers": {}},
     }
@@ -104,17 +104,22 @@ def _remove_generated_system_skills(*, launch_spec: RuntimeBackendLaunchSpec, se
 
 
 
-def _turn_sandbox_policy(launch_spec: RuntimeBackendLaunchSpec) -> dict[str, Any]:
+def _provider_working_directory(launch_spec: RuntimeBackendLaunchSpec) -> str:
+    if launch_spec.execution_mode == "full-access":
+        return launch_spec.working_directory
+    return "/workspace"
+
+
+
+def _turn_sandbox_policy(launch_spec: RuntimeBackendLaunchSpec) -> dict[str, Any] | None:
     if launch_spec.execution_mode == "full-access":
         return {"type": "dangerFullAccess"}
-    policy: dict[str, Any] = {"type": "workspaceWrite", "networkAccess": True}
-    readable_roots = [root for root in launch_spec.readable_roots if root and root != "/"]
-    if readable_roots:
-        policy["readOnlyAccess"] = {"type": "restricted", "includePlatformDefaults": False, "readableRoots": readable_roots}
-    writable_roots = [root for root in launch_spec.writable_roots if root and root != "/"]
-    if writable_roots:
-        policy["writableRoots"] = writable_roots
-    return policy
+    return {"type": "externalSandbox", "networkAccess": "enabled"}
+
+
+
+def _turn_permission_profile(launch_spec: RuntimeBackendLaunchSpec) -> dict[str, Any] | None:
+    return None
 
 
 

@@ -889,9 +889,9 @@ export function App({
             {isEmptyChatView ? (
               <div className="chatapp-empty-chat-stage">
                 <div className="chatapp-empty-chat-stage__copy">
-                  <h1>Come posso aiutarti oggi?</h1>
+                  <h1>How can I help you today?</h1>
                   <span aria-hidden="true" />
-                  <p>Scrivi un comando o fai una domanda a Maverick</p>
+                  <p>Type a command or ask Maverick a question</p>
                 </div>
                 <ChatComposer
                   activeProviderId={activeProviderId}

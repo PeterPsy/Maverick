@@ -15,6 +15,8 @@ MASKED_SYSTEM_PATHS = (
     "/usr/local/share",
 )
 RESOLV_CONF = Path("/etc/resolv.conf")
+SANDBOX_WORKSPACE_ROOT = Path("/workspace")
+SANDBOX_EXTERNAL_RUNTIME_ROOT = Path("/runtime")
 ESSENTIAL_READ_FILES = (
     (Path("/etc/resolv.conf"), Path("/etc/resolv.conf")),
     (Path("/etc/hosts"), Path("/etc/hosts")),
@@ -38,9 +40,11 @@ def build_bwrap_command(
         raise ValueError("workspace sandbox requires a command to execute")
     workspace = workspace_root.resolve(strict=False)
     runtime = runtime_root.resolve(strict=False)
+    sandbox_workspace = SANDBOX_WORKSPACE_ROOT
+    sandbox_runtime = _sandbox_runtime_path(workspace=workspace, runtime=runtime)
     dependencies = _dedupe_paths([path for path in dependency_roots or [] if path.exists()])
     file_dependencies = [
-        (source.resolve(strict=False), destination.resolve(strict=False))
+        (source.resolve(strict=False), _sandbox_destination_path(destination, workspace=workspace, sandbox_workspace=sandbox_workspace, runtime=runtime, sandbox_runtime=sandbox_runtime))
         for source, destination in dependency_files or []
         if source.exists()
     ]
@@ -55,20 +59,33 @@ def build_bwrap_command(
         "/",
         "--setenv",
         "TMPDIR",
-        str(runtime),
+        str(sandbox_runtime),
         "--setenv",
         "TMP",
-        str(runtime),
+        str(sandbox_runtime),
         "--setenv",
         "TEMP",
-        str(runtime),
+        str(sandbox_runtime),
         "--setenv",
         "HOME",
-        str(runtime / "codex-home"),
+        str(sandbox_runtime / "codex-home"),
+        "--setenv",
+        "CODEX_HOME",
+        str(sandbox_runtime / "codex-home"),
+        "--setenv",
+        "MAVERICK_WORKSPACE_ROOT",
+        str(sandbox_workspace),
+        "--setenv",
+        "MAVERICK_RUNTIME_ROOT",
+        str(sandbox_runtime),
+        "--setenv",
+        "PATH",
+        _sandbox_path_env(workspace=workspace, sandbox_workspace=sandbox_workspace, runtime=runtime, sandbox_runtime=sandbox_runtime),
         "--unsetenv",
         "PYTHONPATH",
     ]
-    exposed_paths = [workspace, runtime, *dependencies]
+    dependency_destinations = dependencies
+    exposed_paths = [sandbox_workspace, sandbox_runtime, *dependency_destinations]
     file_destination_dirs = [destination.parent for _source, destination in all_file_dependencies]
     mount_dirs = _dedupe_paths([Path("/proc"), Path("/dev"), *_mount_parent_dirs([*exposed_paths, *file_destination_dirs])])
     for directory in mount_dirs:
@@ -78,19 +95,16 @@ def build_bwrap_command(
         args.extend(["--ro-bind", str(dependency), str(dependency)])
     for path in _masked_system_paths(mount_dirs):
         args.extend(["--tmpfs", str(path)])
-    args.extend(["--bind", str(workspace), str(workspace)])
+    args.extend(["--bind", str(workspace), str(sandbox_workspace)])
     if runtime.is_relative_to(workspace):
         (workspace / runtime.relative_to(workspace)).mkdir(parents=True, exist_ok=True)
     else:
         runtime.mkdir(parents=True, exist_ok=True)
-        args.extend(["--bind", str(runtime), str(runtime)])
+        args.extend(["--bind", str(runtime), str(sandbox_runtime)])
     for source, destination in all_file_dependencies:
-        destination.parent.mkdir(parents=True, exist_ok=True)
         args.extend(["--ro-bind", str(source), str(destination)])
-    if not workspace.is_relative_to("/tmp"):
-        args.extend(["--dir", "/tmp", "--bind", str(runtime), "/tmp"])
-    args.extend(["--remount-ro", "/", "--chdir", str(workspace), "--"])
-    args.extend(command)
+    args.extend(["--remount-ro", "/", "--chdir", str(sandbox_workspace), "--"])
+    args.extend(_sandbox_command(command, workspace=workspace, sandbox_workspace=sandbox_workspace, runtime=runtime, sandbox_runtime=sandbox_runtime))
     return args
 
 
@@ -132,6 +146,52 @@ def _parse_dependency_files(values: list[str]) -> list[tuple[Path, Path]]:
             raise ValueError("dependency files must use SOURCE=DESTINATION")
         files.append((Path(source), Path(destination)))
     return files
+
+
+
+def _sandbox_runtime_path(*, workspace: Path, runtime: Path) -> Path:
+    if runtime.is_relative_to(workspace):
+        return SANDBOX_WORKSPACE_ROOT / runtime.relative_to(workspace)
+    return SANDBOX_EXTERNAL_RUNTIME_ROOT
+
+
+
+def _sandbox_destination_path(path: Path, *, workspace: Path, sandbox_workspace: Path, runtime: Path, sandbox_runtime: Path) -> Path:
+    resolved = path if path.is_absolute() else path.resolve(strict=False)
+    if resolved.is_relative_to(workspace):
+        return sandbox_workspace / resolved.relative_to(workspace)
+    if resolved.is_relative_to(runtime):
+        return sandbox_runtime / resolved.relative_to(runtime)
+    if path.is_absolute():
+        return path
+    return resolved
+
+
+
+def _sandbox_command(command: list[str], *, workspace: Path, sandbox_workspace: Path, runtime: Path, sandbox_runtime: Path) -> list[str]:
+    return [_sandbox_arg(value, workspace=workspace, sandbox_workspace=sandbox_workspace, runtime=runtime, sandbox_runtime=sandbox_runtime) for value in command]
+
+
+
+def _sandbox_arg(value: str, *, workspace: Path, sandbox_workspace: Path, runtime: Path, sandbox_runtime: Path) -> str:
+    if not value.startswith("/"):
+        return value
+    path = Path(value)
+    if path.is_relative_to(workspace):
+        return str(sandbox_workspace / path.relative_to(workspace))
+    if path.is_relative_to(runtime):
+        return str(sandbox_runtime / path.relative_to(runtime))
+    return value
+
+
+
+def _sandbox_path_env(*, workspace: Path, sandbox_workspace: Path, runtime: Path, sandbox_runtime: Path) -> str:
+    entries = [str(sandbox_runtime / "bin")]
+    for entry in str(os.environ.get("PATH") or "").split(os.pathsep):
+        if not entry:
+            continue
+        entries.append(_sandbox_arg(entry, workspace=workspace, sandbox_workspace=sandbox_workspace, runtime=runtime, sandbox_runtime=sandbox_runtime))
+    return os.pathsep.join(entries)
 
 
 def _masked_system_paths(mount_dirs: list[Path]) -> list[Path]:

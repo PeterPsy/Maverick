@@ -274,7 +274,7 @@ export function AppFrameHost({
       <div className="bs-workspace-app-surface">
         {hasDeclaredDependencies ? (
           <button
-            aria-label="Configura collegamenti app"
+            aria-label="Configure app connections"
             className={`bs-dependency-launcher is-${dependencyStatus}`}
             onClick={() => {
               logDependencySetup("panel:open", {
@@ -288,7 +288,7 @@ export function AppFrameHost({
                 refreshDependencies(activeApp.app_id);
               }
             }}
-            title="Configura collegamenti app"
+            title="Configure app connections"
             type="button"
           >
             <span className="material-symbols-rounded" aria-hidden="true">hub</span>

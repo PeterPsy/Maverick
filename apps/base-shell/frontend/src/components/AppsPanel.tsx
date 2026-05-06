@@ -16,20 +16,20 @@ export function AppsPanel({
 }) {
   const visibleApps = shellVisibleApps(apps);
   if (isLoading) {
-    return <section className="bs-app-grid-panel" aria-busy="true" aria-label="Caricamento app" />;
+    return <section className="bs-app-grid-panel" aria-busy="true" aria-label="Loading apps" />;
   }
   if (error) {
-    return <EmptyPanel description={error} title="Impossibile leggere il registry app" />;
+    return <EmptyPanel description={error} title="Unable to read the app registry" />;
   }
   if (!visibleApps.length) {
-    return <EmptyPanel description="Quando il registry contiene app installate, le vedrai qui." title="Nessuna app installata" />;
+    return <EmptyPanel description="When the registry contains installed apps, you will see them here." title="No installed apps" />;
   }
   return (
     <section className="bs-app-grid-panel">
       <div className="bs-app-grid-panel__header">
         <p className="bs-eyebrow">App Registry</p>
-        <h2 className="bs-app-grid-panel__title">App installate</h2>
-        <p className="bs-app-grid-panel__description">Le app abilitate nel workspace corrente compaiono qui e vengono aperte tramite mount.</p>
+        <h2 className="bs-app-grid-panel__title">Installed apps</h2>
+        <p className="bs-app-grid-panel__description">Apps enabled in the current workspace appear here and open through their mount.</p>
       </div>
       <div className="bs-app-grid">
         {visibleApps.map((app) => (
@@ -47,7 +47,7 @@ export function AppsPanel({
             </div>
             <div className="bs-app-card__actions">
               <Button onClick={() => onOpenApp(app.app_id)} size="sm" variant="primary">
-                Apri
+                Open
               </Button>
             </div>
           </article>

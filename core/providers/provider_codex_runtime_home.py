@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 import os
 from pathlib import Path
 import shutil
+import subprocess
 from typing import TYPE_CHECKING
 
 from core.providers.models import ProviderCapabilitySet, ProviderDefinition, ProviderModelOption, ProviderReasoningOption
@@ -177,6 +178,7 @@ class CodexRuntimeHomeMixin:
         runtime_bin = Path(session.runtime_root) / "bin"
         runtime_bin.mkdir(parents=True, exist_ok=True)
         _write_workspace_maverick_wrapper(runtime_bin / "maverick")
+        self._install_runtime_shell_if_present(runtime_bin=runtime_bin)
         sandbox_launcher = runtime_bin / "workspace_sandbox.py"
         shutil.copy2(Path(__file__).resolve().parents[1] / "runtime" / "workspace_sandbox.py", sandbox_launcher)
         sandbox_launcher.chmod(0o755)
@@ -190,6 +192,15 @@ class CodexRuntimeHomeMixin:
 
 
 
+    def _install_runtime_shell_if_present(self, *, runtime_bin: Path) -> None:
+        self._install_runtime_tool_if_present(
+            runtime_bin=runtime_bin,
+            source=self._static_busybox_binary(),
+            tool_name="sh",
+        )
+
+
+
     def _install_runtime_tool_if_present(self, *, runtime_bin: Path, source: Path | None, tool_name: str) -> None:
         destination = runtime_bin / tool_name
         self._reset_path(destination)
@@ -197,6 +208,29 @@ class CodexRuntimeHomeMixin:
             return
         shutil.copy2(source, destination)
         destination.chmod(destination.stat().st_mode | 0o111)
+
+
+
+    def _static_busybox_binary(self) -> Path | None:
+        resolved = shutil.which("busybox")
+        if not resolved:
+            return None
+        candidate = Path(resolved).resolve(strict=False)
+        if not candidate.is_file():
+            return None
+        try:
+            output = subprocess.run(
+                ["file", str(candidate)],
+                text=True,
+                capture_output=True,
+                check=False,
+                timeout=2,
+            ).stdout
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if "statically linked" not in output:
+            return None
+        return candidate
 
 
 

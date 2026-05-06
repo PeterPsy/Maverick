@@ -38,11 +38,11 @@ export function AttachmentMenu({
       />
       <div ref={attachmentMenuRef} className="chat-ui-dropdown chatapp-attachment-picker">
         <button
-          aria-label="Aggiungi allegati"
+          aria-label="Add attachments"
           className="chat-ui-dropdown__trigger chatapp-attachment-picker__trigger"
           disabled={disabled || !canAddMoreAttachments(attachments.length)}
           onClick={() => fileAttachmentInputRef.current?.click()}
-          title={onCapturePageArea ? "Aggiungi file, immagini o usa trascina e rilascia" : "Aggiungi file o immagini"}
+          title={onCapturePageArea ? "Add files, images, or use drag and drop" : "Add files or images"}
           type="button"
         >
           <span aria-hidden="true" className="material-symbols-rounded">
@@ -51,11 +51,11 @@ export function AttachmentMenu({
         </button>
         {onCapturePageArea ? (
           <button
-            aria-label="Cattura area pagina"
+            aria-label="Capture page area"
             className="chat-ui-dropdown__trigger chatapp-attachment-picker__trigger chatapp-attachment-picker__capture-trigger"
             disabled={disabled}
             onClick={onCapturePageArea}
-            title="Cattura area pagina"
+            title="Capture page area"
             type="button"
           >
             <span aria-hidden="true" className="material-symbols-rounded">

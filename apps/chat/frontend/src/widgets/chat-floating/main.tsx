@@ -400,7 +400,7 @@ function ChatFloatingWindow({
     <>
       <button
         aria-busy={isActiveThreadBusy || undefined}
-        aria-label={isActiveThreadBusy ? "Apri chat in corso" : "Apri chat"}
+        aria-label={isActiveThreadBusy ? "Open active chat" : "Open chat"}
         className={`chat-floating-widget-launcher ${windowItem.isCollapsed ? "" : "is-hidden"} ${isActiveThreadBusy ? "is-busy" : ""}`}
         onClick={() => onCollapseChange(windowItem.id, false)}
         type="button"
@@ -417,7 +417,7 @@ function ChatFloatingWindow({
               <button
                 aria-expanded={isThreadMenuOpen}
                 aria-haspopup="menu"
-                aria-label="Scegli chat"
+                aria-label="Choose chat"
                 className={`chat-floating-thread-menu__trigger ${isActiveThreadBusy ? "is-busy" : ""}`}
                 disabled={threads.length === 0}
                 onClick={() => setIsThreadMenuOpen((current) => !current)}
@@ -443,7 +443,7 @@ function ChatFloatingWindow({
                         {isBusy ? <BusyChatGlow /> : null}
                         {isEditing ? (
                           <input
-                            aria-label="Rinomina chat"
+                            aria-label="Rename chat"
                             autoFocus
                             className="chat-floating-thread-menu__rename-input"
                             onChange={(event) => setEditingThreadTitle(event.target.value)}
@@ -469,7 +469,7 @@ function ChatFloatingWindow({
                         )}
                         <div className="chat-floating-thread-menu__item-actions">
                           <button
-                            aria-label={`Rinomina ${thread.title || "chat"}`}
+                            aria-label={`Rename ${thread.title || "chat"}`}
                             className="chat-floating-thread-menu__icon-action"
                             onClick={(event) => {
                               event.stopPropagation();
@@ -482,7 +482,7 @@ function ChatFloatingWindow({
                             </span>
                           </button>
                           <button
-                            aria-label={`Cancella ${thread.title || "chat"}`}
+                            aria-label={`Delete ${thread.title || "chat"}`}
                             className="chat-floating-thread-menu__icon-action is-danger"
                             onClick={(event) => {
                               event.stopPropagation();
@@ -504,7 +504,7 @@ function ChatFloatingWindow({
           </div>
           <div className="chat-floating-widget-shell__actions">
             <button
-              aria-label="Nuova chat"
+              aria-label="New chat"
               className="chat-floating-widget-shell__button"
               onClick={() => onCreateDraftChat(windowItem.id, activeThread?.project_id || null)}
               type="button"
@@ -513,13 +513,13 @@ function ChatFloatingWindow({
                 add
               </span>
             </button>
-            <button aria-label="Collassa chat" className="chat-floating-widget-shell__button" onClick={() => onCollapseChange(windowItem.id, true)} type="button">
+            <button aria-label="Collapse chat" className="chat-floating-widget-shell__button" onClick={() => onCollapseChange(windowItem.id, true)} type="button">
               <span aria-hidden="true" className="material-symbols-rounded">
                 keyboard_arrow_down
               </span>
             </button>
             <button
-              aria-label="Chiudi chat"
+              aria-label="Close chat"
               className="chat-floating-widget-shell__button chat-floating-widget-shell__button--danger chat-floating-widget-shell__button--close"
               onClick={() => onClose(windowItem.id)}
               type="button"

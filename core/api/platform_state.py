@@ -59,6 +59,7 @@ def bootstrap_platform_state(
     start_path: Path | None = None,
     now: datetime | None = None,
     recover_backend_restart: bool = False,
+    apply_bootstrap_admin_password: bool = True,
 ) -> PlatformState:
     """Build in-memory platform state and install first-boot built-in apps."""
     repository_root = discover_repository_root(start_path=start_path)
@@ -114,6 +115,8 @@ def bootstrap_platform_state(
         now=now,
     )
     admin_username, admin_password = _bootstrap_admin_credentials()
+    if not apply_bootstrap_admin_password:
+        admin_password = None
     bootstrap_default_admin(
         identity_store,
         workspace_store,

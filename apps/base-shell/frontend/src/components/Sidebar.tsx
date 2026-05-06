@@ -189,10 +189,10 @@ export function Sidebar({
     >
       {isEdgeCollapsed ? (
         <button
-          aria-label="Apri menu laterale"
+          aria-label="Open side menu"
           className="bs-sidebar__edge-tab"
           onClick={onOpenSidebar}
-          title="Apri menu laterale"
+          title="Open side menu"
           type="button"
         >
           <span aria-hidden="true" className="material-symbols-rounded">dock_to_right</span>
@@ -276,7 +276,7 @@ export function Sidebar({
               </div>
             ) : null}
             {!isPinned && !isMobileLayout ? (
-              <button aria-label="Chiudi pannello laterale" className="bs-panel-minimize" onClick={onClose} title="Chiudi pannello laterale" type="button">
+              <button aria-label="Close side panel" className="bs-panel-minimize" onClick={onClose} title="Close side panel" type="button">
                 <span aria-hidden="true" className="material-symbols-rounded">chevron_left</span>
               </button>
             ) : null}

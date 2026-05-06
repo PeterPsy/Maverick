@@ -22,7 +22,7 @@ export function WorkspaceSwitcher({
   }
 
   async function handleCreate() {
-    const name = window.prompt("Nome del nuovo workspace");
+    const name = window.prompt("New workspace name");
     if (!name?.trim()) {
       return;
     }
@@ -58,7 +58,7 @@ export function WorkspaceSwitcher({
           <span aria-hidden="true" className="material-symbols-rounded bs-workspace-switcher__chevron">expand_more</span>
         </div>
         {canCreateWorkspace ? (
-          <button aria-label="Crea workspace" className="bs-workspace-switcher__create" onClick={handleCreate} type="button">
+          <button aria-label="Create workspace" className="bs-workspace-switcher__create" onClick={handleCreate} type="button">
             <span aria-hidden="true" className="material-symbols-rounded">add</span>
           </button>
         ) : null}

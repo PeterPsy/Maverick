@@ -57,14 +57,14 @@ function ChatSidebarFooterWidget() {
   return (
     <main className="bs-chat-sidebar-footer-widget">
       <button
-        aria-label="Nuova chat"
+        aria-label="New chat"
         className="bs-chat-sidebar-footer__new-chat"
         disabled={isInitialLoading}
         onClick={createChatInCurrentContext}
         type="button"
       >
         <span aria-hidden="true" className="bs-chat-sidebar-footer__plus" />
-        <span>Nuova chat</span>
+        <span>New chat</span>
       </button>
     </main>
   );

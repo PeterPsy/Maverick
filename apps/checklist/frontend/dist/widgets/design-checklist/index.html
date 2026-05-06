@@ -422,7 +422,7 @@
   </head>
   <body>
     <div class="widget-shell">
-      <main id="root" class="widget-error">Carico checklist...</main>
+      <main id="root" class="widget-error">Loading checklist...</main>
     </div>
     <script>
       const hash = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash;
@@ -562,7 +562,7 @@
                 debugLog("save.success", { checklistId, version, pendingFocus });
                 normalizeChecklistRecord(nextChecklist);
                 localVersion = 0;
-                render("Checklist salvata.");
+                render("Checklist saved.");
                 return;
               }
               const next = result.chat_render && result.chat_render.payload ? result.chat_render.payload : null;
@@ -570,7 +570,7 @@
                 debugLog("save.success", { checklistId, version, pendingFocus });
                 normalizePayload({ memory: { checklist_id: checklistId }, payload: next });
                 localVersion = 0;
-                render("Checklist salvata.");
+                render("Checklist saved.");
               }
             }
           })
@@ -607,7 +607,7 @@
         });
         localVersion += 1;
         pendingFocus = focusTarget;
-        render("Checklist salvata.");
+        render("Checklist saved.");
         queueSave();
       };
 
@@ -639,7 +639,7 @@
               </div>
               <div class="checklist-checklist-card__header-actions">
                 <span class="checklist-checklist-card__count">${checked}/${tasks.length}</span>
-                <button aria-label="Nuova sezione" class="checklist-checklist-icon-action" data-add-section="true" type="button" ${checklistId ? "" : "disabled"}>
+                <button aria-label="New section" class="checklist-checklist-icon-action" data-add-section="true" type="button" ${checklistId ? "" : "disabled"}>
                   <svg fill="none" viewBox="0 0 24 24">
                     <path d="M12 5v14M5 12h14" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
                   </svg>
@@ -651,7 +651,7 @@
                 ${state.sections.map((section) => `
                   <section class="checklist-checklist-section">
                     <div class="checklist-checklist-section__header">
-                      <input class="checklist-editor-input checklist-checklist-section__title checklist-checklist-section__input" data-field="section-title" data-section="${esc(section.id)}" placeholder="Nuova sezione" value="${esc(section.title || "")}" ${checklistId ? "" : "disabled"}>
+                      <input class="checklist-editor-input checklist-checklist-section__title checklist-checklist-section__input" data-field="section-title" data-section="${esc(section.id)}" placeholder="New section" value="${esc(section.title || "")}" ${checklistId ? "" : "disabled"}>
                     </div>
                     <div class="checklist-checklist-card__rows">
                       ${(section.tasks || []).map((task) => `
@@ -664,9 +664,9 @@
                             data-task="${esc(task.id)}"
                             ${checklistId ? "" : "disabled"}>
                           <span class="checklist-checklist-row__text">
-                            <input class="checklist-editor-input checklist-checklist-row__input" data-field="task-title" data-section="${esc(section.id)}" data-task="${esc(task.id)}" placeholder="Nuovo task" value="${esc(task.title)}" ${checklistId ? "" : "disabled"}>
+                            <input class="checklist-editor-input checklist-checklist-row__input" data-field="task-title" data-section="${esc(section.id)}" data-task="${esc(task.id)}" placeholder="New task" value="${esc(task.title)}" ${checklistId ? "" : "disabled"}>
                           </span>
-                          <button aria-label="Elimina task" class="checklist-checklist-row__delete" data-remove-task="true" data-section="${esc(section.id)}" data-task="${esc(task.id)}" type="button" ${checklistId ? "" : "disabled"}>×</button>
+                          <button aria-label="Delete task" class="checklist-checklist-row__delete" data-remove-task="true" data-section="${esc(section.id)}" data-task="${esc(task.id)}" type="button" ${checklistId ? "" : "disabled"}>×</button>
                         </div>
                       `).join("")}
                     </div>
@@ -675,8 +675,8 @@
               </div>
             </div>
             <div class="checklist-checklist-card__footer">
-              <input class="checklist-editor-input checklist-checklist-card__hint checklist-checklist-card__hint-input" data-field="summary" placeholder="Aggiungi un sommario" value="${esc(state.summary || "")}" ${checklistId ? "" : "disabled"}>
-              <p class="checklist-checklist-card__hint">${esc(message || (checklistId ? "Saved in Checklist." : "Anteprima checklist."))}</p>
+              <input class="checklist-editor-input checklist-checklist-card__hint checklist-checklist-card__hint-input" data-field="summary" placeholder="Add a summary" value="${esc(state.summary || "")}" ${checklistId ? "" : "disabled"}>
+              <p class="checklist-checklist-card__hint">${esc(message || (checklistId ? "Saved in Checklist." : "Checklist preview."))}</p>
             </div>
           </article>`;
         applyPendingFocus();
@@ -743,7 +743,7 @@
           const result = await backend({ action: "read", id: checklistId });
           normalizeChecklistRecord(result.checklist || {});
           debugLog("refresh.success", { checklistId, mode: "read" });
-          render("Checklist aggiornata.");
+          render("Checklist updated.");
           return;
         }
         const context = await loadContext();
@@ -752,7 +752,7 @@
           const result = await backend({ action: "read", id: checklistId });
           normalizeChecklistRecord(result.checklist || {});
           debugLog("refresh.success", { checklistId, mode: "context-read" });
-          render("Checklist aggiornata.");
+          render("Checklist updated.");
           return;
         }
         debugLog("refresh.success", { checklistId, mode: "context" });
@@ -937,7 +937,7 @@
           section.tasks = tasks;
           localVersion += 1;
           pendingFocus = { field: "task-title", sectionId: section.id, taskId: nextTask.id, selectAll: true, rendersRemaining: 6 };
-          render("Checklist salvata.");
+          render("Checklist saved.");
           queueSave();
           return;
         }
@@ -951,7 +951,7 @@
           section.tasks = [...(section.tasks || []), nextTask];
           localVersion += 1;
           pendingFocus = { field: "task-title", sectionId: section.id, taskId: nextTask.id, selectAll: true, rendersRemaining: 6 };
-          render("Checklist salvata.");
+          render("Checklist saved.");
           queueSave();
         }
       });
@@ -980,7 +980,7 @@
             : section
         );
 
-        render("Salvataggio...");
+        render("Saving...");
         try {
           const result = await backend({
             action: "update",
@@ -994,7 +994,7 @@
           if (next) {
             normalizePayload({ memory: { checklist_id: checklistId }, payload: next });
           }
-          render("Checklist salvata.");
+          render("Checklist saved.");
         } catch (error) {
           input.checked = !input.checked;
           render(error.message);
@@ -1009,13 +1009,13 @@
             ...(state.sections || []),
             {
               id: sectionId,
-              title: "Nuova sezione",
+              title: "New section",
               tasks: [{ id: nextTempId("task"), title: "", checked: false }]
             }
           ];
           localVersion += 1;
           pendingFocus = { field: "section-title", sectionId, selectAll: true };
-          render("Checklist salvata.");
+          render("Checklist saved.");
           queueSave();
           return;
         }

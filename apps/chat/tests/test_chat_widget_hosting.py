@@ -83,10 +83,11 @@ class ChatWidgetHostingTests(unittest.TestCase):
         sidebar_styles = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/styles.css").read_text()
 
         self.assertIn('body: JSON.stringify({ reason: "chat_thread_deleted" })', client_source)
-        self.assertIn("async function deleteProjectThreads(projectId: string, projectThreads: ChatThread[])", sidebar_source)
+        self.assertIn("async function deleteProjectThreads(sectionId: string, projectThreads: ChatThread[])", sidebar_source)
         self.assertIn("const payload = await deleteThread(thread.thread_id);", sidebar_source)
         self.assertIn("setProjectDeleteProgress({ deleted: index + 1, total: projectThreads.length });", sidebar_source)
         self.assertIn('aria-label={`Elimina tutte le chat in ${section.title}`}', sidebar_source)
+        self.assertIn("void deleteProjectThreads(section.id, section.items);", sidebar_source)
         self.assertIn("delete_sweep", sidebar_source)
         self.assertIn("bs-chat-folder__delete-progress", sidebar_source)
         self.assertIn(".bs-chat-folder__delete-progress-track", sidebar_styles)

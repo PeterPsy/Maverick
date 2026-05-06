@@ -68,7 +68,7 @@ function ChatSidebarWidget() {
   const [expandedThreadId, setExpandedThreadId] = useState<string | null>(null);
   const [expandedThreadTitle, setExpandedThreadTitle] = useState("");
   const [editingProject, setEditingProject] = useState<{ projectId: string; name: string } | null>(null);
-  const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
+  const [deletingSectionId, setDeletingSectionId] = useState<string | null>(null);
   const [projectDeleteProgress, setProjectDeleteProgress] = useState<{ deleted: number; total: number } | null>(null);
   const [isShellMobileLayout, setIsShellMobileLayout] = useState(isMobileLayoutViewport);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
@@ -284,11 +284,11 @@ function ChatSidebarWidget() {
     setEditingProject(null);
   }
 
-  async function deleteProjectThreads(projectId: string, projectThreads: ChatThread[]) {
-    if (!projectThreads.length || deletingProjectId) {
+  async function deleteProjectThreads(sectionId: string, projectThreads: ChatThread[]) {
+    if (!projectThreads.length || deletingSectionId) {
       return;
     }
-    setDeletingProjectId(projectId);
+    setDeletingSectionId(sectionId);
     setProjectDeleteProgress({ deleted: 0, total: projectThreads.length });
     setExpandedThreadId(null);
     setExpandedThreadTitle("");
@@ -305,7 +305,7 @@ function ChatSidebarWidget() {
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : "Unable to delete project chats.");
     } finally {
-      setDeletingProjectId(null);
+      setDeletingSectionId(null);
       setProjectDeleteProgress(null);
     }
   }
@@ -374,8 +374,8 @@ function ChatSidebarWidget() {
           sections.map((section) => {
             const isCollapsed = collapsedSections[section.id] ?? false;
             const isEditingProject = editingProject?.projectId === section.projectId;
-            const isDeletingProject = deletingProjectId === section.projectId;
-            const isDeletingAnyProject = deletingProjectId !== null;
+            const isDeletingProject = deletingSectionId === section.id;
+            const isDeletingAnyProject = deletingSectionId !== null;
             const deleteProgress = isDeletingProject ? projectDeleteProgress : null;
             const editingName = isEditingProject ? editingProject.name : section.title;
             return (
@@ -440,15 +440,13 @@ function ChatSidebarWidget() {
                         <span aria-hidden="true" className="material-symbols-rounded">{isEditingProject ? "delete" : "add"}</span>
                       </button>
                     ) : null}
-                    {section.canManage && !isEditingProject ? (
+                    {!isEditingProject ? (
                       <button
                         aria-label={`Elimina tutte le chat in ${section.title}`}
                         className="bs-chat-folder__action-button is-danger"
                         disabled={isPending || isDeletingAnyProject || section.items.length === 0}
                         onClick={() => {
-                          if (section.projectId) {
-                            void deleteProjectThreads(section.projectId, section.items);
-                          }
+                          void deleteProjectThreads(section.id, section.items);
                         }}
                         title="Elimina chat del progetto"
                         type="button"

@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
-from core.api.app_mounts import serve_frontend
+from core.api.app_mounts import DEFAULT_APP_BACKEND_TIMEOUT_SECONDS, app_backend_timeout_seconds, serve_frontend
 
 
 class AppMountsTestCase(unittest.TestCase):
@@ -31,6 +32,17 @@ class AppMountsTestCase(unittest.TestCase):
         self.assertEqual(headers["Cache-Control"], "public, max-age=31536000, immutable")
         self.assertEqual(headers["Access-Control-Allow-Origin"], "*")
         self.assertEqual(headers["Cross-Origin-Resource-Policy"], "cross-origin")
+
+    def test_app_backend_timeout_default_allows_long_running_app_operations(self) -> None:
+        with patch.dict("os.environ", {}, clear=True):
+            self.assertEqual(app_backend_timeout_seconds(), DEFAULT_APP_BACKEND_TIMEOUT_SECONDS)
+            self.assertGreaterEqual(app_backend_timeout_seconds(), 300)
+
+    def test_app_backend_timeout_env_override_has_30_second_floor(self) -> None:
+        with patch.dict("os.environ", {"MAVERICK_APP_BACKEND_TIMEOUT_SECONDS": "5"}):
+            self.assertEqual(app_backend_timeout_seconds(), 30)
+        with patch.dict("os.environ", {"MAVERICK_APP_BACKEND_TIMEOUT_SECONDS": "900"}):
+            self.assertEqual(app_backend_timeout_seconds(), 900)
 
 
 def _serve(root: Path, subpath: str, *, cross_origin: bool = False) -> tuple[str, dict[str, str]]:

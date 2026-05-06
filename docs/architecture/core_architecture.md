@@ -1147,7 +1147,7 @@ The queued-turn event may also carry runtime input attachment metadata.
 
 Attachment metadata is not file storage.
 
-The core file upload surface persists file bytes under workspace storage and returns stable metadata. Uploads and JSON HTTP/ASGI request bodies must be bounded before decoding or dispatching so malformed, non-object, or oversized bodies return stable 4xx errors instead of becoming unbounded memory pressure or generic 500s. WSGI and ASGI hosts must resolve the body-size limit through the same configuration path. Runtime turns should carry references such as `file_id`, `relative_path`, content type, size, and checksum, not inline file bytes.
+The core file upload surface persists file bytes under workspace storage and returns stable metadata. Uploads and JSON HTTP/ASGI request bodies must be bounded before decoding or dispatching so malformed, non-object, or oversized bodies return stable 4xx errors instead of becoming unbounded memory pressure or generic 500s. WSGI and ASGI hosts must resolve the body-size limit through the same configuration path, and the default body ceiling must account for the workspace upload API's decoded-file limit plus base64/JSON expansion. Runtime turns should carry references such as `file_id`, `relative_path`, content type, size, and checksum, not inline file bytes.
 
 Before dispatching a turn to a text-oriented provider backend, the runtime should materialize uploaded attachment references into the provider input as workspace-relative links and local workspace paths. The queued runtime event should still preserve the original user text and structured attachment metadata for transcript rendering.
 

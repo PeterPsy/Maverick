@@ -4,11 +4,14 @@ from io import BytesIO
 from unittest.mock import patch
 import unittest
 
-from core.api.http import HttpRequestError, enforce_same_origin_for_unsafe_request, read_json_body, status_line
+from core.api.http import DEFAULT_MAX_JSON_BODY_BYTES, HttpRequestError, enforce_same_origin_for_unsafe_request, read_json_body, status_line
 from core.api.session_api import clear_session_cookie_header, session_cookie_header
 
 
 class HttpRequestBodyTestCase(unittest.TestCase):
+    def test_default_body_limit_allows_base64_expanded_workspace_uploads(self) -> None:
+        self.assertGreaterEqual(DEFAULT_MAX_JSON_BODY_BYTES, 40 * 1024 * 1024)
+
     def test_read_json_body_rejects_declared_body_over_limit(self) -> None:
         environ = {
             "CONTENT_LENGTH": "11",

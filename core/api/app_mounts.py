@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import mimetypes
+import os
 from pathlib import Path
 import re
 from typing import Any
@@ -29,6 +30,7 @@ from core.identity.models import UserRecord
 
 
 logger = logging.getLogger(__name__)
+DEFAULT_APP_BACKEND_TIMEOUT_SECONDS = 300
 
 
 _PUBLIC_STATIC_EXTENSIONS = {
@@ -93,6 +95,17 @@ def is_public_app_static_asset(subpath: str) -> bool:
     normalized = subpath.lstrip("/")
     suffix = Path(normalized).suffix.lower()
     return normalized.startswith("assets/") or (bool(suffix) and suffix in _PUBLIC_STATIC_EXTENSIONS)
+
+
+def app_backend_timeout_seconds() -> int:
+    raw = os.environ.get("MAVERICK_APP_BACKEND_TIMEOUT_SECONDS", "").strip()
+    if not raw:
+        return DEFAULT_APP_BACKEND_TIMEOUT_SECONDS
+    try:
+        value = int(raw)
+    except ValueError:
+        return DEFAULT_APP_BACKEND_TIMEOUT_SECONDS
+    return max(30, value)
 
 
 def handle_root_shell(
@@ -313,6 +326,7 @@ def handle_app_backend(
                 ),
             },
             cwd=source_root,
+            timeout_seconds=app_backend_timeout_seconds(),
             shutdown_controller=shutdown_controller,
         )
     except Exception as error:

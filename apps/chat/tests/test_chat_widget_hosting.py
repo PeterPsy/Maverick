@@ -77,6 +77,21 @@ class ChatWidgetHostingTests(unittest.TestCase):
         self.assertIn(".bs-chat-folder.is-project-editing .bs-folder-menu__trigger", sidebar_styles)
         self.assertNotIn("panelPositionFromTrigger", sidebar_source)
 
+    def test_chat_sidebar_deletes_project_chats_through_thread_cleanup(self) -> None:
+        client_source = (REPO_ROOT / "apps/chat/frontend/src/api/client.ts").read_text()
+        sidebar_source = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/main.tsx").read_text()
+        sidebar_styles = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/styles.css").read_text()
+
+        self.assertIn('body: JSON.stringify({ reason: "chat_thread_deleted" })', client_source)
+        self.assertIn("async function deleteProjectThreads(projectId: string, projectThreads: ChatThread[])", sidebar_source)
+        self.assertIn("const payload = await deleteThread(thread.thread_id);", sidebar_source)
+        self.assertIn("setProjectDeleteProgress({ deleted: index + 1, total: projectThreads.length });", sidebar_source)
+        self.assertIn('aria-label={`Elimina tutte le chat in ${section.title}`}', sidebar_source)
+        self.assertIn("delete_sweep", sidebar_source)
+        self.assertIn("bs-chat-folder__delete-progress", sidebar_source)
+        self.assertIn(".bs-chat-folder__delete-progress-track", sidebar_styles)
+        self.assertIn("@keyframes bs-chat-project-delete-sheen", sidebar_styles)
+
     def test_chat_structured_messages_use_generic_widget_host(self) -> None:
         structured_source = (REPO_ROOT / "apps/chat/frontend/src/components/StructuredContentMessage.tsx").read_text()
         host_source = (REPO_ROOT / "apps/chat/frontend/src/components/WidgetHostFrame.tsx").read_text()

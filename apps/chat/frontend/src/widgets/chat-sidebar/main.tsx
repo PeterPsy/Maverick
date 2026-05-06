@@ -68,6 +68,8 @@ function ChatSidebarWidget() {
   const [expandedThreadId, setExpandedThreadId] = useState<string | null>(null);
   const [expandedThreadTitle, setExpandedThreadTitle] = useState("");
   const [editingProject, setEditingProject] = useState<{ projectId: string; name: string } | null>(null);
+  const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
+  const [projectDeleteProgress, setProjectDeleteProgress] = useState<{ deleted: number; total: number } | null>(null);
   const [isShellMobileLayout, setIsShellMobileLayout] = useState(isMobileLayoutViewport);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isPending, setIsPending] = useState(false);
@@ -282,6 +284,32 @@ function ChatSidebarWidget() {
     setEditingProject(null);
   }
 
+  async function deleteProjectThreads(projectId: string, projectThreads: ChatThread[]) {
+    if (!projectThreads.length || deletingProjectId) {
+      return;
+    }
+    setDeletingProjectId(projectId);
+    setProjectDeleteProgress({ deleted: 0, total: projectThreads.length });
+    setExpandedThreadId(null);
+    setExpandedThreadTitle("");
+    setEditingProject(null);
+    setError(null);
+    try {
+      for (const [index, thread] of projectThreads.entries()) {
+        const payload = await deleteThread(thread.thread_id);
+        updateFromSidebarPayload(payload, setProjects);
+        setThreads(payload.threads || []);
+        setActiveThreadId((current) => (current === thread.thread_id ? null : current));
+        setProjectDeleteProgress({ deleted: index + 1, total: projectThreads.length });
+      }
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Unable to delete project chats.");
+    } finally {
+      setDeletingProjectId(null);
+      setProjectDeleteProgress(null);
+    }
+  }
+
   function startProjectEdit(project: ChatProject) {
     setExpandedThreadId(null);
     setExpandedThreadTitle("");
@@ -346,6 +374,9 @@ function ChatSidebarWidget() {
           sections.map((section) => {
             const isCollapsed = collapsedSections[section.id] ?? false;
             const isEditingProject = editingProject?.projectId === section.projectId;
+            const isDeletingProject = deletingProjectId === section.projectId;
+            const isDeletingAnyProject = deletingProjectId !== null;
+            const deleteProgress = isDeletingProject ? projectDeleteProgress : null;
             const editingName = isEditingProject ? editingProject.name : section.title;
             return (
               <section className={`bs-chat-folder ${isCollapsed ? "is-collapsed" : ""} ${isEditingProject ? "is-project-editing" : ""}`} key={section.id}>
@@ -395,7 +426,7 @@ function ChatSidebarWidget() {
                       <button
                         aria-label={isEditingProject ? `Elimina progetto ${section.title}` : `Nuova chat in ${section.title}`}
                         className={`bs-chat-folder__action-button ${isEditingProject ? "is-danger" : ""}`}
-                        disabled={isPending}
+                        disabled={isPending || isDeletingAnyProject}
                         onClick={() => {
                           if (isEditingProject && section.projectId) {
                             void removeEditingProject(section.projectId);
@@ -409,11 +440,27 @@ function ChatSidebarWidget() {
                         <span aria-hidden="true" className="material-symbols-rounded">{isEditingProject ? "delete" : "add"}</span>
                       </button>
                     ) : null}
+                    {section.canManage && !isEditingProject ? (
+                      <button
+                        aria-label={`Elimina tutte le chat in ${section.title}`}
+                        className="bs-chat-folder__action-button is-danger"
+                        disabled={isPending || isDeletingAnyProject || section.items.length === 0}
+                        onClick={() => {
+                          if (section.projectId) {
+                            void deleteProjectThreads(section.projectId, section.items);
+                          }
+                        }}
+                        title="Elimina chat del progetto"
+                        type="button"
+                      >
+                        <span aria-hidden="true" className="material-symbols-rounded">delete_sweep</span>
+                      </button>
+                    ) : null}
                     {!section.canManage ? (
                       <button
                         aria-label="Nuovo progetto"
                         className="bs-chat-folder__action-button"
-                        disabled={isPending}
+                        disabled={isPending || isDeletingAnyProject}
                         onClick={() => addProject()}
                         title="Nuovo progetto"
                         type="button"
@@ -425,7 +472,7 @@ function ChatSidebarWidget() {
                       <button
                         aria-label={isEditingProject ? `Salva modifiche a ${section.title}` : `Modifica progetto ${section.title}`}
                         className="bs-instance-menu__trigger bs-folder-menu__trigger"
-                        disabled={isPending || (isEditingProject && !editingName.trim())}
+                        disabled={isPending || isDeletingAnyProject || (isEditingProject && !editingName.trim())}
                         onClick={() => {
                           const project = projects.find((item) => item.project_id === section.projectId);
                           if (!project) {
@@ -445,6 +492,20 @@ function ChatSidebarWidget() {
                     ) : null}
                   </div>
                 </div>
+                {deleteProgress ? (
+                  <div className="bs-chat-folder__delete-progress" role="status" aria-live="polite">
+                    <div className="bs-chat-folder__delete-progress-copy">
+                      <span>Eliminazione chat</span>
+                      <strong>{deleteProgress.deleted}/{deleteProgress.total}</strong>
+                    </div>
+                    <div className="bs-chat-folder__delete-progress-track">
+                      <span
+                        className="bs-chat-folder__delete-progress-bar"
+                        style={{ width: `${Math.round((deleteProgress.deleted / Math.max(1, deleteProgress.total)) * 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                ) : null}
                 {!isCollapsed ? (
                   <div className="bs-chat-folder__dropzone">
                     {section.items.length ? (

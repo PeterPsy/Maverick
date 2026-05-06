@@ -286,6 +286,11 @@ button {
   color: var(--chat-sidebar-icon-color);
 }
 
+.bs-chat-folder__action-button.is-danger:hover,
+.bs-chat-folder__action-button.is-danger:focus-visible {
+  background: rgba(255, 83, 105, 0.14);
+}
+
 .bs-chat-folder__action-button .material-symbols-rounded {
   width: 0.95rem;
   height: 0.95rem;
@@ -383,6 +388,82 @@ button {
   color: var(--maverick-text-muted);
   font-size: 0.7rem;
   line-height: 1.5;
+}
+
+.bs-chat-folder__delete-progress {
+  display: grid;
+  gap: 0.42rem;
+  margin: 0.16rem 0.2rem 0.22rem;
+  padding: 0.52rem 0.58rem;
+  border: 1px solid var(--chat-sidebar-soft-border);
+  border-radius: var(--chat-sidebar-control-radius);
+  background: rgba(12, 12, 14, 0.68);
+  box-shadow: var(--chat-sidebar-inner-edge);
+  animation: bs-chat-project-delete-enter 160ms ease-out both;
+}
+
+.bs-chat-folder__delete-progress-copy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem;
+  color: var(--maverick-text-muted);
+  font-size: 0.66rem;
+  font-weight: 760;
+  line-height: 1.2;
+}
+
+.bs-chat-folder__delete-progress-copy strong {
+  flex: none;
+  color: var(--maverick-text);
+  font-size: 0.64rem;
+  font-weight: 820;
+}
+
+.bs-chat-folder__delete-progress-track {
+  position: relative;
+  height: 0.42rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.075);
+  box-shadow: var(--chat-sidebar-inner-edge);
+}
+
+.bs-chat-folder__delete-progress-bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  min-width: 0.45rem;
+  overflow: hidden;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.56), rgba(255, 255, 255, 0.92));
+  transition: width 180ms ease;
+}
+
+.bs-chat-folder__delete-progress-bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(12, 12, 14, 0.32), transparent);
+  transform: translateX(-100%);
+  animation: bs-chat-project-delete-sheen 900ms ease-in-out infinite;
+}
+
+@keyframes bs-chat-project-delete-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-0.22rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bs-chat-project-delete-sheen {
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 .bs-chat-folder__dropzone {

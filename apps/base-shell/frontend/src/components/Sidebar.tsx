@@ -60,6 +60,7 @@ export function Sidebar({
   const activeApp = activeAppId ? visibleAppsById.get(activeAppId) || null : null;
   const isInitialLoading = isLoading && railApps.length === 0;
   const isDetailLayerOpen = isOpen || isPinned;
+  const isEdgeCollapsed = mode === "rail" && !isDetailLayerOpen && !isMobileLayout;
 
   function handlePointerEnter() {
     if (!isPinned) {
@@ -174,7 +175,7 @@ export function Sidebar({
 
   return (
     <aside
-      className={`bs-sidebar bs-sidebar--${mode} ${isDetailLayerOpen ? "is-open" : "is-closed"}`}
+      className={`bs-sidebar bs-sidebar--${mode} ${isDetailLayerOpen ? "is-open" : "is-closed"} ${isEdgeCollapsed ? "is-edge-collapsed" : ""}`}
       aria-label="Workspace navigation"
       onBlur={handleBlur}
       onFocus={handleFocus}
@@ -186,6 +187,17 @@ export function Sidebar({
       onTouchStart={handleTouchStart}
       style={railMetrics}
     >
+      {isEdgeCollapsed ? (
+        <button
+          aria-label="Apri menu laterale"
+          className="bs-sidebar__edge-tab"
+          onClick={onOpenSidebar}
+          title="Apri menu laterale"
+          type="button"
+        >
+          <span aria-hidden="true" className="material-symbols-rounded">dock_to_right</span>
+        </button>
+      ) : null}
       <div className="bs-sidebar__rail" aria-label="Applications">
         {renderPinnedAppRail()}
       </div>

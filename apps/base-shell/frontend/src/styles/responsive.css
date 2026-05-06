@@ -51,6 +51,10 @@
     display: none;
   }
 
+  .bs-sidebar__edge-tab {
+    display: none;
+  }
+
   .bs-sidebar__details {
     --bs-sidebar-top-fade-height: calc(env(safe-area-inset-top, 0px) + 8.2rem);
     --bs-sidebar-bottom-fade-height: calc(env(safe-area-inset-bottom, 0px) + 4.2rem);

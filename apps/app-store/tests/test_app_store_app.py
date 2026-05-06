@@ -397,6 +397,7 @@ class AppStoreAppTestCase(unittest.TestCase):
         app_root = Path(__file__).resolve().parents[1]
         frontend_js = (app_root / "frontend" / "dist" / "assets" / "main.js").read_text(encoding="utf-8")
         frontend_html = (app_root / "frontend" / "dist" / "index.html").read_text(encoding="utf-8")
+        frontend_css = (app_root / "frontend" / "dist" / "assets" / "main.css").read_text(encoding="utf-8")
 
         self.assertIn("Promote to server app", frontend_js)
         self.assertIn("Request public publication", frontend_js)
@@ -413,6 +414,11 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertNotIn('data-tab="public"', frontend_html)
         self.assertIn('<div class="app-modal__body"', frontend_html)
         self.assertIn("/api/app-store/install-server", frontend_js)
+        self.assertIn("color-scheme: dark", frontend_css)
+        self.assertIn("--maverick-glass-surface", frontend_css)
+        self.assertIn(".feature-card::before", frontend_css)
+        self.assertIn("backdrop-filter: blur(26px)", frontend_css)
+        self.assertNotIn("--store-bg: #fbfbfd", frontend_css)
 
     @integration_test("app-store platform integration suite; run with scripts/test_suite.py --level integration")
     def test_public_submission_transport_actions_are_core_owned(self) -> None:

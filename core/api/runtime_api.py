@@ -41,7 +41,6 @@ from core.runtime.turn_submission import (
     submit_runtime_turn,
     submit_runtime_turn_async,
 )
-from core.runtime.thread_catalog_events import set_thread_availability
 
 
 def _session_payload(session: RuntimeSessionRecord, *, provider_id: str | None = None) -> dict[str, object]:
@@ -618,13 +617,6 @@ def _handle_turn_interrupt(state: PlatformState, context: RequestSession, turn_i
         event_type="runtime.turn.cancelled",
         payload={"reason": "interrupted_by_user"},
         event_bus=state.runtime_event_bus,
-    )
-    set_thread_availability(
-        state,
-        workspace_id=updated.workspace_id,
-        runtime_session_id=updated.session_id,
-        availability="free",
-        now=event.created_at,
     )
     release_idle_runtime_processes(state, session_id=updated.session_id, provider_id=provider_id or "unconfigured", reason="turn_interrupted")
     dispatch_source_app_runtime_event(

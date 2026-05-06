@@ -67,22 +67,6 @@ Do not rely on ad hoc static servers or undocumented rebuild shortcuts.
 
 Keep Vite HTML files as thin mount documents and put UI behavior in React source under `frontend/src`. The generated `package.json` build script runs `tsc --noEmit && vite build`, so frontend changes should type-check before mounted assets are refreshed.
 
-## App-Local Design Tokens
-
-Each app owns its frontend source and should keep its CSS tokens app-local. Do not import token files directly from another app, including `chat` or `base-shell`, because that creates a source-level dependency between app artifacts.
-
-When creating a new app or polishing an existing app, copy the current Maverick visual model into the app's own `frontend/src/styles/tokens.css` or equivalent local token file. The values should stay aligned across apps, but the files remain independently owned by each app.
-
-Current token direction:
-
-- use white (`#ffffff`) as the primary interaction accent for buttons, focus emphasis, selected controls, and high-priority actions
-- do not define or use a dedicated Maverick green brand signal; the primary accent is pure white and app-specific tokens should stay neutral unless the product surface explicitly requires another color
-- prefer semantic tokens such as `--maverick-accent`, `--maverick-accent-soft`, `--maverick-text`, `--maverick-text-muted`, `--maverick-surface`, `--maverick-border`, and app-scoped component tokens
-- avoid legacy color-role tokens such as `primary` and `secondary` when they imply a brand-color hierarchy
-- use app-scoped prefixes only for component geometry or app-specific surfaces, not for redefining the product palette
-
-The `chat` app and the `base-shell` sidebar are the current visual references for glass surfaces, compact controls, dark palette values, and interaction density. Treat them as examples for values and behavior, not as shared CSS modules.
-
 ## Live Update Rule
 
 If app writes emit `app_events` such as `maverick.app.data-changed`, the mounted frontend should react to them without manual refresh.

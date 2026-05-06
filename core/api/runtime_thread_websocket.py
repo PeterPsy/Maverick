@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable
 from core.api.http import json_default
 from core.api.session_api import resolve_request_session
 from core.runtime.runtime_session import RuntimeSessionRecord
-from core.runtime.runtime_threads import ensure_runtime_threads_for_sessions, thread_payload, thread_recency_key
+from core.runtime.runtime_threads import ensure_runtime_threads_for_sessions, thread_payload
 from core.shared.entrypoints import EntrypointShutdownController
 
 if TYPE_CHECKING:
@@ -71,7 +71,7 @@ def runtime_thread_snapshot_frame(state: PlatformState, *, workspace_id: str) ->
         sessions=sessions,
         title_for_session=lambda session: _thread_title_for_session(state, session),
     )
-    ordered = sorted(threads, key=thread_recency_key, reverse=True)
+    ordered = sorted(threads, key=lambda thread: thread.updated_at, reverse=True)
     return {
         "type": "runtime.thread.snapshot",
         "workspace_id": workspace_id,

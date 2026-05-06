@@ -15,7 +15,6 @@ from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.service import queue_runtime_turn, record_runtime_event
-from core.runtime.thread_catalog_events import mark_thread_user_message_queued, set_thread_availability
 from core.runtime.workspace_api_token import register_workspace_api_token
 from core.skills.service import list_available_workspace_skills, resolve_runtime_skills
 
@@ -57,12 +56,6 @@ def _queue_turn_with_event(
         payload=payload,
         event_bus=state.runtime_event_bus,
     )
-    mark_thread_user_message_queued(
-        state,
-        workspace_id=session.workspace_id,
-        runtime_session_id=session.session_id,
-        now=turn.created_at,
-    )
     return turn, [event]
 
 
@@ -89,7 +82,7 @@ def input_text_with_app_references(*, input_text: str, app_references: list[dict
 
 
 def _record_turn_started(state: PlatformState, *, session_id: str, turn_id: str, provider_id: str) -> RuntimeEventRecord:
-    event = record_runtime_event(
+    return record_runtime_event(
         state.runtime_store,
         event_id=str(uuid4()),
         session_id=session_id,
@@ -99,15 +92,6 @@ def _record_turn_started(state: PlatformState, *, session_id: str, turn_id: str,
         payload={"provider_id": provider_id},
         event_bus=state.runtime_event_bus,
     )
-    turn = state.runtime_store.get_turn(turn_id)
-    set_thread_availability(
-        state,
-        workspace_id=turn.workspace_id,
-        runtime_session_id=session_id,
-        availability="active",
-        now=event.created_at,
-    )
-    return event
 
 
 

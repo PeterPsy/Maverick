@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import mimetypes
+import os
 from pathlib import Path
 import re
 from typing import Any
@@ -29,6 +30,7 @@ from core.identity.models import UserRecord
 
 
 logger = logging.getLogger(__name__)
+DEFAULT_APP_BACKEND_TIMEOUT_SECONDS = 300
 
 
 _PUBLIC_STATIC_EXTENSIONS = {
@@ -95,6 +97,17 @@ def is_public_app_static_asset(subpath: str) -> bool:
     return normalized.startswith("assets/") or (bool(suffix) and suffix in _PUBLIC_STATIC_EXTENSIONS)
 
 
+def app_backend_timeout_seconds() -> int:
+    raw = os.environ.get("MAVERICK_APP_BACKEND_TIMEOUT_SECONDS", "").strip()
+    if not raw:
+        return DEFAULT_APP_BACKEND_TIMEOUT_SECONDS
+    try:
+        value = int(raw)
+    except ValueError:
+        return DEFAULT_APP_BACKEND_TIMEOUT_SECONDS
+    return max(30, value)
+
+
 def handle_root_shell(
     state: PlatformState,
     *,
@@ -126,48 +139,6 @@ def handle_root_shell(
             "Root shell `%s` in workspace `%s` failed during frontend serving.",
             root_shell_app_id,
             workspace_id,
-        )
-        return json_response(start_response, {"error": "shell_unavailable"}, status="503 Service Unavailable")
-
-
-def handle_root_shell_static_asset(
-    state: PlatformState,
-    *,
-    workspace_id: str,
-    root_shell_app_id: str,
-    subpath: str,
-    start_path: Path,
-    start_response: StartResponse,
-) -> list[bytes]:
-    """Serve a public root-level asset emitted by the configured shell frontend."""
-    try:
-        _binding, source_root, parsed = resolve_app_surface(
-            state,
-            workspace_id=workspace_id,
-            app_id=root_shell_app_id,
-            start_path=start_path,
-        )
-    except WorkspaceAppBindingNotFoundError:
-        return json_response(start_response, {"error": "shell_not_installed"}, status="404 Not Found")
-    except AppHostingError:
-        return json_response(start_response, {"error": "shell_unavailable"}, status="503 Service Unavailable")
-    frontend = parsed.contract.entrypoints.frontend
-    if frontend is None:
-        return text_response(start_response, "Shell frontend not found", status="404 Not Found")
-    try:
-        return serve_frontend(
-            start_response,
-            frontend_root=(source_root / frontend).resolve(),
-            subpath=subpath,
-            spa_fallback=False,
-            cross_origin=True,
-        )
-    except Exception:
-        logger.exception(
-            "Root shell `%s` in workspace `%s` failed while serving root asset `%s`.",
-            root_shell_app_id,
-            workspace_id,
-            subpath,
         )
         return json_response(start_response, {"error": "shell_unavailable"}, status="503 Service Unavailable")
 
@@ -355,6 +326,7 @@ def handle_app_backend(
                 ),
             },
             cwd=source_root,
+            timeout_seconds=app_backend_timeout_seconds(),
             shutdown_controller=shutdown_controller,
         )
     except Exception as error:

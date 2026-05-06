@@ -33,6 +33,9 @@ class BaseShellAppMountingTests(unittest.TestCase):
 
         self.assertIn("maverick.app.navigate", host_source)
         self.assertIn("maverick.app.ready", host_source)
+        self.assertIn("readyNavigationSignaturesRef.current[payload.app_id] = navigationSignature", host_source)
+        self.assertNotIn("readyNavigationSignaturesRef.current[activeApp.app_id] = appNavigationSignature", host_source)
+        self.assertNotIn("readyNavigationSignaturesRef.current[app.app_id] = appNavigationSignature", host_source)
         self.assertIn("postMessage", host_source)
         self.assertIn("src={appFrameSrc(app.frontend_mount, revision)}", host_source)
         self.assertIn("currentShellAppRoute", (REPO_ROOT / "apps/base-shell/frontend/src/AppShell.tsx").read_text())
@@ -58,7 +61,7 @@ class BaseShellAppMountingTests(unittest.TestCase):
         self.assertIn("mountKey: activeMountKey", host_source)
         self.assertIn("key={`${mountKey}:${revision}`}", host_source)
         iframe_policy_source = (REPO_ROOT / "apps/base-shell/frontend/src/iframePolicy.ts").read_text()
-        self.assertIn('MAVERICK_IFRAME_SANDBOX = "allow-downloads allow-forms allow-popups allow-same-origin allow-scripts"', iframe_policy_source)
+        self.assertIn('MAVERICK_IFRAME_SANDBOX = "allow-downloads allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"', iframe_policy_source)
         self.assertIn("sandbox={MAVERICK_IFRAME_SANDBOX}", host_source)
         self.assertIn("sandbox={MAVERICK_IFRAME_SANDBOX}", widget_source)
         self.assertIn("postToMaverickFrame", host_source)

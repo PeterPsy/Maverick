@@ -17,7 +17,6 @@ from core.providers.service import resolve_provider_for_runtime_session
 from core.runtime.errors import RuntimeSessionNotFoundError
 from core.runtime.runtime_threads import create_runtime_thread
 from core.runtime.service import create_runtime_session, record_runtime_event, transition_runtime_session, transition_runtime_turn
-from core.runtime.thread_catalog_events import set_thread_availability
 from core.runtime.turn_submission import interrupt_runtime_provider_turn, release_idle_runtime_processes, submit_runtime_turn_async
 from core.shared.entrypoints import run_json_entrypoint
 
@@ -303,13 +302,6 @@ def _apply_one_runtime_interrupt_request(
         event_type="runtime.turn.cancelled",
         payload={"reason": reason, "requested_by_app_id": app_id},
         event_bus=state.runtime_event_bus,
-    )
-    set_thread_availability(
-        state,
-        workspace_id=updated.workspace_id,
-        runtime_session_id=updated.session_id,
-        availability="free",
-        now=event.created_at,
     )
     release_idle_runtime_processes(state, session_id=updated.session_id, provider_id=provider_id or "unconfigured", reason="app_turn_interrupted")
     dispatch_source_app_runtime_event(

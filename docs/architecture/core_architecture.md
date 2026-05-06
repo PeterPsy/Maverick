@@ -360,7 +360,7 @@ Those two ids are intentionally different but must be linked by the core runtime
 
 The core also owns the workspace chat thread catalog that points at runtime sessions.
 
-A chat thread is the user-visible runtime conversation record. It stores the thread id, linked `runtime_session_id`, title, availability, source app metadata, optional project id, and `last_user_message_at` timestamp. Apps such as `chat` may render or update that record through core runtime APIs, but they must not persist a second app-owned thread catalog or delete runtime sessions themselves. The core runtime owns availability transitions: queued user turns mark the linked thread as `queued`, started turns mark it as `active`, and terminal turn outcomes or interrupts mark it as `free`. Thread catalog reads reconcile both availability and `last_user_message_at` from the linked runtime turns so existing sessions without a stored recency timestamp still sort by their latest user turn.
+A chat thread is the user-visible runtime conversation record. It stores the thread id, linked `runtime_session_id`, title, availability, source app metadata, and optional project id. Apps such as `chat` may render or update that record through core runtime APIs, but they must not persist a second app-owned thread catalog or delete runtime sessions themselves.
 
 ### 7. Execution policy
 
@@ -668,23 +668,17 @@ It must not absorb chat project buttons, chat orchestration, retrieval settings,
 
 Project organization belongs to the chat app because projects are chat-domain state, not shell or core platform state.
 
-If the product shell needs to show app-specific navigation in its sidebar, it must do so by mounting app-owned widgets through the generic widget registry. The default `base-shell` sidebar owns the fixed frame and reserves standard widget slots, but it does not own the data, labels, or actions rendered inside those slots.
+If a future product shell needs to show chat projects or conversations in its sidebar, it must do so by mounting a chat-owned widget through the generic widget registry. The default `base-shell` sidebar does not reserve space for that chat widget.
 
 If the product shell needs to show app shortcuts in its sidebar, it must do so by mounting an App Store-owned widget through the same generic widget registry.
 
 `base-shell` may keep a fixed `Apps` entry that opens the App Store, but it must not own or hardcode the shortcut list. Pinned app shortcut state belongs to `app-store` workspace data and is mutated through the App Store app's own backend surface.
 
-The intended sidebar shape is:
+The intended first shape is:
 
-- `base-shell` owns the fixed sidebar frame: current app icon, workspace selector, mobile app rail, responsive layout, overlay behavior, scroll containment, fades, and shell mode controls
-- `base-shell` owns mobile sidebar gestures, including opening from a left-edge swipe over mounted app iframes and closing the open sidebar with the opposite swipe
-- `shell.sidebar.primary` is the app-owned central sidebar body for the active app only
-- `shell.sidebar.footer` is an app-owned compact footer action area for the active app only, positioned inside the fixed shell footer above shell mode controls
-- `base-shell` chooses sidebar widgets by matching `owner_app_id` to the active app id; if the active app has no matching widget for a sidebar slot, that slot stays empty rather than falling back to another app's widget
-- `base-shell` does not render generic content skeletons for app-owned sidebar slots; each app-owned sidebar widget renders its own loading state so reloads and app switches have a single loading owner
-- `base-shell` must keep shell-owned app rail and active-app chrome free of app runtime busy indicators; runtime busyness belongs inside app-owned widgets such as Chat's sidebar and floating surfaces
-- `app-store` may own an `app-shortcuts` widget compatible with a shell shortcut content kind when a shell variant exposes shortcut content
-- `chat` owns a `chat-sidebar` widget for `shell.sidebar.primary` and a separate `chat-sidebar-footer` widget for `shell.sidebar.footer`; "new chat" remains Chat-owned even though the footer container is shell-owned
+- `base-shell` owns the generic sidebar widget slot for app shortcuts, and that slot fills the available sidebar height between shell navigation and footer controls
+- `app-store` owns an `app-shortcuts` widget compatible with `shell.sidebar.apps`
+- `chat` may own a `chat-sidebar` widget for shells that choose to expose chat navigation, but default `base-shell` does not mount `shell.sidebar.primary`
 - chat sidebar widgets, when mounted by a shell variant, load and mutate thread records through the core runtime thread surface and use chat-owned backend surfaces only for chat projects and view state
 - `base-shell` keeps the iframe-mounted widget alive while the sidebar is hidden, so opening and closing the menu does not reload app-owned widget state
 - `base-shell` may react to a generic browser message asking it to open an app with scalar navigation params, but it must not import chat code or call chat-private internals
@@ -1069,7 +1063,7 @@ Turn submission is implemented through a dedicated runtime service so future CLI
 
 The runtime WebSocket endpoints are the official realtime transports for mounted apps and other interactive clients.
 
-`WS /ws/runtime/sessions/<session_id>` sends a `runtime.snapshot` frame containing session metadata and persisted events, then live `runtime.event` frames from the runtime event bus. `WS /ws/runtime/threads` sends a `runtime.thread.snapshot` frame containing the workspace thread catalog, ordered by the most recent accepted user message for each thread, then live `runtime.thread.changed` frames from the runtime thread event bus.
+`WS /ws/runtime/sessions/<session_id>` sends a `runtime.snapshot` frame containing session metadata and persisted events, then live `runtime.event` frames from the runtime event bus. `WS /ws/runtime/threads` sends a `runtime.thread.snapshot` frame containing the workspace thread catalog, then live `runtime.thread.changed` frames from the runtime thread event bus.
 
 The HTTP event and thread endpoints remain command, diagnostics, and operator surfaces. Product chat rendering must not bootstrap transcripts or thread lists by replaying runtime data over HTTP.
 
@@ -1153,7 +1147,7 @@ The queued-turn event may also carry runtime input attachment metadata.
 
 Attachment metadata is not file storage.
 
-The core file upload surface persists file bytes under workspace storage and returns stable metadata. Uploads and JSON HTTP/ASGI request bodies must be bounded before decoding or dispatching so malformed, non-object, or oversized bodies return stable 4xx errors instead of becoming unbounded memory pressure or generic 500s. WSGI and ASGI hosts must resolve the body-size limit through the same configuration path. Runtime turns should carry references such as `file_id`, `relative_path`, content type, size, and checksum, not inline file bytes.
+The core file upload surface persists file bytes under workspace storage and returns stable metadata. Uploads and JSON HTTP/ASGI request bodies must be bounded before decoding or dispatching so malformed, non-object, or oversized bodies return stable 4xx errors instead of becoming unbounded memory pressure or generic 500s. WSGI and ASGI hosts must resolve the body-size limit through the same configuration path, and the default body ceiling must account for the workspace upload API's decoded-file limit plus base64/JSON expansion. Runtime turns should carry references such as `file_id`, `relative_path`, content type, size, and checksum, not inline file bytes.
 
 Before dispatching a turn to a text-oriented provider backend, the runtime should materialize uploaded attachment references into the provider input as workspace-relative links and local workspace paths. The queued runtime event should still preserve the original user text and structured attachment metadata for transcript rendering.
 

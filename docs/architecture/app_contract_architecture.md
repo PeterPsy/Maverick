@@ -1175,7 +1175,7 @@ This avoids losing navigation requests when an app iframe is freshly mounted aft
 
 The initial iframe URL remains the registry-provided `frontend_mount`.
 
-Shell-mounted app and widget iframes may use browser sandboxing, but they must preserve access to their own mounted frontend assets. The shell sandbox must include `allow-same-origin` so app documents can behave as same-origin clients for core APIs. Without that token, the browser assigns the iframe an opaque `null` origin, authenticated same-origin API calls fail as CORS/401 errors, and targeted `postMessage` delivery to the mounted app or widget can fail. The static asset route still needs to tolerate opaque `null` origins because old mounted frames, widget frames, or browser module/style CORS behavior may request `/apps/<local_app_id>/assets/...` without session cookies; those asset responses should be cross-origin readable and must never carry user-specific data.
+Shell-mounted app and widget iframes may use browser sandboxing, but they must preserve access to their own mounted frontend assets. The shell sandbox must include `allow-same-origin` so app documents can behave as same-origin clients for core APIs. Without that token, the browser assigns the iframe an opaque `null` origin, authenticated same-origin API calls fail as CORS/401 errors, and targeted `postMessage` delivery to the mounted app or widget can fail. The shell sandbox may include `allow-popups-to-escape-sandbox` together with `allow-popups` so user-initiated OAuth and external login tabs opened by mounted apps are not forced to inherit the iframe sandbox; app iframes still must not receive top-level navigation rights over the shell frame. The static asset route still needs to tolerate opaque `null` origins because old mounted frames, widget frames, or browser module/style CORS behavior may request `/apps/<local_app_id>/assets/...` without session cookies; those asset responses should be cross-origin readable and must never carry user-specific data.
 
 The shell must notify mounted app and widget iframes when their host surface becomes visible or hidden by sending `maverick.app.visibility-changed`. App frontends must treat hidden as a signal to suspend nonessential intervals, runtime replay, and background refresh. Hidden iframes may keep state in memory, but they must not continue live polling as if they were the active work surface.
 
@@ -1445,20 +1445,16 @@ That synthesized item follows the same widget registry path as any other structu
 - the original agent text remains ordinary Markdown
 - local filesystem paths are not exposed to iframe widgets
 
-The same widget mechanism is also the correct way for the shell to host app-specific sidebar content. The default `base-shell` owns only the fixed sidebar frame and mounts standard app-owned slots for the active app.
+The same widget mechanism is also the correct way for a shell variant to host chat navigation. The default `base-shell` sidebar only mounts the app-shortcuts widget slot and does not reserve a second slot for chat navigation.
 
-The shell must not import app sidebar components or own app-domain sidebar state such as chat projects.
+The shell must not import chat sidebar components or own chat projects.
 
-For apps that expose content in the `base-shell` sidebar:
+For shells that choose to expose chat navigation:
 
-- the shell renders `shell.sidebar.primary` as the central modular sidebar body
-- the shell renders `shell.sidebar.footer` as a compact app-owned action area inside the shell's fixed footer
-- sidebar slots discover widgets with `host=base-shell` and the requested shell sidebar content kind
-- sidebar slots prefer the widget whose `owner_app_id` matches the active app id and remain empty when the active app does not declare a matching widget
-- the shell does not render a generic loading skeleton inside app-owned sidebar slots; each owning app must render the skeleton or loading state for its own sidebar widget
-- `chat` declares `chat-sidebar` for `shell.sidebar.primary`
-- `chat` declares `chat-sidebar-footer` for `shell.sidebar.footer`, so "new chat" remains Chat-owned instead of becoming shell logic
-- each widget frontend is served from the owning app's own declared widget mount, such as Chat's `frontend/dist/widgets/chat-sidebar` or `frontend/dist/widgets/chat-sidebar-footer`
+- the shell renders a generic sidebar widget slot for chat navigation
+- the slot discovers widgets with `host=base-shell` and a shell sidebar content kind
+- `chat` declares a widget such as `chat-sidebar`
+- the widget frontend is served from the chat app's own `frontend/dist/widgets/chat-sidebar`
 - project actions go through the chat app backend, while thread create, rename, move, delete, and delete-all actions go through core runtime thread APIs; frontends may implement delete-all as repeated per-thread core deletes when they need progress feedback for runtime cleanup
 - project and thread settings panels are rendered by the chat widget, not by the shell
 - optional shell navigation uses browser messaging from the iframe to ask the host to open the `chat` app with explicit scalar params such as a thread id or a new-chat request
@@ -1470,8 +1466,7 @@ For apps that expose content in the `base-shell` sidebar:
 This preserves the visual layout while moving ownership to the app boundary:
 
 - shell layout and app mounting belong to `base-shell`
-- sidebar body and footer contents belong to the active app that declares those widgets
-- chat projects, chat list state, and "new chat" behavior belong to `chat`
+- chat projects and chat list state belong to `chat`
 - widget discovery, auth, workspace context, and controlled frontend mount belong to the core
 
 ### Backend distribution artifacts
@@ -1524,7 +1519,6 @@ In this example:
 
 The hosted platform route `/` may be configured to serve a root shell app.
 The local hosted default is `base-shell`, but that is a platform configuration value, not a special app identity in the app contract model.
-Root-level browser assets required by that shell, such as `/manifest.webmanifest` and `/sw.js`, may be served from the configured root shell app's frontend artifact without making that app a core dependency.
 
 The user may reach:
 

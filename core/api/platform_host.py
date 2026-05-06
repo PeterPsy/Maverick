@@ -8,14 +8,7 @@ from typing import Iterable
 
 from core.api.admin_api import handle_admin_api
 from core.api.app_dependencies_api import handle_app_dependencies_api
-from core.api.app_mounts import (
-    handle_app_backend,
-    handle_app_frontend,
-    handle_app_frontend_build,
-    handle_root_shell,
-    handle_root_shell_static_asset,
-    is_public_app_static_asset,
-)
+from core.api.app_mounts import handle_app_backend, handle_app_frontend, handle_app_frontend_build, handle_root_shell, is_public_app_static_asset
 from core.api.app_registry import enabled_app_items
 from core.api.app_sdk_api import handle_app_sdk_api
 from core.api.app_store_api import handle_app_store_api
@@ -33,12 +26,6 @@ from core.shared.entrypoints import EntrypointShutdownController
 
 
 logger = logging.getLogger(__name__)
-
-
-_ROOT_SHELL_STATIC_ASSETS = {
-    "/manifest.webmanifest": "manifest.webmanifest",
-    "/sw.js": "sw.js",
-}
 
 
 class PlatformHost:
@@ -125,15 +112,6 @@ class PlatformHost:
                 return json_response(
                     start_response,
                     {"items": enabled_app_items(self.state, workspace_id=workspace_id, start_path=self.start_path, user=user)},
-                )
-            if path in _ROOT_SHELL_STATIC_ASSETS:
-                return handle_root_shell_static_asset(
-                    self.state,
-                    workspace_id=workspace_id,
-                    root_shell_app_id=self.state.root_shell_app_id,
-                    subpath=_ROOT_SHELL_STATIC_ASSETS[path],
-                    start_path=self.start_path,
-                    start_response=start_response,
                 )
             if path == "/" or path == "/app" or path.startswith("/app/"):
                 return handle_root_shell(

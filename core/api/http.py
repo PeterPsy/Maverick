@@ -10,7 +10,9 @@ from urllib.parse import parse_qs, urlparse
 
 
 StartResponse = Callable[[str, list[tuple[str, str]]], None]
-DEFAULT_MAX_JSON_BODY_BYTES = 1024 * 1024
+# Keep the default body ceiling high enough for the workspace upload API's
+# 25 MiB decoded-file contract after base64/JSON expansion.
+DEFAULT_MAX_JSON_BODY_BYTES = 40 * 1024 * 1024
 
 
 class HttpRequestError(ValueError):

@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import asdict, replace
 from datetime import UTC, datetime
 from typing import Callable
-from uuid import uuid4
 
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_thread import RuntimeThreadRecord
@@ -23,24 +22,10 @@ def thread_payload(thread: RuntimeThreadRecord) -> dict[str, object]:
     return asdict(thread)
 
 
-def thread_recency_key(thread: RuntimeThreadRecord) -> tuple[bool, datetime, datetime, str]:
-    user_message_at = thread.last_user_message_at
-    return (
-        user_message_at is not None,
-        user_message_at or thread.created_at,
-        thread.created_at,
-        thread.thread_id,
-    )
-
-
 def list_runtime_threads(store: RuntimeStore, *, workspace_id: str) -> list[RuntimeThreadRecord]:
-    threads = [
-        reconcile_runtime_thread_availability(store, workspace_id=workspace_id, thread=thread)
-        for thread in store.list_threads(workspace_id)
-    ]
     return sorted(
-        threads,
-        key=thread_recency_key,
+        store.list_threads(workspace_id),
+        key=lambda thread: thread.updated_at,
         reverse=True,
     )
 
@@ -95,9 +80,6 @@ def create_runtime_thread(
     existing = find_runtime_thread_by_session(store, workspace_id=workspace_id, runtime_session_id=normalized_session_id)
     if existing is not None:
         patch: dict[str, object] = {"updated_at": timestamp}
-        latest_user_message_at = runtime_thread_last_user_message_at_for_session(store, runtime_session_id=normalized_session_id)
-        if latest_user_message_at is not None and (existing.last_user_message_at is None or existing.last_user_message_at < latest_user_message_at):
-            patch["last_user_message_at"] = latest_user_message_at
         if title.strip():
             patch["title"] = title.strip()[:80]
         if agent_label.strip():
@@ -127,10 +109,9 @@ def create_runtime_thread(
         system_prompt=system_prompt.strip(),
         project_id=project_id.strip() if isinstance(project_id, str) and project_id.strip() else None,
         archived=False,
-        availability=runtime_thread_availability_for_session(store, runtime_session_id=normalized_session_id),
+        availability="free",
         created_at=timestamp,
         updated_at=timestamp,
-        last_user_message_at=runtime_thread_last_user_message_at_for_session(store, runtime_session_id=normalized_session_id),
     )
     return store.save_thread(thread)
 
@@ -179,6 +160,7 @@ def update_runtime_thread(
         "agent_role_id": 120,
         "source_app_id": 80,
         "system_prompt": 0,
+        "availability": 0,
     }.items():
         if key not in updates:
             continue
@@ -189,95 +171,7 @@ def update_runtime_thread(
         patch["project_id"] = project_id or None
     if "archived" in updates:
         patch["archived"] = bool(updates.get("archived"))
-    if len(patch) == 1:
-        return thread
     return store.save_thread(replace(thread, **patch))
-
-
-def reconcile_runtime_thread_availability(
-    store: RuntimeStore,
-    *,
-    workspace_id: str,
-    thread: RuntimeThreadRecord,
-    now: datetime | None = None,
-) -> RuntimeThreadRecord:
-    if thread.workspace_id != workspace_id or not thread.runtime_session_id:
-        return thread
-    expected_availability = runtime_thread_availability_for_session(store, runtime_session_id=thread.runtime_session_id)
-    expected_last_user_message_at = runtime_thread_last_user_message_at_for_session(store, runtime_session_id=thread.runtime_session_id)
-    patch: dict[str, object] = {}
-    if thread.availability != expected_availability:
-        patch["availability"] = expected_availability
-    if expected_last_user_message_at is not None and (
-        thread.last_user_message_at is None or thread.last_user_message_at < expected_last_user_message_at
-    ):
-        patch["last_user_message_at"] = expected_last_user_message_at
-    if not patch:
-        return thread
-    patch["updated_at"] = now or utcnow()
-    return store.save_thread(replace(thread, **patch))
-
-
-def runtime_thread_availability_for_session(store: RuntimeStore, *, runtime_session_id: str) -> str:
-    statuses = {turn.status for turn in store.list_turns(runtime_session_id)}
-    if "active" in statuses:
-        return "active"
-    if "queued" in statuses:
-        return "queued"
-    return "free"
-
-
-def runtime_thread_last_user_message_at_for_session(store: RuntimeStore, *, runtime_session_id: str) -> datetime | None:
-    turns = store.list_turns(runtime_session_id)
-    if not turns:
-        return None
-    return max(turn.created_at for turn in turns)
-
-
-def mark_runtime_thread_user_message(
-    store: RuntimeStore,
-    *,
-    workspace_id: str,
-    runtime_session_id: str,
-    now: datetime | None = None,
-) -> RuntimeThreadRecord | None:
-    thread = find_runtime_thread_by_session(store, workspace_id=workspace_id, runtime_session_id=runtime_session_id)
-    if thread is None:
-        return None
-    timestamp = now or utcnow()
-    return store.save_thread(
-        replace(
-            thread,
-            availability=runtime_thread_availability_for_session(store, runtime_session_id=runtime_session_id),
-            last_user_message_at=timestamp,
-            updated_at=timestamp,
-        )
-    )
-
-
-def update_runtime_thread_availability(
-    store: RuntimeStore,
-    *,
-    workspace_id: str,
-    runtime_session_id: str,
-    availability: str,
-    now: datetime | None = None,
-) -> RuntimeThreadRecord | None:
-    thread = find_runtime_thread_by_session(store, workspace_id=workspace_id, runtime_session_id=runtime_session_id)
-    if thread is None:
-        return None
-    value = _normalized_thread_availability(availability)
-    if not value or thread.availability == value:
-        return thread
-    timestamp = now or utcnow()
-    return store.save_thread(replace(thread, availability=value, updated_at=timestamp))
-
-
-def _normalized_thread_availability(value: str) -> str:
-    normalized = value.strip()
-    if normalized not in {"free", "queued", "active"}:
-        raise ValueError(f"Unsupported runtime thread availability `{normalized}`.")
-    return normalized
 
 
 def delete_runtime_thread_complete(

@@ -137,7 +137,6 @@ export function AppFrameHost({
   useEffect(() => {
     latestNavigationRef.current = { appId: activeApp.app_id, params: activeAppParams };
     postNavigation(frameRefs.current[activeApp.app_id], activeApp.app_id, activeAppParams);
-    readyNavigationSignaturesRef.current[activeApp.app_id] = appNavigationSignature(activeApp.app_id, activeAppParams);
     postDependencies(frameRefs.current[activeApp.app_id], activeApp.app_id, latestDependenciesRef.current);
   }, [activeApp.app_id, paramsSignature]);
 
@@ -310,7 +309,6 @@ export function AppFrameHost({
                 });
                 if (app.app_id === activeApp.app_id) {
                   postNavigation(event.currentTarget, app.app_id, activeAppParams);
-                  readyNavigationSignaturesRef.current[app.app_id] = appNavigationSignature(app.app_id, activeAppParams);
                 }
               }}
               ref={(frame) => {

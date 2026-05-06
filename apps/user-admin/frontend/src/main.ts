@@ -104,7 +104,7 @@ async function requestPersistenceStatus(): Promise<PersistenceStatus | null> {
   try {
     return await requestJson<PersistenceStatus>('/api/admin/persistence');
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Persistence API non disponibile';
+    const message = error instanceof Error ? error.message : 'Persistence API unavailable';
     notice = { tone: 'error', message };
     return null;
   }
@@ -173,14 +173,14 @@ async function resetSelectedUserPassword(form: HTMLFormElement, user: User) {
   const password = String(data.get('password') || '');
   const confirmation = String(data.get('password_confirmation') || '');
   if (password !== confirmation) {
-    throw new Error('Le password non coincidono');
+    throw new Error('Passwords do not match');
   }
   await requestJson<{ status: string }>(`/api/admin/users/${encodeURIComponent(user.user_id)}/password`, {
     method: 'POST',
     body: JSON.stringify({ password })
   });
   form.reset();
-  notice = { tone: 'success', message: 'Password aggiornata.' };
+  notice = { tone: 'success', message: 'Password updated.' };
   render();
 }
 
@@ -190,7 +190,7 @@ async function deleteSelectedUser(user: User) {
     pendingDeleteUserId = user.user_id;
     notice = {
       tone: 'info',
-      message: `Premi di nuovo Elimina utente per confermare la rimozione definitiva di ${label}.`
+      message: `Press Delete user again to confirm permanent removal of ${label}.`
     };
     render();
     return;
@@ -200,7 +200,7 @@ async function deleteSelectedUser(user: User) {
   });
   selectedUserId = '';
   pendingDeleteUserId = '';
-  notice = { tone: 'success', message: `${label} eliminato.` };
+  notice = { tone: 'success', message: `${label} deleted.` };
   await refresh();
 }
 
@@ -264,8 +264,8 @@ async function applyPersistenceMigration(kind: 'json' | 'mongo') {
     target: kind,
     phase: 'applying',
     percent: 18,
-    title: `Migrazione verso ${kind.toUpperCase()}`,
-    detail: 'Copia del control plane nel target adapter in corso.'
+    title: `Migration to ${kind.toUpperCase()}`,
+    detail: 'Copying the control plane to the target adapter.'
   };
   notice = null;
   render();
@@ -279,7 +279,7 @@ async function applyPersistenceMigration(kind: 'json' | 'mongo') {
     phase: 'restarting',
     percent: 68,
     title: 'Restart backend',
-    detail: persistenceMigration.backend_restart?.detail || 'Restart backend programmato.'
+    detail: persistenceMigration.backend_restart?.detail || 'Backend restart scheduled.'
   };
   render();
   await waitForPersistenceCutover(kind);
@@ -293,8 +293,8 @@ async function waitForPersistenceCutover(kind: 'json' | 'mongo') {
       target: kind,
       phase: 'polling',
       percent: 84,
-      title: 'Verifica cutover',
-      detail: 'Attendo che il backend torni healthy con il nuovo adapter.'
+      title: 'Verifying cutover',
+      detail: 'Waiting for the backend to become healthy with the new adapter.'
     };
     render();
     const status = await requestPersistenceStatusQuiet();
@@ -304,12 +304,12 @@ async function waitForPersistenceCutover(kind: 'json' | 'mongo') {
         target: kind,
         phase: 'complete',
         percent: 100,
-        title: 'Migrazione completata',
-        detail: `Adapter attivo: ${kind.toUpperCase()}. Cleanup del vecchio storage avviato dopo health check.`
+        title: 'Migration complete',
+        detail: `Active adapter: ${kind.toUpperCase()}. Old storage cleanup started after health check.`
       };
       notice = {
         tone: 'success',
-        message: `Migrazione verso ${kind.toUpperCase()} completata.`
+        message: `Migration to ${kind.toUpperCase()} complete.`
       };
       render();
       return;
@@ -320,12 +320,12 @@ async function waitForPersistenceCutover(kind: 'json' | 'mongo') {
     target: kind,
     phase: 'failed',
     percent: 100,
-    title: 'Verifica non conclusa',
-    detail: 'Il backend non ha confermato il nuovo adapter entro il timeout. Controlla health e log servizio.'
+    title: 'Verification not completed',
+    detail: 'The backend did not confirm the new adapter before the timeout. Check service health and logs.'
   };
   notice = {
     tone: 'error',
-    message: 'Migrazione non confermata entro il timeout.'
+    message: 'Migration not confirmed before the timeout.'
   };
   render();
 }
@@ -378,7 +378,7 @@ function workspaceAppHtml() {
           <span class="ua-app-workspace-icon material-symbols-rounded" aria-hidden="true">deployed_code</span>
           <span>
             <strong>${workspace.name}</strong>
-            <small>${workspace.workspace_id} · ${enabledCount}/${installedCount} abilitate</small>
+            <small>${workspace.workspace_id} · ${enabledCount}/${installedCount} enabled</small>
           </span>
         </summary>
         <div class="ua-apps">
@@ -386,7 +386,7 @@ function workspaceAppHtml() {
             .map((app) => {
               const enabled = app.status === 'enabled';
               const installed = app.installed;
-              const statusLabel = installed ? app.status : 'non installata';
+              const statusLabel = installed ? app.status : 'not installed';
               return `<div class="ua-app-row">
                 <span class="ua-app-icon material-symbols-rounded" aria-hidden="true">${enabled ? 'apps' : 'hide_source'}</span>
                 <span class="ua-app-copy">
@@ -397,7 +397,7 @@ function workspaceAppHtml() {
                   installed
                     ? `<label class="ua-switch">
                       <input type="checkbox" data-app-toggle="${workspace.workspace_id}:${app.app_id}" ${enabled ? 'checked' : ''} />
-                      <span>Abilitata</span>
+                      <span>Enabled</span>
                     </label>
                     <button type="button" class="ua-secondary" data-app-uninstall="${workspace.workspace_id}:${app.app_id}">
                       <span class="material-symbols-rounded" aria-hidden="true">link_off</span>
@@ -405,7 +405,7 @@ function workspaceAppHtml() {
                     </button>`
                     : `<button type="button" class="ua-secondary" data-app-install="${workspace.workspace_id}:${app.app_id}">
                       <span class="material-symbols-rounded" aria-hidden="true">add_link</span>
-                      Installa
+                      Install
                     </button>`
                 }
               </div>`;
@@ -427,7 +427,7 @@ function persistenceHtml() {
         </div>
         <span class="ua-pill ua-pill-muted">offline</span>
       </div>
-      <p class="ua-card-copy">Le superfici core di persistence non sono disponibili nel backend attivo.</p>
+      <p class="ua-card-copy">The core persistence surfaces are not available in the active backend.</p>
     </section>`;
   }
   const active = persistence.active_adapter;
@@ -452,7 +452,7 @@ function persistenceHtml() {
         <span class="material-symbols-rounded" aria-hidden="true">task_alt</span>
         <span>
           <strong>Ultima migrazione</strong>
-          <small>${persistenceMigration.collections.reduce((total, item) => total + item.count, 0)} documenti · target ${persistenceMigration.target_adapter.kind} · cleanup ${persistenceMigration.source_cleanup?.scheduled ? 'programmato' : 'non richiesto'}</small>
+          <small>${persistenceMigration.collections.reduce((total, item) => total + item.count, 0)} documents · target ${persistenceMigration.target_adapter.kind} · cleanup ${persistenceMigration.source_cleanup?.scheduled ? 'scheduled' : 'not requested'}</small>
         </span>
       </div>`
     : '';
@@ -465,7 +465,7 @@ function persistenceHtml() {
         <p class="ua-kicker">Persistence</p>
         <h2>Control plane adapter</h2>
       </div>
-      <span class="ua-pill">${totalDocuments} documenti</span>
+      <span class="ua-pill">${totalDocuments} documents</span>
     </div>
     <div class="ua-adapter-cards">
       <button type="button" class="ua-adapter-card ${jsonActive ? 'is-active' : ''}" ${jsonActive || locked ? 'disabled' : 'data-adapter-target="json"'}>
@@ -474,7 +474,7 @@ function persistenceHtml() {
           <strong>JSON</strong>
           <small>${jsonActive ? active.json_root : 'data/control-plane/json'}</small>
         </span>
-        <em>${jsonActive ? 'Attuale' : 'Migra qui'}</em>
+        <em>${jsonActive ? 'Current' : 'Migrate here'}</em>
       </button>
       <button type="button" class="ua-adapter-card ${mongoActive ? 'is-active' : ''}" ${mongoActive || locked ? 'disabled' : 'data-adapter-target="mongo"'}>
         <span class="ua-adapter-card-icon material-symbols-rounded" aria-hidden="true">${mongoActive ? 'check_circle' : 'database'}</span>
@@ -482,7 +482,7 @@ function persistenceHtml() {
           <strong>Mongo</strong>
           <small>${mongoActive ? active.mongo_database : 'mongodb://127.0.0.1:27017/maverick'}</small>
         </span>
-        <em>${mongoActive ? 'Attuale' : 'Migra qui'}</em>
+        <em>${mongoActive ? 'Current' : 'Migrate here'}</em>
       </button>
     </div>
     ${progress}
@@ -498,19 +498,19 @@ function persistenceMigrationModalHtml() {
     <section class="ua-modal" role="dialog" aria-modal="true" aria-labelledby="adapter-migration-title">
       <div class="ua-heading">
         <div>
-          <p class="ua-kicker">Conferma migrazione</p>
+          <p class="ua-kicker">Confirm migration</p>
           <h2 id="adapter-migration-title">${source} → ${target}</h2>
         </div>
-        <button type="button" class="ua-icon-button" id="close-migration-modal" aria-label="Chiudi">
+        <button type="button" class="ua-icon-button" id="close-migration-modal" aria-label="Close">
           <span class="material-symbols-rounded" aria-hidden="true">close</span>
         </button>
       </div>
-      <p class="ua-card-copy">La migrazione copia tutto il control plane nel nuovo adapter, aggiorna la configurazione del backend, riavvia il core e cancella il vecchio storage solo dopo che il nuovo backend risponde healthy.</p>
+      <p class="ua-card-copy">The migration copies the entire control plane to the new adapter, updates the backend configuration, restarts the core, and deletes the old storage only after the new backend responds healthy.</p>
       <div class="ua-modal-actions">
-        <button type="button" class="ua-secondary" id="cancel-migration">Annulla</button>
+        <button type="button" class="ua-secondary" id="cancel-migration">Cancel</button>
         <button type="button" class="ua-danger" id="confirm-migration" ${migrationProgress && migrationProgress.phase !== 'complete' && migrationProgress.phase !== 'failed' ? 'disabled' : ''}>
           <span class="material-symbols-rounded" aria-hidden="true">sync_alt</span>
-          Migra e cancella
+          Migrate and delete
         </button>
       </div>
     </section>
@@ -526,7 +526,7 @@ function render() {
       <div>
         <p class="ua-kicker">Maverick</p>
         <h1>User Admin</h1>
-        <p class="ua-copy">Gestione utenti, ruoli platform e accesso workspace.</p>
+        <p class="ua-copy">Manage users, platform roles, and workspace access.</p>
       </div>
       <div class="ua-users">${userListHtml()}</div>
     </aside>
@@ -535,12 +535,12 @@ function render() {
         ${noticeHtml()}
         <form class="ua-card ua-create" id="create-user">
           <div>
-            <p class="ua-kicker">Nuovo utente</p>
-            <h2>Crea accesso</h2>
+            <p class="ua-kicker">New user</p>
+            <h2>Create access</h2>
           </div>
           <input name="username" placeholder="username" required />
-          <input name="password" type="password" placeholder="password temporanea" required />
-          <input name="display_name" placeholder="nome visualizzato" />
+          <input name="password" type="password" placeholder="temporary password" required />
+          <input name="display_name" placeholder="display name" />
           <input name="email" type="email" placeholder="email" />
           <select name="platform_role">
             <option value="member">Member</option>
@@ -548,7 +548,7 @@ function render() {
           </select>
           <button type="submit">
             <span class="material-symbols-rounded" aria-hidden="true">person_add</span>
-            Crea utente
+            Create user
           </button>
         </form>
         ${persistenceHtml()}
@@ -558,49 +558,49 @@ function render() {
             <form class="ua-card ua-detail" id="edit-user">
             <div class="ua-heading">
               <div>
-                <p class="ua-kicker">Utente selezionato</p>
+                <p class="ua-kicker">Selected user</p>
                 <h2>${user.display_name || user.username}</h2>
               </div>
-              <span class="ua-pill">${user.is_active ? 'attivo' : 'disattivato'}</span>
+              <span class="ua-pill">${user.is_active ? 'active' : 'disabled'}</span>
             </div>
             <div class="ua-grid">
-              <label>Nome<input name="display_name" value="${user.display_name || ''}" /></label>
+              <label>Name<input name="display_name" value="${user.display_name || ''}" /></label>
               <label>Email<input name="email" type="email" value="${user.email || ''}" /></label>
-              <label>Ruolo platform<select name="platform_role">
+              <label>Platform role<select name="platform_role">
                 <option value="member" ${user.platform_role === 'member' ? 'selected' : ''}>Member</option>
                 <option value="admin" ${user.platform_role === 'admin' ? 'selected' : ''}>Admin</option>
               </select></label>
-              <label>Tipo account<select name="account_type">
+              <label>Account type<select name="account_type">
                 <option value="standard" ${user.account_type === 'standard' ? 'selected' : ''}>Standard</option>
                 <option value="facilitated" ${user.account_type === 'facilitated' ? 'selected' : ''}>Facilitated</option>
               </select></label>
             </div>
-            <label class="ua-toggle"><input name="is_active" type="checkbox" ${user.is_active ? 'checked' : ''} /> Account attivo</label>
+            <label class="ua-toggle"><input name="is_active" type="checkbox" ${user.is_active ? 'checked' : ''} /> Account active</label>
             <button type="submit">
               <span class="material-symbols-rounded" aria-hidden="true">save</span>
-              Salva utente
+              Save user
             </button>
           </form>
           <form class="ua-card ua-password" id="reset-password">
             <div class="ua-heading">
               <div>
                 <p class="ua-kicker">Password</p>
-                <h2>Reset accesso</h2>
+                <h2>Reset access</h2>
               </div>
               <span class="ua-password-icon material-symbols-rounded" aria-hidden="true">key</span>
             </div>
-            <p class="ua-card-copy">Imposta una nuova password temporanea per l'utente selezionato.</p>
+            <p class="ua-card-copy">Imposta una nuova temporary password per l'utente selezionato.</p>
             <div class="ua-password-grid">
-              <label>Nuova password<input name="password" type="password" minlength="8" autocomplete="new-password" required /></label>
-              <label>Conferma password<input name="password_confirmation" type="password" minlength="8" autocomplete="new-password" required /></label>
+              <label>New password<input name="password" type="password" minlength="8" autocomplete="new-password" required /></label>
+              <label>Confirm password<input name="password_confirmation" type="password" minlength="8" autocomplete="new-password" required /></label>
             </div>
             <button type="submit" class="ua-secondary">
               <span class="material-symbols-rounded" aria-hidden="true">password</span>
-              Aggiorna password
+              Update password
             </button>
             <button type="button" class="ua-danger" id="delete-user">
               <span class="material-symbols-rounded" aria-hidden="true">person_remove</span>
-              ${pendingDeleteUserId === user.user_id ? 'Conferma elimina' : 'Elimina utente'}
+              ${pendingDeleteUserId === user.user_id ? 'Confirm delete' : 'Delete user'}
             </button>
           </form>
           </div>
@@ -608,11 +608,11 @@ function render() {
             <div class="ua-heading">
               <div>
                 <p class="ua-kicker">Workspace</p>
-                <h2>Assegnazioni</h2>
+                <h2>Assignments</h2>
               </div>
               <button type="button" id="save-memberships">
                 <span class="material-symbols-rounded" aria-hidden="true">admin_panel_settings</span>
-                Salva accessi
+                Save access
               </button>
             </div>
             <div class="ua-memberships">${membershipHtml(user)}</div>
@@ -620,15 +620,15 @@ function render() {
           <details class="ua-card ua-collapsible" open>
             <summary class="ua-heading ua-collapsible-heading">
               <div>
-                <p class="ua-kicker">App per workspace</p>
-                <h2>Installazione e visibilità</h2>
+                <p class="ua-kicker">Workspace apps</p>
+                <h2>Installation and visibility</h2>
               </div>
               <span class="ua-summary-caret material-symbols-rounded" aria-hidden="true">chevron_right</span>
             </summary>
-            <p class="ua-card-copy">Installata significa montata nel workspace. Solo le app abilitate sono visibili agli utenti e servite dal core.</p>
+            <p class="ua-card-copy">Installta significa montata nel workspace. Solo le app enabled sono visibili agli utenti e servite dal core.</p>
             <div class="ua-app-workspaces">${workspaceAppHtml()}</div>
           </details>`
-            : '<section class="ua-card"><h2>Nessun utente</h2></section>'
+            : '<section class="ua-card"><h2>No users</h2></section>'
         }
       </div>
     </section>
@@ -711,7 +711,7 @@ function bindEvents() {
 }
 
 function showError(error: unknown) {
-  const message = error instanceof Error ? error.message : 'Errore inatteso';
+  const message = error instanceof Error ? error.message : 'Unexpected error';
   notice = { tone: 'error', message };
   render();
 }
@@ -721,7 +721,7 @@ function noticeHtml() {
   return `<div class="ua-notice ua-notice-${notice.tone}">
     <span class="material-symbols-rounded" aria-hidden="true">${notice.tone === 'error' ? 'error' : notice.tone === 'success' ? 'task_alt' : 'info'}</span>
     <span>${notice.message}</span>
-    <button type="button" class="ua-icon-button" id="dismiss-notice" aria-label="Chiudi">
+    <button type="button" class="ua-icon-button" id="dismiss-notice" aria-label="Close">
       <span class="material-symbols-rounded" aria-hidden="true">close</span>
     </button>
   </div>`;

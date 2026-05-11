@@ -343,7 +343,7 @@ export function WidgetSlot({
 
   useEffect(() => cleanupCaptureMedia, []);
 
-  if (!widget || !contextToken || (activeAppId && activeAppId === widget.owner_app_id)) {
+  if (!widget || !contextToken || (size === "overlay" && activeAppId && activeAppId === widget.owner_app_id)) {
     return error ? <p className="bs-widget-slot__fallback">{error}</p> : null;
   }
 

@@ -8,7 +8,7 @@ import sys
 from core.app_sdk.runtime import backend_response, emit_json, read_entrypoint_payload
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from service import create_page, state_payload, status_payload, update_page, update_site
+from service import create_page, set_view_filter, state_payload, status_payload, update_page, update_site, view_filter
 
 
 payload = read_entrypoint_payload()
@@ -24,6 +24,10 @@ try:
         response = create_page(payload, payload.body)
     elif action == "update-page":
         response = update_page(payload, payload.body)
+    elif action == "view_filter":
+        response = view_filter(payload)
+    elif action == "set_view_filter":
+        response = set_view_filter(payload, payload.body)
     else:
         emit_json(backend_response(400, {"error": f"Unsupported action `{action}`."}))
         raise SystemExit(0)
@@ -33,6 +37,12 @@ try:
             "type": "maverick.app.data-changed",
             "owner_app_id": "docs-studio",
             "resource": "state",
+        })
+    if action == "set_view_filter":
+        app_events.append({
+            "type": "maverick.app.data-changed",
+            "owner_app_id": "docs-studio",
+            "resource": "view-state",
         })
     emit_json(backend_response(200, {"ok": True, **response, "app_events": app_events}))
 except ValueError as exc:

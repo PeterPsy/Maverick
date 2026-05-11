@@ -120,7 +120,25 @@
       }
     ]
   },
-  "widgets": [],
+  "widgets": [
+    {
+      "widget_id": "docs-studio-sidebar",
+      "host": "base-shell",
+      "content_kinds": [
+        "shell.sidebar.primary"
+      ],
+      "frontend": {
+        "kind": "iframe",
+        "mount": "frontend/dist/widgets/docs-studio-sidebar",
+        "spa_fallback": true
+      },
+      "actions": {
+        "backend": true,
+        "mcp": false,
+        "cli": false
+      }
+    }
+  ],
   "entrypoints": {
     "hooks": {
       "install": "hooks/install.py",

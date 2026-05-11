@@ -14,9 +14,9 @@ APP_ROOT = Path(__file__).resolve().parents[1]
 DOCS_ROOT = APP_ROOT / "docs"
 
 DEFAULT_SITE = {
-    "name": "Maverick Core Docs",
-    "logo": "MC",
-    "accent": "#ff4f2e",
+    "name": "Maverick Docs",
+    "logo": "MD",
+    "accent": "#4f46e5",
     "tagline": "Curated Maverick core, workspace, and app contract documentation.",
 }
 

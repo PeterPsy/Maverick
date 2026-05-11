@@ -19,8 +19,10 @@ from service import (
     docs_read,
     docs_search,
     load_state,
+    set_view_filter,
     state_payload,
     update_page,
+    view_filter,
 )
 from app_readmes import build_apps_section
 
@@ -104,6 +106,17 @@ class DocsStudioServiceTest(unittest.TestCase):
             self.assertTrue(results)
             self.assertTrue(all(result["section_id"] == "apps" for result in results))
             self.assertTrue(all(result["source_app_id"] == "docs-studio" for result in results))
+
+    def test_view_filter_persists_sidebar_query(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            payload = self._payload(tmp)
+            updated = set_view_filter(payload, {"query": "provider", "section_id": "providers"})
+
+            self.assertEqual(updated["view_state"]["query"], "provider")
+            self.assertEqual(updated["view_state"]["section_id"], "providers")
+            self.assertEqual(view_filter(payload)["view_state"]["query"], "provider")
+            persisted = load_state(payload)
+            self.assertNotIn("sections", persisted)
 
     def test_app_docs_deduplicate_identical_readmes_across_sources(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

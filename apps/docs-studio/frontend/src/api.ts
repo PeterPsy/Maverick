@@ -1,6 +1,8 @@
-import type { DocsBackendResponse, DocsState } from './types';
+import type { DocsBackendResponse, DocsState, DocsViewState } from './types';
 
-async function callDocsBackend(body: Record<string, unknown>): Promise<DocsBackendResponse> {
+export async function callDocsBackend<T extends DocsBackendResponse = DocsBackendResponse>(
+  body: Record<string, unknown>
+): Promise<T> {
   const response = await fetch('/api/apps/docs-studio/backend', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -11,7 +13,7 @@ async function callDocsBackend(body: Record<string, unknown>): Promise<DocsBacke
   if (!response.ok || payload.ok === false) {
     throw new Error(payload.error || 'Docs Studio request failed');
   }
-  return payload as DocsBackendResponse;
+  return payload as T;
 }
 
 export async function loadDocsState(): Promise<DocsState> {
@@ -42,4 +44,14 @@ export async function createDocsPage(input: {
   body: string;
 }): Promise<DocsBackendResponse> {
   return callDocsBackend({ action: 'create-page', ...input });
+}
+
+export async function readDocsViewFilter(): Promise<DocsViewState> {
+  const payload = await callDocsBackend({ action: 'view_filter' });
+  return payload.view_state || {};
+}
+
+export async function setDocsViewFilter(query: string, sectionId?: string | null): Promise<DocsViewState> {
+  const payload = await callDocsBackend({ action: 'set_view_filter', query, section_id: sectionId || null });
+  return payload.view_state || {};
 }

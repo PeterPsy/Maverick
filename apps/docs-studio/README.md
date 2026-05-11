@@ -4,9 +4,10 @@ Docs Studio is a workspace-local app for creating polished, GitBook-style docume
 
 ## Product Surface
 
-- Frontend: a three-pane documentation workspace with navigation, page preview, editing controls, and an assistant panel.
+- Frontend: a focused documentation reading canvas mounted in the app iframe.
+- Base-shell sidebar widget: `docs-studio-sidebar` for `shell.sidebar.primary`, owning documentation search, section expansion, and page navigation outside the main app iframe.
 - Frontend source: React/Vite under `frontend/src`, built into `frontend/dist` through the Maverick frontend lifecycle.
-- Backend: JSON actions for status, state loading, site updates, workspace page creation, and workspace page updates.
+- Backend: JSON actions for status, state loading, view-filter state, site updates, workspace page creation, and workspace page updates.
 - CLI/MCP: targeted documentation manifest, search, page read, status, state, and reference surfaces for workspace agents.
 - Storage: lightweight configuration under `data/docs-studio/state.json`; workspace-authored Markdown pages under `data/docs-studio/pages/`.
 
@@ -46,7 +47,7 @@ The full `docs_studio_state` surface remains available for the UI and diagnostic
 
 ## Design DNA
 
-The source visual reference is decomposed in `DESIGN_DNA.md`. In short: use a dense documentation shell, soft off-white canvas, warm gray text, black headings, a restrained coral accent, 1px dividers, compact icon rows, preview cards, and a fixed assistant rail on the right.
+The current visual rules are decomposed in `DESIGN_DNA.md`. In short: keep the app iframe focused on the documentation page, move navigation/search into the app-owned shell sidebar widget, use local token aliases derived from Chat's Maverick light/dark palette, and avoid assistant or publishing controls until those surfaces are real app behavior.
 
 ## SDK Flow
 

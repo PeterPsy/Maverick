@@ -12,6 +12,7 @@ export interface DocsPage {
   summary: string;
   body: string;
   updated_at?: string;
+  source_app_id?: string;
   source_doc_id?: string;
   source_path?: string;
 }
@@ -25,11 +26,7 @@ export interface DocsSection {
 export interface DocsState {
   schema_version: string;
   site: DocsSite;
-  view_state?: {
-    query?: string;
-    section_id?: string | null;
-    custom_page_ids?: string[];
-  };
+  view_state?: DocsViewState;
   sections: DocsSection[];
 }
 
@@ -37,5 +34,12 @@ export interface DocsBackendResponse {
   ok?: boolean;
   state?: DocsState;
   page?: DocsPage;
+  view_state?: DocsViewState;
   error?: string;
+}
+
+export interface DocsViewState {
+  query?: string;
+  section_id?: string | null;
+  custom_page_ids?: string[];
 }

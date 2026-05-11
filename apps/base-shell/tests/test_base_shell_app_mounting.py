@@ -81,7 +81,7 @@ class BaseShellAppMountingTests(unittest.TestCase):
         self.assertIn("onLoad={postWidgetContextChanged}", widget_source)
         self.assertIn("navigation_scope: typeof payload.navigation_scope", widget_source)
         self.assertIn('size === "overlay"', widget_source)
-        self.assertIn("activeAppId && activeAppId === widget.owner_app_id", widget_source)
+        self.assertIn('size === "overlay" && activeAppId && activeAppId === widget.owner_app_id', widget_source)
         self.assertNotIn("}, [activeWorkspaceId, contentSignature, contentKind, hostAppId])", widget_source)
         shell_styles = (REPO_ROOT / "apps/base-shell/frontend/src/styles/layout.css").read_text()
         self.assertIn("width: calc(100vw - 2rem)", shell_styles)

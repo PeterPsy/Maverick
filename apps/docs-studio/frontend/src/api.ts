@@ -1,6 +1,8 @@
-import type { DocsBackendResponse, DocsState, DocsViewState } from './types';
+import type { DocsBackendResponse, DocsNavigationState, DocsState, DocsViewState } from './types';
 
-export async function callDocsBackend<T extends DocsBackendResponse = DocsBackendResponse>(
+type DocsNavigationResponse = Omit<DocsBackendResponse, 'state'> & { state?: DocsNavigationState };
+
+export async function callDocsBackend<T extends { ok?: boolean; error?: string } = DocsBackendResponse>(
   body: Record<string, unknown>
 ): Promise<T> {
   const response = await fetch('/api/apps/docs-studio/backend', {
@@ -20,6 +22,14 @@ export async function loadDocsState(): Promise<DocsState> {
   const payload = await callDocsBackend({ action: 'get-state' });
   if (!payload.state) {
     throw new Error('Docs Studio did not return state.');
+  }
+  return payload.state;
+}
+
+export async function loadDocsNavigationState(): Promise<DocsNavigationState> {
+  const payload = await callDocsBackend<DocsNavigationResponse>({ action: 'get-navigation' });
+  if (!payload.state) {
+    throw new Error('Docs Studio did not return navigation state.');
   }
   return payload.state;
 }

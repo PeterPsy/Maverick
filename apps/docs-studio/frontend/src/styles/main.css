@@ -95,7 +95,7 @@ h1 {
   display: block;
   width: min(100%, 19rem);
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  background: linear-gradient(90deg, transparent, var(--docs-title-rule), transparent);
   animation: docs-title-rule-in 720ms 160ms ease-out both;
 }
 
@@ -280,10 +280,10 @@ h1 {
 .markdown-preview blockquote {
   margin: 18px 0 24px;
   padding: 14px 18px;
-  border: 1px solid color-mix(in srgb, var(--docs-accent) 26%, transparent);
+  border: 1px solid var(--docs-quote-border);
   border-left: 3px solid var(--docs-accent);
   border-radius: var(--docs-radius);
-  background: color-mix(in srgb, var(--docs-accent) 7%, var(--docs-panel));
+  background: var(--docs-quote-bg);
 }
 
 .markdown-preview blockquote p {

@@ -8,7 +8,16 @@ import sys
 from core.app_sdk.runtime import backend_response, emit_json, read_entrypoint_payload
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from service import create_page, set_view_filter, state_payload, status_payload, update_page, update_site, view_filter
+from service import (
+    create_page,
+    navigation_payload,
+    set_view_filter,
+    state_payload,
+    status_payload,
+    update_page,
+    update_site,
+    view_filter,
+)
 
 
 payload = read_entrypoint_payload()
@@ -18,6 +27,8 @@ try:
         response = status_payload(payload)
     elif action == "get-state":
         response = state_payload(payload)
+    elif action == "get-navigation":
+        response = navigation_payload(payload)
     elif action == "update-site":
         response = {"state": update_site(payload, payload.body)}
     elif action == "create-page":

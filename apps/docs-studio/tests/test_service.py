@@ -19,6 +19,7 @@ from service import (
     docs_read,
     docs_search,
     load_state,
+    navigation_payload,
     set_view_filter,
     state_payload,
     update_page,
@@ -70,6 +71,17 @@ class DocsStudioServiceTest(unittest.TestCase):
             self.assertGreater(sum(len(section["pages"]) for section in sections), len(apps_section["pages"]))
             persisted = load_state(payload)
             self.assertNotIn("sections", persisted)
+
+    def test_navigation_payload_excludes_page_bodies(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            payload = self._payload(tmp)
+            response = navigation_payload(payload)
+            page = response["state"]["sections"][0]["pages"][0]
+
+            self.assertIn("id", page)
+            self.assertIn("title", page)
+            self.assertNotIn("body", page)
+            self.assertNotIn("source_path", page)
 
     def test_docs_manifest_is_compact_and_filterable(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

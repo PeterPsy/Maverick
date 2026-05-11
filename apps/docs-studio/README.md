@@ -1,6 +1,6 @@
 # Docs Studio
 
-Docs Studio is a workspace-local app for creating polished, GitBook-style documentation experiences. It owns its app source under `apps/docs-studio` and composes documentation from file-backed and runtime sources.
+Docs Studio is a source-available platform app for creating polished, GitBook-style documentation experiences. The current platform source lives under `apps/docs-studio`; workspace-authored documentation remains app-owned data under `data/docs-studio/`.
 
 ## Product Surface
 
@@ -51,16 +51,22 @@ The current visual rules are decomposed in `DESIGN_DNA.md`. In short: keep the a
 
 ## SDK Flow
 
+The installed `default` workspace currently uses the platform source record for Docs Studio, not a workspace-local project copy. Platform-source checks should use scoped app discovery, app tests, and the official frontend build:
+
 ```bash
-maverick core cli run core.app-sdk.validate --app-id docs-studio --workspace default --json
-maverick core cli run core.app-sdk.register-local --app-id docs-studio --workspace default --json
-maverick core cli run core.app-sdk.install-local --app-id docs-studio --workspace default --json
-maverick core cli run core.app-sdk.status --app-id docs-studio --workspace default --json
-maverick core cli run core.app-sdk.package --app-id docs-studio --workspace default --json
+maverick apps list --json
+maverick app docs-studio cli list --json
+maverick app docs-studio mcp list --json
+python3 -m unittest discover -s apps/docs-studio/tests -p 'test_*.py'
+maverick app docs-studio frontend build --json
 ```
 
-## Rebuild Frontend
+The workspace-local SDK register/install/package flow applies after an explicit fork or workspace-local project exists under `workspaces/<workspace_id>/apps/docs-studio/`.
+
+## Frontend Development
 
 ```bash
+npm run test
+npm run build
 maverick app docs-studio frontend build --json
 ```

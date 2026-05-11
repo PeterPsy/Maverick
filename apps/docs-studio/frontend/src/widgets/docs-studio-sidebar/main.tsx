@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ChevronDown, FileText, Search } from 'lucide-react';
-import { loadDocsState, readDocsViewFilter, setDocsViewFilter } from '../../api';
+import { loadDocsNavigationState, readDocsViewFilter, setDocsViewFilter } from '../../api';
 import { useShellSidebarCloseSwipe } from '../../hooks/useShellSidebarCloseSwipe';
 import { docPageIdFromSelectionMessage, type ActiveDocSelectionMessage } from '../../lib/activeDocSelection';
 import { docPageIdFromWidgetContext } from '../../lib/docNavigationParams';
-import type { DocsPage, DocsSection, DocsState } from '../../types';
+import { collapsedSectionsWithPageVisible } from '../../lib/sidebarSelection';
+import type { DocsNavigationPage, DocsNavigationSection, DocsNavigationState } from '../../types';
 import '../../styles/sidebar-widget.css';
 
 const MOBILE_LAYOUT_QUERY = '(max-width: 979px)';
@@ -45,7 +46,7 @@ function useShellMobileLayout() {
   return isShellMobileLayout;
 }
 
-function findFirstPage(state: DocsState | null): DocsPage | null {
+function findFirstPage(state: DocsNavigationState | null): DocsNavigationPage | null {
   for (const section of state?.sections || []) {
     const page = section.pages[0];
     if (page) {
@@ -55,15 +56,15 @@ function findFirstPage(state: DocsState | null): DocsPage | null {
   return null;
 }
 
-function hasPage(state: DocsState | null, pageId: string) {
+function hasPage(state: DocsNavigationState | null, pageId: string) {
   return Boolean(state?.sections.some((section) => section.pages.some((page) => page.id === pageId)));
 }
 
-function sectionContainsPage(section: DocsSection, pageId: string) {
+function sectionContainsPage(section: DocsNavigationSection, pageId: string) {
   return section.pages.some((page) => page.id === pageId);
 }
 
-function selectedPageIdFromState(state: DocsState, currentPageId: string, preferredPageId?: string) {
+function selectedPageIdFromState(state: DocsNavigationState, currentPageId: string, preferredPageId?: string) {
   if (preferredPageId && hasPage(state, preferredPageId)) {
     return preferredPageId;
   }
@@ -73,11 +74,11 @@ function selectedPageIdFromState(state: DocsState, currentPageId: string, prefer
   return findFirstPage(state)?.id || '';
 }
 
-function pageMatchesSearch(page: DocsPage, query: string) {
+function pageMatchesSearch(page: DocsNavigationPage, query: string) {
   if (!query) {
     return true;
   }
-  return `${page.title} ${page.summary} ${page.body} ${page.source_app_id || ''}`.toLowerCase().includes(query);
+  return `${page.title} ${page.summary} ${page.source_app_id || ''}`.toLowerCase().includes(query);
 }
 
 function openPageInShell(pageId: string) {
@@ -98,7 +99,7 @@ function openPageInShell(pageId: string) {
 }
 
 function DocsStudioSidebarWidget() {
-  const [state, setState] = useState<DocsState | null>(null);
+  const [state, setState] = useState<DocsNavigationState | null>(null);
   const [query, setQuery] = useState('');
   const [selectedPageId, setSelectedPageId] = useState('');
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
@@ -106,6 +107,7 @@ function DocsStudioSidebarWidget() {
   const [error, setError] = useState<string | null>(null);
   const isShellMobileLayout = useShellMobileLayout();
   const selectedPageIdRef = useRef('');
+  const stateRef = useRef<DocsNavigationState | null>(null);
   const lastPersistedQueryRef = useRef('');
   const hasLoadedViewStateRef = useRef(false);
 
@@ -128,16 +130,14 @@ function DocsStudioSidebarWidget() {
   }, [state, query]);
 
   async function refreshState(preferredPageId?: string) {
-    const next = await loadDocsState();
+    const next = await loadDocsNavigationState();
     const nextSelectedPageId = selectedPageIdFromState(next, selectedPageIdRef.current, preferredPageId);
     selectedPageIdRef.current = nextSelectedPageId;
+    stateRef.current = next;
     setState(next);
     setSelectedPageId(nextSelectedPageId);
     setCollapsedSections((current) => {
-      if (current.size) {
-        return current;
-      }
-      const collapsed = new Set(next.sections.slice(1).map((section) => section.id));
+      const collapsed = current.size ? new Set(current) : new Set(next.sections.slice(1).map((section) => section.id));
       for (const section of next.sections) {
         if (sectionContainsPage(section, nextSelectedPageId)) {
           collapsed.delete(section.id);
@@ -145,6 +145,15 @@ function DocsStudioSidebarWidget() {
       }
       return collapsed;
     });
+  }
+
+  function applySelectedPageId(pageId: string) {
+    if (!pageId) {
+      return;
+    }
+    selectedPageIdRef.current = pageId;
+    setSelectedPageId(pageId);
+    setCollapsedSections((current) => collapsedSectionsWithPageVisible(current, stateRef.current?.sections || [], pageId));
   }
 
   async function refreshViewFilter() {
@@ -203,14 +212,12 @@ function DocsStudioSidebarWidget() {
       } & ActiveDocSelectionMessage;
       const contextPageId = docPageIdFromWidgetContext(payload);
       if (contextPageId) {
-        selectedPageIdRef.current = contextPageId;
-        setSelectedPageId(contextPageId);
+        applySelectedPageId(contextPageId);
         return;
       }
       const activePageId = docPageIdFromSelectionMessage(payload);
       if (activePageId) {
-        selectedPageIdRef.current = activePageId;
-        setSelectedPageId(activePageId);
+        applySelectedPageId(activePageId);
         return;
       }
       if (
@@ -243,9 +250,8 @@ function DocsStudioSidebarWidget() {
     });
   }
 
-  function selectPage(page: DocsPage) {
-    selectedPageIdRef.current = page.id;
-    setSelectedPageId(page.id);
+  function selectPage(page: DocsNavigationPage) {
+    applySelectedPageId(page.id);
     openPageInShell(page.id);
   }
 

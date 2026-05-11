@@ -523,3 +523,37 @@ def status_payload(payload: AppEntrypointPayload) -> dict[str, object]:
 
 def state_payload(payload: AppEntrypointPayload) -> dict[str, object]:
     return {"state": _composed_state(payload, load_state(payload))}
+
+
+def navigation_payload(payload: AppEntrypointPayload) -> dict[str, object]:
+    """Return a compact state shape for sidebar navigation."""
+    state = _composed_state(payload, load_state(payload))
+    sections = []
+    for section in state.get("sections", []):
+        if not isinstance(section, dict):
+            continue
+        pages = []
+        for page in section.get("pages", []):
+            if not isinstance(page, dict):
+                continue
+            pages.append({
+                "id": page.get("id"),
+                "title": page.get("title"),
+                "icon": page.get("icon"),
+                "summary": page.get("summary"),
+                "source_app_id": page.get("source_app_id"),
+                "updated_at": page.get("updated_at"),
+            })
+        sections.append({
+            "id": section.get("id"),
+            "title": section.get("title"),
+            "pages": pages,
+        })
+    return {
+        "state": {
+            "schema_version": state.get("schema_version"),
+            "site": state.get("site"),
+            "view_state": state.get("view_state") or {},
+            "sections": sections,
+        }
+    }

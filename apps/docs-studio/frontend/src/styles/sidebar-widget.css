@@ -55,7 +55,7 @@ button {
   gap: 0.48rem;
   height: var(--docs-studio-sidebar-search-height);
   min-height: var(--docs-studio-sidebar-search-height);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--docs-sidebar-search-border);
   border-radius: 22px;
   background: var(--maverick-glass-surface);
   box-shadow: var(--maverick-inner-edge);
@@ -273,7 +273,7 @@ button {
   display: block;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--docs-skeleton-bg);
 }
 
 .docs-studio-sidebar-skeleton__icon::after,
@@ -281,7 +281,7 @@ button {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+  background: linear-gradient(90deg, transparent, var(--docs-skeleton-shimmer), transparent);
   transform: translateX(-100%);
   animation: docs-studio-sidebar-skeleton-shimmer 1.45s ease-in-out infinite;
 }

@@ -12,12 +12,14 @@ body,
   height: 100%;
   min-height: 100%;
   margin: 0;
+  background: var(--docs-bg);
   overflow: hidden;
 }
 
 body {
   background: var(--docs-bg);
   color: var(--docs-text);
+  color-scheme: dark;
   font-family: var(--docs-font);
   font-size: 16px;
   line-height: 1.45;
@@ -153,8 +155,8 @@ h1 {
   padding: 16px;
   border: 1px solid var(--docs-border);
   border-radius: var(--docs-radius);
-  background: #111827;
-  color: #f9fafb;
+  background: var(--docs-code-bg);
+  color: var(--docs-code-text);
   line-height: 1.55;
 }
 

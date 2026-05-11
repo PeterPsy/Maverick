@@ -173,9 +173,12 @@ export function App() {
     <main className="docs-app">
       <article className="doc-page">
         <header className="doc-header">
-          <p className="eyebrow">{active.section.title}</p>
-          <h1>{active.page.title}</h1>
-          <p className="lead">{active.page.summary || state.site.tagline}</p>
+          <div className="doc-title-block">
+            <p className="eyebrow">{active.section.title}</p>
+            <h1>{active.page.title}</h1>
+            <span className="doc-title-separator" aria-hidden="true" />
+            <p className="lead">{active.page.summary || state.site.tagline}</p>
+          </div>
         </header>
 
         <section className="markdown-preview" aria-label="Documentation body">

@@ -345,7 +345,7 @@ class AppStoreAppTestCase(unittest.TestCase):
         )
         widgets = {widget.widget_id: widget for widget in parsed.contract.widgets}
         self.assertEqual(widgets["app-shortcuts"].host, "base-shell")
-        self.assertEqual(widgets["app-shortcuts"].content_kinds, ["shell.sidebar.apps"])
+        self.assertEqual(widgets["app-shortcuts"].content_kinds, ["shell.sidebar.apps", "shell.sidebar.primary"])
         self.assertEqual(widgets["app-shortcuts"].frontend.mount, "frontend/dist/widgets/app-shortcuts")
 
     def test_app_store_backend_does_not_fetch_remote_catalog_directly(self) -> None:
@@ -392,8 +392,8 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertIn(b"Server Apps", payload)
         self.assertIn(b"Installed Apps", payload)
         self.assertIn(b"Local Apps", payload)
-        self.assertIn(b"/apps/app-store/assets/main.css?v=20260512-dark-selector", payload)
-        self.assertIn(b"/apps/app-store/assets/main.js?v=20260512-dark-selector", payload)
+        self.assertIn(b"/apps/app-store/assets/main.css?v=20260512-sidebar-primary", payload)
+        self.assertIn(b"/apps/app-store/assets/main.js?v=20260512-sidebar-primary", payload)
 
     def test_frontend_dist_separates_server_promotion_from_public_submission(self) -> None:
         app_root = Path(__file__).resolve().parents[1]
@@ -488,8 +488,16 @@ class AppStoreAppTestCase(unittest.TestCase):
             query_string="host=base-shell&content_kind=shell.sidebar.apps",
             cookie=cookie,
         )
+        status_primary, primary, _primary_headers = self.invoke(
+            app,
+            path="/api/apps/widgets",
+            query_string="host=base-shell&content_kind=shell.sidebar.primary",
+            cookie=cookie,
+        )
         if isinstance(filtered, bytes):
             filtered = json.loads(filtered.decode("utf-8"))
+        if isinstance(primary, bytes):
+            primary = json.loads(primary.decode("utf-8"))
         status_widget, widget_body, widget_headers = self.invoke(
             app,
             path="/api/apps/widgets/app-store/app-shortcuts/frontend/",
@@ -500,11 +508,13 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertEqual(filtered["items"][0]["owner_app_id"], "app-store")
         self.assertEqual(filtered["items"][0]["widget_id"], "app-shortcuts")
         self.assertEqual(filtered["items"][0]["frontend_mount"], "/api/apps/widgets/app-store/app-shortcuts/frontend/")
+        self.assertEqual(status_primary, 200)
+        self.assertIn("app-shortcuts", {item["widget_id"] for item in primary["items"] if item["owner_app_id"] == "app-store"})
         self.assertEqual(status_widget, 200)
         self.assertIn("text/html", widget_headers["Content-Type"])
         self.assertIn(b"App shortcuts", widget_body)
-        self.assertIn(b"styles.css?v=20260512-selector", widget_body)
-        self.assertIn(b"main.js?v=20260512-selector", widget_body)
+        self.assertIn(b"styles.css?v=20260512-sidebar-primary", widget_body)
+        self.assertIn(b"main.js?v=20260512-sidebar-primary", widget_body)
         shortcut_script = (
             Path(__file__).resolve().parents[1] / "frontend" / "dist" / "widgets" / "app-shortcuts" / "main.js"
         ).read_text()

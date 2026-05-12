@@ -136,7 +136,8 @@
       "widget_id": "app-shortcuts",
       "host": "base-shell",
       "content_kinds": [
-        "shell.sidebar.apps"
+        "shell.sidebar.apps",
+        "shell.sidebar.primary"
       ],
       "frontend": {
         "kind": "iframe",

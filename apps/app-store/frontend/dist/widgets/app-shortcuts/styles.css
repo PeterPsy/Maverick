@@ -1,19 +1,34 @@
 :root {
   color-scheme: dark;
   --maverick-bg: rgba(7, 7, 8, 1);
-  --maverick-surface: rgba(255, 255, 255, 0.055);
+  --maverick-bg-strong: rgba(12, 12, 14, 0.58);
+  --maverick-surface: rgba(12, 12, 14, 0.58);
+  --maverick-surface-soft: rgba(255, 255, 255, 0.065);
   --maverick-surface-hover: rgba(255, 255, 255, 0.105);
   --maverick-surface-active: rgba(255, 255, 255, 0.14);
-  --maverick-border: rgba(255, 255, 255, 0.08);
+  --maverick-border: rgba(255, 255, 255, 0.1);
   --maverick-border-strong: rgba(255, 255, 255, 0.14);
   --maverick-glass-surface: rgba(12, 12, 14, 0.58);
+  --maverick-glass-highlight:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 36%),
+    linear-gradient(315deg, rgba(255, 255, 255, 0.035), transparent 42%);
+  --maverick-glass-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.052), inset 0 1px 0 rgba(255, 255, 255, 0.09);
   --maverick-inner-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.14);
   --maverick-text: #ececec;
-  --maverick-text-muted: rgba(236, 236, 236, 0.66);
+  --maverick-text-muted: rgba(236, 236, 236, 0.64);
   --maverick-text-soft: rgba(236, 236, 236, 0.42);
   --maverick-accent: #ffffff;
-  --maverick-accent-soft: rgba(255, 255, 255, 0.18);
+  --maverick-accent-strong: #ffffff;
+  --maverick-accent-muted: rgba(255, 255, 255, 0.72);
+  --maverick-accent-soft: rgba(255, 255, 255, 0.12);
+  --maverick-accent-hover: rgba(255, 255, 255, 0.18);
   --maverick-text-on-accent: #0a0a0b;
+  --maverick-success: #4ade80;
+  --maverick-warning: #f59e0b;
+  --maverick-danger: #ff4d8d;
+  --maverick-focus: rgba(255, 255, 255, 0.32);
+  --maverick-shadow-soft: 0 12px 30px rgba(0, 0, 0, 0.22);
+  --maverick-shadow-strong: 0 22px 60px rgba(0, 0, 0, 0.34);
   --maverick-card-radius: 22px;
   --maverick-control-radius: 18px;
   --maverick-font: "Avenir Next", "Sohne", "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
@@ -65,16 +80,23 @@ button {
 .app-shortcuts {
   --app-shortcuts-control-height: 2.65rem;
   --app-shortcuts-scope-height: 2.24rem;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 0.58rem;
+  --app-shortcuts-scroll-under-bottom: 7.15rem;
+  --app-shortcuts-scroll-under-top: 3.12rem;
+  --app-shortcuts-selector-height: calc(var(--app-shortcuts-control-height) + var(--app-shortcuts-scope-height) + 0.5rem);
+  position: relative;
+  display: block;
   width: 100%;
   height: 100%;
   min-height: 0;
-  padding: 0 0.35rem 0.25rem;
+  overflow: hidden;
 }
 
 .app-shortcuts__selector {
+  position: absolute;
+  top: var(--app-shortcuts-scroll-under-top);
+  left: 0;
+  right: 0;
+  z-index: 3;
   display: grid;
   gap: 0.5rem;
   min-width: 0;
@@ -141,12 +163,14 @@ button {
   display: flex;
   flex-direction: column;
   gap: 0.46rem;
+  width: 100%;
+  height: 100%;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
-  padding-bottom: 1rem;
+  padding: calc(var(--app-shortcuts-scroll-under-top) + var(--app-shortcuts-selector-height) + 0.72rem) 0 var(--app-shortcuts-scroll-under-bottom);
   scrollbar-width: none;
 }
 

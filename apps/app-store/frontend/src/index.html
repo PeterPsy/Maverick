@@ -8,36 +8,25 @@
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:FILL@0..1&opsz=20..48&wght@400..700&display=swap"
     />
-    <link rel="stylesheet" href="/apps/app-store/assets/main.css?v=20260512-dark-selector" />
+    <link rel="stylesheet" href="/apps/app-store/assets/main.css?v=20260512-sidebar-primary" />
   </head>
   <body>
     <main class="store-shell">
-      <header class="store-topbar">
-        <a class="store-brand" href="#today" aria-label="Maverick App Store home">
-          <span class="store-brand__icon" aria-hidden="true">M</span>
-          <span>Maverick App Store</span>
-        </a>
-        <nav class="store-tabs" aria-label="Store sections">
-          <button class="store-tab is-active" type="button" data-target="today">Today</button>
-          <button class="store-tab" type="button" data-target="catalog">Apps</button>
-          <button class="store-tab" type="button" data-target="catalog">Top Charts</button>
-          <button class="store-tab" type="button" data-target="manage">Manage</button>
-        </nav>
-        <div class="topbar-meta">
-          <span class="status-pill" id="statusText">Loading</span>
-          <button class="icon-button" id="refreshButton" type="button" title="Refresh catalog" aria-label="Refresh catalog">
-            <span aria-hidden="true" class="material-symbols-rounded">refresh</span>
-          </button>
-        </div>
-      </header>
-
       <section class="today-section" id="today" aria-labelledby="todayTitle">
         <div class="today-heading">
           <div>
             <p class="date-label" id="todayLabel">Today</p>
-            <h1 id="todayTitle">Today</h1>
+            <h1 id="todayTitle">App Store</h1>
           </div>
-          <p class="today-copy">Scopri app Maverick pronte da installare, aggiornare o portare nel tuo workspace.</p>
+          <div class="today-actions">
+            <p class="today-copy">Scopri app Maverick pronte da installare, aggiornare o portare nel tuo workspace.</p>
+            <div class="status-actions">
+              <span class="status-pill" id="statusText">Loading</span>
+              <button class="icon-button" id="refreshButton" type="button" title="Refresh catalog" aria-label="Refresh catalog">
+                <span aria-hidden="true" class="material-symbols-rounded">refresh</span>
+              </button>
+            </div>
+          </div>
         </div>
         <div class="feature-rail" id="featuredApps" aria-label="Featured apps"></div>
       </section>
@@ -136,6 +125,6 @@
         <div class="app-modal__actions" id="promotionModalActions"></div>
       </div>
     </div>
-    <script src="/apps/app-store/assets/main.js?v=20260512-dark-selector"></script>
+    <script src="/apps/app-store/assets/main.js?v=20260512-sidebar-primary"></script>
   </body>
 </html>

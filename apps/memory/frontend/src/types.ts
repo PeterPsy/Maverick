@@ -67,6 +67,12 @@ export type NodeDetails = GraphNode & {
   incoming_edges?: DetailedEdge[];
 };
 
+export type NodeDraft = {
+  title: string;
+  body: string;
+  type: string;
+};
+
 export type ViewFilter = {
   mode: "search" | "custom";
   title: string;

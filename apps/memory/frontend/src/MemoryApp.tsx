@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CreateNodeModal } from "./components/CreateNodeModal";
 import { GraphCanvas } from "./components/GraphCanvas";
-import { LeftPanel, RightPanel } from "./components/SidePanels";
-import { labelForType } from "./format";
+import { notifyActiveMemorySelection } from "./lib/activeMemorySelection";
+import { nodeIdFromParams, scalarString, shouldOpenCreateNode } from "./lib/memoryNavigationParams";
 import { callMemory, normalizeViewFilter } from "./memoryApi";
-import type { GraphEdge, GraphNode, NodeDetails, ViewFilter } from "./types";
+import type { GraphEdge, GraphNode, NodeDetails, NodeDraft, ViewFilter } from "./types";
 
 const defaultDraft = { title: "", body: "", type: "note" };
 
@@ -15,9 +16,14 @@ export function MemoryApp() {
   const [selectedDetails, setSelectedDetails] = useState<NodeDetails | null>(null);
   const [query, setQuery] = useState("");
   const [viewFilter, setViewFilter] = useState<ViewFilter>(() => normalizeViewFilter());
-  const [contextText, setContextText] = useState("Run a query to preview the exact context agents will receive.");
-  const [draft, setDraft] = useState(defaultDraft);
+  const [draft, setDraft] = useState<NodeDraft>(defaultDraft);
   const [status, setStatus] = useState("Ready");
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [creatingNode, setCreatingNode] = useState(false);
+  const [error, setError] = useState("");
+  const consumedCreateRequests = useRef<Set<string>>(new Set());
+  const consumedLegacyCreateRequest = useRef(false);
+  const selectedIdRef = useRef<string | null>(null);
 
   const nodeById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
   const selectedNode = selectedId ? nodeById.get(selectedId) || null : null;
@@ -67,10 +73,12 @@ export function MemoryApp() {
 
   const selectNode = useCallback(async (id: string | null) => {
     setSelectedId(id);
+    selectedIdRef.current = id;
     if (!id) {
       setSelectedDetails(null);
       return;
     }
+    notifyActiveMemorySelection(id);
     setStatus("Inspecting node");
     const payload = await callMemory<{ node: NodeDetails }>({ action: "inspect", node_id: id });
     setSelectedDetails(payload.node);
@@ -108,11 +116,22 @@ export function MemoryApp() {
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       if (event.origin !== window.location.origin || !event.data || typeof event.data !== "object") return;
-      if (event.data.type === "maverick.app.data-changed" && event.data.owner_app_id === "memory") scheduleEventRefresh();
+      const payload = event.data as {
+        app_id?: string;
+        owner_app_id?: string;
+        params?: Record<string, string | boolean | null>;
+        resource?: string;
+        type?: string;
+      };
+      if (payload.type === "maverick.app.navigate" && (!payload.app_id || payload.app_id === "memory")) {
+        void handleNavigationParams(payload.params || {});
+        return;
+      }
+      if (payload.type === "maverick.app.data-changed" && payload.owner_app_id === "memory") scheduleEventRefresh();
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [scheduleEventRefresh]);
+  }, [nodes, scheduleEventRefresh]);
 
   useEffect(() => {
     if (!("WebSocket" in window)) return undefined;
@@ -161,62 +180,54 @@ export function MemoryApp() {
       });
   }, [edges, nodeById, selectedId]);
 
-  async function runSearch() {
-    const payload = await callMemory<{ state?: { view_filter?: ViewFilter } }>({ action: "set_view_filter", query });
-    const next = normalizeViewFilter(payload.state?.view_filter);
-    setViewFilter(next);
-    await refreshGraph({ query: next.query, viewFilter: next });
-  }
-
   async function remember() {
-    const payload = await callMemory<{ node?: GraphNode }>({
-      action: "remember",
-      title: draft.title,
-      body: draft.body,
-      type: draft.type,
-    });
-    setDraft({ ...defaultDraft, type: draft.type });
-    await refreshGraph({ query, viewFilter });
-    if (payload.node?.id) await selectNode(payload.node.id);
+    setCreatingNode(true);
+    setError("");
+    try {
+      const payload = await callMemory<{ node?: GraphNode }>({
+        action: "remember",
+        title: draft.title,
+        body: draft.body,
+        type: draft.type,
+      });
+      setDraft({ ...defaultDraft, type: draft.type });
+      setCreateModalOpen(false);
+      await refreshGraph({ query, viewFilter });
+      if (payload.node?.id) await selectNode(payload.node.id);
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : "Unable to create node.");
+    } finally {
+      setCreatingNode(false);
+    }
   }
 
-  async function previewContext() {
-    const payload = await callMemory<{ items?: Array<{ title: string; summary?: string; body_text?: string; type?: string }> }>({
-      action: "context",
-      query,
-      limit: 8,
-    });
-    const lines = (payload.items || []).map((item, index) => {
-      const body = item.summary || item.body_text || "";
-      return `${index + 1}. ${item.title}\n   ${labelForType(item.type || "note")} - ${body}`;
-    });
-    setContextText(lines.length ? lines.join("\n\n") : "No matching context.");
-  }
-
-  async function clearCustomView() {
-    const payload = await callMemory<{ state?: { view_filter?: ViewFilter } }>({ action: "clear_custom_view" });
-    const next = normalizeViewFilter(payload.state?.view_filter);
-    setViewFilter(next);
-    setQuery(next.query || "");
-    await refreshGraph({ query: next.query, viewFilter: next });
+  async function handleNavigationParams(params: Record<string, string | boolean | null>) {
+    const requestedNodeId = nodeIdFromParams(params);
+    if (requestedNodeId) {
+      if (nodes.some((node) => node.id === requestedNodeId) || selectedIdRef.current !== requestedNodeId) {
+        await selectNode(requestedNodeId);
+      }
+    }
+    if (!shouldOpenCreateNode(params)) {
+      return;
+    }
+    const requestId = scalarString(params.new_node_request_id);
+    if (requestId) {
+      if (consumedCreateRequests.current.has(requestId)) {
+        return;
+      }
+      consumedCreateRequests.current.add(requestId);
+    } else if (consumedLegacyCreateRequest.current) {
+      return;
+    } else {
+      consumedLegacyCreateRequest.current = true;
+    }
+    setCreateModalOpen(true);
   }
 
   return (
-    <div className="memory-app">
-      <LeftPanel
-        status={status}
-        query={query}
-        viewFilter={viewFilter}
-        nodeCount={nodes.length}
-        edgeCount={edges.length}
-        draft={draft}
-        onQueryChange={setQuery}
-        onSearch={runSearch}
-        onClearCustomView={clearCustomView}
-        onRefreshGraph={() => refreshGraph({ query, viewFilter })}
-        onDraftChange={setDraft}
-        onRemember={remember}
-      />
+    <main className="memory-shell">
+      {error ? <div className="memory-error">{error}</div> : null}
       <GraphCanvas
         nodes={nodes}
         edges={edges}
@@ -224,16 +235,21 @@ export function MemoryApp() {
         selectedNode={selectedNode}
         selectedDetails={selectedDetails}
         relationships={relationships}
+        status={status}
         setNodes={setNodes}
+        onRefreshGraph={() => refreshGraph({ query, viewFilter })}
         onSelectNode={selectNode}
       />
-      <RightPanel
-        nodes={nodes}
-        selectedId={selectedId}
-        contextText={contextText}
-        onSelectNode={selectNode}
-        onPreviewContext={previewContext}
+      <CreateNodeModal
+        draft={draft}
+        open={createModalOpen}
+        saving={creatingNode}
+        onClose={() => {
+          if (!creatingNode) setCreateModalOpen(false);
+        }}
+        onCreate={remember}
+        onDraftChange={setDraft}
       />
-    </div>
+    </main>
   );
 }

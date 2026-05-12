@@ -95,9 +95,18 @@ class MemoryAppTestCase(unittest.TestCase):
             [action.action for action in view_surface.state_actions],
             ["view_filter", "set_view_filter", "set_custom_view", "clear_custom_view"],
         )
+        widgets = {widget.widget_id: widget for widget in parsed.contract.widgets}
+        self.assertEqual({"memory-sidebar", "memory-sidebar-footer"}, set(widgets))
+        self.assertEqual(widgets["memory-sidebar"].host, "base-shell")
+        self.assertEqual(widgets["memory-sidebar"].content_kinds, ["shell.sidebar.primary"])
+        self.assertEqual(widgets["memory-sidebar"].frontend.mount, "frontend/dist/widgets/memory-sidebar")
+        self.assertEqual(widgets["memory-sidebar-footer"].content_kinds, ["shell.sidebar.footer"])
+        self.assertEqual(widgets["memory-sidebar-footer"].frontend.mount, "frontend/dist/widgets/memory-sidebar-footer")
         self.assertTrue((MEMORY_ROOT / "frontend" / "src" / "MemoryApp.tsx").is_file())
         dist_index = (MEMORY_ROOT / "frontend" / "dist" / "index.html").read_text(encoding="utf-8")
         self.assertIn("/apps/memory/assets/", dist_index)
+        self.assertTrue((MEMORY_ROOT / "frontend" / "dist" / "widgets" / "memory-sidebar" / "index.html").is_file())
+        self.assertTrue((MEMORY_ROOT / "frontend" / "dist" / "widgets" / "memory-sidebar-footer" / "index.html").is_file())
 
     def test_install_hook_is_idempotent_and_creates_schema(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

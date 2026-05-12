@@ -1,0 +1,155 @@
+@import './tokens.css';
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  min-height: 0;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  overflow: hidden;
+  background: var(--maverick-bg);
+  color: var(--maverick-text);
+  font-family: var(--maverick-font);
+}
+
+button,
+input,
+select,
+textarea {
+  border: 0;
+  color: inherit;
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+label {
+  display: grid;
+  gap: 0.38rem;
+  min-width: 0;
+  color: var(--maverick-text-muted);
+  font-size: 0.78rem;
+  font-weight: 400;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--maverick-border-strong);
+  border-radius: var(--maverick-control-radius);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--maverick-text);
+  outline: none;
+  padding: 12px;
+}
+
+select {
+  min-height: 2.65rem;
+  background: #19191b;
+}
+
+textarea {
+  min-height: 13rem;
+  resize: vertical;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--maverick-accent);
+  box-shadow: 0 0 0 3px var(--maverick-accent-soft);
+}
+
+.memory-shell {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--maverick-bg);
+}
+
+.primary-action,
+.secondary-action,
+.icon-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.42rem;
+  min-height: 2.2rem;
+  border-radius: 999px;
+  padding: 0 0.78rem;
+  font-size: 0.76rem;
+  font-weight: 400;
+  transition: background 140ms ease, transform 140ms ease;
+}
+
+.primary-action {
+  background: var(--maverick-accent);
+  color: var(--maverick-text-on-accent);
+}
+
+.secondary-action,
+.icon-action {
+  border: 1px solid var(--maverick-border-strong);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--maverick-text);
+}
+
+.icon-action {
+  width: 2.2rem;
+  padding: 0;
+}
+
+.primary-action:hover:not(:disabled),
+.secondary-action:hover:not(:disabled),
+.icon-action:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.memory-error {
+  position: absolute;
+  top: 1rem;
+  left: 50%;
+  z-index: 20;
+  max-width: min(34rem, calc(100% - 2rem));
+  border: 1px solid var(--maverick-border);
+  border-radius: var(--maverick-control-radius);
+  background: rgba(22, 12, 14, 0.94);
+  color: var(--maverick-danger);
+  padding: 0.75rem 1rem;
+  transform: translateX(-50%);
+}
+
+@media (max-width: 900px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}

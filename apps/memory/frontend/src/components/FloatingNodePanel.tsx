@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import { confidenceLabel, formatDate, labelForType } from "../format";
 import type { GraphNode, NodeDetails, RelationshipRow } from "../types";
 
@@ -20,7 +21,7 @@ export function FloatingNodePanel({ node, relationships, onClose, onSelect }: Fl
           <h2>{node.title}</h2>
         </div>
         <button type="button" className="icon-button" onClick={onClose} aria-label="Close node panel">
-          x
+          <X size={16} aria-hidden="true" />
         </button>
       </div>
 

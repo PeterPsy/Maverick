@@ -11,6 +11,13 @@ export default defineConfig({
     rollupOptions: {
       input: {
         app: "frontend/index.html",
+        "widgets/memory-sidebar/index": "frontend/widgets/memory-sidebar/index.html",
+        "widgets/memory-sidebar-footer/index": "frontend/widgets/memory-sidebar-footer/index.html",
+      },
+      output: {
+        entryFileNames: "assets/app-[hash].js",
+        chunkFileNames: "assets/[name]-[hash].js",
+        assetFileNames: "assets/[name]-[hash][extname]",
       },
     },
   },

@@ -1,0 +1,63 @@
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.58);
+  padding: 24px;
+}
+
+.memory-modal {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 18px;
+  width: min(640px, 100%);
+  max-height: min(760px, calc(100dvh - 48px));
+  overflow: auto;
+  border: 1px solid var(--maverick-border-strong);
+  border-radius: var(--maverick-control-radius);
+  background: var(--maverick-bg);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.48);
+  padding: 20px;
+}
+
+.modal-header,
+.modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.modal-header h2 {
+  font-size: 1.38rem;
+  line-height: 1.12;
+}
+
+.modal-header p {
+  margin-top: 5px;
+  color: var(--maverick-text-muted);
+}
+
+.modal-body {
+  display: grid;
+  gap: 14px;
+  min-height: 0;
+}
+
+@media (max-width: 620px) {
+  .modal-backdrop {
+    padding: 14px;
+  }
+
+  .memory-modal {
+    max-height: calc(100dvh - 28px);
+    padding: 16px;
+  }
+
+  .modal-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+}

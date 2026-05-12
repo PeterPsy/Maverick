@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Maximize2, RefreshCw } from "lucide-react";
 import { colors } from "../constants";
 import { labelForType, truncate } from "../format";
 import type { GraphEdge, GraphNode, NodeDetails, RelationshipRow } from "../types";
@@ -17,7 +18,9 @@ type GraphCanvasProps = {
   selectedNode: GraphNode | null;
   selectedDetails: NodeDetails | null;
   relationships: RelationshipRow[];
+  status: string;
   setNodes: (updater: (nodes: GraphNode[]) => GraphNode[]) => void;
+  onRefreshGraph: () => void;
   onSelectNode: (id: string | null) => void;
 };
 
@@ -28,7 +31,9 @@ export function GraphCanvas({
   selectedNode,
   selectedDetails,
   relationships,
+  status,
   setNodes,
+  onRefreshGraph,
   onSelectNode,
 }: GraphCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -82,7 +87,7 @@ export function GraphCanvas({
       ctx.beginPath();
       ctx.moveTo(source.x, source.y);
       ctx.lineTo(target.x, target.y);
-      ctx.strokeStyle = active ? "rgba(216,240,110,.76)" : "rgba(132,151,160,.24)";
+      ctx.strokeStyle = active ? "rgba(255,255,255,.76)" : "rgba(132,151,160,.24)";
       ctx.lineWidth = active ? 2.8 : 0.8 + Number(edge.weight || 0.5) * 1.8;
       ctx.stroke();
     });
@@ -95,7 +100,7 @@ export function GraphCanvas({
       const hovered = node.id === hoverId;
       ctx.beginPath();
       ctx.arc(x, y, radius + (active ? 10 : hovered ? 6 : 0), 0, Math.PI * 2);
-      ctx.fillStyle = active ? "rgba(216,240,110,.2)" : hovered ? "rgba(255,255,255,.1)" : "rgba(255,255,255,.04)";
+      ctx.fillStyle = active ? "rgba(255,255,255,.18)" : hovered ? "rgba(255,255,255,.1)" : "rgba(255,255,255,.04)";
       ctx.fill();
       ctx.beginPath();
       ctx.arc(x, y, radius, 0, Math.PI * 2);
@@ -199,12 +204,24 @@ export function GraphCanvas({
   return (
     <main className="graph-stage">
       <div className="graph-toolbar">
-        <div className="chips">
-          {[...new Set(nodes.map((node) => node.type))].sort().map((type) => (
-            <span className="chip" key={type}><i style={{ background: colors[type] || "#ccd6dd" }} />{labelForType(type)}</span>
-          ))}
+        <div className="graph-toolbar__left">
+          <span className="status-pill">{status}</span>
+          <span className="metric-pill">{nodes.length} nodes</span>
+          <span className="metric-pill">{edges.length} links</span>
+          <div className="chips" aria-label="Visible node types">
+            {[...new Set(nodes.map((node) => node.type))].sort().map((type) => (
+              <span className="chip" key={type}><i style={{ background: colors[type] || "#ccd6dd" }} />{labelForType(type)}</span>
+            ))}
+          </div>
         </div>
-        <button type="button" className="secondary compact" onClick={() => setViewport({ scale: 1, offsetX: 0, offsetY: 0 })}>Fit</button>
+        <div className="graph-toolbar__actions">
+          <button type="button" className="icon-action" onClick={onRefreshGraph} aria-label="Refresh graph" title="Refresh graph">
+            <RefreshCw size={15} aria-hidden="true" />
+          </button>
+          <button type="button" className="icon-action" onClick={() => setViewport({ scale: 1, offsetX: 0, offsetY: 0 })} aria-label="Fit graph" title="Fit graph">
+            <Maximize2 size={15} aria-hidden="true" />
+          </button>
+        </div>
       </div>
       <canvas
         ref={canvasRef}

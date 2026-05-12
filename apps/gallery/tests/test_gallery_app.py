@@ -126,9 +126,14 @@ class GalleryAppTestCase(unittest.TestCase):
         self.assertTrue(view_actions["set_custom_view"].standard)
         self.assertTrue(view_actions["set_view_filter"].standard)
         self.assertTrue(parsed.contract.capabilities.view_surfaces[0].supports_custom_view)
-        self.assertEqual(len(parsed.contract.widgets), 1)
-        widget = parsed.contract.widgets[0]
-        self.assertEqual(widget.widget_id, "file-preview")
+        self.assertEqual(len(parsed.contract.widgets), 2)
+        widgets = {widget.widget_id: widget for widget in parsed.contract.widgets}
+        sidebar_widget = widgets["gallery-sidebar"]
+        self.assertEqual(sidebar_widget.host, "base-shell")
+        self.assertEqual(sidebar_widget.content_kinds, ["shell.sidebar.primary"])
+        self.assertEqual(sidebar_widget.frontend.mount, "frontend/dist/widgets/gallery-sidebar")
+        self.assertTrue((GALLERY_ROOT / "frontend" / "dist" / "widgets" / "gallery-sidebar" / "index.html").is_file())
+        widget = widgets["file-preview"]
         self.assertEqual(widget.host, "chat")
         self.assertIn("gallery.file.preview", widget.content_kinds)
         self.assertEqual(widget.frontend.mount, "frontend/dist/widgets/file-preview")

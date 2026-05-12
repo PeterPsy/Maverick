@@ -11,6 +11,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         app: 'frontend/index.html',
+        'widgets/gallery-sidebar/index': 'frontend/widgets/gallery-sidebar/index.html',
         'widgets/file-preview/index': 'frontend/widgets/file-preview/index.html'
       },
       output: {

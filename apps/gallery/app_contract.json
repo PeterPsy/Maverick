@@ -154,6 +154,23 @@
   },
   "widgets": [
     {
+      "widget_id": "gallery-sidebar",
+      "host": "base-shell",
+      "content_kinds": [
+        "shell.sidebar.primary"
+      ],
+      "frontend": {
+        "kind": "iframe",
+        "mount": "frontend/dist/widgets/gallery-sidebar",
+        "spa_fallback": true
+      },
+      "actions": {
+        "backend": true,
+        "mcp": false,
+        "cli": false
+      }
+    },
+    {
       "widget_id": "file-preview",
       "host": "chat",
       "content_kinds": [

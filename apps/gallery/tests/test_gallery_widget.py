@@ -109,6 +109,32 @@ class GalleryWidgetTestCase(unittest.TestCase):
         self.assertIn("text/html", mount_headers["Content-Type"])
         self.assertIn(b"Gallery file preview", mount_payload)
 
+    def test_platform_exposes_gallery_sidebar_widget(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+        cookie = self.login(app)
+
+        registry_status, registry_payload, _registry_headers = self.invoke(
+            app,
+            path="/api/apps/widgets",
+            query_string="host=base-shell&content_kind=shell.sidebar.primary",
+            cookie=cookie,
+        )
+        mount_status, mount_payload, mount_headers = self.invoke(
+            app,
+            path="/api/apps/widgets/gallery/gallery-sidebar/frontend/",
+            cookie=cookie,
+        )
+
+        self.assertEqual(registry_status, 200)
+        widgets = {item["widget_id"]: item for item in registry_payload["items"]}
+        self.assertEqual(widgets["gallery-sidebar"]["owner_app_id"], "gallery")
+        self.assertEqual(widgets["gallery-sidebar"]["frontend_mount"], "/api/apps/widgets/gallery/gallery-sidebar/frontend/")
+        self.assertEqual(mount_status, 200)
+        self.assertIn("text/html", mount_headers["Content-Type"])
+        self.assertIn(b"Gallery Sidebar Widget", mount_payload)
+
 
 if __name__ == "__main__":
     unittest.main()

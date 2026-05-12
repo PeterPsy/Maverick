@@ -5,6 +5,8 @@ import { clearCustomView, createFolder, decodeBase64, deleteFile, loadCatalog, l
 import { canInlinePreview, canTextPreview, FileCardPreview, GalleryPreview } from './filePreview';
 import { formatBytes, iconForKind, kindLabels, roleLabels } from './galleryMeta';
 import { Icon } from './Icon';
+import { notifyActiveGallerySelection } from './lib/activeGallerySelection';
+import { galleryTargetFromParams, type GalleryNavigationParams, type GalleryNavigationTarget } from './lib/galleryNavigationParams';
 import { MarkdownPreview } from './markdownPreview';
 import { loadFullPreview } from './previewCache';
 import type { FileRole, GalleryFile, GalleryFolder, GalleryViewFilter, PreviewKind, PreviewTablePayload } from './types';
@@ -18,13 +20,18 @@ type DropFeedback = 'idle' | 'ready' | 'blocked' | 'uploading' | 'success' | 'er
 
 const viewKinds = new Set<PreviewKind | 'all'>(['all', 'image', 'video', 'audio', 'pdf', 'document', 'presentation', 'spreadsheet', 'markdown', 'text', 'file']);
 const uploadBucketPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const sidebarTypeFilters: Array<{ kind: PreviewKind | 'all'; label: string; icon: string }> = [
-  { kind: 'all', label: 'All types', icon: 'category' },
-  { kind: 'image', label: 'Images', icon: 'image' },
-  { kind: 'document', label: 'Documents', icon: 'article' },
-  { kind: 'spreadsheet', label: 'Spreadsheets', icon: 'table' },
-  { kind: 'markdown', label: 'Markdown', icon: 'markdown' },
-  { kind: 'file', label: 'Other files', icon: 'draft' }
+const kindFilterOptions: Array<{ kind: PreviewKind | 'all'; label: string }> = [
+  { kind: 'all', label: 'All types' },
+  { kind: 'image', label: 'Images' },
+  { kind: 'video', label: 'Videos' },
+  { kind: 'audio', label: 'Audio' },
+  { kind: 'pdf', label: 'PDFs' },
+  { kind: 'document', label: 'Documents' },
+  { kind: 'presentation', label: 'Presentations' },
+  { kind: 'spreadsheet', label: 'Spreadsheets' },
+  { kind: 'markdown', label: 'Markdown' },
+  { kind: 'text', label: 'Text' },
+  { kind: 'file', label: 'Other files' }
 ];
 
 function normalizedViewFilter(filter?: Partial<GalleryViewFilter>): GalleryViewFilter {
@@ -87,6 +94,14 @@ function visibleFileParentPath(file: GalleryFile) {
   const parts = file.relative_path.split('/').filter(Boolean);
   if (file.role === 'uploaded' && parts.length === 2 && uploadBucketPattern.test(parts[0])) return '';
   return parentFolderPath(file.relative_path);
+}
+
+function fileFromNavigationTarget(files: GalleryFile[], target: GalleryNavigationTarget | null) {
+  if (!target) return null;
+  return files.find((file) => {
+    if (target.fileId && file.id === target.fileId) return true;
+    return Boolean(target.workspaceRelativePath && file.workspace_relative_path === target.workspaceRelativePath);
+  }) || null;
 }
 
 function breadcrumbItems(currentFolderPath: string) {
@@ -213,18 +228,18 @@ function App() {
   const [markdownSaving, setMarkdownSaving] = useState(false);
   const [markdownCopying, setMarkdownCopying] = useState(false);
   const [markdownCopied, setMarkdownCopied] = useState(false);
-  const [createPanelOpen, setCreatePanelOpen] = useState(false);
-  const [createPanelMode, setCreatePanelMode] = useState<'choice' | 'folder'>('choice');
   const [renameValue, setRenameValue] = useState('');
   const [error, setError] = useState('');
   const viewFilterUpdatedAtRef = useRef('');
   const viewFilterWriteRef = useRef<number | null>(null);
   const viewFilterPendingRef = useRef(false);
   const markdownCopyTimerRef = useRef<number | null>(null);
-  const createPanelRef = useRef<HTMLDivElement | null>(null);
-  const newFolderInputRef = useRef<HTMLInputElement | null>(null);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const dropFeedbackTimerRef = useRef<number | null>(null);
+  const filesRef = useRef<GalleryFile[]>([]);
+  const queryRef = useRef('');
+  const viewModeRef = useRef<'search' | 'custom'>('search');
+  const pendingNavigationTargetRef = useRef<GalleryNavigationTarget | null>(galleryTargetFromParams(Object.fromEntries(new URLSearchParams(window.location.search).entries())));
 
   function applyRemoteViewFilter(filter: GalleryViewFilter) {
     if (viewFilterPendingRef.current || filter.updated_at === viewFilterUpdatedAtRef.current) return;
@@ -240,9 +255,15 @@ function App() {
 
   async function refresh() {
     const payload = await loadCatalog();
+    filesRef.current = payload.files;
     setFiles(payload.files);
     setFolders(payload.folders || []);
     applyRemoteViewFilter(normalizedViewFilter(payload.state.view_filter));
+    const pendingFile = fileFromNavigationTarget(payload.files, pendingNavigationTargetRef.current);
+    if (pendingFile) {
+      focusFile(pendingFile, { persistFilter: true });
+      pendingNavigationTargetRef.current = null;
+    }
   }
 
   async function syncViewFilter() {
@@ -264,26 +285,56 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!createPanelOpen) return;
-    function handlePointerDown(event: PointerEvent) {
-      if (createPanelRef.current?.contains(event.target as Node)) return;
-      setCreatePanelOpen(false);
-      setCreatePanelMode('choice');
-    }
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        setCreatePanelOpen(false);
-        setCreatePanelMode('choice');
-        setPreviewModalOpen(false);
+    filesRef.current = files;
+  }, [files]);
+
+  useEffect(() => {
+    queryRef.current = query;
+  }, [query]);
+
+  useEffect(() => {
+    viewModeRef.current = viewMode;
+  }, [viewMode]);
+
+  useEffect(() => {
+    window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'gallery' }, window.location.origin);
+  }, []);
+
+  useEffect(() => {
+    function handleShellMessage(event: MessageEvent) {
+      if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') {
+        return;
+      }
+      const payload = event.data as {
+        app_id?: string;
+        owner_app_id?: string;
+        params?: GalleryNavigationParams;
+        resource?: string;
+        type?: string;
+      };
+      if (payload.type === 'maverick.app.navigate' && (!payload.app_id || payload.app_id === 'gallery')) {
+        handleNavigationParams(payload.params || {});
+        return;
+      }
+      if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === 'gallery') {
+        if (payload.resource === 'files') {
+          refresh().catch((err: Error) => setError(err.message));
+        }
+        if (payload.resource === 'view-state') {
+          syncViewFilter().catch((err: Error) => setError(err.message));
+        }
       }
     }
-    window.addEventListener('pointerdown', handlePointerDown);
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('pointerdown', handlePointerDown);
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [createPanelOpen]);
+
+    window.addEventListener('message', handleShellMessage);
+    return () => window.removeEventListener('message', handleShellMessage);
+  }, []);
+
+  useEffect(() => {
+    if (selectedFile) {
+      notifyActiveGallerySelection(selectedFile);
+    }
+  }, [selectedFile]);
 
   useEffect(() => {
     if (!previewModalOpen) return;
@@ -291,14 +342,10 @@ function App() {
       if (event.key === 'Escape') setPreviewModalOpen(false);
     }
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, [previewModalOpen]);
-
-  useEffect(() => {
-    if (createPanelOpen && createPanelMode === 'folder') {
-      newFolderInputRef.current?.focus();
-    }
-  }, [createPanelMode, createPanelOpen]);
 
   function updateViewFilter(filter: Partial<Pick<GalleryViewFilter, 'query' | 'role' | 'kind'>>) {
     const next = normalizedViewFilter({ query, role: activeRole, kind: kind as PreviewKind | 'all', ...filter });
@@ -319,6 +366,47 @@ function App() {
           viewFilterWriteRef.current = null;
         });
     }, 250);
+  }
+
+  function focusFile(file: GalleryFile, options: { persistFilter?: boolean } = {}) {
+    setSelectedFile(file);
+    setCurrentFolderPath(visibleFileParentPath(file));
+    setActiveRole(file.role);
+    setKind('all');
+    if (options.persistFilter) {
+      viewFilterPendingRef.current = true;
+      if (viewFilterWriteRef.current !== null) window.clearTimeout(viewFilterWriteRef.current);
+      setViewFilter({
+        query: queryRef.current,
+        role: file.role,
+        kind: 'all',
+        preserve_custom: viewModeRef.current === 'custom'
+      })
+        .then((payload) => {
+          const remote = normalizedViewFilter(payload.state.view_filter);
+          viewFilterUpdatedAtRef.current = remote.updated_at;
+        })
+        .catch((err: Error) => setError(err.message))
+        .finally(() => {
+          viewFilterPendingRef.current = false;
+          viewFilterWriteRef.current = null;
+        });
+    }
+  }
+
+  function handleNavigationParams(params: GalleryNavigationParams) {
+    const target = galleryTargetFromParams(params);
+    if (!target) {
+      return;
+    }
+    pendingNavigationTargetRef.current = target;
+    const file = fileFromNavigationTarget(filesRef.current, target);
+    if (file) {
+      focusFile(file, { persistFilter: true });
+      pendingNavigationTargetRef.current = null;
+      return;
+    }
+    refresh().catch((err: Error) => setError(err.message));
   }
 
   function clearCustomFileView() {
@@ -376,12 +464,6 @@ function App() {
       return roleMatch && kindMatch && textMatch;
     });
   }, [activeRole, currentFolderPath, customScopedFiles, kind, query, viewMode]);
-
-  const stats = useMemo(() => ({
-    all: customScopedFiles.length,
-    generated: customScopedFiles.filter((file) => file.role === 'generated').length,
-    uploaded: customScopedFiles.filter((file) => file.role === 'uploaded').length
-  }), [customScopedFiles]);
 
   useEffect(() => {
     setPreviewText('');
@@ -526,14 +608,6 @@ function App() {
     uploadInputRef.current?.click();
   }
 
-  function openCreatePanel() {
-    setCreatePanelOpen((open) => {
-      const nextOpen = !open;
-      if (nextOpen) setCreatePanelMode('choice');
-      return nextOpen;
-    });
-  }
-
   function handleAppDragEnter(event: DragEvent<HTMLElement>) {
     if (!hasDraggedFiles(event.dataTransfer)) return;
     event.preventDefault();
@@ -611,116 +685,27 @@ function App() {
           </div>
         </div>
       ) : null}
-      <aside className="gallery-sidebar" aria-label="Gallery navigation">
-        <div className="gallery-brand">
-          <Icon name="folder_managed" className="gallery-brand-mark" />
-          <strong>Gallery</strong>
-        </div>
-        <div className="create-control" ref={createPanelRef}>
-          <button className="new-action" type="button" onClick={openCreatePanel} aria-expanded={createPanelOpen} aria-haspopup="dialog">
-            <Icon name="add" />
-            Create
-          </button>
-          {createPanelOpen ? (
-            <section className="create-popover" role="dialog" aria-label="Create">
-              {createPanelMode === 'choice' ? (
-                <>
-                  <button
-                    className="create-choice"
-                    type="button"
-                    onClick={() => {
-                      setCreatePanelOpen(false);
-                      requestUpload();
-                    }}
-                  >
-                    <Icon name="upload_file" />
-                    <span>
-                      <strong>Upload file</strong>
-                      <small>{uploadTargetLabel(activeRole, currentFolderPath)}</small>
-                    </span>
-                  </button>
-                  <button className="create-choice" type="button" onClick={() => setCreatePanelMode('folder')}>
-                    <Icon name="create_new_folder" />
-                    <span>
-                      <strong>New folder</strong>
-                      <small>{activeRole === 'all' ? 'Choose a storage section first' : uploadTargetLabel(activeRole, currentFolderPath)}</small>
-                    </span>
-                  </button>
-                </>
-              ) : (
-                <form
-                  className="create-folder-form"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    createCurrentFolder()
-                      .then((created) => {
-                        if (created) {
-                          setCreatePanelOpen(false);
-                          setCreatePanelMode('choice');
-                        }
-                      })
-                      .catch((err: Error) => setError(err.message));
-                  }}
-                >
-                  <label>
-                    <span>Folder name</span>
-                    <input ref={newFolderInputRef} value={newFolderName} onChange={(event) => setNewFolderName(event.target.value)} />
-                  </label>
-                  <div className="create-folder-actions">
-                    <button type="button" onClick={() => setCreatePanelMode('choice')}>Back</button>
-                    <button type="submit" disabled={activeRole === 'all' || !newFolderName.trim()}>
-                      <Icon name="create_new_folder" />
-                      Create
-                    </button>
-                  </div>
-                </form>
-              )}
-            </section>
-          ) : null}
-        </div>
-        <nav className="sidebar-nav" aria-label="Storage sections">
-          <button className={activeRole === 'all' ? 'selected' : ''} type="button" onClick={() => updateViewFilter({ role: 'all' })}>
-            <Icon name="home_storage" />
-            <span>All files</span>
-            <small>{stats.all}</small>
-          </button>
-          <button className={activeRole === 'uploaded' ? 'selected' : ''} type="button" onClick={() => updateViewFilter({ role: 'uploaded' })}>
-            <Icon name="cloud_upload" />
-            <span>Uploaded</span>
-            <small>{stats.uploaded}</small>
-          </button>
-          <button className={activeRole === 'generated' ? 'selected' : ''} type="button" onClick={() => updateViewFilter({ role: 'generated' })}>
-            <Icon name="auto_awesome" />
-            <span>Generated</span>
-            <small>{stats.generated}</small>
-          </button>
-        </nav>
-        <div className="sidebar-section">
-          <p>Types</p>
-          <div className="type-filter-list">
-            {sidebarTypeFilters.map((item) => (
-              <button className={kind === item.kind ? 'selected' : ''} key={item.kind} type="button" onClick={() => updateViewFilter({ kind: item.kind })}>
-                <Icon name={item.icon} />
-                <span>{item.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="storage-summary">
-          <Icon name="database" />
-          <div>
-            <strong>{formatBytes(files.reduce((total, file) => total + file.size_bytes, 0))}</strong>
-            <small>{files.length} files indexed from workspace storage</small>
-          </div>
-        </div>
-      </aside>
-
       <section className="gallery-workspace">
         <header className="gallery-topbar">
           <label className="gallery-search">
             <Icon name="search" />
             <input placeholder="Search in Gallery" value={query} onChange={(event) => updateViewFilter({ query: event.target.value })} />
           </label>
+          <div className="gallery-filter-strip">
+            <div className="storage-segmented" aria-label="Storage section">
+              <button className={activeRole === 'all' ? 'selected' : ''} type="button" onClick={() => updateViewFilter({ role: 'all' })}>All</button>
+              <button className={activeRole === 'uploaded' ? 'selected' : ''} type="button" onClick={() => updateViewFilter({ role: 'uploaded' })}>Uploaded</button>
+              <button className={activeRole === 'generated' ? 'selected' : ''} type="button" onClick={() => updateViewFilter({ role: 'generated' })}>Generated</button>
+            </div>
+            <label className="kind-filter-select">
+              <span>Type</span>
+              <select value={kind} onChange={(event) => updateViewFilter({ kind: event.target.value as PreviewKind | 'all' })}>
+                {kindFilterOptions.map((item) => (
+                  <option key={item.kind} value={item.kind}>{item.label}</option>
+                ))}
+              </select>
+            </label>
+          </div>
           <div className="topbar-actions">
             <button className="icon-button" onClick={() => refresh().catch((err: Error) => setError(err.message))} aria-label="Refresh">
               <Icon name="refresh" />

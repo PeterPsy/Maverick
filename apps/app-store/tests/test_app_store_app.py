@@ -386,14 +386,17 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn("text/html", headers["Content-Type"])
         self.assertIn(b"App Store", payload)
-        self.assertIn(b"Today", payload)
         self.assertIn(b"Most Popular Apps", payload)
         self.assertIn(b"Manage Apps", payload)
         self.assertIn(b"Server Apps", payload)
         self.assertIn(b"Installed Apps", payload)
         self.assertIn(b"Local Apps", payload)
-        self.assertIn(b"/apps/app-store/assets/main.css?v=20260512-sidebar-primary", payload)
-        self.assertIn(b"/apps/app-store/assets/main.js?v=20260512-sidebar-primary", payload)
+        self.assertIn(b'detail-header store-header', payload)
+        self.assertIn(b'detail-title-separator', payload)
+        self.assertNotIn(b'today-heading', payload)
+        self.assertNotIn(b'todayLabel', payload)
+        self.assertIn(b"/apps/app-store/assets/main.css?v=20260512-agents-header", payload)
+        self.assertIn(b"/apps/app-store/assets/main.js?v=20260512-agents-header", payload)
 
     def test_frontend_dist_separates_server_promotion_from_public_submission(self) -> None:
         app_root = Path(__file__).resolve().parents[1]
@@ -513,8 +516,8 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertEqual(status_widget, 200)
         self.assertIn("text/html", widget_headers["Content-Type"])
         self.assertIn(b"App shortcuts", widget_body)
-        self.assertIn(b"styles.css?v=20260512-sidebar-primary", widget_body)
-        self.assertIn(b"main.js?v=20260512-sidebar-primary", widget_body)
+        self.assertIn(b"styles.css?v=20260512-agents-header", widget_body)
+        self.assertIn(b"main.js?v=20260512-agents-header", widget_body)
         shortcut_script = (
             Path(__file__).resolve().parents[1] / "frontend" / "dist" / "widgets" / "app-shortcuts" / "main.js"
         ).read_text()

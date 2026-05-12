@@ -8,26 +8,24 @@
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:FILL@0..1&opsz=20..48&wght@400..700&display=swap"
     />
-    <link rel="stylesheet" href="/apps/app-store/assets/main.css?v=20260512-sidebar-primary" />
+    <link rel="stylesheet" href="/apps/app-store/assets/main.css?v=20260512-agents-header" />
   </head>
   <body>
     <main class="store-shell">
       <section class="today-section" id="today" aria-labelledby="todayTitle">
-        <div class="today-heading">
-          <div>
-            <p class="date-label" id="todayLabel">Today</p>
-            <h1 id="todayTitle">App Store</h1>
+        <header class="detail-header store-header">
+          <div class="detail-title-block">
+            <h2 id="todayTitle">App Store</h2>
+            <span class="detail-title-separator" aria-hidden="true"></span>
+            <p>Scopri app Maverick pronte da installare, aggiornare o portare nel tuo workspace.</p>
           </div>
-          <div class="today-actions">
-            <p class="today-copy">Scopri app Maverick pronte da installare, aggiornare o portare nel tuo workspace.</p>
-            <div class="status-actions">
-              <span class="status-pill" id="statusText">Loading</span>
-              <button class="icon-button" id="refreshButton" type="button" title="Refresh catalog" aria-label="Refresh catalog">
-                <span aria-hidden="true" class="material-symbols-rounded">refresh</span>
-              </button>
-            </div>
+          <div class="action-group">
+            <span class="status-pill" id="statusText">Loading</span>
+            <button class="icon-button" id="refreshButton" type="button" title="Refresh catalog" aria-label="Refresh catalog">
+              <span aria-hidden="true" class="material-symbols-rounded">refresh</span>
+            </button>
           </div>
-        </div>
+        </header>
         <div class="feature-rail" id="featuredApps" aria-label="Featured apps"></div>
       </section>
 
@@ -125,6 +123,6 @@
         <div class="app-modal__actions" id="promotionModalActions"></div>
       </div>
     </div>
-    <script src="/apps/app-store/assets/main.js?v=20260512-sidebar-primary"></script>
+    <script src="/apps/app-store/assets/main.js?v=20260512-agents-header"></script>
   </body>
 </html>

@@ -14,7 +14,6 @@ const catalogGrid = document.querySelector("#catalogGrid");
 const featuredAppsNode = document.querySelector("#featuredApps");
 const searchNode = document.querySelector("#search");
 const surfaceNode = document.querySelector("#surface");
-const todayLabelNode = document.querySelector("#todayLabel");
 const catalogStatsNode = document.querySelector("#catalogStats");
 const serverList = document.querySelector("#serverList");
 const installedList = document.querySelector("#installedList");
@@ -53,14 +52,6 @@ function setStatus(text, kind = "idle") {
 
 function latestVersion(app) {
   return (app.versions || []).find((version) => version.version === app.latest_version) || (app.versions || [])[0] || null;
-}
-
-function formatDateLabel() {
-  return new Intl.DateTimeFormat("en", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  }).format(new Date());
 }
 
 function formatBytes(value) {
@@ -1161,7 +1152,6 @@ async function lookupPublicSubmission() {
 
 async function load() {
   setStatus("Loading", "busy");
-  todayLabelNode.textContent = formatDateLabel();
   const [workspaces, catalog, serverApps, installations, pinned] = await Promise.all([
     requestJson("/api/workspaces"),
     requestJson("/api/app-store/apps"),

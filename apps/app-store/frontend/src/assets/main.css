@@ -1,18 +1,45 @@
 :root {
-  color-scheme: light;
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", Inter, "Segoe UI", sans-serif;
-  --store-bg: #fbfbfd;
-  --store-panel: #ffffff;
-  --store-panel-soft: #f5f5f7;
-  --store-border: rgba(0, 0, 0, 0.08);
-  --store-border-strong: rgba(0, 0, 0, 0.14);
-  --store-text: #1d1d1f;
-  --store-muted: #6e6e73;
-  --store-soft: #86868b;
-  --store-blue: #0066cc;
-  --store-green: #147a38;
-  --store-orange: #a55b00;
-  --store-red: #b4233c;
+  color-scheme: dark;
+  font-family: var(--maverick-font);
+  --maverick-bg: rgba(7, 7, 8, 1);
+  --maverick-bg-strong: #171717;
+  --maverick-surface: rgba(255, 255, 255, 0.055);
+  --maverick-surface-hover: rgba(255, 255, 255, 0.105);
+  --maverick-surface-active: rgba(255, 255, 255, 0.14);
+  --maverick-border: rgba(255, 255, 255, 0.08);
+  --maverick-border-strong: rgba(255, 255, 255, 0.14);
+  --maverick-glass-surface: rgba(12, 12, 14, 0.28);
+  --maverick-glass-highlight:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 36%),
+    linear-gradient(315deg, rgba(255, 255, 255, 0.035), transparent 42%);
+  --maverick-glass-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.052), inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  --maverick-inner-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  --maverick-text: #ececec;
+  --maverick-text-muted: rgba(236, 236, 236, 0.66);
+  --maverick-text-soft: rgba(236, 236, 236, 0.42);
+  --maverick-accent: #ffffff;
+  --maverick-accent-soft: rgba(255, 255, 255, 0.18);
+  --maverick-text-on-accent: #0a0a0b;
+  --maverick-success: #9ff0ca;
+  --maverick-danger: #ffb3bf;
+  --maverick-card-radius: 22px;
+  --maverick-control-radius: 18px;
+  --maverick-font: "Avenir Next", "Sohne", "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
+  --store-bg: var(--maverick-bg);
+  --store-panel: rgba(12, 12, 14, 0.58);
+  --store-panel-solid: rgb(12, 12, 14);
+  --store-panel-soft: var(--maverick-surface);
+  --store-panel-hover: var(--maverick-surface-hover);
+  --store-border: var(--maverick-border);
+  --store-border-strong: var(--maverick-border-strong);
+  --store-text: var(--maverick-text);
+  --store-muted: var(--maverick-text-muted);
+  --store-soft: var(--maverick-text-soft);
+  --store-blue: var(--maverick-accent);
+  --store-green: var(--maverick-success);
+  --store-orange: #fde68a;
+  --store-red: var(--maverick-danger);
+  --store-shadow: var(--maverick-glass-edge), 0 24px 80px rgba(0, 0, 0, 0.36);
   background: var(--store-bg);
   color: var(--store-text);
 }
@@ -31,7 +58,7 @@ html {
 
 body {
   background:
-    linear-gradient(180deg, rgba(245, 245, 247, 0.96) 0, rgba(251, 251, 253, 0) 420px),
+    linear-gradient(180deg, rgba(23, 23, 23, 0.76) 0, rgba(7, 7, 8, 0) 420px),
     var(--store-bg);
   margin: 0;
   overflow-x: hidden;
@@ -88,7 +115,7 @@ button {
 
 .store-topbar::before {
   backdrop-filter: blur(18px);
-  background: rgba(251, 251, 253, 0.9);
+  background: rgba(7, 7, 8, 0.86);
   border-bottom: 1px solid var(--store-border);
   content: "";
   inset: -18px calc((100vw - min(1210px, 100vw)) / -2) 0;
@@ -109,7 +136,7 @@ button {
 .store-brand__icon,
 .app-row-icon {
   align-items: center;
-  color: #ffffff;
+  color: var(--maverick-text-on-accent);
   display: inline-flex;
   flex: 0 0 auto;
   font-weight: 900;
@@ -117,15 +144,16 @@ button {
 }
 
 .store-brand__icon {
-  background: linear-gradient(135deg, #007aff, #5e5ce6);
-  border-radius: 8px;
+  background: var(--maverick-accent);
+  border-radius: 10px;
+  box-shadow: var(--maverick-inner-edge);
   height: 34px;
   width: 34px;
 }
 
 .store-tabs {
   align-items: center;
-  background: rgba(242, 242, 247, 0.92);
+  background: var(--store-panel);
   border: 1px solid var(--store-border);
   border-radius: 999px;
   display: flex;
@@ -152,8 +180,9 @@ button {
 }
 
 .store-tab.is-active {
-  background: var(--store-panel);
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.08);
+  background: var(--maverick-accent);
+  box-shadow: none;
+  color: var(--maverick-text-on-accent);
 }
 
 .topbar-meta {
@@ -165,10 +194,10 @@ button {
 
 .icon-button {
   align-items: center;
-  background: var(--store-text);
+  background: var(--maverick-accent);
   border: 0;
   border-radius: 999px;
-  color: #ffffff;
+  color: var(--maverick-text-on-accent);
   display: inline-flex;
   height: 34px;
   justify-content: center;
@@ -183,7 +212,7 @@ button {
 .app-row-badge,
 .app-row-status {
   background: var(--store-panel-soft);
-  border: 1px solid #e5e5ea;
+  border: 1px solid var(--store-border);
   border-radius: 999px;
   color: var(--store-muted);
   display: inline-flex;
@@ -196,8 +225,8 @@ button {
 
 .status-pill[data-kind="ok"],
 .app-row-status[data-state="installed"] {
-  background: #edf9f0;
-  border-color: #c7efce;
+  background: rgba(159, 240, 202, 0.12);
+  border-color: rgba(159, 240, 202, 0.24);
   color: var(--store-green);
 }
 
@@ -206,14 +235,14 @@ button {
 }
 
 .status-pill[data-kind="error"] {
-  background: #fff0f3;
-  border-color: #ffd0d9;
+  background: rgba(255, 179, 191, 0.12);
+  border-color: rgba(255, 179, 191, 0.24);
   color: var(--store-red);
 }
 
 .app-row-status[data-state="partial"] {
-  background: #fff7e8;
-  border-color: #ffe3ad;
+  background: rgba(253, 230, 138, 0.12);
+  border-color: rgba(253, 230, 138, 0.24);
   color: var(--store-orange);
 }
 
@@ -292,9 +321,10 @@ h3 {
 
 .feature-card {
   aspect-ratio: 1.18;
-  border-radius: 8px;
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.14);
-  color: #ffffff;
+  border: 1px solid var(--store-border);
+  border-radius: var(--maverick-card-radius);
+  box-shadow: var(--store-shadow);
+  color: var(--store-text);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -305,21 +335,27 @@ h3 {
 }
 
 .feature-card--1 {
-  background: linear-gradient(145deg, #2d7ff9, #1a1a72 58%, #101018);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.18), rgba(12, 12, 14, 0.7) 58%, rgba(12, 12, 14, 0.95)),
+    var(--maverick-glass-highlight);
 }
 
 .feature-card--2 {
-  background: linear-gradient(145deg, #ff2d55, #5e2bff 62%, #190b2e);
+  background:
+    linear-gradient(145deg, rgba(255, 179, 191, 0.26), rgba(12, 12, 14, 0.7) 62%, rgba(12, 12, 14, 0.95)),
+    var(--maverick-glass-highlight);
 }
 
 .feature-card--3 {
-  background: linear-gradient(145deg, #30d158, #006a6a 58%, #071c22);
+  background:
+    linear-gradient(145deg, rgba(159, 240, 202, 0.22), rgba(12, 12, 14, 0.7) 58%, rgba(12, 12, 14, 0.95)),
+    var(--maverick-glass-highlight);
 }
 
 .feature-card--empty {
   align-items: center;
-  background: #f5f5f7;
-  border: 1px dashed #d2d2d7;
+  background: var(--store-panel);
+  border: 1px dashed var(--store-border-strong);
   box-shadow: none;
   color: var(--store-muted);
   justify-content: center;
@@ -348,10 +384,10 @@ h3 {
 
 .feature-link {
   align-self: flex-start;
-  background: rgba(255, 255, 255, 0.94);
+  background: var(--maverick-accent);
   border: 0;
   border-radius: 999px;
-  color: #111111;
+  color: var(--maverick-text-on-accent);
   font-weight: 850;
   min-height: 34px;
   padding: 0 14px;
@@ -399,8 +435,8 @@ h3 {
 .app-modal__field input,
 .app-modal__field textarea {
   background: var(--store-panel);
-  border: 1px solid #d2d2d7;
-  border-radius: 8px;
+  border: 1px solid var(--store-border);
+  border-radius: var(--maverick-control-radius);
   color: var(--store-text);
   min-height: 38px;
   padding: 8px 10px;
@@ -411,9 +447,10 @@ h3 {
 }
 
 .quick-links {
-  background: rgba(255, 255, 255, 0.74);
+  background: var(--store-panel);
   border: 1px solid var(--store-border);
-  border-radius: 8px;
+  border-radius: var(--maverick-card-radius);
+  box-shadow: var(--maverick-glass-edge);
   padding: 18px;
   position: sticky;
   top: 86px;
@@ -428,7 +465,7 @@ h3 {
 .quick-link {
   background: var(--store-panel-soft);
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--maverick-control-radius);
   color: var(--store-text);
   font-weight: 750;
   min-height: 38px;
@@ -437,8 +474,8 @@ h3 {
 }
 
 .quick-link:hover {
-  background: #e8f1ff;
-  border-color: #b8d6ff;
+  background: var(--store-panel-hover);
+  border-color: var(--store-border-strong);
 }
 
 .store-stats {
@@ -466,7 +503,8 @@ h3 {
 .app-row {
   align-items: center;
   background: transparent;
-  border-radius: 8px;
+  border: 1px solid transparent;
+  border-radius: var(--maverick-card-radius);
   display: flex;
   gap: 14px;
   min-height: 76px;
@@ -477,12 +515,14 @@ h3 {
 
 .app-row:hover,
 .app-row:focus-visible {
-  background: rgba(0, 102, 204, 0.07);
+  background: var(--store-panel-hover);
+  border-color: var(--store-border);
 }
 
 .app-row-icon {
-  background: linear-gradient(135deg, #007aff, #5e5ce6);
-  border-radius: 8px;
+  background: var(--maverick-accent);
+  border-radius: 15px;
+  box-shadow: var(--maverick-inner-edge);
   height: 46px;
   width: 46px;
 }
@@ -557,14 +597,14 @@ h3 {
 .app-row-more:hover,
 .app-row-menu[open] .app-row-more,
 .app-row-chevron:hover:not(:disabled) {
-  background: rgba(0, 0, 0, 0.06);
+  background: var(--store-panel-hover);
   color: var(--store-text);
 }
 
 .app-row-menu-panel {
-  background: rgba(255, 255, 255, 0.98);
+  background: var(--store-panel-solid);
   border: 1px solid var(--store-border);
-  border-radius: 8px;
+  border-radius: var(--maverick-control-radius);
   box-shadow: 0 18px 54px rgba(0, 0, 0, 0.18);
   display: grid;
   gap: 4px;
@@ -598,7 +638,7 @@ h3 {
 
 .app-row-menu-item:hover:not(:disabled),
 .app-row-menu-check:hover {
-  background: var(--store-panel-soft);
+  background: var(--store-panel-hover);
   color: var(--store-text);
 }
 
@@ -686,8 +726,8 @@ h3 {
 }
 
 .workspace-chip:has(input:checked) {
-  background: #e8f1ff;
-  border-color: #b8d6ff;
+  background: var(--store-panel-hover);
+  border-color: var(--store-border-strong);
   color: var(--store-text);
 }
 
@@ -703,15 +743,16 @@ h3 {
 }
 
 .management-panel {
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--store-panel);
   border: 1px solid var(--store-border);
-  border-radius: 8px;
+  border-radius: var(--maverick-card-radius);
+  box-shadow: var(--maverick-glass-edge);
   padding: 18px;
 }
 
 .empty-state {
-  border: 1px dashed #d2d2d7;
-  border-radius: 8px;
+  border: 1px dashed var(--store-border-strong);
+  border-radius: var(--maverick-card-radius);
   color: var(--store-muted);
   grid-column: 1 / -1;
   line-height: 1.45;
@@ -727,17 +768,17 @@ h3 {
 }
 
 .public-request-lookup button {
-  background: var(--store-text);
+  background: var(--maverick-accent);
   border: 0;
-  border-radius: 8px;
-  color: #ffffff;
+  border-radius: var(--maverick-control-radius);
+  color: var(--maverick-text-on-accent);
   font-weight: 800;
   min-height: 38px;
   padding: 0 14px;
 }
 
 .app-modal-backdrop {
-  background: rgba(29, 29, 31, 0.42);
+  background: rgba(7, 7, 8, 0.72);
   backdrop-filter: blur(8px);
   display: grid;
   inset: 0;
@@ -752,9 +793,9 @@ h3 {
 }
 
 .app-modal {
-  background: rgba(255, 255, 255, 0.98);
+  background: var(--store-panel-solid);
   border: 1px solid var(--store-border);
-  border-radius: 8px;
+  border-radius: var(--maverick-card-radius);
   box-shadow: 0 24px 72px rgba(0, 0, 0, 0.22);
   display: grid;
   gap: 16px;
@@ -796,7 +837,7 @@ h3 {
 .app-modal__readonly {
   background: var(--store-panel-soft);
   border: 1px solid var(--store-border);
-  border-radius: 8px;
+  border-radius: var(--maverick-control-radius);
   color: var(--store-text);
   font-weight: 500;
   line-height: 1.45;
@@ -808,7 +849,7 @@ h3 {
 .app-modal__segmented {
   background: var(--store-panel-soft);
   border: 1px solid var(--store-border);
-  border-radius: 8px;
+  border-radius: var(--maverick-control-radius);
   display: grid;
   gap: 4px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -818,15 +859,15 @@ h3 {
 .app-modal__segmented button {
   background: transparent;
   border: 0;
-  border-radius: 6px;
+  border-radius: calc(var(--maverick-control-radius) - 4px);
   color: var(--store-muted);
   min-height: 34px;
 }
 
 .app-modal__segmented button[data-active="true"] {
-  background: var(--store-panel);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  color: var(--store-text);
+  background: var(--maverick-accent);
+  box-shadow: none;
+  color: var(--maverick-text-on-accent);
 }
 
 .app-modal__actions {
@@ -848,12 +889,12 @@ h3 {
 
 .app-modal__button:hover,
 .app-modal__close:hover {
-  background: #e5e5ea;
+  background: var(--store-panel-hover);
 }
 
 .app-modal__button[data-intent="primary"] {
-  background: var(--store-blue);
-  color: #ffffff;
+  background: var(--maverick-accent);
+  color: var(--maverick-text-on-accent);
 }
 
 .app-modal__button[data-intent="danger"] {

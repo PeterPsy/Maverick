@@ -392,6 +392,8 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertIn(b"Server Apps", payload)
         self.assertIn(b"Installed Apps", payload)
         self.assertIn(b"Local Apps", payload)
+        self.assertIn(b"/apps/app-store/assets/main.css?v=20260512-dark-selector", payload)
+        self.assertIn(b"/apps/app-store/assets/main.js?v=20260512-dark-selector", payload)
 
     def test_frontend_dist_separates_server_promotion_from_public_submission(self) -> None:
         app_root = Path(__file__).resolve().parents[1]
@@ -501,6 +503,8 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertEqual(status_widget, 200)
         self.assertIn("text/html", widget_headers["Content-Type"])
         self.assertIn(b"App shortcuts", widget_body)
+        self.assertIn(b"styles.css?v=20260512-selector", widget_body)
+        self.assertIn(b"main.js?v=20260512-selector", widget_body)
         shortcut_script = (
             Path(__file__).resolve().parents[1] / "frontend" / "dist" / "widgets" / "app-shortcuts" / "main.js"
         ).read_text()
@@ -509,7 +513,9 @@ class AppStoreAppTestCase(unittest.TestCase):
         ).read_text()
         self.assertIn("app.logo?.kind === \"image\"", shortcut_script)
         self.assertIn("app.logo?.kind === \"glyph\"", shortcut_script)
+        self.assertIn("pinned_apps.toggle", shortcut_script)
         self.assertIn(".app-shortcuts__icon img", shortcut_styles)
+        self.assertIn(".app-shortcuts__search-frame", shortcut_styles)
 
     @integration_test("app-store platform integration suite; run with scripts/test_suite.py --level integration")
     def test_catalog_and_install_require_maverick_authentication(self) -> None:

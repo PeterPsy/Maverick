@@ -6,6 +6,7 @@ import {
   catalogLoadedCountAfterRefresh,
   deleteFileWithCatalogRefresh,
   folderOpenRefreshPlan,
+  missingNavigationTargetPlan,
   resolvedFileNavigationPlan,
 } from './storageCatalogFlow';
 
@@ -35,10 +36,11 @@ describe('storage catalog flow planning', () => {
       folderPath: '/Reports/Q1/',
       folderRole: 'generated',
       viewMode: 'search',
+      query: '',
     });
 
     expect(plan).toMatchObject({
-      filter: { role: 'generated' },
+      filter: { query: '', role: 'generated' },
       folderPath: 'Reports/Q1',
       refreshOptions: { folderPath: 'Reports/Q1' },
       shouldWriteViewFilter: false,
@@ -51,6 +53,7 @@ describe('storage catalog flow planning', () => {
       folderPath: 'Reports',
       folderRole: 'generated',
       viewMode: 'custom',
+      query: '',
     });
 
     expect(plan.shouldWriteViewFilter).toBe(true);
@@ -58,11 +61,11 @@ describe('storage catalog flow planning', () => {
   });
 
   it('uses explicit refresh plans for breadcrumb jumps', () => {
-    const searchPlan = breadcrumbRefreshPlan({ activeRole: 'uploaded', folderPath: '', viewMode: 'search' });
-    const customPlan = breadcrumbRefreshPlan({ activeRole: 'uploaded', folderPath: 'Client Docs', viewMode: 'custom' });
+    const searchPlan = breadcrumbRefreshPlan({ activeRole: 'uploaded', folderPath: '', viewMode: 'search', query: '' });
+    const customPlan = breadcrumbRefreshPlan({ activeRole: 'uploaded', folderPath: 'Client Docs', viewMode: 'custom', query: '' });
 
     expect(searchPlan).toMatchObject({
-      filter: { role: 'uploaded' },
+      filter: { query: '', role: 'uploaded' },
       folderPath: '',
       refreshOptions: { folderPath: '' },
       shouldWriteViewFilter: false,
@@ -71,6 +74,39 @@ describe('storage catalog flow planning', () => {
       folderPath: 'Client Docs',
       shouldWriteViewFilter: true,
       viewFilterOptions: { folderPath: 'Client Docs', preserveCustom: false },
+    });
+  });
+
+  it('clears active search before opening a folder result', () => {
+    const plan = folderOpenRefreshPlan({
+      activeRole: 'generated',
+      folderPath: 'Reports/Q1',
+      folderRole: 'generated',
+      viewMode: 'search',
+      query: 'quarterly',
+    });
+
+    expect(plan).toMatchObject({
+      filter: { query: '', role: 'generated' },
+      folderPath: 'Reports/Q1',
+      refreshOptions: { folderPath: 'Reports/Q1' },
+      shouldWriteViewFilter: true,
+    });
+  });
+
+  it('clears active search before breadcrumb navigation', () => {
+    const plan = breadcrumbRefreshPlan({
+      activeRole: 'uploaded',
+      folderPath: 'Client Docs',
+      viewMode: 'search',
+      query: 'invoice',
+    });
+
+    expect(plan).toMatchObject({
+      filter: { query: '', role: 'uploaded' },
+      folderPath: 'Client Docs',
+      refreshOptions: { folderPath: 'Client Docs' },
+      shouldWriteViewFilter: true,
     });
   });
 
@@ -112,5 +148,12 @@ describe('storage catalog flow planning', () => {
     });
 
     expect(calls).toEqual([`delete:${deleted.id}`, `clear:${deleted.id}`, 'refresh']);
+  });
+
+  it('clears missing navigation targets after a failed resolve', () => {
+    expect(missingNavigationTargetPlan()).toEqual({
+      clearPending: true,
+      error: 'Storage file not found.',
+    });
   });
 });

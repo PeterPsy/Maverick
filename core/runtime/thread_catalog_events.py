@@ -9,6 +9,7 @@ from core.runtime.runtime_threads import (
     create_runtime_thread,
     ensure_runtime_threads_for_sessions,
     find_runtime_thread_by_session,
+    mark_runtime_thread_response_completed,
     mark_runtime_thread_user_message,
     runtime_thread_availability_for_session,
     thread_payload,
@@ -44,6 +45,7 @@ def publish_runtime_thread_catalog_change(
     if thread is not None:
         latest_thread = next((item for item in threads if item.thread_id == thread.thread_id), thread)
         payload["thread"] = thread_payload(latest_thread)
+        payload["thread_id"] = latest_thread.thread_id
     thread_bus.publish(workspace_id=workspace_id, event=payload)
 
 
@@ -97,6 +99,36 @@ def set_thread_availability(
         workspace_id=workspace_id,
         runtime_session_id=runtime_session_id,
         availability=canonical_availability,
+        now=now,
+    )
+    publish_runtime_thread_catalog_change(
+        state,
+        workspace_id=workspace_id,
+        action="updated",
+        thread=thread,
+    )
+    return thread
+
+
+def mark_thread_response_completed(
+    state: PlatformState,
+    *,
+    workspace_id: str,
+    runtime_session_id: str,
+    turn_id: str,
+    now: datetime | None = None,
+) -> RuntimeThreadRecord | None:
+    _ensure_thread_for_runtime_session(
+        state,
+        workspace_id=workspace_id,
+        runtime_session_id=runtime_session_id,
+        now=now,
+    )
+    thread = mark_runtime_thread_response_completed(
+        state.runtime_store,
+        workspace_id=workspace_id,
+        runtime_session_id=runtime_session_id,
+        turn_id=turn_id,
         now=now,
     )
     publish_runtime_thread_catalog_change(

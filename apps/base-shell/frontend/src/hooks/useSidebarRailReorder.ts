@@ -157,7 +157,8 @@ export function useSidebarRailReorder({
     const rects = hitTestIds
       .map((appId) => railItemRefs.current.get(appId)?.getBoundingClientRect())
       .filter((rect): rect is DOMRect => Boolean(rect));
-    const targetIndex = rects.length ? dropTargetIndexFromPointerY(rects, event.clientY) : currentReorder.targetIndex;
+    const dragDirection = event.clientY >= currentReorder.startY ? "down" : "up";
+    const targetIndex = rects.length ? dropTargetIndexFromPointerY(rects, event.clientY, dragDirection) : currentReorder.targetIndex;
     setActiveRailReorder({
       ...currentReorder,
       currentX: event.clientX,

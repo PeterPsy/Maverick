@@ -17,10 +17,11 @@ describe('mobile agents safe area layout', () => {
 
     expect(indexHtml).toContain('viewport-fit=cover');
     expect(baseStyles).toContain('.agents-shell::before');
-    expect(baseStyles).toContain('var(--maverick-shell-mobile-content-top-offset, 0px) +');
-    expect(baseStyles).toContain('max(2.15rem, calc(env(safe-area-inset-top, 0px) + 1.15rem))');
+    expect(baseStyles).toContain('var(--maverick-shell-mobile-content-top-offset, env(safe-area-inset-top, 0px)) +');
+    expect(baseStyles).toContain('2.15rem');
     expect(baseStyles).toContain('pointer-events: none;');
-    expect(detailStyles).toContain('padding-top: calc(var(--maverick-shell-mobile-content-top-offset, 0px) + env(safe-area-inset-top, 0px) + 28px);');
-    expect(detailStyles).toContain('padding: calc(var(--maverick-shell-mobile-content-top-offset, 0px) + env(safe-area-inset-top, 0px) + 18px) 18px calc(env(safe-area-inset-bottom, 0px) + 5.25rem);');
+    expect(detailStyles).toContain('padding-top: calc(var(--maverick-shell-mobile-content-top-offset, env(safe-area-inset-top, 0px)) + 28px);');
+    expect(detailStyles).toContain('padding: calc(var(--maverick-shell-mobile-content-top-offset, env(safe-area-inset-top, 0px)) + 18px) 18px calc(env(safe-area-inset-bottom, 0px) + 5.25rem);');
+    expect(detailStyles).not.toContain('var(--maverick-shell-mobile-content-top-offset, 0px) + env(safe-area-inset-top, 0px)');
   });
 });

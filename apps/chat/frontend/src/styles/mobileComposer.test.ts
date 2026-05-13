@@ -38,14 +38,15 @@ describe("mobile chat composer layout", () => {
     const responsiveStyles = readStyle("responsive.css");
 
     expect(layoutStyles).toContain(".chatapp-chat-main:not(.is-empty-chat)::before");
-    expect(layoutStyles).toContain("var(--maverick-shell-mobile-content-top-offset, 0px) +");
-    expect(layoutStyles).toContain("max(2.15rem, calc(env(safe-area-inset-top, 0px) + 1.15rem))");
+    expect(layoutStyles).toContain("var(--maverick-shell-mobile-content-top-offset, env(safe-area-inset-top, 0px)) +");
+    expect(layoutStyles).toContain("2.15rem");
     expect(layoutStyles).toContain("pointer-events: none;");
-    expect(layoutStyles).toContain("max(2.6rem, calc(env(safe-area-inset-top, 0px) + 0.8rem))");
+    expect(layoutStyles).toContain("2.6rem");
     expect(layoutStyles).toContain("padding-bottom: max(1.15rem, env(safe-area-inset-bottom, 0px));");
     expect(responsiveStyles).toContain(
-      "padding: calc(var(--maverick-shell-mobile-content-top-offset, 0px) + env(safe-area-inset-top, 0px) + 0.72rem) 0.45rem 0.85rem;",
+      "padding: calc(var(--maverick-shell-mobile-content-top-offset, env(safe-area-inset-top, 0px)) + 0.72rem) 0.45rem 0.85rem;",
     );
+    expect(responsiveStyles).not.toContain("var(--maverick-shell-mobile-content-top-offset, 0px) + env(safe-area-inset-top, 0px)");
   });
 
   it("keeps sent message attachments tied to the sent message text color", () => {

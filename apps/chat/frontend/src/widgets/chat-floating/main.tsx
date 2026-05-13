@@ -5,7 +5,12 @@ import type { ChatThread } from "../../api/client";
 import { deleteThread, getWidgetContext, updateThread } from "../../api/client";
 import { useRuntimeThreads } from "../../hooks/useRuntimeThreads";
 import { isThreadBusy } from "../chat-sidebar/sections";
-import { floatingWidgetSize } from "./floatingLayout";
+import {
+  floatingWidgetSize,
+  horizontalDragScrollLeft,
+  isHorizontalDragIntent,
+  isVerticalDragIntent,
+} from "./floatingLayout";
 import "../../styles/main.css";
 import "./styles.css";
 
@@ -32,6 +37,14 @@ type PersistedChatWindow = {
 type PersistedWidgetState = {
   version: 1;
   windows: PersistedChatWindow[];
+};
+
+type FloatingStackDragState = {
+  isDragging: boolean;
+  pointerId: number;
+  scrollLeft: number;
+  startX: number;
+  startY: number;
 };
 
 function createWindow(threadId = "", isDraft = false, draftProjectId: string | null = null): ChatWindow {
@@ -163,11 +176,20 @@ function debugThreadSync(label: string, detail: Record<string, unknown> = {}) {
   }
 }
 
+const FLOATING_STACK_DRAG_IGNORE_SELECTOR =
+  'button, a, input, textarea, select, summary, [contenteditable="true"], [role="button"], [role="textbox"], [role="menuitem"]';
+
+function shouldIgnoreFloatingStackDrag(target: EventTarget | null): boolean {
+  return target instanceof Element && Boolean(target.closest(FLOATING_STACK_DRAG_IGNORE_SELECTOR));
+}
+
 function ChatFloatingMount() {
   const [storageKey, setStorageKey] = useState(FALLBACK_WIDGET_STATE_STORAGE_KEY);
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [, setRuntimeThreadError] = useState<string | null>(null);
   const [windows, setWindows] = useState<ChatWindow[]>(readPersistedWindows);
+  const stackDragRef = useRef<FloatingStackDragState | null>(null);
+  const stackRef = useRef<HTMLDivElement | null>(null);
   const threadsRef = useRef(threads);
   const windowsRef = useRef(windows);
 
@@ -299,10 +321,74 @@ function ChatFloatingMount() {
     }
   }
 
+  function startStackDrag(event: React.PointerEvent<HTMLDivElement>) {
+    if (event.pointerType !== "mouse" || event.button !== 0 || shouldIgnoreFloatingStackDrag(event.target)) {
+      return;
+    }
+    const stack = stackRef.current;
+    if (!stack || stack.scrollWidth <= stack.clientWidth) {
+      return;
+    }
+    stackDragRef.current = {
+      isDragging: false,
+      pointerId: event.pointerId,
+      scrollLeft: stack.scrollLeft,
+      startX: event.clientX,
+      startY: event.clientY,
+    };
+  }
+
+  function moveStackDrag(event: React.PointerEvent<HTMLDivElement>) {
+    const dragState = stackDragRef.current;
+    const stack = stackRef.current;
+    if (!dragState || dragState.pointerId !== event.pointerId || !stack) {
+      return;
+    }
+
+    const deltaX = event.clientX - dragState.startX;
+    const deltaY = event.clientY - dragState.startY;
+    if (!dragState.isDragging) {
+      if (isVerticalDragIntent(deltaX, deltaY)) {
+        stackDragRef.current = null;
+        return;
+      }
+      if (!isHorizontalDragIntent(deltaX, deltaY)) {
+        return;
+      }
+      dragState.isDragging = true;
+      stack.setPointerCapture(event.pointerId);
+      stack.classList.add("is-horizontal-dragging");
+    }
+
+    event.preventDefault();
+    stack.scrollLeft = horizontalDragScrollLeft(dragState.scrollLeft, dragState.startX, event.clientX);
+  }
+
+  function endStackDrag(event: React.PointerEvent<HTMLDivElement>) {
+    const dragState = stackDragRef.current;
+    const stack = stackRef.current;
+    if (!dragState || dragState.pointerId !== event.pointerId || !stack) {
+      return;
+    }
+    if (stack.hasPointerCapture(event.pointerId)) {
+      stack.releasePointerCapture(event.pointerId);
+    }
+    stack.classList.remove("is-horizontal-dragging");
+    stackDragRef.current = null;
+  }
+
   const hasMultipleWindows = windows.length > 1;
 
   return (
-    <div className={`chat-floating-widget-stack ${hasMultipleWindows ? "has-multiple-windows" : "has-single-window"}`}>
+    <div
+      className={`chat-floating-widget-stack ${hasMultipleWindows ? "has-multiple-windows" : "has-single-window"}`}
+      onLostPointerCapture={endStackDrag}
+      onPointerCancel={endStackDrag}
+      onPointerDown={startStackDrag}
+      onPointerMove={moveStackDrag}
+      onPointerUp={endStackDrag}
+      ref={stackRef}
+    >
       {windows.map((windowItem) => (
         <ChatFloatingWindow
           key={windowItem.id}

@@ -209,8 +209,8 @@
   inset: 0 0 auto;
   z-index: 12;
   height: calc(
-    var(--maverick-shell-mobile-content-top-offset, 0px) +
-    max(2.15rem, calc(env(safe-area-inset-top, 0px) + 1.15rem))
+    var(--maverick-shell-mobile-content-top-offset, env(safe-area-inset-top, 0px)) +
+    2.15rem
   );
   background: linear-gradient(
     180deg,
@@ -321,8 +321,8 @@
   margin: 0;
   padding:
     calc(
-      var(--maverick-shell-mobile-content-top-offset, 0px) +
-      max(2.6rem, calc(env(safe-area-inset-top, 0px) + 0.8rem))
+      var(--maverick-shell-mobile-content-top-offset, env(safe-area-inset-top, 0px)) +
+      2.6rem
     )
     clamp(0.85rem, 2.2vw, 1.45rem)
     calc(var(--chatapp-composer-overlay-height, 0px) + 1.35rem);

@@ -12,6 +12,7 @@ from chat_state import (
     delete_project,
     list_projects,
     mutate_state,
+    project_exists,
     read_state,
     set_custom_view,
     set_view_filter,
@@ -44,6 +45,24 @@ def _response(status_code: int, payload: dict) -> None:
     print(json.dumps(response, ensure_ascii=False))
 
 
+def _runtime_cleanup_then_commit_response(project_id: str) -> None:
+    response = {
+        "status_code": 200,
+        "json": {"project_id": project_id},
+        "runtime_cleanup_requests": [
+            {
+                "project_id": project_id,
+                "reason": "chat_project_deleted",
+            }
+        ],
+        "runtime_cleanup_commit": {
+            "action": "projects.delete.commit",
+            "payload": {"project_id": project_id},
+        },
+    }
+    print(json.dumps(response, ensure_ascii=False))
+
+
 def main() -> None:
     payload = json.loads(sys.stdin.read() or "{}")
     body = payload.get("body") if isinstance(payload.get("body"), dict) else {}
@@ -69,11 +88,25 @@ def main() -> None:
         _response(200, {"project": project, "projects": list_projects(state), "preferences": state.get("preferences", {}), "_action": action})
         return
     if action == "projects.delete":
+        project_id = str(body.get("project_id") or "").strip()
+        if not project_exists(state, project_id):
+            _response(404, {"error": "project_not_found"})
+            return
+        _runtime_cleanup_then_commit_response(project_id)
+        return
+    if action == "projects.delete.commit":
+        if str(payload.get("surface") or "") != "runtime_cleanup_commit":
+            _response(403, {"error": "project_delete_commit_forbidden"})
+            return
         state, result = mutate_state(path, lambda current: {"deleted": delete_project(current, body)})
         if not result["deleted"]:
             _response(404, {"error": "project_not_found"})
             return
-        _response(200, {"projects": list_projects(state), "preferences": state.get("preferences", {}), "_action": action})
+        _response(200, {"projects": list_projects(state), "preferences": state.get("preferences", {}), "_action": "projects.delete"})
+        return
+    if action == "runtime.cleanup_sessions":
+        runtime_session_ids = body.get("runtime_session_ids") if isinstance(body.get("runtime_session_ids"), list) else []
+        _response(200, {"cleaned_runtime_session_ids": [str(item) for item in runtime_session_ids if str(item).strip()]})
         return
     if action == "view_filter":
         _response(200, {"state": {"view_filter": state.get("preferences", {}).get("view_filter")}})

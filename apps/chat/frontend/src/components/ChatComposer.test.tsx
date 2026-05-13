@@ -149,6 +149,12 @@ describe("ChatComposer reference search", () => {
     await settleReferenceSearch();
 
     expect(onSearchReferences).toHaveBeenCalledWith("Link", expect.any(AbortSignal));
+    const panels = element.querySelectorAll(".chatapp-mention-panel");
+    expect(panels).toHaveLength(1);
+    expect(panels[0].classList.contains("chatapp-mention-panel--app-picker")).toBe(true);
+    const searchInput = element.querySelector('[aria-label="Cerca app o record"]');
+    expect(searchInput).toBeInstanceOf(HTMLInputElement);
+    expect((searchInput as HTMLInputElement).value).toBe("Link");
     expect(element.textContent).toContain("@Link checklist nella chat con @");
     expect(element.textContent).toContain("checklist · checklist · Checklist operativa");
   });
@@ -167,8 +173,45 @@ describe("ChatComposer reference search", () => {
     await settleReferenceSearch();
 
     expect(onSearchReferences).toHaveBeenCalledWith("", expect.any(AbortSignal));
+    const panels = element.querySelectorAll(".chatapp-mention-panel");
+    expect(panels).toHaveLength(1);
+    expect(panels[0].classList.contains("chatapp-mention-panel--app-picker")).toBe(true);
+    expect(element.querySelector('[aria-label="Cerca app o record"]')).toBeInstanceOf(HTMLInputElement);
     expect(element.textContent).toContain("@Link checklist nella chat con @");
     expect(element.textContent).toContain("checklist · checklist · Checklist operativa");
+  });
+
+  it("uses the shared app picker search input for @ queries and insertion", async () => {
+    vi.useFakeTimers();
+    HTMLElement.prototype.scrollIntoView = vi.fn();
+    const onReferenceAdd = vi.fn();
+    const onSearchReferences = vi.fn(async () => [checklistMention]);
+    const { element, getValue } = await renderComposer({ onReferenceAdd, onSearchReferences });
+
+    await typeInEditor("@");
+    const searchInput = element.querySelector('[aria-label="Cerca app o record"]');
+    expect(searchInput).toBeInstanceOf(HTMLInputElement);
+    expect(searchInput?.closest(".chatapp-mention-panel")?.classList.contains("chatapp-mention-panel--app-picker")).toBe(true);
+
+    await act(async () => {
+      changeInputValue(searchInput as HTMLInputElement, "Link");
+    });
+    await settleReferenceSearch();
+
+    expect(onSearchReferences).toHaveBeenCalledWith("Link", expect.any(AbortSignal));
+    expect(getValue()).toBe("@Link");
+
+    const referenceButton = Array.from(element.querySelectorAll(".chatapp-mention-panel__item")).find((button) =>
+      button.textContent?.includes("@Link checklist nella chat con @"),
+    );
+    expect(referenceButton).toBeInstanceOf(HTMLButtonElement);
+
+    await act(async () => {
+      referenceButton!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    });
+
+    expect(onReferenceAdd).toHaveBeenCalledWith(checklistReference);
+    expect(getValue()).toContain("@Link checklist nella chat con @ [ref:checklist/checklist/check_6f4e74d9f31d]");
   });
 
   it("searches checklist entities from the toolbar app picker and inserts the selected reference", async () => {

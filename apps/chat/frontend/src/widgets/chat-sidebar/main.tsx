@@ -8,12 +8,13 @@ import {
   deleteProject,
   deleteThread,
   listChatProjects,
+  markThreadRead,
   updateProject,
   updateThread,
 } from "../../api/client";
 import { useRuntimeThreads } from "../../hooks/useRuntimeThreads";
 import { useShellSidebarCloseSwipe } from "../../hooks/useShellSidebarCloseSwipe";
-import { buildSections, isThreadBusy } from "./sections";
+import { buildSections, isThreadBusy, isThreadUnread } from "./sections";
 import { ThreadInlineActions } from "./ThreadInlineActions";
 import "./styles.css";
 
@@ -60,6 +61,17 @@ function isMobileLayoutViewport() {
   }
 }
 
+function projectDeletionConfirmationMessage(project: ChatProject | undefined, linkedThreadCount: number): string {
+  const projectName = project?.name || "questo progetto";
+  const chatLabel = linkedThreadCount === 1 ? "1 chat collegata" : `${linkedThreadCount} chat collegate`;
+  return `Eliminare il progetto "${projectName}" e ${chatLabel}? Questa azione non puo essere annullata.`;
+}
+
+type PendingProjectDeletion = {
+  message: string;
+  projectId: string;
+};
+
 function ChatSidebarWidget() {
   const [projects, setProjects] = useState<ChatProject[]>([]);
   const [threads, setThreads] = useState<ChatThread[]>([]);
@@ -68,11 +80,13 @@ function ChatSidebarWidget() {
   const [expandedThreadId, setExpandedThreadId] = useState<string | null>(null);
   const [expandedThreadTitle, setExpandedThreadTitle] = useState("");
   const [editingProject, setEditingProject] = useState<{ projectId: string; name: string } | null>(null);
+  const [pendingProjectDeletion, setPendingProjectDeletion] = useState<PendingProjectDeletion | null>(null);
   const [isShellMobileLayout, setIsShellMobileLayout] = useState(isMobileLayoutViewport);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const editingProjectRef = useRef<HTMLElement | null>(null);
+  const readReceiptInFlightRef = useRef<Set<string>>(new Set());
   const touchThreadPointerStartRef = useRef<{ threadId: string; x: number; y: number } | null>(null);
   const touchSelectedThreadIdRef = useRef<string | null>(null);
   const touchSelectedThreadResetRef = useRef<number | null>(null);
@@ -143,6 +157,7 @@ function ChatSidebarWidget() {
         return;
       }
       setEditingProject(null);
+      setPendingProjectDeletion(null);
     }
     document.addEventListener("pointerdown", cancelProjectEditFromOutside);
     return () => document.removeEventListener("pointerdown", cancelProjectEditFromOutside);
@@ -154,6 +169,7 @@ function ChatSidebarWidget() {
     setExpandedThreadId(null);
     setExpandedThreadTitle("");
     setEditingProject(null);
+    setPendingProjectDeletion(null);
     setError(null);
     notifyShell(undefined, { project_id: projectId });
     setIsPending(false);
@@ -170,6 +186,7 @@ function ChatSidebarWidget() {
       setExpandedThreadId(null);
       setExpandedThreadTitle("");
       setEditingProject(null);
+      setPendingProjectDeletion(null);
       setError(null);
     } catch (moveError) {
       setError(moveError instanceof Error ? moveError.message : "Unable to move chat.");
@@ -180,7 +197,28 @@ function ChatSidebarWidget() {
     setActiveThreadId(thread.thread_id);
     setExpandedThreadId(null);
     setExpandedThreadTitle("");
+    setPendingProjectDeletion(null);
+    void markThreadReadIfNeeded(thread);
     notifyShell(thread);
+  }
+
+  async function markThreadReadIfNeeded(thread: ChatThread) {
+    if (!thread.has_unread_completed_response || readReceiptInFlightRef.current.has(thread.thread_id)) {
+      return;
+    }
+    readReceiptInFlightRef.current.add(thread.thread_id);
+    setThreads((current) =>
+      current.map((item) => (item.thread_id === thread.thread_id ? { ...item, has_unread_completed_response: false } : item)),
+    );
+    try {
+      const payload = await markThreadRead(thread.thread_id);
+      setThreads(payload.threads);
+      updateFromSidebarPayload(payload, setProjects);
+    } catch {
+      // Selection should not be blocked by a best-effort read receipt.
+    } finally {
+      readReceiptInFlightRef.current.delete(thread.thread_id);
+    }
   }
 
   function markTouchThreadSelection(threadId: string) {
@@ -238,6 +276,7 @@ function ChatSidebarWidget() {
       const payload = await createProject("New project");
       updateFromSidebarPayload(payload, setProjects);
       setEditingProject(null);
+      setPendingProjectDeletion(null);
       setError(null);
     } catch (projectError) {
       setError(projectError instanceof Error ? projectError.message : "Unable to create project.");
@@ -252,12 +291,18 @@ function ChatSidebarWidget() {
     setExpandedThreadId(null);
     setExpandedThreadTitle("");
     setEditingProject(null);
+    setPendingProjectDeletion(null);
   }
 
   async function removeProject(projectId: string) {
     const payload = await deleteProject(projectId);
     updateFromSidebarPayload(payload, setProjects);
+    setThreads((current) => current.filter((thread) => thread.project_id !== projectId));
+    if (threads.some((thread) => thread.thread_id === activeThreadId && thread.project_id === projectId)) {
+      setActiveThreadId(null);
+    }
     setEditingProject(null);
+    setPendingProjectDeletion(null);
   }
 
   async function renameThread(threadId: string, title: string, projectId: string | null) {
@@ -267,6 +312,7 @@ function ChatSidebarWidget() {
     setExpandedThreadId(null);
     setExpandedThreadTitle("");
     setEditingProject(null);
+    setPendingProjectDeletion(null);
   }
 
   async function removeThread(threadId: string) {
@@ -280,17 +326,20 @@ function ChatSidebarWidget() {
       setExpandedThreadTitle("");
     }
     setEditingProject(null);
+    setPendingProjectDeletion(null);
   }
 
   function startProjectEdit(project: ChatProject) {
     setExpandedThreadId(null);
     setExpandedThreadTitle("");
     setEditingProject({ projectId: project.project_id, name: project.name });
+    setPendingProjectDeletion(null);
     setError(null);
   }
 
   function cancelProjectEdit() {
     setEditingProject(null);
+    setPendingProjectDeletion(null);
   }
 
   async function saveProjectEdit() {
@@ -305,6 +354,7 @@ function ChatSidebarWidget() {
     const project = projects.find((item) => item.project_id === editingProject.projectId);
     if (project?.name === nextName) {
       setEditingProject(null);
+      setPendingProjectDeletion(null);
       return;
     }
     setIsPending(true);
@@ -318,7 +368,17 @@ function ChatSidebarWidget() {
     }
   }
 
-  async function removeEditingProject(projectId: string) {
+  function removeEditingProject(projectId: string) {
+    const project = projects.find((item) => item.project_id === projectId);
+    const linkedThreadCount = threads.filter((thread) => thread.project_id === projectId).length;
+    setPendingProjectDeletion({
+      message: projectDeletionConfirmationMessage(project, linkedThreadCount),
+      projectId,
+    });
+    setError(null);
+  }
+
+  async function confirmProjectDeletion(projectId: string) {
     setIsPending(true);
     try {
       await removeProject(projectId);
@@ -328,6 +388,10 @@ function ChatSidebarWidget() {
     } finally {
       setIsPending(false);
     }
+  }
+
+  function cancelProjectDeletion() {
+    setPendingProjectDeletion(null);
   }
 
   function closeExpandedThread() {
@@ -348,15 +412,20 @@ function ChatSidebarWidget() {
             const isEditingProject = editingProject?.projectId === section.projectId;
             const editingName = isEditingProject ? editingProject.name : section.title;
             return (
-              <section className={`bs-chat-folder ${isCollapsed ? "is-collapsed" : ""} ${isEditingProject ? "is-project-editing" : ""}`} key={section.id}>
-                <div
-                  className="bs-chat-folder__header"
-                  ref={(element) => {
-                    if (isEditingProject) {
-                      editingProjectRef.current = element;
-                    }
-                  }}
-                >
+              <section
+                className={`bs-chat-folder ${isCollapsed ? "is-collapsed" : ""} ${isEditingProject ? "is-project-editing" : ""}`}
+                key={section.id}
+                ref={(element) => {
+                  if (isEditingProject) {
+                    editingProjectRef.current = element;
+                    return;
+                  }
+                  if (editingProjectRef.current === element) {
+                    editingProjectRef.current = null;
+                  }
+                }}
+              >
+                <div className="bs-chat-folder__header">
                   {isEditingProject ? (
                     <span className="bs-chat-folder__title-input-frame">
                       <input
@@ -398,7 +467,7 @@ function ChatSidebarWidget() {
                         disabled={isPending}
                         onClick={() => {
                           if (isEditingProject && section.projectId) {
-                            void removeEditingProject(section.projectId);
+                            removeEditingProject(section.projectId);
                             return;
                           }
                           void createChat(section.projectId);
@@ -445,15 +514,39 @@ function ChatSidebarWidget() {
                     ) : null}
                   </div>
                 </div>
+                {pendingProjectDeletion?.projectId === section.projectId ? (
+                  <div className="bs-chat-project-delete-confirm" role="alert">
+                    <p className="bs-chat-project-delete-confirm__message">{pendingProjectDeletion.message}</p>
+                    <div className="bs-chat-project-delete-confirm__actions">
+                      <button
+                        className="bs-chat-project-delete-confirm__button"
+                        disabled={isPending}
+                        onClick={cancelProjectDeletion}
+                        type="button"
+                      >
+                        Annulla
+                      </button>
+                      <button
+                        className="bs-chat-project-delete-confirm__button is-danger"
+                        disabled={isPending}
+                        onClick={() => void confirmProjectDeletion(pendingProjectDeletion.projectId)}
+                        type="button"
+                      >
+                        Elimina
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
                 {!isCollapsed ? (
                   <div className="bs-chat-folder__dropzone">
                     {section.items.length ? (
                       section.items.map((thread) => {
                         const isBusy = isThreadBusy(thread);
+                        const isUnread = isThreadUnread(thread);
                         const isExpanded = expandedThreadId === thread.thread_id;
                         return (
                           <div
-                            className={`bs-chat-list__item ${activeThreadId === thread.thread_id ? "is-active" : ""} ${isBusy ? "is-busy" : ""} ${isExpanded ? "is-expanded" : ""}`}
+                            className={`bs-chat-list__item ${activeThreadId === thread.thread_id ? "is-active" : ""} ${isBusy ? "is-busy" : ""} ${isUnread ? "is-unread" : ""} ${isExpanded ? "is-expanded" : ""}`}
                             key={thread.thread_id}
                           >
                             {isBusy ? <BusyChatGlow /> : null}
@@ -501,6 +594,7 @@ function ChatSidebarWidget() {
                                 className="bs-instance-menu__trigger"
                                 onClick={() => {
                                   setEditingProject(null);
+                                  setPendingProjectDeletion(null);
                                   setExpandedThreadId((current) => {
                                     if (current === thread.thread_id) {
                                       setExpandedThreadTitle("");

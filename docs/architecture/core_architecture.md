@@ -1069,6 +1069,7 @@ Current first-use endpoints include:
 - `POST /api/runtime/sessions/<session_id>/cleanup`
 - `GET /api/runtime/turns/<turn_id>`
 - `POST /api/runtime/turns/<turn_id>/interrupt`
+- `POST /api/runtime/threads/<thread_id>/read`
 - `WS /ws/runtime/sessions/<session_id>`
 - `WS /ws/runtime/threads`
 
@@ -1079,7 +1080,7 @@ Turn submission is implemented through a dedicated runtime service so future CLI
 
 The runtime WebSocket endpoints are the official realtime transports for mounted apps and other interactive clients.
 
-`WS /ws/runtime/sessions/<session_id>` sends a `runtime.snapshot` frame containing session metadata and persisted events, then live `runtime.event` frames from the runtime event bus. `WS /ws/runtime/threads` sends a `runtime.thread.snapshot` frame containing the workspace thread catalog, ordered by the most recent accepted user message for each thread, then live `runtime.thread.changed` frames from the runtime thread event bus.
+`WS /ws/runtime/sessions/<session_id>` sends a `runtime.snapshot` frame containing session metadata and persisted events, then live `runtime.event` frames from the runtime event bus. `WS /ws/runtime/threads` sends a `runtime.thread.snapshot` frame containing the workspace thread catalog, ordered by the most recent accepted user message for each thread, then live `runtime.thread.changed` frames from the runtime thread event bus. Thread frames include core-derived response completion metadata such as `last_completed_response_at`, `last_completed_turn_id`, and the viewer-specific `has_unread_completed_response` boolean. Per-user read receipt storage remains internal to the core runtime thread record and must not be exposed as a raw user-id map in app payloads.
 
 The HTTP event and thread endpoints remain command, diagnostics, and operator surfaces. Product chat rendering must not bootstrap transcripts or thread lists by replaying runtime data over HTTP.
 
@@ -1231,7 +1232,7 @@ Runtime history and operational records for that agent session must also be part
 - `processes.json` for local process metadata
 - `state.json` for the mutable runtime state snapshot
 
-Workspace-scoped runtime thread records are persisted under `workspaces/<workspace_id>/runtime/threads.json`.
+Workspace-scoped runtime thread records are persisted under `workspaces/<workspace_id>/runtime/threads.json`. Runtime thread records may include the latest successfully completed response timestamp, the completed turn id, and per-user read receipt timestamps so mounted chat surfaces can distinguish read chats from chats whose latest generated response has finished.
 
 The core must not append every agent's session metadata, thread metadata, history, or operational records into installation-level shared JSON files because replay, cleanup, and restart recovery would degrade as total server history grows and would mix workspace-owned runtime state with platform control-plane state. Installation-level runtime persistence is reserved for platform security records such as runtime API token lifecycle state.
 

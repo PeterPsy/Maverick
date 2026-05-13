@@ -39,7 +39,7 @@
     },
     "runtime": {
       "create_sessions": true,
-      "cleanup_sessions": false
+      "cleanup_sessions": true
     },
     "host": {
       "telemetry": false

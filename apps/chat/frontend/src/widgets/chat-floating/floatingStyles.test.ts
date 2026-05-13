@@ -24,7 +24,19 @@ describe("floating chat widget styles", () => {
     expect(stackBlock).toContain("max-width: 100%;");
     expect(stackBlock).toContain("overflow-x: auto;");
     expect(stackBlock).toContain("overflow-y: hidden;");
+    expect(stackBlock).toContain("scrollbar-width: none;");
+    expect(stackBlock).toContain("touch-action: pan-x pan-y;");
     expect(stackBlock).toContain("-webkit-overflow-scrolling: touch;");
     expect(stackBlock).not.toContain("overflow: hidden;");
+    expect(styles).toMatch(/\.chat-floating-widget-stack::-webkit-scrollbar\s*{[\s\S]*display:\s*none;/);
+  });
+
+  it("lets horizontal swipes started inside an open transcript reach the floating stack", () => {
+    const styles = readStyle("styles.css");
+    const transcriptBlock = cssBlock(styles, ".chat-floating-widget-shell__body .chatapp-chat-scroll__inner");
+
+    expect(transcriptBlock).toContain("overscroll-behavior-x: auto;");
+    expect(transcriptBlock).toContain("overscroll-behavior-y: contain;");
+    expect(transcriptBlock).toContain("touch-action: pan-x pan-y;");
   });
 });

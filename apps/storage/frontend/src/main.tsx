@@ -9,7 +9,7 @@ import { canInlinePreview, canTextPreview, StoragePreview } from './filePreview'
 import { formatBytes, formatMegabytes, kindLabels, roleLabels } from './storageMeta';
 import { Icon } from './Icon';
 import { notifyActiveStorageFolderSelection, notifyActiveStorageSelection } from './lib/activeStorageSelection';
-import { breadcrumbRefreshPlan, catalogLoadedCountAfterPage, catalogLoadedCountAfterRefresh, deleteFileWithCatalogRefresh, folderOpenRefreshPlan, resolvedFileNavigationPlan } from './lib/storageCatalogFlow';
+import { breadcrumbRefreshPlan, catalogLoadedCountAfterPage, catalogLoadedCountAfterRefresh, deleteFileWithCatalogRefresh, folderOpenRefreshPlan, missingNavigationTargetPlan, resolvedFileNavigationPlan } from './lib/storageCatalogFlow';
 import { fileFolderSelection, folderParentPath, folderStatsForSelection, normalizeFolderPath } from './lib/storageFolderLayer';
 import { storageTargetFromParams, type StorageNavigationParams, type StorageNavigationTarget } from './lib/storageNavigationParams';
 import { storageCustomScopedFiles, storageViewVisibleFiles, storageViewVisibleFolders } from './lib/storageSearch';
@@ -305,6 +305,10 @@ function App() {
       if (targetFile) {
         pendingNavigationTargetRef.current = null;
         await focusResolvedNavigationFile(targetFile);
+      } else {
+        const missingTarget = missingNavigationTargetPlan();
+        if (missingTarget.clearPending) pendingNavigationTargetRef.current = null;
+        setError(missingTarget.error);
       }
     }
   }
@@ -560,9 +564,9 @@ function App() {
       const targetFolderPath = target.folderRelativePath || '';
       setCurrentFolderPathScoped(targetFolderPath);
       if (target.role) {
-        updateViewFilter({ role: target.role }, { folderPath: targetFolderPath, preserveCustom: false });
+        updateViewFilter({ query: '', role: target.role }, { folderPath: targetFolderPath, preserveCustom: false });
       } else {
-        refresh(undefined, { folderPath: targetFolderPath }).catch((err: Error) => setError(err.message));
+        refresh({ query: '' }, { folderPath: targetFolderPath }).catch((err: Error) => setError(err.message));
       }
       pendingNavigationTargetRef.current = null;
       return;
@@ -604,6 +608,7 @@ function App() {
       activeRole,
       folderPath: folder.relative_path,
       folderRole: folder.role,
+      query,
       viewMode,
     });
     setCurrentFolderPathScoped(plan.folderPath);
@@ -1038,7 +1043,7 @@ function App() {
                         type="button"
                         onClick={() => {
                           setCurrentFolderPathScoped('');
-                          updateViewFilter({ role: 'all' }, { folderPath: '', preserveCustom: false });
+                          updateViewFilter({ query: '', role: 'all' }, { folderPath: '', preserveCustom: false });
                         }}
                         aria-label="Show Storage root"
                       >
@@ -1062,7 +1067,7 @@ function App() {
                           <button
                             type="button"
                             onClick={() => {
-                              const plan = breadcrumbRefreshPlan({ activeRole: activeRole as FileRole, folderPath: '', viewMode });
+                              const plan = breadcrumbRefreshPlan({ activeRole: activeRole as FileRole, folderPath: '', query, viewMode });
                               setCurrentFolderPathScoped(plan.folderPath);
                               if (plan.shouldWriteViewFilter) {
                                 updateViewFilter(plan.filter, plan.viewFilterOptions);
@@ -1093,7 +1098,7 @@ function App() {
                             <button
                               type="button"
                               onClick={() => {
-                                const plan = breadcrumbRefreshPlan({ activeRole: activeRole as FileRole, folderPath: item.path, viewMode });
+                                const plan = breadcrumbRefreshPlan({ activeRole: activeRole as FileRole, folderPath: item.path, query, viewMode });
                                 setCurrentFolderPathScoped(plan.folderPath);
                                 if (plan.shouldWriteViewFilter) {
                                   updateViewFilter(plan.filter, plan.viewFilterOptions);

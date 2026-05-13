@@ -373,23 +373,6 @@
   transform: translate(0.25rem, -50%);
 }
 
-.bs-sidebar__rail-drag-ghost {
-  position: fixed;
-  z-index: 80;
-  display: grid;
-  place-items: center;
-  width: var(--bs-sidebar-icon-size, 3.55rem);
-  height: var(--bs-sidebar-icon-size, 3.55rem);
-  pointer-events: none;
-  transform: translate(-50%, -50%) scale(1.04);
-}
-
-.bs-sidebar__rail-drag-ghost .bs-app-logo--rail {
-  box-shadow:
-    var(--bs-sidebar-inner-edge),
-    0 16px 34px rgba(0, 0, 0, 0.32);
-}
-
 .bs-sidebar__rail-status {
   position: absolute;
   width: 1px;

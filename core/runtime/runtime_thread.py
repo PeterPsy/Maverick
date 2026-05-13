@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 
@@ -25,3 +25,6 @@ class RuntimeThreadRecord:
     created_at: datetime
     updated_at: datetime
     last_user_message_at: datetime | None = None
+    last_completed_response_at: datetime | None = None
+    last_completed_turn_id: str | None = None
+    completed_response_read_at_by_user_id: dict[str, datetime] = field(default_factory=dict)

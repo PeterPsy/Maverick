@@ -62,8 +62,46 @@ def _websocket_environ(scope: dict[str, Any]) -> dict[str, str]:
     }
 
 
-def runtime_thread_snapshot_frame(state: PlatformState, *, workspace_id: str) -> dict[str, Any]:
+def runtime_thread_snapshot_frame(state: PlatformState, *, workspace_id: str, viewer_user_id: str | None = None) -> dict[str, Any]:
     """Build the current workspace runtime thread catalog snapshot."""
+    threads = _ordered_runtime_threads(state, workspace_id=workspace_id)
+    return {
+        "type": "runtime.thread.snapshot",
+        "workspace_id": workspace_id,
+        "threads": [thread_payload(thread, viewer_user_id=viewer_user_id) for thread in threads],
+        "at": datetime.now(tz=UTC),
+    }
+
+
+def runtime_thread_changed_frame(
+    state: PlatformState,
+    *,
+    workspace_id: str,
+    viewer_user_id: str | None,
+    event: dict[str, Any],
+) -> dict[str, Any]:
+    """Build one user-specific thread catalog mutation frame."""
+    threads = _ordered_runtime_threads(state, workspace_id=workspace_id)
+    payloads = [thread_payload(thread, viewer_user_id=viewer_user_id) for thread in threads]
+    frame: dict[str, Any] = {
+        "type": "runtime.thread.changed",
+        "workspace_id": workspace_id,
+        "action": str(event.get("action") or "updated"),
+        "threads": payloads,
+    }
+    for key in ("deleted_thread_ids", "deleted_runtime_session_ids"):
+        value = event.get(key)
+        if isinstance(value, list):
+            frame[key] = value
+    thread_id = _event_thread_id(event)
+    if thread_id:
+        thread_payload_item = next((item for item in payloads if item.get("thread_id") == thread_id), None)
+        if thread_payload_item is not None:
+            frame["thread"] = thread_payload_item
+    return frame
+
+
+def _ordered_runtime_threads(state: PlatformState, *, workspace_id: str):
     sessions = state.runtime_store.list_sessions(workspace_id)
     threads = ensure_runtime_threads_for_sessions(
         state.runtime_store,
@@ -71,13 +109,19 @@ def runtime_thread_snapshot_frame(state: PlatformState, *, workspace_id: str) ->
         sessions=sessions,
         title_for_session=lambda session: _thread_title_for_session(state, session),
     )
-    ordered = sorted(threads, key=thread_recency_key, reverse=True)
-    return {
-        "type": "runtime.thread.snapshot",
-        "workspace_id": workspace_id,
-        "threads": [thread_payload(thread) for thread in ordered],
-        "at": datetime.now(tz=UTC),
-    }
+    return sorted(threads, key=thread_recency_key, reverse=True)
+
+
+def _event_thread_id(event: dict[str, Any]) -> str:
+    direct_thread_id = event.get("thread_id")
+    if isinstance(direct_thread_id, str):
+        return direct_thread_id
+    thread = event.get("thread")
+    if isinstance(thread, dict):
+        thread_id = thread.get("thread_id")
+        if isinstance(thread_id, str):
+            return thread_id
+    return ""
 
 
 def _thread_title_for_session(state: PlatformState, session: RuntimeSessionRecord) -> str:
@@ -111,7 +155,7 @@ async def stream_runtime_thread_events(
     last_heartbeat_at = datetime.now(tz=UTC)
     try:
         await send({"type": "websocket.accept", "subprotocol": None, "headers": []})
-        await _send_json(send, runtime_thread_snapshot_frame(state, workspace_id=workspace_id))
+        await _send_json(send, runtime_thread_snapshot_frame(state, workspace_id=workspace_id, viewer_user_id=context.user.user_id))
         while True:
             receive_task = asyncio.create_task(receive())
             event_task = asyncio.create_task(subscription.get())
@@ -137,7 +181,15 @@ async def stream_runtime_thread_events(
                     return
             if event_task in done:
                 event = event_task.result()
-                await _send_json(send, {"type": "runtime.thread.changed", **event})
+                await _send_json(
+                    send,
+                    runtime_thread_changed_frame(
+                        state,
+                        workspace_id=workspace_id,
+                        viewer_user_id=context.user.user_id,
+                        event=event,
+                    ),
+                )
             now = datetime.now(tz=UTC)
             if (now - last_heartbeat_at).total_seconds() >= heartbeat_interval_seconds:
                 await _send_json(send, {"type": "runtime.thread.heartbeat", "workspace_id": workspace_id, "at": now})

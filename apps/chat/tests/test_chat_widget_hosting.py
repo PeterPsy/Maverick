@@ -77,7 +77,10 @@ class ChatWidgetHostingTests(unittest.TestCase):
         self.assertIn('{isEditingProject ? "check" : "more_horiz"}', sidebar_source)
         self.assertIn('{isEditingProject ? "delete" : "add"}', sidebar_source)
         self.assertIn("bs-chat-folder__title-input", sidebar_source)
+        self.assertIn("bs-chat-project-delete-confirm", sidebar_source)
         self.assertIn(".bs-chat-folder.is-project-editing .bs-folder-menu__trigger", sidebar_styles)
+        self.assertIn(".bs-chat-project-delete-confirm", sidebar_styles)
+        self.assertNotIn("window.confirm", sidebar_source)
         self.assertNotIn("panelPositionFromTrigger", sidebar_source)
 
     def test_chat_structured_messages_use_generic_widget_host(self) -> None:

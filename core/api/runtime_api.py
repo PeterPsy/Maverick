@@ -23,6 +23,7 @@ from core.runtime.runtime_threads import (
     create_runtime_thread,
     delete_runtime_thread_complete,
     ensure_runtime_threads_for_sessions,
+    mark_runtime_thread_completed_response_read,
     thread_payload,
     update_runtime_thread,
 )
@@ -69,7 +70,7 @@ def _event_payload(event: RuntimeEventRecord) -> dict[str, object]:
     return asdict(event)
 
 
-def _threads_payload(state: PlatformState, *, workspace_id: str) -> dict[str, object]:
+def _threads_payload(state: PlatformState, *, workspace_id: str, viewer_user_id: str | None = None) -> dict[str, object]:
     sessions = state.runtime_store.list_sessions(workspace_id)
     threads = ensure_runtime_threads_for_sessions(
         state.runtime_store,
@@ -77,7 +78,7 @@ def _threads_payload(state: PlatformState, *, workspace_id: str) -> dict[str, ob
         sessions=sessions,
         title_for_session=lambda session: _thread_title_for_session(state, session),
     )
-    return {"threads": [thread_payload(thread) for thread in threads]}
+    return {"threads": [thread_payload(thread, viewer_user_id=viewer_user_id) for thread in threads]}
 
 
 def _publish_thread_change(
@@ -95,6 +96,7 @@ def _publish_thread_change(
     }
     if thread is not None:
         payload["thread"] = thread_payload(thread)
+        payload["thread_id"] = thread.thread_id
     if deleted_thread_ids is not None:
         payload["deleted_thread_ids"] = deleted_thread_ids
     if deleted_runtime_session_ids is not None:
@@ -204,7 +206,7 @@ def _handle_session_collection(state: PlatformState, context: RequestSession, me
 
 def _handle_thread_collection(state: PlatformState, context: RequestSession, method: str, body: dict, start_response: StartResponse):
     if method == "GET":
-        return json_response(start_response, _threads_payload(state, workspace_id=context.workspace_id))
+        return json_response(start_response, _threads_payload(state, workspace_id=context.workspace_id, viewer_user_id=context.user.user_id))
     if method != "POST":
         return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")
     runtime_session_id = str(body.get("runtime_session_id") or "").strip()
@@ -238,7 +240,7 @@ def _handle_thread_collection(state: PlatformState, context: RequestSession, met
     _publish_thread_change(state, workspace_id=context.workspace_id, action="updated" if existing else "created", thread=thread)
     return json_response(
         start_response,
-        {"thread": thread_payload(thread), **_threads_payload(state, workspace_id=context.workspace_id)},
+        {"thread": thread_payload(thread, viewer_user_id=context.user.user_id), **_threads_payload(state, workspace_id=context.workspace_id, viewer_user_id=context.user.user_id)},
         status="201 Created",
     )
 
@@ -300,7 +302,7 @@ def _handle_thread_item(
     if method == "GET":
         return json_response(
             start_response,
-            {"thread": thread_payload(thread), **_threads_payload(state, workspace_id=context.workspace_id)},
+            {"thread": thread_payload(thread, viewer_user_id=context.user.user_id), **_threads_payload(state, workspace_id=context.workspace_id, viewer_user_id=context.user.user_id)},
         )
     if method == "PATCH":
         updated = update_runtime_thread(
@@ -314,7 +316,7 @@ def _handle_thread_item(
         _publish_thread_change(state, workspace_id=context.workspace_id, action="updated", thread=updated)
         return json_response(
             start_response,
-            {"thread": thread_payload(updated), **_threads_payload(state, workspace_id=context.workspace_id)},
+            {"thread": thread_payload(updated, viewer_user_id=context.user.user_id), **_threads_payload(state, workspace_id=context.workspace_id, viewer_user_id=context.user.user_id)},
         )
     if method == "DELETE":
         forbidden_reason = _thread_cleanup_forbidden_reason(
@@ -348,7 +350,7 @@ def _handle_thread_item(
             deleted_runtime_session_ids=[deleted.runtime_session_id] if deleted.runtime_session_id else [],
         )
         payload = {
-            **_threads_payload(state, workspace_id=context.workspace_id),
+            **_threads_payload(state, workspace_id=context.workspace_id, viewer_user_id=context.user.user_id),
             "deleted_thread_id": deleted.thread_id,
             "deleted_runtime_session_id": deleted.runtime_session_id,
         }
@@ -356,6 +358,53 @@ def _handle_thread_item(
             payload["runtime_cleanup"] = cleanup_result
         return json_response(start_response, payload)
     return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")
+
+
+def _handle_thread_read(
+    state: PlatformState,
+    context: RequestSession,
+    thread_id: str,
+    method: str,
+    start_response: StartResponse,
+) -> list[bytes]:
+    if method != "POST":
+        return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")
+    try:
+        thread = state.runtime_store.get_thread(thread_id)
+    except RuntimeThreadNotFoundError:
+        try:
+            session = state.runtime_store.get_session(thread_id)
+        except RuntimeSessionNotFoundError:
+            return json_response(start_response, {"error": "runtime_thread_not_found"}, status="404 Not Found")
+        if session.workspace_id != context.workspace_id:
+            return json_response(start_response, {"error": "runtime_thread_not_found"}, status="404 Not Found")
+        thread = create_runtime_thread(
+            state.runtime_store,
+            workspace_id=context.workspace_id,
+            thread_id=session.session_id,
+            runtime_session_id=session.session_id,
+            title=_thread_title_for_session(state, session),
+            agent_label=session.agent_id,
+            source_app_id=session.source_app_id or session.agent_id,
+            system_prompt=session.system_prompt or "",
+            now=session.started_at or session.updated_at,
+        )
+        _publish_thread_change(state, workspace_id=context.workspace_id, action="created", thread=thread)
+    if thread.workspace_id != context.workspace_id:
+        return json_response(start_response, {"error": "runtime_thread_not_found"}, status="404 Not Found")
+    updated = mark_runtime_thread_completed_response_read(
+        state.runtime_store,
+        thread_id=thread.thread_id,
+        workspace_id=context.workspace_id,
+        user_id=context.user.user_id,
+    )
+    if updated is None:
+        return json_response(start_response, {"error": "runtime_thread_not_found"}, status="404 Not Found")
+    _publish_thread_change(state, workspace_id=context.workspace_id, action="updated", thread=updated)
+    return json_response(
+        start_response,
+        {"thread": thread_payload(updated, viewer_user_id=context.user.user_id), **_threads_payload(state, workspace_id=context.workspace_id, viewer_user_id=context.user.user_id)},
+    )
 
 
 def _handle_thread_clear(
@@ -406,7 +455,7 @@ def _handle_thread_clear(
     return json_response(
         start_response,
         {
-            **_threads_payload(state, workspace_id=context.workspace_id),
+            **_threads_payload(state, workspace_id=context.workspace_id, viewer_user_id=context.user.user_id),
             "deleted_thread_ids": [thread.thread_id for thread in deleted_threads],
             "deleted_runtime_session_ids": [thread.runtime_session_id for thread in deleted_threads if thread.runtime_session_id],
             "runtime_cleanup_results": cleanup_results,
@@ -648,6 +697,8 @@ def handle_runtime_api(state: PlatformState, environ: dict, start_response: Star
         return _handle_session_collection(state, context, method, body, start_response, start_path=start_path)
 
     parts = [part for part in path.removeprefix("/api/runtime/").split("/") if part]
+    if len(parts) == 3 and parts[0] == "threads" and parts[2] == "read":
+        return _handle_thread_read(state, context, parts[1], method, start_response)
     if len(parts) == 2 and parts[0] == "threads":
         return _handle_thread_item(state, context, parts[1], method, body, start_response, start_path=start_path)
     if len(parts) == 2 and parts[0] == "sessions" and method == "GET":

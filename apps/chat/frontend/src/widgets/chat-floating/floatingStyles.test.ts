@@ -42,4 +42,15 @@ describe("floating chat widget styles", () => {
     expect(transcriptBlock).toContain("touch-action: pan-x pan-y;");
     expect(styles).toMatch(/\.chat-floating-widget-shell__body \.chatapp-chat-scroll__inner::-webkit-scrollbar\s*{[\s\S]*display:\s*none;/);
   });
+
+  it("hides the floating thread selector dropdown scrollbar without disabling scrolling", () => {
+    const styles = readStyle("styles.css");
+    const dropdownBlock = cssBlock(styles, ".chat-floating-thread-menu__panel");
+
+    expect(dropdownBlock).toContain("max-height: min(20rem, calc(100dvh - 7rem));");
+    expect(dropdownBlock).toContain("overflow-y: auto;");
+    expect(dropdownBlock).toContain("scrollbar-width: none;");
+    expect(dropdownBlock).toContain("-ms-overflow-style: none;");
+    expect(styles).toMatch(/\.chat-floating-thread-menu__panel::-webkit-scrollbar\s*{[\s\S]*display:\s*none;/);
+  });
 });

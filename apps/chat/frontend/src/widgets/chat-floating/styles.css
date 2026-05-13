@@ -241,6 +241,8 @@ body {
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   padding: 0.45rem;
   border: 1px solid var(--chat-sidebar-soft-border);
   border-radius: var(--chat-sidebar-glass-radius);
@@ -249,6 +251,10 @@ body {
   -webkit-backdrop-filter: blur(26px);
   backdrop-filter: blur(26px);
   isolation: isolate;
+}
+
+.chat-floating-thread-menu__panel::-webkit-scrollbar {
+  display: none;
 }
 
 .chat-floating-thread-menu__item {

@@ -25,6 +25,9 @@ const PREVIEW_IMAGE_MAX_WIDTH = 1040;
 const PREVIEW_IMAGE_MIN_SIZE = 120;
 
 type DropFeedback = 'idle' | 'ready' | 'blocked' | 'uploading' | 'success' | 'error';
+type PendingDelete =
+  | { kind: 'file'; file: StorageFile }
+  | { kind: 'folder'; folder: StorageFolder };
 
 const viewKinds = new Set<PreviewKind | 'all'>(['all', 'image', 'video', 'audio', 'pdf', 'document', 'presentation', 'spreadsheet', 'markdown', 'text', 'file']);
 const storageRootRoles: FileRole[] = ['uploaded', 'generated'];
@@ -194,6 +197,8 @@ function App() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedFolder, setSelectedFolder] = useState<StorageFolder | null>(null);
   const [folderDetailsOpen, setFolderDetailsOpen] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [markdownEditing, setMarkdownEditing] = useState(false);
   const [markdownDraft, setMarkdownDraft] = useState('');
   const [markdownSaving, setMarkdownSaving] = useState(false);
@@ -702,6 +707,13 @@ function App() {
     : `${filteredFiles.length} files`;
   const folderBreadcrumbs = folderBreadcrumbItems(currentFolderPath);
   const storageBreadcrumbLabel = activeRole === 'all' ? '' : roleLabels[activeRole];
+  const pendingDeleteName = pendingDelete?.kind === 'file' ? pendingDelete.file.name : pendingDelete?.folder.name || '';
+  const pendingDeletePath = pendingDelete?.kind === 'file' ? pendingDelete.file.workspace_relative_path : pendingDelete?.folder.workspace_relative_path || '';
+  const pendingDeleteTitle = pendingDelete ? `Delete ${pendingDelete.kind}?` : '';
+  const pendingDeleteDescription = pendingDelete?.kind === 'folder'
+    ? 'This removes the folder and every file inside it from workspace storage.'
+    : 'This removes the file from workspace storage.';
+  const pendingDeleteActionLabel = pendingDelete?.kind === 'folder' ? 'Delete folder' : 'Delete file';
 
   useEffect(() => {
     setPreviewText('');
@@ -751,6 +763,15 @@ function App() {
     observer.observe(headerElement);
     return () => observer.disconnect();
   }, [previewModalOpen, selectedFile]);
+
+  useEffect(() => {
+    if (!pendingDelete) return;
+    function handleDeleteDialogKeydown(event: KeyboardEvent) {
+      if (event.key === 'Escape' && !deleteBusy) setPendingDelete(null);
+    }
+    window.addEventListener('keydown', handleDeleteDialogKeydown);
+    return () => window.removeEventListener('keydown', handleDeleteDialogKeydown);
+  }, [deleteBusy, pendingDelete]);
 
   useEffect(() => {
     setPreviewImageSize(null);
@@ -955,8 +976,21 @@ function App() {
     setDraggedFile(null);
   }
 
+  function requestFileDelete(file: StorageFile) {
+    setError('');
+    setPendingDelete({ kind: 'file', file });
+  }
+
+  function requestFolderDelete(folder: StorageFolder) {
+    if (!folder.relative_path) {
+      setError('Storage root folders cannot be deleted.');
+      return;
+    }
+    setError('');
+    setPendingDelete({ kind: 'folder', folder });
+  }
+
   async function removeFile(file: StorageFile) {
-    if (!window.confirm(`Delete ${file.name}? This removes the file from workspace storage.`)) return;
     await deleteFileWithCatalogRefresh(file, {
       clearSelectedFile: (fileId) => {
         if (selectedFile?.id === fileId) setSelectedFile(null);
@@ -967,11 +1001,6 @@ function App() {
   }
 
   async function removeFolder(folder: StorageFolder) {
-    if (!folder.relative_path) {
-      setError('Storage root folders cannot be deleted.');
-      return;
-    }
-    if (!window.confirm(`Delete ${folder.name}? This removes the folder and every file inside it from workspace storage.`)) return;
     const deletedPath = normalizeFolderPath(folder.relative_path);
     const parentPath = folderParentPath(deletedPath);
     await deleteFolder(folder);
@@ -984,6 +1013,24 @@ function App() {
       await refresh({ role: folder.role }, { folderPath: parentPath });
     } else {
       await refresh();
+    }
+  }
+
+  async function confirmPendingDelete() {
+    if (!pendingDelete || deleteBusy) return;
+    setDeleteBusy(true);
+    try {
+      if (pendingDelete.kind === 'folder') {
+        await removeFolder(pendingDelete.folder);
+      } else {
+        await removeFile(pendingDelete.file);
+      }
+      setPendingDelete(null);
+    } catch (err) {
+      setPendingDelete(null);
+      throw err;
+    } finally {
+      setDeleteBusy(false);
     }
   }
 
@@ -1148,7 +1195,7 @@ function App() {
                 canDelete={Boolean(folder.relative_path)}
                 key={folder.id}
                 folder={folder}
-                onDelete={() => removeFolder(folder).catch((err: Error) => setError(err.message))}
+                onDelete={() => requestFolderDelete(folder)}
                 onDownload={() => downloadFolderArchive(folder).catch((err: Error) => setError(err.message))}
                 onOpen={() => openFolder(folder)}
                 onDropFile={(targetFolder) => moveDraggedFile(targetFolder.relative_path, targetFolder.role).catch((err: Error) => setError(err.message))}
@@ -1158,7 +1205,7 @@ function App() {
             {!isInitialLoading && filteredFiles.length ? (
               <AnimatedFileCollection
                 files={filteredFiles}
-                onDelete={(file) => removeFile(file).catch((err: Error) => setError(err.message))}
+                onDelete={requestFileDelete}
                 onDownload={(file) => download(file).catch((err: Error) => setError(err.message))}
                 onDragEnd={() => setDraggedFile(null)}
                 onDragStart={(file) => setDraggedFile(file)}
@@ -1284,6 +1331,31 @@ function App() {
           </section>
         </div>
       ) : null}
+      {pendingDelete ? (
+        <div className="delete-confirmation-backdrop" onMouseDown={() => !deleteBusy && setPendingDelete(null)}>
+          <section className="delete-confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-confirmation-title" onMouseDown={(event) => event.stopPropagation()}>
+            <span className="delete-confirmation-icon" aria-hidden="true">
+              <Icon name="delete" />
+            </span>
+            <div className="delete-confirmation-copy">
+              <p className="storage-eyebrow">Permanent action</p>
+              <h2 id="delete-confirmation-title">{pendingDeleteTitle}</h2>
+              <strong>{pendingDeleteName}</strong>
+              <span>{pendingDeletePath}</span>
+              <p>{pendingDeleteDescription}</p>
+            </div>
+            <div className="delete-confirmation-actions">
+              <button className="secondary-action" disabled={deleteBusy} onClick={() => setPendingDelete(null)} type="button" autoFocus>
+                Cancel
+              </button>
+              <button className="danger-action" disabled={deleteBusy} onClick={() => confirmPendingDelete().catch((err: Error) => setError(err.message))} type="button">
+                <Icon name="delete" />
+                {deleteBusy ? 'Deleting' : pendingDeleteActionLabel}
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
       {previewModalOpen && selectedFile ? (
         <div className="preview-modal-backdrop" onMouseDown={() => setPreviewModalOpen(false)}>
           <section className={previewImageLayout ? 'preview-modal image-preview' : 'preview-modal'} style={previewModalStyle} role="dialog" aria-modal="true" aria-labelledby="preview-modal-title" onMouseDown={(event) => event.stopPropagation()}>
@@ -1299,7 +1371,7 @@ function App() {
                 <button className="icon-button" type="button" onClick={() => download(selectedFile).catch((err: Error) => setError(err.message))} aria-label="Download file" title="Download">
                   <Icon name="download" />
                 </button>
-                <button className="icon-button danger" type="button" onClick={() => removeFile(selectedFile).catch((err: Error) => setError(err.message))} aria-label="Delete file" title="Delete">
+                <button className="icon-button danger" type="button" onClick={() => requestFileDelete(selectedFile)} aria-label="Delete file" title="Delete">
                   <Icon name="delete" />
                 </button>
                 <button className="icon-button" type="button" onClick={() => setPreviewModalOpen(false)} aria-label="Close preview" title="Close">

@@ -16,6 +16,7 @@ Workspace file storage for uploaded files and generated artifacts.
 - Storage hides upload implementation folders such as UUID buckets and presents those uploaded files at the visible Uploaded root.
 - The Uploaded and Generated storage roots render as top-level folder cards in the Storage browser.
 - Folder cards expose details, ZIP download, and delete actions; storage root folders can be downloaded but not deleted.
+- Destructive file and folder deletes use an app-rendered confirmation dialog instead of browser modal APIs so the mounted Storage iframe works under the shell sandbox policy.
 - The Storage browser requests one bounded page of the current folder or search view at a time. When no search query is active, the backend filters direct child files by `folder_path`; a non-empty `Search in Storage` query searches folders and files across Uploaded and Generated storage at once while file-type filters still refine matching files.
 - Direct navigation to a file resolves the target by stable id or workspace-relative path, exits custom/search scoping, reloads the file's containing folder, and then merges the resolved file into the visible page if it is outside the first page.
 - The breadcrumb heading shows direct folder and file counts plus the current folder's recursive size in MB.

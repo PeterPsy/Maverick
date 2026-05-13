@@ -1066,6 +1066,80 @@ h3 {
   padding: 22px;
 }
 
+.delete-confirmation-backdrop {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(5, 7, 11, 0.78);
+  padding: 22px;
+}
+
+.delete-confirmation-dialog {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  width: min(460px, 100%);
+  min-width: 0;
+  border: 1px solid rgba(255, 179, 191, 0.28);
+  border-radius: 14px;
+  background: var(--maverick-glass-highlight), var(--storage-surface);
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.58);
+  padding: 16px;
+  backdrop-filter: blur(26px);
+  -webkit-backdrop-filter: blur(26px);
+}
+
+.delete-confirmation-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 999px;
+  background: var(--storage-danger-soft);
+  color: var(--storage-danger);
+}
+
+.delete-confirmation-copy {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+}
+
+.delete-confirmation-copy h2 {
+  overflow-wrap: anywhere;
+  font-size: 1.05rem;
+}
+
+.delete-confirmation-copy strong,
+.delete-confirmation-copy span,
+.delete-confirmation-copy p {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+
+.delete-confirmation-copy strong {
+  color: var(--storage-text);
+  font-size: 0.9rem;
+}
+
+.delete-confirmation-copy span,
+.delete-confirmation-copy p {
+  color: var(--storage-muted);
+  font-size: 0.8rem;
+}
+
+.delete-confirmation-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 2px;
+}
+
 .details-dialog {
   display: grid;
   gap: 14px;
@@ -1638,8 +1712,21 @@ h3 {
   }
 
   .details-modal-backdrop,
+  .delete-confirmation-backdrop,
   .preview-modal-backdrop {
     padding: 10px;
+  }
+
+  .delete-confirmation-dialog {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .delete-confirmation-actions {
+    justify-content: stretch;
+  }
+
+  .delete-confirmation-actions button {
+    flex: 1 1 140px;
   }
 
   .preview-modal {

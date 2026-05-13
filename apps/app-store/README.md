@@ -7,6 +7,7 @@ Authenticated Maverick app catalog for inspecting remote catalog apps, server-re
 - Frontend, backend, CLI, and MCP entrypoints are declared in `app_contract.json`.
 - The contract declares the bundled `app-store-ops` skill and the `app-shortcuts` base-shell widget.
 - The `app-shortcuts` widget is a dark sidebar app selector exposed for both the shell app selector slot and the App Store primary sidebar, with search, all/pinned scopes, pin controls, and registry logo image or glyph fallback rendering.
+- App-owned `pinned_apps` state is an ordered list. `pinned_apps.set` preserves the normalized order it receives, and the Base Shell uses that order for the desktop app rail while keeping App Store itself outside the movable pinned list.
 - `installed_app` is the current reference entity exposed through app-owned surfaces.
 - The app now declares persisted `view_surfaces` for catalog query/scope filters and curated installed-app selections.
 - The frontend uses the public Maverick App Store browsing experience as the primary page and keeps Maverick management controls on the same page.

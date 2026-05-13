@@ -1203,11 +1203,20 @@ class AppStoreAppTestCase(unittest.TestCase):
             body={"action": "pinned_apps.toggle", "app_id": "agents"},
             cookie=cookie,
         )
+        status_set, ordered, _ordered_headers = self.invoke(
+            app,
+            path="/api/apps/app-store/backend",
+            method="POST",
+            body={"action": "pinned_apps.set", "app_ids": ["skills", "chat", "skills", "", "agents"]},
+            cookie=cookie,
+        )
 
         self.assertEqual(status_initial, 200)
         self.assertEqual(initial["pinned_apps"], ["chat"])
         self.assertEqual(status_toggle, 200)
         self.assertEqual(toggled["state"]["pinned_apps"], ["chat", "agents"])
+        self.assertEqual(status_set, 200)
+        self.assertEqual(ordered["state"]["pinned_apps"], ["skills", "chat", "agents"])
 
     @integration_test("app-store platform integration suite; run with scripts/test_suite.py --level integration")
     def test_app_store_backend_persists_catalog_view_state(self) -> None:

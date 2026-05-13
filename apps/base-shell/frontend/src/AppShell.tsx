@@ -12,6 +12,7 @@ import {
   logout,
   PlatformSettings,
   PlatformStatus,
+  savePinnedApps,
   SessionPayload,
   switchWorkspace,
   WorkspaceItem,
@@ -78,6 +79,10 @@ export function AppShell() {
   const isMobileLayout = useMobileLayout();
   const isSidebarPinned = sidebarMode === "fixed" && !isMobileLayout;
   const sidebarCloseTimerRef = useRef<number | null>(null);
+  const pinnedAppIdsRef = useRef(pinnedAppIds);
+  const pinnedAppsSaveVersionRef = useRef(0);
+  const persistedPinnedAppIdsRef = useRef(pinnedAppIds);
+  const persistedPinnedAppsVersionRef = useRef(0);
   const railApps = shellAppRailApps(apps, pinnedAppIds);
   const shellRailItemCount = isLoading && railApps.length === 0 ? 4 : railApps.length + 1;
   const shellSidebarMetrics = useSidebarRailMetrics(shellRailItemCount, isMobileLayout);
@@ -145,7 +150,7 @@ export function AppShell() {
         listPinnedApps().catch(() => ({ pinned_apps: ["chat"] })),
       ]);
       setApps(registry.items);
-      setPinnedAppIds(pinnedApps.pinned_apps.length ? pinnedApps.pinned_apps : ["chat"]);
+      applyPersistedPinnedApps(pinnedApps.pinned_apps);
       setStatus(platformStatus);
       setWorkspaces(workspacePayload.items);
       setSettings(platformSettings);
@@ -160,6 +165,10 @@ export function AppShell() {
   useEffect(() => {
     loadShellState();
   }, []);
+
+  useEffect(() => {
+    pinnedAppIdsRef.current = pinnedAppIds;
+  }, [pinnedAppIds]);
 
   useEffect(() => {
     return () => {
@@ -188,8 +197,8 @@ export function AppShell() {
         return;
       }
       listPinnedApps()
-        .then((pinnedApps) => setPinnedAppIds(pinnedApps.pinned_apps.length ? pinnedApps.pinned_apps : ["chat"]))
-        .catch(() => setPinnedAppIds(["chat"]));
+        .then((pinnedApps) => applyPersistedPinnedApps(pinnedApps.pinned_apps))
+        .catch(() => applyPersistedPinnedApps(["chat"]));
     }
 
     window.addEventListener("message", handleAppDataChanged);
@@ -333,6 +342,51 @@ export function AppShell() {
     openApp(CHAT_APP_ID, newChatRouteParams());
   }
 
+  function pinnedAppsOrDefault(appIds: string[]): string[] {
+    return appIds.length ? appIds : ["chat"];
+  }
+
+  function applyPersistedPinnedApps(appIds: string[], persistedVersion = pinnedAppsSaveVersionRef.current) {
+    const nextAppIds = pinnedAppsOrDefault(appIds);
+    rememberPersistedPinnedApps(nextAppIds, persistedVersion);
+    pinnedAppIdsRef.current = nextAppIds;
+    setPinnedAppIds(nextAppIds);
+  }
+
+  function rememberPersistedPinnedApps(appIds: string[], persistedVersion: number) {
+    if (persistedVersion < persistedPinnedAppsVersionRef.current) {
+      return;
+    }
+    persistedPinnedAppsVersionRef.current = persistedVersion;
+    persistedPinnedAppIdsRef.current = pinnedAppsOrDefault(appIds);
+  }
+
+  async function handlePinnedAppsReorder(nextPinnedAppIds: string[]) {
+    const saveVersion = pinnedAppsSaveVersionRef.current + 1;
+    pinnedAppsSaveVersionRef.current = saveVersion;
+    pinnedAppIdsRef.current = nextPinnedAppIds;
+    setPinnedAppIds(nextPinnedAppIds);
+    try {
+      const savedPinnedApps = await savePinnedApps(nextPinnedAppIds);
+      rememberPersistedPinnedApps(savedPinnedApps.pinned_apps, saveVersion);
+      if (pinnedAppsSaveVersionRef.current !== saveVersion) {
+        return;
+      }
+      const savedAppIds = pinnedAppsOrDefault(savedPinnedApps.pinned_apps);
+      pinnedAppIdsRef.current = savedAppIds;
+      setPinnedAppIds(savedAppIds);
+      notifyAppDataChanged("app-store", "pinned-apps");
+    } catch (saveError) {
+      if (pinnedAppsSaveVersionRef.current !== saveVersion) {
+        return;
+      }
+      const rollbackAppIds = pinnedAppsOrDefault(persistedPinnedAppIdsRef.current);
+      pinnedAppIdsRef.current = rollbackAppIds;
+      setPinnedAppIds(rollbackAppIds);
+      setError(saveError instanceof Error ? saveError.message : "Unable to save app rail order.");
+    }
+  }
+
   if (isLoading && session === null) {
     return <main className="bs-shell" />;
   }
@@ -393,6 +447,7 @@ export function AppShell() {
         onOpenSidebar={openSidebar}
         onPrimaryActionStateChange={setMobilePrimaryAction}
         onOpenSettings={() => setActiveDialog("settings")}
+        onReorderPinnedApps={handlePinnedAppsReorder}
         onWorkspaceChanged={loadShellState}
         pinnedAppIds={pinnedAppIds}
         railMetrics={shellSidebarMetrics}

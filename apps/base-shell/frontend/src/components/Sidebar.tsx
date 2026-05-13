@@ -1,11 +1,17 @@
-import { useRef } from "react";
-import type { CSSProperties, FocusEvent as ReactFocusEvent, MouseEvent as ReactMouseEvent, TouchEvent as ReactTouchEvent } from "react";
+import { useRef, useState } from "react";
+import type {
+  CSSProperties,
+  FocusEvent as ReactFocusEvent,
+  MouseEvent as ReactMouseEvent,
+  TouchEvent as ReactTouchEvent,
+} from "react";
 import { AppRegistryItem, SessionUser, WorkspaceItem } from "../api";
 import { isHorizontalIntent, isSidebarCloseSwipe, type SidebarSwipePoint } from "../lib/sidebarSwipe";
 import { shellAppRailApps, shellVisibleApps } from "../navigation";
 import type { SidebarMode } from "../session";
 import { AppLogo } from "./AppLogo";
 import { BrandMark } from "./BrandMark";
+import { SidebarAppRail } from "./SidebarAppRail";
 import { WidgetSlot } from "./WidgetSlot";
 import type { WidgetPrimaryActionState } from "./WidgetSlot";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
@@ -33,6 +39,7 @@ export function Sidebar({
   onOpenSidebar,
   onPrimaryActionStateChange,
   onOpenSettings,
+  onReorderPinnedApps,
   onWorkspaceChanged,
   pinnedAppIds,
   railMetrics,
@@ -55,6 +62,7 @@ export function Sidebar({
   onOpenSidebar: () => void;
   onPrimaryActionStateChange: (state: WidgetPrimaryActionState) => void;
   onOpenSettings: () => void;
+  onReorderPinnedApps: (appIds: string[]) => void;
   onWorkspaceChanged: () => void;
   pinnedAppIds: string[];
   railMetrics: CSSProperties;
@@ -62,6 +70,7 @@ export function Sidebar({
   workspaces: WorkspaceItem[];
 }) {
   const closeSwipeStartRef = useRef<TrackedSwipe | null>(null);
+  const [isRailReordering, setIsRailReordering] = useState(false);
   const visibleAppsById = new Map(shellVisibleApps(apps).map((app) => [app.app_id, app]));
   const railApps = shellAppRailApps(apps, pinnedAppIds);
   const activeApp = activeAppId ? visibleAppsById.get(activeAppId) || null : null;
@@ -75,6 +84,9 @@ export function Sidebar({
   }
 
   function handlePointerLeave(event: ReactMouseEvent<HTMLElement>) {
+    if (isRailReordering) {
+      return;
+    }
     if (!isPinned && !event.currentTarget.contains(document.activeElement)) {
       onClose();
     }
@@ -87,13 +99,12 @@ export function Sidebar({
   }
 
   function handleBlur(event: ReactFocusEvent<HTMLElement>) {
+    if (isRailReordering) {
+      return;
+    }
     if (!isPinned && !event.currentTarget.contains(event.relatedTarget)) {
       onClose();
     }
-  }
-
-  function handleOpenApp(appId: string) {
-    onOpenApp(appId);
   }
 
   function resetCloseSwipe() {
@@ -131,57 +142,9 @@ export function Sidebar({
     }
   }
 
-  function renderPinnedAppRail(extraClassName = "", appsToRender = railApps) {
-    const className = extraClassName ? `bs-sidebar__rail-apps ${extraClassName}` : "bs-sidebar__rail-apps";
-    if (isInitialLoading) {
-      return (
-        <div className={`${className} is-loading`} role="list" aria-hidden="true">
-          {Array.from({ length: 4 }).map((_, index) => (
-            <div className="bs-sidebar__rail-item" key={index} role="listitem">
-              <span className="bs-app-logo bs-app-logo--rail bs-sidebar__rail-skeleton-logo" />
-            </div>
-          ))}
-        </div>
-      );
-    }
-    return (
-      <div className={className} role="list">
-        {appsToRender.map((app) => (
-          <div className="bs-sidebar__rail-item" key={app.app_id} role="listitem">
-            <button
-              aria-current={activeAppId === app.app_id ? "page" : undefined}
-              aria-label={app.name}
-              className={sidebarRailButtonClassName(app.app_id, activeAppId)}
-              onClick={() => handleOpenApp(app.app_id)}
-              title={app.name}
-              type="button"
-            >
-              <AppLogo app={app} className="bs-app-logo--rail" />
-              <span className="bs-sidebar__rail-tooltip" role="tooltip">{app.name}</span>
-            </button>
-          </div>
-        ))}
-        <div className="bs-sidebar__rail-item" role="listitem">
-          <button
-            aria-label="Settings"
-            className="bs-sidebar__rail-button"
-            onClick={onOpenSettings}
-            title="Settings"
-            type="button"
-          >
-            <span className="bs-app-logo is-glyph bs-app-logo--rail">
-              <span aria-hidden="true" className="material-symbols-rounded">settings</span>
-            </span>
-            <span className="bs-sidebar__rail-tooltip" role="tooltip">Settings</span>
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <aside
-      className={`bs-sidebar bs-sidebar--${mode} ${isDetailLayerOpen ? "is-open" : "is-closed"}`}
+      className={`bs-sidebar bs-sidebar--${mode} ${isDetailLayerOpen ? "is-open" : "is-closed"} ${isRailReordering ? "is-rail-reordering" : ""}`}
       aria-label="Workspace navigation"
       onBlur={handleBlur}
       onFocus={handleFocus}
@@ -194,7 +157,16 @@ export function Sidebar({
       style={railMetrics}
     >
       <div className="bs-sidebar__rail" aria-label="Applications">
-        {renderPinnedAppRail()}
+        <SidebarAppRail
+          activeAppId={activeAppId}
+          appsToRender={railApps}
+          enableReorder={!isMobileLayout}
+          isInitialLoading={isInitialLoading}
+          onOpenApp={onOpenApp}
+          onOpenSettings={onOpenSettings}
+          onReorderActiveChange={setIsRailReordering}
+          onReorderPinnedApps={onReorderPinnedApps}
+        />
       </div>
 
       <div className="bs-sidebar__details" aria-hidden={!isDetailLayerOpen}>
@@ -217,7 +189,16 @@ export function Sidebar({
           </div>
 
           <div className="bs-sidebar__mobile-apps" aria-label="Applicazioni pinnate" data-no-sidebar-swipe="">
-            {renderPinnedAppRail("bs-sidebar__rail-apps--mobile", sidebarMobileRailApps(railApps, activeAppId))}
+            <SidebarAppRail
+              activeAppId={activeAppId}
+              appsToRender={sidebarMobileRailApps(railApps, activeAppId)}
+              className="bs-sidebar__rail-apps--mobile"
+              enableReorder={false}
+              isInitialLoading={isInitialLoading}
+              onOpenApp={onOpenApp}
+              onOpenSettings={onOpenSettings}
+              onReorderPinnedApps={onReorderPinnedApps}
+            />
           </div>
         </div>
 
@@ -304,11 +285,4 @@ export function sidebarMobileRailApps(railApps: AppRegistryItem[], activeAppId: 
   return railApps.filter((app) => app.app_id.toLowerCase() !== normalizedActiveAppId);
 }
 
-export function sidebarRailButtonClassName(appId: string, activeAppId: string | null): string {
-  return [
-    "bs-sidebar__rail-button",
-    activeAppId === appId ? "is-active" : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
-}
+export { sidebarRailButtonClassName } from "./SidebarAppRail";

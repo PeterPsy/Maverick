@@ -1,4 +1,5 @@
 import { AppRegistryItem } from "./api";
+import { orderedDesktopRailApps } from "./lib/sidebarRailReorder";
 
 export type AppRouteParams = Record<string, string | boolean | null>;
 
@@ -29,13 +30,7 @@ export function shellVisibleApps(apps: AppRegistryItem[]): AppRegistryItem[] {
 }
 
 export function shellAppRailApps(apps: AppRegistryItem[], pinnedAppIds: string[]): AppRegistryItem[] {
-  const visibleAppsById = new Map(shellVisibleApps(apps).map((app) => [app.app_id, app]));
-  const appStore = visibleAppsById.get(APP_STORE_APP_ID) ?? null;
-  const pinnedApps = pinnedAppIds
-    .filter((appId) => appId.toLowerCase() !== APP_STORE_APP_ID)
-    .map((appId) => visibleAppsById.get(appId))
-    .filter((app): app is AppRegistryItem => Boolean(app));
-  return appStore ? [...pinnedApps, appStore] : pinnedApps;
+  return orderedDesktopRailApps(shellVisibleApps(apps), pinnedAppIds, [APP_STORE_APP_ID]);
 }
 
 export function findRegistryApp(apps: AppRegistryItem[], appId: string | null): AppRegistryItem | null {

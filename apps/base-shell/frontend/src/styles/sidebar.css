@@ -198,6 +198,10 @@
   place-items: center;
 }
 
+.bs-sidebar__rail-item.is-dragging {
+  opacity: 0.36;
+}
+
 .bs-sidebar__rail-button {
   position: relative;
   display: grid;
@@ -214,6 +218,27 @@
     background 140ms ease,
     color 140ms ease,
     transform 700ms cubic-bezier(0.175, 0.885, 0.32, 2.2);
+}
+
+.bs-sidebar__rail-button.is-reorderable {
+  cursor: grab;
+  touch-action: manipulation;
+}
+
+.bs-sidebar__rail-button.is-reorderable:active,
+.bs-sidebar__rail-button.is-dragging {
+  cursor: grabbing;
+}
+
+.bs-sidebar__rail-button.is-drop-target .bs-app-logo--rail {
+  box-shadow:
+    var(--bs-sidebar-inner-edge),
+    0 0 0 2px rgba(255, 255, 255, 0.34),
+    0 10px 24px rgba(0, 0, 0, 0.22);
+}
+
+.bs-sidebar__rail-button.is-dragging {
+  transform: scale(0.96);
 }
 
 .bs-sidebar__rail-button > .bs-app-logo--rail {
@@ -337,6 +362,52 @@
 .bs-sidebar__rail-button:focus-visible .bs-sidebar__rail-tooltip {
   opacity: 1;
   transform: translate(0, -50%);
+}
+
+.bs-sidebar.is-rail-reordering {
+  user-select: none;
+}
+
+.bs-sidebar.is-rail-reordering .bs-sidebar__rail-tooltip {
+  opacity: 0;
+  transform: translate(0.25rem, -50%);
+}
+
+.bs-sidebar__rail-drag-ghost {
+  position: fixed;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  width: var(--bs-sidebar-icon-size, 3.55rem);
+  height: var(--bs-sidebar-icon-size, 3.55rem);
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(1.04);
+}
+
+.bs-sidebar__rail-drag-ghost .bs-app-logo--rail {
+  box-shadow:
+    var(--bs-sidebar-inner-edge),
+    0 16px 34px rgba(0, 0, 0, 0.32);
+}
+
+.bs-sidebar__rail-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bs-sidebar__rail-button,
+  .bs-app-logo--rail,
+  .bs-sidebar__rail-tooltip {
+    transition: none;
+  }
 }
 
 .bs-sidebar__details {

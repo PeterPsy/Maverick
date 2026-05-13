@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getActiveProvider, getPlatformStatus, getSession, listApps, normalizeAppRegistryPayload } from "../src/api";
+import { getActiveProvider, getPlatformStatus, getSession, listApps, listPinnedApps, normalizeAppRegistryPayload, savePinnedApps } from "../src/api";
 import { buildProviderSetupDraft } from "../src/components/ProviderSetupDialog";
 
 describe("base-shell api normalization", () => {
@@ -47,6 +47,37 @@ describe("base-shell api normalization", () => {
       items: [expect.objectContaining({ app_id: "chat", name: "Chat" })],
     });
     expect(fetch).toHaveBeenCalledWith("/api/apps", { credentials: "same-origin", headers: { Accept: "application/json" } });
+  });
+
+  it("reads and saves ordered pinned apps through the App Store backend", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ pinned_apps: ["chat", "agents"] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ state: { pinned_apps: ["agents", "chat"] } }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+
+    await expect(listPinnedApps()).resolves.toEqual({ pinned_apps: ["chat", "agents"] });
+    await expect(savePinnedApps([" agents ", "", "chat"])).resolves.toEqual({ pinned_apps: ["agents", "chat"] });
+    expect(fetch).toHaveBeenNthCalledWith(1, "/api/apps/app-store/backend", {
+      credentials: "same-origin",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      method: "POST",
+      body: JSON.stringify({ action: "pinned_apps.list" }),
+    });
+    expect(fetch).toHaveBeenNthCalledWith(2, "/api/apps/app-store/backend", {
+      credentials: "same-origin",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      method: "POST",
+      body: JSON.stringify({ action: "pinned_apps.set", app_ids: ["agents", "chat"] }),
+    });
   });
 
   it("normalizes platform status app records", async () => {

@@ -275,6 +275,12 @@ function stringArrayField(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
+function normalizePinnedAppsPayload(value: unknown): PinnedAppsPayload {
+  const payload = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  const state = payload.state && typeof payload.state === "object" ? (payload.state as Record<string, unknown>) : payload;
+  return { pinned_apps: stringArrayField(state.pinned_apps).map((item) => item.trim()).filter(Boolean) };
+}
+
 function normalizeProvidedInterface(value: unknown): AppInterfaceDeclaration {
   const item = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
   return {
@@ -409,10 +415,18 @@ export function listPinnedApps(): Promise<PinnedAppsPayload> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action: "pinned_apps.list" }),
-  }).then((value) => {
-    const payload = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
-    return { pinned_apps: stringArrayField(payload.pinned_apps).map((item) => item.trim()).filter(Boolean) };
-  });
+  }).then(normalizePinnedAppsPayload);
+}
+
+export function savePinnedApps(appIds: string[]): Promise<PinnedAppsPayload> {
+  return requestJson<unknown>("/api/apps/app-store/backend", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: "pinned_apps.set",
+      app_ids: appIds.map((appId) => appId.trim()).filter(Boolean),
+    }),
+  }).then(normalizePinnedAppsPayload);
 }
 
 export function getPlatformStatus(): Promise<PlatformStatus> {

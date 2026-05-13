@@ -614,8 +614,7 @@ h3 {
 .storage-app-skeleton__line::after,
 .storage-app-skeleton__folder-actions span::after,
 .storage-file-skeleton__actions span::after,
-.storage-counts-skeleton span::after,
-.storage-file-skeleton__preview .animated-file-preview::after {
+.storage-counts-skeleton span::after {
   position: absolute;
   inset: 0;
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
@@ -1357,18 +1356,6 @@ h3 {
 
 .file-type-card-preview.is-loading-preview > .relative {
   animation: storage-preview-icon-pulse 1.25s ease-in-out infinite;
-}
-
-.file-type-card-preview.is-loading-preview > .relative::after {
-  position: absolute;
-  inset: -8px;
-  z-index: 3;
-  border-radius: 12px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.16), transparent);
-  content: "";
-  pointer-events: none;
-  transform: translateX(-120%);
-  animation: storage-loading-skeleton-shimmer 1.45s ease-in-out infinite;
 }
 
 .animated-file-item.is-list .file-type-card-preview > .relative {

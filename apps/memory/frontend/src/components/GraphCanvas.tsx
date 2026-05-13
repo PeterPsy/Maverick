@@ -1,23 +1,16 @@
 import { useCallback, useEffect, useRef } from "react";
-import { colors } from "../constants";
-import { truncate } from "../format";
+import {
+  screenToWorld,
+  zoomViewportAtPoint,
+  type Viewport,
+  type ViewportRect,
+} from "../lib/graphViewport";
 import type { GraphEdge, GraphNode, NodeDetails, RelationshipRow } from "../types";
 import { FloatingNodePanel } from "./FloatingNodePanel";
+import { drawGraphCanvas } from "./graphCanvasDrawing";
+import { applyRepulsion } from "./graphCanvasPhysics";
 import { MemoryMapSkeleton } from "./MemoryMapSkeleton";
-import { drawNodeIcon } from "./nodeCanvasIcons";
-
-type Viewport = {
-  scale: number;
-  offsetX: number;
-  offsetY: number;
-};
-
-type CanvasRect = {
-  height: number;
-  left: number;
-  top: number;
-  width: number;
-};
+import { useGraphCanvasGestures, type GraphCanvasDragState } from "./useGraphCanvasGestures";
 
 type CanvasNode = GraphNode & {
   radius: number;
@@ -39,8 +32,6 @@ type GraphCanvasProps = {
 };
 
 const DEFAULT_VIEWPORT: Viewport = { scale: 1, offsetX: 0, offsetY: 0 };
-const EXACT_REPULSION_NODE_LIMIT = 180;
-const GRID_CELL_SIZE = 180;
 const SETTLED_SPEED = 0.035;
 
 export function GraphCanvas({
@@ -55,12 +46,12 @@ export function GraphCanvas({
 }: GraphCanvasProps) {
   const animationRef = useRef<number | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const dragRef = useRef<{ mode: "node" | "pan"; id?: string; lastX: number; lastY: number } | null>(null);
+  const dragRef = useRef<GraphCanvasDragState | null>(null);
   const edgesRef = useRef<GraphEdge[]>(edges);
   const hoverIdRef = useRef<string | null>(null);
   const nodeByIdRef = useRef<Map<string, CanvasNode>>(new Map());
   const nodesRef = useRef<CanvasNode[]>([]);
-  const rectRef = useRef<CanvasRect>({ height: 620, left: 0, top: 0, width: 900 });
+  const rectRef = useRef<ViewportRect>({ height: 620, left: 0, top: 0, width: 900 });
   const runningRef = useRef(false);
   const selectedIdRef = useRef<string | null>(selectedId);
   const viewportRef = useRef<Viewport>({ ...DEFAULT_VIEWPORT });
@@ -84,60 +75,16 @@ export function GraphCanvas({
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    const rect = rectRef.current;
-    const ratio = window.devicePixelRatio || 1;
-    const viewport = viewportRef.current;
-    const canvasNodes = nodesRef.current;
-    const canvasNodeById = nodeByIdRef.current;
-    const hoveredId = hoverIdRef.current;
-    const activeId = selectedIdRef.current;
-
-    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-    ctx.clearRect(0, 0, rect.width, rect.height);
-    ctx.save();
-    ctx.translate(viewport.offsetX, viewport.offsetY);
-    ctx.scale(viewport.scale, viewport.scale);
-
-    edgesRef.current.forEach((edge) => {
-      const source = canvasNodeById.get(edge.source);
-      const target = canvasNodeById.get(edge.target);
-      if (!source || !target) return;
-      const active = activeId && (edge.source === activeId || edge.target === activeId);
-      ctx.beginPath();
-      ctx.moveTo(source.x, source.y);
-      ctx.lineTo(target.x, target.y);
-      ctx.strokeStyle = active ? "rgba(255,255,255,.76)" : "rgba(132,151,160,.24)";
-      ctx.lineWidth = active ? 2.8 : 0.8 + Number(edge.weight || 0.5) * 1.8;
-      ctx.stroke();
+    drawGraphCanvas(ctx, {
+      activeId: selectedIdRef.current,
+      edges: edgesRef.current,
+      hoveredId: hoverIdRef.current,
+      nodeById: nodeByIdRef.current,
+      nodes: nodesRef.current,
+      ratio: window.devicePixelRatio || 1,
+      rect: rectRef.current,
+      viewport: viewportRef.current,
     });
-
-    canvasNodes.forEach((node) => {
-      const color = colors[node.type] || "#ccd6dd";
-      const active = node.id === activeId;
-      const hovered = node.id === hoveredId;
-      if (active || hovered) {
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, node.radius + (active ? 8 : 5), 0, Math.PI * 2);
-        ctx.strokeStyle = active ? "rgba(255,255,255,.78)" : "rgba(255,255,255,.28)";
-        ctx.lineWidth = active ? 2.2 : 1.4;
-        ctx.stroke();
-      }
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
-      ctx.fillStyle = active ? "rgba(20,23,25,.98)" : "rgba(12,15,17,.92)";
-      ctx.fill();
-      ctx.lineWidth = active ? 3.2 : 2.2;
-      ctx.strokeStyle = color;
-      ctx.stroke();
-      drawNodeIcon(ctx, node.type, node.x, node.y, node.radius, color);
-      if (active || hovered || canvasNodes.length < 42) {
-        ctx.font = "12px Inter, system-ui, sans-serif";
-        ctx.fillStyle = "#edf4f6";
-        ctx.textAlign = "center";
-        ctx.fillText(truncate(node.title, 30), node.x, node.y + node.radius + 18);
-      }
-    });
-    ctx.restore();
   }, []);
 
   const tick = useCallback(() => {
@@ -204,11 +151,7 @@ export function GraphCanvas({
   }, [draw, tick]);
 
   const clientToWorld = useCallback((clientX: number, clientY: number, currentViewport = viewportRef.current) => {
-    const rect = rectRef.current;
-    return {
-      x: (clientX - rect.left - currentViewport.offsetX) / currentViewport.scale,
-      y: (clientY - rect.top - currentViewport.offsetY) / currentViewport.scale,
-    };
+    return screenToWorld({ clientX, clientY }, rectRef.current, currentViewport);
   }, []);
 
   const nodeAt = useCallback((clientX: number, clientY: number) => {
@@ -292,75 +235,38 @@ export function GraphCanvas({
       event.preventDefault();
       updateCanvasRect();
       setViewport((current) => {
-        const before = clientToWorld(event.clientX, event.clientY, current);
         const factor = event.deltaY > 0 ? 0.92 : 1.08;
-        const scale = Math.max(0.45, Math.min(2.2, current.scale * factor));
-        const rect = rectRef.current;
-        return {
-          scale,
-          offsetX: event.clientX - rect.left - before.x * scale,
-          offsetY: event.clientY - rect.top - before.y * scale,
-        };
+        return zoomViewportAtPoint(current, rectRef.current, { clientX: event.clientX, clientY: event.clientY }, factor);
       });
     };
     canvas.addEventListener("wheel", onWheel, { passive: false });
     return () => canvas.removeEventListener("wheel", onWheel);
-  }, [clientToWorld, setViewport, updateCanvasRect]);
+  }, [setViewport, updateCanvasRect]);
 
   const showSkeletonMap = nodes.length === 0;
+  const gestures = useGraphCanvasGestures({
+    clientToWorld,
+    dragRef,
+    hoverIdRef,
+    nodeAt,
+    nodeByIdRef,
+    onSelectNode,
+    rectRef,
+    requestFrame,
+    setViewport,
+    updateCanvasRect,
+    viewportRef,
+  });
 
   return (
     <main className={`graph-stage${showSkeletonMap ? " graph-stage--empty" : ""}`} aria-busy={loading}>
       <canvas
         ref={canvasRef}
-        onMouseDown={(event) => {
-          updateCanvasRect();
-          const node = nodeAt(event.clientX, event.clientY);
-          if (node) {
-            dragRef.current = { mode: "node", id: node.id, lastX: event.clientX, lastY: event.clientY };
-            onSelectNode(node.id);
-          } else {
-            dragRef.current = { mode: "pan", lastX: event.clientX, lastY: event.clientY };
-          }
-          requestFrame();
-        }}
-        onMouseMove={(event) => {
-          updateCanvasRect();
-          const node = nodeAt(event.clientX, event.clientY);
-          const nextHoverId = node?.id || null;
-          if (hoverIdRef.current !== nextHoverId) {
-            hoverIdRef.current = nextHoverId;
-            requestFrame();
-          }
-          const drag = dragRef.current;
-          if (!drag) return;
-          if (drag.mode === "node" && drag.id) {
-            const draggedNode = nodeByIdRef.current.get(drag.id);
-            if (!draggedNode) return;
-            const point = clientToWorld(event.clientX, event.clientY);
-            draggedNode.x = point.x;
-            draggedNode.y = point.y;
-            draggedNode.vx = 0;
-            draggedNode.vy = 0;
-            requestFrame();
-            return;
-          }
-          setViewport((current) => ({
-            ...current,
-            offsetX: current.offsetX + event.clientX - drag.lastX,
-            offsetY: current.offsetY + event.clientY - drag.lastY,
-          }));
-          dragRef.current = { ...drag, lastX: event.clientX, lastY: event.clientY };
-        }}
-        onMouseUp={() => {
-          dragRef.current = null;
-          requestFrame();
-        }}
-        onMouseLeave={() => {
-          dragRef.current = null;
-          hoverIdRef.current = null;
-          requestFrame();
-        }}
+        onPointerCancel={gestures.handlePointerCancel}
+        onPointerDown={gestures.handlePointerDown}
+        onPointerLeave={gestures.handlePointerLeave}
+        onPointerMove={gestures.handlePointerMove}
+        onPointerUp={gestures.handlePointerUp}
       />
       {showSkeletonMap ? (
         <>
@@ -377,62 +283,4 @@ export function GraphCanvas({
       />
     </main>
   );
-}
-
-function applyRepulsion(nodes: CanvasNode[]) {
-  if (nodes.length <= EXACT_REPULSION_NODE_LIMIT) {
-    for (let i = 0; i < nodes.length; i += 1) {
-      for (let j = i + 1; j < nodes.length; j += 1) {
-        applyRepulsionPair(nodes[i], nodes[j]);
-      }
-    }
-    return;
-  }
-  applyGridRepulsion(nodes);
-}
-
-function applyGridRepulsion(nodes: CanvasNode[]) {
-  const grid = new Map<string, CanvasNode[]>();
-  const indexById = new Map(nodes.map((node, index) => [node.id, index]));
-  nodes.forEach((node) => {
-    const key = gridKey(node.x, node.y);
-    const cell = grid.get(key);
-    if (cell) {
-      cell.push(node);
-    } else {
-      grid.set(key, [node]);
-    }
-  });
-
-  nodes.forEach((node, index) => {
-    const cellX = Math.floor(node.x / GRID_CELL_SIZE);
-    const cellY = Math.floor(node.y / GRID_CELL_SIZE);
-    for (let x = cellX - 1; x <= cellX + 1; x += 1) {
-      for (let y = cellY - 1; y <= cellY + 1; y += 1) {
-        const cell = grid.get(`${x}:${y}`);
-        if (!cell) continue;
-        cell.forEach((other) => {
-          if ((indexById.get(other.id) ?? -1) <= index) return;
-          applyRepulsionPair(node, other);
-        });
-      }
-    }
-  });
-}
-
-function applyRepulsionPair(a: CanvasNode, b: CanvasNode) {
-  const dx = b.x - a.x || 0.01;
-  const dy = b.y - a.y || 0.01;
-  const distance = Math.max(20, Math.hypot(dx, dy));
-  const force = 900 / (distance * distance);
-  const fx = (dx / distance) * force;
-  const fy = (dy / distance) * force;
-  a.vx -= fx;
-  a.vy -= fy;
-  b.vx += fx;
-  b.vy += fy;
-}
-
-function gridKey(x: number, y: number) {
-  return `${Math.floor(x / GRID_CELL_SIZE)}:${Math.floor(y / GRID_CELL_SIZE)}`;
 }

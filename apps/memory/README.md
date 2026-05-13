@@ -15,6 +15,7 @@ Workspace knowledge graph for durable agent and user memory.
 
 - Frontend backend calls derive the mounted app id from `/apps/<mount_app_id>/...`, so workspace-local forks use their local backend mount instead of a hardcoded `memory` route.
 - Frontend backend calls normalize HTTP and app-level errors and support abort/timeout handling for stale requests.
+- The graph canvas uses pointer gestures across desktop and mobile: drag empty space to pan, drag a node to move/select it, pinch to zoom, and wheel to zoom on pointer devices.
 - The graph action returns a lightweight node/edge summary for canvas and sidebar rendering. Full external references and edge details are loaded through `inspect`.
 - SQLite connections enable foreign keys, WAL, `busy_timeout`, and explicit write transactions. Schema creation is skipped after the current schema version has been installed.
 - Numeric request fields reject non-finite values, and SQLite constraint failures are returned as validation errors instead of crashing entrypoints.

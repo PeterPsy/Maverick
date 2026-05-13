@@ -308,7 +308,7 @@ class BaseShellAppMountingTests(unittest.TestCase):
         self.assertIn("createWindow(\"\", true, projectId)", widget_source)
         self.assertIn('aria-label="Scegli chat"', widget_source)
         self.assertIn('aria-label="Nuova chat"', widget_source)
-        self.assertIn('aria-label={isActiveThreadBusy ? "Apri chat in corso" : "Apri chat"}', widget_source)
+        self.assertIn('aria-label={isActiveThreadBusy ? "Apri chat in corso" : isActiveThreadUnread ? "Apri chat con risposta da leggere" : "Apri chat"}', widget_source)
         self.assertIn('aria-label="Rinomina chat"', widget_source)
         self.assertIn('className="chat-floating-thread-menu__icon-action is-danger"', widget_source)
         self.assertNotIn("sendRuntimeTurn", widget_source)

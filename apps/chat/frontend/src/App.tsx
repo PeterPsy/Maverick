@@ -11,12 +11,12 @@ import {
   listApps,
   listProviders,
   listSkills,
+  markThreadRead,
   ProviderItem,
   RuntimeEvent,
   RuntimeSession,
   RuntimeTurn,
   orderChatThreads,
-  searchAppReferences,
   selectProvider,
   sendRuntimeTurn,
   updateThread,
@@ -31,6 +31,7 @@ import { appReferencesFromText, referenceKey } from "./lib/mentions";
 import type { MentionItem } from "./lib/mentions";
 import { PendingMessage, QueuedMessage, uploadComposerAttachment } from "./lib/messageState";
 import { mergeRuntimeEvents } from "./lib/runtimeEvents";
+import { searchComposerReferences } from "./lib/referenceSearch";
 import {
   deleteStoredRuntimeTranscript,
   readStoredRuntimeTranscript,
@@ -131,6 +132,7 @@ export function App({
   const navigationRequestRef = useRef<string | null>(null);
   const hasHydratedQueuedMessagesRef = useRef(false);
   const suppressedExternalThreadIdRef = useRef<string | null>(null);
+  const readReceiptInFlightRef = useRef<Set<string>>(new Set());
   const activeRuntimeSessionIdRef = useRef<string | null>(null);
   const runtimeTranscriptCacheRef = useRef<Map<string, RuntimeTranscriptCacheEntry>>(new Map());
   const dockedComposerRef = useRef<HTMLDivElement | null>(null);
@@ -577,6 +579,30 @@ export function App({
     }
   }
 
+  function handleChatRootPointerDown() {
+    void markActiveThreadReadIfNeeded(activeThread);
+  }
+
+  async function markActiveThreadReadIfNeeded(thread: ChatThread | null) {
+    if (!thread?.has_unread_completed_response || readReceiptInFlightRef.current.has(thread.thread_id)) {
+      return;
+    }
+    readReceiptInFlightRef.current.add(thread.thread_id);
+    setActiveThread((current) => (current?.thread_id === thread.thread_id ? { ...current, has_unread_completed_response: false } : current));
+    setThreads((current) =>
+      current.map((item) => (item.thread_id === thread.thread_id ? { ...item, has_unread_completed_response: false } : item)),
+    );
+    try {
+      const payload = await markThreadRead(thread.thread_id);
+      setThreads(payload.threads);
+      setActiveThread((current) => (current?.thread_id === payload.thread.thread_id ? payload.thread : current));
+    } catch {
+      // Reading an open chat should not be blocked by a best-effort receipt.
+    } finally {
+      readReceiptInFlightRef.current.delete(thread.thread_id);
+    }
+  }
+
   async function handleSelectThread(thread: ChatThread) {
     await selectThreadWithoutHttp(thread);
     notifyActiveThreadChanged(thread.thread_id);
@@ -859,10 +885,13 @@ export function App({
     setComposerError(null);
   }
 
-  const handleSearchReferences = useCallback(async (query: string, signal: AbortSignal): Promise<MentionItem[]> => {
-    const references = await searchAppReferences(query, signal);
-    return references.map(referenceMentionItem);
-  }, []);
+  const handleSearchReferences = useCallback(
+    async (query: string, signal: AbortSignal): Promise<MentionItem[]> => {
+      const references = await searchComposerReferences(query, signal, activeAppContext?.app_id || "");
+      return references.map(referenceMentionItem);
+    },
+    [activeAppContext?.app_id],
+  );
 
   function handleReferenceAdd(reference: AppReference) {
     setSelectedReferences((current) => {
@@ -905,7 +934,7 @@ export function App({
   }
 
   return (
-    <main className="chatapp-root">
+    <main className="chatapp-root" onPointerDown={handleChatRootPointerDown}>
       <section className="chatapp-chat-panel">
         <div className={`chatapp-chat-workspace ${isEmptyChatView ? "is-empty-chat" : ""}`}>
           <div className={`chatapp-chat-main ${isEmptyChatView ? "is-empty-chat" : ""}`} style={chatMainStyle}>

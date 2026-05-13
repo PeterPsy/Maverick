@@ -178,6 +178,10 @@ export async function updateMarkdownFile(file: StorageFile, content: string) {
 }
 
 export async function moveFile(file: StorageFile, targetFolderRelativePath: string) {
+  return moveFileReference(file, targetFolderRelativePath);
+}
+
+export async function moveFileReference(file: Pick<StorageFile, 'role' | 'relative_path'>, targetFolderRelativePath: string) {
   return callBackend<MoveFilePayload>({
     action: 'move_file',
     role: file.role,

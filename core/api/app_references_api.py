@@ -64,9 +64,9 @@ def _search_references(state, *, context: RequestSession, body: dict[str, Any], 
     selected_app_ids = set(_string_list(body.get("app_ids")))
     selected_entity_types = set(_string_list(body.get("entity_types")))
     mcp_context = mcp_context_for_request(state, context)
-    items: list[dict[str, Any]] = []
+    candidates: list[tuple[dict[str, Any], int, str]] = []
     errors: list[dict[str, str]] = []
-    for provider in reference_providers(state, context=context, start_path=start_path):
+    for provider_index, provider in enumerate(reference_providers(state, context=context, start_path=start_path)):
         if selected_app_ids and provider["app_id"] not in selected_app_ids:
             continue
         if not provider["tools"].get("search"):
@@ -93,8 +93,8 @@ def _search_references(state, *, context: RequestSession, body: dict[str, Any], 
             for raw_item in _raw_result_items(result):
                 normalized = normalize_reference_item(raw_item, provider=provider, fallback_entity_type=entity["entity_type"])
                 if normalized is not None:
-                    items.append(normalized)
-    return {"query": query, "items": items[:limit], "errors": errors}
+                    candidates.append((normalized, provider_index, str(entity["entity_type"])))
+    return {"query": query, "items": _ordered_search_items(candidates, query=query, limit=limit), "errors": errors}
 
 
 def _lookup_reference(
@@ -162,6 +162,96 @@ def _raw_result_items(result: dict[str, Any]) -> list[object]:
         if isinstance(value, list):
             return value
     return []
+
+
+def _ordered_search_items(
+    candidates: list[tuple[dict[str, Any], int, str]],
+    *,
+    query: str,
+    limit: int,
+) -> list[dict[str, Any]]:
+    if not query.strip():
+        return _round_robin_search_items(candidates, limit=limit)
+    scored = [
+        (_reference_search_score(item, query), index, item)
+        for index, (item, _provider_index, _entity_type) in enumerate(candidates)
+    ]
+    scored.sort(key=lambda candidate: (-candidate[0], candidate[1]))
+    return [item for _score, _index, item in scored[:limit]]
+
+
+def _round_robin_search_items(candidates: list[tuple[dict[str, Any], int, str]], *, limit: int) -> list[dict[str, Any]]:
+    groups: list[list[dict[str, Any]]] = []
+    by_group: dict[tuple[int, str, str], list[dict[str, Any]]] = {}
+    for item, provider_index, entity_type in candidates:
+        group_key = (provider_index, str(item.get("app_id") or ""), entity_type)
+        group = by_group.get(group_key)
+        if group is None:
+            group = []
+            by_group[group_key] = group
+            groups.append(group)
+        group.append(item)
+
+    ordered: list[dict[str, Any]] = []
+    while groups and len(ordered) < limit:
+        next_groups: list[list[dict[str, Any]]] = []
+        for group in groups:
+            if not group:
+                continue
+            ordered.append(group.pop(0))
+            if group:
+                next_groups.append(group)
+            if len(ordered) >= limit:
+                break
+        groups = next_groups
+    return ordered
+
+
+def _reference_search_score(item: dict[str, Any], query: str) -> int:
+    tokens = _query_tokens(query)
+    if not tokens:
+        return 0
+    full_query = " ".join(tokens)
+    label = _search_text(item.get("label"))
+    summary = _search_text(item.get("summary"))
+    identity = _search_text(
+        " ".join(
+            str(item.get(key) or "")
+            for key in (
+                "app_id",
+                "entity_type",
+                "entity_id",
+                "deep_link",
+            )
+        )
+    )
+    score = 0
+    if label == full_query:
+        score += 1000
+    elif label.startswith(full_query):
+        score += 500
+    elif full_query in label:
+        score += 300
+    if full_query in summary:
+        score += 80
+    if full_query in identity:
+        score += 40
+    for token in tokens:
+        if token in label:
+            score += 50
+        if token in summary:
+            score += 15
+        if token in identity:
+            score += 5
+    return score
+
+
+def _query_tokens(query: str) -> list[str]:
+    return [token for token in _search_text(query).split() if token]
+
+
+def _search_text(value: object) -> str:
+    return " ".join(str(value if value is not None else "").casefold().split())
 
 
 def _bounded_text(value: object, *, max_length: int) -> str:

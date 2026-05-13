@@ -4,10 +4,14 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
 
 from errors import StorageValidationError
-from inventory import resolve_file_record
+from reference_entities import (
+    REFERENCE_MANIFEST,
+    reference_resolve_payload,
+    reference_search_payload,
+    reference_summarize_payload,
+)
 from render_preview import rendered_preview_payload, rendered_thumbnail_payload
 from store import (
     MAX_PREVIEW_BYTES,
@@ -34,16 +38,20 @@ from store import (
     write_file_payload,
 )
 
-REFERENCE_MANIFEST = {
-    "app_id": "storage",
-    "schema_version": "1",
-    "entity_types": [
-        {"entity_type": "file", "display_name": "Workspace File", "id_stability": "stable", "searchable": True, "resolvable": True, "summarizable": True, "deep_link_supported": True}
-    ],
-}
-
 CATALOG_ROLES = {"all", "uploaded", "generated"}
-CATALOG_KINDS = {"all", "image", "video", "audio", "markdown", "text", "pdf", "document", "presentation", "spreadsheet", "file"}
+CATALOG_KINDS = {
+    "all",
+    "audio",
+    "document",
+    "file",
+    "image",
+    "markdown",
+    "pdf",
+    "presentation",
+    "spreadsheet",
+    "text",
+    "video",
+}
 
 DATA_CHANGED_RESOURCES = {
     "set_view_filter": "view-state",
@@ -66,22 +74,6 @@ def app_events_for_action(action: str) -> list[dict[str, str]]:
     if resource is None:
         return []
     return [{"type": "maverick.app.data-changed", "resource": resource}]
-
-
-def _file_reference(record: dict[str, Any]) -> dict[str, Any]:
-    app_page = f"files/{quote(str(record['id']), safe='')}"
-    return {
-        "app_id": "storage",
-        "entity_type": "file",
-        "entity_id": record["id"],
-        "title": record["name"],
-        "subtitle": record["workspace_relative_path"],
-        "summary": f"{record['preview_kind']} file, {record['size_bytes']} bytes",
-        "confidence": 1.0,
-        "app_page": app_page,
-        "deep_link": f"/app/storage/{app_page}",
-        "workspace_relative_path": record["workspace_relative_path"],
-    }
 
 
 def _optional_int(body: dict[str, Any], key: str) -> int | None:
@@ -419,39 +411,9 @@ def handle_action(data_root: Path, uploaded_root: Path, generated_root: Path, bo
     if action == "references.manifest":
         return 200, REFERENCE_MANIFEST
     if action == "references.search":
-        query = str(body.get("query") or "").casefold()
-        limit = _optional_positive_int(body, "limit", maximum=50) or 10
-        catalog = catalog_files_payload(
-            data_root=data_root,
-            uploaded_root=uploaded_root,
-            generated_root=generated_root,
-            query=query,
-            offset=0,
-            limit=limit,
-        )
-        return 200, {"results": [_file_reference(item) for item in catalog["files"]]}
+        return 200, reference_search_payload(data_root=data_root, uploaded_root=uploaded_root, generated_root=generated_root, body=body)
     if action == "references.resolve":
-        entity_id = str(body.get("entity_id") or "").strip()
-        record = resolve_file_record(
-            data_root=data_root,
-            uploaded_root=uploaded_root,
-            generated_root=generated_root,
-            entity_id=entity_id,
-        )
-        item = _file_reference(record) if record is not None else None
-        return 200, {"exists": False, "app_id": "storage", "entity_type": "file", "entity_id": entity_id} if item is None else {"exists": True, **item}
+        return 200, reference_resolve_payload(data_root=data_root, uploaded_root=uploaded_root, generated_root=generated_root, body=body)
     if action == "references.summarize":
-        resolved_status, resolved = handle_action(
-            data_root,
-            uploaded_root,
-            generated_root,
-            {"action": "references.resolve", "entity_id": str(body.get("entity_id") or "")},
-        )
-        if resolved_status != 200 or not resolved.get("exists"):
-            return 200, {"summary": "", "safe_fields": {}, "source_updated_at": ""}
-        return 200, {
-            "summary": resolved.get("summary") or resolved.get("title") or "",
-            "safe_fields": {"title": resolved.get("title"), "path": resolved.get("workspace_relative_path")},
-            "source_updated_at": "",
-        }
+        return 200, reference_summarize_payload(data_root=data_root, uploaded_root=uploaded_root, generated_root=generated_root, body=body)
     raise StorageValidationError(f"Unknown action `{action}`.")

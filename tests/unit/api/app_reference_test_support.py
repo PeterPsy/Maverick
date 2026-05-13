@@ -82,6 +82,59 @@ class AppReferenceApiTestSupport:
         )
         write_app_contract_file(app_root, parsed)
 
+    def _write_search_reference_app(self, app_root: Path, *, app_id: str, labels: list[str]) -> None:
+        tool_prefix = app_id.replace("-", "_")
+        (app_root / "mcp").mkdir(parents=True, exist_ok=True)
+        (app_root / "mcp" / "server.py").write_text(
+            "import json, sys\n"
+            f"ITEM_LABELS = {json.dumps(labels)}\n"
+            "payload = json.loads(sys.stdin.read() or '{}')\n"
+            "local_app_id = payload.get('app_id') or " + json.dumps(app_id) + "\n"
+            "tool = payload.get('tool_name')\n"
+            "args = payload.get('arguments') if isinstance(payload.get('arguments'), dict) else {}\n"
+            "items = [\n"
+            "    {\n"
+            "        'app_id': local_app_id,\n"
+            "        'entity_type': 'record',\n"
+            "        'entity_id': f'record-{index}',\n"
+            "        'title': label,\n"
+            "        'summary': f'{label} summary',\n"
+            "        'app_page': f'records/record-{index}',\n"
+            "    }\n"
+            "    for index, label in enumerate(ITEM_LABELS, start=1)\n"
+            "]\n"
+            f"if tool == '{tool_prefix}_reference_search':\n"
+            "    result = {'results': items}\n"
+            f"elif tool == '{tool_prefix}_reference_resolve':\n"
+            "    result = next((item for item in items if item['entity_id'] == args.get('entity_id')), {})\n"
+            f"elif tool == '{tool_prefix}_reference_summarize':\n"
+            "    result = next((item for item in items if item['entity_id'] == args.get('entity_id')), {})\n"
+            "else:\n"
+            "    result = {'entity_types': [{'entity_type': 'record', 'display_name': 'Record'}]}\n"
+            "print(json.dumps(result))\n",
+            encoding="utf-8",
+        )
+        parsed = build_parsed_app_contract(
+            app_id=app_id,
+            name=app_id.replace("-", " ").title(),
+            version="1.0.0",
+            description="Search reference test app.",
+            publisher="maverick",
+            contract=build_app_contract(
+                capabilities=build_app_capabilities(
+                    mcp_tools=[
+                        f"{tool_prefix}_reference_manifest",
+                        f"{tool_prefix}_reference_search",
+                        f"{tool_prefix}_reference_resolve",
+                        f"{tool_prefix}_reference_summarize",
+                    ],
+                    reference_entities=[build_reference_entity_declaration(entity_type="record", display_name="Record")],
+                ),
+                entrypoints=build_app_entrypoints(mcp="mcp/server.py"),
+            ),
+        )
+        write_app_contract_file(app_root, parsed)
+
     def _write_broken_reference_app(self, app_root: Path) -> None:
         (app_root / "mcp").mkdir(parents=True, exist_ok=True)
         (app_root / "mcp" / "server.py").write_text(

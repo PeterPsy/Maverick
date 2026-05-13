@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   TreeExpander,
@@ -11,10 +11,11 @@ import {
   TreeView,
 } from '../../components/ui/tree';
 import { FileCard } from '../../components/ui/file-card-collections';
-import { loadCatalog, loadViewFilter, setViewFilter } from '../../storageApi';
+import { currentStorageAppId, loadCatalog, loadViewFilter, moveFileReference, setViewFilter } from '../../storageApi';
 import { kindLabels, roleLabels } from '../../storageMeta';
 import { useShellSidebarCloseSwipe } from '../../hooks/useShellSidebarCloseSwipe';
 import { storageSelectionFromMessage, type ActiveStorageSelectionMessage } from '../../lib/activeStorageSelection';
+import { readStorageFileDragData, storageFileDropStatus, type StorageFileDropStatus } from '../../lib/storageDragDrop';
 import { storageTargetFromWidgetContext, type StorageNavigationTarget } from '../../lib/storageNavigationParams';
 import type { FileRole, StorageFolder, StorageViewFilter, PreviewKind } from '../../types';
 import '../../styles/sidebar-widget.css';
@@ -39,6 +40,11 @@ type KindRailDragState = {
   pointerId: number;
   scrollLeft: number;
   startX: number;
+};
+
+type FolderTreeDropTarget = {
+  nodeId: string;
+  status: Exclude<StorageFileDropStatus, 'none'>;
 };
 
 const KIND_FILTER_OPTIONS: KindFilterOption[] = [
@@ -259,11 +265,11 @@ function folderIdentityFromWorkspacePath(workspaceRelativePath: string) {
   return folderIdentity(parts[1], pathParts.join('/'));
 }
 
-function openFolderInShell(node: FolderTreeNode) {
+function openFolderInShell(node: FolderTreeNode, appId: string) {
   window.parent?.postMessage(
     {
       type: 'maverick.widget.open-app',
-      app_id: 'storage',
+      app_id: appId,
       params: {
         folder_relative_path: node.role === 'all' ? '' : node.relativePath,
         role: node.role
@@ -398,12 +404,14 @@ function KindFilterRail({ activeKind, availableKinds, onSelect }: {
 }
 
 function StorageSidebarWidget() {
+  const storageAppId = useMemo(() => currentStorageAppId(), []);
   const [folders, setFolders] = useState<StorageFolder[]>([]);
   const [availableKinds, setAvailableKinds] = useState<Set<PreviewKind>>(() => new Set());
   const [query, setQuery] = useState('');
   const [activeKind, setActiveKind] = useState<PreviewKind | 'all'>('all');
   const [activeViewMode, setActiveViewMode] = useState<StorageViewFilter['mode']>('search');
   const [selectedFolderId, setSelectedFolderId] = useState(STORAGE_ROOT_ID);
+  const [dropTarget, setDropTarget] = useState<FolderTreeDropTarget | null>(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const isShellMobileLayout = useShellMobileLayout();
@@ -494,7 +502,7 @@ function StorageSidebarWidget() {
         if (folderId) setSelectedFolderId(folderId);
         return;
       }
-      if (payload.type !== 'maverick.widget.data-changed' || payload.owner_app_id !== 'storage') {
+      if (payload.type !== 'maverick.widget.data-changed' || payload.owner_app_id !== storageAppId) {
         return;
       }
       if (payload.resource === 'files') {
@@ -507,11 +515,63 @@ function StorageSidebarWidget() {
 
     window.addEventListener('message', handleShellMessage);
     return () => window.removeEventListener('message', handleShellMessage);
-  }, []);
+  }, [storageAppId]);
 
   function selectFolder(node: FolderTreeNode) {
     setSelectedFolderId(node.id);
-    openFolderInShell(node);
+    openFolderInShell(node, storageAppId);
+  }
+
+  function handleFolderDrag(event: DragEvent<HTMLElement>, node: FolderTreeNode) {
+    const status = storageFileDropStatus(event.dataTransfer, node.role);
+    if (status === 'none') {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = status === 'ready' ? 'move' : 'none';
+    setDropTarget({ nodeId: node.id, status });
+  }
+
+  function handleFolderDragLeave(event: DragEvent<HTMLElement>, node: FolderTreeNode) {
+    if (storageFileDropStatus(event.dataTransfer, node.role) === 'none') {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    setDropTarget((current) => current?.nodeId === node.id ? null : current);
+  }
+
+  async function handleFolderDrop(event: DragEvent<HTMLElement>, node: FolderTreeNode) {
+    const status = storageFileDropStatus(event.dataTransfer, node.role);
+    if (status === 'none') {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    setDropTarget(null);
+    if (node.role === 'all') {
+      setError('Choose Uploaded or Generated before moving a file.');
+      return;
+    }
+    const source = readStorageFileDragData(event.dataTransfer, storageAppId);
+    if (!source) {
+      setError('This Storage file drag could not be read.');
+      return;
+    }
+    if (source.role !== node.role) {
+      setError('Files can only be moved within their current storage section.');
+      return;
+    }
+    try {
+      await moveFileReference(source, node.relativePath);
+      await refreshCatalog();
+      setSelectedFolderId(node.id);
+      setError(null);
+      openFolderInShell(node, storageAppId);
+    } catch (moveError) {
+      setError(moveError instanceof Error ? moveError.message : 'Unable to move file.');
+    }
   }
 
   return (
@@ -538,7 +598,16 @@ function StorageSidebarWidget() {
             selectedIds={selectedFolderId ? [selectedFolderId] : []}
           >
             <TreeView>
-              <FolderTreeNodeView isLast level={0} node={filteredTreeRoot} onSelect={selectFolder} />
+              <FolderTreeNodeView
+                dropTarget={dropTarget}
+                isLast
+                level={0}
+                node={filteredTreeRoot}
+                onDragLeave={handleFolderDragLeave}
+                onDragOver={handleFolderDrag}
+                onDrop={handleFolderDrop}
+                onSelect={selectFolder}
+              />
             </TreeView>
           </TreeProvider>
         ) : (
@@ -550,17 +619,29 @@ function StorageSidebarWidget() {
   );
 }
 
-function FolderTreeNodeView({ node, level, isLast, onSelect }: {
+function FolderTreeNodeView({ dropTarget, node, level, isLast, onDragLeave, onDragOver, onDrop, onSelect }: {
+  dropTarget: FolderTreeDropTarget | null;
   isLast: boolean;
   level: number;
   node: FolderTreeNode;
+  onDragLeave: (event: DragEvent<HTMLElement>, node: FolderTreeNode) => void;
+  onDragOver: (event: DragEvent<HTMLElement>, node: FolderTreeNode) => void;
+  onDrop: (event: DragEvent<HTMLElement>, node: FolderTreeNode) => void;
   onSelect: (node: FolderTreeNode) => void;
 }) {
   const hasChildren = node.children.length > 0;
+  const nodeDropStatus = dropTarget?.nodeId === node.id ? dropTarget.status : null;
 
   return (
     <TreeNode isLast={isLast} level={level} nodeId={node.id}>
-      <TreeNodeTrigger onClick={() => onSelect(node)}>
+      <TreeNodeTrigger
+        className={nodeDropStatus === 'ready' ? 'storage-folder-tree-drop-ready' : nodeDropStatus === 'blocked' ? 'storage-folder-tree-drop-blocked' : ''}
+        onClick={() => onSelect(node)}
+        onDragEnter={(event) => onDragOver(event, node)}
+        onDragLeave={(event) => onDragLeave(event, node)}
+        onDragOver={(event) => onDragOver(event, node)}
+        onDrop={(event) => onDrop(event, node)}
+      >
         <TreeExpander hasChildren={hasChildren} />
         <TreeIcon hasChildren />
         <TreeLabel title={node.workspaceRelativePath}>{node.label}</TreeLabel>
@@ -568,10 +649,14 @@ function FolderTreeNodeView({ node, level, isLast, onSelect }: {
       <TreeNodeContent hasChildren={hasChildren}>
         {node.children.map((child, index) => (
           <FolderTreeNodeView
+            dropTarget={dropTarget}
             isLast={index === node.children.length - 1}
             key={child.id}
             level={level + 1}
             node={child}
+            onDragLeave={onDragLeave}
+            onDragOver={onDragOver}
+            onDrop={onDrop}
             onSelect={onSelect}
           />
         ))}

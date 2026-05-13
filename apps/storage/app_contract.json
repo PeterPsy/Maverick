@@ -149,6 +149,14 @@
         "resolvable": true,
         "summarizable": true,
         "deep_link_supported": true
+      },
+      {
+        "entity_type": "folder",
+        "display_name": "Storage Folder",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
       }
     ]
   },

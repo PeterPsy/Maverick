@@ -37,6 +37,43 @@ const checklistMention: MentionItem = {
   reference: checklistReference,
 };
 
+const storageFolderReference: AppReference = {
+  type: "entity",
+  app_id: "storage",
+  entity_type: "folder",
+  entity_id: "generated:folder%20test/",
+  label: "folder test",
+  summary: "Storage folder",
+  deep_link: "/app/storage/folders/generated/folder%20test",
+};
+
+const storageFolderMention: MentionItem = {
+  id: "entity:storage:folder:generated:folder%20test/",
+  label: storageFolderReference.label,
+  description: "storage · folder · Storage folder",
+  kind: "entity",
+  reference: storageFolderReference,
+};
+
+function storageFileMention(index: number): MentionItem {
+  const reference: AppReference = {
+    type: "entity",
+    app_id: "storage",
+    entity_type: "file",
+    entity_id: `file_${index}`,
+    label: `File ${index}`,
+    summary: "Storage file",
+    deep_link: `/app/storage/files/file_${index}`,
+  };
+  return {
+    id: `entity:storage:file:file_${index}`,
+    label: reference.label,
+    description: "storage · file · Storage file",
+    kind: "entity",
+    reference,
+  };
+}
+
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
 
@@ -152,7 +189,7 @@ describe("ChatComposer reference search", () => {
     const panels = element.querySelectorAll(".chatapp-mention-panel");
     expect(panels).toHaveLength(1);
     expect(panels[0].classList.contains("chatapp-mention-panel--app-picker")).toBe(true);
-    const searchInput = element.querySelector('[aria-label="Cerca app o record"]');
+    const searchInput = element.querySelector('[aria-label="Cerca app, file o cartelle"]');
     expect(searchInput).toBeInstanceOf(HTMLInputElement);
     expect((searchInput as HTMLInputElement).value).toBe("Link");
     expect(element.textContent).toContain("@Link checklist nella chat con @");
@@ -176,9 +213,30 @@ describe("ChatComposer reference search", () => {
     const panels = element.querySelectorAll(".chatapp-mention-panel");
     expect(panels).toHaveLength(1);
     expect(panels[0].classList.contains("chatapp-mention-panel--app-picker")).toBe(true);
-    expect(element.querySelector('[aria-label="Cerca app o record"]')).toBeInstanceOf(HTMLInputElement);
+    expect(element.querySelector('[aria-label="Cerca app, file o cartelle"]')).toBeInstanceOf(HTMLInputElement);
     expect(element.textContent).toContain("@Link checklist nella chat con @");
     expect(element.textContent).toContain("checklist · checklist · Checklist operativa");
+  });
+
+  it("keeps storage folders visible after the first storage file references", async () => {
+    vi.useFakeTimers();
+    HTMLElement.prototype.scrollIntoView = vi.fn();
+    const onSearchReferences = vi.fn(async () => [
+      ...Array.from({ length: 8 }, (_item, index) => storageFileMention(index + 1)),
+      storageFolderMention,
+    ]);
+    const { element } = await renderComposer({ onSearchReferences });
+    const pickerButton = element.querySelector('[aria-label="App citabili"]');
+    expect(pickerButton).toBeInstanceOf(HTMLButtonElement);
+
+    await act(async () => {
+      (pickerButton as HTMLButtonElement).click();
+    });
+    await settleReferenceSearch();
+
+    expect(onSearchReferences).toHaveBeenCalledWith("", expect.any(AbortSignal));
+    expect(element.textContent).toContain("@folder test");
+    expect(element.textContent).toContain("storage · folder · Storage folder");
   });
 
   it("uses the shared app picker search input for @ queries and insertion", async () => {
@@ -189,7 +247,7 @@ describe("ChatComposer reference search", () => {
     const { element, getValue } = await renderComposer({ onReferenceAdd, onSearchReferences });
 
     await typeInEditor("@");
-    const searchInput = element.querySelector('[aria-label="Cerca app o record"]');
+    const searchInput = element.querySelector('[aria-label="Cerca app, file o cartelle"]');
     expect(searchInput).toBeInstanceOf(HTMLInputElement);
     expect(searchInput?.closest(".chatapp-mention-panel")?.classList.contains("chatapp-mention-panel--app-picker")).toBe(true);
 
@@ -226,7 +284,7 @@ describe("ChatComposer reference search", () => {
     await act(async () => {
       (pickerButton as HTMLButtonElement).click();
     });
-    const searchInput = element.querySelector('[aria-label="Cerca app o record"]');
+    const searchInput = element.querySelector('[aria-label="Cerca app, file o cartelle"]');
     expect(searchInput).toBeInstanceOf(HTMLInputElement);
 
     await act(async () => {

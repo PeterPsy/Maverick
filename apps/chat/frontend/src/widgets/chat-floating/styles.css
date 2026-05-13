@@ -584,6 +584,12 @@ body {
   background: var(--chatapp-soft-surface-hover);
 }
 
+.chat-floating-thread-menu__trigger.is-unread:not(.is-busy),
+.chat-floating-thread-menu__item.is-unread:not(.is-busy),
+.chat-floating-widget-launcher.is-unread:not(.is-busy) {
+  border-color: #fff;
+}
+
 .chat-floating-widget-shell__button:active {
   transform: translateY(1px);
 }

@@ -2,9 +2,9 @@ import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "../../App";
 import type { ChatThread } from "../../api/client";
-import { deleteThread, getWidgetContext, updateThread } from "../../api/client";
+import { deleteThread, getWidgetContext, markThreadRead, updateThread } from "../../api/client";
 import { useRuntimeThreads } from "../../hooks/useRuntimeThreads";
-import { isThreadBusy } from "../chat-sidebar/sections";
+import { isThreadBusy, isThreadUnread } from "../chat-sidebar/sections";
 import {
   floatingWidgetSize,
   horizontalDragScrollLeft,
@@ -188,6 +188,7 @@ function ChatFloatingMount() {
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [, setRuntimeThreadError] = useState<string | null>(null);
   const [windows, setWindows] = useState<ChatWindow[]>(readPersistedWindows);
+  const readReceiptInFlightRef = useRef<Set<string>>(new Set());
   const stackDragRef = useRef<FloatingStackDragState | null>(null);
   const stackRef = useRef<HTMLDivElement | null>(null);
   const threadsRef = useRef(threads);
@@ -307,6 +308,24 @@ function ChatFloatingMount() {
     setWindows((current) => [...current, createWindow(threadId)]);
   }
 
+  async function markThreadReadIfNeeded(thread: ChatThread) {
+    if (!isThreadUnread(thread) || readReceiptInFlightRef.current.has(thread.thread_id)) {
+      return;
+    }
+    readReceiptInFlightRef.current.add(thread.thread_id);
+    setThreads((current) =>
+      current.map((item) => (item.thread_id === thread.thread_id ? { ...item, has_unread_completed_response: false } : item)),
+    );
+    try {
+      const payload = await markThreadRead(thread.thread_id);
+      setThreads(payload.threads);
+    } catch {
+      // Opening a floating chat should not be blocked by a best-effort read receipt.
+    } finally {
+      readReceiptInFlightRef.current.delete(thread.thread_id);
+    }
+  }
+
   async function renameThread(threadId: string, title: string) {
     await updateThread({ thread_id: threadId, title });
   }
@@ -395,6 +414,7 @@ function ChatFloatingMount() {
           onClose={closeWindow}
           onCollapseChange={setWindowCollapsed}
           onCreateDraftChat={createDraftChat}
+          onMarkThreadRead={markThreadReadIfNeeded}
           onRemoveThread={removeThread}
           onRenameThread={renameThread}
           onSelectThread={selectThread}
@@ -410,6 +430,7 @@ function ChatFloatingWindow({
   onClose,
   onCollapseChange,
   onCreateDraftChat,
+  onMarkThreadRead,
   onRemoveThread,
   onRenameThread,
   onSelectThread,
@@ -419,6 +440,7 @@ function ChatFloatingWindow({
   onClose: (windowId: string) => void;
   onCollapseChange: (windowId: string, isCollapsed: boolean) => void;
   onCreateDraftChat: (windowId: string, projectId: string | null) => void;
+  onMarkThreadRead: (thread: ChatThread) => Promise<void>;
   onRemoveThread: (windowId: string, thread: ChatThread) => void;
   onRenameThread: (threadId: string, title: string) => Promise<void>;
   onSelectThread: (windowId: string, threadId: string) => void;
@@ -431,6 +453,7 @@ function ChatFloatingWindow({
   const threadMenuRef = useRef<HTMLDivElement | null>(null);
   const activeThread = threads.find((thread) => thread.thread_id === windowItem.threadId) || null;
   const isActiveThreadBusy = Boolean(activeThread && isThreadBusy(activeThread));
+  const isActiveThreadUnread = Boolean(activeThread && isThreadUnread(activeThread));
 
   useEffect(() => {
     if (!isThreadMenuOpen) {
@@ -462,7 +485,18 @@ function ChatFloatingWindow({
       return;
     }
     setIsThreadMenuOpen(false);
+    const thread = threads.find((item) => item.thread_id === threadId);
+    if (thread) {
+      void onMarkThreadRead(thread);
+    }
     onSelectThread(windowItem.id, threadId);
+  }
+
+  function openCollapsedThread() {
+    onCollapseChange(windowItem.id, false);
+    if (activeThread) {
+      void onMarkThreadRead(activeThread);
+    }
   }
 
   function startRenameThread(thread: ChatThread) {
@@ -486,9 +520,9 @@ function ChatFloatingWindow({
     <>
       <button
         aria-busy={isActiveThreadBusy || undefined}
-        aria-label={isActiveThreadBusy ? "Apri chat in corso" : "Apri chat"}
-        className={`chat-floating-widget-launcher ${windowItem.isCollapsed ? "" : "is-hidden"} ${isActiveThreadBusy ? "is-busy" : ""}`}
-        onClick={() => onCollapseChange(windowItem.id, false)}
+        aria-label={isActiveThreadBusy ? "Apri chat in corso" : isActiveThreadUnread ? "Apri chat con risposta da leggere" : "Apri chat"}
+        className={`chat-floating-widget-launcher ${windowItem.isCollapsed ? "" : "is-hidden"} ${isActiveThreadBusy ? "is-busy" : ""} ${isActiveThreadUnread ? "is-unread" : ""}`}
+        onClick={openCollapsedThread}
         type="button"
       >
         {isActiveThreadBusy ? <BusyChatGlow /> : null}
@@ -504,7 +538,7 @@ function ChatFloatingWindow({
                 aria-expanded={isThreadMenuOpen}
                 aria-haspopup="menu"
                 aria-label="Scegli chat"
-                className={`chat-floating-thread-menu__trigger ${isActiveThreadBusy ? "is-busy" : ""}`}
+                className={`chat-floating-thread-menu__trigger ${isActiveThreadBusy ? "is-busy" : ""} ${isActiveThreadUnread ? "is-unread" : ""}`}
                 disabled={threads.length === 0}
                 onClick={() => setIsThreadMenuOpen((current) => !current)}
                 type="button"
@@ -519,10 +553,11 @@ function ChatFloatingWindow({
                 <div className="chat-floating-thread-menu__panel" role="menu">
                   {threads.map((thread) => {
                     const isBusy = isThreadBusy(thread);
+                    const isUnread = isThreadUnread(thread);
                     const isEditing = editingThreadId === thread.thread_id;
                     return (
                       <div
-                        className={`chat-floating-thread-menu__item ${windowItem.threadId === thread.thread_id ? "is-active" : ""} ${isBusy ? "is-busy" : ""}`}
+                        className={`chat-floating-thread-menu__item ${windowItem.threadId === thread.thread_id ? "is-active" : ""} ${isBusy ? "is-busy" : ""} ${isUnread ? "is-unread" : ""}`}
                         key={thread.thread_id}
                         role="menuitem"
                       >

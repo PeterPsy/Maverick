@@ -6,6 +6,7 @@ import {
   motion,
   type Transition,
 } from "motion/react";
+import { useState, type DragEvent } from "react";
 import {
   Delete02Icon,
   Doc01Icon,
@@ -37,7 +38,7 @@ type AnimatedFileCollectionProps = {
   onDelete: (file: StorageFile) => void;
   onDownload: (file: StorageFile) => void;
   onDragEnd: () => void;
-  onDragStart: (file: StorageFile) => void;
+  onDragStart: (event: DragEvent<HTMLDivElement>, file: StorageFile) => void;
   onOpen: (file: StorageFile) => void;
   onShowDetails: (file: StorageFile) => void;
   selectedFileId?: string;
@@ -76,6 +77,8 @@ const fastFade: Transition = {
   ease: "linear",
 };
 
+const FILE_DRAG_IMAGE_SIZE = 58;
+
 export function CollectionViewToggle({ onChange, view }: CollectionViewToggleProps) {
   return (
     <div className="collection-view-toggle" aria-label="View mode">
@@ -106,6 +109,19 @@ export function AnimatedFileCollection({
   selectedFileId,
   view,
 }: AnimatedFileCollectionProps) {
+  const [draggingFileId, setDraggingFileId] = useState<string | null>(null);
+
+  function handleDragStart(event: DragEvent<HTMLDivElement>, file: StorageFile) {
+    setDraggingFileId(file.id);
+    attachCompactFileDragImage(event);
+    onDragStart(event, file);
+  }
+
+  function handleDragEnd() {
+    setDraggingFileId(null);
+    onDragEnd();
+  }
+
   return (
     <LayoutGroup>
       <motion.div
@@ -127,12 +143,13 @@ export function AnimatedFileCollection({
               view === "list" && "is-list",
               view === "card" && "is-card",
               selectedFileId === file.id && "selected",
+              draggingFileId === file.id && "is-dragging",
             )}
             style={{ zIndex: 1 }}
             animate={{ rotate: 0, x: 0, y: 0 }}
             draggable
-            onDragEnd={onDragEnd}
-            onDragStart={() => onDragStart(file)}
+            onDragEnd={handleDragEnd}
+            onDragStartCapture={(event) => handleDragStart(event, file)}
           >
             <motion.button
               layout
@@ -233,6 +250,27 @@ export function AnimatedFileCollection({
       </motion.div>
     </LayoutGroup>
   );
+}
+
+function attachCompactFileDragImage(event: DragEvent<HTMLDivElement>) {
+  const preview = event.currentTarget.querySelector<HTMLElement>(".animated-file-preview");
+  if (!preview || !event.dataTransfer.setDragImage) {
+    return;
+  }
+  const dragImage = document.createElement("div");
+  dragImage.className = "storage-file-drag-image";
+  dragImage.style.width = `${FILE_DRAG_IMAGE_SIZE}px`;
+  dragImage.style.height = `${FILE_DRAG_IMAGE_SIZE}px`;
+
+  const previewClone = preview.cloneNode(true) as HTMLElement;
+  dragImage.appendChild(previewClone);
+  document.body.appendChild(dragImage);
+  event.dataTransfer.setDragImage(
+    dragImage,
+    Math.round(FILE_DRAG_IMAGE_SIZE / 2),
+    Math.round(FILE_DRAG_IMAGE_SIZE / 2),
+  );
+  window.setTimeout(() => dragImage.remove(), 0);
 }
 
 function Tab({

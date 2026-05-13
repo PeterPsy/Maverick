@@ -4,13 +4,14 @@ import { createRoot } from 'react-dom/client';
 import { Home } from 'lucide-react';
 import { AnimatedFileCollection, CollectionViewToggle, type CollectionViewMode } from './components/ui/animated-collection';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from './components/ui/breadcramb';
-import { CATALOG_PAGE_LIMIT, clearCustomView, decodeBase64, deleteFile, deleteFolder, downloadFolder, loadCatalog, loadViewFilter, moveFile, readFile, renameFile, setViewFilter, updateMarkdownFile, uploadFile } from './storageApi';
+import { CATALOG_PAGE_LIMIT, clearCustomView, currentStorageAppId, decodeBase64, deleteFile, deleteFolder, downloadFolder, loadCatalog, loadViewFilter, moveFileReference, readFile, renameFile, setViewFilter, updateMarkdownFile, uploadFile } from './storageApi';
 import { canInlinePreview, canTextPreview, StoragePreview } from './filePreview';
 import { formatBytes, formatMegabytes, kindLabels, roleLabels } from './storageMeta';
 import { Icon } from './Icon';
 import { notifyActiveStorageFolderSelection, notifyActiveStorageSelection } from './lib/activeStorageSelection';
 import { breadcrumbRefreshPlan, catalogLoadedCountAfterPage, catalogLoadedCountAfterRefresh, deleteFileWithCatalogRefresh, folderOpenRefreshPlan, missingNavigationTargetPlan, resolvedFileNavigationPlan } from './lib/storageCatalogFlow';
 import { fileFolderSelection, folderParentPath, folderStatsForSelection, normalizeFolderPath } from './lib/storageFolderLayer';
+import { readStorageFileDragData, storageDragPayloadFromFile, storageFileDropStatus, writeStorageFileDragData } from './lib/storageDragDrop';
 import { storageTargetFromParams, type StorageNavigationParams, type StorageNavigationTarget } from './lib/storageNavigationParams';
 import { storageCustomScopedFiles, storageViewVisibleFiles, storageViewVisibleFolders } from './lib/storageSearch';
 import { loadFullPreview } from './previewCache';
@@ -128,14 +129,49 @@ function FolderCard({ canDelete, folder, onDelete, onDownload, onDropFile, onOpe
   onDelete: () => void;
   onDownload: () => void;
   onOpen: () => void;
-  onDropFile: (folder: StorageFolder) => void;
+  onDropFile: (event: DragEvent<HTMLElement>, folder: StorageFolder) => void;
   onShowDetails: () => void;
 }) {
+  const [dropStatus, setDropStatus] = useState<'idle' | 'ready' | 'blocked'>('idle');
+
+  function handleStorageDrag(event: DragEvent<HTMLElement>) {
+    const status = storageFileDropStatus(event.dataTransfer, folder.role);
+    if (status === 'none') {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = status === 'ready' ? 'move' : 'none';
+    setDropStatus(status);
+  }
+
+  function handleStorageDragLeave(event: DragEvent<HTMLElement>) {
+    if (storageFileDropStatus(event.dataTransfer, folder.role) === 'none') {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    setDropStatus('idle');
+  }
+
+  function handleStorageDrop(event: DragEvent<HTMLElement>) {
+    const status = storageFileDropStatus(event.dataTransfer, folder.role);
+    if (status === 'none') {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    setDropStatus('idle');
+    onDropFile(event, folder);
+  }
+
   return (
     <article
-      className="folder-card"
-      onDragOver={(event) => event.preventDefault()}
-      onDrop={() => onDropFile(folder)}
+      className={`folder-card ${dropStatus === 'ready' ? 'drop-ready' : dropStatus === 'blocked' ? 'drop-blocked' : ''}`}
+      onDragEnter={handleStorageDrag}
+      onDragLeave={handleStorageDragLeave}
+      onDragOver={handleStorageDrag}
+      onDrop={handleStorageDrop}
     >
       <button className="folder-card-open" type="button" onClick={onOpen}>
         <Icon name="folder" className="folder-card-icon" />
@@ -166,6 +202,7 @@ function FolderCard({ canDelete, folder, onDelete, onDownload, onDropFile, onOpe
 }
 
 function App() {
+  const storageAppId = useMemo(() => currentStorageAppId(), []);
   const [files, setFiles] = useState<StorageFile[]>([]);
   const [folders, setFolders] = useState<StorageFolder[]>([]);
   const [catalogPagination, setCatalogPagination] = useState<CatalogPayload['pagination'] | null>(null);
@@ -963,16 +1000,34 @@ function App() {
     uploadSelectedFiles(droppedFiles).catch((err: Error) => setError(err.message));
   }
 
-  async function moveDraggedFile(targetFolderPath: string, targetRole?: FileRole) {
-    if (!draggedFile) return;
-    if (targetRole && targetRole !== draggedFile.role) {
+  function handleStorageFileDragStart(event: DragEvent<HTMLDivElement>, file: StorageFile) {
+    writeStorageFileDragData(event.dataTransfer, storageDragPayloadFromFile(file, storageAppId));
+    setDraggedFile(file);
+  }
+
+  async function moveDroppedStorageFile(event: DragEvent<HTMLElement>, targetFolderPath: string, targetRole: FileRole) {
+    const draggedReference = readStorageFileDragData(event.dataTransfer, storageAppId)
+      || (draggedFile ? storageDragPayloadFromFile(draggedFile, storageAppId) : null);
+    if (!draggedReference) {
+      setError('Only Storage files can be moved into folders.');
+      setDraggedFile(null);
+      return;
+    }
+    if (targetRole !== draggedReference.role) {
       setError('Files can only be moved within their current storage section.');
       setDraggedFile(null);
       return;
     }
-    const payload = await moveFile(draggedFile, targetFolderPath);
+    const payload = await moveFileReference(draggedReference, targetFolderPath);
     await refresh();
-    if (selectedFile?.id === draggedFile.id) setSelectedFile(payload.file);
+    if (
+      selectedFile?.id === draggedReference.file_id
+      || selectedFile?.file_id === draggedReference.file_id
+      || (selectedFile?.role === draggedReference.role && selectedFile.relative_path === draggedReference.relative_path)
+    ) {
+      setSelectedFile(payload.file);
+    }
+    setError('');
     setDraggedFile(null);
   }
 
@@ -1198,7 +1253,7 @@ function App() {
                 onDelete={() => requestFolderDelete(folder)}
                 onDownload={() => downloadFolderArchive(folder).catch((err: Error) => setError(err.message))}
                 onOpen={() => openFolder(folder)}
-                onDropFile={(targetFolder) => moveDraggedFile(targetFolder.relative_path, targetFolder.role).catch((err: Error) => setError(err.message))}
+                onDropFile={(event, targetFolder) => moveDroppedStorageFile(event, targetFolder.relative_path, targetFolder.role).catch((err: Error) => setError(err.message))}
                 onShowDetails={() => showFolderDetails(folder)}
               />
             )) : null}
@@ -1208,7 +1263,7 @@ function App() {
                 onDelete={requestFileDelete}
                 onDownload={(file) => download(file).catch((err: Error) => setError(err.message))}
                 onDragEnd={() => setDraggedFile(null)}
-                onDragStart={(file) => setDraggedFile(file)}
+                onDragStart={handleStorageFileDragStart}
                 onOpen={openFilePreview}
                 onShowDetails={showFileDetails}
                 selectedFileId={selectedFile?.id}

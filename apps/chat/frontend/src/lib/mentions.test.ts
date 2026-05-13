@@ -20,6 +20,21 @@ const items: MentionItem[] = [
       deep_link: "/app/checklist/checklists/check_123",
     },
   },
+  {
+    id: "entity:storage:folder:generated:Client%20Docs/",
+    label: "Client Docs",
+    description: "storage · folder · Storage folder",
+    kind: "entity",
+    reference: {
+      type: "entity",
+      app_id: "storage",
+      entity_type: "folder",
+      entity_id: "generated:Client%20Docs/",
+      label: "Client Docs",
+      summary: "Storage folder in generated",
+      deep_link: "/app/storage/folders/generated/Client%20Docs",
+    },
+  },
   { id: "maverick-code-skill", label: "Maverick Code Skill", description: "Code work", kind: "skill" },
 ];
 
@@ -114,6 +129,23 @@ describe("mention autocomplete helpers", () => {
         entity_type: "checklist",
         entity_id: "check_123",
         label: "Old launch",
+      },
+    ]);
+  });
+
+  it("keeps encoded storage folder ids intact in reference markers", () => {
+    const applied = applyMention("Open @Client", activeMentionAt("Open @Client", "Open @Client".length)!, items[3]);
+
+    expect(applied.value).toBe("Open @Client Docs [ref:storage/folder/generated:Client%20Docs/] ");
+    expect(appReferencesFromText(applied.value, items)).toEqual([
+      {
+        type: "entity",
+        app_id: "storage",
+        entity_type: "folder",
+        entity_id: "generated:Client%20Docs/",
+        label: "Client Docs",
+        summary: "Storage folder in generated",
+        deep_link: "/app/storage/folders/generated/Client%20Docs",
       },
     ]);
   });

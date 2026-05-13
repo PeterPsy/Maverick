@@ -177,6 +177,12 @@ export type AppEntityReference = {
 
 export type AppReference = AppAppReference | AppEntityReference;
 
+export type SearchAppReferencesOptions = {
+  appIds?: string[];
+  entityTypes?: string[];
+  limit?: number;
+};
+
 export type ChatMessageAttachment = {
   id: string;
   name: string;
@@ -341,11 +347,24 @@ export async function listSkills(): Promise<SkillSummary[]> {
   return (payload.skills || []).filter((skill) => skill.enabled);
 }
 
-export async function searchAppReferences(query: string, signal?: AbortSignal): Promise<AppEntityReference[]> {
+export async function searchAppReferences(
+  query: string,
+  signal?: AbortSignal,
+  options: SearchAppReferencesOptions = {},
+): Promise<AppEntityReference[]> {
+  const body: Record<string, unknown> = { query, limit: options.limit || 8 };
+  const appIds = (options.appIds || []).map((appId) => appId.trim()).filter(Boolean);
+  const entityTypes = (options.entityTypes || []).map((entityType) => entityType.trim()).filter(Boolean);
+  if (appIds.length) {
+    body.app_ids = appIds;
+  }
+  if (entityTypes.length) {
+    body.entity_types = entityTypes;
+  }
   const payload = await requestJson<{ items?: AppEntityReference[] }>("/api/app-references/search", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query, limit: 8 }),
+    body: JSON.stringify(body),
     signal,
   });
   return (payload.items || []).filter((item) => item.type === "entity" && item.app_id && item.entity_type && item.entity_id);

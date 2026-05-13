@@ -578,6 +578,26 @@ h3 {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
 }
 
+.folder-card.drop-ready {
+  border-color: var(--storage-success);
+  background: var(--storage-success-soft);
+  box-shadow: 0 0 0 1px rgba(159, 240, 202, 0.24), 0 10px 28px rgba(0, 0, 0, 0.24);
+}
+
+.folder-card.drop-ready .folder-card-icon {
+  color: var(--storage-success);
+}
+
+.folder-card.drop-blocked {
+  border-color: var(--storage-danger);
+  background: var(--storage-danger-soft);
+  box-shadow: 0 0 0 1px rgba(255, 179, 191, 0.2);
+}
+
+.folder-card.drop-blocked .folder-card-icon {
+  color: var(--storage-danger);
+}
+
 .storage-folder-skeleton {
   pointer-events: none;
   padding: 0 8px 0 12px;
@@ -792,6 +812,18 @@ h3 {
   display: flex;
   align-items: center;
   overflow: visible;
+  transition: opacity 120ms ease, filter 120ms ease;
+}
+
+.animated-file-item.is-dragging {
+  opacity: 0.18;
+  filter: saturate(0.75);
+}
+
+.animated-file-item.is-dragging .animated-file-info,
+.animated-file-item.is-dragging .animated-file-actions,
+.animated-file-item.is-dragging .animated-file-role-badge {
+  opacity: 0;
 }
 
 .animated-file-item.is-list {
@@ -850,6 +882,38 @@ h3 {
   background: var(--storage-preview);
   overflow: hidden;
   pointer-events: none;
+}
+
+.storage-file-drag-image {
+  position: fixed;
+  left: -1000px;
+  top: -1000px;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  background: var(--storage-preview);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.36), 0 0 0 1px var(--storage-border-strong);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.storage-file-drag-image > .animated-file-preview {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.storage-file-drag-image .animated-file-preview-image-frame > img.animated-file-preview-image,
+.storage-file-drag-image .animated-file-preview video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover;
+}
+
+.storage-file-drag-image .file-type-card-preview > .relative {
+  transform: scale(0.74);
+  transform-origin: center;
 }
 
 .animated-file-preview video,

@@ -19,6 +19,7 @@ type ComposerNode = ChildNode & {
 };
 
 const REFERENCE_SEARCH_ERROR_MESSAGE = "Impossibile cercare app o record. Riprova o ricarica la pagina.";
+const APP_PICKER_REFERENCE_LIMIT = 16;
 
 function isAbortError(error: unknown): boolean {
   return Boolean(error && typeof error === "object" && "name" in error && error.name === "AbortError");
@@ -342,7 +343,7 @@ export function ChatComposer({
       searchableMentionItems.filter((item) => item.kind === "app"),
       appMentionPickerQuery,
     );
-    const matchingReferences = filterMentionItems(appPickerReferenceItems, appMentionPickerQuery);
+    const matchingReferences = filterMentionItems(appPickerReferenceItems, appMentionPickerQuery, APP_PICKER_REFERENCE_LIMIT);
     return mergeMentionItems(matchingApps, matchingReferences);
   }, [appMentionPickerQuery, appPickerReferenceItems, searchableMentionItems]);
   const filteredMentionItems = useMemo(() => {
@@ -681,7 +682,7 @@ export function ChatComposer({
                 onSearchQueryChange={updateActiveAppMentionQuery}
                 query={appMentionPickerQuery}
                 searchInputRef={appPickerSearchRef}
-                searchPlaceholder="Cerca app o checklist"
+                searchPlaceholder="Cerca app, file o cartelle"
                 searchQuery={appMentionPickerQuery}
                 statusMessage={appPickerSearchError}
                 ref={appPickerPanelRef}
@@ -829,14 +830,17 @@ function MentionPanel({
     activeItemRef.current?.scrollIntoView({ block: "nearest" });
   }, [activeIndex]);
 
+  const panelLabel = kind === "app" ? "Suggerimenti app, file e cartelle" : "Suggerimenti skill";
+  const panelTitle = kind === "app" ? "App, file e cartelle" : "Skill";
+
   return (
-    <div className={`chatapp-mention-panel ${className}`} ref={ref} role="listbox" aria-label={kind === "app" ? "Suggerimenti app e record" : "Suggerimenti skill"}>
-      <div className="chatapp-mention-panel__header">{kind === "app" ? "App e record" : "Skill"}</div>
+    <div className={`chatapp-mention-panel ${className}`} ref={ref} role="listbox" aria-label={panelLabel}>
+      <div className="chatapp-mention-panel__header">{panelTitle}</div>
       {onSearchQueryChange ? (
         <label className="chatapp-mention-panel__search">
           <span className="chatapp-mention-panel__search-label">Cerca</span>
           <input
-            aria-label="Cerca app o record"
+            aria-label="Cerca app, file o cartelle"
             className="chatapp-mention-panel__search-input"
             onChange={(event) => onSearchQueryChange(event.currentTarget.value)}
             onKeyDown={onSearchKeyDown}

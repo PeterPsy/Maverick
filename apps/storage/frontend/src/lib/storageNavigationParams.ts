@@ -41,11 +41,26 @@ export function storageTargetFromParams(params: StorageNavigationParams): Storag
     return { fileId, targetType: 'file', workspaceRelativePath };
   }
   const appPage = scalarString(params.app_page);
-  const match = /^files\/(.+)$/.exec(appPage);
-  if (!match?.[1]) {
+  const fileMatch = /^files\/(.+)$/.exec(appPage);
+  if (fileMatch?.[1]) {
+    return { fileId: decodeParam(fileMatch[1]), targetType: 'file', workspaceRelativePath: '' };
+  }
+  const folderMatch = /^folders\/(uploaded|generated)(?:\/(.*))?$/.exec(appPage);
+  if (!folderMatch?.[1]) {
     return null;
   }
-  return { fileId: decodeParam(match[1]), targetType: 'file', workspaceRelativePath: '' };
+  const folderRole = storageRoleFromValue(folderMatch[1]);
+  if (folderRole !== 'uploaded' && folderRole !== 'generated') {
+    return null;
+  }
+  const folderRelativePath = normalizeRelativePath(decodeParam(folderMatch[2] || ''));
+  return {
+    fileId: '',
+    folderRelativePath,
+    role: folderRole,
+    targetType: 'folder',
+    workspaceRelativePath: `storage/${folderRole}${folderRelativePath ? `/${folderRelativePath}` : ''}`
+  };
 }
 
 export function storageTargetFromWidgetContext(message: WidgetContextMessage): StorageNavigationTarget | null {

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from base64 import b64decode
+from base64 import b64decode, b64encode
 from io import BytesIO
 import json
 import os
@@ -118,7 +118,9 @@ class StorageAppTestCase(unittest.TestCase):
         self.assertEqual(parsed.contract.capabilities.skills, ["storage-ops"])
         provided_interfaces = {item.interface for item in parsed.contract.provides}
         self.assertIn("file.content.write", provided_interfaces)
-        self.assertIn("file", {item.entity_type for item in parsed.contract.capabilities.reference_entities})
+        reference_entity_types = {item.entity_type for item in parsed.contract.capabilities.reference_entities}
+        self.assertIn("file", reference_entity_types)
+        self.assertIn("folder", reference_entity_types)
         self.assertEqual(parsed.contract.capabilities.view_surfaces[0].view_id, "storage")
         self.assertEqual(parsed.contract.capabilities.view_surfaces[0].entity_types, ["file"])
         view_actions = {
@@ -280,6 +282,64 @@ class StorageAppTestCase(unittest.TestCase):
             self.assertIn("storage/generated/second.md", {item["workspace_relative_path"] for item in catalog["json"]["files"]})
             self.assertIn("storage/generated/Empty", {item["workspace_relative_path"] for item in catalog["json"]["folders"]})
             self.assertEqual(search["json"]["results"][0]["workspace_relative_path"], "storage/generated/second.md")
+
+    def test_backend_reference_search_resolves_storage_folders(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            uploaded_root = root / "storage" / "uploaded"
+            generated_root = root / "storage" / "generated"
+            data_root = root / "data" / "storage"
+            (generated_root / "Client Docs" / "Q1").mkdir(parents=True)
+            (generated_root / "Client Docs" / "Q1" / "brief.txt").write_text("brief", encoding="utf-8")
+            (uploaded_root / "Receipts").mkdir(parents=True)
+            hidden_bucket = uploaded_root / "834cd104-3247-422b-8669-bf5787df25d8"
+            hidden_bucket.mkdir(parents=True)
+
+            search = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={"action": "references.search", "entity_type": "folder", "query": "q1", "limit": 5},
+            )
+            root_search = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={"action": "references.search", "entity_type": "folder", "query": "generated", "limit": 5},
+            )
+            resolved = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={"action": "references.resolve", "entity_type": "folder", "entity_id": "generated:Client%20Docs/Q1/"},
+            )
+            summarized = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={"action": "references.summarize", "entity_type": "folder", "entity_id": "generated:Client%20Docs/Q1/"},
+            )
+            hidden = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={
+                    "action": "references.resolve",
+                    "entity_type": "folder",
+                    "entity_id": "uploaded:834cd104-3247-422b-8669-bf5787df25d8/",
+                },
+            )
+
+            self.assertEqual(search["status_code"], 200)
+            self.assertEqual(search["json"]["results"][0]["entity_type"], "folder")
+            self.assertEqual(search["json"]["results"][0]["entity_id"], "generated:Client%20Docs/Q1/")
+            self.assertEqual(search["json"]["results"][0]["workspace_relative_path"], "storage/generated/Client Docs/Q1")
+            self.assertEqual(search["json"]["results"][0]["deep_link"], "/app/storage/folders/generated/Client%20Docs/Q1")
+            self.assertEqual(root_search["json"]["results"][0]["workspace_relative_path"], "storage/generated")
+            self.assertTrue(resolved["json"]["exists"])
+            self.assertEqual(resolved["json"]["title"], "Q1")
+            self.assertEqual(summarized["json"]["safe_fields"]["kind"], "folder")
+            self.assertFalse(hidden["json"]["exists"])
 
     def test_backend_catalog_handles_legacy_inventory_and_skips_temp_files(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -694,6 +754,101 @@ class StorageAppTestCase(unittest.TestCase):
             self.assertEqual(moved_out["json"]["file"]["workspace_relative_path"], "storage/generated/report.md")
             self.assertTrue((generated_root / "report.md").is_file())
             self.assertEqual(rejected["status_code"], 400)
+
+    def test_backend_move_file_preserves_id_and_rejects_invalid_targets(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            generated_root = root / "storage" / "generated"
+            uploaded_root = root / "storage" / "uploaded"
+            generated_root.mkdir(parents=True)
+            uploaded_root.mkdir(parents=True)
+            data_root = root / "data" / "storage"
+
+            created_file = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={
+                    "action": "upload_file",
+                    "role": "generated",
+                    "file_name": "report.md",
+                    "content_base64": b64encode(b"# report").decode("ascii"),
+                },
+            )
+            created = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={"action": "create_folder", "role": "generated", "folder_name": "Reports"},
+            )
+            moved = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={
+                    "action": "move_file",
+                    "role": "generated",
+                    "relative_path": "report.md",
+                    "target_folder_relative_path": "Reports",
+                },
+            )
+            collision_source = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={
+                    "action": "upload_file",
+                    "role": "generated",
+                    "file_name": "report.md",
+                    "content_base64": b64encode(b"# duplicate").decode("ascii"),
+                },
+            )
+            collision = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={
+                    "action": "move_file",
+                    "role": "generated",
+                    "relative_path": "report.md",
+                    "target_folder_relative_path": "Reports",
+                },
+            )
+            invalid_role = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={
+                    "action": "move_file",
+                    "role": "all",
+                    "relative_path": "report.md",
+                    "target_folder_relative_path": "Reports",
+                },
+            )
+            invalid_path = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={
+                    "action": "move_file",
+                    "role": "generated",
+                    "relative_path": "../report.md",
+                    "target_folder_relative_path": "Reports",
+                },
+            )
+
+            self.assertEqual(created_file["status_code"], 200)
+            self.assertEqual(created["status_code"], 200)
+            self.assertEqual(moved["status_code"], 200)
+            self.assertEqual(moved["json"]["file"]["id"], created_file["json"]["file"]["id"])
+            self.assertEqual(moved["json"]["file"]["workspace_relative_path"], "storage/generated/Reports/report.md")
+            self.assertEqual(collision_source["status_code"], 200)
+            self.assertEqual(collision["status_code"], 400)
+            self.assertEqual(collision["json"]["error"], "validation_error")
+            self.assertTrue((generated_root / "report.md").is_file())
+            self.assertTrue((generated_root / "Reports" / "report.md").is_file())
+            self.assertEqual(invalid_role["status_code"], 400)
+            self.assertEqual(invalid_path["status_code"], 400)
 
     def test_backend_uploads_file_into_existing_folder(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

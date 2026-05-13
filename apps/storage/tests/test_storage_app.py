@@ -181,6 +181,7 @@ class StorageAppTestCase(unittest.TestCase):
             self.assertEqual(kinds["storage/generated/report.md"], "markdown")
             self.assertEqual(kinds["storage/generated/deck.pptx"], "presentation")
             self.assertEqual(kinds["storage/generated/clip.mp4"], "video")
+            self.assertEqual(result["json"]["available_kinds"], ["video", "presentation", "markdown", "text"])
 
     def test_backend_catalog_orders_newest_files_first_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

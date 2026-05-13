@@ -19,6 +19,7 @@ INVENTORY_SCHEMA_VERSION = "1"
 FILE_ID_PATTERN = re.compile(r"^file_[0-9a-f]{32}$")
 FILE_ROLES = {"uploaded", "generated"}
 CATALOG_SORT_FIELDS = {"modified_at", "relative_path", "name", "size_bytes", "preview_kind"}
+PREVIEW_KIND_ORDER = ("image", "video", "audio", "pdf", "document", "presentation", "spreadsheet", "markdown", "text", "file")
 STORAGE_TEMP_PREFIX = ".maverick-storage-write-"
 UPLOAD_BUCKET_PATTERN = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE)
 
@@ -110,6 +111,7 @@ def list_inventory_files(
         generated_root=generated_root,
     )
     files = [_public_record(item) for item in inventory["files"] if item.get("status") == "active"]
+    available_kinds = _available_preview_kinds(files)
     files = _filter_records(
         files,
         query=query,
@@ -131,6 +133,7 @@ def list_inventory_files(
             "has_more": offset + len(page) < total,
         },
         "inventory": {"updated_at": inventory.get("updated_at", ""), "schema_version": INVENTORY_SCHEMA_VERSION},
+        "available_kinds": available_kinds,
     }
 
 
@@ -157,6 +160,7 @@ def catalog_inventory_payload(
         generated_root=generated_root,
     )
     files = [_public_record(item) for item in inventory["files"] if item.get("status") == "active"]
+    available_kinds = _available_preview_kinds(files)
     files = _filter_records(
         files,
         query=query,
@@ -179,6 +183,7 @@ def catalog_inventory_payload(
             "has_more": offset + len(page) < total,
         },
         "inventory": {"updated_at": inventory.get("updated_at", ""), "schema_version": INVENTORY_SCHEMA_VERSION},
+        "available_kinds": available_kinds,
     }
 
 
@@ -1053,6 +1058,12 @@ def _filter_records(
             if normalized_query in f"{item['name']} {item['workspace_relative_path']} {item['content_type']}".casefold()
         ]
     return records
+
+
+def _available_preview_kinds(records: list[dict[str, Any]]) -> list[str]:
+    present = {str(item.get("preview_kind") or "file") for item in records}
+    ordered = [kind for kind in PREVIEW_KIND_ORDER if kind in present]
+    return ordered + sorted(present - set(PREVIEW_KIND_ORDER))
 
 
 def _normalize_relative_folder_path(value: str | None) -> str:

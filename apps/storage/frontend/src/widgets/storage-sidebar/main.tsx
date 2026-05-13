@@ -54,11 +54,6 @@ const KIND_FILTER_OPTIONS: KindFilterOption[] = [
   { kind: 'text', label: kindLabels.text, formats: ['txt'] },
   { kind: 'file', label: 'Other', formats: ['zip'] }
 ];
-const ALL_AVAILABLE_KINDS = new Set<PreviewKind>(
-  KIND_FILTER_OPTIONS
-    .map((option) => option.kind)
-    .filter((kind): kind is PreviewKind => kind !== 'all')
-);
 
 type ViewFilterPayload = {
   state?: {
@@ -404,6 +399,7 @@ function KindFilterRail({ activeKind, availableKinds, onSelect }: {
 
 function StorageSidebarWidget() {
   const [folders, setFolders] = useState<StorageFolder[]>([]);
+  const [availableKinds, setAvailableKinds] = useState<Set<PreviewKind>>(() => new Set());
   const [query, setQuery] = useState('');
   const [activeKind, setActiveKind] = useState<PreviewKind | 'all'>('all');
   const [activeViewMode, setActiveViewMode] = useState<StorageViewFilter['mode']>('search');
@@ -427,6 +423,7 @@ function StorageSidebarWidget() {
   async function refreshCatalog() {
     const payload = await loadCatalog({ limit: 1, offset: 0 });
     setFolders(payload.folders);
+    setAvailableKinds(new Set(payload.available_kinds));
     setActiveKind(normalizeKind(payload.state.view_filter.kind));
     setActiveViewMode(payload.state.view_filter.mode);
     setSelectedFolderId((current) => current || folderIdentityFromFilter(payload.state.view_filter));
@@ -522,7 +519,7 @@ function StorageSidebarWidget() {
       {isInitialLoading ? (
         <KindFilterRailSkeleton />
       ) : (
-        <KindFilterRail activeKind={activeKind} availableKinds={ALL_AVAILABLE_KINDS} onSelect={selectKind} />
+        <KindFilterRail activeKind={activeKind} availableKinds={availableKinds} onSelect={selectKind} />
       )}
 
       {error ? <p className="storage-sidebar-empty">{error}</p> : null}

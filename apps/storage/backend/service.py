@@ -175,6 +175,7 @@ def handle_action(data_root: Path, uploaded_root: Path, generated_root: Path, bo
             "folders": catalog["folders"],
             "pagination": catalog["pagination"],
             "inventory": catalog["inventory"],
+            "available_kinds": catalog["available_kinds"],
         }
     if action == "view_filter":
         return 200, {"state": load_state(data_root)}

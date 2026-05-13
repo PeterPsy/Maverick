@@ -58,6 +58,7 @@ export type CatalogPayload = {
   state: StorageState;
   files: StorageFile[];
   folders: StorageFolder[];
+  available_kinds: PreviewKind[];
   pagination?: {
     offset: number;
     limit: number | null;

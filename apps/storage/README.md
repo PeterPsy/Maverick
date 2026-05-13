@@ -24,7 +24,7 @@ Workspace file storage for uploaded files and generated artifacts.
 - Users can upload a local file from the sidebar into the selected Uploaded or Generated folder; Storage validates the target folder and refuses silent overwrites.
 - Users can also drag local files onto any part of the Storage app to upload them into the currently displayed folder, with animated feedback for ready, uploading, success, and blocked states.
 - The frontend supports animated list and card layouts so users can switch between compact file rows and visual file cards.
-- Storage contributes its file-type filter rail, navigation tree, and folder actions through base shell sidebar widget slots instead of rendering a separate in-app sidebar.
+- Storage contributes its file-type filter rail, navigation tree, and folder actions through base shell sidebar widget slots instead of rendering a separate in-app sidebar; the rail shows only file types currently present in workspace storage.
 - The app-level `Search in Storage` control searches files and folders globally across workspace storage; the sidebar navigation tree mirrors that shared view-state query instead of exposing a separate folder search.
 - CSV and XLSX previews expose structured rows to the frontend so the preview modal can render spreadsheet-like tables instead of plain delimited text.
 - Text, Markdown, CSV, and XLSX previews are bounded by server-side byte, row, column, and archive budgets before extraction.

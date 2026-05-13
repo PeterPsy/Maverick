@@ -14,7 +14,7 @@
 - Call another app's private backend internals.
 - Add core branches like `if app_id == "some-app"`.
 
-> **Ownership model:** chat owns transcripts, gallery owns files, memory owns notes, Docs Studio owns docs pages.
+> **Ownership model:** chat owns transcripts, storage owns files, memory owns notes, Docs Studio owns docs pages.
 
 
 ## Composition patterns

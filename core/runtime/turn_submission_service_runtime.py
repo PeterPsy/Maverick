@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from core.apps.runtime_event_hooks import dispatch_source_app_runtime_event
 from core.providers.service import resolve_runtime_backend_for_session
+from core.runtime.app_references import input_text_with_app_references
 from core.runtime.attachments import input_text_with_attachment_links
 from core.runtime.execution import execute_runtime_turn
 from core.runtime.process_control import terminate_runtime_processes

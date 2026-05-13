@@ -11,9 +11,13 @@ from core.app_sdk.storage import read_json_state, write_json_state
 
 
 STATE_FILE = "state.json"
+SCHEMA_VERSION = "4"
 CHECKLIST_KIND = "checklist.design"
 REFERENCE_ENTITY_TYPE = "checklist"
 WIDGET_CONTENT_KIND = "checklist.design"
+TASK_STATUSES = {"pending", "in-progress", "need-help", "blocked", "completed", "failed"}
+CHECKLIST_STATUSES = {"active", "in-progress", "blocked", "completed", "failed"}
+PRIORITIES = {"low", "medium", "high", "critical"}
 
 
 def now_iso() -> str:
@@ -25,7 +29,7 @@ def now_iso() -> str:
 def empty_state() -> dict[str, Any]:
     """Return the default persisted state."""
     return {
-        "schema_version": "3",
+        "schema_version": SCHEMA_VERSION,
         "checklists": [],
         "view_state": {
             "mode": "default",
@@ -40,7 +44,7 @@ def empty_state() -> dict[str, Any]:
 def load_state(data_root: Path) -> dict[str, Any]:
     """Load checklist state and normalize old SDK dogfood records in memory."""
     state = read_json_state(data_root, STATE_FILE, empty_state())
-    state["schema_version"] = "3"
+    state["schema_version"] = SCHEMA_VERSION
     state["checklists"] = [_normalize_checklist(item) for item in state.get("checklists", []) if isinstance(item, dict)]
     state["view_state"] = _normalize_view_state(state.get("view_state"))
     return state
@@ -49,19 +53,26 @@ def load_state(data_root: Path) -> dict[str, Any]:
 
 def save_state(data_root: Path, state: dict[str, Any]) -> None:
     """Persist checklist state."""
-    state["schema_version"] = "3"
+    state["schema_version"] = SCHEMA_VERSION
     state["view_state"] = _normalize_view_state(state.get("view_state"))
     write_json_state(data_root, STATE_FILE, state)
 
 
 
-def list_checklists(data_root: Path, *, profile: str | None = None, limit: int | None = None) -> list[dict[str, Any]]:
+def list_checklists(
+    data_root: Path,
+    *,
+    profile: str | None = None,
+    limit: int | None = None,
+    apply_view_state: bool = True,
+) -> list[dict[str, Any]]:
     """Return checklists in stable creation order, newest created first."""
     state = load_state(data_root)
     items = list(state.get("checklists", []))
     if profile:
         items = [item for item in items if item.get("profile") == profile]
-    items = _apply_view_state(items, state.get("view_state") or {})
+    if apply_view_state:
+        items = _apply_view_state(items, state.get("view_state") or {})
     items.sort(key=lambda item: str(item.get("created_at") or item.get("updated_at") or ""), reverse=True)
     return deepcopy(items[:limit] if limit else items)
 
@@ -84,13 +95,15 @@ def create_checklist(data_root: Path, payload: dict[str, Any], *, workspace_id: 
         "id": _new_id("check"),
         "workspace_id": _required_workspace_id(workspace_id),
         "profile": _optional_text(payload.get("profile"), max_length=120),
+        "mode": _mode(payload.get("mode")),
         "kind": CHECKLIST_KIND,
         "title": title,
         "summary": summary,
         "sections": sections,
         "source_type": _clean_text(payload.get("source_type"), "chat_preview", max_length=80),
         "source_ref": _clean_text(payload.get("source_ref"), "", max_length=240),
-        "status": _clean_text(payload.get("status"), "active", max_length=40),
+        "status": _status(payload.get("status"), default="active", allowed=CHECKLIST_STATUSES),
+        "priority": _priority(payload.get("priority")),
         "metadata": _metadata(title=title, summary=summary, sections=sections, metadata=payload.get("metadata")),
         "created_at": timestamp,
         "updated_at": timestamp,
@@ -119,12 +132,17 @@ def update_checklist(data_root: Path, checklist_id: str, payload: dict[str, Any]
     for key, max_length in {
         "source_type": 80,
         "source_ref": 240,
-        "status": 40,
         "profile": 120,
     }.items():
         if key in payload:
             value = _optional_text(payload.get(key), max_length=max_length)
             checklist[key] = value if key == "profile" else value or ""
+    if "mode" in payload:
+        checklist["mode"] = _mode(payload.get("mode"))
+    if "status" in payload:
+        checklist["status"] = _status(payload.get("status"), default="active", allowed=CHECKLIST_STATUSES)
+    if "priority" in payload:
+        checklist["priority"] = _priority(payload.get("priority"))
     if isinstance(payload.get("metadata"), dict):
         checklist["metadata"] = {**dict(checklist.get("metadata") or {}), **payload["metadata"]}
     checklist["metadata"] = _metadata(
@@ -175,9 +193,64 @@ def toggle_task(data_root: Path, *, checklist_id: str, section_id: str, task_id:
         for task in section.get("tasks", []):
             if task.get("id") == task_id:
                 task["checked"] = not bool(task.get("checked"))
+                task["status"] = "completed" if task["checked"] else "pending"
                 update_checklist(data_root, checklist_id, {"sections": sections})
                 return deepcopy(task)
     raise ValueError(f"Task `{task_id}` was not found.")
+
+
+
+def set_task_status(
+    data_root: Path,
+    *,
+    checklist_id: str,
+    section_id: str,
+    task_id: str,
+    status: str,
+) -> dict[str, Any]:
+    """Set one task's agent-planning status."""
+    checklist = read_checklist(data_root, checklist_id)
+    sections = list(checklist.get("sections") or [])
+    clean_status = _task_status(status)
+    for section in sections:
+        if section.get("id") != section_id:
+            continue
+        for task in section.get("tasks", []):
+            if task.get("id") == task_id:
+                task["status"] = clean_status
+                task["checked"] = clean_status == "completed"
+                update_checklist(data_root, checklist_id, {"sections": sections, "mode": "agent_plan"})
+                return deepcopy(task)
+    raise ValueError(f"Task `{task_id}` was not found.")
+
+
+
+def set_subtask_status(
+    data_root: Path,
+    *,
+    checklist_id: str,
+    section_id: str,
+    task_id: str,
+    subtask_id: str,
+    status: str,
+) -> dict[str, Any]:
+    """Set one subtask's agent-planning status."""
+    checklist = read_checklist(data_root, checklist_id)
+    sections = list(checklist.get("sections") or [])
+    clean_status = _task_status(status)
+    for section in sections:
+        if section.get("id") != section_id:
+            continue
+        for task in section.get("tasks", []):
+            if task.get("id") != task_id:
+                continue
+            for subtask in task.get("subtasks", []):
+                if subtask.get("id") == subtask_id:
+                    subtask["status"] = clean_status
+                    subtask["checked"] = clean_status == "completed"
+                    update_checklist(data_root, checklist_id, {"sections": sections, "mode": "agent_plan"})
+                    return deepcopy(subtask)
+    raise ValueError(f"Subtask `{subtask_id}` was not found.")
 
 
 

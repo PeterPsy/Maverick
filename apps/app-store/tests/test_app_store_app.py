@@ -395,8 +395,9 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertIn(b'detail-title-separator', payload)
         self.assertNotIn(b'today-heading', payload)
         self.assertNotIn(b'todayLabel', payload)
-        self.assertIn(b"/apps/app-store/assets/main.css?v=20260512-agents-header", payload)
-        self.assertIn(b"/apps/app-store/assets/main.js?v=20260512-agents-header", payload)
+        self.assertIn(b"/apps/app-store/assets/main.css?v=20260512-skeleton-loading", payload)
+        self.assertIn(b"/apps/app-store/assets/app-icons.js?v=20260512-app-icons", payload)
+        self.assertIn(b"/apps/app-store/assets/main.js?v=20260512-skeleton-loading", payload)
 
     def test_frontend_dist_separates_server_promotion_from_public_submission(self) -> None:
         app_root = Path(__file__).resolve().parents[1]
@@ -418,6 +419,36 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertNotIn('data-tab="public"', frontend_html)
         self.assertIn('<div class="app-modal__body"', frontend_html)
         self.assertIn("/api/app-store/install-server", frontend_js)
+
+    def test_frontend_dist_uses_material_app_icons(self) -> None:
+        app_root = Path(__file__).resolve().parents[1]
+        icon_js = (app_root / "frontend" / "dist" / "assets" / "app-icons.js").read_text(encoding="utf-8")
+        frontend_js = (app_root / "frontend" / "dist" / "assets" / "main.js").read_text(encoding="utf-8")
+        frontend_css = (app_root / "frontend" / "dist" / "assets" / "main.css").read_text(encoding="utf-8")
+
+        self.assertIn('"storage": "cloud"', icon_js)
+        self.assertIn('"app-store": "storefront"', icon_js)
+        self.assertIn('renderIcon(app, "app-row-icon")', frontend_js)
+        self.assertNotIn("slice(0, 1).toUpperCase()", frontend_js)
+        self.assertIn(".app-row-icon.is-glyph", frontend_css)
+
+    def test_frontend_dist_has_skeleton_loading_states(self) -> None:
+        app_root = Path(__file__).resolve().parents[1]
+        frontend_js = (app_root / "frontend" / "dist" / "assets" / "main.js").read_text(encoding="utf-8")
+        frontend_css = (app_root / "frontend" / "dist" / "assets" / "main.css").read_text(encoding="utf-8")
+        shortcut_js = (app_root / "frontend" / "dist" / "widgets" / "app-shortcuts" / "main.js").read_text(encoding="utf-8")
+        shortcut_css = (app_root / "frontend" / "dist" / "widgets" / "app-shortcuts" / "styles.css").read_text(encoding="utf-8")
+
+        self.assertIn("renderLoading", frontend_js)
+        self.assertIn("feature-card--skeleton", frontend_js)
+        self.assertIn('aria-busy", "true"', frontend_js)
+        self.assertIn("width: min(100%, 1440px)", frontend_css)
+        self.assertIn("max-width: 1440px", frontend_css)
+        self.assertIn("store-loading-skeleton-shimmer", frontend_css)
+        self.assertIn(".app-row--skeleton", frontend_css)
+        self.assertIn("renderSkeleton", shortcut_js)
+        self.assertIn("app-shortcuts__row--skeleton", shortcut_js)
+        self.assertIn("app-shortcuts-skeleton-shimmer", shortcut_css)
 
     @integration_test("app-store platform integration suite; run with scripts/test_suite.py --level integration")
     def test_public_submission_transport_actions_are_core_owned(self) -> None:
@@ -516,16 +547,19 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertEqual(status_widget, 200)
         self.assertIn("text/html", widget_headers["Content-Type"])
         self.assertIn(b"App shortcuts", widget_body)
-        self.assertIn(b"styles.css?v=20260512-agents-header", widget_body)
-        self.assertIn(b"main.js?v=20260512-agents-header", widget_body)
+        self.assertIn(b"styles.css?v=20260512-skeleton-loading", widget_body)
+        self.assertIn(b"app-icons.js?v=20260512-app-icons", widget_body)
+        self.assertIn(b"main.js?v=20260512-skeleton-loading", widget_body)
         shortcut_script = (
             Path(__file__).resolve().parents[1] / "frontend" / "dist" / "widgets" / "app-shortcuts" / "main.js"
         ).read_text()
+        icon_script = (Path(__file__).resolve().parents[1] / "frontend" / "dist" / "assets" / "app-icons.js").read_text()
         shortcut_styles = (
             Path(__file__).resolve().parents[1] / "frontend" / "dist" / "widgets" / "app-shortcuts" / "styles.css"
         ).read_text()
-        self.assertIn("app.logo?.kind === \"image\"", shortcut_script)
-        self.assertIn("app.logo?.kind === \"glyph\"", shortcut_script)
+        self.assertIn("MaverickAppIcons.renderIcon", shortcut_script)
+        self.assertIn("app.logo?.kind === \"image\"", icon_script)
+        self.assertIn("app.logo?.kind === \"glyph\"", icon_script)
         self.assertIn("pinned_apps.toggle", shortcut_script)
         self.assertIn(".app-shortcuts__icon img", shortcut_styles)
         self.assertIn(".app-shortcuts__search-frame", shortcut_styles)

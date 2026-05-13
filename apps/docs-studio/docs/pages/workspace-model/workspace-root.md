@@ -22,7 +22,7 @@ workspaces/<workspace_id>/
 | `apps/` | Workspace-local app source and forks |
 | `data/<app_id>/` | Durable app-owned structured data |
 | `storage/uploaded/` | User uploads |
-| `storage/generated/` | Generated artifacts visible to Gallery |
+| `storage/generated/` | Generated artifacts visible to Storage |
 | `runtime/` | Ephemeral runtime/session state |
 | `tmp/` | Scratch material |
 
@@ -31,7 +31,7 @@ workspaces/<workspace_id>/
 
 ## Data versus storage
 
-Use `data/` for structured app state and `storage/` for file-like artifacts. This keeps the workspace understandable and lets Gallery derive file inventory from actual files.
+Use `data/` for structured app state and `storage/` for file-like artifacts. This keeps the workspace understandable and lets Storage derive file inventory from actual files.
 
 ## Workspace-local apps
 

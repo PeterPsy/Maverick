@@ -3,11 +3,13 @@ import { AppRegistryItem } from "../src/api";
 import {
   initialShellLaunchRoute,
   isInitialChatLaunchRoute,
+  newChatRouteParams,
   parseShellAppRoute,
   preferredActiveApp,
   shellAppPath,
   shellAppRailApps,
   shellVisibleApps,
+  TRANSIENT_APP_COMMAND_PARAMS,
 } from "../src/navigation";
 
 function app(app_id: string, frontend_mount: string): AppRegistryItem {
@@ -83,5 +85,31 @@ describe("base-shell navigation", () => {
       "/app/records/Contacts/Mattia-siciliano-234512/notes/latest",
     );
     expect(shellAppPath("chat", { new_chat: true, new_chat_request_id: "request-1", workspace_id: "acme" })).toBe("/app/chat");
+    expect(shellAppPath("agents", { new_agent: true, new_agent_request_id: "request-2" })).toBe("/app/agents");
+    expect(shellAppPath("skills", { new_skill: true, new_skill_request_id: "request-3" })).toBe("/app/skills");
+    expect(shellAppPath("memory", { new_node: true, new_node_request_id: "request-4" })).toBe("/app/memory");
+    expect(shellAppPath("memory", { preview_context: true, preview_context_request_id: "request-5" })).toBe("/app/memory");
+  });
+
+  it("keeps mobile command params in the explicit transient set", () => {
+    expect(Array.from(TRANSIENT_APP_COMMAND_PARAMS).sort()).toEqual([
+      "new_agent",
+      "new_agent_request_id",
+      "new_chat",
+      "new_chat_request_id",
+      "new_node",
+      "new_node_request_id",
+      "new_skill",
+      "new_skill_request_id",
+      "preview_context",
+      "preview_context_request_id",
+    ]);
+  });
+
+  it("creates transient new chat navigation params", () => {
+    expect(newChatRouteParams(() => "request-2")).toEqual({
+      new_chat: true,
+      new_chat_request_id: "request-2",
+    });
   });
 });

@@ -3,11 +3,7 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background:
-    linear-gradient(rgba(255, 255, 255, 0.024) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.024) 1px, transparent 1px),
-    var(--maverick-bg);
-  background-size: 32px 32px;
+  background: var(--maverick-bg);
 }
 
 canvas {
@@ -21,89 +17,95 @@ canvas:active {
   cursor: grabbing;
 }
 
-.graph-toolbar {
+.graph-stage--empty canvas,
+.graph-stage--empty canvas:active {
+  cursor: default;
+}
+
+.graph-stage__sr-only {
   position: absolute;
-  z-index: 2;
-  inset: 1rem 1rem auto;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem;
-  pointer-events: none;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
-.graph-toolbar > * {
-  pointer-events: auto;
-}
-
-.graph-toolbar__left,
-.graph-toolbar__actions,
-.chips {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-}
-
-.graph-toolbar__left,
-.chips {
-  flex-wrap: wrap;
-  min-width: 0;
-}
-
-.graph-toolbar__actions {
-  flex: none;
-}
-
-.status-pill,
-.metric-pill,
-.chip {
-  display: inline-flex;
-  align-items: center;
-  min-height: 2rem;
-  border: 1px solid var(--maverick-border);
-  border-radius: 999px;
-  background: rgba(12, 12, 14, 0.58);
-  box-shadow: var(--maverick-inner-edge);
-  backdrop-filter: blur(26px);
-  -webkit-backdrop-filter: blur(26px);
-  color: var(--maverick-text-muted);
-  font-size: 0.74rem;
-  padding: 0 0.72rem;
-}
-
-.status-pill {
-  color: var(--maverick-text);
-}
-
-.chip {
-  gap: 0.45rem;
-}
-
-.chip i {
-  display: block;
-  width: 0.56rem;
-  height: 0.56rem;
-  border-radius: 999px;
-}
-
-.empty-state {
+.memory-map-skeleton {
   position: absolute;
   inset: 0;
-  display: grid;
-  place-items: center;
-  color: var(--maverick-text-muted);
+  overflow: hidden;
   pointer-events: none;
+}
+
+.memory-map-skeleton__links {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.72;
+}
+
+.memory-map-skeleton__link {
+  stroke: rgba(150, 150, 150, 0.18);
+  stroke-dasharray: 7 8;
+  stroke-linecap: round;
+  stroke-width: 0.42;
+  vector-effect: non-scaling-stroke;
+}
+
+.memory-map-skeleton__node {
+  position: absolute;
+  left: var(--memory-skeleton-x);
+  top: var(--memory-skeleton-y);
+  width: var(--memory-skeleton-size);
+  height: var(--memory-skeleton-size);
+  overflow: hidden;
+  border: 1px solid rgba(168, 168, 168, 0.2);
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 36% 30%, rgba(255, 255, 255, 0.13), transparent 0 16%, transparent 42%),
+    linear-gradient(135deg, rgba(86, 86, 86, 0.62), rgba(38, 38, 38, 0.82));
+  box-shadow:
+    0 0 0 7px rgba(140, 140, 140, 0.035),
+    0 0 28px rgba(150, 150, 150, 0.08),
+    inset 0 0 18px rgba(255, 255, 255, 0.055);
+  transform: translate(-50%, -50%);
+}
+
+.memory-map-skeleton__node::before {
+  position: absolute;
+  inset: -42%;
+  background: linear-gradient(105deg, transparent 34%, rgba(255, 255, 255, 0.05) 44%, rgba(255, 255, 255, 0.34) 50%, rgba(255, 255, 255, 0.05) 56%, transparent 66%);
+  mix-blend-mode: screen;
+  transform: translateX(-120%) rotate(16deg);
+  animation: memory-map-node-shimmer 1.65s ease-in-out infinite;
+  content: "";
+}
+
+.memory-map-skeleton__node::after {
+  position: absolute;
+  inset: 35%;
+  border-radius: inherit;
+  background: rgba(170, 170, 170, 0.34);
+  box-shadow: 0 0 14px rgba(180, 180, 180, 0.16);
+  content: "";
+}
+
+.memory-map-skeleton[data-loading="false"] .memory-map-skeleton__node::before {
+  animation-duration: 3.2s;
 }
 
 .node-panel {
   position: absolute;
-  top: 4.75rem;
+  top: calc(var(--maverick-shell-mobile-content-top-offset, 0px) + 4.75rem);
   right: 1rem;
   z-index: 4;
   display: grid;
   gap: 1rem;
   width: min(430px, calc(100% - 2rem));
-  max-height: calc(100dvh - 5.9rem);
+  max-height: calc(100dvh - var(--maverick-shell-mobile-content-top-offset, 0px) - 5.9rem);
   overflow: auto;
   border: 1px solid var(--maverick-border-strong);
   border-radius: var(--maverick-card-radius);
@@ -138,7 +140,7 @@ canvas:active {
 .node-panel h3 {
   color: var(--maverick-text-muted);
   font-size: 0.72rem;
-  font-weight: 900;
+  font-weight: 400;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -253,14 +255,6 @@ code {
 }
 
 @media (max-width: 760px) {
-  .graph-toolbar {
-    inset: 0.72rem 0.72rem auto;
-  }
-
-  .chips {
-    display: none;
-  }
-
   .node-panel {
     top: auto;
     right: 0.72rem;
@@ -268,5 +262,11 @@ code {
     left: 0.72rem;
     width: auto;
     max-height: min(72dvh, 34rem);
+  }
+}
+
+@keyframes memory-map-node-shimmer {
+  100% {
+    transform: translateX(120%) rotate(16deg);
   }
 }

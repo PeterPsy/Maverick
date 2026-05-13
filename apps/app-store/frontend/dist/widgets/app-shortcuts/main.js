@@ -6,10 +6,13 @@ const scopePinned = document.querySelector("#appShortcutScopePinned");
 const state = {
   activeAppId: "",
   apps: [],
+  isLoading: true,
   pinnedIds: [],
   query: "",
   scope: "all",
 };
+
+const SHORTCUT_SKELETON_ROWS = 6;
 
 async function requestJson(url, options = {}) {
   const response = await fetch(url, {
@@ -26,57 +29,17 @@ async function requestJson(url, options = {}) {
 }
 
 function appIcon(app) {
-  const frame = document.createElement("span");
-  frame.className = "app-shortcuts__icon";
-  frame.setAttribute("aria-hidden", "true");
-  if (app.logo?.kind === "image" && app.logo.value) {
-    const image = document.createElement("img");
-    image.alt = "";
-    image.loading = "lazy";
-    image.src = app.logo.value;
-    frame.classList.add("is-image");
-    frame.append(image);
-    return frame;
+  if (window.MaverickAppIcons?.renderIcon) {
+    return window.MaverickAppIcons.renderIcon(app, "app-shortcuts__icon");
   }
+  const frame = document.createElement("span");
+  frame.className = "app-shortcuts__icon is-glyph";
+  frame.setAttribute("aria-hidden", "true");
   const glyph = document.createElement("span");
   glyph.className = "material-symbols-rounded";
-  glyph.textContent = app.logo?.kind === "glyph" && app.logo.value ? app.logo.value : iconName(app);
-  frame.classList.add("is-glyph");
+  glyph.textContent = "deployed_code";
   frame.append(glyph);
   return frame;
-}
-
-function iconName(app) {
-  const icons = {
-    "app-store": "storefront",
-    agents: "psychology",
-    "base-shell": "dashboard",
-    checklist: "checklist",
-    chat: "chat",
-    "developer-kit": "sdk",
-    "document-generator": "description",
-    "docs-studio": "article",
-    "dynamic-views": "dashboard_customize",
-    fleet: "table_chart",
-    gallery: "photo_library",
-    storage: "cloud",
-    memory: "neurology",
-    skills: "school",
-    "user-admin": "admin_panel_settings",
-  };
-  if (icons[app.app_id]) {
-    return icons[app.app_id];
-  }
-  if ((app.views || []).includes("chat")) {
-    return "forum";
-  }
-  if ((app.views || []).includes("agents")) {
-    return "smart_toy";
-  }
-  if ((app.views || []).includes("shell")) {
-    return "dashboard";
-  }
-  return "deployed_code";
 }
 
 function openApp(appId) {
@@ -137,6 +100,8 @@ function surfaceLabel(app) {
 }
 
 function renderEmpty(message) {
+  state.isLoading = false;
+  list.removeAttribute("aria-busy");
   list.replaceChildren();
   const empty = document.createElement("p");
   empty.className = "app-shortcuts__empty";
@@ -151,8 +116,38 @@ function renderScope() {
   scopePinned.setAttribute("aria-selected", state.scope === "pinned" ? "true" : "false");
 }
 
+function skeletonBlock(className, tagName = "span") {
+  const node = document.createElement(tagName);
+  node.className = className;
+  node.setAttribute("aria-hidden", "true");
+  return node;
+}
+
+function renderSkeleton() {
+  renderScope();
+  list.replaceChildren();
+  list.setAttribute("aria-busy", "true");
+  Array.from({ length: SHORTCUT_SKELETON_ROWS }).forEach((_, index) => {
+    const row = skeletonBlock("app-shortcuts__row app-shortcuts__row--skeleton", "article");
+    const copy = skeletonBlock("app-shortcuts__skeleton-copy");
+    copy.append(
+      skeletonBlock(`app-shortcuts__skeleton-line app-shortcuts__skeleton-line--${index % 3 === 0 ? "wide" : "title"}`),
+      skeletonBlock(`app-shortcuts__skeleton-line app-shortcuts__skeleton-line--${index % 2 === 0 ? "meta" : "short"}`),
+    );
+    const button = skeletonBlock("app-shortcuts__button app-shortcuts__button--skeleton", "span");
+    button.append(skeletonBlock("app-shortcuts__icon app-shortcuts__icon--skeleton"), copy);
+    row.append(button, skeletonBlock("app-shortcuts__pin app-shortcuts__pin--skeleton"));
+    list.append(row);
+  });
+}
+
 function render(apps = visibleApps()) {
   renderScope();
+  if (state.isLoading) {
+    renderSkeleton();
+    return;
+  }
+  list.removeAttribute("aria-busy");
   list.replaceChildren();
   if (!apps.length) {
     const emptyMessage = state.scope === "pinned"
@@ -228,16 +223,24 @@ function applyWidgetContext(payload) {
 }
 
 async function load() {
-  const [registry, pinned] = await Promise.all([
-    requestJson("/api/apps"),
-    requestJson("/api/apps/app-store/backend", {
-      method: "POST",
-      body: JSON.stringify({ action: "pinned_apps.list" }),
-    }),
-  ]);
-  state.apps = registry.items || [];
-  state.pinnedIds = pinned.pinned_apps || [];
+  state.isLoading = true;
   render();
+  try {
+    const [registry, pinned] = await Promise.all([
+      requestJson("/api/apps"),
+      requestJson("/api/apps/app-store/backend", {
+        method: "POST",
+        body: JSON.stringify({ action: "pinned_apps.list" }),
+      }),
+    ]);
+    state.apps = registry.items || [];
+    state.pinnedIds = pinned.pinned_apps || [];
+    state.isLoading = false;
+    render();
+  } catch (error) {
+    state.isLoading = false;
+    throw error;
+  }
 }
 
 search.addEventListener("input", () => {

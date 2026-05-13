@@ -5,9 +5,10 @@ Persisted custom visual views rendered in chat and reopened from a workspace lib
 ## Contract Notes
 
 - Frontend, backend, CLI, and MCP entrypoints are declared in `app_contract.json`.
-- The contract now declares the bundled `dynamic-views` skill and the `dynamic-view` chat widget surface.
+- The contract now declares the bundled `dynamic-views` skill, the `dynamic-views-sidebar` base-shell widget, and the `dynamic-view` chat widget surface.
 - The app exposes `view` as its current reference entity and stores view state under `data/dynamic-views/`.
 - Persisted `view_surfaces` cover library filters and curated dynamic-view selections; the dynamic-view widget remains the embedded chat surface.
+- The main Dynamic Views iframe no longer renders the saved-views column. Saved view search and selection live in the base-shell sidebar iframe for `shell.sidebar.primary`, while the main iframe listens for `maverick.app.navigate` with `view_id`, `instance_id`, or `app_page: "views/<id>"` and emits `maverick.app.selection-changed` to keep the sidebar active row synchronized.
 
 ## SDK Flow
 

@@ -57,7 +57,7 @@ body,
 .chat-runtime-text__role {
   color: rgba(244, 247, 251, 0.5);
   font-size: 0.58rem;
-  font-weight: 800;
+  font-weight: 400;
   text-transform: uppercase;
 }
 

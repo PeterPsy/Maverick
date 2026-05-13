@@ -58,10 +58,12 @@ button {
   border: 1px solid var(--chat-sidebar-composer-border);
   border-radius: var(--chat-sidebar-cell-radius);
   background: var(--chat-sidebar-composer-surface);
+  -webkit-backdrop-filter: blur(18px) saturate(1.15);
+  backdrop-filter: blur(18px) saturate(1.15);
   box-shadow: var(--chat-sidebar-inner-edge);
   color: var(--maverick-text);
   font-size: 0.76rem;
-  font-weight: 800;
+  font-weight: 400;
   letter-spacing: 0;
   transition:
     background 140ms ease,

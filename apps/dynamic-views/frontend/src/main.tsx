@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createDynamicView, deleteDynamicView, listDynamicViews, toDynamicViewPayload } from './api';
 import { DynamicViewFrame } from './dynamicViewFrame';
+import { notifyActiveDynamicViewSelection } from './lib/activeDynamicViewSelection';
+import { dynamicViewIdFromParams } from './lib/dynamicViewNavigationParams';
 import type { DynamicViewInstance } from './types';
 import './styles/main.css';
 
@@ -17,6 +19,26 @@ const data = window.MaverickDynamicView?.data || {};
 root.textContent = JSON.stringify(data, null, 2);`;
 const DEFAULT_DATA = '{\n  "headline": "Revenue",\n  "value": 42,\n  "delta": "+18%"\n}';
 
+function initialDynamicViewId() {
+  const query = new URLSearchParams(window.location.search);
+  return dynamicViewIdFromParams({
+    app_page: query.get('app_page'),
+    id: query.get('id'),
+    instance_id: query.get('instance_id'),
+    view_id: query.get('view_id')
+  });
+}
+
+function selectedDynamicViewIdFromItems(items: DynamicViewInstance[], currentViewId: string, preferredViewId?: string) {
+  if (preferredViewId && items.some((item) => item.id === preferredViewId)) {
+    return preferredViewId;
+  }
+  if (currentViewId && items.some((item) => item.id === currentViewId)) {
+    return currentViewId;
+  }
+  return items[0]?.id || '';
+}
+
 function App() {
   const [items, setItems] = useState<DynamicViewInstance[]>([]);
   const [selectedId, setSelectedId] = useState('');
@@ -28,18 +50,79 @@ function App() {
   const [dataJson, setDataJson] = useState(DEFAULT_DATA);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const selectedIdRef = useRef('');
 
-  async function refresh() {
-    const payload = await listDynamicViews();
-    setItems(payload.items);
-    setSelectedId((current) => current || payload.items[0]?.id || '');
+  async function refresh(preferredViewId?: string) {
+    setIsLoading(true);
+    try {
+      const payload = await listDynamicViews();
+      const nextSelectedId = selectedDynamicViewIdFromItems(payload.items, selectedIdRef.current, preferredViewId);
+      selectedIdRef.current = nextSelectedId;
+      setItems(payload.items);
+      setSelectedId(nextSelectedId);
+      return nextSelectedId;
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   useEffect(() => {
-    refresh().catch((loadError: Error) => setError(loadError.message));
+    refresh(initialDynamicViewId()).catch((loadError: Error) => setError(loadError.message));
   }, []);
 
+  useEffect(() => {
+    selectedIdRef.current = selectedId;
+  }, [selectedId]);
+
+  useEffect(() => {
+    window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'dynamic-views' }, window.location.origin);
+  }, []);
+
+  useEffect(() => {
+    function handleShellMessage(event: MessageEvent) {
+      if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') {
+        return;
+      }
+      const payload = event.data as {
+        app_id?: string;
+        owner_app_id?: string;
+        params?: Record<string, string | boolean | null>;
+        resource?: string;
+        type?: string;
+      };
+      if (payload.type === 'maverick.app.navigate' && (!payload.app_id || payload.app_id === 'dynamic-views')) {
+        void handleNavigationParams(payload.params || {});
+        return;
+      }
+      if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === 'dynamic-views' && payload.resource === 'views') {
+        void refresh(selectedIdRef.current).catch((refreshError: Error) => setError(refreshError.message));
+      }
+    }
+
+    window.addEventListener('message', handleShellMessage);
+    return () => window.removeEventListener('message', handleShellMessage);
+  }, [items]);
+
+  useEffect(() => {
+    if (selectedId) {
+      notifyActiveDynamicViewSelection(selectedId);
+    }
+  }, [selectedId]);
+
   const selected = useMemo(() => items.find((item) => item.id === selectedId) || items[0] || null, [items, selectedId]);
+
+  async function handleNavigationParams(params: Record<string, string | boolean | null>) {
+    const requestedViewId = dynamicViewIdFromParams(params);
+    if (!requestedViewId) {
+      return;
+    }
+    if (items.some((item) => item.id === requestedViewId)) {
+      setSelectedId(requestedViewId);
+    } else {
+      await refresh(requestedViewId);
+    }
+  }
 
   async function createView() {
     setBusy(true);
@@ -54,8 +137,7 @@ function App() {
         dataBindings: [{ sourceType: 'inline', sourceRef: `${title.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'dynamic-view'}-seed`, snapshot: data }],
         snapshotMode: 'snapshot'
       });
-      await refresh();
-      setSelectedId(created.instance.id);
+      await refresh(created.instance.id);
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : 'Unable to create dynamic view.');
     } finally {
@@ -68,6 +150,7 @@ function App() {
     setError('');
     try {
       await deleteDynamicView(instanceId);
+      selectedIdRef.current = '';
       setSelectedId('');
       await refresh();
     } catch (deleteError) {
@@ -79,86 +162,79 @@ function App() {
 
   return (
     <main className="dv-shell">
-      <header className="dv-topbar">
-        <div>
-          <p className="dv-eyebrow">Workspace Library</p>
-          <h1>Dynamic Views</h1>
-        </div>
-        <button className="dv-icon-button" onClick={() => refresh().catch((refreshError: Error) => setError(refreshError.message))} aria-label="Refresh">
-          <span className="material-symbols-rounded" aria-hidden="true">refresh</span>
-        </button>
-      </header>
-
-      {error ? <div className="dv-error">{error}</div> : null}
-
-      <section className="dv-layout">
-        <aside className="dv-library" aria-label="Saved dynamic views">
-          <div className="dv-section-head">
-            <p className="dv-eyebrow">Saved</p>
-            <strong>{items.length} views</strong>
+      <section className="dv-detail">
+        <header className="detail-header">
+          <div className="detail-title-block">
+            <h2>{selected?.title || 'Dynamic Views'}</h2>
+            <span className="detail-title-separator" aria-hidden="true" />
+            <p>{selected?.summary || 'Workspace Library'}</p>
           </div>
-          <div className="dv-card-list">
-            {items.map((item) => (
-              <button key={item.id} className={item.id === selected?.id ? 'dv-card selected' : 'dv-card'} onClick={() => setSelectedId(item.id)}>
-                <span className="dv-card-icon material-symbols-rounded" aria-hidden="true">dashboard_customize</span>
-                <span>
-                  <strong>{item.title}</strong>
-                  <small>{item.summary || item.id}</small>
-                </span>
-                <span className="dv-pill">{item.snapshot_mode}</span>
-              </button>
-            ))}
-            {!items.length ? <p className="dv-empty">No dynamic views saved yet.</p> : null}
-          </div>
-        </aside>
-
-        <section className="dv-editor" aria-label="Create dynamic view">
-          <div className="dv-section-head">
-            <p className="dv-eyebrow">Create</p>
-            <button className="dv-primary" onClick={createView} disabled={busy}>
-              <span className="material-symbols-rounded" aria-hidden="true">add</span>
-              Save
+          <div className="action-group">
+            <button className="secondary-action" onClick={() => refresh().catch((refreshError: Error) => setError(refreshError.message))} type="button">
+              <span className="material-symbols-rounded" aria-hidden="true">refresh</span>
+              Refresh
+            </button>
+            <button className="danger-action" onClick={() => selected && removeView(selected.id)} disabled={!selected || busy} type="button">
+              <span className="material-symbols-rounded" aria-hidden="true">delete</span>
+              Delete View
+            </button>
+            <button className="primary-action" onClick={createView} disabled={busy} type="button">
+              <span className="material-symbols-rounded" aria-hidden="true">save</span>
+              {busy ? 'Saving View' : 'Save View'}
             </button>
           </div>
-          <label>
-            <span>Title</span>
-            <input value={title} onChange={(event) => setTitle(event.target.value)} />
-          </label>
-          <label>
-            <span>Summary</span>
-            <input value={summary} onChange={(event) => setSummary(event.target.value)} />
-          </label>
-          <label>
-            <span>HTML</span>
-            <textarea value={html} rows={6} onChange={(event) => setHtml(event.target.value)} />
-          </label>
-          <label>
-            <span>CSS</span>
-            <textarea value={css} rows={5} onChange={(event) => setCss(event.target.value)} />
-          </label>
-          <label>
-            <span>JavaScript</span>
-            <textarea value={javascript} rows={7} onChange={(event) => setJavascript(event.target.value)} />
-          </label>
-          <label>
-            <span>Data JSON</span>
-            <textarea value={dataJson} rows={6} onChange={(event) => setDataJson(event.target.value)} />
-          </label>
-        </section>
+        </header>
 
-        <section className="dv-preview" aria-label="Dynamic view preview">
-          <div className="dv-section-head">
-            <div>
-              <p className="dv-eyebrow">Preview</p>
-              <strong>{selected?.title || 'Select a view'}</strong>
+        {error ? <div className="dv-error">{error}</div> : null}
+
+        <section className="dv-layout">
+          <section className="dv-editor dv-card-panel" aria-label="Create dynamic view">
+            <div className="dv-section-head">
+              <span>
+                <p className="dv-eyebrow">Create</p>
+                <strong>Sandbox HTML view</strong>
+              </span>
+              <span className="dv-pill">{items.length} saved</span>
             </div>
-            {selected ? (
-              <button className="dv-icon-button" onClick={() => removeView(selected.id)} disabled={busy} aria-label="Delete selected view">
-                <span className="material-symbols-rounded" aria-hidden="true">delete</span>
-              </button>
-            ) : null}
-          </div>
-          {selected ? <DynamicViewFrame payload={toDynamicViewPayload(selected)} /> : <p className="dv-empty">Create or select a saved dynamic view.</p>}
+            <div className="dv-editor-fields">
+              <label>
+                <span>Title</span>
+                <input value={title} onChange={(event) => setTitle(event.target.value)} />
+              </label>
+              <label>
+                <span>Summary</span>
+                <input value={summary} onChange={(event) => setSummary(event.target.value)} />
+              </label>
+              <label>
+                <span>HTML</span>
+                <textarea value={html} rows={6} onChange={(event) => setHtml(event.target.value)} />
+              </label>
+              <label>
+                <span>CSS</span>
+                <textarea value={css} rows={5} onChange={(event) => setCss(event.target.value)} />
+              </label>
+              <label>
+                <span>JavaScript</span>
+                <textarea value={javascript} rows={7} onChange={(event) => setJavascript(event.target.value)} />
+              </label>
+              <label>
+                <span>Data JSON</span>
+                <textarea value={dataJson} rows={6} onChange={(event) => setDataJson(event.target.value)} />
+              </label>
+            </div>
+          </section>
+
+          <section className="dv-preview dv-card-panel" aria-label="Dynamic view preview">
+            <div className="dv-section-head">
+              <span>
+                <p className="dv-eyebrow">Preview</p>
+                <strong>{selected?.title || (isLoading ? 'Loading views' : 'No view selected')}</strong>
+              </span>
+            </div>
+            <div className="dv-preview-body">
+              {selected ? <DynamicViewFrame payload={toDynamicViewPayload(selected)} /> : <p className="dv-empty">Create or select a saved dynamic view.</p>}
+            </div>
+          </section>
         </section>
       </section>
     </main>

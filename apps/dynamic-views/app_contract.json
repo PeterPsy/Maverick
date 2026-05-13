@@ -16,7 +16,8 @@
         "cli",
         "mcp",
         "reference",
-        "view"
+        "view",
+        "widget"
       ]
     }
   ],
@@ -120,6 +121,23 @@
     ]
   },
   "widgets": [
+    {
+      "widget_id": "dynamic-views-sidebar",
+      "host": "base-shell",
+      "content_kinds": [
+        "shell.sidebar.primary"
+      ],
+      "frontend": {
+        "kind": "iframe",
+        "mount": "frontend/dist/widgets/dynamic-views-sidebar",
+        "spa_fallback": true
+      },
+      "actions": {
+        "backend": true,
+        "mcp": false,
+        "cli": false
+      }
+    },
     {
       "widget_id": "dynamic-view",
       "host": "chat",

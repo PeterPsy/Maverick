@@ -41,6 +41,22 @@ export function writeShellSession(session: ShellSession): void {
   window.localStorage.setItem(SESSION_KEY, JSON.stringify(session));
 }
 
+export function resolveInitialSidebarOpen(
+  session: ShellSession,
+  {
+    isInitialChatLaunch,
+    isMobileLayout,
+  }: {
+    isInitialChatLaunch: boolean;
+    isMobileLayout: boolean;
+  },
+): boolean {
+  if (isInitialChatLaunch || isMobileLayout) {
+    return false;
+  }
+  return session.sidebarMode === "fixed" ? true : session.isSidebarOpen;
+}
+
 function normalizeSidebarMode(value: unknown): SidebarMode {
   return value === "fixed" || value === "rail" ? value : DEFAULT_SESSION.sidebarMode;
 }

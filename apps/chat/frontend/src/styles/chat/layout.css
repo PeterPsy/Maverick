@@ -203,6 +203,24 @@
   isolation: isolate;
 }
 
+.chatapp-chat-main:not(.is-empty-chat)::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 12;
+  height: calc(
+    var(--maverick-shell-mobile-content-top-offset, 0px) +
+    max(2.15rem, calc(env(safe-area-inset-top, 0px) + 1.15rem))
+  );
+  background: linear-gradient(
+    180deg,
+    var(--maverick-bg) 0%,
+    rgba(7, 7, 8, 0.86) 34%,
+    rgba(7, 7, 8, 0) 100%
+  );
+  pointer-events: none;
+}
+
 .chatapp-chat-main.is-empty-chat {
   justify-content: center;
   width: min(100%, 42rem);
@@ -301,7 +319,13 @@
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
   margin: 0;
-  padding: 0.8rem clamp(0.85rem, 2.2vw, 1.45rem) calc(var(--chatapp-composer-overlay-height, 0px) + 1.35rem);
+  padding:
+    calc(
+      var(--maverick-shell-mobile-content-top-offset, 0px) +
+      max(2.6rem, calc(env(safe-area-inset-top, 0px) + 0.8rem))
+    )
+    clamp(0.85rem, 2.2vw, 1.45rem)
+    calc(var(--chatapp-composer-overlay-height, 0px) + 1.35rem);
 }
 
 .chatapp-chat-scroll__inner--centered {

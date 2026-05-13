@@ -140,8 +140,14 @@ class DynamicViewsAppTestCase(unittest.TestCase):
         self.assertEqual(parsed.contract.capabilities.skills, ["dynamic-views"])
         self.assertEqual(parsed.contract.capabilities.view_surfaces[0].view_id, "dynamic-views")
         self.assertEqual(parsed.contract.capabilities.view_surfaces[0].entity_types, ["view"])
-        self.assertEqual(len(parsed.contract.widgets), 1)
-        widget = parsed.contract.widgets[0]
+        self.assertEqual(len(parsed.contract.widgets), 2)
+        widgets = {widget.widget_id: widget for widget in parsed.contract.widgets}
+        sidebar_widget = widgets["dynamic-views-sidebar"]
+        self.assertEqual(sidebar_widget.host, "base-shell")
+        self.assertEqual(sidebar_widget.content_kinds, ["shell.sidebar.primary"])
+        self.assertEqual(sidebar_widget.frontend.mount, "frontend/dist/widgets/dynamic-views-sidebar")
+        self.assertTrue((DYNAMIC_VIEWS_ROOT / "frontend" / "dist" / "widgets" / "dynamic-views-sidebar" / "index.html").is_file())
+        widget = widgets["dynamic-view"]
         self.assertEqual(widget.widget_id, "dynamic-view")
         self.assertEqual(widget.host, "chat")
         self.assertEqual(widget.content_kinds, ["dynamic.view.instance"])
@@ -213,9 +219,20 @@ class DynamicViewsAppTestCase(unittest.TestCase):
             query_string="host=chat&content_kind=dynamic.view.instance",
             cookie=cookie,
         )
+        sidebar_registry_status, sidebar_registry_payload, _sidebar_registry_headers = self.invoke(
+            app,
+            path="/api/apps/widgets",
+            query_string="host=base-shell&content_kind=shell.sidebar.primary",
+            cookie=cookie,
+        )
         mount_status, mount_payload, mount_headers = self.invoke(
             app,
             path="/api/apps/widgets/dynamic-views/dynamic-view/frontend/",
+            cookie=cookie,
+        )
+        sidebar_mount_status, sidebar_mount_payload, sidebar_mount_headers = self.invoke(
+            app,
+            path="/api/apps/widgets/dynamic-views/dynamic-views-sidebar/frontend/",
             cookie=cookie,
         )
 
@@ -227,9 +244,14 @@ class DynamicViewsAppTestCase(unittest.TestCase):
         self.assertEqual(registry_status, 200)
         self.assertEqual(registry_payload["items"][0]["owner_app_id"], "dynamic-views")
         self.assertEqual(registry_payload["items"][0]["widget_id"], "dynamic-view")
+        self.assertEqual(sidebar_registry_status, 200)
+        self.assertIn("dynamic-views-sidebar", {item["widget_id"] for item in sidebar_registry_payload["items"]})
         self.assertEqual(mount_status, 200)
         self.assertIn("text/html", mount_headers["Content-Type"])
         self.assertIn(b"Dynamic view widget", mount_payload)
+        self.assertEqual(sidebar_mount_status, 200)
+        self.assertIn("text/html", sidebar_mount_headers["Content-Type"])
+        self.assertIn(b"Maverick Dynamic Views Sidebar", sidebar_mount_payload)
 
     @integration_test("dynamic-views platform integration suite; run with scripts/test_suite.py --level integration")
     def test_mcp_and_cli_create_dynamic_view(self) -> None:

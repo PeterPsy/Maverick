@@ -1,16 +1,25 @@
-"""Database schema and shared persistence helpers for Memory."""
+"""Database connection and shared persistence helpers for Memory."""
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import UTC, datetime
 import json
+import math
 from pathlib import Path
 import sqlite3
 from typing import Any
 from uuid import uuid4
 
 from errors import MemoryValidationError
+from memory_schema import SCHEMA_STATEMENTS
 from models import EDGE_KINDS, NODE_TYPES, SCHEMA_VERSION
+
+
+SQLITE_BUSY_TIMEOUT_MS = 10000
+SqliteFileSignature = tuple[int, int, int]
+_WAL_CONFIGURED_PATHS: dict[Path, SqliteFileSignature] = {}
+
 
 def now_timestamp() -> str:
     return datetime.now(tz=UTC).isoformat()
@@ -28,141 +37,73 @@ def artifacts_root(data_root: Path) -> Path:
     return data_root / "artifacts"
 
 
+def sqlite_file_signature(path: Path) -> SqliteFileSignature | None:
+    try:
+        stat = path.stat()
+    except FileNotFoundError:
+        return None
+    return (stat.st_dev, stat.st_ino, stat.st_ctime_ns)
+
+
+def configure_wal_if_needed(connection: sqlite3.Connection, path: Path) -> None:
+    resolved_path = path.resolve(strict=False)
+    signature = sqlite_file_signature(path)
+    if signature is None or _WAL_CONFIGURED_PATHS.get(resolved_path) != signature:
+        connection.execute("PRAGMA journal_mode = WAL")
+        signature = sqlite_file_signature(path) or signature
+    if signature is not None:
+        _WAL_CONFIGURED_PATHS[resolved_path] = signature
+
+
 def connect(data_root: Path) -> sqlite3.Connection:
     data_root.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(db_path(data_root))
+    path = db_path(data_root)
+    connection = sqlite3.connect(path, timeout=SQLITE_BUSY_TIMEOUT_MS / 1000)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
+    connection.execute(f"PRAGMA busy_timeout = {SQLITE_BUSY_TIMEOUT_MS}")
+    configure_wal_if_needed(connection, path)
+    connection.execute("PRAGMA synchronous = NORMAL")
     return connection
+
+
+@contextmanager
+def transaction(data_root: Path, *, immediate: bool = False):
+    with connect(data_root) as db:
+        db.execute("BEGIN IMMEDIATE" if immediate else "BEGIN")
+        try:
+            yield db
+        except Exception:
+            db.rollback()
+            raise
+        else:
+            db.commit()
 
 
 def ensure_schema(data_root: Path) -> None:
     data_root.mkdir(parents=True, exist_ok=True)
     (artifacts_root(data_root) / "extracted").mkdir(parents=True, exist_ok=True)
     (artifacts_root(data_root) / "previews").mkdir(parents=True, exist_ok=True)
-    with connect(data_root) as db:
-        db.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS schema_metadata (
-              key TEXT PRIMARY KEY,
-              value TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS nodes (
-              id TEXT PRIMARY KEY,
-              type TEXT NOT NULL,
-              title TEXT NOT NULL,
-              summary TEXT NOT NULL DEFAULT '',
-              body_text TEXT NOT NULL DEFAULT '',
-              status TEXT NOT NULL DEFAULT 'active',
-              importance REAL NOT NULL DEFAULT 0.5,
-              confidence REAL NOT NULL DEFAULT 1.0,
-              created_at TEXT NOT NULL,
-              updated_at TEXT NOT NULL,
-              deleted_at TEXT,
-              deleted_by TEXT,
-              delete_reason TEXT,
-              last_accessed_at TEXT,
-              metadata_json TEXT NOT NULL DEFAULT '{}'
-            );
-            CREATE TABLE IF NOT EXISTS edges (
-              id TEXT PRIMARY KEY,
-              source_node_id TEXT NOT NULL,
-              target_node_id TEXT NOT NULL,
-              kind TEXT NOT NULL,
-              weight REAL NOT NULL DEFAULT 0.5,
-              confidence REAL NOT NULL DEFAULT 1.0,
-              reason TEXT NOT NULL DEFAULT '',
-              status TEXT NOT NULL DEFAULT 'active',
-              created_at TEXT NOT NULL,
-              updated_at TEXT NOT NULL,
-              deleted_at TEXT,
-              metadata_json TEXT NOT NULL DEFAULT '{}',
-              FOREIGN KEY(source_node_id) REFERENCES nodes(id),
-              FOREIGN KEY(target_node_id) REFERENCES nodes(id)
-            );
-            CREATE TABLE IF NOT EXISTS external_refs (
-              id TEXT PRIMARY KEY,
-              node_id TEXT NOT NULL,
-              ref_kind TEXT NOT NULL,
-              owning_app_id TEXT NOT NULL DEFAULT '',
-              entity_type TEXT NOT NULL DEFAULT '',
-              entity_id TEXT NOT NULL DEFAULT '',
-              file_id TEXT NOT NULL DEFAULT '',
-              workspace_relative_path TEXT NOT NULL DEFAULT '',
-              uri TEXT NOT NULL DEFAULT '',
-              title TEXT NOT NULL DEFAULT '',
-              metadata_json TEXT NOT NULL DEFAULT '{}',
-              created_at TEXT NOT NULL,
-              updated_at TEXT NOT NULL,
-              FOREIGN KEY(node_id) REFERENCES nodes(id)
-            );
-            CREATE TABLE IF NOT EXISTS chunks (
-              id TEXT PRIMARY KEY,
-              node_id TEXT NOT NULL,
-              external_ref_id TEXT,
-              chunk_index INTEGER NOT NULL DEFAULT 0,
-              content_text TEXT NOT NULL,
-              content_hash TEXT NOT NULL DEFAULT '',
-              token_count INTEGER NOT NULL DEFAULT 0,
-              created_at TEXT NOT NULL,
-              updated_at TEXT NOT NULL,
-              metadata_json TEXT NOT NULL DEFAULT '{}',
-              FOREIGN KEY(node_id) REFERENCES nodes(id),
-              FOREIGN KEY(external_ref_id) REFERENCES external_refs(id)
-            );
-            CREATE TABLE IF NOT EXISTS events (
-              id TEXT PRIMARY KEY,
-              event_type TEXT NOT NULL,
-              actor_type TEXT NOT NULL DEFAULT '',
-              actor_id TEXT NOT NULL DEFAULT '',
-              node_id TEXT,
-              edge_id TEXT,
-              external_ref_id TEXT,
-              payload_json TEXT NOT NULL DEFAULT '{}',
-              created_at TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS retrieval_feedback (
-              id TEXT PRIMARY KEY,
-              query TEXT NOT NULL,
-              node_id TEXT,
-              edge_id TEXT,
-              feedback_kind TEXT NOT NULL,
-              actor_type TEXT NOT NULL DEFAULT '',
-              actor_id TEXT NOT NULL DEFAULT '',
-              created_at TEXT NOT NULL,
-              metadata_json TEXT NOT NULL DEFAULT '{}'
-            );
-            CREATE TABLE IF NOT EXISTS index_jobs (
-              id TEXT PRIMARY KEY,
-              job_type TEXT NOT NULL,
-              status TEXT NOT NULL,
-              target_kind TEXT NOT NULL,
-              target_id TEXT NOT NULL,
-              attempt_count INTEGER NOT NULL DEFAULT 0,
-              last_error TEXT NOT NULL DEFAULT '',
-              created_at TEXT NOT NULL,
-              updated_at TEXT NOT NULL,
-              metadata_json TEXT NOT NULL DEFAULT '{}'
-            );
-            CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
-              node_id UNINDEXED,
-              title,
-              summary,
-              body_text
-            );
-            CREATE INDEX IF NOT EXISTS idx_nodes_type_status ON nodes(type, status);
-            CREATE INDEX IF NOT EXISTS idx_nodes_updated ON nodes(updated_at);
-            CREATE INDEX IF NOT EXISTS idx_edges_source ON edges(source_node_id, status);
-            CREATE INDEX IF NOT EXISTS idx_edges_target ON edges(target_node_id, status);
-            CREATE INDEX IF NOT EXISTS idx_edges_kind ON edges(kind, status);
-            CREATE INDEX IF NOT EXISTS idx_external_refs_app_entity ON external_refs(owning_app_id, entity_type, entity_id);
-            CREATE INDEX IF NOT EXISTS idx_external_refs_file ON external_refs(file_id, workspace_relative_path);
-            """
-        )
+    if schema_is_current(data_root):
+        return
+    with transaction(data_root, immediate=True) as db:
+        for statement in SCHEMA_STATEMENTS:
+            db.execute(statement)
         db.execute(
             "INSERT OR REPLACE INTO schema_metadata(key, value) VALUES (?, ?)",
             ("schema_version", SCHEMA_VERSION),
         )
+
+
+def schema_is_current(data_root: Path) -> bool:
+    if not db_path(data_root).exists():
+        return False
+    try:
+        with connect(data_root) as db:
+            row = db.execute("SELECT value FROM schema_metadata WHERE key = 'schema_version'").fetchone()
+    except sqlite3.Error:
+        return False
+    return row is not None and row["value"] == SCHEMA_VERSION
 
 
 def health_payload(data_root: Path) -> dict[str, Any]:
@@ -188,6 +129,37 @@ def normalize_edge_kind(value: str) -> str:
     if normalized not in EDGE_KINDS:
         raise MemoryValidationError(f"Unsupported edge kind `{normalized}`.")
     return normalized
+
+
+def normalize_limit(value: object, *, default: int, minimum: int, maximum: int, field_name: str = "limit") -> int:
+    if value is None or value == "":
+        return default
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as error:
+        raise MemoryValidationError(f"{field_name} must be an integer.") from error
+    return max(minimum, min(parsed, maximum))
+
+
+def normalize_float(
+    value: object,
+    *,
+    default: float,
+    minimum: float,
+    maximum: float,
+    field_name: str,
+) -> float:
+    if value is None or value == "":
+        return default
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as error:
+        raise MemoryValidationError(f"{field_name} must be a number.") from error
+    if not math.isfinite(parsed):
+        raise MemoryValidationError(f"{field_name} must be a finite number.")
+    if parsed < minimum or parsed > maximum:
+        raise MemoryValidationError(f"{field_name} must be between {minimum:g} and {maximum:g}.")
+    return parsed
 
 
 def json_text(value: Any) -> str:

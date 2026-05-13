@@ -53,7 +53,9 @@ def _workspace_app_tool_definitions(
         entrypoint_path = str((source_root / parsed.contract.entrypoints.mcp).resolve())
         paths = workspace_paths(workspace_id=workspace_id, start_path=start_path)
         for tool_name in parsed.contract.capabilities.mcp_tools:
-            hosted_tool_name = f"app.{parsed.app_id}.{tool_name}"
+            local_app_id = binding.app_id
+            public_app_id = binding.public_app_id or parsed.app_id
+            hosted_tool_name = f"app.{local_app_id}.{tool_name}"
             def _handler(
                 arguments: dict[str, Any],
                 context: McpInvocationContext,
@@ -62,7 +64,8 @@ def _workspace_app_tool_definitions(
                 _tool_name: str = tool_name,
                 _workspace_id: str = workspace_id,
                 _source_root: Path = source_root,
-                _app_id: str = parsed.app_id,
+                _app_id: str = local_app_id,
+                _public_app_id: str = public_app_id,
                 _data_root: str = binding.data_root,
                 _workspace_root: str = str(paths.root),
                 _uploaded_storage_root: str = str(paths.uploaded_storage),
@@ -90,6 +93,7 @@ def _workspace_app_tool_definitions(
                         "effective_mode": context.effective_mode,
                         "runtime_session_id": context.runtime_session_id,
                         "app_id": _app_id,
+                        "public_app_id": _public_app_id,
                         "workspace_root": _workspace_root,
                         "data_root": _data_root,
                         "uploaded_storage_root": _uploaded_storage_root,
@@ -139,11 +143,11 @@ def _workspace_app_tool_definitions(
                 (
                     McpToolDefinition(
                         tool_name=hosted_tool_name,
-                        description=f"App MCP tool exposed by `{parsed.app_id}`.",
+                        description=f"App MCP tool exposed by `{local_app_id}`.",
                         input_schema={"type": "object"},
                         output_schema={"type": "object"},
                         owner_kind="app",
-                        owner_id=parsed.app_id,
+                        owner_id=local_app_id,
                         workspace_id=workspace_id,
                         exposure_scope="workspace_enabled_app",
                         invocation_policy=McpInvocationPolicy(

@@ -7,7 +7,10 @@ import type { SidebarMode } from "../session";
 import { AppLogo } from "./AppLogo";
 import { BrandMark } from "./BrandMark";
 import { WidgetSlot } from "./WidgetSlot";
+import type { WidgetPrimaryActionState } from "./WidgetSlot";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
+
+const SIDEBAR_DESKTOP_LOGO_SRC = "/apps/base-shell/sidebar-logo.svg";
 
 type TrackedSwipe = SidebarSwipePoint & {
   id: number;
@@ -23,10 +26,12 @@ export function Sidebar({
   isMobileLayout,
   isPinned,
   mode,
+  mobilePrimaryActionRequestId,
   onClose,
   onModeChange,
   onOpenApp,
   onOpenSidebar,
+  onPrimaryActionStateChange,
   onOpenSettings,
   onWorkspaceChanged,
   pinnedAppIds,
@@ -43,10 +48,12 @@ export function Sidebar({
   isMobileLayout: boolean;
   isPinned: boolean;
   mode: SidebarMode;
+  mobilePrimaryActionRequestId: number;
   onClose: () => void;
   onModeChange: (mode: SidebarMode) => void;
   onOpenApp: (appId: string, params?: Record<string, string | boolean | null>) => void;
   onOpenSidebar: () => void;
+  onPrimaryActionStateChange: (state: WidgetPrimaryActionState) => void;
   onOpenSettings: () => void;
   onWorkspaceChanged: () => void;
   pinnedAppIds: string[];
@@ -234,39 +241,46 @@ export function Sidebar({
             label="App sidebar footer"
             onCloseSidebar={onClose}
             onOpenApp={onOpenApp}
+            onPrimaryActionStateChange={onPrimaryActionStateChange}
             preferredOwnerAppId={activeAppId}
+            primaryActionRequestId={mobilePrimaryActionRequestId}
             size="compact"
           />
 
           <div className="bs-sidebar__shell-controls">
             {!isMobileLayout ? (
-              <div className="bs-sidebar__mode-switcher" aria-label="Sidebar mode">
-                <button
-                  aria-label="Solo app in overlay"
-                  aria-pressed={mode === "rail"}
-                  className={`bs-sidebar__mode-button ${mode === "rail" ? "is-active" : ""}`}
-                  onClick={() => onModeChange("rail")}
-                  title="Solo app in overlay"
-                  type="button"
-                >
-                  <span aria-hidden="true" className="material-symbols-rounded">dock_to_left</span>
-                </button>
-                <button
-                  aria-label="Sidebar fissa"
-                  aria-pressed={mode === "fixed"}
-                  className={`bs-sidebar__mode-button ${mode === "fixed" ? "is-active" : ""}`}
-                  onClick={() => onModeChange("fixed")}
-                  title="Sidebar fissa"
-                  type="button"
-                >
-                  <span aria-hidden="true" className="material-symbols-rounded">left_panel_close</span>
-                </button>
-              </div>
+              <img alt="" aria-hidden="true" className="bs-sidebar__desktop-logo" src={SIDEBAR_DESKTOP_LOGO_SRC} />
             ) : null}
-            {!isPinned && !isMobileLayout ? (
-              <button aria-label="Chiudi pannello laterale" className="bs-panel-minimize" onClick={onClose} title="Chiudi pannello laterale" type="button">
-                <span aria-hidden="true" className="material-symbols-rounded">chevron_left</span>
-              </button>
+            {!isMobileLayout ? (
+              <div className="bs-sidebar__control-cluster">
+                <div className="bs-sidebar__mode-switcher" aria-label="Sidebar mode">
+                  <button
+                    aria-label="Solo app in overlay"
+                    aria-pressed={mode === "rail"}
+                    className={`bs-sidebar__mode-button ${mode === "rail" ? "is-active" : ""}`}
+                    onClick={() => onModeChange("rail")}
+                    title="Solo app in overlay"
+                    type="button"
+                  >
+                    <span aria-hidden="true" className="material-symbols-rounded">dock_to_left</span>
+                  </button>
+                  <button
+                    aria-label="Sidebar fissa"
+                    aria-pressed={mode === "fixed"}
+                    className={`bs-sidebar__mode-button ${mode === "fixed" ? "is-active" : ""}`}
+                    onClick={() => onModeChange("fixed")}
+                    title="Sidebar fissa"
+                    type="button"
+                  >
+                    <span aria-hidden="true" className="material-symbols-rounded">left_panel_close</span>
+                  </button>
+                </div>
+                {!isPinned ? (
+                  <button aria-label="Chiudi pannello laterale" className="bs-panel-minimize" onClick={onClose} title="Chiudi pannello laterale" type="button">
+                    <span aria-hidden="true" className="material-symbols-rounded">chevron_left</span>
+                  </button>
+                ) : null}
+              </div>
             ) : null}
           </div>
         </div>

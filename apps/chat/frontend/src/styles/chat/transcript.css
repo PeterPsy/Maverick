@@ -133,7 +133,13 @@
   color: #d8f3ff;
   font-size: 0.76rem;
   line-height: 1.2;
+  font-family: inherit;
   vertical-align: baseline;
+}
+
+button.chatapp-message-reference-chip {
+  appearance: none;
+  cursor: pointer;
 }
 
 .chatapp-message-reference-chip.is-skill {
@@ -142,10 +148,20 @@
   color: #ffe1ef;
 }
 
+.chatapp-message-reference-chip.is-entity {
+  border-color: rgba(52, 211, 153, 0.34);
+  background: rgba(6, 95, 70, 0.24);
+  color: #d7ffee;
+}
+
+.chatapp-message-reference-chip.is-missing {
+  opacity: 0.72;
+}
+
 .chatapp-message-reference-chip__kind {
   color: rgba(255, 255, 255, 0.7);
   font-size: 0.64rem;
-  font-weight: 800;
+  font-weight: 400;
   letter-spacing: 0;
   text-transform: uppercase;
 }
@@ -153,7 +169,7 @@
 .chatapp-message-reference-chip__label {
   overflow: hidden;
   min-width: 0;
-  font-weight: 700;
+  font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -166,7 +182,7 @@
 .chatapp-human-message__editorial-summary {
   color: rgba(255, 255, 255, 0.72);
   font-size: 0.72rem;
-  font-weight: 700;
+  font-weight: 400;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -202,6 +218,22 @@
   display: grid;
   gap: 0.55rem;
   max-width: min(24rem, 100%);
+}
+
+.chatapp-human-message__attachments .chatapp-attachment-card.is-readonly {
+  border-color: color-mix(in srgb, currentColor 14%, transparent);
+  background: color-mix(in srgb, currentColor 5%, transparent);
+  color: inherit;
+}
+
+.chatapp-human-message__attachments .chatapp-attachment-card__icon {
+  border-color: color-mix(in srgb, currentColor 16%, transparent);
+  background: color-mix(in srgb, currentColor 6%, transparent);
+  color: currentColor;
+}
+
+.chatapp-human-message__attachments .chatapp-attachment-card__detail {
+  color: color-mix(in srgb, currentColor 68%, transparent);
 }
 
 .chatapp-agent-block__body {
@@ -310,7 +342,7 @@
 
 .chatapp-inter-agent-message__eyebrow {
   font-size: 0.7rem;
-  font-weight: 700;
+  font-weight: 400;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: rgba(238, 243, 255, 0.72);
@@ -321,7 +353,7 @@
   min-width: 0;
   max-width: 100%;
   font-size: 0.94rem;
-  font-weight: 700;
+  font-weight: 400;
   color: #ffffff;
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -655,6 +687,7 @@
   display: block;
   width: min(100%, 760px);
   min-height: 160px;
+  max-height: min(70dvh, 45rem);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--chatapp-cell-radius);
   background: var(--chatapp-soft-surface);
@@ -850,6 +883,7 @@
 
 .chatapp-message-reference-chip,
 .chatapp-message-reference-chip.is-skill,
+.chatapp-message-reference-chip.is-entity,
 .chatapp-human-message__editorial-chip {
   border-color: rgba(10, 10, 11, 0.08);
   background: rgba(10, 10, 11, 0.055);
@@ -904,6 +938,7 @@
 
 .chatapp-structured-widget {
   width: min(100%, 54rem);
+  max-height: min(70dvh, 45rem);
   border-color: rgba(255, 255, 255, 0.055);
   border-radius: var(--chatapp-cell-radius);
   background: var(--chatapp-soft-surface);

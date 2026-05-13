@@ -2,12 +2,12 @@ import { useEffect, useState } from "react";
 
 export const MOBILE_LAYOUT_QUERY = "(max-width: 979px)";
 
-function getInitialMatch(): boolean {
+export function getInitialMobileLayout(): boolean {
   return typeof window !== "undefined" && typeof window.matchMedia === "function" ? window.matchMedia(MOBILE_LAYOUT_QUERY).matches : false;
 }
 
 export function useMobileLayout() {
-  const [isMobileLayout, setIsMobileLayout] = useState(getInitialMatch);
+  const [isMobileLayout, setIsMobileLayout] = useState(getInitialMobileLayout);
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") {

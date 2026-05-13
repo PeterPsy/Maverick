@@ -73,7 +73,7 @@ button {
   border-right: 1px solid var(--ua-border);
   background: var(--ua-panel);
   color: var(--ua-text);
-  padding: 24px;
+  padding: calc(var(--maverick-shell-mobile-content-top-offset, 0px) + 24px) 24px 24px;
 }
 
 .ua-main {
@@ -797,7 +797,10 @@ button.ua-danger:hover {
 }
 
 @media (max-width: 640px) {
-  .ua-rail,
+  .ua-rail {
+    padding: calc(var(--maverick-shell-mobile-content-top-offset, 0px) + 18px) 18px 18px;
+  }
+
   .ua-main {
     padding: 18px;
   }

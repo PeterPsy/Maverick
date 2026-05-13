@@ -155,11 +155,24 @@ export function orderChatThreads(threads: ChatThread[]): ChatThread[] {
     });
 }
 
-export type AppReference = {
+export type AppAppReference = {
   type: "app";
   app_id: string;
   label?: string;
 };
+
+export type AppEntityReference = {
+  type: "entity";
+  app_id: string;
+  entity_type: string;
+  entity_id: string;
+  label: string;
+  summary?: string;
+  deep_link?: string;
+  exists?: boolean;
+};
+
+export type AppReference = AppAppReference | AppEntityReference;
 
 export type ChatMessageAttachment = {
   id: string;
@@ -323,6 +336,16 @@ export async function listSkills(): Promise<SkillSummary[]> {
     body: JSON.stringify({ action: "catalog" }),
   });
   return (payload.skills || []).filter((skill) => skill.enabled);
+}
+
+export async function searchAppReferences(query: string, signal?: AbortSignal): Promise<AppEntityReference[]> {
+  const payload = await requestJson<{ items?: AppEntityReference[] }>("/api/app-references/search", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query, limit: 8 }),
+    signal,
+  });
+  return (payload.items || []).filter((item) => item.type === "entity" && item.app_id && item.entity_type && item.entity_id);
 }
 
 export function selectProvider(provider_id: string): Promise<ProviderPayload> {

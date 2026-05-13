@@ -6,11 +6,12 @@ from dataclasses import asdict
 from urllib.parse import parse_qs
 from uuid import uuid4
 
+from core.api.app_reference_payloads import materialize_runtime_app_references
 from core.api.http import StartResponse, json_response, read_json_body, status_line
 from core.api.platform_state import PlatformState
+from core.api.provider_api import workspace_provider_status
 from core.api.runtime_cleanup import cleanup_runtime_session
 from core.api.session_api import RequestSession, require_session
-from core.api.provider_api import workspace_provider_status
 from core.apps.runtime_event_hooks import dispatch_source_app_runtime_event
 from core.authorization.errors import AuthorizationError
 from core.authorization.service import authorize_runtime_session_create, require_runtime_session_operation
@@ -470,17 +471,16 @@ def _handle_session_turns(state: PlatformState, context: RequestSession, session
     client_message_id = str(body.get("client_message_id") or "").strip() or None
     attachments = body.get("attachments") if isinstance(body.get("attachments"), list) else []
     attachment_items = [item for item in attachments if isinstance(item, dict)]
-    app_references = body.get("app_references") if isinstance(body.get("app_references"), list) else []
-    app_reference_items = [
-        reference
-        for item in app_references
-        if isinstance(item, dict)
-        for reference in [_app_reference_payload(item)]
-        if reference["app_id"]
-    ]
     input_text = str(body.get("input_text") or body.get("message") or "").strip()
     if not input_text and not attachment_items:
         return json_response(start_response, {"error": "empty_runtime_input"}, status="400 Bad Request")
+    app_references = body.get("app_references") if isinstance(body.get("app_references"), list) else []
+    app_reference_items = materialize_runtime_app_references(
+        state,
+        context=context,
+        references=[item for item in app_references if isinstance(item, dict)],
+        start_path=start_path,
+    )
     async_requested = bool(body.get("async"))
     def notify_source_app_queued(queued_turn: RuntimeTurnRecord, _events: list[RuntimeEventRecord]) -> None:
         dispatch_source_app_runtime_event(
@@ -529,16 +529,6 @@ def _handle_session_turns(state: PlatformState, context: RequestSession, session
         },
         status=status,
     )
-
-
-def _app_reference_payload(item: dict) -> dict[str, str]:
-    app_id = str(item.get("app_id") or "").strip()
-    label = str(item.get("label") or "").strip()
-    payload = {"type": "app", "app_id": app_id}
-    if label:
-        payload["label"] = label
-    return payload
-
 
 def _handle_session_cleanup(
     state: PlatformState,

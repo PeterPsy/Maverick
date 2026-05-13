@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { openChatRootRouteInShell, openChatThreadRouteInShell } from "./shellNavigation";
+import { openAppRouteInShell, openChatRootRouteInShell, openChatThreadRouteInShell } from "./shellNavigation";
 
 function messageTarget() {
   const messages: Array<{ message: unknown; targetOrigin: string }> = [];
@@ -64,6 +64,23 @@ describe("chat shell navigation", () => {
       type: "maverick.app.open-app",
       app_id: "chat",
       params: {},
+    });
+  });
+
+  it("can ask the shell to open another app page", () => {
+    const parent = messageTarget();
+
+    const posted = openAppRouteInShell("checklist", "checklists/check_123", {
+      currentWindow: {},
+      origin: "https://maverick.test",
+      parentWindow: parent.target,
+    });
+
+    expect(posted).toBe(true);
+    expect(parent.messages[0]?.message).toEqual({
+      type: "maverick.app.open-app",
+      app_id: "checklist",
+      params: { app_page: "checklists/check_123" },
     });
   });
 });

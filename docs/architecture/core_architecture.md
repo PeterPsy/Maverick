@@ -212,13 +212,13 @@ This resolver is deliberately app-agnostic:
 - the core validates interface id, version compatibility, provider visibility, and workspace enablement
 - the core persists only workspace-scoped dependency selections, not app product data
 
-The core must not special-case app ids such as `fleet`, `agents`, `gallery`, or a file provider app. A cross-app consumer depends on interface types such as `agent.catalog` or `file.preview`; the shell and the consumer app receive resolved provider ids after the workspace selection is made. If a provider app is disabled or uninstalled, the selection becomes stale until setup is corrected.
+The core must not special-case app ids such as `fleet`, `agents`, `storage`, or a file provider app. A cross-app consumer depends on interface types such as `agent.catalog` or `file.preview`; the shell and the consumer app receive resolved provider ids after the workspace selection is made. If a provider app is disabled or uninstalled, the selection becomes stale until setup is corrected.
 
 The app-hosting domain must also separate public app identity from workspace-local binding identity.
 
 - `public_app_id` identifies the distributed app artifact or catalog entry declared by the app contract.
 - `local_app_id` identifies one workspace binding, app-owned data namespace, and user-facing app instance inside that workspace.
-- `mount_app_id` identifies the concrete route namespace used by mounted HTTP, WebSocket, CLI, MCP, and widget surfaces, normally equal to `local_app_id`.
+- `mount_app_id` identifies the concrete route namespace used by mounted HTTP, WebSocket, and widget surfaces, normally equal to `local_app_id`. CLI command ids and MCP tool ids use `local_app_id`; entrypoint payloads also receive `public_app_id` so app-owned code can distinguish the source artifact from the workspace-local binding.
 
 Built-in apps may use the same value for all three, but the core must not require that equality. App Store install, fork, dependency selection, app registry responses, lifecycle hooks, and workspace data paths must preserve the distinction so one workspace can bind a public app, fork, or alternate provider under a distinct local id.
 
@@ -279,7 +279,7 @@ This includes:
 - runtime sessions that can carry an app-provided materialized `system_prompt`
 - runtime sessions that can carry selected `skill_ids` when an agent type narrows the workspace default
 - runtime sessions that can identify the app surface that created them with `source_app_id`
-- runtime turns that can carry structured app references by stable `app_id` when an app UI parses human-facing mention text
+- runtime turns that can carry structured app references when an app UI parses human-facing mention text; `type: "app"` references carry a stable `app_id`, while `type: "entity"` references carry `app_id`, `entity_type`, `entity_id`, and optional safe label, summary, existence, and deep-link metadata
 
 These fields are generic runtime configuration. They are not an Agents app dependency.
 
@@ -433,7 +433,11 @@ These are not separate products.
 
 The same platform host framework should also be able to expose app-contributed MCP, CLI, and skill surfaces once those apps are installed and enabled.
 
-Apps may expose reference tools through their declared MCP and CLI surfaces so other apps can link to app-owned records without reading app-private storage. The core's responsibility is generic: validate contracts, register enabled app surfaces, enforce workspace policy, invoke the declared entrypoints, and expose discovery metadata. The core must not know how to search business records, chat threads, gallery files, memory nodes, or any other app-specific entity.
+Apps may expose reference tools through their declared MCP and CLI surfaces so other apps can link to app-owned records without reading app-private storage. The core's responsibility is generic: validate contracts, register enabled app surfaces, enforce workspace policy, invoke the declared entrypoints, and expose discovery metadata. The core must not know how to search business records, chat threads, storage files, memory nodes, or any other app-specific entity.
+
+For authenticated mounted app frontends, the platform host exposes the generic HTTP surface `/api/app-references/manifest`, `/api/app-references/search`, `/api/app-references/resolve`, and `/api/app-references/summarize`. These routes discover enabled apps that declare `capabilities.reference_entities`, enforce the same visibility policy as mounted app surfaces, invoke the owning app's reference MCP tools, and normalize results into stable `type: "entity"` reference payloads. The core never reads app-owned storage to satisfy these requests.
+
+Runtime turn submissions treat client-supplied `app_references` as reference identities, not trusted provider context. Before the provider prompt is built, the core verifies that the app is enabled and visible in the workspace, resolves or summarizes entity references through the owning app's reference tools, and uses only owner-returned labels, summaries, and deep links. Unverified references are omitted rather than materialized from client-provided descriptive fields.
 
 The common reference tool convention is:
 
@@ -629,7 +633,7 @@ Workspace-wide selections such as provider/model choice and app dependency bindi
 
 Workspace app installation and enablement are separate control-plane states.
 
-An installed workspace app has a binding in the workspace and can be managed by an admin without deleting its data. A disabled installed app remains attached to the workspace, but it must not be listed in `/api/apps`, mounted through `/apps/<local_app_id>/`, exposed through `/api/apps/<local_app_id>/backend`, or exposed through app-owned widgets, CLI, MCP, or skills. Only enabled workspace app bindings are visible to normal workspace users and served by the platform host.
+An installed workspace app has a binding in the workspace and can be managed by an admin without deleting its data. A disabled installed app remains attached to the workspace, but it must not be listed in `/api/apps`, mounted through `/apps/<mount_app_id>/`, exposed through `/api/apps/<mount_app_id>/backend`, or exposed through app-owned widgets, CLI, MCP, or skills. Only enabled workspace app bindings are visible to normal workspace users and served by the platform host.
 
 For hosted and local deployments, bootstrap credentials and signing/encryption material are installation configuration, not development defaults. The core must require the bootstrap admin credential plus refs or protected key-file paths for signing and encryption material before booting a hosted platform:
 
@@ -677,7 +681,11 @@ If the product shell needs to show app shortcuts in its sidebar, it must do so b
 The intended sidebar shape is:
 
 - `base-shell` owns the fixed sidebar frame: current app icon, workspace selector, mobile app rail, responsive layout, overlay behavior, scroll containment, fades, and shell mode controls
-- `base-shell` owns mobile sidebar gestures, including opening from a left-edge swipe over mounted app iframes and closing the open sidebar with the opposite swipe
+- on desktop, the app rail is always a layout-reserved side rail; overlay sidebar mode may overlay only the expanded sidebar details panel beyond that rail, while fixed mode reserves both the rail and details panel
+- on mobile, `base-shell` owns a shell header above mounted app iframes; the mobile workspace reserves the header height so app content starts below it, while the header opens the sidebar from the active app icon, opens a new Chat launch from the centered logo, and exposes a right-side primary action button
+- on mobile shell entry or refresh, the sidebar starts closed even when the local desktop sidebar session was open or fixed
+- mobile sidebar opening must not depend on a left-edge swipe over mounted app iframes; app content keeps normal horizontal touch behavior unless the sidebar is already open
+- the mobile header primary action is a generic shell-to-widget invocation of the active app's `shell.sidebar.footer` widget; the footer widget owns whether the action is available, whether the sidebar surface should be made visible before invocation, and what app behavior it triggers
 - `shell.sidebar.primary` is the app-owned central sidebar body for the active app only
 - `shell.sidebar.footer` is an app-owned compact footer action area for the active app only, positioned inside the fixed shell footer above shell mode controls
 - `base-shell` chooses sidebar widgets by matching `owner_app_id` to the active app id; if the active app has no matching widget for a sidebar slot, that slot stays empty rather than falling back to another app's widget
@@ -723,6 +731,8 @@ This does not make workspace-local apps cross-workspace capabilities: the app st
 One-shot navigation commands must be idempotent at the receiving app boundary.
 
 For example, `chat` may accept `{ "new_chat": true }` from a shell widget, but that request must include a unique app-owned request id such as `new_chat_request_id`, and the chat app must consume that id only once. This prevents repeated iframe ready/navigation handshakes from creating duplicate empty threads.
+The shell must deliver one-shot command params through the app navigation message and must not persist them in the user-facing `/app/<app_id>` URL.
+Current transient command params include `new_chat`, `new_chat_request_id`, `new_agent`, `new_agent_request_id`, `new_skill`, `new_skill_request_id`, `new_node`, `new_node_request_id`, `preview_context`, and `preview_context_request_id`.
 
 Creating a new empty chat thread must not preallocate or start a runtime session. A runtime session is created only when the first user message or an explicit runtime-session handoff requires execution.
 

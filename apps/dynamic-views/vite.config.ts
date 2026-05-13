@@ -11,6 +11,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         app: 'frontend/index.html',
+        'widgets/dynamic-views-sidebar/index': 'frontend/widgets/dynamic-views-sidebar/index.html',
         'widgets/dynamic-view/index': 'frontend/widgets/dynamic-view/index.html'
       },
       output: {

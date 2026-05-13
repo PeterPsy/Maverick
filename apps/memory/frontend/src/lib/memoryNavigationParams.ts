@@ -21,6 +21,10 @@ export function shouldOpenCreateNode(params: MemoryNavigationParams): boolean {
   return params.new_node === true || scalarString(params.new_node) === "true" || scalarString(params.create_node) === "true";
 }
 
+export function shouldOpenPreviewContext(params: MemoryNavigationParams): boolean {
+  return params.preview_context === true || scalarString(params.preview_context) === "true" || scalarString(params.context_preview) === "true";
+}
+
 function decodeParam(value: string): string {
   try {
     return decodeURIComponent(value);

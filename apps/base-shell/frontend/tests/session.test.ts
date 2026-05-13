@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { readShellSession, writeShellSession } from "../src/session";
+import { readShellSession, resolveInitialSidebarOpen, writeShellSession } from "../src/session";
 
 describe("base-shell session", () => {
   afterEach(() => {
@@ -52,5 +52,29 @@ describe("base-shell session", () => {
       "maverick:base-shell:session",
       JSON.stringify({ activeAppId: "chat", isSidebarOpen: false, sidebarMode: "rail" }),
     );
+  });
+
+  it("starts with the sidebar closed on mobile even when the local session was open or fixed", () => {
+    expect(
+      resolveInitialSidebarOpen(
+        { activeAppId: "memory", isSidebarOpen: true, sidebarMode: "rail" },
+        { isInitialChatLaunch: false, isMobileLayout: true },
+      ),
+    ).toBe(false);
+    expect(
+      resolveInitialSidebarOpen(
+        { activeAppId: "memory", isSidebarOpen: false, sidebarMode: "fixed" },
+        { isInitialChatLaunch: false, isMobileLayout: true },
+      ),
+    ).toBe(false);
+  });
+
+  it("keeps desktop fixed sidebars open at startup", () => {
+    expect(
+      resolveInitialSidebarOpen(
+        { activeAppId: "memory", isSidebarOpen: false, sidebarMode: "fixed" },
+        { isInitialChatLaunch: false, isMobileLayout: false },
+      ),
+    ).toBe(true);
   });
 });

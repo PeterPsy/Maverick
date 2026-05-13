@@ -104,7 +104,9 @@ def _run_apps(tokens: list[str], *, state, trusted_context: CliInvocationContext
             continue
         apps.append(
             {
-                "app_id": parsed.app_id,
+                "app_id": binding.app_id,
+                "public_app_id": binding.public_app_id or parsed.app_id,
+                "mount_app_id": binding.mount_app_id or binding.app_id,
                 "name": parsed.name,
                 "description": parsed.description,
                 "version": parsed.version,

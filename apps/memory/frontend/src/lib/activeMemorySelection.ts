@@ -6,6 +6,7 @@ type ShellPostTarget = {
 
 type NotifyOptions = {
   currentWindow?: unknown;
+  ownerAppId?: string;
   origin?: string;
   parentWindow?: ShellPostTarget | null;
 };
@@ -27,10 +28,11 @@ export function notifyActiveMemorySelection(nodeId: string, options: NotifyOptio
     return false;
   }
   const origin = options.origin ?? (typeof window === "undefined" ? "*" : window.location.origin);
+  const ownerAppId = options.ownerAppId || "memory";
   parentWindow.postMessage(
     {
       type: "maverick.app.selection-changed",
-      owner_app_id: "memory",
+      owner_app_id: ownerAppId,
       selection: { node_id: normalizedNodeId },
     },
     origin,
@@ -38,8 +40,8 @@ export function notifyActiveMemorySelection(nodeId: string, options: NotifyOptio
   return true;
 }
 
-export function nodeIdFromSelectionMessage(message: ActiveMemorySelectionMessage): string {
-  if (message.type !== "maverick.app.selection-changed" || message.owner_app_id !== "memory") {
+export function nodeIdFromSelectionMessage(message: ActiveMemorySelectionMessage, ownerAppId = "memory"): string {
+  if (message.type !== "maverick.app.selection-changed" || message.owner_app_id !== ownerAppId) {
     return "";
   }
   const value = message.selection && typeof message.selection.node_id === "string" ? message.selection.node_id.trim() : "";
@@ -53,7 +55,7 @@ export function nodeIdFromWidgetContext(message: {
     };
   };
   type?: string;
-}): string {
+}, ownerAppId = "memory"): string {
   if (message.type !== "maverick.widget.context-changed") {
     return "";
   }
@@ -62,7 +64,7 @@ export function nodeIdFromWidgetContext(message: {
     return "";
   }
   const activeAppId = scalarString((payload as { active_app_id?: unknown }).active_app_id);
-  if (activeAppId !== "memory") {
+  if (activeAppId !== ownerAppId) {
     return "";
   }
   const activeAppParams = (payload as { active_app_params?: unknown }).active_app_params;

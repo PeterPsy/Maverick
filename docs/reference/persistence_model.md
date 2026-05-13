@@ -32,7 +32,7 @@ Examples:
 - chat data
 - record-centric data
 - memory data
-- gallery state
+- storage state
 - Skills app workspace skill copies
 
 ## Workspace Roots

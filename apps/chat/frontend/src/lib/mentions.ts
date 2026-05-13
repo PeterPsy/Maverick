@@ -1,16 +1,20 @@
-export type MentionKind = "app" | "skill";
+import type { AppReference } from "../api/client";
+
+export type MentionKind = "app" | "entity" | "skill";
 
 export type MentionTrigger = "@" | "$";
+export type MentionTriggerKind = "app" | "skill";
 
 export type MentionItem = {
   id: string;
   label: string;
   description: string;
   kind: MentionKind;
+  reference?: AppReference;
 };
 
 export type ActiveMention = {
-  kind: MentionKind;
+  kind: MentionTriggerKind;
   trigger: MentionTrigger;
   start: number;
   end: number;
@@ -24,16 +28,23 @@ export type MentionToken = {
   text: string;
 };
 
-export type MentionAppReference = {
-  type: "app";
-  app_id: string;
-  label?: string;
+export type MentionAppReference = AppReference;
+
+export type EntityReferenceMarker = {
+  appId: string;
+  entityType: string;
+  entityId: string;
+  label: string;
+  markerStart: number;
+  markerEnd: number;
+  mentionStart: number | null;
 };
 
-const TRIGGER_KIND: Record<MentionTrigger, MentionKind> = {
+const TRIGGER_KIND: Record<MentionTrigger, MentionTriggerKind> = {
   "@": "app",
   "$": "skill",
 };
+const ENTITY_REFERENCE_MARKER_PATTERN = /\[ref:([^/\]\s]+)\/([^/\]\s]+)\/([^\]\s]+)\]/g;
 
 function isMentionTrigger(value: string): value is MentionTrigger {
   return value === "@" || value === "$";
@@ -79,7 +90,7 @@ export function filterMentionItems(items: MentionItem[], query: string, limit = 
 }
 
 export function applyMention(text: string, mention: ActiveMention, item: MentionItem): { value: string; cursor: number } {
-  const replacement = `${mention.trigger}${item.label} `;
+  const replacement = `${mentionText(item)} `;
   const nextValue = `${text.slice(0, mention.start)}${replacement}${text.slice(mention.end)}`;
   return {
     value: nextValue,
@@ -88,7 +99,13 @@ export function applyMention(text: string, mention: ActiveMention, item: Mention
 }
 
 export function mentionText(item: MentionItem): string {
-  return `${item.kind === "app" ? "@" : "$"}${item.label}`;
+  if (item.kind === "skill") {
+    return `$${item.label}`;
+  }
+  if (item.reference?.type === "entity") {
+    return `@${item.label} [ref:${item.reference.app_id}/${item.reference.entity_type}/${item.reference.entity_id}]`;
+  }
+  return `@${item.label}`;
 }
 
 function canEndMention(text: string, index: number): boolean {
@@ -126,16 +143,77 @@ export function findMentionTokens(text: string, items: MentionItem[]): MentionTo
 export function appReferencesFromText(text: string, items: MentionItem[]): MentionAppReference[] {
   const referencesById = new Map<string, MentionAppReference>();
   for (const token of findMentionTokens(text, items)) {
-    if (token.item.kind !== "app") {
+    if (token.item.kind !== "app" && token.item.kind !== "entity") {
       continue;
     }
-    referencesById.set(token.item.id, {
-      type: "app",
+    const reference = token.item.reference || {
+      type: "app" as const,
       app_id: token.item.id,
       label: token.item.label,
-    });
+    };
+    referencesById.set(referenceKey(reference), reference);
+  }
+  for (const marker of findEntityReferenceMarkers(text)) {
+    const reference: MentionAppReference = {
+      type: "entity",
+      app_id: marker.appId,
+      entity_type: marker.entityType,
+      entity_id: marker.entityId,
+      label: marker.label || marker.entityId,
+    };
+    const key = referenceKey(reference);
+    if (!referencesById.has(key)) {
+      referencesById.set(key, reference);
+    }
   }
   return [...referencesById.values()];
+}
+
+export function findEntityReferenceMarkers(text: string): EntityReferenceMarker[] {
+  return [...text.matchAll(ENTITY_REFERENCE_MARKER_PATTERN)].map((match) => {
+    const markerStart = match.index || 0;
+    const markerEnd = markerStart + match[0].length;
+    const mention = entityReferenceMentionPrefix(text, markerStart);
+    return {
+      appId: match[1],
+      entityType: match[2],
+      entityId: match[3],
+      label: mention?.label || match[3],
+      markerStart,
+      markerEnd,
+      mentionStart: mention?.start ?? null,
+    };
+  });
+}
+
+function entityReferenceMentionPrefix(text: string, markerStart: number): { start: number; label: string } | null {
+  if (markerStart <= 0 || !/[ \t]/.test(text[markerStart - 1])) {
+    return null;
+  }
+  let labelEnd = markerStart;
+  while (labelEnd > 0 && /[ \t]/.test(text[labelEnd - 1])) {
+    labelEnd -= 1;
+  }
+  const separator = text.slice(labelEnd, markerStart);
+  if (!separator || !/^[ \t]+$/.test(separator)) {
+    return null;
+  }
+  const atIndex = text.lastIndexOf("@", labelEnd - 1);
+  if (atIndex < 0 || !canStartMention(text, atIndex)) {
+    return null;
+  }
+  const label = text.slice(atIndex + 1, labelEnd).trim();
+  if (!label || /[\r\n\[\]]/.test(label)) {
+    return null;
+  }
+  return { start: atIndex, label };
+}
+
+export function referenceKey(reference: AppReference): string {
+  if (reference.type === "entity") {
+    return `${reference.type}:${reference.app_id}:${reference.entity_type}:${reference.entity_id}`;
+  }
+  return `${reference.type}:${reference.app_id}`;
 }
 
 export function removeMentionToken(text: string, token: MentionToken): { value: string; cursor: number } {

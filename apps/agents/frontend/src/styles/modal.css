@@ -10,14 +10,15 @@
 
 .agent-modal {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto;
   gap: 18px;
   width: min(680px, 100%);
   max-height: min(780px, calc(100dvh - 48px));
   border: 1px solid var(--maverick-border-strong);
   border-radius: var(--maverick-control-radius);
-  background: var(--maverick-bg-strong);
+  background: var(--maverick-bg);
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.48);
+  overflow: visible;
   padding: 20px;
 }
 
@@ -48,7 +49,7 @@
   display: grid;
   gap: 14px;
   min-height: 0;
-  overflow: auto;
+  overflow: visible;
 }
 
 .modal-body textarea {
@@ -56,8 +57,10 @@
 }
 
 .modal-skill-picker {
-  max-height: 260px;
-  overflow: auto;
+  max-height: clamp(8rem, calc(100dvh - 37rem), 260px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border-top: 1px solid var(--maverick-border);
   padding: 12px;
 }
@@ -99,5 +102,18 @@
   .modal-actions {
     align-items: stretch;
     flex-direction: column-reverse;
+  }
+}
+
+@media (max-height: 700px) {
+  .agent-modal {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .modal-skill-picker {
+    max-height: none;
+    overflow: visible;
+    overscroll-behavior: auto;
   }
 }

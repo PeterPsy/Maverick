@@ -96,7 +96,7 @@
         },
         {
           "id": "workspace-files",
-          "title": "Files and gallery",
+          "title": "Files and storage",
           "icon": "doc",
           "summary": "Workspace files are source-of-truth artifacts; indexes are derived metadata.",
           "source_path": "pages/workspace-model/workspace-files.md"

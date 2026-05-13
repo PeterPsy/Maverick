@@ -10,7 +10,19 @@ export type ShellAppRoute = {
 const APP_ROUTE_PREFIX = "/app";
 export const CHAT_APP_ID = "chat";
 export const APP_STORE_APP_ID = "app-store";
-const NON_URL_APP_PARAMS = new Set(["app_page", "workspace_id", "new_chat", "new_chat_request_id"]);
+export const TRANSIENT_APP_COMMAND_PARAMS = new Set([
+  "new_agent",
+  "new_agent_request_id",
+  "new_chat",
+  "new_chat_request_id",
+  "new_node",
+  "new_node_request_id",
+  "new_skill",
+  "new_skill_request_id",
+  "preview_context",
+  "preview_context_request_id",
+]);
+const NON_URL_APP_PARAMS = new Set(["app_page", "workspace_id", ...TRANSIENT_APP_COMMAND_PARAMS]);
 
 export function shellVisibleApps(apps: AppRegistryItem[]): AppRegistryItem[] {
   return apps.filter((app) => app.app_id !== "base-shell" && Boolean(app.frontend_mount));
@@ -54,10 +66,14 @@ export function initialShellLaunchRoute(
   }
   return {
     appId: CHAT_APP_ID,
-    params: {
-      new_chat: true,
-      new_chat_request_id: createRequestId(),
-    },
+    params: newChatRouteParams(createRequestId),
+  };
+}
+
+export function newChatRouteParams(createRequestId: () => string = createNavigationRequestId): AppRouteParams {
+  return {
+    new_chat: true,
+    new_chat_request_id: createRequestId(),
   };
 }
 

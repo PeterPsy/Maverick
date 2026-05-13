@@ -101,6 +101,26 @@ class SkillsAppTestCase(unittest.TestCase):
         self.assertIn("skills-ops", parsed.contract.capabilities.skills)
         self.assertIn("skill", {item.entity_type for item in parsed.contract.capabilities.reference_entities})
         self.assertEqual(parsed.contract.capabilities.view_surfaces[0].view_id, "skills")
+        self.assertEqual(
+            {widget.widget_id for widget in parsed.contract.widgets},
+            {"skills-sidebar", "skills-sidebar-footer"},
+        )
+        app_root = Path(__file__).resolve().parents[1]
+        self.assertTrue((app_root / "frontend" / "dist" / "widgets" / "skills-sidebar" / "index.html").is_file())
+        self.assertTrue((app_root / "frontend" / "dist" / "widgets" / "skills-sidebar-footer" / "index.html").is_file())
+
+    def test_view_filter_is_available_on_fresh_data_root(self) -> None:
+        service, store = load_skills_backend_modules()
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "skills"
+
+            status, payload = service.handle_action(data_root, {"action": "view_filter"})
+            state = store.read_state(data_root)
+
+            self.assertEqual(status, 200)
+            self.assertEqual(payload["state"]["view_filter"]["mode"], "search")
+            self.assertEqual(payload["state"]["view_filter"]["query"], "")
+            self.assertEqual(state["view_filter"]["mode"], "search")
 
     def test_bundled_sdk_skill_sources_do_not_reference_installation_global_paths(self) -> None:
         app_root = Path(__file__).resolve().parents[1]

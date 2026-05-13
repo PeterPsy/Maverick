@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sqlite3
 from typing import Any
 
+from database import normalize_limit
 from errors import MemoryValidationError
 from store import (
     add_external_ref,
@@ -94,7 +96,33 @@ def action_from_tool(tool_name: str, fallback: str) -> str:
     return mapping.get(tool_name, fallback)
 
 
-def handle_action(data_root: Path, body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+def reference_manifest_payload(app_id: str) -> dict[str, Any]:
+    return {**REFERENCE_MANIFEST, "app_id": app_id}
+
+
+def node_deep_link(app_id: str, node_id: str) -> str:
+    return f"/app/{app_id}/nodes/{node_id}"
+
+
+def handle_action(data_root: Path, body: dict[str, Any], *, app_id: str = "memory") -> tuple[int, dict[str, Any]]:
+    try:
+        return _handle_action(data_root, body, app_id=app_id)
+    except sqlite3.IntegrityError as error:
+        raise MemoryValidationError(sqlite_integrity_detail(error)) from error
+
+
+def sqlite_integrity_detail(error: sqlite3.IntegrityError) -> str:
+    message = str(error).lower()
+    if "unique" in message:
+        return "record already exists."
+    if "foreign key" in message:
+        return "referenced record was not found."
+    if "not null" in message:
+        return "required field is missing."
+    return "database constraint failed."
+
+
+def _handle_action(data_root: Path, body: dict[str, Any], *, app_id: str = "memory") -> tuple[int, dict[str, Any]]:
     action = str(body.get("action") or "context").strip()
     if action in {"remember", "create_node"}:
         return 200, {"node": create_node(data_root, body)}
@@ -118,19 +146,26 @@ def handle_action(data_root: Path, body: dict[str, Any]) -> tuple[int, dict[str,
         return 200, {"node": inspect_node(data_root, node_id)}
     if action == "search":
         query = str(body.get("query") or "").strip()
-        return 200, {"results": search_nodes(data_root, query, limit=int(body.get("limit") or 10))}
+        limit = normalize_limit(body.get("limit"), default=10, minimum=1, maximum=50)
+        return 200, {"results": search_nodes(data_root, query, limit=limit)}
     if action == "context":
         query = str(body.get("query") or "").strip()
-        return 200, context_payload(data_root, query, limit=int(body.get("limit") or 8))
+        return 200, context_payload(
+            data_root,
+            query,
+            limit=normalize_limit(body.get("limit"), default=8, minimum=1, maximum=50),
+            record_access_event=bool(body.get("record_access_event")),
+        )
     if action == "graph":
         return 200, graph_payload(
             data_root,
             query=str(body.get("query") or "").strip(),
             node_ids=body.get("node_ids"),
-            limit=int(body.get("limit") or 200),
+            limit=normalize_limit(body.get("limit"), default=200, minimum=1, maximum=500),
         )
     if action == "audit":
-        return 200, {"events": audit_events(data_root, limit=int(body.get("limit") or 50))}
+        limit = normalize_limit(body.get("limit"), default=50, minimum=1, maximum=200)
+        return 200, {"events": audit_events(data_root, limit=limit)}
     if action == "view_filter":
         return 200, {"state": load_view_state(data_root)}
     if action == "set_view_filter":
@@ -140,27 +175,28 @@ def handle_action(data_root: Path, body: dict[str, Any]) -> tuple[int, dict[str,
             preserve_custom=bool(body.get("preserve_custom")),
         )
     if action == "set_custom_view":
-        return 200, set_custom_view_payload(data_root=data_root, body=body)
+        return 200, set_custom_view_payload(data_root=data_root, body=body, app_id=app_id)
     if action == "clear_custom_view":
         return 200, clear_custom_view_payload(data_root=data_root)
     if action == "health.check":
         return 200, health_payload(data_root)
     if action == "references.manifest":
-        return 200, REFERENCE_MANIFEST
+        return 200, reference_manifest_payload(app_id)
     if action == "references.search":
         query = str(body.get("query") or "").strip()
         results = []
-        for node in search_nodes(data_root, query, limit=int(body.get("limit") or 10)):
+        limit = normalize_limit(body.get("limit"), default=10, minimum=1, maximum=50)
+        for node in search_nodes(data_root, query, limit=limit):
             results.append(
                 {
-                    "app_id": "memory",
+                    "app_id": app_id,
                     "entity_type": "node",
                     "entity_id": node["id"],
                     "title": node["title"],
                     "subtitle": node["type"],
                     "summary": node["summary"] or node["body_text"][:240],
                     "confidence": node["confidence"],
-                    "deep_link": f"/apps/memory/nodes/{node['id']}",
+                    "deep_link": node_deep_link(app_id, node["id"]),
                 }
             )
         return 200, {"results": results}
@@ -169,12 +205,12 @@ def handle_action(data_root: Path, body: dict[str, Any]) -> tuple[int, dict[str,
         node = inspect_node(data_root, node_id)
         return 200, {
             "exists": node.get("status") != "deleted",
-            "app_id": "memory",
+            "app_id": app_id,
             "entity_type": "node",
             "entity_id": node["id"],
             "title": node["title"],
             "subtitle": node["type"],
-            "deep_link": f"/apps/memory/nodes/{node['id']}",
+            "deep_link": node_deep_link(app_id, node["id"]),
             "updated_at": node["updated_at"],
         }
     if action == "references.summarize":

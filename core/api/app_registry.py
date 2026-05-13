@@ -59,8 +59,13 @@ def enabled_app_items(
             continue
         try:
             logo_path = source_root / "frontend" / "dist" / "maverick-icon-compact.png"
+            local_app_id = binding.app_id
+            public_app_id = binding.public_app_id or parsed.app_id
+            mount_app_id = binding.mount_app_id or local_app_id
             item = {
-                "app_id": parsed.app_id,
+                "app_id": local_app_id,
+                "public_app_id": public_app_id,
+                "mount_app_id": mount_app_id,
                 "name": parsed.name,
                 "version": parsed.version,
                 "description": parsed.description,
@@ -90,12 +95,12 @@ def enabled_app_items(
                     for item in parsed.contract.requires
                 ],
                 "logo": (
-                    {"kind": "image", "value": f"/apps/{parsed.app_id}/maverick-icon-compact.png"}
+                    {"kind": "image", "value": f"/apps/{mount_app_id}/maverick-icon-compact.png"}
                     if logo_path.exists()
                     else None
                 ),
-                "frontend_mount": f"/apps/{parsed.app_id}/" if parsed.contract.entrypoints.frontend else "",
-                "backend_mount": f"/api/apps/{parsed.app_id}/backend" if parsed.contract.entrypoints.backend else "",
+                "frontend_mount": f"/apps/{mount_app_id}/" if parsed.contract.entrypoints.frontend else "",
+                "backend_mount": f"/api/apps/{mount_app_id}/backend" if parsed.contract.entrypoints.backend else "",
             }
             if parsed.contract.visibility.platform_roles or parsed.contract.visibility.workspace_roles or parsed.contract.visibility.capabilities:
                 item["visibility"] = {
@@ -115,7 +120,19 @@ def enabled_app_items(
 
 def resolve_app_surface(state: PlatformState, *, workspace_id: str, app_id: str, start_path: Path):
     """Resolve one installed app to binding, source root, and parsed contract."""
-    binding = state.app_store.get_workspace_app_binding(workspace_id=workspace_id, app_id=app_id)
+    try:
+        binding = state.app_store.get_workspace_app_binding(workspace_id=workspace_id, app_id=app_id)
+    except WorkspaceAppBindingNotFoundError:
+        binding = next(
+            (
+                candidate
+                for candidate in enabled_workspace_app_bindings(state.app_store, workspace_id=workspace_id)
+                if (candidate.mount_app_id or candidate.app_id) == app_id
+            ),
+            None,
+        )
+        if binding is None:
+            raise
     if binding.status != "enabled":
         raise WorkspaceAppBindingNotFoundError(
             f"Workspace app `{app_id}` is not enabled in workspace `{workspace_id}`."

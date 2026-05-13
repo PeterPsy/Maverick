@@ -293,7 +293,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.8rem;
-  font-weight: 700;
+  font-weight: 400;
   letter-spacing: -0.01em;
 }
 
@@ -387,7 +387,7 @@
 
 .chat-ui-select-menu__option-title {
   font-size: 0.82rem;
-  font-weight: 700;
+  font-weight: 400;
   letter-spacing: -0.01em;
 }
 
@@ -477,7 +477,7 @@
   margin: 0 0 0.35rem;
   color: var(--maverick-accent-muted);
   font-size: 0.74rem;
-  font-weight: 700;
+  font-weight: 400;
   letter-spacing: 0.18em;
   text-transform: uppercase;
 }

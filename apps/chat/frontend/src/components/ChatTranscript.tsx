@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type { AppReference, ChatMessage } from "../api/client";
 import { formatFileSize } from "../lib/attachments";
-import { findMentionTokens } from "../lib/mentions";
+import { findMentionTokens, referenceKey } from "../lib/mentions";
 import type { MentionItem } from "../lib/mentions";
+import { openAppRouteInShell } from "../lib/shellNavigation";
 import { MarkdownMessage } from "./MarkdownMessage";
 import { RuntimeStepMessage } from "./RuntimeStepMessage";
 import { StructuredContentMessage } from "./StructuredContentMessage";
@@ -349,6 +350,9 @@ function renderHumanMessageContent(content: string, appReferences: AppReference[
     kind: token.item.kind,
     id: token.item.id,
     label: token.item.label,
+    appId: token.item.reference?.type === "entity" ? token.item.reference.app_id : undefined,
+    deepLink: token.item.reference?.type === "entity" ? token.item.reference.deep_link : undefined,
+    exists: token.item.reference?.type === "entity" ? token.item.reference.exists : undefined,
     start: token.start,
     end: token.end,
   }));
@@ -376,31 +380,95 @@ function renderHumanMessageContent(content: string, appReferences: AppReference[
   return segments;
 }
 
-type MessageMentionMatch = {
+export type MessageMentionMatch = {
   kind: MentionItem["kind"];
   id: string;
   label: string;
   start: number;
   end: number;
+  appId?: string;
+  deepLink?: string;
+  exists?: boolean;
 };
 
-function fallbackMatchesForAppReference(content: string, reference: AppReference): MessageMentionMatch[] {
+export function fallbackMatchesForAppReference(content: string, reference: AppReference): MessageMentionMatch[] {
+  if (reference.type === "entity") {
+    const label = reference.label?.trim() || reference.entity_id;
+    const marker = `[ref:${reference.app_id}/${reference.entity_type}/${reference.entity_id}]`;
+    const markerMatches = fallbackEntityReferenceCandidates(content, marker);
+    const labelMatches = markerMatches.length ? [] : fallbackReferenceCandidates(content, [`@${label}`]);
+    return [...markerMatches, ...labelMatches].map((match) => ({
+      ...match,
+      kind: "entity" as const,
+      id: referenceKey(reference),
+      appId: reference.app_id,
+      label,
+      deepLink: reference.deep_link,
+      exists: reference.exists,
+    }));
+  }
   const label = reference.label?.trim();
   const candidates = [`@${reference.app_id}`, label ? `@${label}` : ""].filter(Boolean);
+  return fallbackReferenceCandidates(content, candidates).map((match) => ({
+    ...match,
+    kind: "app" as const,
+    id: reference.app_id,
+    label: reference.label || reference.app_id,
+  }));
+}
+
+function fallbackEntityReferenceCandidates(content: string, marker: string): Pick<MessageMentionMatch, "start" | "end">[] {
+  const matches: Pick<MessageMentionMatch, "start" | "end">[] = [];
+  let searchFrom = 0;
+  while (searchFrom < content.length) {
+    const markerStart = content.indexOf(marker, searchFrom);
+    if (markerStart < 0) {
+      break;
+    }
+    const mentionStart = entityReferenceMentionStart(content, markerStart);
+    matches.push({
+      start: mentionStart ?? markerStart,
+      end: markerStart + marker.length,
+    });
+    searchFrom = markerStart + marker.length;
+  }
+  return matches;
+}
+
+function entityReferenceMentionStart(content: string, markerStart: number): number | null {
+  if (markerStart <= 0 || !/[ \t]/.test(content[markerStart - 1])) {
+    return null;
+  }
+  let labelEnd = markerStart;
+  while (labelEnd > 0 && /[ \t]/.test(content[labelEnd - 1])) {
+    labelEnd -= 1;
+  }
+  const separator = content.slice(labelEnd, markerStart);
+  if (!separator || !/^[ \t]+$/.test(separator)) {
+    return null;
+  }
+  const atIndex = content.lastIndexOf("@", labelEnd - 1);
+  if (atIndex < 0) {
+    return null;
+  }
+  if (atIndex > 0 && !/\s/.test(content[atIndex - 1])) {
+    return null;
+  }
+  const label = content.slice(atIndex + 1, labelEnd).trim();
+  if (!label || /[\r\n\[\]]/.test(label)) {
+    return null;
+  }
+  return atIndex;
+}
+
+function fallbackReferenceCandidates(content: string, candidates: string[]): Pick<MessageMentionMatch, "start" | "end">[] {
   return candidates
-    .map((candidate): MessageMentionMatch | null => {
+    .filter(Boolean)
+    .map((candidate) => {
       const start = content.indexOf(candidate);
-      return start >= 0
-        ? {
-            kind: "app" as const,
-            id: reference.app_id,
-            label: reference.label || reference.app_id,
-            start,
-            end: start + candidate.length,
-          }
-        : null;
+      return start >= 0 ? { start, end: start + candidate.length } : null;
     })
-    .filter((match): match is MessageMentionMatch => Boolean(match));
+    .filter((match): match is Pick<MessageMentionMatch, "start" | "end"> => Boolean(match));
 }
 
 function rangesOverlap(left: Pick<MessageMentionMatch, "start" | "end">, right: Pick<MessageMentionMatch, "start" | "end">): boolean {
@@ -408,16 +476,40 @@ function rangesOverlap(left: Pick<MessageMentionMatch, "start" | "end">, right: 
 }
 
 function MentionReferenceChip({ match }: { match: MessageMentionMatch }) {
+  const className = `chatapp-message-reference-chip is-${match.kind} ${match.exists === false ? "is-missing" : ""}`;
+  const title = match.kind === "entity" ? `reference: ${match.id}` : `${match.kind === "app" ? "app_id" : "skill_id"}: ${match.id}`;
+  const content = (
+    <>
+      <span className="chatapp-message-reference-chip__kind">{match.kind === "entity" ? "Record" : match.kind === "app" ? "App" : "Skill"}</span>
+      <span className="chatapp-message-reference-chip__label">{match.exists === false ? `${match.label} (missing)` : match.label}</span>
+    </>
+  );
+  if (match.kind === "entity" && match.appId && match.deepLink) {
+    return (
+      <button
+        className={className}
+        data-reference-id={match.id}
+        onClick={() => openEntityReference(match.appId || "", match.deepLink || "")}
+        title={title}
+        type="button"
+      >
+        {content}
+      </button>
+    );
+  }
   return (
-    <span
-      className={`chatapp-message-reference-chip is-${match.kind}`}
-      data-reference-id={match.id}
-      title={`${match.kind === "app" ? "app_id" : "skill_id"}: ${match.id}`}
-    >
-      <span className="chatapp-message-reference-chip__kind">{match.kind === "app" ? "App" : "Skill"}</span>
-      <span className="chatapp-message-reference-chip__label">{match.label}</span>
+    <span className={className} data-reference-id={match.id} title={title}>
+      {content}
     </span>
   );
+}
+
+function openEntityReference(appId: string, deepLink: string): void {
+  const prefix = `/app/${appId}/`;
+  const appPage = deepLink.startsWith(prefix) ? deepLink.slice(prefix.length) : "";
+  if (appPage) {
+    openAppRouteInShell(appId, appPage);
+  }
 }
 
 function bubbleClass(message: ChatMessage) {

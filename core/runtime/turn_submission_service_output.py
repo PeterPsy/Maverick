@@ -65,29 +65,6 @@ def _queue_turn_with_event(
     )
     return turn, [event]
 
-
-
-def input_text_with_app_references(*, input_text: str, app_references: list[dict[str, object]] | None) -> str:
-    if not app_references:
-        return input_text
-    app_ids: list[str] = []
-    provider_text = input_text
-    for reference in app_references:
-        app_id = str(reference.get("app_id") or "").strip()
-        label = str(reference.get("label") or "").strip()
-        if app_id and app_id not in app_ids:
-            app_ids.append(app_id)
-        if app_id:
-            for token in [f"@{label}" if label else "", f"@{app_id}"]:
-                if token:
-                    provider_text = provider_text.replace(token, f"app_id:{app_id}")
-    if not app_ids:
-        return input_text
-    reference_lines = ["Referenced apps:"] + [f"- app_id: {app_id}" for app_id in app_ids]
-    return f"{provider_text.rstrip()}\n\n" + "\n".join(reference_lines)
-
-
-
 def _record_turn_started(state: PlatformState, *, session_id: str, turn_id: str, provider_id: str) -> RuntimeEventRecord:
     event = record_runtime_event(
         state.runtime_store,

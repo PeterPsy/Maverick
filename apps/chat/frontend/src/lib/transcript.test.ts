@@ -45,6 +45,43 @@ describe("runtime event transcript projection", () => {
     ]);
   });
 
+  it("preserves structured entity references on human messages", () => {
+    const messages = eventsToMessages([
+      event({
+        event_type: "runtime.turn.queued",
+        payload: {
+          input_text: "controlla @Agency launch [ref:checklist/checklist/check_123]",
+          app_references: [
+            {
+              type: "entity",
+              app_id: "checklist",
+              entity_type: "checklist",
+              entity_id: "check_123",
+              label: "Agency launch",
+              summary: "1/3 checked",
+              deep_link: "/app/checklist/checklists/check_123",
+            },
+          ],
+        },
+      }),
+    ]);
+
+    expect(messages).toMatchObject([
+      {
+        role: "human",
+        appReferences: [
+          {
+            type: "entity",
+            app_id: "checklist",
+            entity_type: "checklist",
+            entity_id: "check_123",
+            label: "Agency launch",
+          },
+        ],
+      },
+    ]);
+  });
+
   it("projects final provider output as an agent message", () => {
     const messages = eventsToMessages([
       event({

@@ -5,8 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from database import ensure_schema, json_text, new_id, now_timestamp, record_event, row_payload, transaction
 from errors import MemoryValidationError
-from database import connect, ensure_schema, json_text, new_id, now_timestamp, record_event, row_payload
+
 
 def validate_workspace_relative_path(value: str) -> str:
     normalized = str(value or "").strip()
@@ -30,7 +31,7 @@ def add_external_ref(data_root: Path, body: dict[str, Any], *, ref_kind: str) ->
         "id": str(body.get("external_ref_id") or body.get("id") or new_id("ref")),
         "node_id": node_id,
         "ref_kind": ref_kind,
-        "owning_app_id": str(body.get("owning_app_id") or body.get("app") or ("gallery" if ref_kind == "workspace_file" else "")).strip(),
+        "owning_app_id": str(body.get("owning_app_id") or body.get("app") or ("storage" if ref_kind == "workspace_file" else "")).strip(),
         "entity_type": str(body.get("entity_type") or body.get("type") or ("file" if ref_kind == "workspace_file" else "")).strip(),
         "entity_id": str(body.get("entity_id") or "").strip(),
         "file_id": str(body.get("file_id") or "").strip(),
@@ -45,7 +46,7 @@ def add_external_ref(data_root: Path, body: dict[str, Any], *, ref_kind: str) ->
         raise MemoryValidationError("file_id or workspace_relative_path is required.")
     if ref_kind == "app_entity" and not (ref["owning_app_id"] and ref["entity_type"] and ref["entity_id"]):
         raise MemoryValidationError("owning_app_id, entity_type, and entity_id are required.")
-    with connect(data_root) as db:
+    with transaction(data_root, immediate=True) as db:
         if db.execute("SELECT id FROM nodes WHERE id = ? AND status = 'active'", (node_id,)).fetchone() is None:
             raise MemoryValidationError("node not found.")
         db.execute(

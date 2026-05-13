@@ -1,4 +1,4 @@
-import { type CSSProperties, type MutableRefObject, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, type MutableRefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ChatMessageAttachment,
   ChatThread,
@@ -16,6 +16,7 @@ import {
   RuntimeSession,
   RuntimeTurn,
   orderChatThreads,
+  searchAppReferences,
   selectProvider,
   sendRuntimeTurn,
   updateThread,
@@ -25,9 +26,8 @@ import { ChatTranscript } from "./components/ChatTranscript";
 import { useComposerAttachments } from "./hooks/useComposerAttachments";
 import { useRuntimeEvents } from "./hooks/useRuntimeEvents";
 import { useRuntimeThreads } from "./hooks/useRuntimeThreads";
-import { useShellSidebarSwipe } from "./hooks/useShellSidebarSwipe";
 import { hasInvalidAttachments } from "./lib/attachments";
-import { appReferencesFromText } from "./lib/mentions";
+import { appReferencesFromText, referenceKey } from "./lib/mentions";
 import type { MentionItem } from "./lib/mentions";
 import { PendingMessage, QueuedMessage, uploadComposerAttachment } from "./lib/messageState";
 import { mergeRuntimeEvents } from "./lib/runtimeEvents";
@@ -102,8 +102,6 @@ export function App({
   newChatRequestId?: string | null;
   threadId?: string | null;
 } = {}) {
-  useShellSidebarSwipe();
-
   const [providers, setProviders] = useState<ProviderItem[]>([]);
   const [activeProviderId, setActiveProviderId] = useState("");
   const [threads, setThreads] = useState<ChatThread[]>([]);
@@ -125,6 +123,7 @@ export function App({
   const [error, setError] = useState<string | null>(null);
   const [composerError, setComposerError] = useState<string | null>(null);
   const [mentionItems, setMentionItems] = useState<MentionItem[]>([]);
+  const [selectedReferences, setSelectedReferences] = useState<AppReference[]>([]);
   const [activeAppContext, setActiveAppContext] = useState<ActiveAppContext | null>(null);
   const consumedNewChatRequests = useRef<Set<string>>(new Set());
   const consumedLegacyNewChatRequest = useRef(false);
@@ -189,6 +188,10 @@ export function App({
     }
     return latestRuntimeStepLabel(events, activeTurn?.turn_id) || "Thinking";
   }, [activeTurn?.turn_id, events, isBootstrapping, isHistoryLoading, isRuntimeBusy]);
+  const composerMentionItems = useMemo(
+    () => mergeSelectedReferenceMentionItems(mentionItems, selectedReferences),
+    [mentionItems, selectedReferences],
+  );
 
   useEffect(() => {
     const dock = dockedComposerRef.current;
@@ -459,6 +462,7 @@ export function App({
     setQueuedMessages([]);
     setActiveTurn(null);
     setComposer("");
+    setSelectedReferences([]);
     clearAttachments();
   }
 
@@ -749,8 +753,9 @@ export function App({
       return;
     }
     setComposer("");
+    setSelectedReferences([]);
     clearAttachments();
-    const appReferences = mergeAppReferences(appReferencesFromText(input, mentionItems), activeAppContext);
+    const appReferences = mergeAppReferences(appReferencesFromText(input, composerMentionItems), activeAppContext);
     if (isRuntimeBusy || isSending) {
       setQueuedMessages((current) => [...current, { clientMessageId, content: input, attachments: messageAttachments, appReferences }]);
       return;
@@ -823,6 +828,7 @@ export function App({
       setError(sendError instanceof Error ? sendError.message : "Unable to send message.");
       setActiveTurn(null);
       setComposer(message.content);
+      setSelectedReferences(message.appReferences);
       setPendingUserMessages((current) => current.filter((item) => item.clientMessageId !== message.clientMessageId));
       setFailedUserMessages((current) => [
         ...current,
@@ -851,6 +857,23 @@ export function App({
   function handleAddAttachments(files: File[]) {
     addAttachments(files);
     setComposerError(null);
+  }
+
+  const handleSearchReferences = useCallback(async (query: string, signal: AbortSignal): Promise<MentionItem[]> => {
+    const references = await searchAppReferences(query, signal);
+    return references.map(referenceMentionItem);
+  }, []);
+
+  function handleReferenceAdd(reference: AppReference) {
+    setSelectedReferences((current) => {
+      const key = referenceKey(reference);
+      return current.some((item) => referenceKey(item) === key) ? current : [...current, reference];
+    });
+  }
+
+  function handleReferenceRemove(reference: AppReference) {
+    const key = referenceKey(reference);
+    setSelectedReferences((current) => current.filter((item) => referenceKey(item) !== key));
   }
 
   function handleCapturePageArea() {
@@ -902,10 +925,13 @@ export function App({
                   executionMode={executionMode}
                   isEmptyMode
                   isSending={isRuntimeBusy || isSending}
-                  mentionItems={mentionItems}
+                  mentionItems={composerMentionItems}
                   onAddAttachments={handleAddAttachments}
                   onCapturePageArea={enablePageCapture ? handleCapturePageArea : undefined}
                   onChange={setComposer}
+                  onReferenceAdd={handleReferenceAdd}
+                  onReferenceRemove={handleReferenceRemove}
+                  onSearchReferences={handleSearchReferences}
                   onSelectProvider={handleSelectProvider}
                   onRemoveAttachment={removeAttachment}
                   onStopTurn={handleStopTurn}
@@ -935,10 +961,13 @@ export function App({
                   error={composerError}
                   executionMode={executionMode}
                   isSending={isRuntimeBusy || isSending}
-                  mentionItems={mentionItems}
+                  mentionItems={composerMentionItems}
                   onAddAttachments={handleAddAttachments}
                   onCapturePageArea={enablePageCapture ? handleCapturePageArea : undefined}
                   onChange={setComposer}
+                  onReferenceAdd={handleReferenceAdd}
+                  onReferenceRemove={handleReferenceRemove}
+                  onSearchReferences={handleSearchReferences}
                   onSelectProvider={handleSelectProvider}
                   onRemoveAttachment={removeAttachment}
                   onStopTurn={handleStopTurn}
@@ -1084,6 +1113,36 @@ function mergeAppReferences(references: AppReference[], activeApp: ActiveAppCont
   return [...references, { type: "app", app_id: activeApp.app_id, label: activeApp.name }];
 }
 
+function referenceMentionItem(reference: AppReference): MentionItem {
+  if (reference.type === "entity") {
+    return {
+      id: referenceKey(reference),
+      label: reference.label || reference.entity_id,
+      description: [reference.app_id, reference.entity_type, reference.summary].filter(Boolean).join(" · "),
+      kind: "entity",
+      reference,
+    };
+  }
+  return {
+    id: reference.app_id,
+    label: reference.label || reference.app_id,
+    description: "",
+    kind: "app",
+    reference,
+  };
+}
+
+function mergeSelectedReferenceMentionItems(items: MentionItem[], selectedReferences: AppReference[]): MentionItem[] {
+  const byKey = new Map<string, MentionItem>();
+  for (const item of items) {
+    byKey.set(item.reference ? referenceKey(item.reference) : `${item.kind}:${item.id}`, item);
+  }
+  for (const reference of selectedReferences) {
+    byKey.set(referenceKey(reference), referenceMentionItem(reference));
+  }
+  return [...byKey.values()];
+}
+
 function scalarString(value: string | boolean | null | undefined): string {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -1154,12 +1213,29 @@ function persistedAppReferences(value: unknown): AppReference[] {
   }
   return value
     .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
-    .map((item) => ({
-      type: "app" as const,
-      app_id: typeof item.app_id === "string" ? item.app_id : "",
-      label: typeof item.label === "string" ? item.label : undefined,
-    }))
-    .filter((item) => item.app_id);
+    .map(persistedAppReference)
+    .filter((item) => (item.type === "app" ? Boolean(item.app_id) : Boolean(item.app_id && item.entity_type && item.entity_id)));
+}
+
+function persistedAppReference(item: Record<string, unknown>): AppReference {
+  const appId = typeof item.app_id === "string" ? item.app_id : "";
+  if (item.type === "entity") {
+    return {
+      type: "entity",
+      app_id: appId,
+      entity_type: typeof item.entity_type === "string" ? item.entity_type : "",
+      entity_id: typeof item.entity_id === "string" ? item.entity_id : "",
+      label: typeof item.label === "string" ? item.label : "",
+      summary: typeof item.summary === "string" ? item.summary : undefined,
+      deep_link: typeof item.deep_link === "string" ? item.deep_link : undefined,
+      exists: typeof item.exists === "boolean" ? item.exists : undefined,
+    };
+  }
+  return {
+    type: "app",
+    app_id: appId,
+    label: typeof item.label === "string" ? item.label : undefined,
+  };
 }
 
 function isPersistedMessageAttachment(value: unknown): value is ChatMessageAttachment {

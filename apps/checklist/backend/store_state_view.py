@@ -9,9 +9,13 @@ from uuid import uuid4
 
 
 STATE_FILE = "state.json"
+SCHEMA_VERSION = "4"
 CHECKLIST_KIND = "checklist.design"
 REFERENCE_ENTITY_TYPE = "checklist"
 WIDGET_CONTENT_KIND = "checklist.design"
+TASK_STATUSES = {"pending", "in-progress", "need-help", "blocked", "completed", "failed"}
+CHECKLIST_STATUSES = {"active", "in-progress", "blocked", "completed", "failed"}
+PRIORITIES = {"low", "medium", "high", "critical"}
 
 
 def _apply_view_state(items: list[dict[str, Any]], view_state: dict[str, Any]) -> list[dict[str, Any]]:
@@ -52,6 +56,8 @@ def _reference_record(checklist: dict[str, Any]) -> dict[str, Any]:
         "entity_id": resolved["id"],
         "title": resolved["title"],
         "summary": resolved["summary"],
+        "app_page": f"checklists/{resolved['id']}",
+        "deep_link": f"/app/checklist/checklists/{resolved['id']}",
         "metadata": {
             "checked_count": resolved["checked_count"],
             "task_count": resolved["task_count"],
@@ -62,14 +68,20 @@ def _reference_record(checklist: dict[str, Any]) -> dict[str, Any]:
 
 
 def _metadata(*, title: str, summary: str, sections: list[dict[str, Any]], metadata: Any) -> dict[str, Any]:
-    tasks = [task for section in sections for task in section.get("tasks", [])]
+    tasks = [
+        item
+        for section in sections
+        for task in section.get("tasks", [])
+        for item in [task, *task.get("subtasks", [])]
+    ]
     return {
         **(dict(metadata) if isinstance(metadata, dict) else {}),
-        "checkedCount": sum(1 for task in tasks if task.get("checked")),
+        "checkedCount": sum(1 for task in tasks if task.get("checked") or task.get("status") == "completed"),
+        "blockedCount": sum(1 for task in tasks if task.get("status") in {"blocked", "need-help"}),
         "sections": deepcopy(sections),
         "summary": summary,
         "title": title,
-        "viewer": "checklist_design_v1",
+        "viewer": "checklist_agent_plan_v1",
     }
 
 
@@ -77,8 +89,13 @@ def _metadata(*, title: str, summary: str, sections: list[dict[str, Any]], metad
 def _summary_for(sections: list[dict[str, Any]], requested: str) -> str:
     if requested.strip() and not _is_progress_summary(requested):
         return requested.strip()
-    tasks = [task for section in sections for task in section.get("tasks", [])]
-    checked = sum(1 for task in tasks if task.get("checked"))
+    tasks = [
+        item
+        for section in sections
+        for task in section.get("tasks", [])
+        for item in [task, *task.get("subtasks", [])]
+    ]
+    checked = sum(1 for task in tasks if task.get("checked") or task.get("status") == "completed")
     return f"{checked}/{len(tasks)} checked"
 
 
@@ -111,3 +128,49 @@ def _required_workspace_id(value: Any) -> str:
 
 def _new_id(prefix: str) -> str:
     return f"{prefix}_{uuid4().hex[:12]}"
+
+
+
+def _mode(value: Any) -> str:
+    mode = str(value if value is not None else "").strip().lower().replace("-", "_")
+    return mode if mode in {"simple", "agent_plan", "execution"} else "simple"
+
+
+
+def _priority(value: Any) -> str:
+    priority = str(value if value is not None else "").strip().lower()
+    return priority if priority in PRIORITIES else "medium"
+
+
+
+def _status(value: Any, *, default: str, allowed: set[str]) -> str:
+    status = str(value if value is not None else "").strip().lower().replace("_", "-")
+    return status if status in allowed else default
+
+
+
+def _task_status(value: Any, *, checked: Any = None) -> str:
+    status = _status(value, default="", allowed=TASK_STATUSES)
+    if status:
+        return status
+    return "completed" if bool(checked) else "pending"
+
+
+
+def _level(value: Any) -> int:
+    try:
+        return max(0, min(12, int(value)))
+    except (TypeError, ValueError):
+        return 0
+
+
+
+def _string_list(value: Any, *, max_items: int, max_length: int) -> list[str]:
+    items: list[str] = []
+    for item in value if isinstance(value, list) else []:
+        text = str(item if item is not None else "").strip()
+        if text:
+            items.append(text[:max_length])
+        if len(items) >= max_items:
+            break
+    return items

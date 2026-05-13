@@ -9,7 +9,8 @@ const ROOT_SHELL_ASSETS = [
   "/apps/base-shell/apple-touch-icon.png",
   "/apps/base-shell/maverick-app-icon.svg",
   "/apps/base-shell/maverick-mark.svg",
-  "/apps/base-shell/maverick-logotype.svg"
+  "/apps/base-shell/maverick-logotype.svg",
+  "/apps/base-shell/sidebar-logo.svg"
 ];
 const SAFE_SHELL_FILES = new Set(ROOT_SHELL_ASSETS.filter((path) => path.startsWith(SHELL_ASSET_PREFIX)));
 

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AppDependenciesPayload, AppRegistryItem, getAppDependencies, saveAppDependencySelection } from "../api";
 import { MAVERICK_IFRAME_SANDBOX, postMaverickFrameVisibility, postToMaverickFrame } from "../iframePolicy";
+import { syncAppFrameShellLayout } from "../lib/appFrameShellLayout";
 import { AppDependencySetup } from "./AppDependencySetup";
 
 type AppFrameParams = Record<string, string | boolean | null>;
@@ -30,14 +31,14 @@ export function AppFrameHost({
   activeApp,
   activeAppParams,
   activeWorkspaceId,
+  isMobileLayout,
   onOpenApp,
-  onOpenSidebar,
 }: {
   activeApp: AppRegistryItem;
   activeAppParams: AppFrameParams;
   activeWorkspaceId: string;
+  isMobileLayout: boolean;
   onOpenApp: (appId: string, params?: AppFrameParams) => void;
-  onOpenSidebar?: () => void;
 }) {
   const activeMountKey = `${activeWorkspaceId}:${activeApp.app_id}`;
   const [mountedApps, setMountedApps] = useState<Array<{ app: AppRegistryItem; mountKey: string }>>([
@@ -143,12 +144,13 @@ export function AppFrameHost({
 
   useEffect(() => {
     mountedApps.forEach(({ app }) => {
+      syncAppFrameShellLayout(frameRefs.current[app.app_id], isMobileLayout);
       postMaverickFrameVisibility(frameRefs.current[app.app_id], {
         app_id: app.app_id,
         visible: app.app_id === activeApp.app_id,
       });
     });
-  }, [activeApp.app_id, mountedApps]);
+  }, [activeApp.app_id, isMobileLayout, mountedApps]);
 
   useEffect(() => {
     latestDependenciesRef.current = null;
@@ -215,12 +217,6 @@ export function AppFrameHost({
       if (!payload.type) {
         return;
       }
-      if (payload.type === "maverick.shell.sidebar.open") {
-        if (Object.values(frameRefs.current).some((frame) => frame?.contentWindow === event.source)) {
-          onOpenSidebar?.();
-        }
-        return;
-      }
       if (payload.type === "maverick.app.data-changed" && payload.owner_app_id) {
         const ownerFrame = frameRefs.current[payload.owner_app_id];
         if (ownerFrame?.contentWindow && event.source !== ownerFrame.contentWindow) {
@@ -268,7 +264,7 @@ export function AppFrameHost({
 
     window.addEventListener("message", handleAppMessage);
     return () => window.removeEventListener("message", handleAppMessage);
-  }, [onOpenApp, onOpenSidebar]);
+  }, [onOpenApp]);
 
   return (
     <section className="bs-workspace-app-panel" aria-label={`${activeApp.name} app`}>
@@ -304,6 +300,7 @@ export function AppFrameHost({
               className={`bs-workspace-app-frame ${isActive ? "is-active" : "is-hidden"}`}
               key={`${mountKey}:${revision}`}
               onLoad={(event) => {
+                syncAppFrameShellLayout(event.currentTarget, isMobileLayout);
                 postMaverickFrameVisibility(event.currentTarget, {
                   app_id: app.app_id,
                   visible: isActive,

@@ -19,7 +19,7 @@ If the platform cannot enforce sandbox boundaries for a non-default workspace, r
 ## Boundary invariants
 
 - A sandboxed runtime cannot read or write outside its workspace root.
-- Gallery and retrieval must never return another workspace's files.
+- Storage and retrieval must never return another workspace's files.
 - Child agents inherit the same workspace root unless a trusted control-plane action changes scope.
 - Platform interaction from sandboxed workspaces goes through controlled interfaces.
 

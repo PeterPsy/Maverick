@@ -66,7 +66,7 @@ def _document_reference(record: dict[str, Any]) -> dict[str, Any]:
         "subtitle": str(record.get("workspace_relative_path") or ""),
         "summary": f"{str(record.get('format') or '').upper()} generated document",
         "confidence": 1.0,
-        "deep_link": f"/apps/gallery?path={record.get('workspace_relative_path')}",
+        "deep_link": f"/apps/storage?path={record.get('workspace_relative_path')}",
         "workspace_relative_path": record.get("workspace_relative_path"),
     }
 

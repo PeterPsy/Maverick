@@ -66,7 +66,7 @@
       calc(env(safe-area-inset-top, 0px) + 1rem) calc(env(safe-area-inset-right, 0px) + 1rem) calc(env(safe-area-inset-bottom, 0px) + 1rem) calc(env(safe-area-inset-left, 0px) + 1rem);
     border: 0;
     border-radius: 0;
-    background: rgb(12, 12, 14);
+    background: var(--maverick-bg);
     box-shadow: none;
     backdrop-filter: blur(26px);
     overscroll-behavior: contain;
@@ -108,6 +108,11 @@
     grid-column: 1;
     align-self: end;
     z-index: 4;
+  }
+
+  .bs-sidebar__desktop-logo,
+  .bs-sidebar__control-cluster {
+    display: none;
   }
 
   .bs-widget-slot__frame {

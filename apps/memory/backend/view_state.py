@@ -30,7 +30,7 @@ def default_view_filter() -> dict[str, Any]:
     }
 
 
-def _normalize_ref(raw_ref: object) -> dict[str, str] | None:
+def _normalize_ref(raw_ref: object, *, app_id: str = "memory") -> dict[str, str] | None:
     if isinstance(raw_ref, str):
         entity_type, separator, entity_id = raw_ref.partition(":")
         if not separator:
@@ -42,9 +42,10 @@ def _normalize_ref(raw_ref: object) -> dict[str, str] | None:
         return {"entity_type": "node", "entity_id": node_id} if node_id else None
     if not isinstance(raw_ref, dict):
         return None
-    app_id = str(raw_ref.get("app_id") or "memory").strip()
-    if app_id and app_id != "memory":
-        raise MemoryValidationError("Memory custom view refs must target app_id `memory`.")
+    ref_app_id = str(raw_ref.get("app_id") or app_id).strip()
+    allowed_app_ids = {app_id, "memory"}
+    if ref_app_id and ref_app_id not in allowed_app_ids:
+        raise MemoryValidationError(f"Memory custom view refs must target app_id `{app_id}`.")
     entity_type = str(raw_ref.get("entity_type") or raw_ref.get("type") or "node").strip()
     if entity_type != "node":
         raise MemoryValidationError("Memory custom view refs must target entity_type `node`.")
@@ -63,7 +64,13 @@ def _refs_from_node_ids(body: dict[str, Any]) -> list[dict[str, str]]:
     return [{"entity_type": "node", "entity_id": str(value or "").strip()} for value in values if str(value or "").strip()]
 
 
-def normalize_custom_refs(*, refs: object = None, entity_references: object = None, body: dict[str, Any] | None = None) -> list[dict[str, str]]:
+def normalize_custom_refs(
+    *,
+    refs: object = None,
+    entity_references: object = None,
+    body: dict[str, Any] | None = None,
+    app_id: str = "memory",
+) -> list[dict[str, str]]:
     raw_refs: list[object] = []
     for value in (refs, entity_references):
         if value is None:
@@ -73,7 +80,7 @@ def normalize_custom_refs(*, refs: object = None, entity_references: object = No
         raw_refs.extend(value)
     normalized = _refs_from_node_ids(body) if body is not None else []
     for raw_ref in raw_refs:
-        ref = _normalize_ref(raw_ref)
+        ref = _normalize_ref(raw_ref, app_id=app_id)
         if ref is not None:
             normalized.append(ref)
     seen: set[str] = set()
@@ -89,7 +96,7 @@ def normalize_custom_refs(*, refs: object = None, entity_references: object = No
     return unique_refs
 
 
-def normalize_view_filter(raw_filter: object) -> dict[str, Any]:
+def normalize_view_filter(raw_filter: object, *, app_id: str = "memory") -> dict[str, Any]:
     if not isinstance(raw_filter, dict):
         return default_view_filter()
     mode = str(raw_filter.get("mode") or "search").strip()
@@ -101,7 +108,7 @@ def normalize_view_filter(raw_filter: object) -> dict[str, Any]:
         "mode": mode,
         "title": title,
         "query": query,
-        "refs": normalize_custom_refs(refs=raw_filter.get("refs")),
+        "refs": normalize_custom_refs(refs=raw_filter.get("refs"), app_id=app_id),
         "updated_at": str(raw_filter.get("updated_at") or "").strip(),
     }
 
@@ -143,8 +150,13 @@ def set_view_filter_payload(*, data_root: Path, query: object = None, preserve_c
     return {"state": write_view_state(data_root, state)}
 
 
-def set_custom_view_payload(*, data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
-    refs = normalize_custom_refs(refs=body.get("refs"), entity_references=body.get("entity_references"), body=body)
+def set_custom_view_payload(*, data_root: Path, body: dict[str, Any], app_id: str = "memory") -> dict[str, Any]:
+    refs = normalize_custom_refs(
+        refs=body.get("refs"),
+        entity_references=body.get("entity_references"),
+        body=body,
+        app_id=app_id,
+    )
     state = load_view_state(data_root)
     state["view_filter"] = normalize_view_filter(
         {

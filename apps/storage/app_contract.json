@@ -1,0 +1,279 @@
+{
+  "app_id": "storage",
+  "contract_version": "1.0",
+  "name": "Storage",
+  "version": "0.1.0",
+  "description": "Workspace file storage for uploaded files and generated artifacts.",
+  "publisher": "maverick",
+  "minimum_core_version": "0.1.0",
+  "provides": [
+    {
+      "interface": "file.catalog",
+      "version": "1",
+      "description": "Workspace uploaded and generated file catalog.",
+      "surfaces": [
+        "backend",
+        "cli",
+        "mcp",
+        "reference",
+        "view",
+        "widget"
+      ]
+    },
+    {
+      "interface": "file.preview",
+      "version": "1",
+      "description": "Workspace file preview rendering metadata and widget support.",
+      "surfaces": [
+        "backend",
+        "cli",
+        "mcp",
+        "widget"
+      ]
+    },
+    {
+      "interface": "file.content.read",
+      "version": "1",
+      "description": "Workspace file content read access through official Storage surfaces.",
+      "surfaces": [
+        "backend",
+        "cli",
+        "mcp"
+      ]
+    },
+    {
+      "interface": "file.content.write",
+      "version": "1",
+      "description": "Workspace file content creation and update access through official Storage surfaces.",
+      "surfaces": [
+        "backend",
+        "cli",
+        "mcp"
+      ]
+    }
+  ],
+  "requires": [],
+  "distribution": {
+    "mode": "sealed",
+    "source_access": "none"
+  },
+  "visibility": {
+    "platform_roles": null
+  },
+  "permissions": {
+    "secrets": {
+      "read": [],
+      "write": []
+    },
+    "network": {
+      "outbound": []
+    },
+    "runtime": {
+      "create_sessions": false,
+      "cleanup_sessions": false
+    },
+    "host": {
+      "telemetry": false
+    }
+  },
+  "capabilities": {
+    "mcp_tools": [
+      "maverick_storage",
+      "storage_view_filter",
+      "storage_set_view_filter",
+      "storage_set_custom_view",
+      "storage_clear_custom_view",
+      "storage_write_file",
+      "storage_reference_manifest",
+      "storage_reference_search",
+      "storage_reference_resolve",
+      "storage_reference_summarize"
+    ],
+    "cli_commands": [
+      "storage"
+    ],
+    "skills": [
+      "storage-ops"
+    ],
+    "views": [
+      "storage"
+    ],
+    "data_events": [
+      {
+        "resource": "files",
+        "description": "Emitted when workspace uploaded or generated files change through official Storage surfaces."
+      },
+      {
+        "resource": "view-state",
+        "description": "Emitted when Storage filters or custom view state change through official Storage surfaces."
+      }
+    ],
+    "view_surfaces": [
+      {
+        "view_id": "storage",
+        "display_name": "Storage",
+        "entity_types": [
+          "file"
+        ],
+        "state_actions": [
+          {
+            "action": "view_filter",
+            "standard": true,
+            "description": "Read the current Storage view state without scanning workspace storage."
+          },
+          {
+            "action": "set_view_filter",
+            "standard": true,
+            "description": "Set global keyword search plus selected role and kind view state for the Storage view."
+          },
+          {
+            "action": "set_custom_view",
+            "standard": true,
+            "description": "Show a curated set of Storage file references."
+          },
+          {
+            "action": "clear_custom_view",
+            "standard": true,
+            "description": "Return Storage to normal search mode."
+          }
+        ],
+        "supports_custom_view": true,
+        "supports_filter_refinement": true
+      }
+    ],
+    "reference_entities": [
+      {
+        "entity_type": "file",
+        "display_name": "Workspace File",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      }
+    ]
+  },
+  "widgets": [
+    {
+      "widget_id": "storage-sidebar",
+      "host": "base-shell",
+      "content_kinds": [
+        "shell.sidebar.primary"
+      ],
+      "frontend": {
+        "kind": "iframe",
+        "mount": "frontend/dist/widgets/storage-sidebar",
+        "spa_fallback": true
+      },
+      "actions": {
+        "backend": true,
+        "mcp": false,
+        "cli": false
+      }
+    },
+    {
+      "widget_id": "storage-sidebar-footer",
+      "host": "base-shell",
+      "content_kinds": [
+        "shell.sidebar.footer"
+      ],
+      "frontend": {
+        "kind": "iframe",
+        "mount": "frontend/dist/widgets/storage-sidebar-footer",
+        "spa_fallback": true
+      },
+      "actions": {
+        "backend": true,
+        "mcp": false,
+        "cli": false
+      }
+    },
+    {
+      "widget_id": "file-preview",
+      "host": "chat",
+      "content_kinds": [
+        "storage.file",
+        "storage.file.preview",
+        "workspace.file",
+        "workspace.file.preview"
+      ],
+      "frontend": {
+        "kind": "iframe",
+        "mount": "frontend/dist/widgets/file-preview",
+        "spa_fallback": true
+      },
+      "actions": {
+        "backend": true,
+        "mcp": false,
+        "cli": false
+      }
+    }
+  ],
+  "entrypoints": {
+    "mcp": "mcp/server.py",
+    "cli": "cli/app_cli.py",
+    "backend": "backend/app_backend.py",
+    "frontend": "frontend/dist",
+    "skills_root": "skills",
+    "hooks": {
+      "install": "hooks/install.py",
+      "migrate": "hooks/migrate.py",
+      "health_check": "hooks/health_check.py"
+    }
+  },
+  "storage": {
+    "storage_kind": "json",
+    "data_schema_version": "1",
+    "primary_paths": [
+      "data/storage/state.json",
+      "data/storage/files.json",
+      "data/storage/preview_cache.json",
+      "data/storage/rendered_previews"
+    ],
+    "indices": {
+      "kind": "file_based"
+    },
+    "supports_export": false,
+    "supports_import": false,
+    "supports_migrations": true
+  },
+  "compatibility": {
+    "workspace_modes": [
+      "sandbox"
+    ]
+  },
+  "hook_timeouts": {
+    "install_seconds": 60,
+    "upgrade_seconds": 120,
+    "migrate_seconds": 300,
+    "export_seconds": 120,
+    "import_seconds": 120,
+    "validate_after_import_seconds": 60,
+    "repair_after_import_seconds": 180,
+    "health_check_seconds": 30
+  },
+  "lifecycle": {
+    "install": true,
+    "upgrade": true,
+    "uninstall": false,
+    "migrate": true,
+    "export": false,
+    "import": false,
+    "validate_after_import": false,
+    "repair_after_import": false,
+    "health_check": true
+  },
+  "health_contract": {
+    "mode": "hook",
+    "degraded_on_failure": true
+  },
+  "failure_semantics": {
+    "install_failure": "block_activation",
+    "migrate_failure": "preserve_data_mark_unhealthy",
+    "import_failure": "preserve_payload_mark_failed"
+  },
+  "rollback_support": {
+    "bundle": false,
+    "data": false,
+    "repair_only": false
+  }
+}

@@ -144,7 +144,7 @@ button {
 .docs-studio-sidebar-section__toggle strong {
   overflow: hidden;
   font-size: 0.76rem;
-  font-weight: 850;
+  font-weight: 400;
   letter-spacing: 0;
   text-overflow: ellipsis;
   text-transform: uppercase;

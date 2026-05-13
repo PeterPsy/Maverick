@@ -15,7 +15,7 @@ This matrix tracks the repository-wide completeness baseline for first-party Mav
 | `docs-studio` | yes | repo-wide baseline | Documentation workspace app with declared backend, CLI, MCP, references, view state, and docs-owned storage paths. |
 | `document-generator` | yes | repo-wide baseline | Bundled `document-generator-docs` skill, generated-document references, and standard job view state are declared. |
 | `dynamic-views` | yes | repo-wide baseline | Bundled `dynamic-views` skill, dynamic-view references, standard library view state, and chat widget are declared. |
-| `gallery` | yes | repo-wide baseline plus app-local coverage when present | Bundled `gallery-ops` skill now declared in the contract; file-preview widget remains the embedded surface. |
+| `storage` | yes | repo-wide baseline plus app-local coverage when present | Bundled `storage-ops` skill now declared in the contract; file-preview widget remains the embedded surface. |
 | `memory` | yes | repo-wide baseline plus app-local coverage when present | Reference app for durable graph state, references, and persisted custom views. |
 | `skills` | yes | repo-wide baseline | Contract declares bundled skill template ids, skill references, and standard catalog view state. |
 | `user-admin` | yes | repo-wide baseline | Frontend, CLI, and MCP only for now; app-owned backend and hooks remain intentionally absent while admin state stays core-owned. |

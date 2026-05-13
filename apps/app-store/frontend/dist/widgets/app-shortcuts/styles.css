@@ -209,6 +209,15 @@ button {
   transform: scale(0.985);
 }
 
+.app-shortcuts__row--skeleton {
+  pointer-events: none;
+}
+
+.app-shortcuts__row--skeleton:hover {
+  background: transparent;
+  border-color: transparent;
+}
+
 .app-shortcuts__button {
   display: grid;
   grid-template-columns: 2rem minmax(0, 1fr);
@@ -220,6 +229,10 @@ button {
   padding: 0 0.24rem 0 0.7rem;
   background: transparent;
   text-align: left;
+}
+
+.app-shortcuts__button--skeleton {
+  cursor: default;
 }
 
 .app-shortcuts__button:focus-visible,
@@ -250,6 +263,58 @@ button {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.app-shortcuts__icon--skeleton,
+.app-shortcuts__pin--skeleton,
+.app-shortcuts__skeleton-line {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.app-shortcuts__icon--skeleton,
+.app-shortcuts__pin--skeleton {
+  box-shadow: var(--maverick-inner-edge);
+}
+
+.app-shortcuts__icon--skeleton::after,
+.app-shortcuts__pin--skeleton::after,
+.app-shortcuts__skeleton-line::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+  transform: translateX(-100%);
+  animation: app-shortcuts-skeleton-shimmer 1.45s ease-in-out infinite;
+  content: "";
+}
+
+.app-shortcuts__skeleton-copy {
+  display: grid;
+  gap: 0.34rem;
+  min-width: 0;
+}
+
+.app-shortcuts__skeleton-line--wide,
+.app-shortcuts__skeleton-line--title {
+  width: min(9.4rem, 82%);
+  height: 0.78rem;
+}
+
+.app-shortcuts__skeleton-line--wide {
+  width: min(11rem, 92%);
+}
+
+.app-shortcuts__skeleton-line--meta,
+.app-shortcuts__skeleton-line--short {
+  width: 5.2rem;
+  height: 0.58rem;
+}
+
+.app-shortcuts__skeleton-line--short {
+  width: 3.8rem;
 }
 
 .app-shortcuts__copy {
@@ -299,6 +364,12 @@ button {
   font-size: 0.76rem;
   line-height: 1.45;
   padding: 0.75rem;
+}
+
+@keyframes app-shortcuts-skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 @media (max-width: 979px) {

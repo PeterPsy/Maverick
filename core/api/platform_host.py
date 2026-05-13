@@ -16,6 +16,7 @@ from core.api.app_mounts import (
     handle_root_shell_static_asset,
     is_public_app_static_asset,
 )
+from core.api.app_references_api import handle_app_references_api
 from core.api.app_registry import enabled_app_items
 from core.api.app_sdk_api import handle_app_sdk_api
 from core.api.app_store_api import handle_app_store_api
@@ -97,6 +98,15 @@ class PlatformHost:
             if routed is not None:
                 return routed
             routed = handle_app_dependencies_api(self.state, environ, start_response, start_path=self.start_path)
+            if routed is not None:
+                return routed
+            routed = handle_app_references_api(
+                self.state,
+                environ,
+                start_response,
+                context=context,
+                start_path=self.start_path,
+            )
             if routed is not None:
                 return routed
             routed = handle_widget_api(self.state, environ, start_response, start_path=self.start_path, workspace_id=workspace_id)

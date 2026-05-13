@@ -9,9 +9,13 @@ from typing import Any
 
 
 STATE_FILE = "state.json"
+SCHEMA_VERSION = "4"
 CHECKLIST_KIND = "checklist.design"
 REFERENCE_ENTITY_TYPE = "checklist"
 WIDGET_CONTENT_KIND = "checklist.design"
+TASK_STATUSES = {"pending", "in-progress", "need-help", "blocked", "completed", "failed"}
+CHECKLIST_STATUSES = {"active", "in-progress", "blocked", "completed", "failed"}
+PRIORITIES = {"low", "medium", "high", "critical"}
 
 
 def reference_summarize(data_root: Path, *, entity_type: str, entity_id: str) -> dict[str, Any]:
@@ -145,13 +149,15 @@ def _normalize_checklist(value: dict[str, Any]) -> dict[str, Any]:
             "id": _clean_text(value.get("id"), _new_id("check"), max_length=200),
             "workspace_id": _clean_text(value.get("workspace_id"), "legacy-unknown", max_length=120),
             "profile": _optional_text(value.get("profile"), max_length=120),
+            "mode": _mode(value.get("mode")),
             "kind": CHECKLIST_KIND,
             "title": title,
             "summary": summary,
             "sections": sections,
             "source_type": _clean_text(value.get("source_type"), "chat_preview", max_length=80),
             "source_ref": _clean_text(value.get("source_ref"), "", max_length=240),
-            "status": _clean_text(value.get("status"), "active", max_length=40),
+            "status": _status(value.get("status"), default="active", allowed=CHECKLIST_STATUSES),
+            "priority": _priority(value.get("priority")),
             "metadata": _metadata(title=title, summary=summary, sections=sections, metadata=value.get("metadata")),
             "created_at": timestamp,
             "updated_at": str(value.get("updated_at") or timestamp),
@@ -192,19 +198,102 @@ def _normalize_task(value: Any, section_index: int, task_index: int) -> dict[str
     if not isinstance(value, dict):
         return None
     title = _clean_text(value.get("title") or value.get("text"), "", max_length=500)
+    status = _task_status(value.get("status"), checked=value.get("checked") if "checked" in value else value.get("done"))
     return {
         "id": _clean_text(value.get("id"), f"task-{section_index + 1}-{task_index + 1}", max_length=200),
         "title": title,
-        "checked": bool(value.get("checked") if "checked" in value else value.get("done")),
+        "description": _clean_text(value.get("description"), "", max_length=1200),
+        "status": status,
+        "checked": status == "completed",
+        "priority": _priority(value.get("priority")),
+        "level": _level(value.get("level")),
+        "dependencies": _string_list(value.get("dependencies"), max_items=24, max_length=200),
+        "tools": _string_list(value.get("tools"), max_items=24, max_length=120),
+        "subtasks": _normalize_subtasks(value.get("subtasks"), section_index, task_index),
+        "blocked_reason": _clean_text(value.get("blocked_reason"), "", max_length=500),
+        "agent_ref": _clean_text(value.get("agent_ref"), "", max_length=240),
+        "source_ref": _clean_text(value.get("source_ref"), "", max_length=240),
+        "agent_dialogs": _dialog_refs(value.get("agent_dialogs") or value.get("dialogs")),
     }
 
 
 
+def _normalize_subtasks(value: Any, section_index: int, task_index: int) -> list[dict[str, Any]]:
+    raw_subtasks = value if isinstance(value, list) else []
+    return [
+        subtask
+        for subtask_index, raw_subtask in enumerate(raw_subtasks)
+        if (subtask := _normalize_subtask(raw_subtask, section_index, task_index, subtask_index)) is not None
+    ]
+
+
+
+def _normalize_subtask(value: Any, section_index: int, task_index: int, subtask_index: int) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    title = _clean_text(value.get("title") or value.get("text"), "", max_length=500)
+    status = _task_status(value.get("status"), checked=value.get("checked") if "checked" in value else value.get("done"))
+    return {
+        "id": _clean_text(value.get("id"), f"subtask-{section_index + 1}-{task_index + 1}-{subtask_index + 1}", max_length=200),
+        "title": title,
+        "description": _clean_text(value.get("description"), "", max_length=1200),
+        "status": status,
+        "checked": status == "completed",
+        "priority": _priority(value.get("priority")),
+        "tools": _string_list(value.get("tools"), max_items=24, max_length=120),
+        "blocked_reason": _clean_text(value.get("blocked_reason"), "", max_length=500),
+        "agent_ref": _clean_text(value.get("agent_ref"), "", max_length=240),
+        "source_ref": _clean_text(value.get("source_ref"), "", max_length=240),
+        "agent_dialogs": _dialog_refs(value.get("agent_dialogs") or value.get("dialogs")),
+    }
+
+
+
+def _dialog_refs(value: Any) -> list[dict[str, str]]:
+    raw_items = value if isinstance(value, list) else []
+    refs: list[dict[str, str]] = []
+    for index, item in enumerate(raw_items[:12]):
+        if isinstance(item, str):
+            ref = _clean_text(item, "", max_length=240)
+            if ref:
+                refs.append({"id": f"dialog-{index + 1}", "title": ref, "summary": "", "ref": ref, "agent_ref": ""})
+            continue
+        if not isinstance(item, dict):
+            continue
+        ref = _clean_text(item.get("ref") or item.get("source_ref") or item.get("id"), "", max_length=240)
+        title = _clean_text(item.get("title"), ref or f"Agent dialog {index + 1}", max_length=180)
+        if not ref and not title:
+            continue
+        refs.append(
+            {
+                "id": _clean_text(item.get("id"), f"dialog-{index + 1}", max_length=120),
+                "title": title,
+                "summary": _clean_text(item.get("summary") or item.get("description"), "", max_length=500),
+                "ref": ref,
+                "agent_ref": _clean_text(item.get("agent_ref"), "", max_length=240),
+            }
+        )
+    return refs
+
+
+
 def _with_counts(checklist: dict[str, Any]) -> dict[str, Any]:
-    tasks = [task for section in checklist.get("sections", []) for task in section.get("tasks", [])]
+    tasks = _all_tasks(checklist)
     checklist["task_count"] = len(tasks)
-    checklist["checked_count"] = sum(1 for task in tasks if task.get("checked"))
+    checklist["checked_count"] = sum(1 for task in tasks if task.get("checked") or task.get("status") == "completed")
+    checklist["blocked_count"] = sum(1 for task in tasks if task.get("status") in {"blocked", "need-help"})
+    checklist["failed_count"] = sum(1 for task in tasks if task.get("status") == "failed")
     return checklist
+
+
+
+def _all_tasks(checklist: dict[str, Any]) -> list[dict[str, Any]]:
+    tasks: list[dict[str, Any]] = []
+    for section in checklist.get("sections", []):
+        for task in section.get("tasks", []):
+            tasks.append(task)
+            tasks.extend(task.get("subtasks", []))
+    return tasks
 
 
 

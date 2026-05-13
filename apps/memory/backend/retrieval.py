@@ -7,7 +7,7 @@ import re
 import sqlite3
 from typing import Any
 
-from database import connect, ensure_schema, record_event, row_payload
+from database import connect, ensure_schema, normalize_limit, record_event, row_payload
 
 TOKEN_PATTERN = re.compile(r"[A-Za-z0-9_]+")
 
@@ -20,7 +20,7 @@ def fts_query(query: str) -> str:
 
 def search_nodes(data_root: Path, query: str, *, limit: int = 10) -> list[dict[str, Any]]:
     ensure_schema(data_root)
-    normalized_limit = max(1, min(int(limit or 10), 50))
+    normalized_limit = normalize_limit(limit, default=10, minimum=1, maximum=50)
     with connect(data_root) as db:
         search = fts_query(query)
         rows: list[sqlite3.Row]
@@ -58,8 +58,9 @@ def search_nodes(data_root: Path, query: str, *, limit: int = 10) -> list[dict[s
         return [row_payload(row) or {} for row in rows]
 
 
-def context_payload(data_root: Path, query: str, *, limit: int = 8) -> dict[str, Any]:
-    nodes = search_nodes(data_root, query, limit=limit)
+def context_payload(data_root: Path, query: str, *, limit: int = 8, record_access_event: bool = False) -> dict[str, Any]:
+    normalized_limit = normalize_limit(limit, default=8, minimum=1, maximum=50)
+    nodes = search_nodes(data_root, query, limit=normalized_limit)
     with connect(data_root) as db:
         items: list[dict[str, Any]] = []
         seen: set[str] = set()
@@ -93,7 +94,7 @@ def context_payload(data_root: Path, query: str, *, limit: int = 8) -> dict[str,
             )
             for related_row in related:
                 related_payload = row_payload(related_row) or {}
-                if related_payload["id"] in seen or len(items) >= limit:
+                if related_payload["id"] in seen or len(items) >= normalized_limit:
                     continue
                 seen.add(related_payload["id"])
                 items.append(
@@ -107,15 +108,16 @@ def context_payload(data_root: Path, query: str, *, limit: int = 8) -> dict[str,
                         "provenance": [],
                     }
                 )
-            if len(items) >= limit:
+            if len(items) >= normalized_limit:
                 break
-        record_event(db, event_type="retrieval_context_generated", payload={"query": query, "item_count": len(items)})
-    return {"query": query, "items": items[:limit]}
+        if record_access_event:
+            record_event(db, event_type="retrieval_context_generated", payload={"query": query, "item_count": len(items)})
+    return {"query": query, "items": items[:normalized_limit]}
 
 
 def graph_payload(data_root: Path, *, query: str = "", node_ids: object = None, limit: int = 200) -> dict[str, Any]:
     ensure_schema(data_root)
-    normalized_limit = max(1, min(int(limit or 200), 500))
+    normalized_limit = normalize_limit(limit, default=200, minimum=1, maximum=500)
     selected_node_ids = _normalized_node_ids(node_ids, limit=normalized_limit)
     if selected_node_ids:
         placeholders = ",".join("?" for _item in selected_node_ids)
@@ -176,13 +178,6 @@ def graph_payload(data_root: Path, *, query: str = "", node_ids: object = None, 
                 tuple(node_ids) + tuple(node_ids),
             )
         ]
-        refs_by_node: dict[str, list[dict[str, Any]]] = {node_id: [] for node_id in node_ids}
-        for row in db.execute(
-            f"SELECT * FROM external_refs WHERE node_id IN ({placeholders}) ORDER BY created_at",
-            tuple(node_ids),
-        ):
-            ref = row_payload(row) or {}
-            refs_by_node.setdefault(ref.get("node_id", ""), []).append(ref)
     graph_nodes = []
     for node in nodes:
         graph_nodes.append(
@@ -194,7 +189,6 @@ def graph_payload(data_root: Path, *, query: str = "", node_ids: object = None, 
                 "importance": node["importance"],
                 "confidence": node["confidence"],
                 "updated_at": node["updated_at"],
-                "external_refs": refs_by_node.get(node["id"], []),
             }
         )
     graph_edges = [
@@ -232,7 +226,7 @@ def _normalized_node_ids(raw_node_ids: object, *, limit: int) -> list[str]:
 
 def audit_events(data_root: Path, *, limit: int = 50) -> list[dict[str, Any]]:
     ensure_schema(data_root)
-    normalized_limit = max(1, min(int(limit or 50), 200))
+    normalized_limit = normalize_limit(limit, default=50, minimum=1, maximum=200)
     with connect(data_root) as db:
         return [
             row_payload(row) or {}

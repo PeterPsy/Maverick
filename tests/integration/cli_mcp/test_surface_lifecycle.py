@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from tests.support.surfaces import *
 
 
@@ -89,3 +91,36 @@ class TestSurfaceLifecycle(SurfaceTestBase):
 
         self.assertIn("app.checklists.checklists.list", [tool.tool_name for tool in tools])
         self.assertIn("app.tasks.checklists.list", [tool.tool_name for tool in tools])
+
+    def test_cli_and_mcp_names_use_local_id_not_mount_id(self) -> None:
+        store = self.make_app_store()
+        now = datetime.now(tz=UTC)
+        repo_root = self.make_repo_root()
+        app_root = repo_root / "apps" / "checklists"
+        self.write_app_contract(app_root)
+        source = register_app_source_from_contract(
+            store,
+            source_kind="platform",
+            source_path=str(app_root),
+            now=now,
+        )
+        binding = install_store_app(
+            store,
+            source_id=source.source_id,
+            workspace_id="default",
+            local_app_id="checklists-local",
+            start_path=repo_root,
+            now=now,
+        )
+        store.save_workspace_app_binding(replace(binding, mount_app_id="checklists-mount"))
+
+        tools = [tool.tool_name for tool in list_mcp_tools(app_store=store, workspace_id="default", start_path=repo_root)]
+        commands = [
+            command.command_id
+            for command in list_core_cli_commands(app_store=store, workspace_id="default", start_path=repo_root)
+        ]
+
+        self.assertIn("app.checklists-local.checklists.list", tools)
+        self.assertNotIn("app.checklists-mount.checklists.list", tools)
+        self.assertIn("app.checklists-local.checklists", commands)
+        self.assertNotIn("app.checklists-mount.checklists", commands)

@@ -21,7 +21,19 @@ export function openChatRootRouteInShell(options: ShellRouteOptions = {}): boole
   return postChatRouteToShell({}, options);
 }
 
+export function openAppRouteInShell(appId: string, appPage: string, options: ShellRouteOptions = {}): boolean {
+  const normalizedAppId = appId.trim();
+  if (!normalizedAppId) {
+    return false;
+  }
+  return postAppRouteToShell(normalizedAppId, { app_page: appPage.trim().replace(/^\/+/, "") }, options);
+}
+
 function postChatRouteToShell(params: Record<string, string>, options: ShellRouteOptions): boolean {
+  return postAppRouteToShell("chat", params, options);
+}
+
+function postAppRouteToShell(appId: string, params: Record<string, string>, options: ShellRouteOptions): boolean {
   if (options.navigationScope) {
     return false;
   }
@@ -34,7 +46,7 @@ function postChatRouteToShell(params: Record<string, string>, options: ShellRout
   parentWindow.postMessage(
     {
       type: "maverick.app.open-app",
-      app_id: "chat",
+      app_id: appId,
       params,
     },
     origin,

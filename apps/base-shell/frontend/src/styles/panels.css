@@ -38,8 +38,13 @@
 .bs-empty-panel {
   align-content: start;
   gap: 1rem;
-  padding: 2rem 1rem 1rem calc(var(--maverick-sidebar-width) + 2rem);
+  padding: 2rem 1rem 1rem;
   background: linear-gradient(180deg, rgba(18, 18, 18, 0.92), rgba(18, 18, 18, 0.98)), var(--maverick-bg);
+}
+
+.bs-shell.is-mobile-layout .bs-app-grid-panel,
+.bs-shell.is-mobile-layout .bs-empty-panel {
+  padding-top: calc(var(--bs-mobile-shell-content-top-offset) + 2rem);
 }
 
 .bs-app-grid-panel__header {

@@ -32,6 +32,7 @@
 
 .modal-header h2 {
   font-size: 1.38rem;
+  font-weight: 400;
   line-height: 1.12;
 }
 
@@ -44,6 +45,67 @@
   display: grid;
   gap: 14px;
   min-height: 0;
+}
+
+.memory-modal--context {
+  width: min(560px, 100%);
+}
+
+.modal-body--context {
+  overflow: auto;
+}
+
+.context-preview-list {
+  display: grid;
+  gap: 0.62rem;
+}
+
+.context-preview-card {
+  display: grid;
+  gap: 0.42rem;
+  min-width: 0;
+  border: 1px solid var(--maverick-border);
+  border-radius: var(--maverick-control-radius);
+  background: rgba(255, 255, 255, 0.045);
+  padding: 0.78rem;
+}
+
+.context-preview-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  min-width: 0;
+  color: var(--maverick-text-muted);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+}
+
+.context-preview-card strong,
+.context-preview-card p,
+.context-preview-card small,
+.context-preview-empty,
+.context-preview-error {
+  overflow-wrap: anywhere;
+}
+
+.context-preview-card strong {
+  color: var(--maverick-text);
+  font-size: 0.9rem;
+  font-weight: 400;
+}
+
+.context-preview-card p,
+.context-preview-card small,
+.context-preview-empty {
+  color: var(--maverick-text-muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.context-preview-error {
+  color: var(--maverick-danger);
+  font-size: 0.8rem;
 }
 
 @media (max-width: 620px) {

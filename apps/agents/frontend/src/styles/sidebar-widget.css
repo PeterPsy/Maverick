@@ -87,6 +87,12 @@ button {
   box-shadow: 0 0 0 3px var(--maverick-accent-soft);
 }
 
+@media (max-width: 979px) {
+  input {
+    font-size: 16px;
+  }
+}
+
 .agents-sidebar-list {
   display: flex;
   flex-direction: column;
@@ -177,7 +183,7 @@ button {
 
 .agents-sidebar-row__copy strong {
   font-size: 0.82rem;
-  font-weight: 800;
+  font-weight: 400;
 }
 
 .agents-sidebar-row__copy span {
@@ -272,7 +278,7 @@ button {
   color: var(--maverick-text);
   padding: 0 0.82rem;
   font-size: 0.76rem;
-  font-weight: 800;
+  font-weight: 400;
   transition: background 140ms ease, transform 140ms ease;
   touch-action: manipulation;
 }

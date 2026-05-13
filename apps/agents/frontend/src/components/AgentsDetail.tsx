@@ -23,25 +23,6 @@ function cardAnimation(delay = 0) {
   };
 }
 
-function PromptSignal({ label }: { label: string }) {
-  return (
-    <div className="bento-visual prompt-signal" aria-hidden="true">
-      <motion.div
-        className="prompt-signal-orbit"
-        animate={{ rotate: 360 }}
-        transition={{ duration: 18, repeat: Infinity, ease: 'linear' }}
-      />
-      <motion.div
-        className="prompt-signal-core"
-        animate={{ scale: [1, 1.08, 1] }}
-        transition={{ duration: 2.2, repeat: Infinity, ease: [0.16, 1, 0.3, 1] }}
-      >
-        {label.slice(0, 2).toUpperCase()}
-      </motion.div>
-    </div>
-  );
-}
-
 function RoleFlow({ roleName }: { roleName: string }) {
   const initials = roleName
     .split(/\s+/)
@@ -79,18 +60,13 @@ function TraceMeter({ traceVerbosity }: { traceVerbosity: string }) {
   return (
     <div className="bento-visual trace-meter" aria-hidden="true">
       {[0, 1, 2, 3, 4].map((item) => (
-        <motion.span
+        <span
           key={item}
           className={item < steps ? 'is-active' : ''}
-          animate={{ height: item < steps ? [22, 36, 26] : 18 }}
-          transition={{ duration: 1.8, repeat: Infinity, delay: item * 0.12, ease: [0.16, 1, 0.3, 1] }}
+          style={{ height: item < steps ? `${26 + item * 4}px` : '18px' }}
         />
       ))}
-      <motion.div
-        className="trace-sweep"
-        animate={{ x: ['-120%', '120%'] }}
-        transition={{ duration: 2.1, repeat: Infinity, ease: [0.16, 1, 0.3, 1] }}
-      />
+      <div className="trace-sweep" />
     </div>
   );
 }
@@ -213,7 +189,6 @@ export function AgentsDetail({
           <div className="bento-card-topline">
             <span><Bot size={15} aria-hidden="true" /> Agent Type</span>
           </div>
-          <PromptSignal label={selectedAgentType.name} />
           <div className="bento-card-body">
             <label>
               Name

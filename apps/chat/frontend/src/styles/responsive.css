@@ -430,7 +430,10 @@
   }
 
   .chatapp-chat-panel__meta {
-    padding: max(0.45rem, env(safe-area-inset-top, 0px)) 0.55rem 0.45rem;
+    padding:
+      calc(var(--maverick-shell-mobile-content-top-offset, 0px) + max(0.45rem, env(safe-area-inset-top, 0px)))
+      0.55rem
+      0.45rem;
   }
 
   .chatapp-chat-panel__meta-actions {
@@ -514,7 +517,10 @@
   }
 
   .chatapp-chat-panel__meta {
-    padding: max(0.45rem, env(safe-area-inset-top, 0px)) 0.55rem 0.45rem;
+    padding:
+      calc(var(--maverick-shell-mobile-content-top-offset, 0px) + max(0.45rem, env(safe-area-inset-top, 0px)))
+      0.55rem
+      0.45rem;
   }
 
   .chatapp-chat-scroll {
@@ -522,7 +528,7 @@
   }
 
   .chatapp-chat-scroll__inner {
-    padding: 0.72rem 0.45rem 0.85rem;
+    padding: calc(var(--maverick-shell-mobile-content-top-offset, 0px) + env(safe-area-inset-top, 0px) + 0.72rem) 0.45rem 0.85rem;
   }
 
   .chatapp-composer {
@@ -1257,7 +1263,6 @@
   }
 
   .chatapp-composer:focus-within .chatapp-composer__input-shell,
-  .chatapp-composer:has(.chatapp-composer__icon-action:active) .chatapp-composer__input-shell,
   .chatapp-composer:has(.chatapp-composer__tool-button:active) .chatapp-composer__input-shell,
   .chatapp-composer:has(.chatapp-attachment-picker__trigger:active) .chatapp-composer__input-shell,
   .chatapp-composer:has(.chatapp-composer__input-shell.has-app-picker) .chatapp-composer__input-shell,
@@ -1274,7 +1279,6 @@
   }
 
   .chatapp-composer:focus-within .chatapp-composer__text-area,
-  .chatapp-composer:has(.chatapp-composer__icon-action:active) .chatapp-composer__text-area,
   .chatapp-composer:has(.chatapp-composer__tool-button:active) .chatapp-composer__text-area,
   .chatapp-composer:has(.chatapp-attachment-picker__trigger:active) .chatapp-composer__text-area,
   .chatapp-composer:has(.chatapp-composer__input-shell.has-app-picker) .chatapp-composer__text-area,
@@ -1285,7 +1289,6 @@
   }
 
   .chatapp-composer:focus-within .chat-ui-input.chatapp-composer__editor,
-  .chatapp-composer:has(.chatapp-composer__icon-action:active) .chat-ui-input.chatapp-composer__editor,
   .chatapp-composer:has(.chatapp-composer__tool-button:active) .chat-ui-input.chatapp-composer__editor,
   .chatapp-composer:has(.chatapp-attachment-picker__trigger:active) .chat-ui-input.chatapp-composer__editor,
   .chatapp-composer:has(.chatapp-composer__input-shell.has-app-picker) .chat-ui-input.chatapp-composer__editor,
@@ -1300,7 +1303,6 @@
   }
 
   .chatapp-composer:focus-within .chatapp-composer__toolbar,
-  .chatapp-composer:has(.chatapp-composer__icon-action:active) .chatapp-composer__toolbar,
   .chatapp-composer:has(.chatapp-composer__tool-button:active) .chatapp-composer__toolbar,
   .chatapp-composer:has(.chatapp-attachment-picker__trigger:active) .chatapp-composer__toolbar,
   .chatapp-composer:has(.chatapp-composer__input-shell.has-app-picker) .chatapp-composer__toolbar,
@@ -1312,7 +1314,6 @@
   }
 
   .chatapp-composer:focus-within .chatapp-composer__tools,
-  .chatapp-composer:has(.chatapp-composer__icon-action:active) .chatapp-composer__tools,
   .chatapp-composer:has(.chatapp-composer__tool-button:active) .chatapp-composer__tools,
   .chatapp-composer:has(.chatapp-attachment-picker__trigger:active) .chatapp-composer__tools,
   .chatapp-composer:has(.chatapp-composer__input-shell.has-app-picker) .chatapp-composer__tools,
@@ -1325,7 +1326,6 @@
   }
 
   .chatapp-composer:focus-within .chatapp-composer__actions,
-  .chatapp-composer:has(.chatapp-composer__icon-action:active) .chatapp-composer__actions,
   .chatapp-composer:has(.chatapp-composer__tool-button:active) .chatapp-composer__actions,
   .chatapp-composer:has(.chatapp-attachment-picker__trigger:active) .chatapp-composer__actions,
   .chatapp-composer:has(.chatapp-composer__input-shell.has-app-picker) .chatapp-composer__actions,
@@ -1337,7 +1337,6 @@
   }
 
   .chatapp-composer:focus-within .chatapp-composer__icon-action,
-  .chatapp-composer:has(.chatapp-composer__icon-action:active) .chatapp-composer__icon-action,
   .chatapp-composer:has(.chatapp-composer__tool-button:active) .chatapp-composer__icon-action,
   .chatapp-composer:has(.chatapp-attachment-picker__trigger:active) .chatapp-composer__icon-action,
   .chatapp-composer:has(.chatapp-composer__input-shell.has-app-picker) .chatapp-composer__icon-action,

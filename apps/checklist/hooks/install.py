@@ -7,5 +7,13 @@ from core.app_sdk.storage import ensure_json_state
 
 
 payload = read_entrypoint_payload()
-ensure_json_state(payload.data_root, "state.json", {"schema_version": "2", "checklists": []})
+ensure_json_state(
+    payload.data_root,
+    "state.json",
+    {
+        "schema_version": "4",
+        "checklists": [],
+        "view_state": {"mode": "default", "query": "", "title": "", "refs": []},
+    },
+)
 emit_json({"ok": True})

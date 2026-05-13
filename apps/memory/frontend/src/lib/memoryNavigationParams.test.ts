@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nodeIdFromParams, shouldOpenCreateNode } from "./memoryNavigationParams";
+import { nodeIdFromParams, shouldOpenCreateNode, shouldOpenPreviewContext } from "./memoryNavigationParams";
 
 describe("memory navigation params", () => {
   it("resolves node ids from direct params and app pages", () => {
@@ -13,5 +13,12 @@ describe("memory navigation params", () => {
     expect(shouldOpenCreateNode({ new_node: "true" })).toBe(true);
     expect(shouldOpenCreateNode({ create_node: "true" })).toBe(true);
     expect(shouldOpenCreateNode({ new_node: false })).toBe(false);
+  });
+
+  it("detects context preview requests", () => {
+    expect(shouldOpenPreviewContext({ preview_context: true })).toBe(true);
+    expect(shouldOpenPreviewContext({ preview_context: "true" })).toBe(true);
+    expect(shouldOpenPreviewContext({ context_preview: "true" })).toBe(true);
+    expect(shouldOpenPreviewContext({ preview_context: false })).toBe(false);
   });
 });

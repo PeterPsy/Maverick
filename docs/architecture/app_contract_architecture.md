@@ -69,12 +69,12 @@ Mounted app frontends have a canonical user-facing shell route:
 /app/<local_app_id>/<app_page>
 ```
 
-This route belongs to the base shell and is served by the configured root shell app. It selects an enabled workspace app binding by its local mount id and forwards the optional app-owned page segment to the mounted iframe as `params.app_page` in the `maverick.app.navigate` message.
+This route belongs to the base shell and is served by the configured root shell app. It selects an enabled workspace app binding by its local app id and forwards the optional app-owned page segment to the mounted iframe as `params.app_page` in the `maverick.app.navigate` message.
 
 The direct frontend mount remains:
 
 ```text
-/apps/<local_app_id>/
+/apps/<mount_app_id>/
 ```
 
 That direct mount is an internal asset and iframe serving surface. It must remain available for app frontend assets, SPA fallback, widgets, and direct app availability checks, but it is not the canonical browser URL for workspace navigation.
@@ -82,8 +82,8 @@ That direct mount is an internal asset and iframe serving surface. It must remai
 The public app id declared by the app artifact and the local app id used for one workspace binding are separate identities:
 
 - `public_app_id` is the catalog or source identity declared by the app contract and used for distribution, upgrade lineage, compatibility, and publisher ownership.
-- `local_app_id` is the workspace binding and mount identity chosen for one installation of that app in a workspace.
-- `mount_app_id` is the concrete route namespace exposed by the core host, normally equal to `local_app_id`.
+- `local_app_id` is the workspace binding and app-owned data namespace chosen for one installation of that app in a workspace.
+- `mount_app_id` is the concrete HTTP/widget route namespace exposed by the core host, normally equal to `local_app_id`.
 
 For built-in apps these values may be equal, but the architecture must not rely on that. A workspace may install two compatible forks or versions of the same public app under different local ids, and app contracts must not hardcode the local id they will be mounted under.
 
@@ -312,7 +312,7 @@ Workspace installation records must carry the local identities separately:
 
 - `public_app_id` from the source contract
 - `local_app_id` for the workspace binding and app-owned data namespace
-- `mount_app_id` for mounted HTTP, WebSocket, CLI, MCP, and widget route namespaces when it differs from `local_app_id`
+- `mount_app_id` for mounted HTTP, WebSocket, and widget route namespaces when it differs from `local_app_id`. CLI command ids and MCP tool ids use `local_app_id`; entrypoint payloads also receive `public_app_id`.
 - source or binding metadata that links the local install to the installation-level artifact, workspace-local project, fork, or external bundle
 
 This identity separation is required for:
@@ -501,7 +501,7 @@ Some apps own business objects that other apps may need to reference without tak
 
 Examples:
 
-- Gallery owns uploaded files and generated artifacts.
+- Storage owns uploaded files and generated artifacts.
 - Chat owns projects and chat-specific UI state; core runtime owns chat thread records and transcript events.
 - Agents owns agent types, agent instances, and prompt material.
 - A record-centric app may own accounts, contacts, deals, activities, and relationships.
@@ -544,6 +544,10 @@ Rules:
 - referenceable entities must have stable `app_id`, `entity_type`, and `entity_id` identity
 - safe summaries must omit private fields the owning app does not intend to expose
 - authorization remains governed by the core and by the owning app surface being called
+
+Mounted app frontends should use the platform host's generic `/api/app-references/manifest`, `/api/app-references/search`, `/api/app-references/resolve`, and `/api/app-references/summarize` routes when building interactive reference pickers. The routes are app-agnostic: they discover enabled providers from `capabilities.reference_entities`, invoke the owning app's reference MCP tools, and return normalized `type: "entity"` references that can be stored or sent as runtime `app_references`.
+
+When a mounted frontend sends runtime `app_references`, the client payload is only an identity hint. The runtime submit path must re-check the local workspace app id, entity type, and entity id against enabled visible providers, then refresh labels, summaries, and deep links by calling the owner app's reference tools. Apps should return local-route-neutral `app_page` values when possible; the core maps those pages onto the binding's `local_app_id` route namespace.
 
 Reference lookup behavior belongs to the owning app's CLI and MCP surfaces. A common convention should be used so apps such as Memory can consume references without app-specific integrations:
 
@@ -623,7 +627,7 @@ Runtime event hooks are opt-in. The core must not call every source app backend 
 
 Apps that declare `permissions.runtime.create_sessions: true` may ask the platform host to create or reuse runtime sessions and submit asynchronous turns by returning a generic `runtime_session_requests` list from an app backend or hook result. The core applies these requests as platform runtime operations; it does not interpret app-owned workflow concepts such as Fleet nodes, edges, handoff text, loop goals, or queue state.
 
-Each request may include `agent_id`, optional `runtime_session_id`, `system_prompt` or a generic dependency-backed `system_prompt_request`, `skill_ids`, `input_text`, `app_references`, and a callback action. The platform stamps the created session with the requesting app as `source_app_id`, submits the turn through the core runtime, and invokes the app callback with the created `runtime_session_id` and `turn_id` or an error. The callback lets the app persist its own projection state without the core writing app-owned data.
+Each request may include `agent_id`, optional `runtime_session_id`, `system_prompt` or a generic dependency-backed `system_prompt_request`, `skill_ids`, `input_text`, `app_references`, and a callback action. `app_references` is a generic union: `type: "app"` carries a stable `app_id`, while `type: "entity"` carries `app_id`, `entity_type`, `entity_id`, and optional safe label, summary, existence, and deep-link metadata. The platform stamps the created session with the requesting app as `source_app_id`, submits the turn through the core runtime, and invokes the app callback with the created `runtime_session_id` and `turn_id` or an error. The callback lets the app persist its own projection state without the core writing app-owned data.
 
 Apps may also return `runtime_turn_interrupt_requests` for turns that belong to a runtime session sourced by that same app. The core validates workspace and source-app ownership, performs the generic interrupt operation, records the runtime terminal event, and dispatches the same source-app runtime event hook. The app still owns any product-level decision to mark its own node, job, or workflow as stopped or failed.
 
@@ -635,13 +639,13 @@ Backend recovery may invoke a declared app hook such as `backend_recovery` on en
 
 Referenceable entities let apps such as Memory understand and link app-owned records. Some apps also need to render a curated set of their own records in UI after an agent or another app has selected relevant references.
 
-This is a separate app-owned surface. The core must not decide which business records, message threads, Memory nodes, or Gallery files belong in a view. The selecting agent or app composes stable references by using reference surfaces, then asks the owning app UI to render that set through a declared view composition surface.
+This is a separate app-owned surface. The core must not decide which business records, message threads, Memory nodes, or Storage files belong in a view. The selecting agent or app composes stable references by using reference surfaces, then asks the owning app UI to render that set through a declared view composition surface.
 
 Apps that support externally composed views may declare view surfaces under `capabilities.view_surfaces`:
 
 ```json
 "capabilities": {
-  "views": ["gallery"],
+  "views": ["storage"],
   "reference_entities": [
     {
       "entity_type": "file",
@@ -654,34 +658,34 @@ Apps that support externally composed views may declare view surfaces under `cap
   ],
   "view_surfaces": [
     {
-      "view_id": "gallery",
-      "display_name": "Gallery",
+      "view_id": "storage",
+      "display_name": "Storage",
       "entity_types": ["file"],
       "state_actions": [
         {
           "action": "view_filter",
           "standard": true,
-          "description": "Read the current Gallery view state without scanning workspace storage."
+          "description": "Read the current Storage view state without scanning workspace storage."
         },
         {
           "action": "set_view_filter",
           "standard": true,
-          "description": "Set keyword, role, and kind filters for the Gallery view."
+          "description": "Set keyword, role, and kind filters for the Storage view."
         },
         {
           "action": "set_custom_view",
           "standard": true,
-          "description": "Show a curated set of Gallery file references."
+          "description": "Show a curated set of Storage file references."
         },
         {
           "action": "clear_custom_view",
           "standard": true,
-          "description": "Return Gallery to normal search mode."
+          "description": "Return Storage to normal search mode."
         },
         {
           "action": "toggle_preview_density",
           "standard": false,
-          "description": "Example of an app-specific Gallery view enhancement."
+          "description": "Example of an app-specific Storage view enhancement."
         }
       ],
       "supports_custom_view": true,
@@ -713,7 +717,7 @@ set_custom_view
 clear_custom_view
 ```
 
-Concrete CLI and MCP command syntax may remain app-specific while `standard: true` action names and payload semantics stay common. Apps can add richer UI operations by declaring additional `standard: false` actions. Apps such as Gallery and Memory implement these standard view surfaces: agents can build a custom Gallery file view, record-centric view, or Memory graph view from topic search, Memory context, record references, message references, or any other app-owned evidence without the rendering app needing to know why those records were selected.
+Concrete CLI and MCP command syntax may remain app-specific while `standard: true` action names and payload semantics stay common. Apps can add richer UI operations by declaring additional `standard: false` actions. Apps such as Storage and Memory implement these standard view surfaces: agents can build a custom Storage file view, record-centric view, or Memory graph view from topic search, Memory context, record references, message references, or any other app-owned evidence without the rendering app needing to know why those records were selected.
 
 A record-centric app can declare the same standard view actions for `account`, `contact`, `deal`, and `activity` references. Its custom view payload stores typed refs such as:
 
@@ -817,8 +821,8 @@ The platform host may provide workspace, data-root, request, and active-provider
 For the first deployment model, the simplest canonical shape is:
 
 - `/` for the platform host or shell entrypoint
-- `/apps/<local_app_id>/...` for mounted app frontend routes
-- `/api/apps/<local_app_id>/...` for mounted app backend routes
+- `/apps/<mount_app_id>/...` for mounted app frontend routes
+- `/api/apps/<mount_app_id>/...` for mounted app backend routes
 - `MCP` and `CLI` surfaces mounted by the core from the same app contract
 
 The exact production routing layer may be implemented behind `nginx`, but the mount model should remain canonical at the platform level.
@@ -1017,7 +1021,7 @@ Rules:
 - `surfaces` must reference surfaces the provider contract actually exposes
 - consumers must refer to dependency selections by alias, not by hardcoded app id
 
-The core resolves these declarations against enabled workspace app bindings and stores only workspace-scoped provider selections. It does not know the product semantics of `agents`, `gallery`, `drive`, or any other app.
+The core resolves these declarations against enabled workspace app bindings and stores only workspace-scoped provider selections. It does not know the product semantics of `agents`, `storage`, `drive`, or any other app.
 
 The base shell owns the human setup flow for unresolved dependencies. It can show candidate provider apps filtered by interface type and persist the selected provider app ids through the generic core dependency API. Mounted apps receive the resolved dependency payload through shell messages and may also read it from the generic dependency API.
 
@@ -1122,8 +1126,8 @@ The shell attaches only to platform protocols such as:
 - `/api/providers/active` and `/api/runtime/status` for runtime provider indicators
 - `/api/settings/platform` for generic settings metadata
 - `/api/recovery/status` and related recovery routes for operator status where appropriate
-- mounted app frontend routes under `/apps/<local_app_id>/`
-- mounted app backend routes under `/api/apps/<local_app_id>/...`
+- mounted app frontend routes under `/apps/<mount_app_id>/`
+- mounted app backend routes under `/api/apps/<mount_app_id>/...`
 
 The shell must derive app navigation from registry records such as `local_app_id`, `public_app_id`, `name`, `description`, `views`, `frontend_mount`, `backend_mount`, and optional icon or logo metadata.
 
@@ -1175,7 +1179,9 @@ This avoids losing navigation requests when an app iframe is freshly mounted aft
 
 The initial iframe URL remains the registry-provided `frontend_mount`.
 
-Shell-mounted app and widget iframes may use browser sandboxing, but they must preserve access to their own mounted frontend assets. The shell sandbox must include `allow-same-origin` so app documents can behave as same-origin clients for core APIs. Without that token, the browser assigns the iframe an opaque `null` origin, authenticated same-origin API calls fail as CORS/401 errors, and targeted `postMessage` delivery to the mounted app or widget can fail. The static asset route still needs to tolerate opaque `null` origins because old mounted frames, widget frames, or browser module/style CORS behavior may request `/apps/<local_app_id>/assets/...` without session cookies; those asset responses should be cross-origin readable and must never carry user-specific data.
+Shell-mounted app and widget iframes may use browser sandboxing, but they must preserve access to their own mounted frontend assets. The shell sandbox must include `allow-same-origin` so app documents can behave as same-origin clients for core APIs. Without that token, the browser assigns the iframe an opaque `null` origin, authenticated same-origin API calls fail as CORS/401 errors, and targeted `postMessage` delivery to the mounted app or widget can fail. The static asset route still needs to tolerate opaque `null` origins because old mounted frames, widget frames, or browser module/style CORS behavior may request `/apps/<mount_app_id>/assets/...` without session cookies; those asset responses should be cross-origin readable and must never carry user-specific data.
+
+On mobile, the shell may render transparent chrome above mounted app iframes. To let app content scroll visually underneath that chrome while keeping the first app content below it, the shell exposes host layout CSS variables on same-origin mounted app documents. `--maverick-shell-mobile-content-top-offset` is the top inset that app-owned scroll containers should add to their own top padding. The shell must not crop the mounted iframe below its mobile header, because that prevents app content from appearing behind shell blur.
 
 The shell must notify mounted app and widget iframes when their host surface becomes visible or hidden by sending `maverick.app.visibility-changed`. App frontends must treat hidden as a signal to suspend nonessential intervals, runtime replay, and background refresh. Hidden iframes may keep state in memory, but they must not continue live polling as if they were the active work surface.
 
@@ -1378,6 +1384,57 @@ Widgets are reusable app-owned surfaces. Any authenticated app frontend may disc
 
 The widget frontend document route is a controlled authenticated mount. Static non-HTML files below that widget frontend mount, such as `styles.css`, `main.js`, fonts, or images, follow the same public-cacheable rule as app frontend assets: they must not contain user-specific data and may be served with cross-origin headers so sandboxed widget iframes can load their own bundle without per-asset session cookies.
 
+Iframe widgets that need host-driven sizing may post `maverick.widget.resize` to their parent with the declaring `owner_app_id`, `widget_id`, and a pixel height such as `320px`.
+The embedded widget must measure its content, not the current iframe viewport, so parent resizing does not create a feedback loop.
+The host must validate the message origin and frame source, match `owner_app_id` and `widget_id` to the mounted widget, accept only bounded pixel values, and ignore invalid or excessive resize strings.
+Long widget content should be capped by the host surface and scroll inside the mounted iframe rather than stretching the host transcript or shell area indefinitely.
+
+Shell sidebar footer widgets may expose a mobile header primary action through the `maverick.widget.primary-action` protocol.
+This is a shell-to-widget contract, not a shell-owned app command.
+The shell may query only the mounted `shell.sidebar.footer` widget selected for the active app:
+
+```json
+{
+  "type": "maverick.widget.primary-action.query",
+  "owner_app_id": "agents",
+  "widget_id": "agents-sidebar-footer"
+}
+```
+
+The widget answers with its current availability:
+
+```json
+{
+  "type": "maverick.widget.primary-action.state",
+  "owner_app_id": "agents",
+  "widget_id": "agents-sidebar-footer",
+  "available": true,
+  "label": "New Agent",
+  "preferred_surface": "app"
+}
+```
+
+`preferred_surface` is optional and defaults to `app`.
+When a footer action needs UI that lives inside the shell sidebar, it may return `"preferred_surface": "sidebar"`.
+The host may then open the currently selected sidebar surface immediately before sending `maverick.widget.primary-action.invoke`.
+This is a narrow primary-action affordance and must not reintroduce a generic iframe command that opens the shell sidebar.
+
+When the user activates the shell header button, the shell sends:
+
+```json
+{
+  "type": "maverick.widget.primary-action.invoke",
+  "owner_app_id": "agents",
+  "widget_id": "agents-sidebar-footer"
+}
+```
+
+The host must validate message origin and frame source for widget responses, and must match `owner_app_id` and `widget_id` to the mounted widget before accepting state.
+State from a different frame, owner, or widget id must be ignored.
+The shell treats missing state, widget remount, app switch, load failure, or `available: false` as unavailable.
+The `label` is host chrome text for accessible labels and titles; the widget still owns the actual action behavior.
+The widget must derive or receive the effective mounted owner id, such as the local `owner_app_id` in `/api/apps/widgets/<owner_app_id>/<widget_id>/frontend/`, instead of hardcoding its source package id.
+
 Widget actions should go to the widget owner's own backend or tool surface.
 
 For example, a checklist widget embedded in chat should persist checklist edits through the `checklists` app, not through the `chat` app.
@@ -1453,6 +1510,7 @@ For apps that expose content in the `base-shell` sidebar:
 
 - the shell renders `shell.sidebar.primary` as the central modular sidebar body
 - the shell renders `shell.sidebar.footer` as a compact app-owned action area inside the shell's fixed footer
+- on desktop, the shell's app rail is always layout-reserved; overlay sidebar mode may overlay only the sidebar body/footer details area beyond the rail, while mobile may keep the full sidebar as an overlay surface
 - sidebar slots discover widgets with `host=base-shell` and the requested shell sidebar content kind
 - sidebar slots prefer the widget whose `owner_app_id` matches the active app id and remain empty when the active app does not declare a matching widget
 - the shell does not render a generic loading skeleton inside app-owned sidebar slots; each owning app must render the skeleton or loading state for its own sidebar widget

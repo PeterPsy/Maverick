@@ -1,18 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { BrainCircuit, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { colors } from "../../constants";
 import { labelForType, truncate } from "../../format";
+import { NodeTypeIcon } from "../../components/nodeIcons";
 import { useShellSidebarCloseSwipe } from "../../hooks/useShellSidebarCloseSwipe";
 import { nodeIdFromSelectionMessage, nodeIdFromWidgetContext, type ActiveMemorySelectionMessage } from "../../lib/activeMemorySelection";
-import { callMemory, normalizeViewFilter } from "../../memoryApi";
-import type { GraphEdge, GraphNode, ViewFilter } from "../../types";
+import { callMemory, currentMemoryAppId, MemoryApiError, normalizeViewFilter } from "../../memoryApi";
+import type { GraphNode, ViewFilter } from "../../types";
 import "../../styles/sidebar-widget.css";
 
 const MOBILE_LAYOUT_QUERY = "(max-width: 979px)";
 
 type GraphPayload = {
-  edges?: GraphEdge[];
   nodes?: GraphNode[];
 };
 
@@ -51,11 +51,11 @@ function useShellMobileLayout() {
   return isShellMobileLayout;
 }
 
-function openNodeInShell(nodeId: string) {
+function openNodeInShell(nodeId: string, appId: string) {
   window.parent?.postMessage(
     {
       type: "maverick.widget.open-app",
-      app_id: "memory",
+      app_id: appId,
       params: {
         app_page: `nodes/${encodeURIComponent(nodeId)}`,
         node_id: nodeId,
@@ -73,26 +73,33 @@ function nodeMatchesSearch(node: GraphNode, query: string) {
   return `${node.title} ${node.summary} ${node.body_text} ${node.type} ${node.id}`.toLowerCase().includes(query);
 }
 
-function graphRequest(viewFilter: ViewFilter) {
-  const body: Record<string, unknown> = { action: "graph", query: viewFilter.query, limit: 160 };
+function graphRequest(viewFilter: ViewFilter, query: string) {
+  const body: Record<string, unknown> = { action: "graph", query, limit: 160 };
   if (viewFilter.mode === "custom") {
     body.node_ids = viewFilter.refs.map((ref) => ref.entity_id).filter(Boolean);
   }
   return body;
 }
 
+function graphRequestKey(viewFilter: ViewFilter, query: string) {
+  const refs = viewFilter.mode === "custom" ? viewFilter.refs.map((ref) => ref.entity_id).join(",") : "";
+  return `${viewFilter.mode}:${query}:${refs}`;
+}
+
 function MemorySidebarWidget() {
+  const appId = useMemo(() => currentMemoryAppId(), []);
   const [nodes, setNodes] = useState<GraphNode[]>([]);
-  const [edges, setEdges] = useState<GraphEdge[]>([]);
   const [query, setQuery] = useState("");
   const [viewFilter, setViewFilter] = useState<ViewFilter>(() => normalizeViewFilter());
   const [selectedNodeId, setSelectedNodeId] = useState("");
-  const [contextText, setContextText] = useState("");
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const isShellMobileLayout = useShellMobileLayout();
-  const lastPersistedQueryRef = useRef("");
+  const graphAbortRef = useRef<AbortController | null>(null);
+  const graphRequestSeqRef = useRef(0);
   const hasLoadedViewStateRef = useRef(false);
+  const queryRef = useRef("");
+  const skipGraphEffectKeyRef = useRef("");
 
   useShellSidebarCloseSwipe(isShellMobileLayout);
 
@@ -101,21 +108,39 @@ function MemorySidebarWidget() {
     return nodes.filter((node) => nodeMatchesSearch(node, needle));
   }, [nodes, query]);
 
+  useEffect(() => {
+    queryRef.current = query;
+  }, [query]);
+
   async function refreshViewFilter() {
     const payload = await callMemory<{ state?: { view_filter?: ViewFilter } }>({ action: "view_filter" });
     const next = normalizeViewFilter(payload.state?.view_filter);
-    lastPersistedQueryRef.current = next.query;
     hasLoadedViewStateRef.current = true;
     setViewFilter(next);
-    setQuery(next.query);
+    setQuery(next.mode === "custom" ? next.query : "");
     return next;
   }
 
-  async function refreshGraph(nextViewFilter = viewFilter) {
-    const payload = await callMemory<GraphPayload>(graphRequest(nextViewFilter));
+  async function refreshGraph(nextViewFilter = viewFilter, nextQuery = query.trim()) {
+    graphAbortRef.current?.abort();
+    const controller = new AbortController();
+    graphAbortRef.current = controller;
+    const requestId = graphRequestSeqRef.current + 1;
+    graphRequestSeqRef.current = requestId;
+    let payload: GraphPayload;
+    try {
+      payload = await callMemory<GraphPayload>(graphRequest(nextViewFilter, nextQuery), { signal: controller.signal });
+    } catch (loadError) {
+      if (loadError instanceof MemoryApiError && loadError.code === "request_cancelled") {
+        return;
+      }
+      throw loadError;
+    }
+    if (controller.signal.aborted || requestId !== graphRequestSeqRef.current) {
+      return;
+    }
     const nextNodes = payload.nodes || [];
     setNodes(nextNodes);
-    setEdges(payload.edges || []);
     setSelectedNodeId((current) => {
       if (current && nextNodes.some((node) => node.id === current)) {
         return current;
@@ -127,7 +152,9 @@ function MemorySidebarWidget() {
   async function refreshAll() {
     try {
       const next = await refreshViewFilter();
-      await refreshGraph(next);
+      const nextQuery = next.mode === "custom" ? next.query : "";
+      skipGraphEffectKeyRef.current = graphRequestKey(next, nextQuery);
+      await refreshGraph(next, nextQuery);
       setError(null);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to load memory.");
@@ -141,23 +168,26 @@ function MemorySidebarWidget() {
   }, []);
 
   useEffect(() => {
-    if (!hasLoadedViewStateRef.current || query === lastPersistedQueryRef.current) {
+    if (!hasLoadedViewStateRef.current) {
+      return;
+    }
+    const nextQuery = query.trim();
+    const requestKey = graphRequestKey(viewFilter, nextQuery);
+    if (skipGraphEffectKeyRef.current === requestKey) {
+      skipGraphEffectKeyRef.current = "";
       return;
     }
     const timeout = window.setTimeout(() => {
-      const nextQuery = query.trim();
-      callMemory<{ state?: { view_filter?: ViewFilter } }>({ action: "set_view_filter", query: nextQuery })
-        .then((payload) => {
-          const next = normalizeViewFilter(payload.state?.view_filter);
-          lastPersistedQueryRef.current = next.query;
-          setViewFilter(next);
-          setError(null);
-          return refreshGraph(next);
-        })
-        .catch((saveError: Error) => setError(saveError.message));
+      refreshGraph(viewFilter, nextQuery)
+        .then(() => setError(null))
+        .catch((searchError: Error) => setError(searchError.message));
     }, 250);
     return () => window.clearTimeout(timeout);
-  }, [query]);
+  }, [query, viewFilter]);
+
+  useEffect(() => {
+    return () => graphAbortRef.current?.abort();
+  }, []);
 
   useEffect(() => {
     function handleShellMessage(event: MessageEvent) {
@@ -169,56 +199,38 @@ function MemorySidebarWidget() {
         resource?: string;
         type?: string;
       } & ActiveMemorySelectionMessage;
-      const contextNodeId = nodeIdFromWidgetContext(payload);
+      const contextNodeId = nodeIdFromWidgetContext(payload, appId);
       if (contextNodeId) {
         setSelectedNodeId(contextNodeId);
         return;
       }
-      const activeNodeId = nodeIdFromSelectionMessage(payload);
+      const activeNodeId = nodeIdFromSelectionMessage(payload, appId);
       if (activeNodeId) {
         setSelectedNodeId(activeNodeId);
         return;
       }
-      if (payload.type !== "maverick.widget.data-changed" || payload.owner_app_id !== "memory") {
+      if (payload.type !== "maverick.widget.data-changed" || payload.owner_app_id !== appId) {
         return;
       }
       if (payload.resource === "view-state") {
         void refreshAll();
       } else if (payload.resource === "graph") {
-        void refreshGraph();
+        void refreshGraph(viewFilter, queryRef.current.trim());
       }
     }
 
     window.addEventListener("message", handleShellMessage);
     return () => window.removeEventListener("message", handleShellMessage);
-  }, [viewFilter]);
-
-  async function previewContext() {
-    try {
-      const payload = await callMemory<{ items?: Array<{ title: string; summary?: string; body_text?: string; type?: string }> }>({
-        action: "context",
-        query,
-        limit: 5,
-      });
-      const lines = (payload.items || []).map((item) => {
-        const body = item.summary || item.body_text || "";
-        return `${item.title} - ${labelForType(item.type || "note")}: ${truncate(body, 120)}`;
-      });
-      setContextText(lines.length ? lines.join("\n\n") : "No matching context.");
-      setError(null);
-    } catch (contextError) {
-      setError(contextError instanceof Error ? contextError.message : "Unable to preview context.");
-    }
-  }
+  }, [appId, viewFilter]);
 
   async function clearCustomView() {
     try {
       const payload = await callMemory<{ state?: { view_filter?: ViewFilter } }>({ action: "clear_custom_view" });
       const next = normalizeViewFilter(payload.state?.view_filter);
-      lastPersistedQueryRef.current = next.query;
+      skipGraphEffectKeyRef.current = graphRequestKey(next, "");
       setViewFilter(next);
-      setQuery(next.query);
-      await refreshGraph(next);
+      setQuery("");
+      await refreshGraph(next, "");
       setError(null);
     } catch (clearError) {
       setError(clearError instanceof Error ? clearError.message : "Unable to clear custom view.");
@@ -227,7 +239,7 @@ function MemorySidebarWidget() {
 
   function selectNode(node: GraphNode) {
     setSelectedNodeId(node.id);
-    openNodeInShell(node.id);
+    openNodeInShell(node.id, appId);
   }
 
   return (
@@ -256,41 +268,32 @@ function MemorySidebarWidget() {
           </div>
         ) : null}
 
-        <div className="memory-sidebar-stats" aria-label="Memory graph stats">
-          <span>{nodes.length}<small>nodes</small></span>
-          <span>{edges.length}<small>links</small></span>
-        </div>
-
         {isInitialLoading ? (
           <MemorySidebarSkeleton />
         ) : filteredNodes.length ? (
-          filteredNodes.slice(0, 48).map((node) => (
-            <button
-              className={`memory-sidebar-row ${node.id === selectedNodeId ? "is-active" : ""}`}
-              key={node.id}
-              onClick={() => selectNode(node)}
-              type="button"
-            >
-              <span className="memory-sidebar-row__icon" aria-hidden="true">
-                <BrainCircuit size={17} />
-                <i style={{ background: colors[node.type] || "#ccd6dd" }} />
-              </span>
-              <span className="memory-sidebar-row__copy">
-                <strong>{node.title}</strong>
-                <span>{labelForType(node.type)} · {truncate(node.summary || node.body_text, 52)}</span>
-              </span>
-            </button>
-          ))
+          filteredNodes.slice(0, 48).map((node) => {
+            const color = colors[node.type] || "#ccd6dd";
+            return (
+              <button
+                className={`memory-sidebar-row ${node.id === selectedNodeId ? "is-active" : ""}`}
+                key={node.id}
+                onClick={() => selectNode(node)}
+                type="button"
+              >
+                <span className="memory-sidebar-row__icon" style={{ color }} aria-hidden="true">
+                  <NodeTypeIcon type={node.type} size={17} />
+                  <i style={{ background: color }} />
+                </span>
+                <span className="memory-sidebar-row__copy">
+                  <strong>{node.title}</strong>
+                  <span>{labelForType(node.type)} · {truncate(node.summary || node.body_text, 52)}</span>
+                </span>
+              </button>
+            );
+          })
         ) : (
           <p className="memory-sidebar-empty">No memory nodes found.</p>
         )}
-
-        <section className="memory-sidebar-context">
-          <button className="memory-sidebar-context-button" onClick={previewContext} type="button">
-            Preview context
-          </button>
-          {contextText ? <pre>{contextText}</pre> : null}
-        </section>
       </div>
     </main>
   );

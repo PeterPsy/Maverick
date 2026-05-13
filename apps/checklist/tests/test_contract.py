@@ -15,9 +15,12 @@ class GeneratedAppContractTest(unittest.TestCase):
         app_root = Path(__file__).resolve().parents[1]
         parsed = parse_app_contract_file(app_root)
         self.assertEqual(parsed.app_id, "checklist")
+        self.assertEqual(parsed.contract.storage.data_schema_version, "4")
         self.assertEqual(parsed.contract.capabilities.cli_commands, ["checklist", "checklist-reference", "checklist-view"])
         self.assertIn("checklist_reference_search", parsed.contract.capabilities.mcp_tools)
         self.assertIn("checklist_set_custom_view", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("checklist_set_task_status", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("checklist_next_actions", parsed.contract.capabilities.mcp_tools)
         self.assertEqual(parsed.contract.capabilities.reference_entities[0].entity_type, "checklist")
         surface = parsed.contract.capabilities.view_surfaces[0]
         self.assertEqual(surface.view_id, "main")
@@ -26,9 +29,13 @@ class GeneratedAppContractTest(unittest.TestCase):
         self.assertTrue(actions["set_custom_view"].standard)
         self.assertTrue(actions["set_view_filter"].standard)
         self.assertTrue(surface.supports_custom_view)
-        self.assertEqual(parsed.contract.widgets[0].widget_id, "design-checklist")
-        self.assertEqual(parsed.contract.widgets[0].host, "chat")
-        self.assertEqual(parsed.contract.widgets[0].content_kinds, ["checklist.design"])
+        widgets = {widget.widget_id: widget for widget in parsed.contract.widgets}
+        self.assertEqual(widgets["checklist-sidebar"].host, "base-shell")
+        self.assertEqual(widgets["checklist-sidebar"].content_kinds, ["shell.sidebar.primary"])
+        self.assertEqual(widgets["checklist-sidebar-footer"].host, "base-shell")
+        self.assertEqual(widgets["checklist-sidebar-footer"].content_kinds, ["shell.sidebar.footer"])
+        self.assertEqual(widgets["design-checklist"].host, "chat")
+        self.assertEqual(widgets["design-checklist"].content_kinds, ["checklist.design"])
 
     def test_checklist_tasklist_creates_chat_render_payload(self) -> None:
         app_root = Path(__file__).resolve().parents[1]
@@ -62,6 +69,175 @@ class GeneratedAppContractTest(unittest.TestCase):
         self.assertEqual(result["chat_render"]["kind"], "checklist.design")
         self.assertNotIn("legacy_kind", result["chat_render"])
         self.assertEqual(result["chat_render"]["payload"]["id"], result["checklist"]["id"])
+        self.assertEqual(result["checklist"]["mode"], "simple")
+        self.assertEqual(result["checklist"]["sections"][0]["tasks"][0]["status"], "pending")
+
+    def test_agent_plan_payload_preserves_status_priority_dependencies_tools_and_subtasks(self) -> None:
+        app_root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir) / "data"
+            created = run_json_entrypoint(
+                app_root / "mcp" / "server.py",
+                cwd=app_root,
+                payload={
+                    "app_id": "checklist",
+                    "workspace_id": "default",
+                    "data_root": str(data_root),
+                    "tool_name": "checklist_create",
+                    "arguments": {
+                        "payload": {
+                            "mode": "agent_plan",
+                            "title": "Agent handoff",
+                            "priority": "high",
+                            "sections": [
+                                {
+                                    "id": "plan",
+                                    "title": "Plan",
+                                    "tasks": [
+                                        {
+                                            "id": "implement",
+                                            "title": "Implement schema",
+                                            "description": "Move checklist to agent-plan semantics.",
+                                            "status": "in-progress",
+                                            "priority": "critical",
+                                            "dependencies": ["research"],
+                                            "tools": ["shell", "file-system"],
+                                            "blocked_reason": "Waiting for agent context.",
+                                            "agent_ref": "agent:planner",
+                                            "source_ref": "chat:thread-123",
+                                            "agent_dialogs": [
+                                                {
+                                                    "id": "dialog-1",
+                                                    "title": "Planner handoff",
+                                                    "summary": "Agent explained the schema work.",
+                                                    "ref": "chat:thread-123#turn-1",
+                                                    "agent_ref": "agent:planner",
+                                                }
+                                            ],
+                                            "subtasks": [
+                                                {
+                                                    "id": "tests",
+                                                    "title": "Add tests",
+                                                    "status": "pending",
+                                                    "priority": "high",
+                                                    "tools": ["test-runner"],
+                                                    "agent_ref": "agent:tester",
+                                                    "source_ref": "chat:thread-123#turn-2",
+                                                    "agent_dialogs": ["chat:thread-123#turn-2"],
+                                                }
+                                            ],
+                                        }
+                                    ],
+                                }
+                            ],
+                        }
+                    },
+                },
+            )
+
+        checklist = created["checklist"]
+        task = checklist["sections"][0]["tasks"][0]
+        self.assertEqual(checklist["mode"], "agent_plan")
+        self.assertEqual(checklist["priority"], "high")
+        self.assertEqual(task["status"], "in-progress")
+        self.assertEqual(task["priority"], "critical")
+        self.assertEqual(task["dependencies"], ["research"])
+        self.assertEqual(task["tools"], ["shell", "file-system"])
+        self.assertEqual(task["blocked_reason"], "Waiting for agent context.")
+        self.assertEqual(task["agent_ref"], "agent:planner")
+        self.assertEqual(task["source_ref"], "chat:thread-123")
+        self.assertEqual(task["agent_dialogs"][0]["title"], "Planner handoff")
+        self.assertEqual(task["subtasks"][0]["tools"], ["test-runner"])
+        self.assertEqual(task["subtasks"][0]["agent_ref"], "agent:tester")
+        self.assertEqual(task["subtasks"][0]["source_ref"], "chat:thread-123#turn-2")
+        self.assertEqual(task["subtasks"][0]["agent_dialogs"][0]["ref"], "chat:thread-123#turn-2")
+        self.assertEqual(checklist["task_count"], 2)
+
+    def test_agent_status_tools_update_task_and_subtask_status(self) -> None:
+        app_root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir) / "data"
+            created = run_json_entrypoint(
+                app_root / "mcp" / "server.py",
+                cwd=app_root,
+                payload={
+                    "app_id": "checklist",
+                    "workspace_id": "default",
+                    "data_root": str(data_root),
+                    "tool_name": "checklist_create",
+                    "arguments": {
+                        "payload": {
+                            "mode": "agent_plan",
+                            "title": "Execution",
+                            "sections": [
+                                {
+                                    "id": "main",
+                                    "title": "Main",
+                                    "tasks": [
+                                        {
+                                            "id": "task-1",
+                                            "title": "Run build",
+                                            "status": "pending",
+                                            "subtasks": [{"id": "sub-1", "title": "Install deps", "status": "pending"}],
+                                        }
+                                    ],
+                                }
+                            ],
+                        }
+                    },
+                },
+            )
+            checklist_id = created["checklist"]["id"]
+            task_status = run_json_entrypoint(
+                app_root / "mcp" / "server.py",
+                cwd=app_root,
+                payload={
+                    "app_id": "checklist",
+                    "workspace_id": "default",
+                    "data_root": str(data_root),
+                    "tool_name": "checklist_set_task_status",
+                    "arguments": {
+                        "id": checklist_id,
+                        "section_id": "main",
+                        "task_id": "task-1",
+                        "status": "completed",
+                    },
+                },
+            )
+            subtask_status = run_json_entrypoint(
+                app_root / "mcp" / "server.py",
+                cwd=app_root,
+                payload={
+                    "app_id": "checklist",
+                    "workspace_id": "default",
+                    "data_root": str(data_root),
+                    "tool_name": "checklist_set_subtask_status",
+                    "arguments": {
+                        "id": checklist_id,
+                        "section_id": "main",
+                        "task_id": "task-1",
+                        "subtask_id": "sub-1",
+                        "status": "blocked",
+                    },
+                },
+            )
+            reread = run_json_entrypoint(
+                app_root / "mcp" / "server.py",
+                cwd=app_root,
+                payload={
+                    "app_id": "checklist",
+                    "workspace_id": "default",
+                    "data_root": str(data_root),
+                    "tool_name": "checklist_read",
+                    "arguments": {"id": checklist_id},
+                },
+            )
+
+        self.assertEqual(task_status["status_code"], 200)
+        self.assertTrue(task_status["task"]["checked"])
+        self.assertEqual(subtask_status["subtask"]["status"], "blocked")
+        self.assertEqual(reread["checklist"]["checked_count"], 1)
+        self.assertEqual(reread["checklist"]["blocked_count"], 1)
 
     def test_backend_updates_v3_style_sections(self) -> None:
         app_root = Path(__file__).resolve().parents[1]
@@ -272,6 +448,58 @@ class GeneratedAppContractTest(unittest.TestCase):
         self.assertEqual(listed["status_code"], 200)
         self.assertEqual([item["id"] for item in listed["json"]["items"]], [newer_id, older_id])
 
+    def test_list_can_ignore_view_state_for_all_checklists_view(self) -> None:
+        app_root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir) / "data"
+            for title in ["Visible plan", "Hidden plan"]:
+                run_json_entrypoint(
+                    app_root / "backend" / "app_backend.py",
+                    cwd=app_root,
+                    payload={
+                        "app_id": "checklist",
+                        "workspace_id": "default",
+                        "data_root": str(data_root),
+                        "body": {
+                            "action": "create",
+                            "payload": {"title": title, "sections": [{"id": "main", "title": "", "tasks": []}]},
+                        },
+                    },
+                )
+            run_json_entrypoint(
+                app_root / "backend" / "app_backend.py",
+                cwd=app_root,
+                payload={
+                    "app_id": "checklist",
+                    "workspace_id": "default",
+                    "data_root": str(data_root),
+                    "body": {"action": "set_view_filter", "query": "Visible"},
+                },
+            )
+            filtered = run_json_entrypoint(
+                app_root / "backend" / "app_backend.py",
+                cwd=app_root,
+                payload={
+                    "app_id": "checklist",
+                    "workspace_id": "default",
+                    "data_root": str(data_root),
+                    "body": {"action": "list"},
+                },
+            )
+            unfiltered = run_json_entrypoint(
+                app_root / "backend" / "app_backend.py",
+                cwd=app_root,
+                payload={
+                    "app_id": "checklist",
+                    "workspace_id": "default",
+                    "data_root": str(data_root),
+                    "body": {"action": "list", "ignore_view_state": True},
+                },
+            )
+
+        self.assertEqual([item["title"] for item in filtered["json"]["items"]], ["Visible plan"])
+        self.assertEqual({item["title"] for item in unfiltered["json"]["items"]}, {"Visible plan", "Hidden plan"})
+
     def test_reference_tools_search_resolve_and_summarize_checklists(self) -> None:
         app_root = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -336,6 +564,8 @@ class GeneratedAppContractTest(unittest.TestCase):
 
         self.assertEqual(searched["status_code"], 200)
         self.assertEqual(searched["results"][0]["entity_id"], checklist_id)
+        self.assertEqual(searched["results"][0]["deep_link"], f"/app/checklist/checklists/{checklist_id}")
+        self.assertEqual(resolved["app_page"], f"checklists/{checklist_id}")
         self.assertTrue(resolved["exists"])
         self.assertEqual(resolved["title"], "Agency launch")
         self.assertIn("1/1 checked", summarized["summary"])

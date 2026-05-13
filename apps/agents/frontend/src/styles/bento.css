@@ -40,8 +40,13 @@
 }
 
 .bento-card-agent {
+  display: grid;
   grid-column: 1 / span 2;
   grid-row: 1 / span 2;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  align-items: stretch;
+  min-height: 32rem;
 }
 
 .bento-card-role {
@@ -112,7 +117,15 @@
 }
 
 .bento-card-agent .bento-card-body {
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-column: 1;
+  grid-row: 2;
+  align-self: stretch;
+  grid-template-rows: auto minmax(13rem, auto);
+}
+
+.bento-card-agent .bento-card-topline {
+  grid-column: 1 / -1;
+  grid-row: 1;
 }
 
 .bento-card-agent label,
@@ -132,6 +145,20 @@
   min-height: 0;
 }
 
+.bento-card-agent input,
+.bento-card-agent textarea {
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
+.bento-card-agent input {
+  min-height: 2.85rem;
+}
+
+.bento-card-agent label:last-child textarea {
+  min-height: 13rem;
+}
+
 .bento-kpi {
   display: grid;
   gap: 0.38rem;
@@ -141,7 +168,7 @@
 .bento-kpi span {
   color: var(--maverick-text-muted);
   font-size: 0.74rem;
-  font-weight: 800;
+  font-weight: 400;
 }
 
 .bento-kpi strong {
@@ -157,54 +184,6 @@
   justify-content: center;
   flex: 1;
   min-height: 112px;
-}
-
-.prompt-signal {
-  position: relative;
-  min-height: 132px;
-}
-
-.prompt-signal-orbit {
-  position: absolute;
-  width: 132px;
-  height: 132px;
-  border: 1px solid var(--maverick-border-strong);
-  border-radius: 999px;
-}
-
-.prompt-signal-orbit::before,
-.prompt-signal-orbit::after {
-  position: absolute;
-  width: 9px;
-  height: 9px;
-  border-radius: 999px;
-  background: var(--maverick-accent);
-  content: "";
-}
-
-.prompt-signal-orbit::before {
-  top: -4px;
-  left: 48px;
-}
-
-.prompt-signal-orbit::after {
-  right: 14px;
-  bottom: 12px;
-  opacity: 0.55;
-}
-
-.prompt-signal-core {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 86px;
-  height: 86px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: var(--maverick-control-radius);
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--maverick-text);
-  font-size: 1.8rem;
-  font-weight: 900;
 }
 
 .trace-meter {

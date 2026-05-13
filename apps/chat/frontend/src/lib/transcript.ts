@@ -135,12 +135,29 @@ function appReferencesPayload(value: unknown): AppReference[] {
   }
   return value
     .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
-    .map((item) => ({
-      type: "app" as const,
-      app_id: typeof item.app_id === "string" ? item.app_id : "",
-      label: typeof item.label === "string" ? item.label : undefined,
-    }))
-    .filter((item) => item.app_id);
+    .map(appReferencePayload)
+    .filter((item) => (item.type === "app" ? Boolean(item.app_id) : Boolean(item.app_id && item.entity_type && item.entity_id)));
+}
+
+function appReferencePayload(item: Record<string, unknown>): AppReference {
+  const appId = typeof item.app_id === "string" ? item.app_id : "";
+  if (item.type === "entity") {
+    return {
+      type: "entity",
+      app_id: appId,
+      entity_type: typeof item.entity_type === "string" ? item.entity_type : "",
+      entity_id: typeof item.entity_id === "string" ? item.entity_id : "",
+      label: typeof item.label === "string" ? item.label : "",
+      summary: typeof item.summary === "string" ? item.summary : undefined,
+      deep_link: typeof item.deep_link === "string" ? item.deep_link : undefined,
+      exists: typeof item.exists === "boolean" ? item.exists : undefined,
+    };
+  }
+  return {
+    type: "app",
+    app_id: appId,
+    label: typeof item.label === "string" ? item.label : undefined,
+  };
 }
 
 export function eventsToMessages(events: RuntimeEvent[]): ChatMessage[] {

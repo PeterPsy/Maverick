@@ -3,11 +3,48 @@ import { createWidgetContext, listWidgets, WidgetRegistryItem } from "../api";
 import { MAVERICK_IFRAME_SANDBOX, postMaverickFrameVisibility, postToMaverickFrame } from "../iframePolicy";
 import { widgetSelectionChangedMessage } from "../lib/widgetSelectionMessages";
 
+export type PrimaryActionPreferredSurface = "app" | "sidebar";
+
+export type WidgetPrimaryActionState = {
+  available: boolean;
+  label: string;
+  preferredSurface: PrimaryActionPreferredSurface;
+};
+
+const UNAVAILABLE_PRIMARY_ACTION_STATE: WidgetPrimaryActionState = {
+  available: false,
+  label: "",
+  preferredSurface: "app",
+};
+
+const COLLAPSED_OVERLAY_SIZE = "3rem";
+const MAX_OVERLAY_HEIGHT_PX = 2160;
+const MAX_OVERLAY_WIDTH_PX = 4096;
+const PIXEL_SIZE_PATTERN = /^(\d+(?:\.\d+)?)px$/;
+
 type CaptureRect = {
   height: number;
   width: number;
   x: number;
   y: number;
+};
+
+type WidgetMessagePayload = {
+  active_thread_id?: string;
+  app_id?: string;
+  height?: string;
+  owner_app_id?: string;
+  navigation_scope?: string;
+  params?: Record<string, string | boolean | null>;
+  resource?: string;
+  selection?: Record<string, string | boolean | null>;
+  type?: string;
+  widget_id?: string;
+  width?: string;
+  workspace_id?: string;
+  available?: boolean;
+  label?: string;
+  preferred_surface?: string;
 };
 
 export function WidgetSlot({
@@ -19,7 +56,9 @@ export function WidgetSlot({
   label,
   onCloseSidebar,
   onOpenApp,
+  onPrimaryActionStateChange,
   preferredOwnerAppId,
+  primaryActionRequestId = 0,
   size = "fill",
 }: {
   activeAppId?: string | null;
@@ -30,13 +69,15 @@ export function WidgetSlot({
   label: string;
   onCloseSidebar?: () => void;
   onOpenApp: (appId: string, params?: Record<string, string | boolean | null>) => void;
+  onPrimaryActionStateChange?: (state: WidgetPrimaryActionState) => void;
   preferredOwnerAppId?: string | null;
+  primaryActionRequestId?: number;
   size?: "compact" | "fill" | "overlay";
 }) {
   const [widget, setWidget] = useState<WidgetRegistryItem | null>(null);
   const [contextToken, setContextToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [overlaySize, setOverlaySize] = useState({ height: "3rem", width: "3rem" });
+  const [overlaySize, setOverlaySize] = useState(collapsedOverlaySize());
   const [captureDraft, setCaptureDraft] = useState<CaptureRect | null>(null);
   const [captureStart, setCaptureStart] = useState<{ x: number; y: number } | null>(null);
   const [isCaptureActive, setIsCaptureActive] = useState(false);
@@ -45,15 +86,20 @@ export function WidgetSlot({
   const captureStreamRef = useRef<MediaStream | null>(null);
   const captureNavigationScopeRef = useRef("");
   const captureVideoRef = useRef<HTMLVideoElement | null>(null);
+  const lastPrimaryActionRequestRef = useRef(primaryActionRequestId);
   const widgetFrameRef = useRef<HTMLIFrameElement | null>(null);
   const contentSignature = JSON.stringify({ activeWorkspaceId, content });
+  const supportsPrimaryActionSlot = contentKind === "shell.sidebar.footer";
 
   useEffect(() => {
     let cancelled = false;
     setWidget(null);
     setContextToken(null);
     setError(null);
-    setOverlaySize({ height: "3rem", width: "3rem" });
+    setOverlaySize(collapsedOverlaySize());
+    if (supportsPrimaryActionSlot) {
+      onPrimaryActionStateChange?.(UNAVAILABLE_PRIMARY_ACTION_STATE);
+    }
 
     async function loadWidget() {
       try {
@@ -63,6 +109,9 @@ export function WidgetSlot({
           if (!cancelled) {
             setWidget(null);
             setContextToken(null);
+            if (supportsPrimaryActionSlot) {
+              onPrimaryActionStateChange?.(UNAVAILABLE_PRIMARY_ACTION_STATE);
+            }
           }
           return;
         }
@@ -83,6 +132,9 @@ export function WidgetSlot({
           setWidget(null);
           setContextToken(null);
           setError(loadError instanceof Error ? loadError.message : "Widget non disponibile.");
+          if (supportsPrimaryActionSlot) {
+            onPrimaryActionStateChange?.(UNAVAILABLE_PRIMARY_ACTION_STATE);
+          }
         }
       }
     }
@@ -91,7 +143,7 @@ export function WidgetSlot({
     return () => {
       cancelled = true;
     };
-  }, [activeWorkspaceId, contentKind, hostAppId, preferredOwnerAppId, size]);
+  }, [activeWorkspaceId, contentKind, hostAppId, onPrimaryActionStateChange, preferredOwnerAppId, size, supportsPrimaryActionSlot]);
 
   function postWidgetContextChanged() {
     if (!widget) {
@@ -107,6 +159,16 @@ export function WidgetSlot({
         widget_id: widget.widget_id,
       },
     );
+    if (supportsPrimaryActionSlot) {
+      postToMaverickFrame(
+        widgetFrameRef.current,
+        {
+          type: "maverick.widget.primary-action.query",
+          owner_app_id: widget.owner_app_id,
+          widget_id: widget.widget_id,
+        },
+      );
+    }
   }
 
   function postWidgetVisibility() {
@@ -134,20 +196,7 @@ export function WidgetSlot({
       if (event.origin !== window.location.origin || !event.data || typeof event.data !== "object") {
         return;
       }
-      const payload = event.data as {
-        active_thread_id?: string;
-        app_id?: string;
-        height?: string;
-        owner_app_id?: string;
-        navigation_scope?: string;
-        params?: Record<string, string | boolean | null>;
-        resource?: string;
-        selection?: Record<string, string | boolean | null>;
-        type?: string;
-        widget_id?: string;
-        width?: string;
-        workspace_id?: string;
-      };
+      const payload = event.data as WidgetMessagePayload;
       if (
         payload.type === "maverick.app.frontend-changed" &&
         payload.owner_app_id === widget?.owner_app_id &&
@@ -163,10 +212,20 @@ export function WidgetSlot({
         onCloseSidebar?.();
       }
       if (
+        payload.type === "maverick.widget.primary-action.state" &&
+        supportsPrimaryActionSlot &&
+        isMountedWidgetFrameMessage(event, payload, widget, widgetFrameRef.current)
+      ) {
+        onPrimaryActionStateChange?.({
+          available: payload.available === true,
+          label: typeof payload.label === "string" ? payload.label : "",
+          preferredSurface: payload.preferred_surface === "sidebar" ? "sidebar" : "app",
+        });
+      }
+      if (
         payload.type === "maverick.shell.capture-area.start" &&
         size === "overlay" &&
-        payload.owner_app_id === widget?.owner_app_id &&
-        payload.widget_id === widget?.widget_id
+        isMountedWidgetFrameMessage(event, payload, widget, widgetFrameRef.current)
       ) {
         const nextNavigationScope = typeof payload.navigation_scope === "string" ? payload.navigation_scope : "";
         captureNavigationScopeRef.current = nextNavigationScope;
@@ -175,12 +234,12 @@ export function WidgetSlot({
       if (
         payload.type === "maverick.widget.resize" &&
         size === "overlay" &&
-        payload.owner_app_id === widget?.owner_app_id &&
-        payload.widget_id === widget?.widget_id
+        isMountedWidgetFrameMessage(event, payload, widget, widgetFrameRef.current)
       ) {
-        const width = typeof payload.width === "string" && payload.width ? payload.width : "3rem";
-        const height = typeof payload.height === "string" && payload.height ? payload.height : "3rem";
-        setOverlaySize({ height, width });
+        const nextOverlaySize = overlayWidgetSizeFromMessage(payload);
+        if (nextOverlaySize) {
+          setOverlaySize(nextOverlaySize);
+        }
       }
       if (payload.type === "maverick.chat.active-thread-changed" && payload.owner_app_id === widget?.owner_app_id) {
         postToMaverickFrame(
@@ -213,7 +272,25 @@ export function WidgetSlot({
 
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [onCloseSidebar, onOpenApp, size, widget?.owner_app_id, widget?.widget_id]);
+  }, [onCloseSidebar, onOpenApp, onPrimaryActionStateChange, size, supportsPrimaryActionSlot, widget?.owner_app_id, widget?.widget_id]);
+
+  useEffect(() => {
+    if (primaryActionRequestId === lastPrimaryActionRequestRef.current) {
+      return;
+    }
+    lastPrimaryActionRequestRef.current = primaryActionRequestId;
+    if (!supportsPrimaryActionSlot || !widget) {
+      return;
+    }
+    postToMaverickFrame(
+      widgetFrameRef.current,
+      {
+        type: "maverick.widget.primary-action.invoke",
+        owner_app_id: widget.owner_app_id,
+        widget_id: widget.widget_id,
+      },
+    );
+  }, [primaryActionRequestId, supportsPrimaryActionSlot, widget?.owner_app_id, widget?.widget_id]);
 
   function postCaptureError(message: string) {
     postToMaverickFrame(
@@ -348,7 +425,7 @@ export function WidgetSlot({
   }
 
   const src = widgetFrameSrc(widget.frontend_mount, contextToken, frameRevision);
-  const isCollapsedOverlay = size === "overlay" && overlaySize.width === "3rem" && overlaySize.height === "3rem";
+  const isCollapsedOverlay = size === "overlay" && overlaySize.width === COLLAPSED_OVERLAY_SIZE && overlaySize.height === COLLAPSED_OVERLAY_SIZE;
   const slotStyle =
     size === "overlay"
       ? overlaySize
@@ -392,6 +469,48 @@ export function WidgetSlot({
       ) : null}
     </>
   );
+}
+
+function collapsedOverlaySize() {
+  return { height: COLLAPSED_OVERLAY_SIZE, width: COLLAPSED_OVERLAY_SIZE };
+}
+
+function isMountedWidgetFrameMessage(
+  event: MessageEvent,
+  payload: WidgetMessagePayload,
+  widget: WidgetRegistryItem | null,
+  frame: HTMLIFrameElement | null,
+): boolean {
+  return (
+    !!widget &&
+    event.source === frame?.contentWindow &&
+    payload.owner_app_id === widget.owner_app_id &&
+    payload.widget_id === widget.widget_id
+  );
+}
+
+function overlayWidgetSizeFromMessage(payload: WidgetMessagePayload): { height: string; width: string } | null {
+  const width = boundedPixelSize(payload.width, MAX_OVERLAY_WIDTH_PX);
+  const height = boundedPixelSize(payload.height, MAX_OVERLAY_HEIGHT_PX);
+  if (!width || !height) {
+    return null;
+  }
+  return { height, width };
+}
+
+function boundedPixelSize(value: unknown, maxPx: number): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const match = value.trim().match(PIXEL_SIZE_PATTERN);
+  if (!match) {
+    return null;
+  }
+  const parsed = Number(match[1]);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > maxPx) {
+    return null;
+  }
+  return `${Math.ceil(parsed)}px`;
 }
 
 export function selectPreferredWidget(

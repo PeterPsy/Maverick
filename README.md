@@ -86,7 +86,7 @@ For local service installs, hosted evaluation, MongoDB, nginx, certbot, systemd,
 
 ## Apps Are The Integration Layer
 
-Apps are how Maverick grows. A CRM, memory graph, gallery, chat surface, admin panel, document workflow, or company-specific tool should be an app, not a core patch.
+Apps are how Maverick grows. A CRM, memory graph, storage, chat surface, admin panel, document workflow, or company-specific tool should be an app, not a core patch.
 
 An app can provide frontend, backend, CLI, MCP, lifecycle hooks, widgets, skills, reference entities, view surfaces, and storage behavior. The platform mounts and governs those capabilities through the app contract.
 

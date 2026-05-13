@@ -44,7 +44,7 @@ function openDynamicViews(instanceId?: string) {
     {
       type: 'maverick.widget.open-app',
       app_id: 'dynamic-views',
-      params: instanceId ? { instance_id: instanceId } : {}
+      params: instanceId ? { app_page: `views/${encodeURIComponent(instanceId)}`, instance_id: instanceId, view_id: instanceId } : {}
     },
     window.location.origin
   );

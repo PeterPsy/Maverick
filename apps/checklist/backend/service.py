@@ -20,6 +20,8 @@ from store import (
     reference_resolve,
     reference_search,
     reference_summarize,
+    set_subtask_status,
+    set_task_status,
     set_custom_view,
     set_view_filter,
     toggle_task,
@@ -36,6 +38,8 @@ MUTATING_ACTIONS = {
     "add_item",
     "toggle_task",
     "toggle_item",
+    "set_task_status",
+    "set_subtask_status",
 }
 VIEW_STATE_ACTIONS = {
     "set_view_filter",
@@ -58,6 +62,7 @@ def handle_action(data_root: Path, body: dict[str, Any], *, workspace_id: str | 
                     data_root,
                     profile=_optional(body.get("profile")),
                     limit=_positive_int(body.get("limit")),
+                    apply_view_state=not bool(body.get("ignore_view_state")),
                 ),
             }
         if action == "references.manifest":
@@ -94,10 +99,12 @@ def handle_action(data_root: Path, body: dict[str, Any], *, workspace_id: str | 
             }
         if action == "clear_custom_view":
             return 200, {"action": "clear_custom_view", "view_state": clear_custom_view(data_root)}
+        if action == "next_actions":
+            return 200, {"action": "next_actions", "items": _next_actions(data_root)}
         if action in {"read", "get", "recall"}:
             checklist = read_checklist(data_root, _required_id(body))
             return 200, tool_payload("read", checklist)
-        if action == "create":
+        if action in {"create", "create_plan"}:
             checklist = create_checklist(data_root, _payload(body), workspace_id=str(workspace_id or ""))
             return 201, tool_payload("create", checklist)
         if action == "update":
@@ -121,6 +128,25 @@ def handle_action(data_root: Path, body: dict[str, Any], *, workspace_id: str | 
                 task_id=str(body.get("task_id") or body.get("item_id") or ""),
             )
             return 200, {"action": "toggle_task", "task": task}
+        if action == "set_task_status":
+            task = set_task_status(
+                data_root,
+                checklist_id=_required_id(body),
+                section_id=str(body.get("section_id") or "section-default"),
+                task_id=str(body.get("task_id") or ""),
+                status=str(body.get("status") or ""),
+            )
+            return 200, {"action": "set_task_status", "task": task}
+        if action == "set_subtask_status":
+            subtask = set_subtask_status(
+                data_root,
+                checklist_id=_required_id(body),
+                section_id=str(body.get("section_id") or "section-default"),
+                task_id=str(body.get("task_id") or ""),
+                subtask_id=str(body.get("subtask_id") or ""),
+                status=str(body.get("status") or ""),
+            )
+            return 200, {"action": "set_subtask_status", "subtask": subtask}
     except ValueError as error:
         return 400, {"error": "validation_error", "detail": str(error)}
     return 400, {"error": "unsupported_action", "detail": f"Unsupported action `{action}`."}
@@ -135,7 +161,20 @@ def describe(data_root: Path) -> dict[str, Any]:
         "status": "ready",
         "checklist_count": len(list_checklists(data_root)),
         "latest": items[0] if items else None,
-        "actions": ["create", "list", "read", "recall", "update", "delete", "add_task", "toggle_task"],
+        "actions": [
+            "create",
+            "create_plan",
+            "list",
+            "read",
+            "recall",
+            "update",
+            "delete",
+            "add_task",
+            "toggle_task",
+            "set_task_status",
+            "set_subtask_status",
+            "next_actions",
+        ],
         "reference_manifest": reference_manifest(),
         "view_actions": ["view_filter", "set_view_filter", "set_custom_view", "clear_custom_view"],
         "content_kind": CHECKLIST_KIND,
@@ -183,6 +222,9 @@ def mcp_result_for_tool(
         "checklist_delete": "delete",
         "checklist_add_task": "add_task",
         "checklist_toggle_task": "toggle_task",
+        "checklist_set_task_status": "set_task_status",
+        "checklist_set_subtask_status": "set_subtask_status",
+        "checklist_next_actions": "next_actions",
         "checklist_reference_search": "references.search",
         "checklist_reference_resolve": "references.resolve",
         "checklist_reference_summarize": "references.summarize",
@@ -221,3 +263,30 @@ def _positive_int(value: Any) -> int | None:
 def _optional(value: Any) -> str | None:
     text = str(value if value is not None else "").strip()
     return text or None
+
+
+def _next_actions(data_root: Path) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for checklist in list_checklists(data_root, limit=500):
+        for section in checklist.get("sections", []):
+            for task in section.get("tasks", []):
+                if task.get("status") in {"completed", "failed"}:
+                    continue
+                items.append(
+                    {
+                        "checklist_id": checklist["id"],
+                        "checklist_title": checklist["title"],
+                        "section_id": section.get("id"),
+                        "section_title": section.get("title"),
+                        "task_id": task.get("id"),
+                        "title": task.get("title"),
+                        "status": task.get("status"),
+                        "priority": task.get("priority"),
+                        "dependencies": task.get("dependencies", []),
+                        "tools": task.get("tools", []),
+                    }
+                )
+    priority_rank = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+    status_rank = {"in-progress": 0, "blocked": 1, "need-help": 2, "pending": 3}
+    items.sort(key=lambda item: (status_rank.get(str(item.get("status")), 9), priority_rank.get(str(item.get("priority")), 9)))
+    return items[:50]

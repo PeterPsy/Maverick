@@ -9,8 +9,8 @@ export function WorkspaceView({
   apps,
   error,
   isLoading,
+  isMobileLayout,
   onOpenApp,
-  onOpenSidebar,
 }: {
   activeApp: AppRegistryItem | null;
   activeAppParams: Record<string, string | boolean | null>;
@@ -18,8 +18,8 @@ export function WorkspaceView({
   apps: AppRegistryItem[];
   error: string | null;
   isLoading: boolean;
+  isMobileLayout: boolean;
   onOpenApp: (appId: string, params?: Record<string, string | boolean | null>) => void;
-  onOpenSidebar?: () => void;
 }) {
   if (!activeApp) {
     return (
@@ -36,8 +36,8 @@ export function WorkspaceView({
       activeApp={activeApp}
       activeAppParams={activeAppParams}
       activeWorkspaceId={activeWorkspaceId}
+      isMobileLayout={isMobileLayout}
       onOpenApp={onOpenApp}
-      onOpenSidebar={onOpenSidebar}
     />
   );
 }

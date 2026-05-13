@@ -154,6 +154,7 @@ def _normalized_state_payload(payload: dict) -> dict:
         payload["schema_version"] = SCHEMA_VERSION
     skills = payload.get("skills") if isinstance(payload.get("skills"), list) else []
     payload["skills"] = [item for item in skills if isinstance(item, dict)]
+    payload["view_filter"] = normalize_view_filter(payload.get("view_filter"))
     return payload
 
 

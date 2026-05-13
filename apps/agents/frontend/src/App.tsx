@@ -351,7 +351,6 @@ function AgentsDetailSkeleton() {
       <div className="agent-bento-grid agents-detail-skeleton__grid" aria-hidden="true">
         <section className="bento-card bento-card-agent agents-detail-skeleton__card">
           <span className="agents-detail-skeleton__line agents-detail-skeleton__line--small" />
-          <span className="agents-detail-skeleton__visual" />
           <span className="agents-detail-skeleton__field" />
           <span className="agents-detail-skeleton__field agents-detail-skeleton__field--tall" />
         </section>

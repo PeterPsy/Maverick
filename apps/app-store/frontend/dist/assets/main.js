@@ -5,11 +5,19 @@ const state = {
   localApps: [],
   pinnedApps: [],
   workspaces: [],
+  isLoading: true,
   selectedWorkspaces: new Set(),
   pending: new Set(),
   publicIdentities: {},
 };
 
+const FEATURE_SKELETON_COUNT = 3;
+const CATALOG_SKELETON_COUNT = 5;
+const MANAGEMENT_SKELETON_COUNT = 3;
+const LOCAL_SKELETON_COUNT = 2;
+const WORKSPACE_SKELETON_COUNT = 3;
+
+const storeShell = document.querySelector(".store-shell");
 const catalogGrid = document.querySelector("#catalogGrid");
 const featuredAppsNode = document.querySelector("#featuredApps");
 const searchNode = document.querySelector("#search");
@@ -48,6 +56,108 @@ async function requestJson(url, options = {}) {
 function setStatus(text, kind = "idle") {
   statusText.textContent = text;
   statusText.dataset.kind = kind;
+}
+
+function setBusy(node, busy) {
+  if (!node) return;
+  if (busy) {
+    node.setAttribute("aria-busy", "true");
+    return;
+  }
+  node.removeAttribute("aria-busy");
+}
+
+function syncLoadingChrome() {
+  storeShell?.classList.toggle("is-loading", state.isLoading);
+  [searchNode, surfaceNode, publicSubmissionId, publicSubmissionLookup, refreshButton].forEach((node) => {
+    if (node) {
+      node.disabled = state.isLoading;
+    }
+  });
+}
+
+function skeletonBlock(className, tagName = "span") {
+  const node = document.createElement(tagName);
+  node.className = className;
+  node.setAttribute("aria-hidden", "true");
+  return node;
+}
+
+function skeletonLine(size) {
+  return skeletonBlock(`store-loading-skeleton__line store-loading-skeleton__line--${size}`);
+}
+
+function renderWorkspaceSkeleton() {
+  workspaceList.replaceChildren();
+  setBusy(workspaceList, true);
+  Array.from({ length: WORKSPACE_SKELETON_COUNT }).forEach((_, index) => {
+    const chip = skeletonBlock("workspace-chip workspace-chip--skeleton", "span");
+    chip.append(skeletonLine(index === 0 ? "workspace-wide" : "workspace"));
+    workspaceList.append(chip);
+  });
+}
+
+function renderFeaturedSkeleton() {
+  featuredAppsNode.replaceChildren();
+  setBusy(featuredAppsNode, true);
+  Array.from({ length: FEATURE_SKELETON_COUNT }).forEach((_, index) => {
+    const card = skeletonBlock(`feature-card feature-card--${index + 1} feature-card--skeleton`, "article");
+    const copy = skeletonBlock("store-loading-skeleton__stack", "div");
+    copy.append(skeletonLine("kicker"), skeletonLine(index === 0 ? "feature-title-wide" : "feature-title"), skeletonLine("feature-copy"));
+    card.append(copy, skeletonBlock("store-loading-skeleton__button"), skeletonBlock("store-loading-skeleton__icon feature-icon"));
+    featuredAppsNode.append(card);
+  });
+}
+
+function renderStatsSkeleton() {
+  catalogStatsNode.replaceChildren();
+  catalogStatsNode.classList.add("store-stats--skeleton");
+  catalogStatsNode.append(skeletonLine("stats"), skeletonLine("stats-short"), skeletonLine("stats"));
+}
+
+function renderRowSkeleton() {
+  const row = skeletonBlock("app-row app-row--skeleton", "article");
+  const icon = skeletonBlock("app-row-icon app-row-icon--skeleton");
+  const copy = skeletonBlock("app-row-copy store-loading-skeleton__stack", "div");
+  copy.append(skeletonLine("row-title"), skeletonLine("row-copy"));
+  const details = skeletonBlock("app-row-details", "div");
+  const meta = skeletonBlock("app-row-meta", "div");
+  meta.append(skeletonBlock("store-loading-skeleton__badge"), skeletonBlock("store-loading-skeleton__status"));
+  details.append(meta, skeletonLine("surface"));
+  const actions = skeletonBlock("app-row-actions", "div");
+  actions.append(skeletonBlock("store-loading-skeleton__control"), skeletonBlock("store-loading-skeleton__control"));
+  row.append(icon, copy, details, actions);
+  return row;
+}
+
+function renderListSkeleton(listNode, rowCount) {
+  listNode.replaceChildren();
+  setBusy(listNode, true);
+  Array.from({ length: rowCount }).forEach(() => {
+    listNode.append(renderRowSkeleton());
+  });
+}
+
+function renderLoading() {
+  renderWorkspaceSkeleton();
+  renderFeaturedSkeleton();
+  renderStatsSkeleton();
+  renderListSkeleton(catalogGrid, CATALOG_SKELETON_COUNT);
+  renderListSkeleton(installedList, MANAGEMENT_SKELETON_COUNT);
+  renderListSkeleton(serverList, MANAGEMENT_SKELETON_COUNT);
+  renderListSkeleton(localList, LOCAL_SKELETON_COUNT);
+}
+
+function clearLoadingState() {
+  [
+    featuredAppsNode,
+    catalogGrid,
+    installedList,
+    serverList,
+    localList,
+    workspaceList,
+  ].forEach((node) => setBusy(node, false));
+  catalogStatsNode.classList.remove("store-stats--skeleton");
 }
 
 function latestVersion(app) {
@@ -210,6 +320,7 @@ function notifyPinnedAppsChanged() {
 
 function renderWorkspaces() {
   workspaceList.replaceChildren();
+  setBusy(workspaceList, false);
   state.workspaces.forEach((workspace) => {
     const label = document.createElement("label");
     label.className = "workspace-chip";
@@ -232,10 +343,17 @@ function renderWorkspaces() {
 }
 
 function renderAppIcon(app) {
-  const icon = document.createElement("span");
-  icon.className = "app-row-icon";
-  icon.textContent = (app.name || app.app_id).slice(0, 1).toUpperCase();
-  return icon;
+  if (window.MaverickAppIcons?.renderIcon) {
+    return window.MaverickAppIcons.renderIcon(app, "app-row-icon");
+  }
+  const frame = document.createElement("span");
+  frame.className = "app-row-icon is-glyph";
+  frame.setAttribute("aria-hidden", "true");
+  const glyph = document.createElement("span");
+  glyph.className = "material-symbols-rounded";
+  glyph.textContent = "deployed_code";
+  frame.append(glyph);
+  return frame;
 }
 
 function closeOpenMenus() {
@@ -679,11 +797,17 @@ function renderPublicSubmission(submission) {
   status.textContent = submission.status || "unknown";
   meta.append(versionBadge, status);
   details.append(meta);
-  row.append(renderAppIcon({ name: submission.name || submission.app_id || "Public" }), copy, details);
+  row.append(renderAppIcon({ app_id: submission.app_id || "public", name: submission.name || submission.app_id || "Public" }), copy, details);
   publicSubmissionResult.append(row);
 }
 
 function render() {
+  syncLoadingChrome();
+  if (state.isLoading) {
+    renderLoading();
+    return;
+  }
+  clearLoadingState();
   renderFeatured();
   renderInstalled();
   renderStore();
@@ -1151,27 +1275,37 @@ async function lookupPublicSubmission() {
 }
 
 async function load() {
+  state.isLoading = true;
   setStatus("Loading", "busy");
-  const [workspaces, catalog, serverApps, installations, pinned] = await Promise.all([
-    requestJson("/api/workspaces"),
-    requestJson("/api/app-store/apps"),
-    requestJson("/api/app-store/server-apps"),
-    requestJson("/api/app-store/installations"),
-    requestJson("/api/apps/app-store/backend", {
-      method: "POST",
-      body: JSON.stringify({ action: "pinned_apps.list" }),
-    }),
-  ]);
-  state.workspaces = workspaces.items || [];
-  state.apps = catalog.items || [];
-  state.serverApps = serverApps.items || [];
-  state.installations = installations.items || [];
-  state.localApps = installations.local_apps || [];
-  state.pinnedApps = pinned.pinned_apps || [];
-  state.selectedWorkspaces = new Set([workspaces.active_workspace_id || state.workspaces[0]?.workspace_id].filter(Boolean));
-  renderWorkspaces();
   render();
-  setStatus(`${state.apps.length} catalog apps · ${state.serverApps.length} server apps`, "ok");
+  try {
+    const [workspaces, catalog, serverApps, installations, pinned] = await Promise.all([
+      requestJson("/api/workspaces"),
+      requestJson("/api/app-store/apps"),
+      requestJson("/api/app-store/server-apps"),
+      requestJson("/api/app-store/installations"),
+      requestJson("/api/apps/app-store/backend", {
+        method: "POST",
+        body: JSON.stringify({ action: "pinned_apps.list" }),
+      }),
+    ]);
+    state.workspaces = workspaces.items || [];
+    state.apps = catalog.items || [];
+    state.serverApps = serverApps.items || [];
+    state.installations = installations.items || [];
+    state.localApps = installations.local_apps || [];
+    state.pinnedApps = pinned.pinned_apps || [];
+    state.selectedWorkspaces = new Set([workspaces.active_workspace_id || state.workspaces[0]?.workspace_id].filter(Boolean));
+    state.isLoading = false;
+    renderWorkspaces();
+    render();
+    setStatus(`${state.apps.length} catalog apps · ${state.serverApps.length} server apps`, "ok");
+  } catch (error) {
+    state.isLoading = false;
+    renderWorkspaces();
+    render();
+    throw error;
+  }
 }
 
 refreshButton.addEventListener("click", () => {

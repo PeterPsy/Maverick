@@ -52,6 +52,9 @@ class ChatWidgetHostingTests(unittest.TestCase):
         self.assertIn("maverick.widget.open-app", footer_source)
         self.assertIn("new_chat_request_id", footer_source)
 
+        footer_styles = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar-footer/styles.css").read_text()
+        self.assertIn("backdrop-filter: blur(18px) saturate(1.15);", footer_styles)
+
     def test_chat_sidebar_project_button_creates_without_opening_settings_panel(self) -> None:
         sidebar_source = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/main.tsx").read_text()
         sidebar_styles = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/styles.css").read_text()
@@ -92,7 +95,18 @@ class ChatWidgetHostingTests(unittest.TestCase):
         self.assertIn("content,", host_source)
         self.assertIn("state.widget.frontend_mount", host_source)
         self.assertIn("#context=", host_source)
-        self.assertIn("window.location.hash", host_source)
+        self.assertIn("sandbox={MAVERICK_WIDGET_IFRAME_SANDBOX}", host_source)
+        self.assertNotIn("widgetContextTokenFromLocation", host_source)
+
+    def test_chat_widget_host_bounds_resize_messages(self) -> None:
+        host_source = (REPO_ROOT / "apps/chat/frontend/src/components/WidgetHostFrame.tsx").read_text()
+        resize_source = (REPO_ROOT / "apps/chat/frontend/src/lib/widgetResize.ts").read_text()
+
+        self.assertIn("boundedWidgetHeightPx(payload.height)", host_source)
+        self.assertIn("payload.owner_app_id !== widget.owner_app_id", host_source)
+        self.assertIn("payload.widget_id !== widget.widget_id", host_source)
+        self.assertIn("STRUCTURED_WIDGET_MIN_HEIGHT_PX", resize_source)
+        self.assertIn("STRUCTURED_WIDGET_MAX_HEIGHT_PX", resize_source)
 
     def test_chat_transcript_triggers_widget_previews_from_workspace_file_links(self) -> None:
         transcript_source = (REPO_ROOT / "apps/chat/frontend/src/lib/transcript.ts").read_text()

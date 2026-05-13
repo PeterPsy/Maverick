@@ -1,0 +1,206 @@
+// @vitest-environment happy-dom
+
+import { act, useState } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createWidgetContext, listWidgets, type WidgetRegistryItem } from "../src/api";
+import { WidgetSlot } from "../src/components/WidgetSlot";
+import type { WidgetPrimaryActionState } from "../src/components/WidgetSlot";
+
+vi.mock("../src/api", () => ({
+  createWidgetContext: vi.fn(),
+  listWidgets: vi.fn(),
+}));
+
+const ownerAppId = "agents";
+const widgetId = "agents-sidebar-footer";
+
+function footerWidget(): WidgetRegistryItem {
+  return {
+    actions: {},
+    content_kinds: ["shell.sidebar.footer"],
+    frontend_mount: `/api/apps/widgets/${ownerAppId}/${widgetId}/frontend/`,
+    host: "base-shell",
+    owner_app_id: ownerAppId,
+    widget_id: widgetId,
+  };
+}
+
+function PrimaryActionHarness({ onOpenSidebar }: { onOpenSidebar: () => void }) {
+  const [primaryAction, setPrimaryAction] = useState<WidgetPrimaryActionState>({
+    available: false,
+    label: "",
+    preferredSurface: "app",
+  });
+  const [requestId, setRequestId] = useState(0);
+
+  return (
+    <>
+      <button
+        aria-label="Mobile primary action"
+        data-preferred-surface={primaryAction.preferredSurface}
+        disabled={!primaryAction.available}
+        onClick={() => {
+          if (primaryAction.preferredSurface === "sidebar") {
+            onOpenSidebar();
+          }
+          setRequestId((current) => current + 1);
+        }}
+        type="button"
+      >
+        {primaryAction.label || "Primary action"}
+      </button>
+      <WidgetSlot
+        activeWorkspaceId="default"
+        content={{ is_mobile_layout: true }}
+        contentKind="shell.sidebar.footer"
+        hostAppId="base-shell"
+        label="App sidebar footer"
+        onOpenApp={vi.fn()}
+        onPrimaryActionStateChange={setPrimaryAction}
+        preferredOwnerAppId={ownerAppId}
+        primaryActionRequestId={requestId}
+        size="compact"
+      />
+    </>
+  );
+}
+
+describe("WidgetSlot primary action protocol", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    interceptHappyDomIframeFetch();
+    vi.mocked(listWidgets).mockResolvedValue({ items: [footerWidget()] });
+    vi.mocked(createWidgetContext).mockResolvedValue({ context: {}, context_token: "context-token" });
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+    clearHappyDomFetchInterceptor();
+    vi.clearAllMocks();
+  });
+
+  it("accepts state only from the mounted footer frame and invokes that frame from the enabled header action", async () => {
+    const openSidebar = vi.fn();
+    await act(async () => {
+      root.render(<PrimaryActionHarness onOpenSidebar={openSidebar} />);
+    });
+    const iframe = await waitForIframe(container);
+    const frameWindow = iframe.contentWindow;
+    if (!frameWindow) {
+      throw new Error("Expected iframe contentWindow.");
+    }
+    const framePostMessage = vi.spyOn(frameWindow, "postMessage");
+    const primaryButton = primaryActionButton(container);
+
+    expect(primaryButton.disabled).toBe(true);
+
+    await act(async () => {
+      iframe.dispatchEvent(new Event("load"));
+    });
+    expect(framePostMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        owner_app_id: ownerAppId,
+        type: "maverick.widget.primary-action.query",
+        widget_id: widgetId,
+      }),
+      window.location.origin,
+    );
+
+    await dispatchWidgetState(window);
+    expect(primaryButton.disabled).toBe(true);
+
+    await dispatchWidgetState(frameWindow);
+    expect(primaryButton.disabled).toBe(false);
+    expect(primaryButton.dataset.preferredSurface).toBe("sidebar");
+    expect(primaryButton.textContent).toBe("New Agent");
+
+    await act(async () => {
+      primaryButton.click();
+    });
+    expect(openSidebar).toHaveBeenCalledTimes(1);
+    expect(framePostMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        owner_app_id: ownerAppId,
+        type: "maverick.widget.primary-action.invoke",
+        widget_id: widgetId,
+      }),
+      window.location.origin,
+    );
+  });
+});
+
+function interceptHappyDomIframeFetch() {
+  const happyDomWindow = window as Window & {
+    happyDOM?: {
+      settings?: {
+        fetch?: {
+          interceptor?: {
+            beforeAsyncRequest?: () => Promise<Response>;
+          } | null;
+        };
+      };
+    };
+  };
+  if (happyDomWindow.happyDOM?.settings?.fetch) {
+    happyDomWindow.happyDOM.settings.fetch.interceptor = {
+      beforeAsyncRequest: async () => new Response("<!doctype html><html></html>"),
+    };
+  }
+}
+
+function clearHappyDomFetchInterceptor() {
+  const happyDomWindow = window as Window & {
+    happyDOM?: { settings?: { fetch?: { interceptor?: unknown } } };
+  };
+  if (happyDomWindow.happyDOM?.settings?.fetch) {
+    happyDomWindow.happyDOM.settings.fetch.interceptor = null;
+  }
+}
+
+async function waitForIframe(parent: HTMLElement): Promise<HTMLIFrameElement> {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const iframe = parent.querySelector("iframe");
+    if (iframe instanceof HTMLIFrameElement) {
+      return iframe;
+    }
+    await act(async () => {
+      await Promise.resolve();
+    });
+  }
+  throw new Error("Widget iframe was not mounted.");
+}
+
+function primaryActionButton(parent: HTMLElement): HTMLButtonElement {
+  const button = parent.querySelector('button[aria-label="Mobile primary action"]');
+  if (!(button instanceof HTMLButtonElement)) {
+    throw new Error("Primary action button was not mounted.");
+  }
+  return button;
+}
+
+async function dispatchWidgetState(source: MessageEventSource) {
+  await act(async () => {
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        data: {
+          available: true,
+          label: "New Agent",
+          owner_app_id: ownerAppId,
+          preferred_surface: "sidebar",
+          type: "maverick.widget.primary-action.state",
+          widget_id: widgetId,
+        },
+        origin: window.location.origin,
+        source,
+      }),
+    );
+  });
+}

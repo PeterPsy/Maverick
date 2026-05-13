@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
 import unittest
 from pathlib import Path
 
@@ -13,14 +12,7 @@ MATRIX_PATH = REPO_ROOT / "docs" / "reference" / "app_completeness_matrix.md"
 
 
 def tracked_app_contract_paths() -> list[Path]:
-    result = subprocess.run(
-        ["git", "ls-files", "apps/*/app_contract.json"],
-        cwd=REPO_ROOT,
-        check=True,
-        stdout=subprocess.PIPE,
-        text=True,
-    )
-    return [REPO_ROOT / line for line in result.stdout.splitlines()]
+    return sorted((REPO_ROOT / "apps").glob("*/app_contract.json"))
 
 
 class AppContractBaselineTest(unittest.TestCase):

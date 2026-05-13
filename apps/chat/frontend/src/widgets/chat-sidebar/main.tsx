@@ -12,7 +12,7 @@ import {
   updateThread,
 } from "../../api/client";
 import { useRuntimeThreads } from "../../hooks/useRuntimeThreads";
-import { useShellSidebarCloseSwipe } from "../../hooks/useShellSidebarSwipe";
+import { useShellSidebarCloseSwipe } from "../../hooks/useShellSidebarCloseSwipe";
 import { buildSections, isThreadBusy } from "./sections";
 import { ThreadInlineActions } from "./ThreadInlineActions";
 import "./styles.css";

@@ -17,25 +17,28 @@ import {
   WorkspaceItem,
 } from "./api";
 import {
+  CHAT_APP_ID,
   currentShellAppRoute,
   initialShellLaunchRoute,
   isInitialChatLaunchRoute,
+  newChatRouteParams,
   preferredActiveApp,
   pushShellAppRoute,
   replaceShellAppRoute,
   shellAppRailApps,
 } from "./navigation";
-import { readShellSession, writeShellSession } from "./session";
+import { readShellSession, resolveInitialSidebarOpen, writeShellSession } from "./session";
 import type { SidebarMode } from "./session";
-import { useMobileLayout } from "./hooks/useMobileLayout";
-import { useMobileSidebarOpenSwipe } from "./hooks/useMobileSidebarOpenSwipe";
+import { getInitialMobileLayout, useMobileLayout } from "./hooks/useMobileLayout";
 import { useSidebarRailMetrics } from "./hooks/useSidebarRailMetrics";
 import { LoginScreen } from "./components/LoginScreen";
+import { MobileShellHeader } from "./components/MobileShellHeader";
 import { Sidebar } from "./components/Sidebar";
 import { ShellOverlayWidgets } from "./components/ShellOverlayWidgets";
 import { ShellDialog, ShellDialogs } from "./components/ShellDialogs";
 import { ProviderSetupDialog } from "./components/ProviderSetupDialog";
 import { WorkspaceView } from "./components/WorkspaceView";
+import type { WidgetPrimaryActionState } from "./components/WidgetSlot";
 
 const MOBILE_SIDEBAR_TRANSITION_MS = 220;
 
@@ -44,6 +47,7 @@ export function AppShell() {
   const initialRoute = useMemo(() => currentShellAppRoute(), []);
   const isInitialChatLaunch = useMemo(() => isInitialChatLaunchRoute(initialRoute), [initialRoute]);
   const initialLaunchRoute = useMemo(() => initialShellLaunchRoute(initialRoute), [initialRoute]);
+  const initialIsMobileLayout = useMemo(() => getInitialMobileLayout(), []);
   const initialActiveAppId = initialLaunchRoute.appId || initialSession.activeAppId;
   const [apps, setApps] = useState<AppRegistryItem[]>([]);
   const [pinnedAppIds, setPinnedAppIds] = useState<string[]>(["chat"]);
@@ -54,12 +58,23 @@ export function AppShell() {
   const [activeAppId, setActiveAppId] = useState<string | null>(initialActiveAppId);
   const [activeAppParams, setActiveAppParams] = useState<Record<string, string | boolean | null>>(initialLaunchRoute.params);
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>(isInitialChatLaunch ? "rail" : initialSession.sidebarMode);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(isInitialChatLaunch ? false : initialSession.sidebarMode === "fixed" ? true : initialSession.isSidebarOpen);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() =>
+    resolveInitialSidebarOpen(initialSession, {
+      isInitialChatLaunch,
+      isMobileLayout: initialIsMobileLayout,
+    }),
+  );
   const [isSidebarClosing, setIsSidebarClosing] = useState(false);
   const [activeDialog, setActiveDialog] = useState<ShellDialog>(null);
   const [dismissedProviderSetupWorkspaceId, setDismissedProviderSetupWorkspaceId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [mobilePrimaryAction, setMobilePrimaryAction] = useState<WidgetPrimaryActionState>({
+    available: false,
+    label: "",
+    preferredSurface: "app",
+  });
+  const [mobilePrimaryActionRequestId, setMobilePrimaryActionRequestId] = useState(0);
   const isMobileLayout = useMobileLayout();
   const isSidebarPinned = sidebarMode === "fixed" && !isMobileLayout;
   const sidebarCloseTimerRef = useRef<number | null>(null);
@@ -108,11 +123,6 @@ export function AppShell() {
       window.location.origin,
     );
   }
-
-  useMobileSidebarOpenSwipe({
-    enabled: isMobileLayout && !isSidebarPinned && !isSidebarOpen && !isSidebarClosing,
-    onOpen: openSidebar,
-  });
 
   async function loadShellState() {
     setIsLoading(true);
@@ -224,6 +234,10 @@ export function AppShell() {
   }, [isSidebarPinned]);
 
   useEffect(() => {
+    setMobilePrimaryAction({ available: false, label: "", preferredSurface: "app" });
+  }, [activeApp?.app_id, activeAppId]);
+
+  useEffect(() => {
     if (activeAppId === null) {
       replaceShellAppRoute(null, {});
       return;
@@ -305,6 +319,20 @@ export function AppShell() {
     setSettings(await getPlatformSettings());
   }
 
+  function invokeMobilePrimaryAction() {
+    if (!mobilePrimaryAction.available) {
+      return;
+    }
+    if (mobilePrimaryAction.preferredSurface === "sidebar") {
+      openSidebar();
+    }
+    setMobilePrimaryActionRequestId((current) => current + 1);
+  }
+
+  function openNewChat() {
+    openApp(CHAT_APP_ID, newChatRouteParams());
+  }
+
   if (isLoading && session === null) {
     return <main className="bs-shell" />;
   }
@@ -325,6 +353,17 @@ export function AppShell() {
       className={`bs-shell is-sidebar-mode-${sidebarMode} ${isSidebarOpen ? "is-sidebar-open" : ""} ${isSidebarClosing ? "is-sidebar-closing" : ""} ${isMobileLayout ? "is-mobile-layout" : ""}`}
       style={shellSidebarMetrics}
     >
+      {isMobileLayout ? (
+        <MobileShellHeader
+          activeApp={activeApp}
+          isPrimaryActionAvailable={mobilePrimaryAction.available}
+          isSidebarOpen={isSidebarOpen || isSidebarClosing}
+          onOpenNewChat={openNewChat}
+          onOpenSidebar={openSidebar}
+          onPrimaryAction={invokeMobilePrimaryAction}
+          primaryActionLabel={mobilePrimaryAction.label}
+        />
+      ) : null}
       <div className="bs-workspace-view-shell">
         <WorkspaceView
           activeApp={activeApp}
@@ -333,13 +372,10 @@ export function AppShell() {
           apps={apps}
           error={error}
           isLoading={isLoading}
+          isMobileLayout={isMobileLayout}
           onOpenApp={openApp}
-          onOpenSidebar={openSidebar}
         />
       </div>
-      {isMobileLayout && !isSidebarPinned && !isSidebarOpen && !isSidebarClosing ? (
-        <div aria-hidden="true" className="bs-mobile-sidebar-swipe-edge" />
-      ) : null}
       <Sidebar
         activeAppId={activeApp?.app_id ?? activeAppId}
         activeAppParams={activeAppParams}
@@ -350,10 +386,12 @@ export function AppShell() {
         isMobileLayout={isMobileLayout}
         isPinned={isSidebarPinned}
         mode={sidebarMode}
+        mobilePrimaryActionRequestId={mobilePrimaryActionRequestId}
         onClose={closeSidebar}
         onModeChange={handleSidebarModeChange}
         onOpenApp={openApp}
         onOpenSidebar={openSidebar}
+        onPrimaryActionStateChange={setMobilePrimaryAction}
         onOpenSettings={() => setActiveDialog("settings")}
         onWorkspaceChanged={loadShellState}
         pinnedAppIds={pinnedAppIds}

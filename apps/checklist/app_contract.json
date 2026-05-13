@@ -59,6 +59,9 @@
       "checklist_delete",
       "checklist_add_task",
       "checklist_toggle_task",
+      "checklist_set_task_status",
+      "checklist_set_subtask_status",
+      "checklist_next_actions",
       "checklist_view_filter",
       "checklist_set_view_filter",
       "checklist_set_custom_view",
@@ -131,6 +134,40 @@
   },
   "widgets": [
     {
+      "widget_id": "checklist-sidebar",
+      "host": "base-shell",
+      "content_kinds": [
+        "shell.sidebar.primary"
+      ],
+      "frontend": {
+        "kind": "iframe",
+        "mount": "frontend/dist/widgets/checklist-sidebar",
+        "spa_fallback": true
+      },
+      "actions": {
+        "backend": true,
+        "mcp": false,
+        "cli": false
+      }
+    },
+    {
+      "widget_id": "checklist-sidebar-footer",
+      "host": "base-shell",
+      "content_kinds": [
+        "shell.sidebar.footer"
+      ],
+      "frontend": {
+        "kind": "iframe",
+        "mount": "frontend/dist/widgets/checklist-sidebar-footer",
+        "spa_fallback": true
+      },
+      "actions": {
+        "backend": true,
+        "mcp": false,
+        "cli": false
+      }
+    },
+    {
       "widget_id": "design-checklist",
       "host": "chat",
       "content_kinds": [
@@ -162,7 +199,7 @@
   },
   "storage": {
     "storage_kind": "json",
-    "data_schema_version": "3",
+    "data_schema_version": "4",
     "primary_paths": [
       "data/checklist/state.json"
     ],

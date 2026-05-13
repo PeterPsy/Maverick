@@ -1348,7 +1348,7 @@ function App() {
               <button className="secondary-action" disabled={deleteBusy} onClick={() => setPendingDelete(null)} type="button" autoFocus>
                 Cancel
               </button>
-              <button className="danger-action" disabled={deleteBusy} onClick={() => confirmPendingDelete().catch((err: Error) => setError(err.message))} type="button">
+              <button className="primary-action" disabled={deleteBusy} onClick={() => confirmPendingDelete().catch((err: Error) => setError(err.message))} type="button">
                 <Icon name="delete" />
                 {deleteBusy ? 'Deleting' : pendingDeleteActionLabel}
               </button>

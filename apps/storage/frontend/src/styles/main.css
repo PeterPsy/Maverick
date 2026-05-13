@@ -1082,7 +1082,7 @@ h3 {
   gap: 14px;
   width: min(460px, 100%);
   min-width: 0;
-  border: 1px solid rgba(255, 179, 191, 0.28);
+  border: 1px solid var(--storage-border-strong);
   border-radius: 14px;
   background: var(--maverick-glass-highlight), var(--storage-surface);
   box-shadow: 0 28px 90px rgba(0, 0, 0, 0.58);
@@ -1097,8 +1097,9 @@ h3 {
   width: 2.5rem;
   height: 2.5rem;
   border-radius: 999px;
-  background: var(--storage-danger-soft);
-  color: var(--storage-danger);
+  background: var(--storage-accent-soft);
+  color: var(--storage-accent);
+  box-shadow: var(--storage-shadow);
 }
 
 .delete-confirmation-copy {

@@ -15,6 +15,24 @@ from core.api.platform_state import bootstrap_platform_state
 from tests.support.markers import slow_test_class
 
 
+class UserAdminFrontendDistTests(unittest.TestCase):
+    """Verify the bundled User Admin frontend keeps the Maverick glass theme."""
+
+    def test_frontend_dist_uses_maverick_glass_theme(self) -> None:
+        app_root = Path(__file__).resolve().parents[1]
+        css_files = sorted((app_root / "frontend" / "dist" / "assets").glob("index-*.css"))
+        self.assertTrue(css_files)
+        frontend_css = css_files[-1].read_text(encoding="utf-8")
+        frontend_html = (app_root / "frontend" / "dist" / "index.html").read_text(encoding="utf-8")
+
+        self.assertIn("User Admin", frontend_html)
+        self.assertIn("color-scheme:dark", frontend_css)
+        self.assertIn("--maverick-glass-surface", frontend_css)
+        self.assertIn("backdrop-filter:blur(26px)", frontend_css)
+        self.assertIn("@keyframes ua-progress-sheen", frontend_css)
+        self.assertNotIn("--ua-primary:#d72451", frontend_css)
+
+
 @slow_test_class("slow user-admin app integration suite; run with scripts/test_suite.py --level slow")
 class UserAdminApiTestCase(unittest.TestCase):
     """Verify the core exposes app-agnostic user administration APIs."""

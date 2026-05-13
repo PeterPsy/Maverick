@@ -172,8 +172,8 @@ h3 {
     inset: 0 0 auto;
     z-index: 20;
     height: calc(
-      var(--maverick-shell-mobile-content-top-offset, 0px) +
-      max(2.15rem, calc(env(safe-area-inset-top, 0px) + 1.15rem))
+      var(--maverick-shell-mobile-content-top-offset, env(safe-area-inset-top, 0px)) +
+      2.15rem
     );
     background: linear-gradient(
       180deg,

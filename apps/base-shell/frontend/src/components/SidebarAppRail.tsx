@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 import type { AppRegistryItem } from "../api";
 import { useSidebarRailReorder, type ActiveRailReorder } from "../hooks/useSidebarRailReorder";
 import { reorderByTargetIndex } from "../lib/sidebarRailReorder";
@@ -49,9 +49,7 @@ export function SidebarAppRail({
   const baseClassName = className ? `bs-sidebar__rail-apps ${className}` : "bs-sidebar__rail-apps";
   const renderedApps = canReorder ? reorderedRailAppsForRender(appsToRender, activeRailReorder) : appsToRender;
   const renderedReorderableIds = renderedApps.filter((app) => isDesktopRailReorderableApp(app.app_id)).map((app) => app.app_id);
-  const draggingRailApp = activeRailReorder ? appsToRender.find((app) => app.app_id === activeRailReorder.appId) ?? null : null;
   const isReorderActive = Boolean(activeRailReorder);
-  const ghostStyle = activeRailReorder ? railDragGhostStyle(activeRailReorder, railAppsContainerRef.current) : undefined;
 
   function handleOpenApp(appId: string, event?: ReactMouseEvent<HTMLButtonElement>) {
     if (suppressClickIfNeeded(appId, event)) {
@@ -128,41 +126,12 @@ export function SidebarAppRail({
         </div>
         <span className="bs-sidebar__rail-status" aria-live="polite">{keyboardReorderStatus}</span>
       </div>
-      {draggingRailApp ? (
-        <div
-          className="bs-sidebar__rail-drag-ghost"
-          style={ghostStyle}
-        >
-          <AppLogo app={draggingRailApp} className="bs-app-logo--rail" />
-        </div>
-      ) : null}
     </>
   );
 }
 
-function railDragGhostStyle(activeReorder: ActiveRailReorder, container: HTMLDivElement | null): CSSProperties {
-  if (!container) {
-    return { left: `${activeReorder.currentX}px`, top: `${activeReorder.currentY}px` };
-  }
-  const rect = container.getBoundingClientRect();
-  const firstButton = container.querySelector(".bs-sidebar__rail-button");
-  const buttonRect = firstButton instanceof HTMLElement ? firstButton.getBoundingClientRect() : null;
-  const halfIcon = Math.max(12, (buttonRect?.height || 48) / 2);
-  const minY = rect.top + halfIcon;
-  const maxY = rect.bottom - halfIcon;
-  const clampedY = maxY >= minY ? clamp(activeReorder.currentY, minY, maxY) : (rect.top + rect.bottom) / 2;
-  return {
-    left: `${(rect.left + rect.right) / 2}px`,
-    top: `${clampedY}px`,
-  };
-}
-
 function isDesktopRailReorderableApp(appId: string): boolean {
   return appId.toLowerCase() !== APP_STORE_APP_ID;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
 }
 
 function reorderedRailAppsForRender(appsToRender: AppRegistryItem[], activeReorder: ActiveRailReorder | null): AppRegistryItem[] {

@@ -36,3 +36,7 @@ export function buildSections(projects: ChatProject[], threads: ChatThread[]): F
 export function isThreadBusy(thread: ChatThread): boolean {
   return thread.availability === "busy" || thread.availability === "queued" || thread.availability === "active";
 }
+
+export function isThreadUnread(thread: ChatThread): boolean {
+  return Boolean(thread.has_unread_completed_response) && !isThreadBusy(thread);
+}

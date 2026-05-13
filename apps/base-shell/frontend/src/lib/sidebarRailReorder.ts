@@ -7,6 +7,8 @@ export type RailItemRect = {
   bottom: number;
 };
 
+export type DropTargetDirection = "up" | "down" | "nearest";
+
 export function sanitizePinnedOrder(
   pinnedAppIds: string[],
   visibleAppIds: string[],
@@ -65,12 +67,31 @@ export function reorderByTargetIndex<T>(items: T[], sourceIndex: number, targetI
   return nextItems;
 }
 
-export function dropTargetIndexFromPointerY(rects: RailItemRect[], pointerY: number): number {
+export function dropTargetIndexFromPointerY(
+  rects: RailItemRect[],
+  pointerY: number,
+  direction: DropTargetDirection = "nearest",
+): number {
   if (!rects.length) {
     return 0;
   }
-  const midpointCount = rects.reduce((count, rect) => count + (pointerY > (rect.top + rect.bottom) / 2 ? 1 : 0), 0);
-  return clamp(midpointCount, 0, rects.length);
+  const orderedRects = [...rects].sort((left, right) => left.top - right.top);
+  for (let index = 0; index < orderedRects.length; index += 1) {
+    const rect = orderedRects[index];
+    if (pointerY < rect.top) {
+      return index;
+    }
+    if (pointerY <= rect.bottom) {
+      if (direction === "down") {
+        return index + 1;
+      }
+      if (direction === "up") {
+        return index;
+      }
+      return pointerY > (rect.top + rect.bottom) / 2 ? index + 1 : index;
+    }
+  }
+  return rects.length;
 }
 
 function normalizeAppId(appId: string): string {

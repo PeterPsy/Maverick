@@ -431,7 +431,7 @@
 
   .chatapp-chat-panel__meta {
     padding:
-      calc(var(--maverick-shell-mobile-content-top-offset, 0px) + max(0.45rem, env(safe-area-inset-top, 0px)))
+      calc(var(--maverick-shell-mobile-content-top-offset, env(safe-area-inset-top, 0px)) + 0.45rem)
       0.55rem
       0.45rem;
   }
@@ -518,7 +518,7 @@
 
   .chatapp-chat-panel__meta {
     padding:
-      calc(var(--maverick-shell-mobile-content-top-offset, 0px) + max(0.45rem, env(safe-area-inset-top, 0px)))
+      calc(var(--maverick-shell-mobile-content-top-offset, env(safe-area-inset-top, 0px)) + 0.45rem)
       0.55rem
       0.45rem;
   }
@@ -528,7 +528,7 @@
   }
 
   .chatapp-chat-scroll__inner {
-    padding: calc(var(--maverick-shell-mobile-content-top-offset, 0px) + env(safe-area-inset-top, 0px) + 0.72rem) 0.45rem 0.85rem;
+    padding: calc(var(--maverick-shell-mobile-content-top-offset, env(safe-area-inset-top, 0px)) + 0.72rem) 0.45rem 0.85rem;
   }
 
   .chatapp-composer {

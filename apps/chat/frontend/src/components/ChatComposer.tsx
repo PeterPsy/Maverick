@@ -315,8 +315,6 @@ export function ChatComposer({
   const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
   const [showAppPicker, setShowAppPicker] = useState(false);
   const [selectedAppIndex, setSelectedAppIndex] = useState(0);
-  const [referenceMentionItems, setReferenceMentionItems] = useState<MentionItem[]>([]);
-  const [referenceSearchError, setReferenceSearchError] = useState<string | null>(null);
   const [appPickerQuery, setAppPickerQuery] = useState("");
   const [appPickerReferenceItems, setAppPickerReferenceItems] = useState<MentionItem[]>([]);
   const [appPickerSearchError, setAppPickerSearchError] = useState<string | null>(null);
@@ -326,33 +324,37 @@ export function ChatComposer({
   const appPickerSearchRef = useRef<HTMLInputElement | null>(null);
   const pendingCaretIndexRef = useRef<number | null>(null);
   const searchableMentionItems = useMemo(
-    () => mergeMentionItems(mentionItems, referenceMentionItems, appPickerReferenceItems),
-    [appPickerReferenceItems, mentionItems, referenceMentionItems],
+    () => mergeMentionItems(mentionItems, appPickerReferenceItems),
+    [appPickerReferenceItems, mentionItems],
   );
   const mentionTokens = useMemo(() => findMentionTokens(value, searchableMentionItems), [searchableMentionItems, value]);
-  const appPickerItems = useMemo(() => {
-    const matchingApps = filterMentionItems(
-      searchableMentionItems.filter((item) => item.kind === "app"),
-      appPickerQuery,
-    );
-    const matchingReferences = filterMentionItems(appPickerReferenceItems, appPickerQuery);
-    return mergeMentionItems(matchingApps, matchingReferences);
-  }, [appPickerQuery, appPickerReferenceItems, searchableMentionItems]);
   const activeMentionCandidate = useMemo(() => activeMentionAt(value, caretIndex), [caretIndex, value]);
   const activeMentionComplete = activeMentionCandidate
     ? mentionTokens.some((token) => token.start === activeMentionCandidate.start && caretIndex >= token.end)
     : false;
   const activeMention = activeMentionCandidate?.start === dismissedMentionStart || activeMentionComplete ? null : activeMentionCandidate;
+  const activeAppMention = activeMention?.kind === "app" ? activeMention : null;
+  const activeSkillMention = activeMention?.kind === "skill" ? activeMention : null;
+  const isAppMentionPickerOpen = showAppPicker || Boolean(activeAppMention);
+  const appMentionPickerQuery = activeAppMention ? activeAppMention.query : appPickerQuery;
+  const appPickerItems = useMemo(() => {
+    const matchingApps = filterMentionItems(
+      searchableMentionItems.filter((item) => item.kind === "app"),
+      appMentionPickerQuery,
+    );
+    const matchingReferences = filterMentionItems(appPickerReferenceItems, appMentionPickerQuery);
+    return mergeMentionItems(matchingApps, matchingReferences);
+  }, [appMentionPickerQuery, appPickerReferenceItems, searchableMentionItems]);
   const filteredMentionItems = useMemo(() => {
-    if (!activeMention) {
+    if (!activeSkillMention) {
       return [];
     }
     return filterMentionItems(
-      searchableMentionItems.filter((item) => item.kind === activeMention.kind || (activeMention.kind === "app" && item.kind === "entity")),
-      activeMention.query,
+      searchableMentionItems.filter((item) => item.kind === activeSkillMention.kind),
+      activeSkillMention.query,
     );
-  }, [activeMention, searchableMentionItems]);
-  const isMentionPanelOpen = Boolean(activeMention);
+  }, [activeSkillMention, searchableMentionItems]);
+  const isSkillMentionPanelOpen = Boolean(activeSkillMention);
 
   useLayoutEffect(() => {
     const editor = editorRef.current;
@@ -370,43 +372,16 @@ export function ChatComposer({
 
   useEffect(() => {
     setSelectedMentionIndex(0);
-  }, [activeMention?.kind, activeMention?.query]);
+  }, [activeSkillMention?.kind, activeSkillMention?.query]);
 
   useEffect(() => {
-    if (!activeMention || activeMention.kind !== "app" || !onSearchReferences) {
-      setReferenceMentionItems([]);
-      setReferenceSearchError(null);
-      return;
-    }
-    setReferenceSearchError(null);
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => {
-      onSearchReferences(activeMention.query, controller.signal)
-        .then((items) => {
-          setReferenceMentionItems(items);
-          setReferenceSearchError(null);
-        })
-        .catch((error) => {
-          if (!isAbortError(error)) {
-            setReferenceMentionItems([]);
-            setReferenceSearchError(REFERENCE_SEARCH_ERROR_MESSAGE);
-          }
-        });
-    }, 160);
-    return () => {
-      window.clearTimeout(timer);
-      controller.abort();
-    };
-  }, [activeMention?.kind, activeMention?.query, onSearchReferences]);
-
-  useEffect(() => {
-    if (!showAppPicker || !onSearchReferences) {
-      if (!showAppPicker) {
+    if (!isAppMentionPickerOpen || !onSearchReferences) {
+      if (!isAppMentionPickerOpen) {
         setAppPickerSearchError(null);
       }
       return;
     }
-    const query = appPickerQuery.trim();
+    const query = appMentionPickerQuery.trim();
     setAppPickerSearchError(null);
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
@@ -426,20 +401,20 @@ export function ChatComposer({
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [appPickerQuery, onSearchReferences, showAppPicker]);
+  }, [appMentionPickerQuery, isAppMentionPickerOpen, onSearchReferences]);
 
   useEffect(() => {
     setSelectedAppIndex(0);
   }, [appPickerItems]);
 
   useEffect(() => {
-    if (showAppPicker) {
+    if (isAppMentionPickerOpen) {
       appPickerSearchRef.current?.focus();
     }
-  }, [showAppPicker]);
+  }, [isAppMentionPickerOpen]);
 
   useEffect(() => {
-    if (!showAppPicker) {
+    if (!isAppMentionPickerOpen) {
       return;
     }
     const handlePointerDown = (event: PointerEvent) => {
@@ -447,11 +422,15 @@ export function ChatComposer({
       if (!target || appPickerPanelRef.current?.contains(target) || appPickerButtonRef.current?.contains(target)) {
         return;
       }
-      setShowAppPicker(false);
+      if (showAppPicker) {
+        setShowAppPicker(false);
+      } else if (activeAppMention) {
+        setDismissedMentionStart(activeAppMention.start);
+      }
     };
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, [showAppPicker]);
+  }, [activeAppMention, isAppMentionPickerOpen, showAppPicker]);
 
   useEffect(() => {
     if (dismissedMentionStart === null) {
@@ -502,6 +481,27 @@ export function ChatComposer({
     });
   }
 
+  function updateActiveAppMentionQuery(query: string) {
+    if (!activeAppMention) {
+      setAppPickerQuery(query);
+      return;
+    }
+    const nextValue = `${value.slice(0, activeAppMention.start + 1)}${query}${value.slice(activeAppMention.end)}`;
+    const nextCaret = activeAppMention.start + 1 + query.length;
+    pendingCaretIndexRef.current = nextCaret;
+    onChange(nextValue);
+    setCaretIndex(nextCaret);
+    setDismissedMentionStart(null);
+  }
+
+  function selectAppMentionPickerItem(item: MentionItem) {
+    if (activeAppMention && !showAppPicker) {
+      insertMention(item);
+      return;
+    }
+    insertAppMention(item);
+  }
+
   function removeMention(token: MentionToken) {
     const next = removeMentionToken(value, token);
     pendingCaretIndexRef.current = next.cursor;
@@ -549,35 +549,63 @@ export function ChatComposer({
     });
   }
 
-  function onComposerKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (showAppPicker && !isMentionPanelOpen) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        setShowAppPicker(false);
-        return;
-      }
-      if (appPickerItems.length) {
-        if (event.key === "ArrowDown") {
-          event.preventDefault();
-          setSelectedAppIndex((current) => (current + 1) % appPickerItems.length);
-          return;
-        }
-        if (event.key === "ArrowUp") {
-          event.preventDefault();
-          setSelectedAppIndex((current) => (current - 1 + appPickerItems.length) % appPickerItems.length);
-          return;
-        }
-        if (event.key === "Tab" || event.key === "Enter") {
-          event.preventDefault();
-          insertAppMention(appPickerItems[selectedAppIndex] || appPickerItems[0]);
-          return;
-        }
-      }
+  function closeAppMentionPicker(focusEditor = false) {
+    if (showAppPicker) {
+      setShowAppPicker(false);
+    } else if (activeAppMention) {
+      setDismissedMentionStart(activeAppMention.start);
     }
-    if (isMentionPanelOpen) {
+    setAppPickerSearchError(null);
+    if (focusEditor) {
+      requestAnimationFrame(() => {
+        const editor = editorRef.current;
+        if (!editor) {
+          return;
+        }
+        editor.focus();
+        setComposerCaret(editor, caretIndex);
+      });
+    }
+  }
+
+  function handleAppMentionPickerKey(event: KeyboardEvent<HTMLElement>, focusEditorOnClose = false): boolean {
+    if (!isAppMentionPickerOpen) {
+      return false;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeAppMentionPicker(focusEditorOnClose);
+      return true;
+    }
+    if (!appPickerItems.length) {
+      return false;
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setSelectedAppIndex((current) => (current + 1) % appPickerItems.length);
+      return true;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setSelectedAppIndex((current) => (current - 1 + appPickerItems.length) % appPickerItems.length);
+      return true;
+    }
+    if (event.key === "Tab" || event.key === "Enter") {
+      event.preventDefault();
+      selectAppMentionPickerItem(appPickerItems[selectedAppIndex] || appPickerItems[0]);
+      return true;
+    }
+    return false;
+  }
+
+  function onComposerKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (handleAppMentionPickerKey(event)) {
+      return;
+    }
+    if (isSkillMentionPanelOpen) {
       if (event.key === "Escape") {
         event.preventDefault();
-        setDismissedMentionStart(activeMention?.start ?? null);
+        setDismissedMentionStart(activeSkillMention?.start ?? null);
         return;
       }
       if (filteredMentionItems.length) {
@@ -605,29 +633,7 @@ export function ChatComposer({
   }
 
   function onAppPickerSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      setShowAppPicker(false);
-      editorRef.current?.focus();
-      return;
-    }
-    if (!appPickerItems.length) {
-      return;
-    }
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      setSelectedAppIndex((current) => (current + 1) % appPickerItems.length);
-      return;
-    }
-    if (event.key === "ArrowUp") {
-      event.preventDefault();
-      setSelectedAppIndex((current) => (current - 1 + appPickerItems.length) % appPickerItems.length);
-      return;
-    }
-    if (event.key === "Tab" || event.key === "Enter") {
-      event.preventDefault();
-      insertAppMention(appPickerItems[selectedAppIndex] || appPickerItems[0]);
-    }
+    handleAppMentionPickerKey(event, true);
   }
 
   function onDragOver(event: DragEvent<HTMLDivElement>) {
@@ -663,20 +669,20 @@ export function ChatComposer({
         <form className="chatapp-form-stack" onSubmit={submit}>
           <AttachmentPreviewStrip attachments={attachments} disabled={isSending} onRemoveAttachment={onRemoveAttachment} />
           <QueuedMessageNotice queuedCount={queuedCount} queuedPreview={queuedPreview} />
-          <div className={`chatapp-composer__input-shell ${showAppPicker ? "has-app-picker" : ""}`}>
-            {showAppPicker ? (
+          <div className={`chatapp-composer__input-shell ${isAppMentionPickerOpen ? "has-app-picker" : ""}`}>
+            {isAppMentionPickerOpen ? (
               <MentionPanel
                 activeIndex={Math.min(selectedAppIndex, Math.max(appPickerItems.length - 1, 0))}
                 className="chatapp-mention-panel--app-picker"
                 items={appPickerItems}
                 kind="app"
-                onSelect={insertAppMention}
+                onSelect={selectAppMentionPickerItem}
                 onSearchKeyDown={onAppPickerSearchKeyDown}
-                onSearchQueryChange={setAppPickerQuery}
-                query=""
+                onSearchQueryChange={updateActiveAppMentionQuery}
+                query={appMentionPickerQuery}
                 searchInputRef={appPickerSearchRef}
                 searchPlaceholder="Cerca app o checklist"
-                searchQuery={appPickerQuery}
+                searchQuery={appMentionPickerQuery}
                 statusMessage={appPickerSearchError}
                 ref={appPickerPanelRef}
               />
@@ -701,14 +707,13 @@ export function ChatComposer({
                 suppressContentEditableWarning
                 tabIndex={disabled ? -1 : 0}
               />
-              {activeMention ? (
+              {activeSkillMention ? (
                 <MentionPanel
                   activeIndex={Math.min(selectedMentionIndex, Math.max(filteredMentionItems.length - 1, 0))}
                   items={filteredMentionItems}
-                  kind={activeMention.kind}
+                  kind={activeSkillMention.kind}
                   onSelect={insertMention}
-                  query={activeMention.query}
-                  statusMessage={referenceSearchError}
+                  query={activeSkillMention.query}
                 />
               ) : null}
             </div>
@@ -716,20 +721,19 @@ export function ChatComposer({
               <div className="chatapp-composer__tools">
                 <AttachmentMenu attachments={attachments} disabled={disabled} onAddAttachments={onAddAttachments} onCapturePageArea={onCapturePageArea} />
                 <button
-                  aria-expanded={showAppPicker}
+                  aria-expanded={isAppMentionPickerOpen}
                   aria-haspopup="listbox"
                   aria-label="App citabili"
-                  className={`chatapp-composer__tool-button ${showAppPicker ? "is-active" : ""}`}
+                  className={`chatapp-composer__tool-button ${isAppMentionPickerOpen ? "is-active" : ""}`}
                   disabled={disabled}
                   onClick={() => {
-                    setShowAppPicker((current) => {
-                      const next = !current;
-                      if (next) {
-                        setAppPickerQuery("");
-                        setAppPickerSearchError(null);
-                      }
-                      return next;
-                    });
+                    if (isAppMentionPickerOpen) {
+                      closeAppMentionPicker();
+                      return;
+                    }
+                    setAppPickerQuery("");
+                    setAppPickerSearchError(null);
+                    setShowAppPicker(true);
                   }}
                   ref={appPickerButtonRef}
                   type="button"

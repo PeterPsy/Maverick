@@ -39,6 +39,8 @@ def normalize_state(payload: dict) -> dict:
         return empty_state()
     payload.setdefault("schema_version", "2")
     payload.setdefault("projects", [])
+    if not isinstance(payload["projects"], list):
+        payload["projects"] = []
     payload.setdefault("preferences", {})
     if not isinstance(payload["preferences"], dict):
         payload["preferences"] = {}
@@ -74,6 +76,16 @@ def project_payload(project: dict) -> dict:
 def list_projects(state: dict) -> list[dict]:
     projects = [project_payload(project) for project in state.get("projects", []) if isinstance(project, dict)]
     return sorted(projects, key=lambda item: item["name"].casefold())
+
+
+def project_exists(state: dict, project_id: str) -> bool:
+    normalized_project_id = project_id.strip()
+    if not normalized_project_id:
+        return False
+    return any(
+        isinstance(project, dict) and project.get("project_id") == normalized_project_id
+        for project in state.get("projects", [])
+    )
 
 
 def default_view_filter() -> dict:

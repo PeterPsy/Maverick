@@ -85,13 +85,16 @@ class BaseShellAppMountingTests(unittest.TestCase):
         self.assertIn('size === "overlay" && activeAppId && activeAppId === widget.owner_app_id', widget_source)
         self.assertNotIn("}, [activeWorkspaceId, contentSignature, contentKind, hostAppId])", widget_source)
         shell_styles = (REPO_ROOT / "apps/base-shell/frontend/src/styles/layout.css").read_text()
-        self.assertIn("width: calc(100vw - 2rem)", shell_styles)
+        self.assertIn("width: 100vw", shell_styles)
         self.assertIn("position: absolute", shell_styles)
         self.assertIn("right: 0", shell_styles)
         self.assertIn("bottom: 0", shell_styles)
         self.assertIn("flex: none", shell_styles)
-        self.assertIn("max-width: calc(100vw - 2rem)", shell_styles)
+        self.assertIn("max-width: 100vw", shell_styles)
         self.assertIn("max-height: min(38rem, calc(100dvh - 2rem))", shell_styles)
+        self.assertNotIn("width: min(23rem, calc(100vw - 1.4rem))", shell_styles)
+        self.assertNotIn(".bs-widget-slot--overlay.is-collapsed", shell_styles)
+        self.assertNotIn(".bs-widget-slot--overlay .bs-widget-slot__frame", shell_styles)
 
     def test_base_shell_caches_resolved_app_dependencies(self) -> None:
         host_source = (REPO_ROOT / "apps/base-shell/frontend/src/components/AppFrameHost.tsx").read_text()

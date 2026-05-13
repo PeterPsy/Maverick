@@ -67,4 +67,16 @@ describe("sidebar rail reorder model", () => {
     expect(dropTargetIndexFromPointerY(rects, 115)).toBe(2);
     expect(dropTargetIndexFromPointerY(rects, 150)).toBe(3);
   });
+
+  it("uses drag direction so hovered items swap immediately near the final slots", () => {
+    const rects = [
+      { top: 50, bottom: 90 },
+      { top: 100, bottom: 140 },
+      { top: 150, bottom: 190 },
+    ];
+
+    expect(dropTargetIndexFromPointerY(rects, 101, "down")).toBe(2);
+    expect(dropTargetIndexFromPointerY(rects, 151, "down")).toBe(3);
+    expect(dropTargetIndexFromPointerY(rects, 139, "up")).toBe(1);
+  });
 });

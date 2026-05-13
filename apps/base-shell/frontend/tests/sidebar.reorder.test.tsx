@@ -106,7 +106,7 @@ describe("Sidebar desktop rail reorder", () => {
     expect(openApp).not.toHaveBeenCalled();
   });
 
-  it("keeps the drag ghost clamped inside the rail bounds", async () => {
+  it("does not render a detached drag ghost during long press", async () => {
     await renderSidebar();
     stubRailRects([
       ["Chat", 0, 40],
@@ -121,10 +121,8 @@ describe("Sidebar desktop rail reorder", () => {
       dispatchPointer(chatButton, "pointermove", { clientY: 500 });
     });
 
-    const ghost = container.querySelector(".bs-sidebar__rail-drag-ghost");
-    expect(ghost).toBeInstanceOf(HTMLElement);
-    expect((ghost as HTMLElement).style.left).toBe("30px");
-    expect((ghost as HTMLElement).style.top).toBe("140px");
+    expect(container.querySelector(".bs-sidebar__rail-drag-ghost")).toBeNull();
+    expect(railButton("Chat").className).toContain("is-dragging");
   });
 
   it("cancels a pending long press when the pointer moves before the timer", async () => {
@@ -182,8 +180,8 @@ describe("Sidebar desktop rail reorder", () => {
     await act(async () => {
       dispatchPointer(chatButton, "pointerdown", { clientY: 20 });
       vi.advanceTimersByTime(360);
-      dispatchPointer(chatButton, "pointermove", { clientY: 135 });
-      dispatchPointer(chatButton, "pointerup", { clientY: 135 });
+      dispatchPointer(chatButton, "pointermove", { clientY: 101 });
+      dispatchPointer(chatButton, "pointerup", { clientY: 101 });
     });
 
     expect(reorderPinnedApps).toHaveBeenCalledWith(["agents", "skills", "chat", "docs"]);
@@ -201,8 +199,8 @@ describe("Sidebar desktop rail reorder", () => {
     await act(async () => {
       dispatchPointer(nextChatButton, "pointerdown", { clientY: 20 });
       vi.advanceTimersByTime(360);
-      dispatchPointer(nextChatButton, "pointermove", { clientY: 180 });
-      dispatchPointer(nextChatButton, "pointerup", { clientY: 180 });
+      dispatchPointer(nextChatButton, "pointermove", { clientY: 151 });
+      dispatchPointer(nextChatButton, "pointerup", { clientY: 151 });
     });
 
     expect(reorderPinnedApps).toHaveBeenCalledWith(["agents", "skills", "docs", "chat"]);

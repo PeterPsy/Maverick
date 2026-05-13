@@ -52,22 +52,19 @@ body {
   overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior-x: contain;
-  scrollbar-color: rgba(255, 255, 255, 0.24) transparent;
-  scrollbar-width: thin;
+  scrollbar-width: none;
+  touch-action: pan-x pan-y;
   -webkit-overflow-scrolling: touch;
 }
 
 .chat-floating-widget-stack::-webkit-scrollbar {
-  height: 0.45rem;
+  display: none;
 }
 
-.chat-floating-widget-stack::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.chat-floating-widget-stack::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.24);
+.chat-floating-widget-stack.is-horizontal-dragging,
+.chat-floating-widget-stack.is-horizontal-dragging * {
+  cursor: grabbing;
+  user-select: none;
 }
 
 .chat-floating-widget-shell {
@@ -629,6 +626,9 @@ body {
 
 .chat-floating-widget-shell__body .chatapp-chat-scroll__inner {
   padding: 3.35rem 0.35rem calc(var(--chatapp-composer-overlay-height, 58px) + 1rem);
+  overscroll-behavior-x: auto;
+  overscroll-behavior-y: contain;
+  touch-action: pan-x pan-y;
 }
 
 .chat-floating-widget-shell__body .chatapp-composer {

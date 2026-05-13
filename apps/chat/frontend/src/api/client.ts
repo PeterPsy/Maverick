@@ -31,6 +31,9 @@ export type ChatThread = {
   created_at: string;
   updated_at: string;
   last_user_message_at?: string | null;
+  last_completed_response_at?: string | null;
+  last_completed_turn_id?: string | null;
+  has_unread_completed_response?: boolean;
 };
 
 export type ChatProject = {
@@ -515,6 +518,14 @@ export async function updateThread(payload: {
   return withChatProjects(response);
 }
 
+export async function markThreadRead(threadId: string): Promise<{ thread: ChatThread; threads: ChatThread[]; projects?: ChatProject[] }> {
+  const response = await requestJson<{ thread: ChatThread; threads: ChatThread[] }>(`/api/runtime/threads/${encodeURIComponent(threadId)}/read`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+  return withChatProjects(response);
+}
+
 export async function deleteThread(threadId: string): Promise<ChatSidebarPayload> {
   const payload = await requestJson<DeleteThreadPayload>(`/api/runtime/threads/${encodeURIComponent(threadId)}`, {
     method: "DELETE",
@@ -543,10 +554,14 @@ export async function updateProject(projectId: string, name: string): Promise<{ 
 }
 
 export async function deleteProject(projectId: string): Promise<ChatProjectsPayload> {
-  const projectPayload = await requestJson<{ projects?: ChatProject[]; preferences?: Record<string, unknown> }>("/api/apps/chat/backend", {
+  const backendPath = "/api/apps/chat/backend";
+  const projectPayload = await requestJson<{ projects?: ChatProject[]; preferences?: Record<string, unknown> }>(backendPath, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action: "projects.delete", project_id: projectId }),
   });
-  return { projects: projectPayload.projects || [], preferences: projectPayload.preferences };
+  if (!Array.isArray(projectPayload.projects)) {
+    throw new ApiError("Project deletion did not return updated projects.", { path: backendPath, status: 502 });
+  }
+  return { projects: projectPayload.projects, preferences: projectPayload.preferences };
 }

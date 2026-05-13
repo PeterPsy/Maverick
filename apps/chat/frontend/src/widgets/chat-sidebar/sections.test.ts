@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChatThread } from "../../api/client";
-import { buildSections, isThreadBusy } from "./sections";
+import { buildSections, isThreadBusy, isThreadUnread } from "./sections";
 
 function thread(overrides: Partial<ChatThread> = {}): ChatThread {
   return {
@@ -37,5 +37,11 @@ describe("chat sidebar runtime status", () => {
     expect(isThreadBusy(thread({ availability: "queued" }))).toBe(true);
     expect(isThreadBusy(thread({ availability: "active" }))).toBe(true);
     expect(isThreadBusy(thread({ availability: "free" }))).toBe(false);
+  });
+
+  it("marks completed unread responses only when the thread is not busy", () => {
+    expect(isThreadUnread(thread({ availability: "free", has_unread_completed_response: true }))).toBe(true);
+    expect(isThreadUnread(thread({ availability: "active", has_unread_completed_response: true }))).toBe(false);
+    expect(isThreadUnread(thread({ availability: "free", has_unread_completed_response: false }))).toBe(false);
   });
 });

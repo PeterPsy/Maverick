@@ -386,6 +386,67 @@ button {
   line-height: 1.5;
 }
 
+.bs-chat-project-delete-confirm {
+  display: grid;
+  gap: 0.52rem;
+  margin: 0.08rem 0.2rem 0.12rem;
+  padding: 0.58rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--chat-sidebar-control-radius);
+  background: rgba(12, 12, 14, 0.78);
+  box-shadow: var(--chat-sidebar-inner-edge);
+}
+
+.bs-chat-project-delete-confirm__message {
+  margin: 0;
+  color: var(--maverick-text-muted);
+  font-size: 0.68rem;
+  line-height: 1.4;
+}
+
+.bs-chat-project-delete-confirm__actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.38rem;
+}
+
+.bs-chat-project-delete-confirm__button {
+  min-width: 0;
+  min-height: 1.9rem;
+  padding: 0 0.58rem;
+  border: 1px solid var(--chat-sidebar-soft-border);
+  border-radius: var(--chat-sidebar-control-radius);
+  background: rgba(255, 255, 255, 0.055);
+  box-shadow: var(--chat-sidebar-inner-edge);
+  color: var(--maverick-text);
+  font-size: 0.68rem;
+  font-weight: 400;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease,
+    opacity 140ms ease;
+}
+
+.bs-chat-project-delete-confirm__button:hover:not(:disabled),
+.bs-chat-project-delete-confirm__button:focus-visible {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: var(--chat-sidebar-soft-surface-hover);
+  outline: none;
+}
+
+.bs-chat-project-delete-confirm__button.is-danger {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.bs-chat-project-delete-confirm__button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .bs-chat-folder__dropzone {
   display: grid;
   gap: 0.18rem;
@@ -446,6 +507,10 @@ button {
 
 .bs-chat-list__item.is-busy.is-active {
   background: transparent;
+}
+
+.bs-chat-list__item.is-unread:not(.is-busy) {
+  border-color: #fff;
 }
 
 .bs-chat-list__glow {

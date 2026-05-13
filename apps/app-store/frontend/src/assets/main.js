@@ -231,6 +231,19 @@ function appById(appId) {
   return state.apps.find((app) => app.app_id === appId) || null;
 }
 
+function mergeCatalogAndServerApps(catalogItems, serverItems) {
+  const merged = [];
+  const seen = new Set();
+  [...catalogItems, ...serverItems].forEach((app) => {
+    if (!app?.app_id || seen.has(app.app_id)) {
+      return;
+    }
+    seen.add(app.app_id);
+    merged.push(app);
+  });
+  return merged;
+}
+
 function titleizeAppId(appId) {
   return appId.split("-").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
 }
@@ -1290,8 +1303,8 @@ async function load() {
       }),
     ]);
     state.workspaces = workspaces.items || [];
-    state.apps = catalog.items || [];
     state.serverApps = serverApps.items || [];
+    state.apps = mergeCatalogAndServerApps(catalog.items || [], state.serverApps);
     state.installations = installations.items || [];
     state.localApps = installations.local_apps || [];
     state.pinnedApps = pinned.pinned_apps || [];

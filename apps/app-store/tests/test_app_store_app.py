@@ -428,6 +428,8 @@ class AppStoreAppTestCase(unittest.TestCase):
 
         self.assertIn('"storage": "cloud"', icon_js)
         self.assertIn('"app-store": "storefront"', icon_js)
+        self.assertIn("mergeCatalogAndServerApps", frontend_js)
+        self.assertIn("state.apps = mergeCatalogAndServerApps(catalog.items || [], state.serverApps)", frontend_js)
         self.assertIn('renderIcon(app, "app-row-icon")', frontend_js)
         self.assertNotIn("slice(0, 1).toUpperCase()", frontend_js)
         self.assertIn(".app-row-icon.is-glyph", frontend_css)

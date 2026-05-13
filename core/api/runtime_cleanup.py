@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
 from io import BytesIO
 import json
 from pathlib import Path
@@ -12,6 +11,7 @@ from core.api.app_mounts import handle_app_backend
 from core.api.platform_state import PlatformState
 from core.runtime.errors import RuntimeSessionNotFoundError
 from core.runtime.paths import runtime_session_root
+from core.runtime.runtime_threads import thread_payload
 from core.runtime.session_termination import terminate_runtime_session
 
 
@@ -112,7 +112,7 @@ def _publish_deleted_thread_cleanup(
         workspace_id=workspace_id,
         event={
             "action": "deleted",
-            "threads": [asdict(thread) for thread in threads],
+            "threads": [thread_payload(thread) for thread in threads],
             "deleted_thread_ids": deleted_thread_ids,
             "deleted_runtime_session_ids": [],
         },

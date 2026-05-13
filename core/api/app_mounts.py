@@ -10,6 +10,7 @@ import re
 from typing import Any
 
 from core.api.app_event_publication import declared_data_event_resources, publish_declared_app_events
+from core.api.app_runtime_cleanup_requests import apply_runtime_cleanup_requests
 from core.api.app_registry import resolve_app_surface
 from core.api.http import StartResponse, json_response, query_params, read_json_body, status_line, text_response
 from core.api.platform_state import PlatformState
@@ -393,14 +394,21 @@ def handle_app_backend(
     except AppHostingError as error:
         return json_response(start_response, {"error": "runtime_request_failed", "detail": str(error)}, status=status_line(500))
     try:
-        runtime_cleanup_results = _apply_runtime_cleanup_requests(
+        runtime_cleanup_results = apply_runtime_cleanup_requests(
             state,
             workspace_id=workspace_id,
             app_id=app_id,
             cleanup_allowed=parsed.contract.permissions.runtime.cleanup_sessions,
+            user=user,
+            source_root=source_root,
+            backend_entrypoint=backend,
+            data_root=binding.data_root,
+            parsed=parsed,
             result=result,
             start_path=start_path,
         )
+    except AuthorizationError as error:
+        return json_response(start_response, {"error": error.reason}, status=status_line(403))
     except AppHostingError as error:
         return json_response(start_response, {"error": "runtime_cleanup_failed", "detail": str(error)}, status=status_line(500))
     status_code = int(result.get("status_code", 200))
@@ -438,51 +446,6 @@ def _app_dependencies_payload(
     except Exception:
         logger.exception("App `%s` dependency resolution failed in workspace `%s`.", app_id, workspace_id)
         return {"workspace_id": workspace_id, "consumer_app_id": app_id, "status": "blocked", "dependencies": []}
-
-
-def _apply_runtime_cleanup_requests(
-    state: PlatformState,
-    *,
-    workspace_id: str,
-    app_id: str,
-    cleanup_allowed: bool,
-    result: dict[str, Any],
-    start_path: Path,
-) -> list[dict[str, object]]:
-    response_json = result.get("json") if isinstance(result.get("json"), dict) else None
-    requests = result.pop("runtime_cleanup_requests", None)
-    if requests is None and response_json is not None:
-        requests = response_json.pop("runtime_cleanup_requests", [])
-    if requests is None:
-        requests = []
-    if not isinstance(requests, list) or not requests:
-        return []
-    if not cleanup_allowed:
-        raise AppHostingError(f"App `{app_id}` requested runtime cleanup without declaring runtime.cleanup_sessions.")
-    from core.api.runtime_cleanup import cleanup_runtime_session
-    from core.runtime.errors import RuntimeSessionNotFoundError
-
-    cleanup_results: list[dict[str, object]] = []
-    for item in requests:
-        if not isinstance(item, dict):
-            continue
-        session_id = str(item.get("runtime_session_id") or item.get("session_id") or "").strip()
-        if not session_id:
-            continue
-        try:
-            session = state.runtime_store.get_session(session_id)
-        except RuntimeSessionNotFoundError:
-            session = None
-        if session is not None and session.workspace_id != workspace_id:
-            raise AppHostingError(f"App `{app_id}` cannot clean runtime session outside workspace `{workspace_id}`.")
-        cleanup = cleanup_runtime_session(
-            state,
-            session_id=session_id,
-            reason=str(item.get("reason") or f"{app_id}_runtime_cleanup"),
-            start_path=start_path,
-        )
-        cleanup_results.append(cleanup)
-    return cleanup_results
 
 
 def _resolve_app_secret_payload(

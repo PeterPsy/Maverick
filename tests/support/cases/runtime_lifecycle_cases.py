@@ -31,14 +31,17 @@ from core.runtime.runtime_thread import RuntimeThreadRecord
 from core.runtime.runtime_threads import (
     create_runtime_thread,
     list_runtime_threads,
+    mark_runtime_thread_completed_response_read,
+    mark_runtime_thread_response_completed,
     mark_runtime_thread_user_message,
+    thread_payload,
     update_runtime_thread,
     update_runtime_thread_availability,
 )
 from core.runtime.session_collection import RuntimeSessionJsonCollection
 from core.runtime.session_termination import terminate_runtime_session
 from core.runtime.store import MAX_RUNTIME_EVENTS_PER_SESSION, RuntimeDocumentStore, RuntimeCollections
-from core.runtime.thread_catalog_events import mark_thread_user_message_queued, set_thread_availability
+from core.runtime.thread_catalog_events import mark_thread_response_completed, mark_thread_user_message_queued, set_thread_availability
 from core.runtime.turn_submission import _complete_output_text, _missing_final_suffix, release_idle_runtime_processes
 from core.runtime.workspace_collection import WorkspaceRuntimeJsonCollection
 from core.shared.json_file_collection import JsonFileCollection
@@ -598,6 +601,66 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
         self.assertEqual(free.availability, "free")
         self.assertEqual(free.last_user_message_at, queued_at)
 
+    def test_runtime_thread_completed_response_tracks_unread_per_user(self) -> None:
+        store = self.make_store()
+        repo_root = self.make_repo_root()
+        now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
+        session = create_runtime_session(
+            store,
+            session_id="session-a",
+            workspace_id="acme",
+            agent_id="agent-1",
+            now=now,
+            start_path=repo_root,
+        )
+        create_runtime_thread(
+            store,
+            workspace_id="acme",
+            thread_id="thread-a",
+            runtime_session_id=session.session_id,
+            title="A",
+            now=now,
+        )
+        turn = queue_runtime_turn(
+            store,
+            turn_id="turn-a",
+            session_id=session.session_id,
+            input_text="hello",
+            now=now + timedelta(seconds=1),
+        )
+        transition_runtime_turn(store, turn_id=turn.turn_id, target_status="active", now=now + timedelta(seconds=2))
+        transition_runtime_turn(store, turn_id=turn.turn_id, target_status="completed", now=now + timedelta(seconds=3))
+        completed_at = now + timedelta(seconds=4)
+
+        completed = mark_runtime_thread_response_completed(
+            store,
+            workspace_id="acme",
+            runtime_session_id=session.session_id,
+            turn_id=turn.turn_id,
+            now=completed_at,
+        )
+
+        self.assertIsNotNone(completed)
+        assert completed is not None
+        self.assertEqual(completed.availability, "free")
+        self.assertEqual(completed.last_completed_response_at, completed_at)
+        self.assertEqual(completed.last_completed_turn_id, turn.turn_id)
+        self.assertTrue(thread_payload(completed, viewer_user_id="user-a")["has_unread_completed_response"])
+        self.assertNotIn("completed_response_read_at_by_user_id", thread_payload(completed, viewer_user_id="user-a"))
+
+        read = mark_runtime_thread_completed_response_read(
+            store,
+            thread_id=completed.thread_id,
+            workspace_id="acme",
+            user_id="user-a",
+            now=completed_at + timedelta(seconds=1),
+        )
+
+        self.assertIsNotNone(read)
+        assert read is not None
+        self.assertFalse(thread_payload(read, viewer_user_id="user-a")["has_unread_completed_response"])
+        self.assertTrue(thread_payload(read, viewer_user_id="user-b")["has_unread_completed_response"])
+
     def test_runtime_thread_list_reconciles_stale_busyness_from_turns(self) -> None:
         store = self.make_store()
         repo_root = self.make_repo_root()
@@ -714,6 +777,46 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
         self.assertEqual(second.status, "queued")
         self.assertEqual(updated.availability, "queued")
         self.assertEqual(event_bus.events[-1]["thread"]["availability"], "queued")
+
+    def test_thread_catalog_completed_response_publishes_read_needed_metadata(self) -> None:
+        store = self.make_store()
+        repo_root = self.make_repo_root()
+        event_bus = CapturingThreadEventBus()
+        now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
+        session = create_runtime_session(
+            store,
+            session_id="session-a",
+            workspace_id="acme",
+            agent_id="agent-1",
+            now=now,
+            start_path=repo_root,
+        )
+        turn = queue_runtime_turn(store, turn_id="turn-a", session_id=session.session_id, input_text="first", now=now)
+        transition_runtime_turn(store, turn_id=turn.turn_id, target_status="active", now=now + timedelta(seconds=1))
+        transition_runtime_turn(store, turn_id=turn.turn_id, target_status="completed", now=now + timedelta(seconds=2))
+        create_runtime_thread(
+            store,
+            workspace_id="acme",
+            thread_id="thread-a",
+            runtime_session_id=session.session_id,
+            title="A",
+            now=now,
+        )
+        state = SimpleNamespace(runtime_store=store, runtime_thread_event_bus=event_bus)
+
+        updated = mark_thread_response_completed(
+            state,
+            workspace_id="acme",
+            runtime_session_id=session.session_id,
+            turn_id=turn.turn_id,
+            now=now + timedelta(seconds=3),
+        )
+
+        self.assertIsNotNone(updated)
+        assert updated is not None
+        self.assertEqual(updated.last_completed_turn_id, turn.turn_id)
+        self.assertEqual(event_bus.events[-1]["thread"]["last_completed_turn_id"], turn.turn_id)
+        self.assertIn("has_unread_completed_response", event_bus.events[-1]["thread"])
 
     def test_thread_catalog_event_preserves_user_renamed_title(self) -> None:
         store = self.make_store()

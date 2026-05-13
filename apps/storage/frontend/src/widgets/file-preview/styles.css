@@ -257,6 +257,10 @@ h3 {
   background: var(--widget-panel);
 }
 
+.file-widget__fallback.is-loading-preview .storage-icon {
+  animation: file-widget-preview-icon-pulse 1.25s ease-in-out infinite;
+}
+
 .file-widget__meta {
   display: flex;
   flex-wrap: wrap;
@@ -272,4 +276,17 @@ h3 {
 
 .file-widget__empty {
   padding: 0.9rem;
+}
+
+@keyframes file-widget-preview-icon-pulse {
+  0%,
+  100% {
+    opacity: 0.72;
+    filter: saturate(0.82);
+  }
+
+  50% {
+    opacity: 1;
+    filter: saturate(1.08);
+  }
 }

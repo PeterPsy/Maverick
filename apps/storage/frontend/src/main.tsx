@@ -173,6 +173,7 @@ function App() {
   const [kind, setKind] = useState('all');
   const [currentFolderPath, setCurrentFolderPath] = useState('');
   const [draggedFile, setDraggedFile] = useState<StorageFile | null>(null);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [dragDepth, setDragDepth] = useState(0);
   const [dropFeedback, setDropFeedback] = useState<DropFeedback>('idle');
@@ -185,6 +186,7 @@ function App() {
   const [previewUrl, setPreviewUrl] = useState('');
   const [previewText, setPreviewText] = useState('');
   const [previewTable, setPreviewTable] = useState<PreviewTablePayload | undefined>(undefined);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
   const [previewImageSize, setPreviewImageSize] = useState<PreviewImageSize | null>(null);
   const [previewViewportSize, setPreviewViewportSize] = useState<PreviewImageSize>(() => ({ width: window.innerWidth, height: window.innerHeight }));
@@ -341,7 +343,9 @@ function App() {
   }
 
   useEffect(() => {
-    refresh().catch((err: Error) => setError(err.message));
+    refresh()
+      .catch((err: Error) => setError(err.message))
+      .finally(() => setIsInitialLoading(false));
     const interval = window.setInterval(() => {
       syncViewFilter().catch((err: Error) => setError(err.message));
     }, VIEW_SYNC_MS);
@@ -698,6 +702,7 @@ function App() {
     setPreviewText('');
     setPreviewUrl('');
     setPreviewTable(undefined);
+    setPreviewLoading(false);
     setMarkdownEditing(false);
     setMarkdownDraft('');
     setMarkdownCopying(false);
@@ -764,6 +769,7 @@ function App() {
     if (!selectedFile || (!previewModalOpen && !markdownEditing)) return;
     if (!canInlinePreview(selectedFile) && !canTextPreview(selectedFile)) return;
     let active = true;
+    setPreviewLoading(true);
     loadFullPreview(selectedFile)
       .then((payload) => {
         if (!active) return;
@@ -772,7 +778,10 @@ function App() {
         setPreviewUrl(payload.url);
         setPreviewTable(payload.table);
       })
-      .catch((err: Error) => active && setError(err.message));
+      .catch((err: Error) => active && setError(err.message))
+      .finally(() => {
+        if (active) setPreviewLoading(false);
+      });
     return () => {
       active = false;
     };
@@ -1006,6 +1015,20 @@ function App() {
 
         <section className="content-panel">
           <div className="content-heading">
+            {isInitialLoading ? (
+              <>
+                <div className="storage-breadcrumb storage-heading-skeleton" aria-hidden="true">
+                  <span className="storage-app-skeleton__icon" />
+                  <span className="storage-app-skeleton__line storage-app-skeleton__line--breadcrumb" />
+                </div>
+                <div className="content-counts storage-counts-skeleton" aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
+                </div>
+              </>
+            ) : (
+              <>
             <Breadcrumb className="storage-breadcrumb">
               <BreadcrumbList>
                 <BreadcrumbItem>
@@ -1094,6 +1117,8 @@ function App() {
               <span>{fileCountLabel}</span>
               <span aria-label={`Folder size ${currentFolderSizeLabel}`} title="Folder size">{currentFolderSizeLabel}</span>
             </div>
+              </>
+            )}
           </div>
 
           {error ? <div className="storage-error">{error}</div> : null}
@@ -1110,7 +1135,10 @@ function App() {
           ) : null}
 
           <section className={`storage-browser ${layoutMode}`} aria-label="Workspace storage">
-            {visibleFolders.map((folder) => (
+            {isInitialLoading ? (
+              <StorageAppSkeleton view={layoutMode} />
+            ) : null}
+            {!isInitialLoading ? visibleFolders.map((folder) => (
               <FolderCard
                 canDelete={Boolean(folder.relative_path)}
                 key={folder.id}
@@ -1121,8 +1149,8 @@ function App() {
                 onDropFile={(targetFolder) => moveDraggedFile(targetFolder.relative_path, targetFolder.role).catch((err: Error) => setError(err.message))}
                 onShowDetails={() => showFolderDetails(folder)}
               />
-            ))}
-            {filteredFiles.length ? (
+            )) : null}
+            {!isInitialLoading && filteredFiles.length ? (
               <AnimatedFileCollection
                 files={filteredFiles}
                 onDelete={(file) => removeFile(file).catch((err: Error) => setError(err.message))}
@@ -1135,10 +1163,10 @@ function App() {
                 view={layoutMode}
               />
             ) : null}
-            {!filteredFiles.length && !visibleFolders.length ? (
+            {!isInitialLoading && !filteredFiles.length && !visibleFolders.length ? (
               <div className="empty-state">{viewMode === 'custom' ? 'No files from this custom view are currently available.' : query.trim() ? 'No matching folders or files.' : 'No folders or files here yet.'}</div>
             ) : null}
-            {catalogPagination?.has_more ? (
+            {!isInitialLoading && catalogPagination?.has_more ? (
               <div className="catalog-page-actions">
                 <button className="secondary-action" disabled={catalogLoadingMore} onClick={() => loadMoreFiles().catch((err: Error) => setError(err.message))} type="button">
                   {catalogLoadingMore ? 'Loading' : 'Load more'}
@@ -1275,12 +1303,62 @@ function App() {
               </div>
             </header>
             <div className="preview-modal-body">
-              <StoragePreview file={selectedFile} previewUrl={previewUrl} previewText={previewText} previewTable={previewTable} />
+              <StoragePreview file={selectedFile} loading={previewLoading} previewUrl={previewUrl} previewText={previewText} previewTable={previewTable} />
             </div>
           </section>
         </div>
       ) : null}
     </main>
+  );
+}
+
+function StorageAppSkeleton({ view }: { view: CollectionViewMode }) {
+  const folderCount = view === 'card' ? 2 : 3;
+  const fileCount = view === 'card' ? 8 : 6;
+
+  return (
+    <>
+      {Array.from({ length: folderCount }).map((_, index) => (
+        <article className="folder-card storage-folder-skeleton" key={`folder-${index}`} aria-hidden="true">
+          <span className="storage-app-skeleton__folder-main">
+            <span className="storage-app-skeleton__icon" />
+            <span className="storage-app-skeleton__line storage-app-skeleton__line--folder" />
+          </span>
+          <span className="storage-app-skeleton__folder-actions">
+            <span />
+            <span />
+            <span />
+          </span>
+        </article>
+      ))}
+      <div
+        className={`animated-file-collection is-${view} storage-app-skeleton__files`}
+        role="status"
+        aria-label="Storage files are loading"
+      >
+        {Array.from({ length: fileCount }).map((_, index) => (
+          <article className={`animated-file-item is-${view} storage-file-skeleton`} key={`file-${index}`} aria-hidden="true">
+            <span className="animated-file-preview-button storage-file-skeleton__preview">
+              <span className="animated-file-preview" />
+            </span>
+            <span className={`animated-file-info is-${view}`}>
+              <span className="animated-file-copy">
+                <span className="storage-app-skeleton__line storage-app-skeleton__line--title" />
+                <span className="storage-app-skeleton__line storage-app-skeleton__line--meta" />
+              </span>
+              <span className="animated-file-trailing storage-file-skeleton__trailing">
+                <span className="storage-file-skeleton__actions">
+                  <span />
+                  <span />
+                  <span />
+                </span>
+                <span className="storage-app-skeleton__line storage-app-skeleton__line--badge" />
+              </span>
+            </span>
+          </article>
+        ))}
+      </div>
+    </>
   );
 }
 

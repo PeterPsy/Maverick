@@ -107,9 +107,9 @@ function SpreadsheetPreview({ table, compact = false }: { table?: PreviewTablePa
   );
 }
 
-function FileTypeFallback({ file }: { file: StorageFile }) {
+function FileTypeFallback({ file, loading = false }: { file: StorageFile; loading?: boolean }) {
   return (
-    <div className="file-type-preview file-type-card-preview storage-file-card-scope">
+    <div className={`file-type-preview file-type-card-preview storage-file-card-scope ${loading ? 'is-loading-preview' : ''}`}>
       <FileCard formatFile={fileCardFormatForFile(file)} />
     </div>
   );
@@ -179,7 +179,7 @@ function CardImagePreview({ src }: { src: string }) {
   );
 }
 
-export function StoragePreview({ file, previewUrl, previewText, previewTable }: { file: StorageFile; previewUrl: string; previewText: string; previewTable?: PreviewTablePayload }) {
+export function StoragePreview({ file, loading = false, previewUrl, previewText, previewTable }: { file: StorageFile; loading?: boolean; previewUrl: string; previewText: string; previewTable?: PreviewTablePayload }) {
   if (canTablePreview(file)) return <SpreadsheetPreview table={previewTable} />;
   if (file.preview_kind === 'image' && previewUrl) return <img src={previewUrl} alt={file.name} />;
   if (file.preview_kind === 'video' && previewUrl) return <video src={previewUrl} controls />;
@@ -190,8 +190,9 @@ export function StoragePreview({ file, previewUrl, previewText, previewTable }: 
   if (file.preview_kind === 'markdown') return previewText ? <MarkdownPreview text={previewText} /> : <pre>Loading preview...</pre>;
   if (file.preview_kind === 'text') return <pre>{previewText || 'Loading preview...'}</pre>;
   if (['document', 'presentation', 'spreadsheet'].includes(file.preview_kind) && previewText) return <pre>{previewText}</pre>;
+  const isLoadingMediaPreview = loading && (file.preview_kind === 'image' || file.preview_kind === 'video');
   return (
-    <div className="format-preview">
+    <div className={`format-preview ${isLoadingMediaPreview ? 'is-loading-preview' : ''}`}>
       <Icon name={iconForKind(file.preview_kind)} />
       <strong>{kindLabels[file.preview_kind]}</strong>
       <p>{file.name}</p>
@@ -203,11 +204,14 @@ export function StoragePreview({ file, previewUrl, previewText, previewTable }: 
 export function FileCardPreview({ file }: { file: StorageFile }) {
   const [previewUrl, setPreviewUrl] = useState('');
   const [previewFailed, setPreviewFailed] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   useEffect(() => {
     setPreviewUrl('');
     setPreviewFailed(false);
-    if (!canCardAssetPreview(file)) return;
+    const canLoadAssetPreview = canCardAssetPreview(file);
+    setPreviewLoading(canLoadAssetPreview);
+    if (!canLoadAssetPreview) return;
     let active = true;
     loadCardPreview(file)
       .then((payload) => {
@@ -216,6 +220,9 @@ export function FileCardPreview({ file }: { file: StorageFile }) {
       })
       .catch(() => {
         if (active) setPreviewFailed(true);
+      })
+      .finally(() => {
+        if (active) setPreviewLoading(false);
     });
     return () => {
       active = false;
@@ -231,5 +238,5 @@ export function FileCardPreview({ file }: { file: StorageFile }) {
   if (file.preview_kind === 'video' && previewUrl) {
     return <video src={previewUrl} muted playsInline preload="metadata" />;
   }
-  return <FileTypeFallback file={file} />;
+  return <FileTypeFallback file={file} loading={previewLoading} />;
 }

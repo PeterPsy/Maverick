@@ -81,6 +81,11 @@ button {
   scroll-snap-type: none;
 }
 
+.storage-kind-rail-skeleton {
+  pointer-events: none;
+  cursor: default;
+}
+
 .storage-kind-rail::-webkit-scrollbar {
   display: none;
   width: 0;
@@ -141,6 +146,29 @@ button {
 
 .storage-kind-button:active {
   transform: scale(0.985);
+}
+
+.storage-kind-button-skeleton {
+  pointer-events: none;
+}
+
+.storage-kind-button-skeleton .storage-kind-card-slot > span {
+  position: relative;
+  display: block;
+  width: 3.2rem;
+  height: 3.2rem;
+  overflow: hidden;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.storage-kind-button-skeleton .storage-kind-card-slot > span::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+  content: "";
+  transform: translateX(-100%);
+  animation: storage-sidebar-skeleton-shimmer 1.45s ease-in-out infinite;
 }
 
 .storage-kind-card-slot {
@@ -475,15 +503,25 @@ button {
 
 .storage-sidebar-skeleton__row {
   display: grid;
-  grid-template-columns: 2rem minmax(0, 1fr);
+  grid-template-columns: 0.75rem 2rem minmax(0, 1fr);
   align-items: center;
-  gap: 0.65rem;
+  gap: 0.5rem;
   min-height: 3.05rem;
   border-radius: 22px;
   box-shadow: var(--maverick-inner-edge);
   padding: 0.58rem 0.7rem;
 }
 
+.storage-sidebar-skeleton__row.depth-1 {
+  padding-left: 1.45rem;
+}
+
+.storage-sidebar-skeleton__row.depth-2,
+.storage-sidebar-skeleton__row.depth-3 {
+  padding-left: 2.2rem;
+}
+
+.storage-sidebar-skeleton__expander,
 .storage-sidebar-skeleton__icon,
 .storage-sidebar-skeleton__copy span {
   position: relative;
@@ -493,6 +531,7 @@ button {
   background: rgba(255, 255, 255, 0.08);
 }
 
+.storage-sidebar-skeleton__expander::after,
 .storage-sidebar-skeleton__icon::after,
 .storage-sidebar-skeleton__copy span::after {
   content: "";
@@ -501,6 +540,11 @@ button {
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
   transform: translateX(-100%);
   animation: storage-sidebar-skeleton-shimmer 1.45s ease-in-out infinite;
+}
+
+.storage-sidebar-skeleton__expander {
+  width: 0.54rem;
+  height: 0.54rem;
 }
 
 .storage-sidebar-skeleton__icon {
@@ -518,9 +562,13 @@ button {
   height: 0.72rem;
 }
 
-.storage-sidebar-skeleton__copy span:last-child {
-  width: 48%;
-  height: 0.64rem;
+.storage-sidebar-skeleton__row.depth-1 .storage-sidebar-skeleton__copy span {
+  width: 62%;
+}
+
+.storage-sidebar-skeleton__row.depth-2 .storage-sidebar-skeleton__copy span,
+.storage-sidebar-skeleton__row.depth-3 .storage-sidebar-skeleton__copy span {
+  width: 54%;
 }
 
 @keyframes storage-sidebar-skeleton-shimmer {

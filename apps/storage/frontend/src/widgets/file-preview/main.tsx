@@ -62,15 +62,16 @@ function openStorage(file?: StorageFile) {
   );
 }
 
-function Preview({ file, previewUrl, previewText }: { file: StorageFile; previewUrl: string; previewText: string }) {
+function Preview({ file, loading, previewUrl, previewText }: { file: StorageFile; loading: boolean; previewUrl: string; previewText: string }) {
   if (file.preview_kind === 'image' && previewUrl) return <img src={previewUrl} alt={file.name} />;
   if (file.preview_kind === 'video' && previewUrl) return <video src={previewUrl} controls />;
   if (file.preview_kind === 'audio' && previewUrl) return <audio src={previewUrl} controls />;
   if (file.preview_kind === 'pdf' && previewUrl) return <iframe src={previewUrl} title={file.name} />;
   if (file.preview_kind === 'markdown') return previewText ? <MarkdownPreview text={previewText} compact /> : <pre>Loading preview...</pre>;
   if (file.preview_kind === 'text') return <pre>{previewText || 'Loading preview...'}</pre>;
+  const isLoadingMediaPreview = loading && (file.preview_kind === 'image' || file.preview_kind === 'video');
   return (
-    <div className="file-widget__fallback">
+    <div className={`file-widget__fallback ${isLoadingMediaPreview ? 'is-loading-preview' : ''}`}>
       <Icon name={iconForKind(file.preview_kind)} />
       <strong>{kindLabels[file.preview_kind]}</strong>
       <p>Open in Storage or download from the app to inspect this file.</p>
@@ -82,6 +83,7 @@ function StorageFilePreviewWidget() {
   const [file, setFile] = useState<StorageFile | null>(null);
   const [previewUrl, setPreviewUrl] = useState('');
   const [previewText, setPreviewText] = useState('');
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -97,6 +99,7 @@ function StorageFilePreviewWidget() {
   useEffect(() => {
     setPreviewText('');
     setPreviewUrl('');
+    setPreviewLoading(Boolean(file && canInlinePreview(file)));
     if (!file || !canInlinePreview(file)) return;
     let active = true;
     let objectUrl = '';
@@ -111,7 +114,10 @@ function StorageFilePreviewWidget() {
           setPreviewUrl(objectUrl);
         }
       })
-      .catch((previewError: Error) => active && setError(previewError.message));
+      .catch((previewError: Error) => active && setError(previewError.message))
+      .finally(() => {
+        if (active) setPreviewLoading(false);
+      });
     return () => {
       active = false;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
@@ -143,7 +149,7 @@ function StorageFilePreviewWidget() {
         </button>
       </header>
       <section className="file-widget__preview">
-        <Preview file={file} previewUrl={previewUrl} previewText={previewText} />
+        <Preview file={file} loading={previewLoading} previewUrl={previewUrl} previewText={previewText} />
       </section>
       <footer className="file-widget__meta">
         {meta.map((item) => <span key={item}>{item}</span>)}

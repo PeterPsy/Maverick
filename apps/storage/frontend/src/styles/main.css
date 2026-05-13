@@ -109,6 +109,12 @@ p {
   }
 }
 
+@keyframes storage-loading-skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
 .storage-shell {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -570,6 +576,148 @@ h3 {
 .folder-card:hover {
   border-color: var(--storage-border-strong);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+.storage-folder-skeleton {
+  pointer-events: none;
+  padding: 0 8px 0 12px;
+}
+
+.storage-app-skeleton__folder-main {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.storage-app-skeleton__folder-actions,
+.storage-file-skeleton__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.125rem;
+}
+
+.storage-app-skeleton__icon,
+.storage-app-skeleton__line,
+.storage-app-skeleton__folder-actions span,
+.storage-file-skeleton__actions span,
+.storage-counts-skeleton span,
+.storage-file-skeleton__preview .animated-file-preview {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.storage-app-skeleton__icon::after,
+.storage-app-skeleton__line::after,
+.storage-app-skeleton__folder-actions span::after,
+.storage-file-skeleton__actions span::after,
+.storage-counts-skeleton span::after,
+.storage-file-skeleton__preview .animated-file-preview::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+  content: "";
+  transform: translateX(-100%);
+  animation: storage-loading-skeleton-shimmer 1.45s ease-in-out infinite;
+}
+
+.storage-app-skeleton__icon {
+  width: 1.55rem;
+  height: 1.55rem;
+  border-radius: 10px;
+}
+
+.storage-app-skeleton__line {
+  border-radius: 999px;
+}
+
+.storage-app-skeleton__line--folder {
+  width: min(12rem, 72%);
+  height: 0.82rem;
+}
+
+.storage-app-skeleton__line--breadcrumb {
+  width: min(13rem, 48vw);
+  height: 0.86rem;
+}
+
+.storage-heading-skeleton {
+  display: flex;
+  align-items: center;
+  gap: 0.48rem;
+  min-width: 0;
+}
+
+.storage-heading-skeleton .storage-app-skeleton__icon {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 999px;
+}
+
+.storage-app-skeleton__folder-actions span,
+.storage-file-skeleton__actions span {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 999px;
+}
+
+.storage-counts-skeleton span {
+  width: 5.4rem;
+  height: 1.62rem;
+  border-color: transparent;
+  color: transparent;
+  padding: 0;
+}
+
+.storage-counts-skeleton span:nth-child(2) {
+  width: 4.8rem;
+}
+
+.storage-counts-skeleton span:nth-child(3) {
+  width: 3.9rem;
+}
+
+.storage-app-skeleton__files {
+  pointer-events: none;
+}
+
+.storage-file-skeleton__preview .animated-file-preview {
+  border-radius: inherit;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.storage-app-skeleton__line--title {
+  width: min(16rem, 78%);
+  height: 0.86rem;
+}
+
+.storage-app-skeleton__line--meta {
+  width: min(10rem, 48%);
+  height: 0.68rem;
+}
+
+.storage-app-skeleton__line--badge {
+  width: 4.8rem;
+  height: 0.68rem;
+}
+
+.storage-file-skeleton .animated-file-copy {
+  width: 100%;
+}
+
+.storage-file-skeleton.is-card .animated-file-copy {
+  gap: 0.32rem;
+}
+
+.storage-file-skeleton.is-card .storage-app-skeleton__line--title {
+  width: 82%;
+}
+
+.storage-file-skeleton.is-card .storage-app-skeleton__line--meta {
+  width: 58%;
 }
 
 .animated-file-item.selected .animated-file-preview-button {
@@ -1207,12 +1355,41 @@ h3 {
   overflow: hidden;
 }
 
+.file-type-card-preview.is-loading-preview > .relative {
+  animation: storage-preview-icon-pulse 1.25s ease-in-out infinite;
+}
+
+.file-type-card-preview.is-loading-preview > .relative::after {
+  position: absolute;
+  inset: -8px;
+  z-index: 3;
+  border-radius: 12px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.16), transparent);
+  content: "";
+  pointer-events: none;
+  transform: translateX(-120%);
+  animation: storage-loading-skeleton-shimmer 1.45s ease-in-out infinite;
+}
+
 .animated-file-item.is-list .file-type-card-preview > .relative {
   transform: scale(0.72);
 }
 
 .animated-file-item.is-card .file-type-card-preview > .relative {
   transform: scale(1.35);
+}
+
+@keyframes storage-preview-icon-pulse {
+  0%,
+  100% {
+    opacity: 0.72;
+    filter: saturate(0.82);
+  }
+
+  50% {
+    opacity: 1;
+    filter: saturate(1.08);
+  }
 }
 
 .file-type-preview strong,
@@ -1223,6 +1400,10 @@ h3 {
 
 .format-preview {
   padding: 18px;
+}
+
+.format-preview.is-loading-preview .storage-icon {
+  animation: storage-preview-icon-pulse 1.25s ease-in-out infinite;
 }
 
 .format-preview small,

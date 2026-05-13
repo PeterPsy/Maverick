@@ -519,7 +519,11 @@ function StorageSidebarWidget() {
 
   return (
     <main className={`storage-sidebar-widget ${isShellMobileLayout ? 'is-shell-mobile' : ''}`}>
-      <KindFilterRail activeKind={activeKind} availableKinds={ALL_AVAILABLE_KINDS} onSelect={selectKind} />
+      {isInitialLoading ? (
+        <KindFilterRailSkeleton />
+      ) : (
+        <KindFilterRail activeKind={activeKind} availableKinds={ALL_AVAILABLE_KINDS} onSelect={selectKind} />
+      )}
 
       {error ? <p className="storage-sidebar-empty">{error}</p> : null}
 
@@ -579,14 +583,28 @@ function FolderTreeNodeView({ node, level, isLast, onSelect }: {
   );
 }
 
+function KindFilterRailSkeleton() {
+  return (
+    <nav aria-hidden="true" className="storage-kind-rail storage-kind-rail-skeleton">
+      {Array.from({ length: 5 }).map((_, index) => (
+        <span className="storage-kind-button storage-kind-button-skeleton" key={index}>
+          <span className="storage-kind-card-slot">
+            <span />
+          </span>
+        </span>
+      ))}
+    </nav>
+  );
+}
+
 function StorageSidebarSkeleton() {
   return (
-    <div aria-hidden="true" className="storage-sidebar-skeleton">
-      {Array.from({ length: 6 }).map((_, index) => (
-        <div className="storage-sidebar-skeleton__row" key={index}>
+    <div className="storage-sidebar-skeleton" role="status" aria-label="Storage folders are loading">
+      {Array.from({ length: 7 }).map((_, index) => (
+        <div className={`storage-sidebar-skeleton__row depth-${Math.min(index, 3)}`} key={index} aria-hidden="true">
+          <span className="storage-sidebar-skeleton__expander" />
           <span className="storage-sidebar-skeleton__icon" />
           <span className="storage-sidebar-skeleton__copy">
-            <span />
             <span />
           </span>
         </div>

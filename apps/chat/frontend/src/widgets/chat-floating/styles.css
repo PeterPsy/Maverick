@@ -628,7 +628,13 @@ body {
   padding: 3.35rem 0.35rem calc(var(--chatapp-composer-overlay-height, 58px) + 1rem);
   overscroll-behavior-x: auto;
   overscroll-behavior-y: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   touch-action: pan-x pan-y;
+}
+
+.chat-floating-widget-shell__body .chatapp-chat-scroll__inner::-webkit-scrollbar {
+  display: none;
 }
 
 .chat-floating-widget-shell__body .chatapp-composer {

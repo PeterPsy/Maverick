@@ -37,6 +37,9 @@ describe("floating chat widget styles", () => {
 
     expect(transcriptBlock).toContain("overscroll-behavior-x: auto;");
     expect(transcriptBlock).toContain("overscroll-behavior-y: contain;");
+    expect(transcriptBlock).toContain("scrollbar-width: none;");
+    expect(transcriptBlock).toContain("-ms-overflow-style: none;");
     expect(transcriptBlock).toContain("touch-action: pan-x pan-y;");
+    expect(styles).toMatch(/\.chat-floating-widget-shell__body \.chatapp-chat-scroll__inner::-webkit-scrollbar\s*{[\s\S]*display:\s*none;/);
   });
 });

@@ -400,7 +400,7 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertNotIn(b'todayLabel', payload)
         self.assertIn(b"/apps/app-store/assets/main.css?v=20260512-skeleton-loading", payload)
         self.assertIn(b"/apps/app-store/assets/app-icons.js?v=20260512-app-icons", payload)
-        self.assertIn(b"/apps/app-store/assets/main.js?v=20260514-folder-carousel", payload)
+        self.assertIn(b"/apps/app-store/assets/main.js?v=20260514-folder-only", payload)
 
     def test_frontend_dist_separates_server_promotion_from_public_submission(self) -> None:
         app_root = Path(__file__).resolve().parents[1]

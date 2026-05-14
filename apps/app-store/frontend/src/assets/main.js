@@ -744,6 +744,25 @@ function renderStore() {
     catalogGrid.append(empty);
     return;
   }
+  if (window.MaverickAppFolderView?.render) {
+    window.MaverickAppFolderView.render({
+      mount: catalogGrid,
+      apps,
+      activeSurface: surfaceNode?.value || "",
+      helpers: {
+        latestVersion,
+        selectedInstallState,
+        statusLabel,
+        surfaceLabel,
+        renderMoreOptions,
+        renderIcon: renderAppIcon,
+        installApp,
+        openApp,
+        isAppPending,
+      },
+    });
+    return;
+  }
   apps.forEach((app) => catalogGrid.append(renderRow(app, "store")));
 }
 

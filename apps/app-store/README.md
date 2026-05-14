@@ -11,6 +11,7 @@ Authenticated Maverick app catalog for inspecting remote catalog apps, server-re
 - `installed_app` is the current reference entity exposed through app-owned surfaces.
 - The app now declares persisted `view_surfaces` for catalog query/scope filters and curated installed-app selections.
 - The frontend uses the public Maverick App Store browsing experience as the primary page and keeps Maverick management controls on the same page.
+- The primary catalog view groups apps into animated type folders; opening a folder app launches a carousel with app description, install/open controls, pinning, and workspace assignment options.
 - The management area includes Server Apps backed by `/api/app-store/server-apps`; it lists installation-level app sources even when they are not installed in the active workspace.
 - Server app rows can install or uninstall selected workspace bindings through `/api/app-store/install-server` and `/api/app-store/uninstall`; this binds the workspace to the registered server source without copying source into the workspace.
 - Public App Store publication is intentionally cross-repo: this app packages workspace-local app source into a ZIP, submits it with safe metadata, and reads submission status from the external public store service. The reviewer/admin approval panel lives in the external public store service, not in Maverick.

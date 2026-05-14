@@ -7,7 +7,6 @@ export function DocsStudioLoadingSkeleton() {
       <article className="doc-page" aria-hidden="true">
         <header className="doc-header docs-loading-skeleton__header">
           <div className="doc-title-block">
-            <span className="docs-loading-skeleton__line docs-loading-skeleton__line--eyebrow" />
             <span className="docs-loading-skeleton__line docs-loading-skeleton__line--title" />
             <span className="doc-title-separator" />
             <span className="docs-loading-skeleton__line docs-loading-skeleton__line--lead" />

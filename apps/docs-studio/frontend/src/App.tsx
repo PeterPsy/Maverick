@@ -175,7 +175,6 @@ export function App() {
       <article className="doc-page">
         <header className="doc-header">
           <div className="doc-title-block">
-            <p className="eyebrow">{active.section.title}</p>
             <h1>{active.page.title}</h1>
             <span className="doc-title-separator" aria-hidden="true" />
             <p className="lead">{active.page.summary || state.site.tagline}</p>

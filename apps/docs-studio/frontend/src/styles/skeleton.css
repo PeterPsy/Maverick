@@ -51,11 +51,6 @@
   content: "";
 }
 
-.docs-loading-skeleton__line--eyebrow {
-  width: 7rem;
-  height: 0.68rem;
-}
-
 .docs-loading-skeleton__line--title {
   width: min(24rem, 76%);
   height: 2.47rem;

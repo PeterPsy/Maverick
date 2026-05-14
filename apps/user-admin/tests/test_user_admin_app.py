@@ -12,6 +12,7 @@ import unittest
 
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
+from core.apps.contracts import parse_app_contract_file
 from tests.support.markers import slow_test_class
 
 
@@ -20,9 +21,9 @@ class UserAdminFrontendDistTests(unittest.TestCase):
 
     def test_frontend_dist_uses_maverick_glass_theme(self) -> None:
         app_root = Path(__file__).resolve().parents[1]
-        css_files = sorted((app_root / "frontend" / "dist" / "assets").glob("index-*.css"))
+        css_files = sorted((app_root / "frontend" / "dist" / "assets").glob("*.css"))
         self.assertTrue(css_files)
-        frontend_css = css_files[-1].read_text(encoding="utf-8")
+        frontend_css = "\n".join(path.read_text(encoding="utf-8") for path in css_files)
         frontend_html = (app_root / "frontend" / "dist" / "index.html").read_text(encoding="utf-8")
 
         self.assertIn("User Admin", frontend_html)
@@ -31,6 +32,23 @@ class UserAdminFrontendDistTests(unittest.TestCase):
         self.assertIn("backdrop-filter:blur(26px)", frontend_css)
         self.assertIn("@keyframes ua-progress-sheen", frontend_css)
         self.assertNotIn("--ua-primary:#d72451", frontend_css)
+
+    def test_user_admin_declares_shell_sidebar_widget(self) -> None:
+        app_root = Path(__file__).resolve().parents[1]
+        parsed = parse_app_contract_file(app_root)
+        widgets = {widget.widget_id: widget for widget in parsed.contract.widgets}
+        sidebar_widget = widgets["user-admin-sidebar"]
+        vite_source = (app_root / "vite.config.ts").read_text(encoding="utf-8")
+        sidebar_source = (app_root / "frontend" / "src" / "widgets" / "user-admin-sidebar" / "main.ts").read_text(encoding="utf-8")
+
+        self.assertIn("widget", parsed.contract.provides[0].surfaces)
+        self.assertEqual(sidebar_widget.host, "base-shell")
+        self.assertEqual(sidebar_widget.content_kinds, ["shell.sidebar.primary"])
+        self.assertEqual(sidebar_widget.frontend.mount, "frontend/dist/widgets/user-admin-sidebar")
+        self.assertTrue((app_root / "frontend" / "dist" / "widgets" / "user-admin-sidebar" / "index.html").is_file())
+        self.assertIn("'widgets/user-admin-sidebar/index': 'frontend/widgets/user-admin-sidebar/index.html'", vite_source)
+        self.assertIn("maverick.widget.open-app", sidebar_source)
+        self.assertIn("maverick.shell.sidebar.close", sidebar_source)
 
 
 @slow_test_class("slow user-admin app integration suite; run with scripts/test_suite.py --level slow")

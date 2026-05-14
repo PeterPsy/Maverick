@@ -4,9 +4,10 @@ Admin-only control panel for users, platform roles, workspace assignments, app v
 
 ## Contract Notes
 
-- The app currently declares frontend, CLI, and MCP entrypoints only.
+- The app currently declares frontend, CLI, MCP, and base-shell sidebar widget surfaces.
 - `user-admin` intentionally does not declare an app-owned backend or lifecycle hooks yet; authoritative admin state remains core-owned.
 - Persistence adapter status, dry-runs, migrations, and backend restarts are core-owned admin surfaces. User Admin only presents those surfaces in the UI.
+- The main app iframe owns the admin work surface. User search and user selection live in the `user-admin-sidebar` iframe declared for `shell.sidebar.primary`, matching the base-shell sidebar split used by Chat and Storage.
 - The app stores only admin UI preferences under `data/user-admin/preferences.json`.
 - `reference_entities`, `data_events`, and persisted `view_surfaces` remain intentionally empty until the app grows app-owned administrative state instead of acting as a shell over core-managed records.
 

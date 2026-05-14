@@ -1,30 +1,6 @@
+@import './styles/tokens.css';
+
 :root {
-  color-scheme: dark;
-  --maverick-bg: rgba(7, 7, 8, 1);
-  --maverick-bg-strong: #171717;
-  --maverick-surface: rgba(255, 255, 255, 0.055);
-  --maverick-surface-hover: rgba(255, 255, 255, 0.105);
-  --maverick-surface-active: rgba(255, 255, 255, 0.14);
-  --maverick-border: rgba(255, 255, 255, 0.08);
-  --maverick-border-strong: rgba(255, 255, 255, 0.14);
-  --maverick-glass-surface: rgba(12, 12, 14, 0.28);
-  --maverick-glass-highlight:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 36%),
-    linear-gradient(315deg, rgba(255, 255, 255, 0.035), transparent 42%);
-  --maverick-glass-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.052), inset 0 1px 0 rgba(255, 255, 255, 0.09);
-  --maverick-inner-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.14);
-  --maverick-text: #ececec;
-  --maverick-text-muted: rgba(236, 236, 236, 0.66);
-  --maverick-text-soft: rgba(236, 236, 236, 0.42);
-  --maverick-accent: #ffffff;
-  --maverick-accent-soft: rgba(255, 255, 255, 0.18);
-  --maverick-text-on-accent: #0a0a0b;
-  --maverick-success: #9ff0ca;
-  --maverick-danger: #ffb3bf;
-  --maverick-warning: #ffd69a;
-  --maverick-card-radius: 22px;
-  --maverick-control-radius: 18px;
-  --maverick-font: "Avenir Next", "Sohne", "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
   --ua-menu-shadow: 0 24px 80px rgba(0, 0, 0, 0.46);
   background: var(--maverick-bg);
   color: var(--maverick-text);
@@ -101,30 +77,8 @@ h2 {
 }
 
 .ua-shell {
-  display: grid;
-  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
   min-height: 100dvh;
   background: var(--maverick-bg);
-}
-
-.ua-rail {
-  position: sticky;
-  top: 0;
-  display: grid;
-  align-content: start;
-  gap: 1.4rem;
-  height: 100dvh;
-  min-height: 0;
-  overflow: auto;
-  border-right: 1px solid var(--maverick-border);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.018)),
-    rgba(12, 12, 14, 0.66);
-  box-shadow: var(--maverick-glass-edge);
-  backdrop-filter: blur(26px);
-  -webkit-backdrop-filter: blur(26px);
-  color: var(--maverick-text);
-  padding: 24px;
 }
 
 .ua-main {
@@ -141,6 +95,49 @@ h2 {
   gap: 18px;
   width: min(100%, 1320px);
   min-width: 0;
+}
+
+.ua-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  min-width: 0;
+  padding: 4px 2px 2px;
+}
+
+.ua-page-header > div:first-child {
+  min-width: 0;
+}
+
+.ua-page-stats {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.ua-stat {
+  display: grid;
+  min-width: 5.4rem;
+  border: 1px solid var(--maverick-border);
+  border-radius: var(--maverick-control-radius);
+  background: rgba(255, 255, 255, 0.045);
+  box-shadow: var(--maverick-inner-edge);
+  padding: 0.56rem 0.72rem;
+}
+
+.ua-stat strong {
+  color: var(--maverick-text);
+  font-size: 1rem;
+  line-height: 1.1;
+}
+
+.ua-stat small {
+  color: var(--maverick-text-muted);
+  font-size: 0.68rem;
+  line-height: 1.2;
+  text-transform: uppercase;
 }
 
 .ua-kicker {
@@ -163,7 +160,6 @@ h2 {
   margin-top: 0.68rem;
 }
 
-.ua-users,
 .ua-memberships,
 .ua-grid,
 .ua-app-workspaces,
@@ -172,38 +168,6 @@ h2 {
   gap: 0.64rem;
 }
 
-.ua-user {
-  display: grid;
-  grid-template-columns: 2.25rem minmax(0, 1fr);
-  align-items: center;
-  gap: 0.72rem;
-  width: 100%;
-  min-height: 3.72rem;
-  border: 1px solid transparent;
-  border-radius: var(--maverick-control-radius);
-  background: transparent;
-  color: inherit;
-  padding: 0.6rem;
-  text-align: left;
-  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
-}
-
-.ua-user:hover,
-.ua-user.is-active {
-  border-color: var(--maverick-border);
-  background: rgba(255, 255, 255, 0.055);
-}
-
-.ua-user:hover {
-  transform: translateY(-1px);
-}
-
-.ua-user.is-active {
-  border-color: var(--maverick-border-strong);
-  background: var(--maverick-surface-active);
-}
-
-.ua-user-icon,
 .ua-membership-icon,
 .ua-password-icon,
 .ua-app-workspace-icon,
@@ -225,7 +189,6 @@ h2 {
   color: var(--maverick-text-muted);
 }
 
-.ua-user.is-active .ua-user-icon,
 .ua-adapter-card.is-active .ua-adapter-card-icon,
 .ua-migration-result > .material-symbols-rounded {
   border-color: rgba(159, 240, 202, 0.24);
@@ -233,7 +196,6 @@ h2 {
   color: var(--maverick-success);
 }
 
-.ua-user-copy,
 .ua-membership span:not(.ua-membership-icon),
 .ua-app-workspace-heading span:not(.material-symbols-rounded),
 .ua-app-copy,
@@ -245,7 +207,6 @@ h2 {
   gap: 0.22rem;
 }
 
-.ua-user-copy strong,
 .ua-app-copy strong,
 .ua-membership strong,
 .ua-app-workspace-heading strong {
@@ -255,7 +216,6 @@ h2 {
   white-space: nowrap;
 }
 
-.ua-user span span,
 .ua-membership small,
 .ua-app-workspace-heading small,
 .ua-app-copy small,
@@ -427,7 +387,7 @@ select:focus {
   background: rgba(255, 255, 255, 0.09);
 }
 
-button:not(.ua-user) {
+button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -442,7 +402,7 @@ button:not(.ua-user) {
   transition: background 160ms ease, border-color 160ms ease, color 160ms ease, opacity 160ms ease, transform 160ms ease;
 }
 
-button:not(.ua-user):hover:not(:disabled) {
+button:hover:not(:disabled) {
   transform: translateY(-1px);
 }
 
@@ -847,15 +807,12 @@ button.ua-danger:hover:not(:disabled) {
 }
 
 @media (max-width: 980px) {
-  .ua-shell {
-    grid-template-columns: 1fr;
+  .ua-page-header {
+    flex-direction: column;
   }
 
-  .ua-rail {
-    position: static;
-    height: auto;
-    border-right: 0;
-    border-bottom: 1px solid var(--maverick-border);
+  .ua-page-stats {
+    justify-content: flex-start;
   }
 
   .ua-create,
@@ -880,7 +837,6 @@ button.ua-danger:hover:not(:disabled) {
 }
 
 @media (max-width: 640px) {
-  .ua-rail,
   .ua-main {
     padding: 18px;
   }

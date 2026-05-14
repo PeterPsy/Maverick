@@ -14,7 +14,8 @@
       "surfaces": [
         "cli",
         "mcp",
-        "view"
+        "view",
+        "widget"
       ]
     }
   ],
@@ -62,7 +63,25 @@
     "view_surfaces": [],
     "reference_entities": []
   },
-  "widgets": [],
+  "widgets": [
+    {
+      "widget_id": "user-admin-sidebar",
+      "host": "base-shell",
+      "content_kinds": [
+        "shell.sidebar.primary"
+      ],
+      "frontend": {
+        "kind": "iframe",
+        "mount": "frontend/dist/widgets/user-admin-sidebar",
+        "spa_fallback": true
+      },
+      "actions": {
+        "backend": false,
+        "mcp": false,
+        "cli": false
+      }
+    }
+  ],
   "entrypoints": {
     "mcp": "mcp/server.py",
     "cli": "cli/app_cli.py",

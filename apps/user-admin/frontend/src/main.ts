@@ -1,64 +1,16 @@
 import './styles.css';
-
-type Membership = {
-  workspace_id: string;
-  role: 'admin' | 'member';
-  status: string;
-};
-
-type User = {
-  user_id: string;
-  username: string;
-  email: string | null;
-  display_name: string | null;
-  platform_role: 'admin' | 'member';
-  account_type: string;
-  is_active: boolean;
-  memberships: Membership[];
-};
-
-type Workspace = {
-  workspace_id: string;
-  name: string;
-  status: string;
-};
-
-type WorkspaceApp = {
-  workspace_id: string;
-  workspace_name: string;
-  app_id: string;
-  name: string;
-  description: string;
-  version: string;
-  source_id: string;
-  installed: boolean;
-  status: 'uninstalled' | 'installed' | 'enabled' | 'disabled' | 'failed' | 'updating' | 'rolled_back';
-};
-
-type PersistenceAdapter = {
-  kind: 'json' | 'mongo';
-  json_root: string;
-  mongo_uri: string | null;
-  mongo_database: string;
-};
-
-type PersistenceStatus = {
-  active_adapter: PersistenceAdapter;
-  collections: { name: string; count: number }[];
-  restart_required_for_cutover: boolean;
-};
-
-type MigrationResult = {
-  status: string;
-  source_adapter: PersistenceAdapter;
-  target_adapter: PersistenceAdapter;
-  collections: { name: string; count: number }[];
-  restart_required_for_cutover: boolean;
-  active_adapter_changed?: boolean;
-  env_file?: { path: string; updated: boolean; missing: boolean };
-  backend_restart?: { restarted: boolean; scheduled: boolean; detail: string; method: string; healthy: boolean };
-  source_cleanup?: { scheduled: boolean; mode: string };
-};
+import {
+  loadUsers,
+  loadWorkspaces,
+  loadWorkspaceApps,
+  requestJson,
+  type Membership,
+  type MigrationResult,
+  type PersistenceStatus,
+  type User,
+  type Workspace,
+  type WorkspaceApp
+} from './adminApi';
 
 type MigrationProgress = {
   target: 'json' | 'mongo';
@@ -74,23 +26,11 @@ let workspaceApps: WorkspaceApp[] = [];
 let persistence: PersistenceStatus | null = null;
 let persistenceMigration: MigrationResult | null = null;
 let migrationProgress: MigrationProgress | null = null;
-let selectedUserId = '';
+let selectedUserId = userIdFromNavigationParams(Object.fromEntries(new URLSearchParams(window.location.search).entries()));
 let pendingDeleteUserId = '';
 let migrationTarget: 'json' | 'mongo' | null = null;
 let notice: { tone: 'info' | 'success' | 'error'; message: string } | null = null;
-
-async function requestJson<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(path, {
-    credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
-    ...options
-  });
-  const payload = await response.json();
-  if (!response.ok) {
-    throw new Error(payload.detail || payload.error || `Request failed ${response.status}`);
-  }
-  return payload as T;
-}
+let lastPublishedUserId = '';
 
 function selectedUser(): User | undefined {
   return users.find((user) => user.user_id === selectedUserId) || users[0];
@@ -98,6 +38,68 @@ function selectedUser(): User | undefined {
 
 function membershipFor(user: User, workspaceId: string): Membership | undefined {
   return user.memberships.find((membership) => membership.workspace_id === workspaceId);
+}
+
+function userIdFromNavigationParams(params: Record<string, unknown>): string {
+  const directUserId = scalarParam(params.user_id) || scalarParam(params.selected_user_id) || scalarParam(params.id);
+  if (directUserId) {
+    return directUserId;
+  }
+  const appPage = scalarParam(params.app_page);
+  const userPageMatch = /^users\/([^/?#]+)$/.exec(appPage);
+  if (!userPageMatch?.[1]) {
+    return '';
+  }
+  try {
+    return decodeURIComponent(userPageMatch[1]);
+  } catch {
+    return userPageMatch[1];
+  }
+}
+
+function scalarParam(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function applyNavigationParams(params: Record<string, unknown>) {
+  const userId = userIdFromNavigationParams(params);
+  if (!userId) {
+    return;
+  }
+  selectedUserId = userId;
+  pendingDeleteUserId = '';
+  if (users.length) {
+    render();
+  }
+}
+
+function publishSelectedUser(user: User | undefined) {
+  if (!user || user.user_id === lastPublishedUserId || window.parent === window) {
+    return;
+  }
+  lastPublishedUserId = user.user_id;
+  window.parent.postMessage(
+    {
+      type: 'maverick.app.selection-changed',
+      owner_app_id: 'user-admin',
+      selection: { user_id: user.user_id }
+    },
+    window.location.origin
+  );
+}
+
+function publishUserDataChanged() {
+  if (window.parent === window) {
+    return;
+  }
+  window.parent.postMessage(
+    {
+      type: 'maverick.app.data-changed',
+      owner_app_id: 'user-admin',
+      resource: 'users'
+    },
+    window.location.origin
+  );
 }
 
 async function requestPersistenceStatus(): Promise<PersistenceStatus | null> {
@@ -120,14 +122,14 @@ async function requestPersistenceStatusQuiet(): Promise<PersistenceStatus | null
 
 async function refresh() {
   const [usersPayload, workspacesPayload, workspaceAppsPayload, persistencePayload] = await Promise.all([
-    requestJson<{ items: User[] }>('/api/admin/users'),
-    requestJson<{ items: Workspace[] }>('/api/admin/workspaces'),
-    requestJson<{ items: WorkspaceApp[] }>('/api/admin/workspace-apps'),
+    loadUsers(),
+    loadWorkspaces(),
+    loadWorkspaceApps(),
     requestPersistenceStatus()
   ]);
-  users = usersPayload.items;
-  workspaces = workspacesPayload.items;
-  workspaceApps = workspaceAppsPayload.items;
+  users = usersPayload;
+  workspaces = workspacesPayload;
+  workspaceApps = workspaceAppsPayload;
   persistence = persistencePayload;
   if (!selectedUserId || !users.some((user) => user.user_id === selectedUserId)) {
     selectedUserId = users[0]?.user_id || '';
@@ -151,6 +153,7 @@ async function createUser(form: HTMLFormElement) {
   selectedUserId = created.user_id;
   form.reset();
   await refresh();
+  publishUserDataChanged();
 }
 
 async function updateSelectedUser(form: HTMLFormElement, user: User) {
@@ -166,6 +169,7 @@ async function updateSelectedUser(form: HTMLFormElement, user: User) {
     })
   });
   await refresh();
+  publishUserDataChanged();
 }
 
 async function resetSelectedUserPassword(form: HTMLFormElement, user: User) {
@@ -202,6 +206,7 @@ async function deleteSelectedUser(user: User) {
   pendingDeleteUserId = '';
   notice = { tone: 'success', message: `${label} deleted.` };
   await refresh();
+  publishUserDataChanged();
 }
 
 async function updateMemberships(user: User) {
@@ -217,6 +222,7 @@ async function updateMemberships(user: User) {
     body: JSON.stringify({ memberships })
   });
   await refresh();
+  publishUserDataChanged();
 }
 
 async function installWorkspaceApp(app: WorkspaceApp) {
@@ -328,22 +334,6 @@ async function waitForPersistenceCutover(kind: 'json' | 'mongo') {
     message: 'Migration not confirmed before the timeout.'
   };
   render();
-}
-
-function userListHtml() {
-  return users
-    .map((user) => {
-      const active = user.user_id === selectedUser()?.user_id ? 'is-active' : '';
-      const role = user.platform_role === 'admin' ? 'Admin' : 'Member';
-      return `<button class="ua-user ${active}" data-user-id="${user.user_id}">
-        <span class="ua-user-icon material-symbols-rounded" aria-hidden="true">account_circle</span>
-        <span class="ua-user-copy">
-          <strong>${user.display_name || user.username}</strong>
-          <span>${role} · ${user.memberships.length} workspace</span>
-        </span>
-      </button>`;
-    })
-    .join('');
 }
 
 function membershipHtml(user: User) {
@@ -521,17 +511,22 @@ function render() {
   const root = document.getElementById('app');
   const user = selectedUser();
   if (!root) return;
-  root.innerHTML = `<section class="ua-shell">
-    <aside class="ua-rail">
-      <div>
-        <p class="ua-kicker">Maverick</p>
-        <h1>User Admin</h1>
-        <p class="ua-copy">Manage users, platform roles, and workspace access.</p>
-      </div>
-      <div class="ua-users">${userListHtml()}</div>
-    </aside>
+  const activeUsers = users.filter((item) => item.is_active).length;
+  root.innerHTML = `<main class="ua-shell">
     <section class="ua-main">
       <div class="ua-content">
+        <header class="ua-page-header">
+          <div>
+            <p class="ua-kicker">Maverick</p>
+            <h1>User Admin</h1>
+            <p class="ua-copy">Manage users, platform roles, workspace access, app visibility, and control-plane persistence.</p>
+          </div>
+          <div class="ua-page-stats" aria-label="Admin summary">
+            <span class="ua-stat"><strong>${users.length}</strong><small>users</small></span>
+            <span class="ua-stat"><strong>${activeUsers}</strong><small>active</small></span>
+            <span class="ua-stat"><strong>${workspaces.length}</strong><small>workspaces</small></span>
+          </div>
+        </header>
         ${noticeHtml()}
         <form class="ua-card ua-create" id="create-user">
           <div>
@@ -633,21 +628,15 @@ function render() {
       </div>
     </section>
     ${persistenceMigrationModalHtml()}
-  </section>`;
+  </main>`;
   bindEvents();
+  publishSelectedUser(user);
 }
 
 function bindEvents() {
   document.getElementById('dismiss-notice')?.addEventListener('click', () => {
     notice = null;
     render();
-  });
-  document.querySelectorAll<HTMLButtonElement>('[data-user-id]').forEach((button) => {
-    button.addEventListener('click', () => {
-      selectedUserId = button.dataset.userId || '';
-      pendingDeleteUserId = '';
-      render();
-    });
   });
   document.getElementById('create-user')?.addEventListener('submit', (event) => {
     event.preventDefault();
@@ -726,5 +715,17 @@ function noticeHtml() {
     </button>
   </div>`;
 }
+
+window.addEventListener('message', (event) => {
+  if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') {
+    return;
+  }
+  const payload = event.data as { app_id?: string; params?: Record<string, unknown>; type?: string };
+  if (payload.type === 'maverick.app.navigate' && (!payload.app_id || payload.app_id === 'user-admin')) {
+    applyNavigationParams(payload.params || {});
+  }
+});
+
+window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'user-admin' }, window.location.origin);
 
 refresh().catch(showError);

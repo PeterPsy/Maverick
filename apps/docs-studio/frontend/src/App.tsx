@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { loadDocsState } from './api';
+import { DocsStudioLoadingSkeleton } from './components/DocsStudioLoadingSkeleton';
 import { Markdown } from './Markdown';
 import { notifyActiveDocSelection } from './lib/activeDocSelection';
 import { docPageIdFromParams } from './lib/docNavigationParams';
@@ -166,7 +167,7 @@ export function App() {
   }, [activePageId]);
 
   if (!state || !active) {
-    return <div className="loading">Loading Docs Studio...</div>;
+    return <DocsStudioLoadingSkeleton />;
   }
 
   return (

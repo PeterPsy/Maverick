@@ -19,9 +19,9 @@
   --maverick-accent: #ffffff;
   --maverick-accent-soft: rgba(255, 255, 255, 0.18);
   --maverick-text-on-accent: #0a0a0b;
-  --maverick-success: #9ff0ca;
-  --maverick-danger: #ffb3bf;
-  --maverick-warning: #ffd69a;
+  --maverick-success: #ffffff;
+  --maverick-danger: #ffffff;
+  --maverick-warning: #ffffff;
   --maverick-card-radius: 22px;
   --maverick-control-radius: 18px;
   --maverick-font: "Avenir Next", "Sohne", "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;

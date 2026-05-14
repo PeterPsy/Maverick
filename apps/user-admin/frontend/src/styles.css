@@ -191,9 +191,9 @@ h2 {
 
 .ua-adapter-card.is-active .ua-adapter-card-icon,
 .ua-migration-result > .material-symbols-rounded {
-  border-color: rgba(159, 240, 202, 0.24);
-  background: rgba(159, 240, 202, 0.1);
-  color: var(--maverick-success);
+  border-color: rgba(255, 255, 255, 0.26);
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--maverick-accent);
 }
 
 .ua-membership span:not(.ua-membership-icon),
@@ -288,13 +288,13 @@ h2 {
 }
 
 .ua-notice-success {
-  border-color: rgba(159, 240, 202, 0.26);
-  color: var(--maverick-success);
+  border-color: rgba(255, 255, 255, 0.24);
+  color: var(--maverick-text);
 }
 
 .ua-notice-error {
-  border-color: rgba(255, 179, 191, 0.28);
-  color: var(--maverick-danger);
+  border-color: rgba(255, 255, 255, 0.24);
+  color: var(--maverick-text);
 }
 
 .ua-icon-button {
@@ -418,10 +418,10 @@ button:hover:not(:disabled) {
   align-items: center;
   width: max-content;
   min-height: 1.75rem;
-  border: 1px solid rgba(159, 240, 202, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 999px;
-  background: rgba(159, 240, 202, 0.1);
-  color: var(--maverick-success);
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--maverick-accent);
   padding: 0 0.68rem;
   font-size: 0.7rem;
   font-weight: 400;
@@ -449,13 +449,13 @@ button:hover:not(:disabled) {
 }
 
 .ua-password {
-  border-color: rgba(255, 179, 191, 0.16);
+  border-color: rgba(255, 255, 255, 0.16);
 }
 
 .ua-password-icon {
-  border-color: rgba(255, 179, 191, 0.2);
-  background: rgba(255, 179, 191, 0.09);
-  color: var(--maverick-danger);
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--maverick-accent);
 }
 
 .ua-password-grid {
@@ -486,7 +486,7 @@ button:hover:not(:disabled) {
   gap: 0.72rem;
   grid-column: 1 / -1;
   min-height: 3.1rem;
-  border-color: rgba(159, 240, 202, 0.24);
+  border-color: rgba(255, 255, 255, 0.24);
   padding: 12px;
 }
 
@@ -545,31 +545,31 @@ button:hover:not(:disabled) {
 }
 
 .ua-migration-progress.is-complete {
-  border-color: rgba(159, 240, 202, 0.26);
-  background: rgba(159, 240, 202, 0.08);
+  border-color: rgba(255, 255, 255, 0.26);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .ua-migration-progress.is-complete .ua-migration-progress-heading > .material-symbols-rounded,
 .ua-migration-progress.is-complete .ua-migration-progress-heading em {
-  color: var(--maverick-success);
+  color: var(--maverick-accent);
 }
 
 .ua-migration-progress.is-complete .ua-progress-track span {
-  background: var(--maverick-success);
+  background: var(--maverick-accent);
 }
 
 .ua-migration-progress.is-failed {
-  border-color: rgba(255, 179, 191, 0.3);
-  background: rgba(255, 179, 191, 0.08);
+  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .ua-migration-progress.is-failed .ua-migration-progress-heading > .material-symbols-rounded,
 .ua-migration-progress.is-failed .ua-migration-progress-heading em {
-  color: var(--maverick-danger);
+  color: var(--maverick-accent);
 }
 
 .ua-migration-progress.is-failed .ua-progress-track span {
-  background: var(--maverick-danger);
+  background: var(--maverick-accent);
 }
 
 .ua-adapter-cards {
@@ -599,9 +599,9 @@ button.ua-adapter-card {
 }
 
 .ua-adapter-card.is-active {
-  border-color: rgba(159, 240, 202, 0.34);
-  background: rgba(159, 240, 202, 0.09);
-  color: var(--maverick-success);
+  border-color: rgba(255, 255, 255, 0.34);
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--maverick-accent);
   cursor: default;
 }
 
@@ -634,8 +634,8 @@ button.ua-adapter-card {
 }
 
 .ua-adapter-card.is-active em {
-  border-color: rgba(159, 240, 202, 0.26);
-  color: var(--maverick-success);
+  border-color: rgba(255, 255, 255, 0.26);
+  color: var(--maverick-accent);
 }
 
 .ua-modal-backdrop {
@@ -700,8 +700,8 @@ button.ua-adapter-card {
 }
 
 .ua-membership:has(input:checked) {
-  border-color: rgba(159, 240, 202, 0.2);
-  background: rgba(159, 240, 202, 0.07);
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.07);
 }
 
 .ua-membership span:not(.ua-membership-icon) {
@@ -769,13 +769,13 @@ button.ua-secondary:hover:not(:disabled) {
 }
 
 button.ua-danger {
-  border: 1px solid rgba(255, 179, 191, 0.3);
-  background: rgba(255, 179, 191, 0.1);
-  color: var(--maverick-danger);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--maverick-accent);
 }
 
 button.ua-danger:hover:not(:disabled) {
-  background: rgba(255, 179, 191, 0.15);
+  background: rgba(255, 255, 255, 0.15);
 }
 
 @keyframes ua-panel-enter {

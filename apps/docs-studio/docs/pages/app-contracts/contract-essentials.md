@@ -11,6 +11,9 @@
   "distribution": {
     "mode": "workspace_local",
     "source_access": "editable"
+  },
+  "presentation": {
+    "frontend_role": "workspace"
   }
 }
 ```

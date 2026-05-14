@@ -37,7 +37,7 @@ export function orderedDesktopRailApps(
   pinnedAppIds: string[],
   staticAppIds: string[] = STATIC_DESKTOP_RAIL_APP_IDS,
 ): AppRegistryItem[] {
-  const visibleApps = registryApps.filter((app) => app.app_id !== "base-shell" && Boolean(app.frontend_mount));
+  const visibleApps = registryApps.filter((app) => app.app_id !== "base-shell" && app.frontend_launchable && Boolean(app.frontend_mount));
   const visibleAppsById = new Map(visibleApps.map((app) => [app.app_id, app]));
   const orderedPinnedApps = sanitizePinnedOrder(
     pinnedAppIds,

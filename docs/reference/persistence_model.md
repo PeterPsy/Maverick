@@ -122,7 +122,7 @@ MCP:
 - `core.persistence.migration.dry_run`
 - `core.persistence.migration.apply`
 
-Admin apps such as User Admin may expose that workflow, but the core must not import or depend on those apps. A migration is full adapter-to-adapter movement: the core copies every control-plane collection to the target adapter, updates the service environment file when available, and requires a backend restart for cutover. During the running process, the source adapter remains the only mounted adapter; after restart, the target adapter is the only mounted adapter. When the operator requests source cleanup, the core schedules deletion of the old adapter storage only after the restarted backend is healthy on the target adapter.
+Admin apps such as Settings may expose that workflow, but the core must not import or depend on those apps. A migration is full adapter-to-adapter movement: the core copies every control-plane collection to the target adapter, updates the service environment file when available, and requires a backend restart for cutover. During the running process, the source adapter remains the only mounted adapter; after restart, the target adapter is the only mounted adapter. When the operator requests source cleanup, the core schedules deletion of the old adapter storage only after the restarted backend is healthy on the target adapter.
 
 That does not change the architectural boundary:
 

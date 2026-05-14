@@ -4,6 +4,7 @@ import type { AppReference, ChatMessage } from "../api/client";
 import { formatFileSize } from "../lib/attachments";
 import { findMentionTokens, referenceKey } from "../lib/mentions";
 import type { MentionItem } from "../lib/mentions";
+import { referenceKindLabel } from "../lib/referenceKindLabels";
 import { openAppRouteInShell } from "../lib/shellNavigation";
 import { MarkdownMessage } from "./MarkdownMessage";
 import { RuntimeStepMessage } from "./RuntimeStepMessage";
@@ -16,7 +17,7 @@ function formatTime(value: string) {
   if (Number.isNaN(parsed.getTime())) {
     return "";
   }
-  return new Intl.DateTimeFormat("it-IT", {
+  return new Intl.DateTimeFormat("en-US", {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
@@ -141,10 +142,10 @@ export function ChatTranscript({
                     </div>
                     {message.content ? (
                       <button
-                        aria-label="Copia messaggio"
+                        aria-label="Copy message"
                         className="chatapp-message-action chatapp-message-action--icon chatapp-message-action--copy"
                         onClick={() => void copyMessage(message.content)}
-                        title="Copia"
+                        title="Copy"
                         type="button"
                       >
                         <span aria-hidden="true" className="material-symbols-rounded">
@@ -197,14 +198,14 @@ export function ChatTranscript({
                   <section className="chatapp-agent-block chatapp-agent-block--action">
                     <div className="chatapp-message-copy-row chatapp-message-copy-row--agent">
                       <div className="chatapp-agent-block__body">
-                        <MarkdownMessage content={visibleContent || "_Nessun output testuale._"} />
+                        <MarkdownMessage content={visibleContent || "_No text output._"} />
                       </div>
                       {message.content ? (
                         <button
-                          aria-label="Copia messaggio"
+                          aria-label="Copy message"
                           className="chatapp-message-action chatapp-message-action--icon chatapp-message-action--copy"
                           onClick={() => void copyMessage(message.content)}
-                          title="Copia"
+                          title="Copy"
                           type="button"
                         >
                           <span aria-hidden="true" className="material-symbols-rounded">
@@ -215,7 +216,7 @@ export function ChatTranscript({
                     </div>
                     {message.content.length > 3200 ? (
                       <button className="chatapp-message-action" onClick={() => toggleExpanded(message.id)} type="button">
-                        {expandedMessages.has(message.id) ? "Comprimi output" : "Espandi output completo"}
+                        {expandedMessages.has(message.id) ? "Collapse output" : "Expand full output"}
                       </button>
                     ) : null}
                     <MessageFooter content={message.content} createdAt={message.createdAt} onCopy={copyMessage} />
@@ -226,10 +227,10 @@ export function ChatTranscript({
                 <div className="chatapp-bubble__meta">
                   {message.content && (message.role === "human" || message.role === "agent") ? (
                     <button
-                      aria-label="Copia messaggio"
+                      aria-label="Copy message"
                       className="chatapp-message-action chatapp-message-action--icon chatapp-message-action--copy chatapp-message-action--copy-meta"
                       onClick={() => void copyMessage(message.content)}
-                      title="Copia"
+                      title="Copy"
                       type="button"
                     >
                       <span aria-hidden="true" className="material-symbols-rounded">
@@ -263,7 +264,7 @@ export function ChatTranscript({
         ) : null}
       </div>
       {showScrollJump ? (
-        <button className="chatapp-chat-scroll-jump" onClick={scrollToBottom} type="button" aria-label="Vai all'ultimo messaggio">
+        <button className="chatapp-chat-scroll-jump" onClick={scrollToBottom} type="button" aria-label="Jump to latest message">
           <span aria-hidden="true" className="material-symbols-rounded">
             arrow_downward
           </span>
@@ -286,10 +287,10 @@ function MessageFooter({
     <div className="chatapp-message-mobile-footer">
       {content ? (
         <button
-          aria-label="Copia messaggio"
+          aria-label="Copy message"
           className="chatapp-message-action chatapp-message-action--icon chatapp-message-action--copy"
           onClick={() => void onCopy(content)}
-          title="Copia"
+          title="Copy"
           type="button"
         >
           <span aria-hidden="true" className="material-symbols-rounded">
@@ -352,7 +353,9 @@ function renderHumanMessageContent(content: string, appReferences: AppReference[
     label: token.item.label,
     appId: token.item.reference?.type === "entity" ? token.item.reference.app_id : undefined,
     deepLink: token.item.reference?.type === "entity" ? token.item.reference.deep_link : undefined,
+    entityType: token.item.reference?.type === "entity" ? token.item.reference.entity_type : undefined,
     exists: token.item.reference?.type === "entity" ? token.item.reference.exists : undefined,
+    summary: token.item.reference?.type === "entity" ? token.item.reference.summary : undefined,
     start: token.start,
     end: token.end,
   }));
@@ -388,7 +391,9 @@ export type MessageMentionMatch = {
   end: number;
   appId?: string;
   deepLink?: string;
+  entityType?: string;
   exists?: boolean;
+  summary?: string;
 };
 
 export function fallbackMatchesForAppReference(content: string, reference: AppReference): MessageMentionMatch[] {
@@ -402,9 +407,11 @@ export function fallbackMatchesForAppReference(content: string, reference: AppRe
       kind: "entity" as const,
       id: referenceKey(reference),
       appId: reference.app_id,
+      entityType: reference.entity_type,
       label,
       deepLink: reference.deep_link,
       exists: reference.exists,
+      summary: reference.summary,
     }));
   }
   const label = reference.label?.trim();
@@ -480,7 +487,7 @@ function MentionReferenceChip({ match }: { match: MessageMentionMatch }) {
   const title = match.kind === "entity" ? `reference: ${match.id}` : `${match.kind === "app" ? "app_id" : "skill_id"}: ${match.id}`;
   const content = (
     <>
-      <span className="chatapp-message-reference-chip__kind">{match.kind === "entity" ? "Record" : match.kind === "app" ? "App" : "Skill"}</span>
+      <span className="chatapp-message-reference-chip__kind">{referenceKindLabel(match)}</span>
       <span className="chatapp-message-reference-chip__label">{match.exists === false ? `${match.label} (missing)` : match.label}</span>
     </>
   );

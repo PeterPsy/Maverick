@@ -1,13 +1,12 @@
-const CACHE_NAME = "maverick-base-shell-v1";
+const CACHE_NAME = "maverick-base-shell-v3";
 const SHELL_ASSET_PREFIX = "/apps/base-shell/";
 const SHELL_BUNDLE_PREFIX = `${SHELL_ASSET_PREFIX}assets/`;
 const ROOT_SHELL_ASSETS = [
   "/manifest.webmanifest",
-  "/apps/base-shell/pwa-icon-192.png",
-  "/apps/base-shell/pwa-icon-512.png",
-  "/apps/base-shell/pwa-maskable-512.png",
-  "/apps/base-shell/apple-touch-icon.png",
-  "/apps/base-shell/maverick-app-icon.svg",
+  "/apps/base-shell/app-icon-lightcolor-192.png",
+  "/apps/base-shell/app-icon-lightcolor.png",
+  "/apps/base-shell/pwa-maskable-light.png",
+  "/apps/base-shell/pwa-apple-touch-icon.png",
   "/apps/base-shell/maverick-mark.svg",
   "/apps/base-shell/maverick-logotype.svg",
   "/apps/base-shell/sidebar-logo.svg"

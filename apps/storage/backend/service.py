@@ -23,6 +23,8 @@ from store import (
     file_info_payload,
     load_state,
     move_file_payload,
+    move_folder_payload,
+    move_items_payload,
     preview_table_payload,
     preview_text_payload,
     read_file_payload,
@@ -62,6 +64,8 @@ DATA_CHANGED_RESOURCES = {
     "delete_folder": "files",
     "create_folder": "files",
     "move_file": "files",
+    "move_folder": "files",
+    "move_items": "files",
     "update_markdown_file": "files",
     "upload_file": "files",
     "write_file": "files",
@@ -376,6 +380,27 @@ def handle_action(data_root: Path, uploaded_root: Path, generated_root: Path, bo
         return 200, move_file_payload(
             role=role,
             relative_path=relative_path,
+            target_folder_relative_path=body.get("target_folder_relative_path"),
+            data_root=data_root,
+            uploaded_root=uploaded_root,
+            generated_root=generated_root,
+        )
+    if action == "move_folder":
+        role = str(body.get("role") or "")
+        return 200, move_folder_payload(
+            role=role,
+            relative_path=body.get("relative_path"),
+            target_folder_relative_path=body.get("target_folder_relative_path"),
+            data_root=data_root,
+            uploaded_root=uploaded_root,
+            generated_root=generated_root,
+        )
+    if action == "move_items":
+        role = str(body.get("role") or "")
+        return 200, move_items_payload(
+            role=role,
+            files=body.get("files"),
+            folders=body.get("folders"),
             target_folder_relative_path=body.get("target_folder_relative_path"),
             data_root=data_root,
             uploaded_root=uploaded_root,

@@ -19,6 +19,8 @@ function app(app_id: string, frontend_mount: string): AppRegistryItem {
     description: "",
     distribution_mode: "sealed",
     frontend_mount,
+    frontend_role: frontend_mount ? "workspace" : "none",
+    frontend_launchable: Boolean(frontend_mount),
     logo: null,
     name: app_id,
     publisher: "maverick",
@@ -34,6 +36,7 @@ function app(app_id: string, frontend_mount: string): AppRegistryItem {
 const registry = [
   app("base-shell", "/apps/base-shell/"),
   app("app-store", "/apps/app-store/"),
+  app("settings", "/apps/settings/"),
   app("chat", "/apps/chat/"),
   app("docs", "/apps/docs/"),
   app("headless", ""),
@@ -41,12 +44,12 @@ const registry = [
 
 describe("base-shell navigation", () => {
   it("shows only mountable non-shell apps", () => {
-    expect(shellVisibleApps(registry).map((item) => item.app_id)).toEqual(["app-store", "chat", "docs"]);
+    expect(shellVisibleApps(registry).map((item) => item.app_id)).toEqual(["app-store", "settings", "chat", "docs"]);
   });
 
-  it("keeps App Store in the app rail without duplicating pinned entries", () => {
+  it("keeps static App Store and Settings shortcuts out of reorderable pinned entries", () => {
     expect(shellAppRailApps(registry, ["chat"]).map((item) => item.app_id)).toEqual(["chat", "app-store"]);
-    expect(shellAppRailApps(registry, ["app-store", "chat"]).map((item) => item.app_id)).toEqual(["chat", "app-store"]);
+    expect(shellAppRailApps(registry, ["settings", "app-store", "chat"]).map((item) => item.app_id)).toEqual(["chat", "app-store"]);
   });
 
   it("prefers requested app, then App Store, then first visible app", () => {

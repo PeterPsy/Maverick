@@ -154,6 +154,27 @@ class BaseShellAppMountingTests(unittest.TestCase):
         self.assertNotIn("new_chat: true", shortcut_source)
         self.assertNotIn("new_chat_request_id", shortcut_source)
 
+    def test_settings_shortcut_opens_settings_app_without_shell_modal(self) -> None:
+        shell_source = (REPO_ROOT / "apps/base-shell/frontend/src/AppShell.tsx").read_text()
+        navigation_source = (REPO_ROOT / "apps/base-shell/frontend/src/navigation.ts").read_text()
+        sidebar_source = (REPO_ROOT / "apps/base-shell/frontend/src/components/Sidebar.tsx").read_text()
+        rail_source = (REPO_ROOT / "apps/base-shell/frontend/src/components/SidebarAppRail.tsx").read_text()
+        api_source = (REPO_ROOT / "apps/base-shell/frontend/src/api.ts").read_text()
+
+        self.assertFalse((REPO_ROOT / "apps/base-shell/frontend/src/components/ShellDialogs.tsx").exists())
+        self.assertIn('SETTINGS_APP_ID = "settings"', navigation_source)
+        self.assertIn("app.app_id !== SETTINGS_APP_ID", navigation_source)
+        self.assertIn("function openSettingsApp()", shell_source)
+        self.assertIn("openApp(SETTINGS_APP_ID)", shell_source)
+        self.assertIn("onOpenSettings={openSettingsApp}", shell_source)
+        self.assertIn("settingsApp={settingsApp}", sidebar_source)
+        self.assertIn("aria-current={activeAppId === SETTINGS_APP_ID ? \"page\" : undefined}", rail_source)
+        self.assertIn("aria-label={settingsApp.name}", rail_source)
+        self.assertNotIn("ShellDialogs", shell_source)
+        self.assertNotIn("activeDialog", shell_source)
+        self.assertNotIn("clearRuntimeSessions", shell_source)
+        self.assertNotIn("clearRuntimeSessions", api_source)
+
     def test_workspace_create_button_is_admin_only_in_shell(self) -> None:
         sidebar_source = (REPO_ROOT / "apps/base-shell/frontend/src/components/Sidebar.tsx").read_text()
         switcher_source = (REPO_ROOT / "apps/base-shell/frontend/src/components/WorkspaceSwitcher.tsx").read_text()
@@ -196,17 +217,17 @@ class BaseShellAppMountingTests(unittest.TestCase):
         self.assertNotIn("getAgentsCommonPrompt", chat_source)
         self.assertIn("system_prompt: systemPrompt", chat_source)
 
-    def test_chat_creation_starts_runtime_session_immediately(self) -> None:
+    def test_chat_first_send_creates_runtime_session_with_initial_turn(self) -> None:
         chat_source = (REPO_ROOT / "apps/chat/frontend/src/App.tsx").read_text()
 
-        create_chat_start = chat_source.index("async function createChat(")
-        create_chat_end = chat_source.index("async function handleSelectThread(", create_chat_start)
-        create_chat_source = chat_source[create_chat_start:create_chat_end]
+        submit_start = chat_source.index("async function submitMessage")
+        submit_end = chat_source.index("useEffect(() => {", submit_start)
+        submit_source = chat_source[submit_start:submit_end]
 
-        self.assertIn("const session = await createRuntimeSession({", create_chat_source)
-        self.assertIn("project_id: projectId", create_chat_source)
-        self.assertIn("setActiveSession(session)", create_chat_source)
-        self.assertIn("createThread(session.session_id, projectId", create_chat_source)
+        self.assertIn("response = await createRuntimeSessionWithTurn({", submit_source)
+        self.assertIn("project_id: draftChat?.projectId ?? null", submit_source)
+        self.assertIn("inputText: message.content", submit_source)
+        self.assertIn("response = await sendRuntimeTurn(", submit_source)
         self.assertIn("if (!thread.runtime_session_id)", chat_source)
         self.assertIn('throw new Error("This chat does not have a runtime session.")', chat_source)
         self.assertIn("getWidgetContext", chat_source)
@@ -238,7 +259,7 @@ class BaseShellAppMountingTests(unittest.TestCase):
         self.assertIn('document.addEventListener("pointerdown", cancelProjectEditFromOutside)', widget_source)
         self.assertIn('className="bs-chat-folder__title-input-frame"', widget_source)
         self.assertIn('className="bs-chat-folder__title-input"', widget_source)
-        self.assertIn('aria-label={`Rinomina progetto ${section.title}`}', widget_source)
+        self.assertIn('aria-label={`Rename project ${section.title}`}', widget_source)
         self.assertIn(".bs-chat-folder.is-project-editing .bs-chat-folder__header", widget_styles)
         self.assertIn(".bs-chat-folder__title-input-frame", widget_styles)
         self.assertIn("--chat-sidebar-project-edit-scale", widget_styles)
@@ -308,10 +329,10 @@ class BaseShellAppMountingTests(unittest.TestCase):
         self.assertIn("if (!navigationScope) {", widget_state_source)
         self.assertIn("threadIds.has(windowItem.threadId) ? windowItem : { ...windowItem, isDraft: true }", widget_state_source)
         self.assertIn("createWindow(\"\", true, projectId)", widget_source)
-        self.assertIn('aria-label="Scegli chat"', widget_source)
-        self.assertIn('aria-label="Nuova chat"', widget_source)
-        self.assertIn('aria-label={isActiveThreadBusy ? "Apri chat in corso" : isActiveThreadUnread ? "Apri chat con risposta da leggere" : "Apri chat"}', widget_source)
-        self.assertIn('aria-label="Rinomina chat"', widget_source)
+        self.assertIn('aria-label="Choose chat"', widget_source)
+        self.assertIn('aria-label="New chat"', widget_source)
+        self.assertIn('aria-label={isActiveThreadBusy ? "Open active chat" : isActiveThreadUnread ? "Open chat with unread response" : "Open chat"}', widget_source)
+        self.assertIn('aria-label="Rename chat"', widget_source)
         self.assertIn('className="chat-floating-thread-menu__icon-action is-danger"', widget_source)
         self.assertNotIn("sendRuntimeTurn", widget_source)
         self.assertNotIn("MarkdownMessage", widget_source)
@@ -347,10 +368,10 @@ class BaseShellAppMountingTests(unittest.TestCase):
         self.assertNotIn("ChatHeader", app_source)
         self.assertNotIn("<ChatHeader", app_source)
         self.assertNotIn("chat-floating-widget-shell__title", widget_source)
-        self.assertNotIn('aria-label="Scegli chat"', app_source)
-        self.assertNotIn('aria-label="Nuova chat"', app_source)
-        self.assertIn('aria-label="Scegli chat"', widget_source)
-        self.assertIn('aria-label="Nuova chat"', widget_source)
+        self.assertNotIn('aria-label="Choose chat"', app_source)
+        self.assertNotIn('aria-label="New chat"', app_source)
+        self.assertIn('aria-label="Choose chat"', widget_source)
+        self.assertIn('aria-label="New chat"', widget_source)
 
     def test_shell_overlay_widget_supports_area_capture_without_app_dom_access(self) -> None:
         widget_slot_source = (REPO_ROOT / "apps/base-shell/frontend/src/components/WidgetSlot.tsx").read_text()
@@ -362,7 +383,7 @@ class BaseShellAppMountingTests(unittest.TestCase):
         self.assertIn("maverick.widget.capture-area.complete", widget_slot_source)
         self.assertIn("new File([blob]", widget_slot_source)
         self.assertIn("bs-capture-overlay", shell_styles)
-        self.assertIn("Cattura area pagina", attachment_menu_source)
+        self.assertIn("Capture page area", attachment_menu_source)
         self.assertNotIn("contentDocument", widget_slot_source)
         self.assertNotIn("contentWindow.document", widget_slot_source)
 

@@ -13,6 +13,8 @@ function app(app_id: string): AppRegistryItem {
     description: "",
     distribution_mode: "sealed",
     frontend_mount: `/apps/${app_id}/`,
+    frontend_role: "workspace",
+    frontend_launchable: true,
     logo: null,
     name: app_id,
     publisher: "maverick",

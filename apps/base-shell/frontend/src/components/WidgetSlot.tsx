@@ -32,6 +32,7 @@ type CaptureRect = {
 type WidgetMessagePayload = {
   active_thread_id?: string;
   app_id?: string;
+  detail?: Record<string, unknown>;
   height?: string;
   owner_app_id?: string;
   navigation_scope?: string;
@@ -262,6 +263,7 @@ export function WidgetSlot({
           {
             type: "maverick.widget.data-changed",
             active_thread_id: typeof payload.active_thread_id === "string" ? payload.active_thread_id : "",
+            ...(payload.detail && typeof payload.detail === "object" ? { detail: payload.detail } : {}),
             navigation_scope: typeof payload.navigation_scope === "string" ? payload.navigation_scope : "",
             owner_app_id: payload.owner_app_id,
             resource: payload.resource || "",

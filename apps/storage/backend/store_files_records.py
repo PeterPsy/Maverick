@@ -11,7 +11,7 @@ import zipfile
 
 from core.app_sdk.storage import read_json_state, write_json_state
 from errors import StorageValidationError
-from inventory import content_hash, move_file_record, remove_folder_records, rename_file_record, upsert_directory_record, upsert_file_record
+from inventory import content_hash, remove_folder_records, rename_file_record, upsert_directory_record, upsert_file_record
 from store_files_paths import (
     atomic_write_bytes,
     enforce_storage_budget,
@@ -235,33 +235,6 @@ def delete_folder_payload(*, role: str, relative_path: object, data_root: Path, 
         shutil.rmtree(folder)
         remove_folder_records(data_root=data_root, role=role, relative_path=relative)
         return {"deleted": True, "folder": record}
-
-
-
-def move_file_payload(*, role: str, relative_path: str, target_folder_relative_path: object, data_root: Path, uploaded_root: Path, generated_root: Path) -> dict:
-    root = storage_root_for_role(role=role, uploaded_root=uploaded_root, generated_root=generated_root).resolve()
-    with storage_write_lock(data_root):
-        source = resolve_storage_file(
-            role=role,
-            relative_path=relative_path,
-            uploaded_root=uploaded_root,
-            generated_root=generated_root,
-        )
-        target_folder = resolve_storage_folder(
-            role=role,
-            relative_path=target_folder_relative_path,
-            uploaded_root=uploaded_root,
-            generated_root=generated_root,
-        )
-        target = (target_folder / source.name).resolve()
-        if root not in target.parents:
-            raise StorageValidationError("Moved file must stay inside the selected storage root.")
-        if target.exists() and target != source:
-            raise StorageValidationError("A file or folder with that name already exists in the target folder.")
-        if target == source:
-            return {"file": upsert_file_record(data_root=data_root, role=role, root=root, path=source)}
-        shutil.move(str(source), str(target))
-        return {"file": move_file_record(data_root=data_root, role=role, root=root, old_relative_path=relative_path, new_path=target)}
 
 
 

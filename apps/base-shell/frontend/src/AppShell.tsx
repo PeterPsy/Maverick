@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AppRegistryItem,
-  clearRuntimeSessions,
   configureActiveProvider,
   getPlatformSettings,
   getPlatformStatus,
@@ -26,7 +25,9 @@ import {
   preferredActiveApp,
   pushShellAppRoute,
   replaceShellAppRoute,
+  SETTINGS_APP_ID,
   shellAppRailApps,
+  shellVisibleApps,
 } from "./navigation";
 import { readShellSession, resolveInitialSidebarOpen, writeShellSession } from "./session";
 import type { SidebarMode } from "./session";
@@ -36,7 +37,6 @@ import { LoginScreen } from "./components/LoginScreen";
 import { MobileShellHeader } from "./components/MobileShellHeader";
 import { Sidebar } from "./components/Sidebar";
 import { ShellOverlayWidgets } from "./components/ShellOverlayWidgets";
-import { ShellDialog, ShellDialogs } from "./components/ShellDialogs";
 import { ProviderSetupDialog } from "./components/ProviderSetupDialog";
 import { WorkspaceView } from "./components/WorkspaceView";
 import type { WidgetPrimaryActionState } from "./components/WidgetSlot";
@@ -66,7 +66,6 @@ export function AppShell() {
     }),
   );
   const [isSidebarClosing, setIsSidebarClosing] = useState(false);
-  const [activeDialog, setActiveDialog] = useState<ShellDialog>(null);
   const [dismissedProviderSetupWorkspaceId, setDismissedProviderSetupWorkspaceId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -84,7 +83,8 @@ export function AppShell() {
   const persistedPinnedAppIdsRef = useRef(pinnedAppIds);
   const persistedPinnedAppsVersionRef = useRef(0);
   const railApps = shellAppRailApps(apps, pinnedAppIds);
-  const shellRailItemCount = isLoading && railApps.length === 0 ? 4 : railApps.length + 1;
+  const hasSettingsShortcut = shellVisibleApps(apps).some((app) => app.app_id === SETTINGS_APP_ID);
+  const shellRailItemCount = isLoading && railApps.length === 0 ? 4 : railApps.length + (hasSettingsShortcut ? 1 : 0);
   const shellSidebarMetrics = useSidebarRailMetrics(shellRailItemCount, isMobileLayout);
 
   function clearSidebarClosing() {
@@ -205,6 +205,23 @@ export function AppShell() {
     return () => window.removeEventListener("message", handleAppDataChanged);
   }, []);
 
+  useEffect(() => {
+    function handleShellCommand(event: MessageEvent) {
+      if (event.origin !== window.location.origin || !event.data || typeof event.data !== "object") {
+        return;
+      }
+      const payload = event.data as { type?: string };
+      if (payload.type === "maverick.shell.logout") {
+        handleLogout().catch((logoutError) => {
+          setError(logoutError instanceof Error ? logoutError.message : "Unable to logout.");
+        });
+      }
+    }
+
+    window.addEventListener("message", handleShellCommand);
+    return () => window.removeEventListener("message", handleShellCommand);
+  }, []);
+
   const registryActiveApp = preferredActiveApp(apps, activeAppId);
   const provisionalActiveApp = useMemo(
     () => (isLoading && activeAppId ? provisionalMountedApp(activeAppId) : null),
@@ -290,21 +307,7 @@ export function AppShell() {
 
   async function handleLogout() {
     await logout();
-    setActiveDialog(null);
     await loadShellState();
-  }
-
-  async function handleProviderModelSettingsChanged(modelId: string, reasoningEffort: string | null) {
-    const providerId = settings?.provider.active_provider?.provider_id;
-    if (!providerId) {
-      throw new Error("Provider non caricato.");
-    }
-    await configureActiveProvider({
-      provider_id: providerId,
-      model_id: modelId,
-      model_reasoning_effort: reasoningEffort,
-    });
-    setSettings(await getPlatformSettings());
   }
 
   async function handleInitialProviderConfigured(payload: {
@@ -317,15 +320,8 @@ export function AppShell() {
     setDismissedProviderSetupWorkspaceId(null);
   }
 
-  async function handleClearRuntimeSessions(sessionIds?: string[]) {
-    const payload = await clearRuntimeSessions(sessionIds);
-    if (payload.deleted_threads > 0) {
-      notifyAppDataChanged("chat", "threads");
-      for (const threadId of payload.deleted_thread_ids) {
-        notifyAppDataChanged("chat", "threads", { deleted_thread_id: threadId });
-      }
-    }
-    setSettings(await getPlatformSettings());
+  function openSettingsApp() {
+    openApp(SETTINGS_APP_ID);
   }
 
   function invokeMobilePrimaryAction() {
@@ -446,7 +442,7 @@ export function AppShell() {
         onOpenApp={openApp}
         onOpenSidebar={openSidebar}
         onPrimaryActionStateChange={setMobilePrimaryAction}
-        onOpenSettings={() => setActiveDialog("settings")}
+        onOpenSettings={openSettingsApp}
         onReorderPinnedApps={handlePinnedAppsReorder}
         onWorkspaceChanged={loadShellState}
         pinnedAppIds={pinnedAppIds}
@@ -455,14 +451,6 @@ export function AppShell() {
         workspaces={workspaces}
       />
       <ShellOverlayWidgets activeApp={activeApp} activeWorkspaceId={activeWorkspaceId} onOpenApp={openApp} user={session.user} />
-      <ShellDialogs
-        activeDialog={activeDialog}
-        onClose={() => setActiveDialog(null)}
-        onLogout={handleLogout}
-        onClearRuntimeSessions={handleClearRuntimeSessions}
-        onProviderModelSettingsChanged={handleProviderModelSettingsChanged}
-        settings={settings}
-      />
       <ProviderSetupDialog
         onClose={() => setDismissedProviderSetupWorkspaceId(activeWorkspaceId)}
         onConfigure={handleInitialProviderConfigured}
@@ -488,6 +476,8 @@ function provisionalMountedApp(appId: string): AppRegistryItem {
     requires: [],
     logo: null,
     frontend_mount: `/apps/${encodeURIComponent(appId)}/`,
+    frontend_role: "workspace",
+    frontend_launchable: true,
     backend_mount: "",
   };
 }

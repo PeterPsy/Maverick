@@ -80,7 +80,7 @@ python3.12 scripts/install_maverick.py --control-store json
 python3.12 scripts/install_maverick.py --control-store mongo --mongodb-uri mongodb://127.0.0.1:27017/maverick
 ```
 
-Adapter migrations run as one explicit operator workflow through core admin surfaces or the User Admin UI: dry-run the target, write every control-plane collection to the target adapter, update the service environment file, and restart with only one adapter mounted. Backend startup must not silently migrate or delete control-plane state.
+Adapter migrations run as one explicit operator workflow through core admin surfaces or the Settings UI: dry-run the target, write every control-plane collection to the target adapter, update the service environment file, and restart with only one adapter mounted. Backend startup must not silently migrate or delete control-plane state.
 
 For the first public release, the recommended path is local CLI-first setup, not Docker and not a setup UI.
 

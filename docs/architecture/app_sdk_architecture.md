@@ -41,7 +41,7 @@ apps/<app_id>/
 workspaces/<workspace_id>/apps/<app_id>/
 ```
 
-Workspace-local creation is the default developer workflow. Generated workspace-local apps must declare:
+Workspace-local creation is the default developer workflow. Generated workspace-local apps must declare workspace-local distribution:
 
 ```json
 {
@@ -51,6 +51,10 @@ Workspace-local creation is the default developer workflow. Generated workspace-
   }
 }
 ```
+
+Templates with a user-openable frontend also declare `presentation.frontend_role: "workspace"`.
+Templates without a frontend declare `presentation.frontend_role: "none"`.
+Templates that ship frontend assets only for a platform or plugin workflow declare `presentation.frontend_role: "supporting"` and must not be treated as shell-launchable apps.
 
 Installation-level app creation is reserved for explicit platform or store-app work. It must not be the default for workspace agents.
 
@@ -163,7 +167,7 @@ App entrypoints run in app source roots. The generic entrypoint and lifecycle ru
 
 ## Developer Kit App
 
-`apps/developer-kit` is a sealed workspace-visible app that exposes a frontend for SDK workflows. It is intentionally not admin-only because the official SDK must be usable by every workspace developer. Permission checks for creating, registering, installing, and packaging apps belong to the authenticated SDK API and generic app-hosting policy layer, not to SDK discoverability.
+`apps/developer-kit` is a sealed workspace-visible SDK support app. It may ship frontend assets for SDK workflows, but its contract marks that frontend as `presentation.frontend_role: supporting` because it is a platform/plugin surface rather than a primary workspace app to pin or open from the normal shell app rail. Permission checks for creating, registering, installing, and packaging apps belong to the authenticated SDK API and generic app-hosting policy layer, not to SDK discoverability.
 
 The Developer Kit UI calls `/api/app-sdk` to:
 

@@ -1,0 +1,516 @@
+import './styles.css';
+import {
+  createAdminUser,
+  deleteAdminUser,
+  installWorkspaceApp as installWorkspaceAppBinding,
+  resetAdminUserPassword,
+  setWorkspaceAppEnabled,
+  uninstallWorkspaceApp as uninstallWorkspaceAppBinding,
+  updateAdminUser,
+  updateAdminUserMemberships
+} from './adminActions';
+import {
+  clearRuntimeSessions,
+  configureActiveProvider,
+  getPlatformSettings,
+  loadUsers,
+  loadWorkspaces,
+  loadWorkspaceApps,
+  logout,
+  requestJson,
+  type PlatformSettings,
+  type PersistenceStatus,
+  type RuntimeCleanupPayload,
+  type User,
+  type Workspace,
+  type WorkspaceApp
+} from './adminApi';
+import {
+  createSettingsPanelState,
+  settingsPanelHtml,
+  syncSettingsPanelDraft,
+  updateDraftModel
+} from './settingsPanel';
+import {
+  DEFAULT_SETTINGS_PAGE_ID,
+  settingsPageById,
+  settingsPageIdFromParams,
+  type SettingsPage,
+  type SettingsPageId
+} from './pages';
+import { settingsAppSkeletonHtml } from './appSkeleton';
+import { bindSettingsEvents } from './bindEvents';
+import { escapeHtml } from './html';
+import { pageSettingsBlockHtml } from './pageFrame';
+import { createPersistenceController } from './persistenceController';
+import { persistenceMigrationModalHtml, persistencePageHtml } from './persistencePage';
+import { usersPageHtml, workspaceAccessPageHtml } from './userPages';
+import { workspaceAppsPageHtml } from './workspaceAppsPage';
+
+let users: User[] = [];
+let workspaces: Workspace[] = [];
+let workspaceApps: WorkspaceApp[] = [];
+let persistence: PersistenceStatus | null = null;
+let platformSettings: PlatformSettings | null = null;
+let settingsPanelState = createSettingsPanelState();
+const initialNavigationParams = Object.fromEntries(new URLSearchParams(window.location.search).entries());
+let selectedPageId: SettingsPageId = settingsPageIdFromParams(initialNavigationParams) || DEFAULT_SETTINGS_PAGE_ID;
+let selectedUserId = userIdFromNavigationParams(initialNavigationParams);
+let isLoading = true;
+let pendingDeleteUserId = '';
+let notice: { tone: 'info' | 'success' | 'error'; message: string } | null = null;
+let lastPublishedPageId = '';
+let lastPublishedUserId = '';
+
+const persistenceController = createPersistenceController({
+  getPersistence: () => persistence,
+  render: () => render(),
+  requestPersistenceStatusQuiet,
+  setNotice: (nextNotice) => {
+    notice = nextNotice;
+  },
+  setPersistence: (status) => {
+    persistence = status;
+  },
+});
+
+function selectedUser(): User | undefined {
+  return users.find((user) => user.user_id === selectedUserId) || users[0];
+}
+
+function userIdFromNavigationParams(params: Record<string, unknown>): string {
+  const directUserId = scalarParam(params.user_id) || scalarParam(params.selected_user_id) || scalarParam(params.id);
+  if (directUserId) {
+    return directUserId;
+  }
+  const appPage = scalarParam(params.app_page);
+  const userPageMatch = /^users\/([^/?#]+)$/.exec(appPage);
+  if (!userPageMatch?.[1]) {
+    return '';
+  }
+  try {
+    return decodeURIComponent(userPageMatch[1]);
+  } catch {
+    return userPageMatch[1];
+  }
+}
+
+function scalarParam(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function applyNavigationParams(params: Record<string, unknown>) {
+  const pageId = settingsPageIdFromParams(params);
+  const userId = userIdFromNavigationParams(params);
+  let changed = false;
+  if (pageId && pageId !== selectedPageId) {
+    selectedPageId = pageId;
+    changed = true;
+  }
+  if (userId && userId !== selectedUserId) {
+    selectedUserId = userId;
+    pendingDeleteUserId = '';
+    changed = true;
+  }
+  if (!changed) {
+    return;
+  }
+  if (users.length || isLoading) {
+    render();
+  }
+}
+
+function publishSelectedPage(page: SettingsPage) {
+  if (page.id === lastPublishedPageId || window.parent === window) {
+    return;
+  }
+  lastPublishedPageId = page.id;
+  window.parent.postMessage(
+    {
+      type: 'maverick.app.selection-changed',
+      owner_app_id: 'settings',
+      selection: { page_id: page.id }
+    },
+    window.location.origin
+  );
+}
+
+function publishSelectedUser(user: User | undefined) {
+  if (!user || user.user_id === lastPublishedUserId || window.parent === window) {
+    return;
+  }
+  lastPublishedUserId = user.user_id;
+  window.parent.postMessage(
+    {
+      type: 'maverick.app.selection-changed',
+      owner_app_id: 'settings',
+      selection: { user_id: user.user_id }
+    },
+    window.location.origin
+  );
+}
+
+function publishUserDataChanged() {
+  if (window.parent === window) {
+    return;
+  }
+  window.parent.postMessage(
+    {
+      type: 'maverick.app.data-changed',
+      owner_app_id: 'settings',
+      resource: 'users'
+    },
+    window.location.origin
+  );
+}
+
+async function requestPersistenceStatus(): Promise<PersistenceStatus | null> {
+  try {
+    return await requestJson<PersistenceStatus>('/api/admin/persistence');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Persistence API unavailable';
+    notice = { tone: 'error', message };
+    return null;
+  }
+}
+
+async function requestPersistenceStatusQuiet(): Promise<PersistenceStatus | null> {
+  try {
+    return await requestJson<PersistenceStatus>('/api/admin/persistence');
+  } catch {
+    return null;
+  }
+}
+
+async function requestPlatformSettingsQuiet(): Promise<PlatformSettings | null> {
+  try {
+    return await getPlatformSettings();
+  } catch {
+    return null;
+  }
+}
+
+async function refresh() {
+  isLoading = true;
+  render();
+  try {
+    const [usersPayload, workspacesPayload, workspaceAppsPayload, persistencePayload, settingsPayload] = await Promise.all([
+      loadUsers(),
+      loadWorkspaces(),
+      loadWorkspaceApps(),
+      requestPersistenceStatus(),
+      requestPlatformSettingsQuiet()
+    ]);
+    users = usersPayload;
+    workspaces = workspacesPayload;
+    workspaceApps = workspaceAppsPayload;
+    persistence = persistencePayload;
+    platformSettings = settingsPayload;
+    syncSettingsPanelDraft(settingsPanelState, platformSettings);
+    if (!selectedUserId || !users.some((user) => user.user_id === selectedUserId)) {
+      selectedUserId = users[0]?.user_id || '';
+    }
+  } finally {
+    isLoading = false;
+  }
+  render();
+}
+
+async function createUser(form: HTMLFormElement) {
+  const data = new FormData(form);
+  const created = await createAdminUser({
+    username: String(data.get('username') || ''),
+    password: String(data.get('password') || ''),
+    display_name: String(data.get('display_name') || ''),
+    email: String(data.get('email') || ''),
+    platform_role: String(data.get('platform_role') || 'member')
+  });
+  selectedUserId = created.user_id;
+  form.reset();
+  await refresh();
+  publishUserDataChanged();
+}
+
+async function updateSelectedUser(form: HTMLFormElement, user: User) {
+  const data = new FormData(form);
+  await updateAdminUser(user.user_id, {
+    display_name: String(data.get('display_name') || ''),
+    email: String(data.get('email') || ''),
+    platform_role: String(data.get('platform_role') || 'member'),
+    account_type: String(data.get('account_type') || 'standard'),
+    is_active: data.get('is_active') === 'on'
+  });
+  await refresh();
+  publishUserDataChanged();
+}
+
+async function resetSelectedUserPassword(form: HTMLFormElement, user: User) {
+  const data = new FormData(form);
+  const password = String(data.get('password') || '');
+  const confirmation = String(data.get('password_confirmation') || '');
+  if (password !== confirmation) {
+    throw new Error('Passwords do not match');
+  }
+  await resetAdminUserPassword(user.user_id, password);
+  form.reset();
+  notice = { tone: 'success', message: 'Password updated.' };
+  render();
+}
+
+async function deleteSelectedUser(user: User) {
+  const label = user.display_name || user.username;
+  if (pendingDeleteUserId !== user.user_id) {
+    pendingDeleteUserId = user.user_id;
+    notice = {
+      tone: 'info',
+      message: `Press Delete user again to confirm permanent removal of ${label}.`
+    };
+    render();
+    return;
+  }
+  await deleteAdminUser(user.user_id);
+  selectedUserId = '';
+  pendingDeleteUserId = '';
+  notice = { tone: 'success', message: `${label} deleted.` };
+  await refresh();
+  publishUserDataChanged();
+}
+
+async function updateMemberships(user: User) {
+  const memberships = workspaces
+    .map((workspace) => {
+      const checkbox = document.querySelector<HTMLInputElement>(`[data-workspace-enabled="${workspace.workspace_id}"]`);
+      const role = document.querySelector<HTMLSelectElement>(`[data-workspace-role="${workspace.workspace_id}"]`);
+      return checkbox?.checked ? { workspace_id: workspace.workspace_id, role: role?.value || 'member' } : null;
+    })
+    .filter((membership): membership is { role: string; workspace_id: string } => Boolean(membership));
+  await updateAdminUserMemberships(user.user_id, memberships);
+  await refresh();
+  publishUserDataChanged();
+}
+
+async function installWorkspaceApp(app: WorkspaceApp) {
+  await installWorkspaceAppBinding(app);
+  await refresh();
+}
+
+async function setWorkspaceAppStatus(app: WorkspaceApp, enabled: boolean) {
+  await setWorkspaceAppEnabled(app, enabled);
+  await refresh();
+}
+
+async function uninstallWorkspaceApp(app: WorkspaceApp) {
+  await uninstallWorkspaceAppBinding(app);
+  await refresh();
+}
+
+async function saveProviderSettingsFromPanel() {
+  const providerId = platformSettings?.provider.active_provider?.provider_id;
+  if (!providerId || !settingsPanelState.draftModelId) {
+    settingsPanelState.providerError = 'Provider not loaded.';
+    render();
+    return;
+  }
+  settingsPanelState.isSavingProvider = true;
+  settingsPanelState.providerError = '';
+  render();
+  try {
+    await configureActiveProvider({
+      provider_id: providerId,
+      model_id: settingsPanelState.draftModelId,
+      model_reasoning_effort: settingsPanelState.draftReasoningEffort || null
+    });
+    platformSettings = await getPlatformSettings();
+    syncSettingsPanelDraft(settingsPanelState, platformSettings);
+    notice = { tone: 'success', message: 'Provider settings updated.' };
+  } catch (error) {
+    settingsPanelState.providerError = error instanceof Error ? error.message : 'Unable to update provider settings.';
+  } finally {
+    settingsPanelState.isSavingProvider = false;
+    render();
+  }
+}
+
+async function clearRuntimeSessionsFromPanel(sessionIds?: string[]) {
+  const scopedIds = (sessionIds || []).filter(Boolean);
+  settingsPanelState.cleanupError = '';
+  if (scopedIds.length) {
+    scopedIds.forEach((sessionId) => settingsPanelState.cleaningSessionIds.add(sessionId));
+  } else {
+    settingsPanelState.clearingAllRuntime = true;
+  }
+  render();
+  try {
+    const payload = await clearRuntimeSessions(scopedIds.length ? scopedIds : undefined);
+    publishRuntimeCleanupChanged(payload);
+    platformSettings = await getPlatformSettings();
+    syncSettingsPanelDraft(settingsPanelState, platformSettings);
+    notice = {
+      tone: 'success',
+      message: scopedIds.length ? 'Runtime session cleaned.' : 'Runtime sessions cleaned.'
+    };
+  } catch (error) {
+    settingsPanelState.cleanupError = error instanceof Error ? error.message : 'Unable to clean runtime sessions.';
+  } finally {
+    scopedIds.forEach((sessionId) => settingsPanelState.cleaningSessionIds.delete(sessionId));
+    settingsPanelState.clearingAllRuntime = false;
+    render();
+  }
+}
+
+function publishRuntimeCleanupChanged(payload: RuntimeCleanupPayload) {
+  if (payload.deleted_threads <= 0 || window.parent === window) {
+    return;
+  }
+  window.parent.postMessage(
+    {
+      type: 'maverick.app.data-changed',
+      owner_app_id: 'chat',
+      resource: 'threads'
+    },
+    window.location.origin
+  );
+  payload.deleted_thread_ids.forEach((threadId) => {
+    window.parent.postMessage(
+      {
+        type: 'maverick.app.data-changed',
+        owner_app_id: 'chat',
+        resource: 'threads',
+        deleted_thread_id: threadId
+      },
+      window.location.origin
+    );
+  });
+}
+
+async function logoutFromSettings() {
+  if (window.parent && window.parent !== window) {
+    window.parent.postMessage({ type: 'maverick.shell.logout' }, window.location.origin);
+    return;
+  }
+  await logout();
+  window.location.href = '/';
+}
+
+function activePageHtml(page: SettingsPage, user: User | undefined) {
+  if (page.id === 'users') {
+    return usersPageHtml({ page, pendingDeleteUserId, selectedUser: user, users });
+  }
+  if (page.id === 'workspace-access') {
+    return workspaceAccessPageHtml({ page, selectedUser: user, users, workspaces });
+  }
+  if (page.id === 'workspace-apps') {
+    return workspaceAppsPageHtml({ page, workspaceApps, workspaces });
+  }
+  if (page.id === 'platform-settings') {
+    return platformSettingsPageHtml(page);
+  }
+  return persistencePageHtml(page, persistenceController.viewState());
+}
+
+function platformSettingsPageHtml(page: SettingsPage) {
+  return `${pageSettingsBlockHtml(page)}
+    ${settingsPanelHtml(platformSettings, settingsPanelState)}`;
+}
+
+function render() {
+  const root = document.getElementById('app');
+  const user = isLoading ? undefined : selectedUser();
+  const page = settingsPageById(selectedPageId);
+  if (!root) return;
+  root.innerHTML = `<main class="settings-shell">
+    <section class="settings-main">
+      <div class="settings-content">
+        ${
+          isLoading
+            ? settingsAppSkeletonHtml(page)
+            : `<header class="detail-header">
+          <div class="detail-title-block">
+            <h2>${escapeHtml(page.title)}</h2>
+            <span class="detail-title-separator" aria-hidden="true"></span>
+            <p>${escapeHtml(page.summary)}</p>
+          </div>
+        </header>
+        ${noticeHtml()}
+        ${activePageHtml(page, user)}`
+        }
+      </div>
+    </section>
+    ${persistenceMigrationModalHtml(persistenceController.viewState())}
+  </main>`;
+  bindEvents();
+  publishSelectedPage(page);
+  if (!isLoading) {
+    publishSelectedUser(user);
+  }
+}
+
+function bindEvents() {
+  bindSettingsEvents({
+    clearRuntimeSessionsFromPanel,
+    createUser,
+    deleteSelectedUser,
+    dismissNotice: () => {
+      notice = null;
+      render();
+    },
+    installWorkspaceApp,
+    logoutFromSettings,
+    onProviderModelChanged: (modelId) => {
+      updateDraftModel(settingsPanelState, platformSettings, modelId);
+      render();
+    },
+    onProviderReasoningChanged: (reasoningEffort) => {
+      settingsPanelState.draftReasoningEffort = reasoningEffort;
+      settingsPanelState.providerError = '';
+      render();
+    },
+    persistenceController,
+    render,
+    resetSelectedUserPassword,
+    saveProviderSettingsFromPanel,
+    selectedUser,
+    selectUser: (userId) => {
+      selectedUserId = userId;
+      pendingDeleteUserId = '';
+      render();
+    },
+    setWorkspaceAppStatus,
+    showError,
+    uninstallWorkspaceApp,
+    updateMemberships,
+    updateSelectedUser,
+    workspaceApps: () => workspaceApps,
+  });
+}
+
+function showError(error: unknown) {
+  const message = error instanceof Error ? error.message : 'Unexpected error';
+  notice = { tone: 'error', message };
+  render();
+}
+
+function noticeHtml() {
+  if (!notice) return '';
+  return `<div class="settings-notice settings-notice-${notice.tone}">
+    <span class="material-symbols-rounded" aria-hidden="true">${notice.tone === 'error' ? 'error' : notice.tone === 'success' ? 'task_alt' : 'info'}</span>
+    <span>${escapeHtml(notice.message)}</span>
+    <button type="button" class="settings-icon-button" id="dismiss-notice" aria-label="Close">
+      <span class="material-symbols-rounded" aria-hidden="true">close</span>
+    </button>
+  </div>`;
+}
+
+window.addEventListener('message', (event) => {
+  if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') {
+    return;
+  }
+  const payload = event.data as { app_id?: string; params?: Record<string, unknown>; type?: string };
+  if (payload.type === 'maverick.app.navigate' && (!payload.app_id || payload.app_id === 'settings')) {
+    applyNavigationParams(payload.params || {});
+  }
+});
+
+window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'settings' }, window.location.origin);
+
+refresh().catch(showError);

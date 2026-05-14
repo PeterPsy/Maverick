@@ -4,9 +4,11 @@ from __future__ import annotations
 
 
 from core.api.app_registry import user_can_mount_app
+from core.api.app_store_catalog_payloads import normalize_catalog_item
 from core.api.platform_state import PlatformState
 from core.api.session_api import RequestSession
 from core.apps.models import AppContractDescriptor, WorkspaceAppBindingRecord
+from core.apps.presentation import app_has_supporting_frontend
 from core.authorization.service import can_mount_app_visibility
 from core.workspaces.models import WorkspaceMembershipRecord
 from core.workspaces.errors import WorkspaceMembershipError, WorkspaceNotFoundError
@@ -170,7 +172,7 @@ def _filter_catalog_for_context(state: PlatformState, catalog: dict[str, object]
     if not isinstance(raw_items, list):
         return catalog
     items = [
-        item
+        normalize_catalog_item(item)
         for item in raw_items
         if isinstance(item, dict) and _catalog_item_visible_for_context(state, context, item)
     ]
@@ -187,8 +189,10 @@ def _source_visible_for_context(state: PlatformState, context: RequestSession, c
 
 def _source_surface_labels(contract: AppContractDescriptor) -> list[str]:
     surfaces = []
-    if contract.entrypoints.frontend or contract.capabilities.views or contract.capabilities.view_surfaces:
+    if contract.presentation.frontend_role == "workspace":
         surfaces.append("frontend")
+    elif app_has_supporting_frontend(contract):
+        surfaces.append("supporting_frontend")
     if contract.entrypoints.backend:
         surfaces.append("backend")
     if contract.entrypoints.mcp or contract.capabilities.mcp_tools:

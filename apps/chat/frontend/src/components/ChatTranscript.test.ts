@@ -19,10 +19,12 @@ describe("chat transcript reference fallback matches", () => {
         kind: "entity",
         id: "entity:checklist:checklist:check_123",
         appId: "checklist",
+        entityType: "checklist",
         label: "Renamed launch",
         start: 7,
         end: 54,
         deepLink: "/app/checklist/checklists/check_123",
+        summary: "server summary",
       },
     ]);
   });
@@ -60,6 +62,7 @@ describe("chat transcript reference fallback matches", () => {
         kind: "entity",
         id: "entity:checklist:checklist:check_123",
         appId: "checklist",
+        entityType: "checklist",
         label: "Renamed launch",
         start: 19,
         end: 54,
@@ -81,6 +84,7 @@ describe("chat transcript reference fallback matches", () => {
         kind: "entity",
         id: "entity:checklist:checklist:check_123",
         appId: "checklist",
+        entityType: "checklist",
         label: "Renamed launch",
         start: 25,
         end: 60,

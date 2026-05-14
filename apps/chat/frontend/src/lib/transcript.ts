@@ -433,11 +433,3 @@ function prefixEndIgnoringWhitespace(text: string, prefix: string): number | nul
 function normalizedText(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
-
-export function firstUserTitle(value: string): string {
-  const normalized = value.replace(/\s+/g, " ").trim();
-  if (!normalized) {
-    return "New chat";
-  }
-  return normalized.length > 54 ? `${normalized.slice(0, 54)}...` : normalized;
-}

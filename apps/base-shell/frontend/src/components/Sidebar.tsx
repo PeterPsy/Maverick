@@ -7,7 +7,7 @@ import type {
 } from "react";
 import { AppRegistryItem, SessionUser, WorkspaceItem } from "../api";
 import { isHorizontalIntent, isSidebarCloseSwipe, type SidebarSwipePoint } from "../lib/sidebarSwipe";
-import { shellAppRailApps, shellVisibleApps } from "../navigation";
+import { SETTINGS_APP_ID, shellAppRailApps, shellVisibleApps } from "../navigation";
 import type { SidebarMode } from "../session";
 import { AppLogo } from "./AppLogo";
 import { BrandMark } from "./BrandMark";
@@ -74,6 +74,7 @@ export function Sidebar({
   const visibleAppsById = new Map(shellVisibleApps(apps).map((app) => [app.app_id, app]));
   const railApps = shellAppRailApps(apps, pinnedAppIds);
   const activeApp = activeAppId ? visibleAppsById.get(activeAppId) || null : null;
+  const settingsApp = visibleAppsById.get(SETTINGS_APP_ID) || null;
   const isInitialLoading = isLoading && railApps.length === 0;
   const isDetailLayerOpen = isOpen || isPinned;
 
@@ -166,6 +167,7 @@ export function Sidebar({
           onOpenSettings={onOpenSettings}
           onReorderActiveChange={setIsRailReordering}
           onReorderPinnedApps={onReorderPinnedApps}
+          settingsApp={settingsApp}
         />
       </div>
 
@@ -198,6 +200,7 @@ export function Sidebar({
               onOpenApp={onOpenApp}
               onOpenSettings={onOpenSettings}
               onReorderPinnedApps={onReorderPinnedApps}
+              settingsApp={settingsApp}
             />
           </div>
         </div>

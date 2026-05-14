@@ -79,27 +79,6 @@ export type DynamicViewPayload = {
   updatedAt?: string;
 };
 
-export type DynamicViewCreatePayload = {
-  title: string;
-  summary?: string;
-  package: {
-    renderer?: DynamicViewRenderer;
-    html: string;
-    css?: string;
-    javascript?: string;
-    dataSchema?: Record<string, unknown>;
-    tags?: string[];
-  };
-  data?: Record<string, unknown>;
-  dataBindings?: Array<{
-    sourceType: string;
-    sourceRef: string;
-    query?: string | null;
-    snapshot?: Record<string, unknown> | null;
-  }>;
-  snapshotMode?: DynamicViewSnapshotMode;
-};
-
 export type DynamicViewsListPayload = {
   items: DynamicViewInstance[];
 };

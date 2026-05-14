@@ -58,8 +58,8 @@ export function ThreadInlineActions({
     <div className="bs-chat-list__inline-actions">
       <div className="bs-chat-list__inline-field">
         <span className="bs-chat-list__inline-select-frame">
-          <select aria-label="Progetto" disabled={isSaving} onChange={(event) => setProjectId(event.target.value)} value={projectId}>
-            <option value="">Senza progetto</option>
+          <select aria-label="Project" disabled={isSaving} onChange={(event) => setProjectId(event.target.value)} value={projectId}>
+            <option value="">No project</option>
             {projects.map((project) => (
               <option key={project.project_id} value={project.project_id}>
                 {project.name}
@@ -71,12 +71,12 @@ export function ThreadInlineActions({
       {error ? <p className="bs-chat-list__inline-error">{error}</p> : null}
       <div className="bs-chat-list__inline-buttons">
         <button disabled={isSaving || !title.trim()} onClick={save} type="button">
-          Salva
+          Save
         </button>
         <button disabled={isSaving} onClick={onClose} type="button">
-          Annulla
+          Cancel
         </button>
-        <button aria-label={`Elimina ${thread.title}`} className="bs-chat-list__inline-icon-button" disabled={isSaving} onClick={remove} title="Elimina" type="button">
+        <button aria-label={`Delete ${thread.title}`} className="bs-chat-list__inline-icon-button" disabled={isSaving} onClick={remove} title="Delete" type="button">
           <span aria-hidden="true" className="material-symbols-rounded">delete</span>
         </button>
       </div>

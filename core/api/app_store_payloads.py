@@ -9,6 +9,7 @@ from core.api.platform_state import PlatformState
 from core.api.session_api import RequestSession
 from core.apps.errors import AppHostingError
 from core.apps.models import WorkspaceAppBindingRecord, WorkspaceLocalAppProjectRecord
+from core.apps.presentation import app_frontend_is_launchable
 from core.workspaces.models import WorkspaceMembershipRecord
 from core.workspaces.errors import WorkspaceNotFoundError
 
@@ -43,6 +44,9 @@ def _server_apps_payload(state: PlatformState, context: RequestSession) -> dict[
                 "source_id": latest.source_id,
                 "source_kind": latest.source_kind,
                 "distribution": asdict(latest.contract.distribution),
+                "presentation": asdict(latest.contract.presentation),
+                "frontend_role": latest.contract.presentation.frontend_role,
+                "frontend_launchable": app_frontend_is_launchable(latest.contract),
                 "surfaces": _source_surface_labels(latest.contract),
                 "versions": [
                     {
@@ -54,6 +58,9 @@ def _server_apps_payload(state: PlatformState, context: RequestSession) -> dict[
                         "source_id": source.source_id,
                         "source_kind": source.source_kind,
                         "distribution": asdict(source.contract.distribution),
+                        "presentation": asdict(source.contract.presentation),
+                        "frontend_role": source.contract.presentation.frontend_role,
+                        "frontend_launchable": app_frontend_is_launchable(source.contract),
                         "surfaces": _source_surface_labels(source.contract),
                     }
                     for source in ordered_sources
@@ -148,6 +155,17 @@ def _installation_payload(state: PlatformState, context: RequestSession, workspa
         for binding in state.app_store.list_workspace_app_bindings(workspace_id):
             if not _installed_binding_visible_for_context(state, context, membership, binding):
                 continue
+            try:
+                contract = _binding_contract(state, binding)
+                presentation = asdict(contract.presentation)
+                frontend_role = contract.presentation.frontend_role
+                frontend_launchable = app_frontend_is_launchable(contract)
+                surfaces = _source_surface_labels(contract)
+            except AppHostingError:
+                presentation = {"frontend_role": "none"}
+                frontend_role = "none"
+                frontend_launchable = False
+                surfaces = []
             items.append(
                 {
                     "workspace_id": workspace_id,
@@ -156,6 +174,10 @@ def _installation_payload(state: PlatformState, context: RequestSession, workspa
                     "active_version": binding.active_version,
                     "source_kind": binding.source_kind,
                     "source_record_id": binding.source_record_id,
+                    "presentation": presentation,
+                    "frontend_role": frontend_role,
+                    "frontend_launchable": frontend_launchable,
+                    "surfaces": surfaces,
                 }
             )
     return {"items": items}

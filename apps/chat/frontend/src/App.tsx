@@ -1,8 +1,8 @@
-import { type CSSProperties, type MutableRefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, type DragEvent, type MutableRefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ChatMessageAttachment,
   ChatThread,
-  createRuntimeSession,
+  createRuntimeSessionWithTurn,
   createThread,
   AppReference,
   isRuntimeSessionUnavailableError,
@@ -19,7 +19,6 @@ import {
   orderChatThreads,
   selectProvider,
   sendRuntimeTurn,
-  updateThread,
 } from "./api/client";
 import { ChatComposer } from "./components/ChatComposer";
 import { ChatTranscript } from "./components/ChatTranscript";
@@ -27,7 +26,8 @@ import { useComposerAttachments } from "./hooks/useComposerAttachments";
 import { useRuntimeEvents } from "./hooks/useRuntimeEvents";
 import { useRuntimeThreads } from "./hooks/useRuntimeThreads";
 import { hasInvalidAttachments } from "./lib/attachments";
-import { appReferencesFromText, referenceKey } from "./lib/mentions";
+import { filesFromDataTransfer, hasFileDropData } from "./lib/fileDropAttachments";
+import { appReferencesFromText, mentionText, referenceKey } from "./lib/mentions";
 import type { MentionItem } from "./lib/mentions";
 import { PendingMessage, QueuedMessage, uploadComposerAttachment } from "./lib/messageState";
 import { mergeRuntimeEvents } from "./lib/runtimeEvents";
@@ -41,7 +41,7 @@ import {
 import { latestRuntimeStepLabel } from "./lib/runtimeStepLabels";
 import { openChatRootRouteInShell, openChatThreadRouteInShell } from "./lib/shellNavigation";
 import { findThreadByRuntimeSession } from "./lib/threadNavigation";
-import { eventsToMessages, firstUserTitle } from "./lib/transcript";
+import { eventsToMessages } from "./lib/transcript";
 
 type ShellNavigationMessage = {
   type?: string;
@@ -82,6 +82,16 @@ type ActiveAppContext = {
   views: string[];
 };
 
+export type ExternalMentionDrop = {
+  items: MentionItem[];
+  requestId: string;
+};
+
+export type ExternalFileDrop = {
+  files: File[];
+  requestId: string;
+};
+
 const MESSAGE_HISTORY_LIMIT = 50;
 const QUEUED_MESSAGES_STORAGE_PREFIX = "maverick.chat.queued-messages.v1";
 const THREAD_SYNC_DEBUG_STORAGE_KEY = "maverick.chat.debug.thread-sync";
@@ -92,12 +102,16 @@ function isThreadAvailabilityBusy(availability: string) {
 
 export function App({
   enablePageCapture = false,
+  externalFileDrop = null,
+  externalMentionDrop = null,
   navigationScope = "",
   newChatProjectId = null,
   newChatRequestId = null,
   threadId = null,
 }: {
   enablePageCapture?: boolean;
+  externalFileDrop?: ExternalFileDrop | null;
+  externalMentionDrop?: ExternalMentionDrop | null;
   navigationScope?: string;
   newChatProjectId?: string | null;
   newChatRequestId?: string | null;
@@ -126,7 +140,9 @@ export function App({
   const [mentionItems, setMentionItems] = useState<MentionItem[]>([]);
   const [selectedReferences, setSelectedReferences] = useState<AppReference[]>([]);
   const [activeAppContext, setActiveAppContext] = useState<ActiveAppContext | null>(null);
+  const consumedExternalFileDrops = useRef<Set<string>>(new Set());
   const consumedNewChatRequests = useRef<Set<string>>(new Set());
+  const consumedExternalMentionDrops = useRef<Set<string>>(new Set());
   const consumedLegacyNewChatRequest = useRef(false);
   const initialSelectionHandledRef = useRef(false);
   const navigationRequestRef = useRef<string | null>(null);
@@ -281,6 +297,22 @@ export function App({
     loadInitialState();
     void loadMentionItems();
   }, []);
+
+  useEffect(() => {
+    if (!externalMentionDrop || consumedExternalMentionDrops.current.has(externalMentionDrop.requestId)) {
+      return;
+    }
+    consumedExternalMentionDrops.current.add(externalMentionDrop.requestId);
+    appendMentionItemsToComposer(externalMentionDrop.items);
+  }, [externalMentionDrop]);
+
+  useEffect(() => {
+    if (!externalFileDrop || consumedExternalFileDrops.current.has(externalFileDrop.requestId)) {
+      return;
+    }
+    consumedExternalFileDrops.current.add(externalFileDrop.requestId);
+    handleAddAttachments(externalFileDrop.files);
+  }, [externalFileDrop]);
 
   useEffect(() => {
     if (!threadsLoaded || initialSelectionHandledRef.current) {
@@ -497,47 +529,6 @@ export function App({
     openChatRootRouteInShell({ navigationScope });
   }
 
-  async function createChat({ activeAppContext: activeAppContextOverride, projectId = null, resetView = true }: CreateChatOptions = {}) {
-    debugThreadSync("app-create-chat-start", {
-      activeThreadId: activeThread?.thread_id || "",
-      navigationScope,
-      projectId,
-      resetView,
-      threadId,
-    });
-    if (resetView) {
-      resetActiveConversation();
-    }
-    const systemPrompt = draftChat?.systemPrompt || (await loadDefaultSystemPrompt(activeAppContextOverride ?? activeAppContext));
-    const session = await createRuntimeSession({
-      project_id: projectId,
-      source_app_id: "chat",
-      system_prompt: systemPrompt,
-      title: "New chat",
-    });
-    const payload = await createThread(session.session_id, projectId, { source_app_id: "chat", system_prompt: systemPrompt, title: "New chat" });
-    setThreads(payload.threads);
-    setActiveThread(payload.thread);
-    setDraftChat(null);
-    setActiveSession(session);
-    setEvents([]);
-    setHasLoadedHistory(false);
-    if (resetView) {
-      setPendingUserMessages([]);
-      setFailedUserMessages([]);
-      setQueuedMessages([]);
-    }
-    setActiveTurn(null);
-    debugThreadSync("app-create-chat-complete", {
-      createdThreadId: payload.thread.thread_id,
-      navigationScope,
-      threadId,
-    });
-    notifyActiveThreadChanged(payload.thread.thread_id);
-    openChatThreadRouteInShell(payload.thread.thread_id, { navigationScope });
-    return payload.thread;
-  }
-
   function cachedTranscriptForThread(thread: ChatThread | null) {
     if (!thread?.runtime_session_id) {
       return null;
@@ -581,6 +572,28 @@ export function App({
 
   function handleChatRootPointerDown() {
     void markActiveThreadReadIfNeeded(activeThread);
+  }
+
+  function handleChatRootDragOver(event: DragEvent<HTMLElement>) {
+    if (isThreadLoading || !hasFileDropData(event.dataTransfer)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "copy";
+  }
+
+  function handleChatRootDrop(event: DragEvent<HTMLElement>) {
+    if (isThreadLoading) {
+      return;
+    }
+    const files = filesFromDataTransfer(event.dataTransfer);
+    if (!files.length) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    handleAddAttachments(files);
   }
 
   async function markActiveThreadReadIfNeeded(thread: ChatThread | null) {
@@ -805,50 +818,59 @@ export function App({
     setError(null);
     try {
       let thread = activeThread;
+      let response: Awaited<ReturnType<typeof sendRuntimeTurn>>;
       if (!thread) {
-        thread = await createChat({
-          activeAppContext,
-          projectId: draftChat?.projectId ?? null,
-          resetView: false,
+        const systemPrompt = draftChat?.systemPrompt || (await loadDefaultSystemPrompt(activeAppContext));
+        response = await createRuntimeSessionWithTurn({
+          appReferences: message.appReferences,
+          attachments: message.attachments,
+          clientMessageId: message.clientMessageId,
+          inputText: message.content,
+          options: {
+            project_id: draftChat?.projectId ?? null,
+            source_app_id: "chat",
+            system_prompt: systemPrompt,
+            title: "New chat",
+          },
         });
+        setDraftChat(null);
       } else if (!threads.some((item) => item.thread_id === thread?.thread_id)) {
         throw new Error("This chat no longer exists.");
+      } else {
+        if (!thread.runtime_session_id) {
+          throw new Error("This chat does not have a runtime session.");
+        }
+        response = await sendRuntimeTurn(
+          thread.runtime_session_id,
+          message.content,
+          message.clientMessageId,
+          message.attachments,
+          message.appReferences,
+        );
       }
-      if (!thread.runtime_session_id) {
-        throw new Error("This chat does not have a runtime session.");
+      const responseThread = response.thread;
+      const baseThread = responseThread || thread;
+      if (!baseThread) {
+        throw new Error("Runtime thread was not created.");
       }
-      const response = await sendRuntimeTurn(
-        thread.runtime_session_id,
-        message.content,
-        message.clientMessageId,
-        message.attachments,
-        message.appReferences,
-      );
       setActiveSession(response.session);
       setActiveTurn(response.turn);
       setEvents((current) => mergeRuntimeEvents(current, response.events));
       const userMessageAt = response.turn.created_at || new Date().toISOString();
       const optimisticThread = {
-        ...thread,
+        ...baseThread,
+        ...(responseThread || {}),
         availability: response.turn.status === "queued" || response.turn.status === "active" ? response.turn.status : "free",
         last_user_message_at: userMessageAt,
       };
       setActiveThread((current) => (current?.thread_id === optimisticThread.thread_id ? { ...current, ...optimisticThread } : optimisticThread));
       setThreads((current) => upsertOrderedThread(current, optimisticThread));
+      if (!thread) {
+        notifyActiveThreadChanged(optimisticThread.thread_id);
+        openChatThreadRouteInShell(optimisticThread.thread_id, { navigationScope });
+      }
       if (response.turn.status !== "queued" && response.turn.status !== "active") {
         setPendingUserMessages((current) => current.filter((item) => item.clientMessageId !== message.clientMessageId));
-      }
-      if (events.length === 0 && thread.title === "New chat") {
-        const updated = await updateThread({ thread_id: thread.thread_id, title: firstUserTitle(message.content) });
-        const titledThread = { ...updated.thread, last_user_message_at: updated.thread.last_user_message_at || userMessageAt };
-        setActiveThread(titledThread);
-        setThreads(
-          orderChatThreads(
-            updated.threads.map((item) =>
-              item.thread_id === titledThread.thread_id ? { ...item, last_user_message_at: item.last_user_message_at || userMessageAt } : item,
-            ),
-          ),
-        );
       }
     } catch (sendError) {
       setError(sendError instanceof Error ? sendError.message : "Unable to send message.");
@@ -882,6 +904,24 @@ export function App({
 
   function handleAddAttachments(files: File[]) {
     addAttachments(files);
+    setComposerError(null);
+  }
+
+  function appendMentionItemsToComposer(items: MentionItem[]) {
+    const validItems = items.filter((item) => item.reference);
+    if (!validItems.length) {
+      return;
+    }
+    const mentionBlock = validItems.map((item) => mentionText(item)).join(" ");
+    setComposer((current) => {
+      const prefix = current && !/\s$/.test(current) ? " " : "";
+      return `${current}${prefix}${mentionBlock} `;
+    });
+    validItems.forEach((item) => {
+      if (item.reference) {
+        handleReferenceAdd(item.reference);
+      }
+    });
     setComposerError(null);
   }
 
@@ -934,16 +974,16 @@ export function App({
   }
 
   return (
-    <main className="chatapp-root" onPointerDown={handleChatRootPointerDown}>
+    <main className="chatapp-root" onDragOver={handleChatRootDragOver} onDrop={handleChatRootDrop} onPointerDown={handleChatRootPointerDown}>
       <section className="chatapp-chat-panel">
         <div className={`chatapp-chat-workspace ${isEmptyChatView ? "is-empty-chat" : ""}`}>
           <div className={`chatapp-chat-main ${isEmptyChatView ? "is-empty-chat" : ""}`} style={chatMainStyle}>
             {isEmptyChatView ? (
               <div className="chatapp-empty-chat-stage">
                 <div className="chatapp-empty-chat-stage__copy">
-                  <h1>Come posso aiutarti oggi?</h1>
+                  <h1>How can I help today?</h1>
                   <span aria-hidden="true" />
-                  <p>Scrivi un comando o fai una domanda a Maverick</p>
+                  <p>Type a command or ask Maverick a question</p>
                 </div>
                 <ChatComposer
                   activeProviderId={activeProviderId}

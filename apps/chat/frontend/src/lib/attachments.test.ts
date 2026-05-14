@@ -22,6 +22,6 @@ describe("composer attachment helpers", () => {
       type: "application/x-sh",
     });
     const attachments = buildComposerAttachments([file]);
-    expect(attachments[0].warning).toBe("Tipo file non supportato");
+    expect(attachments[0].warning).toBe("Unsupported file type");
   });
 });

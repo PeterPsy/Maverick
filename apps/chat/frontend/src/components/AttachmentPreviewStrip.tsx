@@ -15,7 +15,7 @@ export function AttachmentPreviewStrip({
   }
 
   return (
-    <div className="chatapp-attachment-strip" aria-label="Allegati selezionati">
+    <div className="chatapp-attachment-strip" aria-label="Selected attachments">
       {attachments.map((attachment) => (
         <div
           className={`chatapp-attachment-card ${attachment.isImage ? "is-image" : ""} ${attachment.warning ? "is-invalid" : ""}`}
@@ -34,7 +34,7 @@ export function AttachmentPreviewStrip({
             {attachment.warning ? <span className="chatapp-attachment-card__warning">{attachment.warning}</span> : null}
           </span>
           <button
-            aria-label={`Rimuovi ${attachment.name}`}
+            aria-label={`Remove ${attachment.name}`}
             className="chatapp-attachment-card__remove"
             disabled={disabled}
             onClick={() => onRemoveAttachment(attachment.id)}

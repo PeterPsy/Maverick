@@ -272,6 +272,74 @@ def move_file_record(
     )
 
 
+def move_folder_records(
+    *,
+    data_root: Path,
+    role: str,
+    root: Path,
+    old_relative_path: str,
+    new_path: Path,
+) -> dict[str, Any]:
+    resolved_root = root.resolve()
+    resolved_path = new_path.resolve()
+    old_prefix = old_relative_path.strip("/")
+    if not old_prefix:
+        raise StorageValidationError("Storage root folders cannot be moved.")
+    if resolved_path == resolved_root or resolved_root not in resolved_path.parents or not resolved_path.is_dir():
+        raise StorageValidationError("Folder does not exist.")
+    new_prefix = resolved_path.relative_to(resolved_root).as_posix()
+    captured: dict[str, Any] = {}
+
+    def updater(payload: dict[str, Any]) -> dict[str, Any]:
+        inventory = _normalize_inventory(payload)
+        now = _timestamp()
+        translated_existing_by_path: dict[str, dict[str, Any]] = {}
+        for item in inventory["files"]:
+            item_path = str(item.get("relative_path") or "")
+            if item.get("status") == "active" and item.get("role") == role and _relative_path_is_self_or_child(item_path, old_prefix):
+                suffix = _relative_path_suffix(item_path, old_prefix)
+                new_relative_path = f"{new_prefix}/{suffix}" if suffix else new_prefix
+                translated_existing_by_path[_path_key(role, new_relative_path)] = item
+
+        moved_files, moved_directories = _scan_directory_subtree(
+            role=role,
+            root=resolved_root,
+            directory=resolved_path,
+            existing_by_path=translated_existing_by_path,
+            now=now,
+        )
+        parent_directories = _directory_chain_for_path(role=role, root=resolved_root, path=resolved_path.parent)
+        next_files = [
+            item
+            for item in inventory["files"]
+            if not (
+                item.get("status") == "active"
+                and item.get("role") == role
+                and _relative_path_is_self_or_child(str(item.get("relative_path") or ""), old_prefix)
+            )
+        ]
+        next_directories = [
+            item
+            for item in inventory["directories"]
+            if not (
+                item.get("status") == "active"
+                and item.get("role") == role
+                and _relative_path_is_self_or_child(str(item.get("relative_path") or ""), old_prefix)
+            )
+        ]
+        inventory["files"] = _replace_entries_by_path(next_files, moved_files)
+        inventory["directories"] = _replace_directories(next_directories, parent_directories + moved_directories)
+        inventory["updated_at"] = now
+        target_directory = next((item for item in moved_directories if item["relative_path"] == new_prefix), None)
+        if target_directory is None:
+            target_directory = _directory_entry_for_path(role=role, root=resolved_root, path=resolved_path)
+        captured.update(_public_folder_record(target_directory))
+        return inventory
+
+    update_json_state(data_root, INVENTORY_FILE, updater, _empty_inventory())
+    return captured
+
+
 def remove_file_record(*, data_root: Path, role: str, relative_path: str) -> None:
     def updater(payload: dict[str, Any]) -> dict[str, Any]:
         inventory = _normalize_inventory(payload)
@@ -773,6 +841,20 @@ def _root_for_role(*, role: str, uploaded_root: Path, generated_root: Path) -> P
 
 def _path_key(role: str, relative_path: str) -> str:
     return f"{role}:{relative_path}"
+
+
+def _relative_path_is_self_or_child(relative_path: str, prefix: str) -> bool:
+    normalized_path = relative_path.strip("/")
+    normalized_prefix = prefix.strip("/")
+    return normalized_path == normalized_prefix or normalized_path.startswith(f"{normalized_prefix}/")
+
+
+def _relative_path_suffix(relative_path: str, prefix: str) -> str:
+    normalized_path = relative_path.strip("/")
+    normalized_prefix = prefix.strip("/")
+    if normalized_path == normalized_prefix:
+        return ""
+    return normalized_path[len(normalized_prefix) + 1 :]
 
 
 def _directory_key(role: str, relative_path: str) -> str:

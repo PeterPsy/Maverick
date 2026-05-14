@@ -95,6 +95,7 @@ def _contract_payload(request: AppSdkCreateRequest) -> dict[str, Any]:
         "requires": [],
         "distribution": distribution,
         "visibility": {"platform_roles": None},
+        "presentation": {"frontend_role": "workspace" if has_frontend else "none"},
         "capabilities": {
             "mcp_tools": (
                 [

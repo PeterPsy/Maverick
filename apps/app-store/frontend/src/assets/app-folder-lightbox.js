@@ -7,7 +7,7 @@
     return;
   }
 
-  const { PLACEHOLDER_IMAGE, appImage, createNode, normalizeSurfaces } = data;
+  const { createNode, normalizeSurfaces } = data;
 
   function fallbackIcon() {
     const frame = createNode("span", "folder-lightbox-app-icon app-row-icon is-glyph");
@@ -18,8 +18,8 @@
     return frame;
   }
 
-  function renderLightboxIcon(app, helpers) {
-    const icon = helpers.renderIcon ? helpers.renderIcon(app) : fallbackIcon();
+  function renderLightboxIcon(app, helpers, installation = null) {
+    const icon = helpers.renderIcon ? helpers.renderIcon(app, installation) : fallbackIcon();
     icon.classList.add("folder-lightbox-app-icon");
     return icon;
   }
@@ -47,10 +47,6 @@
     }
     pill.textContent = text;
     return pill;
-  }
-
-  function setSlidePosition(lightbox) {
-    lightbox.track.style.transform = `translateX(-${lightbox.index * 100}%)`;
   }
 
   function updateNavState(lightbox) {
@@ -81,15 +77,26 @@
     const pending = helpers.isAppPending ? helpers.isAppPending(app.app_id) : false;
     const installed = installState.installedCount > 0;
     const mode = app.storeMode || "store";
+    const presentationInstallation = installState.presentationInstallation || null;
+    const launchable = helpers.canOpenInstalledApp
+      ? helpers.canOpenInstalledApp(app, installState)
+      : helpers.isFrontendLaunchable
+        ? helpers.isFrontendLaunchable(app)
+        : true;
     const statusText = helpers.statusLabel ? helpers.statusLabel(app.app_id) : installed ? "Installed" : "Not installed";
-    const surfaceText = helpers.surfaceLabel ? helpers.surfaceLabel(app) : normalizeSurfaces(app).join(" / ") || "No declared surfaces";
+    const surfaceText = helpers.surfaceLabel
+      ? helpers.surfaceLabel(app, presentationInstallation)
+      : normalizeSurfaces(app).join(" / ") || "No declared surfaces";
+    const frontendText = helpers.frontendAvailabilityLabel ? helpers.frontendAvailabilityLabel(app, presentationInstallation) : "";
 
+    lightbox.iconSlot.replaceChildren(renderLightboxIcon(app, helpers, presentationInstallation));
     lightbox.title.textContent = app.name || app.app_id;
     lightbox.description.textContent = app.description || "Ready to install in Maverick.";
     lightbox.counter.textContent = `${lightbox.index + 1} / ${lightbox.folder.apps.length}`;
     lightbox.meta.replaceChildren(
       renderMetaPill(version.version || app.latest_version || "unknown"),
       renderMetaPill(statusText, installed ? "installed" : installState.isPartiallyInstalled ? "partial" : "available"),
+      ...(frontendText ? [renderMetaPill(frontendText, launchable ? "frontend" : "supporting-frontend")] : []),
       renderMetaPill(surfaceText),
     );
     renderDots(lightbox);
@@ -97,45 +104,29 @@
     lightbox.actions.replaceChildren();
     const primary = createNode("button", "folder-lightbox-primary");
     primary.type = "button";
-    primary.disabled = pending || primaryDisabled({ app, mode, version, installState, installed });
+    primary.disabled = pending || !installed || !launchable;
     const primaryLabel = createNode("span");
-    primaryLabel.textContent = installed ? "Open App" : "Get App";
+    primaryLabel.textContent = launchable ? "Open App" : "No App View";
     const primaryIcon = createNode("span", "material-symbols-rounded");
     primaryIcon.setAttribute("aria-hidden", "true");
-    primaryIcon.textContent = installed ? "open_in_new" : "download";
+    primaryIcon.textContent = launchable ? "open_in_new" : "extension";
     primary.append(primaryLabel, primaryIcon);
     primary.addEventListener("click", (event) => {
       event.stopPropagation();
-      if (installed) {
-        helpers.openApp?.(app.app_id, mode === "local" ? app.workspace_id : null);
-      } else if (mode === "server") {
-        helpers.installServerApp?.(app, version);
-      } else if (mode === "local") {
-        helpers.installLocalApp?.(app);
-      } else if (version?.version) {
-        helpers.installApp?.(app, version);
+      if (installed && launchable) {
+        helpers.openApp?.(app.app_id, mode === "local" ? app.workspace_id : installState.launchableWorkspaceId || null);
       }
     });
     lightbox.actions.append(primary);
 
-    if (helpers.renderMoreOptions) {
-      const moreOptions = helpers.renderMoreOptions(app, mode, version, installState);
-      moreOptions.classList.add("folder-lightbox-options");
-      lightbox.actions.append(moreOptions);
+    lightbox.settings.replaceChildren();
+    if (helpers.renderAppSettings) {
+      lightbox.settings.append(helpers.renderAppSettings(app, mode, version, installState));
+      return;
     }
-  }
-
-  function primaryDisabled({ app, mode, version, installState, installed }) {
-    if (installed) {
-      return false;
-    }
-    if (mode === "local") {
-      return app.localStatus === "invalid" || !app.workspace_id;
-    }
-    if (mode === "server") {
-      return !version?.source_id || installState.workspaceCount === 0;
-    }
-    return !version?.version || installState.workspaceCount === 0;
+    const fallback = createNode("p", "folder-lightbox-settings-empty");
+    fallback.textContent = "No app settings available.";
+    lightbox.settings.append(fallback);
   }
 
   function navigate(lightbox, nextIndex) {
@@ -143,13 +134,8 @@
       return;
     }
     lightbox.index = nextIndex;
-    lightbox.track.dataset.sliding = "true";
-    setSlidePosition(lightbox);
     updateNavState(lightbox);
     renderDetails(lightbox);
-    window.setTimeout(() => {
-      lightbox.track.dataset.sliding = "false";
-    }, 520);
   }
 
   function close(lightbox) {
@@ -196,26 +182,6 @@
     });
   }
 
-  function renderSlides(folder, helpers) {
-    const track = createNode("div", "folder-lightbox-track");
-    track.dataset.sliding = "false";
-    folder.apps.forEach((app, slideIndex) => {
-      const slide = createNode("div", "folder-lightbox-slide");
-      const image = createNode("img");
-      image.src = appImage(app, folder.id, slideIndex);
-      image.alt = "";
-      image.loading = "lazy";
-      image.addEventListener("error", () => {
-        image.src = PLACEHOLDER_IMAGE;
-      });
-      const shade = createNode("span", "folder-lightbox-slide-shade");
-      const icon = renderLightboxIcon(app, helpers);
-      slide.append(image, shade, icon);
-      track.append(slide);
-    });
-    return track;
-  }
-
   function open(folder, index, sourceElement, options = {}) {
     if (!folder.apps.length) {
       return null;
@@ -235,24 +201,25 @@
     const nextButton = renderIconButton("folder-lightbox-nav folder-lightbox-nav--next", "Next app", "chevron_right");
     const stage = createNode("div", "folder-lightbox-stage");
     const frame = createNode("div", "folder-lightbox-frame");
-    const media = createNode("div", "folder-lightbox-media");
-    const track = renderSlides(folder, helpers);
     const details = createNode("div", "folder-lightbox-details");
+    const summary = createNode("div", "folder-lightbox-summary");
+    const iconSlot = createNode("div", "folder-lightbox-icon-slot");
     const copy = createNode("div", "folder-lightbox-copy");
     const title = createNode("h3");
     const description = createNode("p");
     const meta = createNode("div", "folder-lightbox-meta");
+    const actions = createNode("div", "folder-lightbox-actions");
+    const settings = createNode("div", "folder-lightbox-settings");
     const footer = createNode("div", "folder-lightbox-footer");
     const dots = createNode("div", "folder-lightbox-dots");
     const counter = createNode("p", "folder-lightbox-counter");
-    const actions = createNode("div", "folder-lightbox-actions");
 
     copy.append(title, description, meta);
+    summary.append(iconSlot, copy, actions);
     footer.append(dots, counter);
-    details.append(copy, footer, actions);
-    media.append(track);
-    frame.append(media, details);
-    stage.append(frame);
+    details.append(summary, settings);
+    frame.append(details);
+    stage.append(frame, footer);
     root.append(backdrop, closeButton, prevButton, nextButton, stage);
     document.body.append(root);
 
@@ -264,6 +231,7 @@
       dots,
       folder,
       frame,
+      iconSlot,
       index,
       meta,
       nextButton,
@@ -271,9 +239,9 @@
       previousOverflow: document.body.style.overflow,
       prevButton,
       root,
+      settings,
       stage,
       title,
-      track,
     };
     lightbox.handleKeydown = (event) => {
       if (event.key === "Escape") {
@@ -287,13 +255,12 @@
 
     activeLightbox = lightbox;
     document.body.style.overflow = "hidden";
-    setSlidePosition(lightbox);
     updateNavState(lightbox);
     renderDetails(lightbox);
     animateFromSource(lightbox, sourceElement);
 
     root.addEventListener("click", () => close(lightbox));
-    frame.addEventListener("click", (event) => event.stopPropagation());
+    stage.addEventListener("click", (event) => event.stopPropagation());
     closeButton.addEventListener("click", (event) => {
       event.stopPropagation();
       close(lightbox);

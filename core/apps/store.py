@@ -24,6 +24,7 @@ from core.apps.models import (
     AppCompatibilityDescriptor,
     AppNetworkPermissionDeclaration,
     AppPermissionsDeclaration,
+    AppPresentationDeclaration,
     AppProvidedInterfaceDeclaration,
     AppReferenceEntityDeclaration,
     AppRequiredInterfaceDeclaration,
@@ -179,6 +180,7 @@ class AppDocumentStore:
             ],
             distribution=AppDistributionDeclaration(**payload["distribution"]),
             visibility=AppVisibilityDeclaration(**payload.get("visibility", {"platform_roles": None})),
+            presentation=AppPresentationDeclaration(**payload["presentation"]),
             permissions=AppPermissionsDeclaration(
                 secrets=AppSecretPermissionDeclaration(
                     **payload.get("permissions", {}).get("secrets", {"read": [], "write": []})

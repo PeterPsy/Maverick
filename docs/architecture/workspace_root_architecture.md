@@ -206,6 +206,8 @@ Workspace-scoped runtime thread records live under:
 /workspaces/<workspace_id>/runtime/threads.json
 ```
 
+Runtime thread records own the user-facing conversation catalog metadata, including display titles. The core derives a compact default title of up to five words from the first accepted user message only while a thread still has the default placeholder title, favoring the message's topic over opening filler or setup phrases. Once a non-placeholder title has been saved, the core does not recalculate it during normal thread reconciliation; later user-renamed titles are preserved.
+
 Installation-level runtime state under `.maverick/local-state/runtime/` is reserved for platform security records such as runtime API token lifecycle state. It must not store runtime sessions, threads, turns, events, process records, state snapshots, or other workspace-scoped runtime records.
 
 Runtime sessions may also contain provider-managed executable shims under:

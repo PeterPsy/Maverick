@@ -395,6 +395,52 @@ export function createRuntimeSession(options: RuntimeSessionOptions = {}): Promi
   });
 }
 
+function serializableMessageAttachments(attachments: ChatMessageAttachment[]) {
+  return attachments.map(({ objectUrl: _objectUrl, ...attachment }) => attachment);
+}
+
+export function createRuntimeSessionWithTurn({
+  appReferences = [],
+  attachments = [],
+  clientMessageId,
+  inputText,
+  options = {},
+}: {
+  appReferences?: AppReference[];
+  attachments?: ChatMessageAttachment[];
+  clientMessageId?: string;
+  inputText: string;
+  options?: RuntimeSessionOptions;
+}): Promise<{
+  session: RuntimeSession;
+  thread?: ChatThread;
+  turn: RuntimeTurn;
+  events: RuntimeEvent[];
+}> {
+  const body: Record<string, unknown> = {
+    agent_id: "chat",
+    agent_role_id: options.agent_role_id || "",
+    agent_type_id: options.agent_type_id || "",
+    project_id: options.project_id || null,
+    source_app_id: options.source_app_id || "chat",
+    system_prompt: options.system_prompt || undefined,
+    skill_ids: options.skill_ids || [],
+    title: options.title || "New chat",
+    input_text: inputText,
+    client_message_id: clientMessageId,
+    attachments: serializableMessageAttachments(attachments),
+    async: true,
+  };
+  if (appReferences.length) {
+    body.app_references = appReferences;
+  }
+  return requestJson("/api/runtime/sessions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 export function runtimeWebSocketUrl(sessionId: string, lastEventId?: string | null): string {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   const url = new URL(`${protocol}//${window.location.host}/ws/runtime/sessions/${encodeURIComponent(sessionId)}`);
@@ -421,14 +467,14 @@ export function sendRuntimeTurn(
   appReferences: AppReference[] = [],
 ): Promise<{
   session: RuntimeSession;
+  thread?: ChatThread;
   turn: RuntimeTurn;
   events: RuntimeEvent[];
 }> {
-  const serializableAttachments = attachments.map(({ objectUrl: _objectUrl, ...attachment }) => attachment);
   const body: Record<string, unknown> = {
     input_text: inputText,
     client_message_id: clientMessageId,
-    attachments: serializableAttachments,
+    attachments: serializableMessageAttachments(attachments),
     async: true,
   };
   if (appReferences.length) {

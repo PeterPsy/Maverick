@@ -13,6 +13,7 @@ AppSourceKind = Literal["platform", "external_bundle", "workspace_local_project"
 WorkspaceAppStatus = Literal["installed", "enabled", "disabled", "failed", "updating", "rolled_back"]
 AppDistributionMode = Literal["sealed", "source_available", "workspace_local"]
 AppSourceAccess = Literal["none", "read_only", "forkable", "editable"]
+AppFrontendRole = Literal["workspace", "supporting", "none"]
 HealthMode = Literal["none", "hook"]
 InstallFailureMode = Literal["block_activation", "mark_failed"]
 MigrateFailureMode = Literal["preserve_data_mark_unhealthy", "block_activation"]
@@ -121,6 +122,13 @@ class AppVisibilityDeclaration:
     platform_roles: list[PlatformRole] | None
     workspace_roles: list[Literal["admin", "member"]] | None = None
     capabilities: list[str] | None = None
+
+
+@dataclass(frozen=True)
+class AppPresentationDeclaration:
+    """Describe app presentation semantics for user-facing shell surfaces."""
+
+    frontend_role: AppFrontendRole
 
 
 @dataclass(frozen=True)
@@ -289,6 +297,7 @@ class AppContractDescriptor:
     requires: list[AppRequiredInterfaceDeclaration]
     distribution: AppDistributionDeclaration
     visibility: AppVisibilityDeclaration
+    presentation: AppPresentationDeclaration
     permissions: AppPermissionsDeclaration
     compatibility: AppCompatibilityDescriptor
     storage: AppStorageDeclaration

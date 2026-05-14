@@ -1,4 +1,5 @@
 @import '../../styles/tokens.css';
+@import '../../styles/skeleton.css';
 
 * {
   box-sizing: border-box;
@@ -106,7 +107,7 @@ button {
 .dv-widget__eyebrow {
   color: var(--maverick-text-soft);
   font-size: 0.65rem;
-  font-weight: 800;
+  font-weight: 400;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }

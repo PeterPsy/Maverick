@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+import re
+import unicodedata
 from typing import Any
 
 from errors import DynamicViewsValidationError
@@ -130,6 +132,82 @@ def _target_id(body: dict[str, Any]) -> str:
     return str(body.get("id") or body.get("target_id") or body.get("instance_id") or "").strip()
 
 
+def _requested_view_ids(body: dict[str, Any]) -> list[str]:
+    raw_value = body.get("view_ids") or body.get("ids")
+    if raw_value is None:
+        raw_value = body.get("refs")
+    if not isinstance(raw_value, list):
+        return []
+    ids: list[str] = []
+    for item in raw_value:
+        if isinstance(item, dict):
+            if str(item.get("entity_type") or "") != "view":
+                continue
+            value = str(item.get("entity_id") or "").strip()
+        else:
+            value = str(item or "").strip()
+        if value and value not in ids:
+            ids.append(value)
+    return ids
+
+
+def _normalize_search_text(value: str) -> str:
+    normalized = unicodedata.normalize("NFKD", value)
+    return "".join(char for char in normalized if not unicodedata.combining(char)).casefold()
+
+
+def _search_tokens(value: str) -> list[str]:
+    return [token for token in re.split(r"[^a-z0-9]+", _normalize_search_text(value)) if token]
+
+
+def _token_matches(haystack: str, token: str) -> bool:
+    if token in haystack:
+        return True
+    return len(token) > 3 and token.endswith("s") and token[:-1] in haystack
+
+
+def _item_matches_query(item: dict, query: str) -> bool:
+    if not query:
+        return True
+    package = item.get("package") if isinstance(item.get("package"), dict) else {}
+    bindings = item.get("data_bindings") if isinstance(item.get("data_bindings"), list) else []
+    searchable_values = [
+        item.get("title"),
+        item.get("summary"),
+        item.get("id"),
+        item.get("status"),
+        item.get("snapshot_mode"),
+        package.get("title"),
+        package.get("summary"),
+        package.get("renderer"),
+        *list(package.get("tags") or []),
+    ]
+    for binding in bindings:
+        if not isinstance(binding, dict):
+            continue
+        searchable_values.extend([binding.get("source_type"), binding.get("source_ref"), binding.get("query")])
+    haystack = _normalize_search_text(" ".join(str(value or "") for value in searchable_values))
+    normalized_query = _normalize_search_text(query)
+    if normalized_query in haystack:
+        return True
+    tokens = _search_tokens(query)
+    return bool(tokens) and all(_token_matches(haystack, token) for token in tokens)
+
+
+def _filtered_items(items: list[dict], body: dict[str, Any]) -> list[dict]:
+    requested_ids = _requested_view_ids(body)
+    if requested_ids:
+        by_id = {item["id"]: item for item in items}
+        items = [by_id[item_id] for item_id in requested_ids if item_id in by_id]
+    status = str(body.get("status") or "all").strip()
+    if status == "ready":
+        items = [item for item in items if str(item.get("status") or "ready") == "ready"]
+    query = str(body.get("query") or "").strip()
+    if query:
+        items = [item for item in items if _item_matches_query(item, query)]
+    return items
+
+
 def _hydrate_all(state: dict) -> list[dict]:
     items: list[dict] = []
     for instance in state["instances"]:
@@ -185,8 +263,8 @@ def handle_action(
 ) -> tuple[int, dict[str, Any]]:
     action = str(body.get("action") or "list").strip().lower()
     if action in {"catalog", "list"}:
-        items = _hydrate_all(load_state(data_root))
-        limit = max(1, min(int(body.get("limit") or 50), 100))
+        items = _filtered_items(_hydrate_all(load_state(data_root)), body)
+        limit = max(1, min(int(body.get("limit") or 100), 500))
         return 200, {"action": "list", "summary": f"dynamic views list | count={len(items[:limit])}", "items": items[:limit]}
     if action == "view_filter":
         return 200, {"state": _view_state(data_root)}

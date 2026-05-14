@@ -17,6 +17,8 @@ function app(app_id: string, name = app_id): AppRegistryItem {
     description: "",
     distribution_mode: "sealed",
     frontend_mount: `/apps/${app_id}/`,
+    frontend_role: "workspace",
+    frontend_launchable: true,
     logo: null,
     name,
     publisher: "maverick",
@@ -31,7 +33,7 @@ function app(app_id: string, name = app_id): AppRegistryItem {
 
 const apps = [app("app-store", "App Store"), app("chat", "Chat"), app("agents", "Agents"), app("skills", "Skills"), app("docs", "Docs")];
 const user: SessionUser = {
-  user_id: "user-admin",
+  user_id: "settings",
   username: "admin",
   email: null,
   display_name: null,

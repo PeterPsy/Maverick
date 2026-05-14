@@ -16,6 +16,7 @@ from core.runtime.runtime_threads import (
     update_runtime_thread_availability,
 )
 from core.runtime.errors import RuntimeSessionNotFoundError
+from core.runtime.thread_titles import runtime_thread_title_for_session
 
 if TYPE_CHECKING:
     from core.api.platform_state import PlatformState
@@ -54,18 +55,27 @@ def mark_thread_user_message_queued(
     *,
     workspace_id: str,
     runtime_session_id: str,
+    input_text: object = "",
+    attachments: list[dict[str, object]] | None = None,
+    app_references: list[dict[str, object]] | None = None,
     now: datetime | None = None,
 ) -> RuntimeThreadRecord | None:
     _ensure_thread_for_runtime_session(
         state,
         workspace_id=workspace_id,
         runtime_session_id=runtime_session_id,
+        input_text=input_text,
+        attachments=attachments,
+        app_references=app_references,
         now=now,
     )
     thread = mark_runtime_thread_user_message(
         state.runtime_store,
         workspace_id=workspace_id,
         runtime_session_id=runtime_session_id,
+        input_text=input_text,
+        attachments=attachments,
+        app_references=app_references,
         now=now,
     )
     publish_runtime_thread_catalog_change(
@@ -145,6 +155,9 @@ def _ensure_thread_for_runtime_session(
     *,
     workspace_id: str,
     runtime_session_id: str,
+    input_text: object = "",
+    attachments: list[dict[str, object]] | None = None,
+    app_references: list[dict[str, object]] | None = None,
     now: datetime | None = None,
 ) -> RuntimeThreadRecord | None:
     existing = find_runtime_thread_by_session(
@@ -165,7 +178,13 @@ def _ensure_thread_for_runtime_session(
         workspace_id=workspace_id,
         thread_id=session.session_id,
         runtime_session_id=session.session_id,
-        title=_thread_title_for_session(state, session),
+        title=_thread_title_for_session(
+            state,
+            session,
+            input_text=input_text,
+            attachments=attachments,
+            app_references=app_references,
+        ),
         agent_label=session.agent_id,
         agent_type_id=getattr(session, "agent_type_id", ""),
         agent_role_id=getattr(session, "agent_role_id", ""),
@@ -175,10 +194,18 @@ def _ensure_thread_for_runtime_session(
     )
 
 
-def _thread_title_for_session(state: PlatformState, session) -> str:
-    turns = state.runtime_store.list_turns(session.session_id)
-    for turn in sorted(turns, key=lambda item: item.created_at):
-        title = str(turn.input_text or "").strip()
-        if title:
-            return title[:80]
-    return session.agent_id.strip() or "New chat"
+def _thread_title_for_session(
+    state: PlatformState,
+    session,
+    *,
+    input_text: object = "",
+    attachments: list[dict[str, object]] | None = None,
+    app_references: list[dict[str, object]] | None = None,
+) -> str:
+    return runtime_thread_title_for_session(
+        state.runtime_store,
+        session,
+        input_text=input_text,
+        attachments=attachments,
+        app_references=app_references,
+    )

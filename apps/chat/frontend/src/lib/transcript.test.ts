@@ -124,12 +124,12 @@ describe("runtime event transcript projection", () => {
       event({
         event_id: "final-with-file",
         event_type: "runtime.output.final",
-        payload: { text: "Ho creato [report.md](storage/generated/report.md)." },
+        payload: { text: "I created [report.md](storage/generated/report.md)." },
       }),
     ]);
 
     expect(messages).toMatchObject([
-      { role: "agent", content: "Ho creato [report.md](storage/generated/report.md).", status: "complete" },
+      { role: "agent", content: "I created [report.md](storage/generated/report.md).", status: "complete" },
       {
         id: "turn-1:link-preview:final-with-file:0",
         role: "structured",
@@ -376,7 +376,7 @@ describe("runtime event transcript projection", () => {
       event({
         event_id: "delta-1",
         event_type: "runtime.output.delta",
-        payload: { text: "Controllo i file." },
+        payload: { text: "Checking files." },
         created_at: "2026-04-19T00:00:02.000Z",
       }),
       event({
@@ -389,7 +389,7 @@ describe("runtime event transcript projection", () => {
 
     expect(messages).toMatchObject([
       { id: "turn-1:tools:0", role: "tool", toolCalls: [{ id: "tool-1" }] },
-      { role: "agent", content: "Controllo i file.", status: "pending" },
+      { role: "agent", content: "Checking files.", status: "pending" },
       { id: "turn-1:tools:1", role: "tool", toolCalls: [{ id: "tool-2" }] },
     ]);
   });
@@ -652,7 +652,7 @@ describe("runtime event transcript projection", () => {
       event({
         event_id: "delta-1",
         event_type: "runtime.output.delta",
-        payload: { text: "Uso una ricerca web. " },
+        payload: { text: "Using web search. " },
         created_at: "2026-04-19T00:00:02.000Z",
       }),
       event({
@@ -664,7 +664,7 @@ describe("runtime event transcript projection", () => {
       event({
         event_id: "delta-2",
         event_type: "runtime.output.delta",
-        payload: { text: "Scrivo il report." },
+        payload: { text: "Writing the report." },
         created_at: "2026-04-19T00:00:04.000Z",
       }),
       event({
@@ -676,7 +676,7 @@ describe("runtime event transcript projection", () => {
       event({
         event_id: "final-1",
         event_type: "runtime.output.final",
-        payload: { text: "Uso una ricerca web. Scrivo il report." },
+        payload: { text: "Using web search. Writing the report." },
         created_at: "2026-04-19T00:00:06.000Z",
       }),
     ]);
@@ -690,9 +690,9 @@ describe("runtime event transcript projection", () => {
     ]);
     expect(messages).toMatchObject([
       { role: "tool", toolCalls: [{ id: "tool-1" }] },
-      { role: "agent", content: "Uso una ricerca web. ", status: "complete" },
+      { role: "agent", content: "Using web search. ", status: "complete" },
       { role: "tool", toolCalls: [{ id: "tool-2" }] },
-      { role: "agent", content: "Scrivo il report.", status: "complete" },
+      { role: "agent", content: "Writing the report.", status: "complete" },
       { role: "tool", toolCalls: [{ id: "tool-3" }] },
     ]);
   });
@@ -702,20 +702,20 @@ describe("runtime event transcript projection", () => {
       event({
         event_id: "delta-1",
         event_type: "runtime.output.delta",
-        payload: { text: "Prima parte. " },
+        payload: { text: "First part. " },
         created_at: "2026-04-19T00:00:01.000Z",
       }),
       event({
         event_id: "final-1",
         event_type: "runtime.output.final",
-        payload: { text: "Prima parte. Parte finale." },
+        payload: { text: "First part. Final part." },
         created_at: "2026-04-19T00:00:02.000Z",
       }),
     ]);
 
     expect(messages).toMatchObject([
-      { id: "turn-1:agent:stream:0", role: "agent", content: "Prima parte. ", status: "complete" },
-      { id: "turn-1:agent", role: "agent", content: "Parte finale.", status: "complete" },
+      { id: "turn-1:agent:stream:0", role: "agent", content: "First part. ", status: "complete" },
+      { id: "turn-1:agent", role: "agent", content: "Final part.", status: "complete" },
     ]);
   });
 
@@ -724,20 +724,20 @@ describe("runtime event transcript projection", () => {
       event({
         event_id: "delta-1",
         event_type: "runtime.output.delta",
-        payload: { text: "Prima parte. " },
+        payload: { text: "First part. " },
         created_at: "2026-04-19T00:00:01.000Z",
       }),
       event({
         event_id: "final-1",
         event_type: "runtime.output.final",
-        payload: { text: "Prima parte.\n\nParte finale." },
+        payload: { text: "First part.\n\nFinal part." },
         created_at: "2026-04-19T00:00:02.000Z",
       }),
     ]);
 
     expect(messages).toMatchObject([
-      { id: "turn-1:agent:stream:0", role: "agent", content: "Prima parte. ", status: "complete" },
-      { id: "turn-1:agent", role: "agent", content: "Parte finale.", status: "complete" },
+      { id: "turn-1:agent:stream:0", role: "agent", content: "First part. ", status: "complete" },
+      { id: "turn-1:agent", role: "agent", content: "Final part.", status: "complete" },
     ]);
   });
 
@@ -746,24 +746,24 @@ describe("runtime event transcript projection", () => {
       event({
         event_id: "delta-1",
         event_type: "runtime.output.delta",
-        payload: { text: "Ciao" },
+        payload: { text: "How" },
         created_at: "2026-04-19T00:00:01.000Z",
       }),
       event({
         event_id: "delta-2",
         event_type: "runtime.output.delta",
-        payload: { text: ", come" },
+        payload: { text: " are" },
         created_at: "2026-04-19T00:00:02.000Z",
       }),
       event({
         event_id: "delta-3",
         event_type: "runtime.output.delta",
-        payload: { text: " va?" },
+        payload: { text: " you?" },
         created_at: "2026-04-19T00:00:03.000Z",
       }),
     ]);
 
-    expect(messages).toMatchObject([{ role: "agent", content: "Ciao, come va?", status: "pending" }]);
+    expect(messages).toMatchObject([{ role: "agent", content: "How are you?", status: "pending" }]);
   });
 
   it("projects cancelled turns as system messages", () => {

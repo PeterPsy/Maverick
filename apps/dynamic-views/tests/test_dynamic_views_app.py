@@ -155,6 +155,29 @@ class DynamicViewsAppTestCase(unittest.TestCase):
         self.assertTrue(widget.actions.cli)
         self.assertTrue((DYNAMIC_VIEWS_ROOT / "frontend" / "dist" / "widgets" / "dynamic-view" / "index.html").is_file())
 
+    def test_workspace_frontend_is_viewer_only(self) -> None:
+        main_source = (DYNAMIC_VIEWS_ROOT / "frontend" / "src" / "main.tsx").read_text(encoding="utf-8")
+        details_source = (DYNAMIC_VIEWS_ROOT / "frontend" / "src" / "DynamicViewDetailsDialog.tsx").read_text(encoding="utf-8")
+        source = f"{main_source}\n{details_source}"
+
+        self.assertIn("Views created by Chat and agents will appear here.", source)
+        self.assertIn("Open details for", source)
+        self.assertIn('role="dialog"', source)
+        self.assertNotIn("<aside", main_source)
+        self.assertNotIn("createDynamicView", source)
+        self.assertNotIn("Save View", source)
+        self.assertNotIn("Refresh", source)
+        self.assertNotIn("<textarea", source)
+
+    def test_sidebar_search_uses_library_filter_contract(self) -> None:
+        sidebar_source = (DYNAMIC_VIEWS_ROOT / "frontend" / "src" / "widgets" / "dynamic-views-sidebar" / "main.tsx").read_text(encoding="utf-8")
+        filters_source = (DYNAMIC_VIEWS_ROOT / "frontend" / "src" / "lib" / "dynamicViewSidebarFilters.ts").read_text(encoding="utf-8")
+
+        self.assertIn("preserve_custom: false", sidebar_source)
+        self.assertIn("nextQuery === lastPersistedQueryRef.current", sidebar_source)
+        self.assertIn("queryRef.current.trim()", sidebar_source)
+        self.assertIn("...(query ? { query } : {})", filters_source)
+
     def test_backend_creates_lists_reads_and_deletes_dynamic_view(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             data_root = Path(temp) / "data" / "dynamic-views"
@@ -173,6 +196,70 @@ class DynamicViewsAppTestCase(unittest.TestCase):
             self.assertEqual(listed["json"]["items"][0]["id"], instance_id)
             self.assertEqual(read["json"]["instance"]["title"], "Revenue Probe")
             self.assertEqual(deleted["json"]["deleted"], 1)
+
+    def test_backend_list_supports_sidebar_search_and_selected_refs(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "dynamic-views"
+            revenue_payload = self.sample_create_payload()
+            ops_payload = self.sample_create_payload()
+            ops_payload["payload"]["title"] = "Trend AI 2026: radar operativo"
+            ops_payload["payload"]["summary"] = "People planning for AI trend analysis"
+            ops_payload["payload"]["package"]["tags"] = ["people"]
+            ops_payload["payload"]["dataBindings"] = [
+                {"sourceType": "inline", "sourceRef": "headcount-plan", "snapshot": {"value": 9}}
+            ]
+
+            revenue_id = self.run_backend(data_root=data_root, body=revenue_payload)["json"]["instance"]["id"]
+            ops_id = self.run_backend(data_root=data_root, body=ops_payload)["json"]["instance"]["id"]
+            tag_search = self.run_backend(data_root=data_root, body={"action": "list", "query": "finance"})
+            binding_search = self.run_backend(data_root=data_root, body={"action": "list", "query": "headcount"})
+            token_search = self.run_backend(data_root=data_root, body={"action": "list", "query": "ai trends 2026"})
+            selected_refs = self.run_backend(
+                data_root=data_root,
+                body={
+                    "action": "list",
+                    "refs": [
+                        {"entity_type": "view", "entity_id": revenue_id},
+                        {"entity_type": "view", "entity_id": ops_id},
+                    ],
+                },
+            )
+
+            self.assertEqual([item["id"] for item in tag_search["json"]["items"]], [revenue_id])
+            self.assertEqual([item["id"] for item in binding_search["json"]["items"]], [ops_id])
+            self.assertEqual([item["id"] for item in token_search["json"]["items"]], [ops_id])
+            self.assertEqual([item["id"] for item in selected_refs["json"]["items"]], [revenue_id, ops_id])
+
+    def test_view_filter_search_defaults_to_library_mode_and_can_refine_custom(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "dynamic-views"
+            custom = self.run_backend(
+                data_root=data_root,
+                body={
+                    "action": "set_custom_view",
+                    "title": "Selected views",
+                    "query": "",
+                    "status": "ready",
+                    "refs": [{"entity_type": "view", "entity_id": "view_selected"}],
+                },
+            )
+            refined = self.run_backend(
+                data_root=data_root,
+                body={"action": "set_view_filter", "preserve_custom": True, "query": " finance ", "status": "ready"},
+            )
+            library = self.run_backend(
+                data_root=data_root,
+                body={"action": "set_view_filter", "query": " AI trends ", "status": "all"},
+            )
+
+            self.assertEqual(custom["json"]["state"]["view_filter"]["mode"], "custom")
+            self.assertEqual(refined["json"]["state"]["view_filter"]["mode"], "custom")
+            self.assertEqual(refined["json"]["state"]["view_filter"]["query"], "finance")
+            self.assertEqual(refined["json"]["state"]["view_filter"]["refs"], [{"entity_type": "view", "entity_id": "view_selected"}])
+            self.assertEqual(library["json"]["state"]["view_filter"]["mode"], "search")
+            self.assertEqual(library["json"]["state"]["view_filter"]["query"], "AI trends")
+            self.assertEqual(library["json"]["state"]["view_filter"]["refs"], [])
+            self.assertEqual(library["json"]["state"]["view_filter"]["title"], "")
 
     def test_backend_rejects_blocked_source(self) -> None:
         payload = self.sample_create_payload()

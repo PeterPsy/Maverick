@@ -11,6 +11,7 @@ export type ShellAppRoute = {
 const APP_ROUTE_PREFIX = "/app";
 export const CHAT_APP_ID = "chat";
 export const APP_STORE_APP_ID = "app-store";
+export const SETTINGS_APP_ID = "settings";
 export const TRANSIENT_APP_COMMAND_PARAMS = new Set([
   "new_agent",
   "new_agent_request_id",
@@ -26,11 +27,11 @@ export const TRANSIENT_APP_COMMAND_PARAMS = new Set([
 const NON_URL_APP_PARAMS = new Set(["app_page", "workspace_id", ...TRANSIENT_APP_COMMAND_PARAMS]);
 
 export function shellVisibleApps(apps: AppRegistryItem[]): AppRegistryItem[] {
-  return apps.filter((app) => app.app_id !== "base-shell" && Boolean(app.frontend_mount));
+  return apps.filter(isShellLaunchableApp);
 }
 
 export function shellAppRailApps(apps: AppRegistryItem[], pinnedAppIds: string[]): AppRegistryItem[] {
-  return orderedDesktopRailApps(shellVisibleApps(apps), pinnedAppIds, [APP_STORE_APP_ID]);
+  return orderedDesktopRailApps(shellVisibleApps(apps).filter((app) => app.app_id !== SETTINGS_APP_ID), pinnedAppIds, [APP_STORE_APP_ID]);
 }
 
 export function findRegistryApp(apps: AppRegistryItem[], appId: string | null): AppRegistryItem | null {
@@ -38,7 +39,11 @@ export function findRegistryApp(apps: AppRegistryItem[], appId: string | null): 
     return null;
   }
   const normalizedAppId = appId.toLowerCase();
-  return apps.find((app) => app.app_id.toLowerCase() === normalizedAppId && Boolean(app.frontend_mount)) ?? null;
+  return apps.find((app) => app.app_id.toLowerCase() === normalizedAppId && isShellLaunchableApp(app)) ?? null;
+}
+
+export function isShellLaunchableApp(app: AppRegistryItem): boolean {
+  return app.app_id !== "base-shell" && app.frontend_launchable === true && Boolean(app.frontend_mount);
 }
 
 export function preferredActiveApp(apps: AppRegistryItem[], requestedAppId: string | null): AppRegistryItem | null {

@@ -12,6 +12,7 @@ from core.api.http import json_default
 from core.api.session_api import resolve_request_session
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_threads import ensure_runtime_threads_for_sessions, thread_payload, thread_recency_key
+from core.runtime.thread_titles import runtime_thread_title_for_session
 from core.shared.entrypoints import EntrypointShutdownController
 
 if TYPE_CHECKING:
@@ -125,12 +126,7 @@ def _event_thread_id(event: dict[str, Any]) -> str:
 
 
 def _thread_title_for_session(state: PlatformState, session: RuntimeSessionRecord) -> str:
-    turns = state.runtime_store.list_turns(session.session_id)
-    for turn in sorted(turns, key=lambda item: item.created_at):
-        title = str(turn.input_text or "").strip()
-        if title:
-            return title[:80]
-    return session.agent_id.strip() or "New chat"
+    return runtime_thread_title_for_session(state.runtime_store, session)
 
 
 async def stream_runtime_thread_events(

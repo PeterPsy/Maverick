@@ -602,7 +602,7 @@ The first shell-facing API slice is intentionally core-generic, not `base-shell`
 - `/api/status` exposes platform status for the active workspace
 - `/api/providers/active` and `/api/runtime/status` expose active runtime provider and runtime sessions
 - `/api/settings/platform` exposes read-only platform/workspace/provider/runtime/recovery metadata for settings UI
-- `/api/settings/runtime-sessions` and `/api/settings/runtime-sessions/clear` expose the runtime-session inventory in the cleanup scope of the active workspace and the cleanup action used by shell settings workflows
+- `/api/settings/runtime-sessions` and `/api/settings/runtime-sessions/clear` expose the runtime-session inventory in the cleanup scope of the active workspace and the cleanup action used by app-owned settings workflows
 - when the active workspace is `default`, only a platform admin may use settings cleanup and the scope expands to every workspace on the server
 - when the active workspace is not `default`, cleanup stays limited to that active workspace and is available to platform admins plus admins of that workspace
 - cleanup is destructive by design: it terminates provider processes, cancels queued or active turns, removes runtime-session records, turns, events, core-owned state, and the runtime session filesystem root, then invokes app-declared cleanup hooks for app-owned data linked to that runtime session
@@ -616,7 +616,7 @@ When `/api/settings/platform` reports `active_provider: null`, `base-shell` may 
 
 Admin-facing apps must still stay app-agnostic at the core boundary.
 
-For example, a `user-admin` app may provide the UI for creating users, resetting a user's password, changing platform roles, and assigning users to workspaces, but the records remain owned by the core identity and workspace governance domains.
+For example, a `settings` app may provide the UI for creating users, resetting a user's password, changing platform roles, and assigning users to workspaces, but the records remain owned by the core identity and workspace governance domains.
 
 Admin app visibility is enforced through generic app contract visibility metadata, not through app-specific branches in the core.
 
@@ -667,8 +667,8 @@ The completed `base-shell` implementation intentionally carries only shell-owned
 - registry-driven app catalog and mounted app iframe surfaces
 - login/session UI backed by core identity/session APIs
 - workspace selector backed by core workspace APIs
-- provider/runtime indicators backed by core provider/runtime APIs
-- Tutorial and Settings dialogs backed by currently available core metadata
+- provider setup gating backed by core provider/runtime APIs
+- a registry-gated Settings shortcut that opens the app-owned `settings` frontend instead of rendering settings UI inside the shell
 
 It must not absorb chat project buttons, chat orchestration, retrieval settings, push notifications, or app-specific backend controls into `base-shell`.
 
@@ -736,7 +736,7 @@ For example, `chat` may accept `{ "new_chat": true }` from a shell widget, but t
 The shell must deliver one-shot command params through the app navigation message and must not persist them in the user-facing `/app/<app_id>` URL.
 Current transient command params include `new_chat`, `new_chat_request_id`, `new_agent`, `new_agent_request_id`, `new_skill`, `new_skill_request_id`, `new_node`, `new_node_request_id`, `preview_context`, and `preview_context_request_id`.
 
-Creating a new empty chat thread must not preallocate or start a runtime session. A runtime session is created only when the first user message or an explicit runtime-session handoff requires execution.
+Creating a new empty chat thread must not preallocate or start a runtime session. A runtime session is created only when the first user message or an explicit runtime-session handoff requires execution. For a draft chat's first user message, Chat must create the runtime session and queue the first turn in one runtime request before doing route/catalog work that is not required to persist the message; default title derivation is follow-on thread metadata from the queued message and must not be a prerequisite for starting the turn.
 
 When the `agents` app is installed and enabled in the active workspace, `chat` may use the Agents backend surface to initialize a new empty chat with the workspace common prompt. This is an app-to-app use of an official app backend surface, not a core dependency: the core must not read Agents data, parse role files, or special-case the Chat/Agents relationship.
 
@@ -827,6 +827,8 @@ An app may need to serve:
 This is the intended target model.
 
 The real value of an app is not only that it renders a screen.
+
+The core distinguishes frontend asset serving from frontend launchability. `entrypoints.frontend` means the platform can mount and serve an app's frontend artifact, while `presentation.frontend_role` says whether that frontend is a user-openable workspace app (`workspace`) or a supporting platform/plugin surface (`supporting`). Registry and App Store payloads expose the derived `frontend_launchable` flag so shells and shortcut widgets do not hardcode app ids when deciding what can be opened or pinned.
 
 The real value is that it extends the platform for both:
 

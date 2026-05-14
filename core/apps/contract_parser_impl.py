@@ -16,6 +16,7 @@ from core.apps.contract_parser_metadata import (
     parse_health_contract_section,
     parse_hook_timeouts_section,
     parse_lifecycle_section,
+    parse_presentation_section,
     parse_rollback_support_section,
     parse_visibility_section,
 )
@@ -45,6 +46,7 @@ ROOT_FIELDS = {
     "requires",
     "distribution",
     "visibility",
+    "presentation",
     "permissions",
     "capabilities",
     "entrypoints",
@@ -98,6 +100,10 @@ def parse_app_contract_file(source_root: Path) -> ParsedAppContract:
             requires=parse_required_interfaces(root),
             distribution=parse_distribution_section(_expect_mapping(root.get("distribution", {}), label="distribution")),
             visibility=parse_visibility_section(_expect_mapping(root.get("visibility", {}), label="visibility")),
+            presentation=parse_presentation_section(
+                _expect_mapping(root.get("presentation", {}), label="presentation"),
+                has_frontend_entrypoint=entrypoints.frontend is not None,
+            ),
             permissions=parse_permissions_section(_expect_mapping(root.get("permissions", {}), label="permissions")),
             compatibility=compatibility,
             storage=parse_storage_section(_expect_mapping(root.get("storage", {}), label="storage"), app_id=app_id),

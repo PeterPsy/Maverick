@@ -8,11 +8,12 @@ from pathlib import Path
 from core.api.platform_state import PlatformState
 from core.api.session_api import RequestSession
 from core.apps.models import WorkspaceLocalAppProjectRecord
+from core.apps.presentation import app_frontend_is_launchable
 from core.apps.workspace_local_discovery import discover_workspace_local_app_projects
 
 
 from core.api.app_store_payloads import _invalid_local_project_visible_for_context, _local_project_visible_for_context
-from core.api.app_store_visibility import _can_manage_workspace_apps, _workspace_membership
+from core.api.app_store_visibility import _can_manage_workspace_apps, _source_surface_labels, _workspace_membership
 
 def _local_apps_payload(state: PlatformState, context: RequestSession, workspace_ids: list[str], *, start_path: Path) -> list[dict[str, object]]:
     items = []
@@ -42,6 +43,10 @@ def _local_apps_payload(state: PlatformState, context: RequestSession, workspace
                         "publisher": "workspace",
                         "project_root": invalid.project_root,
                         "distribution": {"mode": "workspace_local", "source_access": "editable"},
+                        "presentation": {"frontend_role": "none"},
+                        "frontend_role": "none",
+                        "frontend_launchable": False,
+                        "surfaces": [],
                         "installed": False,
                         "status": "invalid",
                         "active_version": None,
@@ -67,6 +72,10 @@ def _local_apps_payload(state: PlatformState, context: RequestSession, workspace
                     "publisher": project.publisher,
                     "project_root": project.project_root,
                     "distribution": asdict(project.contract.distribution),
+                    "presentation": asdict(project.contract.presentation),
+                    "frontend_role": project.contract.presentation.frontend_role,
+                    "frontend_launchable": app_frontend_is_launchable(project.contract),
+                    "surfaces": _source_surface_labels(project.contract),
                     "installed": binding is not None,
                     "status": binding.status if binding else "uninstalled",
                     "active_version": binding.active_version if binding else None,

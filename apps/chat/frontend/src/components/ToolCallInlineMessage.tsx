@@ -275,7 +275,7 @@ function formatToolTime(value: string): string {
   if (Number.isNaN(parsed.getTime())) {
     return "";
   }
-  return new Intl.DateTimeFormat("it-IT", {
+  return new Intl.DateTimeFormat("en-US", {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",

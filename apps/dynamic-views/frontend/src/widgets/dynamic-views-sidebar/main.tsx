@@ -4,21 +4,26 @@ import { callBackend, listDynamicViews } from '../../api';
 import { useShellSidebarCloseSwipe } from '../../hooks/useShellSidebarCloseSwipe';
 import { dynamicViewIdFromSelectionMessage, type ActiveDynamicViewSelectionMessage } from '../../lib/activeDynamicViewSelection';
 import { dynamicViewIdFromWidgetContext } from '../../lib/dynamicViewNavigationParams';
+import {
+  DEFAULT_VIEW_FILTER,
+  listOptionsFromFilter,
+  selectedViewIdsFromFilter,
+  viewMatchesSearch,
+  type ViewFilter
+} from '../../lib/dynamicViewSidebarFilters';
 import type { DynamicViewInstance } from '../../types';
 import '../../styles/sidebar-widget.css';
 
 const MOBILE_LAYOUT_QUERY = '(max-width: 979px)';
 
-type ViewFilter = {
-  mode?: string;
-  query?: string;
-  status?: string;
-};
-
 type ViewFilterPayload = {
   state?: {
     view_filter?: ViewFilter;
   };
+};
+
+type RefreshViewFilterOptions = {
+  syncQuery?: boolean;
 };
 
 function isMobileLayoutViewport() {
@@ -74,20 +79,19 @@ function openDynamicViewInShell(viewId: string) {
   }
 }
 
-function viewMatchesSearch(view: DynamicViewInstance, query: string) {
-  if (!query) return true;
-  return `${view.title} ${view.summary} ${view.id} ${view.snapshot_mode}`.toLowerCase().includes(query);
-}
-
 function DynamicViewsSidebarWidget() {
   const [items, setItems] = useState<DynamicViewInstance[]>([]);
   const [query, setQuery] = useState('');
   const [selectedViewId, setSelectedViewId] = useState('');
+  const [viewFilter, setViewFilter] = useState<ViewFilter>(DEFAULT_VIEW_FILTER);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const isShellMobileLayout = useShellMobileLayout();
   const lastPersistedQueryRef = useRef('');
   const hasLoadedViewStateRef = useRef(false);
+  const queryRef = useRef('');
+  const saveRequestSeqRef = useRef(0);
+  const viewFilterRef = useRef<ViewFilter>(DEFAULT_VIEW_FILTER);
 
   useShellSidebarCloseSwipe(isShellMobileLayout);
 
@@ -96,8 +100,13 @@ function DynamicViewsSidebarWidget() {
     return items.filter((item) => viewMatchesSearch(item, needle));
   }, [items, query]);
 
-  async function refreshViews() {
-    const payload = await listDynamicViews();
+  async function refreshViews(filter: ViewFilter = viewFilterRef.current) {
+    if (filter.mode === 'custom' && !selectedViewIdsFromFilter(filter).length) {
+      setItems([]);
+      setSelectedViewId('');
+      return;
+    }
+    const payload = await listDynamicViews(listOptionsFromFilter(filter));
     setItems(payload.items);
     setSelectedViewId((current) => {
       if (current && payload.items.some((item) => item.id === current)) {
@@ -107,17 +116,28 @@ function DynamicViewsSidebarWidget() {
     });
   }
 
-  async function refreshViewFilter() {
+  function rememberViewFilter(nextFilter: ViewFilter) {
+    viewFilterRef.current = nextFilter;
+    setViewFilter(nextFilter);
+  }
+
+  async function refreshViewFilter(options: RefreshViewFilterOptions = {}) {
     const payload = await callBackend<ViewFilterPayload>({ action: 'view_filter' });
-    const nextQuery = payload.state?.view_filter?.query || '';
+    const nextFilter = payload.state?.view_filter || DEFAULT_VIEW_FILTER;
+    const nextQuery = nextFilter.query || '';
     lastPersistedQueryRef.current = nextQuery;
     hasLoadedViewStateRef.current = true;
-    setQuery(nextQuery);
+    rememberViewFilter(nextFilter);
+    if (options.syncQuery !== false) {
+      setQuery(nextQuery);
+    }
+    return nextFilter;
   }
 
   async function refreshAll() {
     try {
-      await Promise.all([refreshViews(), refreshViewFilter()]);
+      const nextFilter = await refreshViewFilter();
+      await refreshViews(nextFilter);
       setError(null);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load dynamic views.');
@@ -131,20 +151,45 @@ function DynamicViewsSidebarWidget() {
   }, []);
 
   useEffect(() => {
-    if (!hasLoadedViewStateRef.current || query === lastPersistedQueryRef.current) {
+    viewFilterRef.current = viewFilter;
+  }, [viewFilter]);
+
+  useEffect(() => {
+    queryRef.current = query;
+  }, [query]);
+
+  useEffect(() => {
+    const nextQuery = query.trim();
+    if (!hasLoadedViewStateRef.current || nextQuery === lastPersistedQueryRef.current) {
       return;
     }
     const timeout = window.setTimeout(() => {
-      const nextQuery = query.trim();
-      callBackend<ViewFilterPayload>({ action: 'set_view_filter', query: nextQuery, status: 'all' })
-        .then(() => {
+      const requestSeq = saveRequestSeqRef.current + 1;
+      saveRequestSeqRef.current = requestSeq;
+      callBackend<ViewFilterPayload>({
+        action: 'set_view_filter',
+        preserve_custom: false,
+        query: nextQuery,
+        status: viewFilter.status || 'all'
+      })
+        .then((payload) => {
+          if (requestSeq !== saveRequestSeqRef.current || nextQuery !== queryRef.current.trim()) {
+            return;
+          }
+          const nextFilter = payload.state?.view_filter || { ...viewFilter, query: nextQuery };
+          rememberViewFilter(nextFilter);
           lastPersistedQueryRef.current = nextQuery;
           setError(null);
+          void refreshViews(nextFilter).catch((loadError: Error) => setError(loadError.message));
         })
-        .catch((saveError: Error) => setError(saveError.message));
+        .catch((saveError: Error) => {
+          if (requestSeq === saveRequestSeqRef.current && nextQuery === queryRef.current.trim()) {
+            setError(saveError.message);
+          }
+        });
     }, 250);
     return () => window.clearTimeout(timeout);
-  }, [query]);
+  }, [query, viewFilter.status]);
 
   useEffect(() => {
     function handleShellMessage(event: MessageEvent) {
@@ -178,7 +223,15 @@ function DynamicViewsSidebarWidget() {
         void refreshViews();
       }
       if (payload.resource === 'view-state') {
-        void refreshViewFilter();
+        const hasLocalQueryChange = queryRef.current.trim() !== lastPersistedQueryRef.current;
+        void refreshViewFilter({ syncQuery: !hasLocalQueryChange })
+          .then((nextFilter) => {
+            if (!hasLocalQueryChange) {
+              return refreshViews(nextFilter);
+            }
+            return undefined;
+          })
+          .catch((loadError: Error) => setError(loadError.message));
       }
     }
 
@@ -225,7 +278,9 @@ function DynamicViewsSidebarWidget() {
             </button>
           ))
         ) : (
-          <p className="dynamic-views-sidebar-empty">No dynamic views found.</p>
+          <p className="dynamic-views-sidebar-empty">
+            {viewFilter.mode === 'custom' && !query.trim() ? 'No selected dynamic views available.' : 'No dynamic views found.'}
+          </p>
         )}
       </div>
     </main>

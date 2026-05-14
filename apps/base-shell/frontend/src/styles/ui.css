@@ -180,8 +180,7 @@
   font-size: 1.2rem;
 }
 
-.bs-dialog-grid,
-.bs-settings-list {
+.bs-dialog-grid {
   display: grid;
   gap: 0.75rem;
 }
@@ -190,17 +189,8 @@
   grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
 }
 
-.bs-dialog-grid .bs-ui-surface,
-.bs-settings-list .bs-ui-surface {
+.bs-dialog-grid .bs-ui-surface {
   padding: 0.9rem;
-}
-
-.bs-settings-provider-form {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(8rem, 0.55fr) auto;
-  gap: 0.65rem;
-  align-items: end;
-  margin-top: 0.85rem;
 }
 
 .bs-settings-field {
@@ -237,98 +227,6 @@
   color: #ffb3bf;
   font-size: 0.76rem;
   line-height: 1.35;
-}
-
-.bs-runtime-session-panel {
-  margin-top: 0.85rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  padding-top: 0.75rem;
-}
-
-.bs-runtime-session-panel summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  cursor: pointer;
-  color: var(--maverick-text);
-  font-size: 0.82rem;
-  font-weight: 800;
-}
-
-.bs-runtime-session-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-  align-items: center;
-  margin-top: 0.75rem;
-}
-
-.bs-runtime-session-progress {
-  display: inline-flex;
-  gap: 0.45rem;
-  align-items: center;
-  color: var(--maverick-text-muted);
-  font-size: 0.75rem;
-}
-
-.bs-runtime-session-progress progress {
-  width: 8rem;
-  height: 0.55rem;
-}
-
-.bs-runtime-session-list {
-  display: grid;
-  gap: 0.55rem;
-  margin-top: 0.75rem;
-}
-
-.bs-runtime-session-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.75rem;
-  align-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 0.7rem;
-  padding: 0.65rem;
-  background: rgba(255, 255, 255, 0.035);
-}
-
-.bs-runtime-session-main {
-  display: grid;
-  gap: 0.22rem;
-  min-width: 0;
-}
-
-.bs-runtime-session-main strong,
-.bs-runtime-session-main span,
-.bs-runtime-session-main code {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.bs-runtime-session-main strong {
-  font-size: 0.82rem;
-}
-
-.bs-runtime-session-main span {
-  color: var(--maverick-text-muted);
-  font-size: 0.74rem;
-}
-
-.bs-runtime-session-main code {
-  color: var(--maverick-text-soft);
-  font-size: 0.7rem;
-}
-
-@media (max-width: 720px) {
-  .bs-settings-provider-form {
-    grid-template-columns: 1fr;
-  }
-
-  .bs-runtime-session-row {
-    grid-template-columns: 1fr;
-  }
 }
 
 .bs-login {
@@ -399,7 +297,7 @@
 }
 
 .bs-login__brand-mark {
-  width: 2.15rem;
+  width: 4.3rem;
   height: auto;
 }
 
@@ -472,7 +370,7 @@
   overflow: hidden;
   color: var(--bs-login-muted);
   font-size: 0.82rem;
-  font-weight: 750;
+  font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -496,7 +394,7 @@
   z-index: 2;
   color: var(--bs-login-muted);
   font-size: 0.74rem;
-  font-weight: 750;
+  font-weight: 400;
   opacity: 0;
   transform: translateY(0.35rem);
   transition: opacity 260ms ease, transform 260ms ease;
@@ -656,7 +554,7 @@
   opacity: 0;
   color: rgba(255, 247, 250, 0.9);
   font-size: 0.82rem;
-  font-weight: 800;
+  font-weight: 400;
   white-space: nowrap;
   transition: min-width 300ms ease, opacity 300ms ease, padding 300ms ease, color 200ms ease, transform 200ms ease, background 200ms ease;
 }
@@ -711,7 +609,7 @@ button.bs-glass-field__action:not(:disabled) {
   background: transparent;
   color: rgba(255, 247, 250, 0.72);
   font-size: 0.86rem;
-  font-weight: 700;
+  font-weight: 400;
   transition: color 180ms ease, transform 180ms ease;
 }
 
@@ -733,7 +631,7 @@ button.bs-glass-field__action:not(:disabled) {
   background: rgba(120, 12, 30, 0.34);
   color: var(--bs-login-foreground);
   font-size: 0.82rem;
-  font-weight: 700;
+  font-weight: 400;
   text-align: center;
   text-shadow: 0 1px 10px rgba(0, 0, 0, 0.18);
 }
@@ -783,7 +681,7 @@ button.bs-glass-field__action:not(:disabled) {
 
 @media (max-width: 640px) {
   .bs-login__brand-mark {
-    width: 1.9rem;
+    width: 3.8rem;
   }
 
   .bs-login__headline {
@@ -841,36 +739,6 @@ button.bs-glass-field__action:not(:disabled) {
   .bs-login__back {
     transition: none;
   }
-}
-
-.bs-settings-flags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-}
-
-.bs-settings-flag,
-.bs-settings-logout {
-  border-radius: 999px;
-  font-size: 0.72rem;
-  font-weight: 750;
-}
-
-.bs-settings-flag {
-  padding: 0.35rem 0.62rem;
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--maverick-text-muted);
-}
-
-.bs-settings-flag.is-on {
-  background: rgba(51, 210, 137, 0.13);
-  color: #9ff0ca;
-}
-
-.bs-settings-logout {
-  min-height: 2.3rem;
-  background: rgba(255, 83, 105, 0.14);
-  color: #ffb3bf;
 }
 
 @keyframes bs-spin {

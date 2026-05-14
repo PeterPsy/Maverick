@@ -19,6 +19,7 @@ from core.apps.models import (
     AppLifecycleDeclaration,
     AppNetworkPermissionDeclaration,
     AppPermissionsDeclaration,
+    AppPresentationDeclaration,
     AppProvidedInterfaceDeclaration,
     AppReferenceEntityDeclaration,
     AppRequiredInterfaceDeclaration,
@@ -156,6 +157,13 @@ def build_app_distribution(
         mode=mode,
         source_access=source_access,
     )
+
+def build_app_presentation(
+    *,
+    frontend_role: str = "none",
+) -> AppPresentationDeclaration:
+    """Build one app presentation declaration for shell-facing UI semantics."""
+    return AppPresentationDeclaration(frontend_role=frontend_role)
 
 def build_app_permissions(
     *,
@@ -330,6 +338,7 @@ def build_app_contract(
     requires: list[AppRequiredInterfaceDeclaration] | None = None,
     distribution: AppDistributionDeclaration | None = None,
     visibility: AppVisibilityDeclaration | None = None,
+    presentation: AppPresentationDeclaration | None = None,
     permissions: AppPermissionsDeclaration | None = None,
     compatibility: AppCompatibilityDescriptor | None = None,
     storage: AppStorageDeclaration | None = None,
@@ -343,17 +352,22 @@ def build_app_contract(
     widgets: list[WidgetDeclaration] | None = None,
 ) -> AppContractDescriptor:
     """Build an executable app contract descriptor."""
+    resolved_entrypoints = entrypoints or build_app_entrypoints()
+    resolved_presentation = presentation or build_app_presentation(
+        frontend_role="workspace" if resolved_entrypoints.frontend else "none"
+    )
     return AppContractDescriptor(
         provides=provides or [],
         requires=requires or [],
         distribution=distribution or build_app_distribution(),
         visibility=visibility or AppVisibilityDeclaration(platform_roles=None, workspace_roles=None, capabilities=None),
+        presentation=resolved_presentation,
         permissions=permissions or build_app_permissions(),
         compatibility=compatibility or build_app_compatibility(),
         storage=storage or build_app_storage(),
         capabilities=capabilities or build_app_capabilities(),
         lifecycle=lifecycle or build_app_lifecycle(),
-        entrypoints=entrypoints or build_app_entrypoints(),
+        entrypoints=resolved_entrypoints,
         hook_timeouts=hook_timeouts or build_app_hook_timeouts(),
         failure_semantics=failure_semantics or build_app_failure_semantics(),
         health_contract=health_contract or build_app_health_contract(),

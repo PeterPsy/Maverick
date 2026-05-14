@@ -10,6 +10,7 @@ const APP_EVENTS_WS_PATH = "/api/apps/events/ws";
 type AppReadyMessage = {
   app_id?: string;
   deleted_thread_id?: string;
+  detail?: Record<string, unknown>;
   owner_app_id?: string;
   params?: Record<string, string | boolean | null>;
   resource?: string;
@@ -17,6 +18,7 @@ type AppReadyMessage = {
   workspace_id?: string;
 };
 type AppEventMessage = {
+  detail?: Record<string, unknown>;
   owner_app_id?: string;
   resource?: string;
   type?: string;
@@ -224,6 +226,7 @@ export function AppFrameHost({
             ownerFrame,
             {
               type: "maverick.app.data-changed",
+              ...(payload.detail && typeof payload.detail === "object" ? { detail: payload.detail } : {}),
               owner_app_id: payload.owner_app_id,
               resource: payload.resource || "",
               deleted_thread_id: payload.deleted_thread_id || "",

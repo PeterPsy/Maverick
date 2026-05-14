@@ -180,8 +180,8 @@
       }
     },
     {
-      "app_id": "user-admin",
-      "package_name": "@maverick/user-admin",
+      "app_id": "settings",
+      "package_name": "@maverick/settings",
       "version": "0.1.0",
       "private": true,
       "dependencies": {

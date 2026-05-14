@@ -732,7 +732,7 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
         self.assertIsNotNone(thread)
         assert thread is not None
         self.assertEqual(thread.thread_id, session.session_id)
-        self.assertEqual(thread.title, "work on this")
+        self.assertEqual(thread.title, "Work On This")
         self.assertEqual(thread.availability, "queued")
         self.assertEqual(thread.last_user_message_at, turn.created_at)
         self.assertEqual(event_bus.events[-1]["thread"]["availability"], "queued")

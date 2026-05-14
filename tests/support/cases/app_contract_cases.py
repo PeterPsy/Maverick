@@ -17,6 +17,7 @@ from core.apps.contracts import (
     build_app_hook_timeouts,
     build_app_lifecycle,
     build_app_permissions,
+    build_app_presentation,
     build_reference_entity_declaration,
     build_app_storage,
     build_parsed_app_contract,
@@ -206,6 +207,63 @@ class AppContractTestCase(unittest.TestCase):
             self.assertEqual(loaded.contract.permissions.network.outbound, ["api.vendor.example"])
             self.assertTrue(loaded.contract.permissions.runtime.cleanup_sessions)
             self.assertTrue(loaded.contract.permissions.host.telemetry)
+
+    def test_parse_contract_preserves_frontend_presentation_role(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            app_root = Path(temp_dir) / "apps" / "supporting-tool"
+            (app_root / "frontend" / "dist").mkdir(parents=True, exist_ok=True)
+            parsed = build_parsed_app_contract(
+                app_id="supporting-tool",
+                name="Supporting Tool",
+                version="1.0.0",
+                description="Tool with mounted supporting frontend assets.",
+                publisher="vendor",
+                contract=build_app_contract(
+                    presentation=build_app_presentation(frontend_role="supporting"),
+                    entrypoints=build_app_entrypoints(frontend="frontend/dist"),
+                ),
+            )
+            write_app_contract_file(app_root, parsed)
+
+            loaded = parse_app_contract_file(app_root)
+
+            self.assertEqual(loaded.contract.presentation.frontend_role, "supporting")
+            self.assertEqual(app_contract_payload(loaded)["presentation"], {"frontend_role": "supporting"})
+
+    def test_parse_contract_rejects_frontend_role_without_matching_entrypoint(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            app_root = Path(temp_dir) / "apps" / "bad-presentation"
+            parsed = build_parsed_app_contract(
+                app_id="bad-presentation",
+                name="Bad Presentation",
+                version="1.0.0",
+                description="Invalid presentation contract.",
+                publisher="vendor",
+                contract=build_app_contract(
+                    presentation=build_app_presentation(frontend_role="supporting"),
+                ),
+            )
+            write_app_contract_file(app_root, parsed)
+
+            with self.assertRaisesRegex(AppContractValidationError, "frontend role requires"):
+                parse_app_contract_file(app_root)
+
+            (app_root / "frontend" / "dist").mkdir(parents=True, exist_ok=True)
+            parsed = build_parsed_app_contract(
+                app_id="bad-presentation",
+                name="Bad Presentation",
+                version="1.0.0",
+                description="Invalid presentation contract.",
+                publisher="vendor",
+                contract=build_app_contract(
+                    presentation=build_app_presentation(frontend_role="none"),
+                    entrypoints=build_app_entrypoints(frontend="frontend/dist"),
+                ),
+            )
+            write_app_contract_file(app_root, parsed)
+
+            with self.assertRaisesRegex(AppContractValidationError, "must use frontend_role workspace or supporting"):
+                parse_app_contract_file(app_root)
 
     def test_parse_contract_rejects_unknown_root_and_section_fields(self) -> None:
         with TemporaryDirectory() as temp_dir:

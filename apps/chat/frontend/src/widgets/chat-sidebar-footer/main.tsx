@@ -5,7 +5,7 @@ import { useRuntimeThreads } from "../../hooks/useRuntimeThreads";
 import "./styles.css";
 
 const DEFAULT_APP_ID = "chat";
-const PRIMARY_ACTION_LABEL = "Nuova chat";
+const PRIMARY_ACTION_LABEL = "New chat";
 const WIDGET_ID = "chat-sidebar-footer";
 
 function notifyShell(appId: string, projectId: string | null) {
@@ -98,14 +98,14 @@ function ChatSidebarFooterWidget() {
   return (
     <main className="bs-chat-sidebar-footer-widget">
       <button
-        aria-label="Nuova chat"
+        aria-label="New chat"
         className="bs-chat-sidebar-footer__new-chat"
         disabled={isInitialLoading}
         onClick={createChatInCurrentContext}
         type="button"
       >
         <span aria-hidden="true" className="bs-chat-sidebar-footer__plus" />
-        <span>Nuova chat</span>
+        <span>New chat</span>
       </button>
     </main>
   );

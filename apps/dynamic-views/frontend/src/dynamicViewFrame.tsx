@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DynamicViewPayload } from './types';
 
-const MIN_HEIGHT = 260;
-const DEFAULT_HEIGHT = 420;
-const MAX_HEIGHT = 960;
+const MIN_HEIGHT = 1;
+const DEFAULT_HEIGHT = 1;
 const RESIZE_EVENT = 'maverick.dynamic_view.resize';
 
 const HOST_CSS = `
@@ -37,7 +36,7 @@ pre, code {
 
 function clampHeight(value: number) {
   if (!Number.isFinite(value)) return DEFAULT_HEIGHT;
-  return Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, Math.round(value)));
+  return Math.max(MIN_HEIGHT, Math.ceil(value));
 }
 
 export function buildSrcDoc(payload: DynamicViewPayload, frameId: string) {
@@ -67,10 +66,19 @@ export function buildSrcDoc(payload: DynamicViewPayload, frameId: string) {
     '<script>',
     `window.MaverickDynamicView = ${runtimePayload};`,
     "const maverickFrameId = window.MaverickDynamicView?.metadata?.frameId || '';",
-    'function reportMaverickDynamicViewHeight() {',
+    'function maverickDynamicViewContentHeight() {',
     '  const doc = document.documentElement;',
     '  const body = document.body;',
-    '  const height = Math.max(doc?.scrollHeight || 0, doc?.offsetHeight || 0, body?.scrollHeight || 0, body?.offsetHeight || 0);',
+    '  const bodyTop = body?.getBoundingClientRect?.().top || 0;',
+    "  const elementBottom = Array.from(body?.querySelectorAll('*') || []).reduce(function(max, element) {",
+    '    const rect = element.getBoundingClientRect();',
+    '    return Math.max(max, rect.bottom - bodyTop);',
+    '  }, 0);',
+    '  const fallbackHeight = Math.max(body?.scrollHeight || 0, body?.offsetHeight || 0, doc?.scrollHeight || 0);',
+    '  return elementBottom > 0 ? elementBottom : fallbackHeight;',
+    '}',
+    'function reportMaverickDynamicViewHeight() {',
+    '  const height = maverickDynamicViewContentHeight();',
     "  window.parent?.postMessage({ type: 'maverick.dynamic_view.resize', frameId: maverickFrameId, height }, '*');",
     '}',
     "window.addEventListener('error', function(event) {",
@@ -110,5 +118,15 @@ export function DynamicViewFrame({ payload, title }: { payload: DynamicViewPaylo
     return () => window.removeEventListener('message', handleMessage);
   }, [frameId]);
 
-  return <iframe ref={iframeRef} className="dynamic-view-frame" sandbox="allow-scripts" srcDoc={srcDoc} style={{ height }} title={title || payload.title} />;
+  return (
+    <iframe
+      ref={iframeRef}
+      className="dynamic-view-frame"
+      sandbox="allow-scripts"
+      scrolling="no"
+      srcDoc={srcDoc}
+      style={{ height }}
+      title={title || payload.title}
+    />
+  );
 }

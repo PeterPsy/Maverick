@@ -20,7 +20,6 @@ from store_files_records import (
     create_folder_payload,
     delete_folder_payload,
     file_info_payload,
-    move_file_payload,
     preview_table_payload,
     preview_text_payload,
     read_folder_payload,
@@ -28,6 +27,7 @@ from store_files_records import (
     update_markdown_file_payload,
     upload_file_payload,
 )
+from store_files_moves import move_file_payload, move_folder_payload, move_items_payload
 from store_files_view import (
     clear_custom_view_payload,
     load_state,
@@ -51,6 +51,8 @@ __all__ = [
     "list_folders",
     "load_state",
     "move_file_payload",
+    "move_folder_payload",
+    "move_items_payload",
     "preview_table_payload",
     "preview_text_payload",
     "read_file_payload",

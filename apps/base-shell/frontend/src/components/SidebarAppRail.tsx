@@ -3,7 +3,7 @@ import type { MouseEvent as ReactMouseEvent } from "react";
 import type { AppRegistryItem } from "../api";
 import { useSidebarRailReorder, type ActiveRailReorder } from "../hooks/useSidebarRailReorder";
 import { reorderByTargetIndex } from "../lib/sidebarRailReorder";
-import { APP_STORE_APP_ID } from "../navigation";
+import { APP_STORE_APP_ID, SETTINGS_APP_ID } from "../navigation";
 import { AppLogo } from "./AppLogo";
 
 export function SidebarAppRail({
@@ -16,6 +16,7 @@ export function SidebarAppRail({
   onOpenSettings,
   onReorderPinnedApps,
   onReorderActiveChange,
+  settingsApp,
 }: {
   activeAppId: string | null;
   appsToRender: AppRegistryItem[];
@@ -26,6 +27,7 @@ export function SidebarAppRail({
   onOpenSettings: () => void;
   onReorderActiveChange?: (active: boolean) => void;
   onReorderPinnedApps: (appIds: string[]) => void;
+  settingsApp: AppRegistryItem | null;
 }) {
   const reorderableRailAppIds = appsToRender.filter((app) => isDesktopRailReorderableApp(app.app_id)).map((app) => app.app_id);
   const canReorder = enableReorder && reorderableRailAppIds.length > 1;
@@ -110,20 +112,23 @@ export function SidebarAppRail({
             </div>
           );
         })}
-        <div className="bs-sidebar__rail-item" role="listitem">
-          <button
-            aria-label="Settings"
-            className="bs-sidebar__rail-button"
-            onClick={onOpenSettings}
-            title="Settings"
-            type="button"
-          >
-            <span className="bs-app-logo is-glyph bs-app-logo--rail">
-              <span aria-hidden="true" className="material-symbols-rounded">settings</span>
-            </span>
-            <span className="bs-sidebar__rail-tooltip" role="tooltip">Settings</span>
-          </button>
-        </div>
+        {settingsApp ? (
+          <div className="bs-sidebar__rail-item" role="listitem">
+            <button
+              aria-current={activeAppId === SETTINGS_APP_ID ? "page" : undefined}
+              aria-label={settingsApp.name}
+              className={sidebarRailButtonClassName(SETTINGS_APP_ID, activeAppId)}
+              onClick={onOpenSettings}
+              title={settingsApp.name}
+              type="button"
+            >
+              <span className="bs-app-logo is-glyph bs-app-logo--rail">
+                <span aria-hidden="true" className="material-symbols-rounded">settings</span>
+              </span>
+              <span className="bs-sidebar__rail-tooltip" role="tooltip">{settingsApp.name}</span>
+            </button>
+          </div>
+        ) : null}
         <span className="bs-sidebar__rail-status" aria-live="polite">{keyboardReorderStatus}</span>
       </div>
     </>

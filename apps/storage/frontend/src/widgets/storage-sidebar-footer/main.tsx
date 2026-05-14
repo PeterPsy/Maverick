@@ -5,6 +5,7 @@ import { Check, FolderPlus, Upload, X } from 'lucide-react';
 import { createFolder, currentStorageAppId, loadCatalog, uploadFile } from '../../storageApi';
 import { roleLabels } from '../../storageMeta';
 import { storageSelectionFromMessage, type ActiveStorageSelectionMessage } from '../../lib/activeStorageSelection';
+import { applyStorageFoldersDelta } from '../../lib/storageCatalogDelta';
 import { storageTargetFromWidgetContext, type StorageNavigationTarget } from '../../lib/storageNavigationParams';
 import type { FileRole, StorageFolder } from '../../types';
 import '../../styles/sidebar-widget.css';
@@ -119,6 +120,10 @@ function StorageSidebarFooterWidget() {
     setFolders(payload.folders || []);
   }
 
+  function revalidateCatalog() {
+    refreshCatalog().catch((loadError: Error) => setStatus(loadError.message));
+  }
+
   useEffect(() => {
     refreshCatalog().catch((loadError: Error) => setStatus(loadError.message));
   }, []);
@@ -196,7 +201,8 @@ function StorageSidebarFooterWidget() {
     try {
       const payload = await createFolder(nextTarget.role, nextTarget.relativePath, folderName);
       const createdTarget = targetFromFolder(payload.folder);
-      await refreshCatalog();
+      setFolders((current) => applyStorageFoldersDelta(current, { type: 'upsert_folder', folder: payload.folder }));
+      revalidateCatalog();
       setTarget(createdTarget);
       setIsNamingFolder(false);
       setNewFolderName('');
@@ -229,7 +235,7 @@ function StorageSidebarFooterWidget() {
       for (const file of selectedFiles) {
         await uploadFile(nextTarget.role, nextTarget.relativePath, file);
       }
-      await refreshCatalog();
+      revalidateCatalog();
       setStatus('');
       openFolderInShell(appId, nextTarget);
     } catch (uploadError) {

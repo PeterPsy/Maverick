@@ -14,6 +14,8 @@ function app(app_id: string, frontend_mount = `/apps/${app_id}/`): AppRegistryIt
     description: "",
     distribution_mode: "sealed",
     frontend_mount,
+    frontend_role: frontend_mount ? "workspace" : "none",
+    frontend_launchable: Boolean(frontend_mount),
     logo: null,
     name: app_id,
     publisher: "maverick",

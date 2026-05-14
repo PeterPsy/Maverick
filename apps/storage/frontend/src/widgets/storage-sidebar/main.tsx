@@ -11,12 +11,15 @@ import {
   TreeView,
 } from '../../components/ui/tree';
 import { FileCard } from '../../components/ui/file-card-collections';
-import { currentStorageAppId, loadCatalog, loadViewFilter, moveFileReference, setViewFilter } from '../../storageApi';
+import { currentStorageAppId, loadCatalog, loadViewFilter, moveFileReference, moveFolderReference, moveItemsReferences, setViewFilter } from '../../storageApi';
 import { kindLabels, roleLabels } from '../../storageMeta';
 import { useShellSidebarCloseSwipe } from '../../hooks/useShellSidebarCloseSwipe';
 import { storageSelectionFromMessage, type ActiveStorageSelectionMessage } from '../../lib/activeStorageSelection';
-import { readStorageFileDragData, storageFileDropStatus, type StorageFileDropStatus } from '../../lib/storageDragDrop';
+import { applyStorageFoldersDelta, type StorageCatalogDelta } from '../../lib/storageCatalogDelta';
+import { attachStorageFolderDragImage } from '../../lib/storageDragImage';
+import { readStorageFileDragData, readStorageFolderDragData, readStorageSelectionDragData, storageDragPayloadFromFolder, storageMoveDropStatus, writeStorageFolderDragData, type StorageMoveDropStatus, type StorageSelectionDragPayload } from '../../lib/storageDragDrop';
 import { storageTargetFromWidgetContext, type StorageNavigationTarget } from '../../lib/storageNavigationParams';
+import { storageViewFilterChangedMessage, storageViewFilterFromMessage } from '../../lib/storageViewFilterEvents';
 import type { FileRole, StorageFolder, StorageViewFilter, PreviewKind } from '../../types';
 import '../../styles/sidebar-widget.css';
 
@@ -44,7 +47,7 @@ type KindRailDragState = {
 
 type FolderTreeDropTarget = {
   nodeId: string;
-  status: Exclude<StorageFileDropStatus, 'none'>;
+  status: Exclude<StorageMoveDropStatus, 'none'>;
 };
 
 const KIND_FILTER_OPTIONS: KindFilterOption[] = [
@@ -117,6 +120,53 @@ function folderIdentity(role: StorageTreeRole, relativePath: string) {
 
 function normalizeFolderPath(path: string) {
   return path.split('/').filter(Boolean).join('/');
+}
+
+function folderMoveTargetBlocked(source: Pick<StorageFolder, 'relative_path' | 'role'>, target: FolderTreeNode) {
+  if (target.role === 'all' || source.role !== target.role) {
+    return true;
+  }
+  const sourcePath = normalizeFolderPath(source.relative_path);
+  const targetPath = normalizeFolderPath(target.relativePath);
+  if (!sourcePath) {
+    return true;
+  }
+  return targetPath === sourcePath || targetPath.startsWith(`${sourcePath}/`);
+}
+
+function folderContainsPath(folder: Pick<StorageFolder, 'relative_path'>, relativePath: string) {
+  const folderPath = normalizeFolderPath(folder.relative_path);
+  const childPath = normalizeFolderPath(relativePath);
+  return Boolean(folderPath) && (childPath === folderPath || childPath.startsWith(`${folderPath}/`));
+}
+
+function storageSelectionMoveTargetBlocked(selection: StorageSelectionDragPayload, target: FolderTreeNode) {
+  return selection.files.some((file) => file.role !== target.role)
+    || selection.folders.some((folder) => folder.role !== target.role || folderMoveTargetBlocked(folder, target));
+}
+
+function storageSelectionMovePlan(selection: StorageSelectionDragPayload) {
+  const movableFolders = selection.folders.filter((folder) => !selection.folders.some((parent) => (
+    parent.folder_id !== folder.folder_id
+    && parent.role === folder.role
+    && folderContainsPath(parent, folder.relative_path)
+  )));
+  const movableFiles = selection.files.filter((file) => !movableFolders.some((folder) => folder.role === file.role && folderContainsPath(folder, file.relative_path)));
+  return { files: movableFiles, folders: movableFolders };
+}
+
+function storageFolderFromNode(node: FolderTreeNode): StorageFolder | null {
+  if (node.role === 'all' || !node.relativePath) {
+    return null;
+  }
+  return {
+    id: `${node.role}:${node.relativePath}/`,
+    modified_at: '',
+    name: node.label,
+    relative_path: node.relativePath,
+    role: node.role,
+    workspace_relative_path: node.workspaceRelativePath,
+  };
 }
 
 function buildFolderTree(folders: StorageFolder[]): FolderTreeNode {
@@ -240,7 +290,7 @@ function collectDefaultExpandedIds(node: FolderTreeNode, expandAll: boolean) {
   return ids;
 }
 
-function folderIdentityFromFilter(filter?: StorageViewFilter) {
+function folderIdentityFromFilter(filter?: Partial<StorageViewFilter> | null) {
   return folderIdentity(filter?.role || 'all', '');
 }
 
@@ -412,6 +462,7 @@ function StorageSidebarWidget() {
   const [activeViewMode, setActiveViewMode] = useState<StorageViewFilter['mode']>('search');
   const [selectedFolderId, setSelectedFolderId] = useState(STORAGE_ROOT_ID);
   const [dropTarget, setDropTarget] = useState<FolderTreeDropTarget | null>(null);
+  const [draggedFolder, setDraggedFolder] = useState<StorageFolder | null>(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const isShellMobileLayout = useShellMobileLayout();
@@ -437,9 +488,21 @@ function StorageSidebarWidget() {
     setSelectedFolderId((current) => current || folderIdentityFromFilter(payload.state.view_filter));
   }
 
+  function applyFolderDelta(delta: StorageCatalogDelta) {
+    setFolders((current) => applyStorageFoldersDelta(current, delta));
+  }
+
+  function revalidateCatalog() {
+    refreshCatalog().catch((loadError: Error) => setError(loadError.message));
+  }
+
   async function refreshViewFilter() {
     const payload = (await loadViewFilter()) as ViewFilterPayload;
     const nextFilter = payload.state?.view_filter;
+    applyViewFilter(nextFilter);
+  }
+
+  function applyViewFilter(nextFilter?: Partial<StorageViewFilter> | null) {
     setQuery(nextFilter?.query || '');
     setActiveKind(normalizeKind(nextFilter?.kind));
     setActiveViewMode(nextFilter?.mode === 'custom' ? 'custom' : 'search');
@@ -469,8 +532,8 @@ function StorageSidebarWidget() {
     setViewFilter({ kind, preserve_custom: activeViewMode === 'custom' })
       .then((payload) => {
         const nextFilter = payload.state.view_filter;
-        setActiveKind(normalizeKind(nextFilter.kind));
-        setActiveViewMode(nextFilter.mode);
+        applyViewFilter(nextFilter);
+        window.parent?.postMessage(storageViewFilterChangedMessage(storageAppId, nextFilter), window.location.origin);
         setError(null);
       })
       .catch((saveError: Error) => {
@@ -509,6 +572,11 @@ function StorageSidebarWidget() {
         void refreshCatalog();
       }
       if (payload.resource === 'view-state') {
+        const nextFilter = storageViewFilterFromMessage(payload, storageAppId);
+        if (nextFilter) {
+          applyViewFilter(nextFilter);
+          return;
+        }
         void refreshViewFilter();
       }
     }
@@ -522,10 +590,28 @@ function StorageSidebarWidget() {
     openFolderInShell(node, storageAppId);
   }
 
+  function handleFolderDragStart(event: DragEvent<HTMLElement>, node: FolderTreeNode) {
+    const folder = storageFolderFromNode(node);
+    if (!folder) {
+      event.preventDefault();
+      return;
+    }
+    attachStorageFolderDragImage(event);
+    writeStorageFolderDragData(event.dataTransfer, storageDragPayloadFromFolder(folder, storageAppId));
+    setDraggedFolder(folder);
+  }
+
   function handleFolderDrag(event: DragEvent<HTMLElement>, node: FolderTreeNode) {
-    const status = storageFileDropStatus(event.dataTransfer, node.role);
+    let status = storageMoveDropStatus(event.dataTransfer, node.role);
     if (status === 'none') {
       return;
+    }
+    const sourceSelection = readStorageSelectionDragData(event.dataTransfer, storageAppId);
+    if (status === 'ready' && sourceSelection && storageSelectionMoveTargetBlocked(sourceSelection, node)) {
+      status = 'blocked';
+    }
+    if (status === 'ready' && draggedFolder && folderMoveTargetBlocked(draggedFolder, node)) {
+      status = 'blocked';
     }
     event.preventDefault();
     event.stopPropagation();
@@ -534,7 +620,7 @@ function StorageSidebarWidget() {
   }
 
   function handleFolderDragLeave(event: DragEvent<HTMLElement>, node: FolderTreeNode) {
-    if (storageFileDropStatus(event.dataTransfer, node.role) === 'none') {
+    if (storageMoveDropStatus(event.dataTransfer, node.role) === 'none') {
       return;
     }
     event.preventDefault();
@@ -543,7 +629,7 @@ function StorageSidebarWidget() {
   }
 
   async function handleFolderDrop(event: DragEvent<HTMLElement>, node: FolderTreeNode) {
-    const status = storageFileDropStatus(event.dataTransfer, node.role);
+    const status = storageMoveDropStatus(event.dataTransfer, node.role);
     if (status === 'none') {
       return;
     }
@@ -551,26 +637,76 @@ function StorageSidebarWidget() {
     event.stopPropagation();
     setDropTarget(null);
     if (node.role === 'all') {
-      setError('Choose Uploaded or Generated before moving a file.');
+      setError('Choose Uploaded or Generated before moving Storage items.');
+      setDraggedFolder(null);
       return;
     }
-    const source = readStorageFileDragData(event.dataTransfer, storageAppId);
-    if (!source) {
-      setError('This Storage file drag could not be read.');
+    const sourceSelection = readStorageSelectionDragData(event.dataTransfer, storageAppId);
+    if (sourceSelection) {
+      if (storageSelectionMoveTargetBlocked(sourceSelection, node)) {
+        setError('Selected items can only be moved within their current storage section, and folders cannot move into themselves or child folders.');
+        setDraggedFolder(null);
+        return;
+      }
+      const movePlan = storageSelectionMovePlan(sourceSelection);
+      try {
+        const payload = await moveItemsReferences(movePlan.files, movePlan.folders, node.role, node.relativePath);
+        for (const movedFolder of payload.folders) {
+          applyFolderDelta({ type: 'move_folder', previous: movedFolder.previous, folder: movedFolder.folder });
+        }
+        revalidateCatalog();
+        setError(null);
+      } catch (moveError) {
+        setError(moveError instanceof Error ? moveError.message : 'Unable to move selected items.');
+      } finally {
+        setDraggedFolder(null);
+      }
       return;
     }
-    if (source.role !== node.role) {
-      setError('Files can only be moved within their current storage section.');
+    const sourceFile = readStorageFileDragData(event.dataTransfer, storageAppId);
+    if (sourceFile) {
+      if (sourceFile.role !== node.role) {
+        setError('Files can only be moved within their current storage section.');
+        setDraggedFolder(null);
+        return;
+      }
+      try {
+        await moveFileReference(sourceFile, node.relativePath);
+        revalidateCatalog();
+        setError(null);
+      } catch (moveError) {
+        setError(moveError instanceof Error ? moveError.message : 'Unable to move file.');
+      } finally {
+        setDraggedFolder(null);
+      }
+      return;
+    }
+
+    const sourceFolder = readStorageFolderDragData(event.dataTransfer, storageAppId) || draggedFolder;
+    if (!sourceFolder) {
+      setError('This Storage item drag could not be read.');
+      setDraggedFolder(null);
+      return;
+    }
+    if (sourceFolder.role !== node.role) {
+      setError('Folders can only be moved within their current storage section.');
+      setDraggedFolder(null);
+      return;
+    }
+    if (folderMoveTargetBlocked(sourceFolder, node)) {
+      setError('Folders cannot be moved into themselves or one of their child folders.');
+      setDraggedFolder(null);
       return;
     }
     try {
-      await moveFileReference(source, node.relativePath);
-      await refreshCatalog();
-      setSelectedFolderId(node.id);
+      const payload = await moveFolderReference(sourceFolder, node.relativePath);
+      applyFolderDelta({ type: 'move_folder', previous: sourceFolder, folder: payload.folder });
+      revalidateCatalog();
       setError(null);
-      openFolderInShell(node, storageAppId);
     } catch (moveError) {
-      setError(moveError instanceof Error ? moveError.message : 'Unable to move file.');
+      setError(moveError instanceof Error ? moveError.message : 'Unable to move folder.');
+    } finally {
+      setDraggedFolder(null);
     }
   }
 
@@ -603,8 +739,10 @@ function StorageSidebarWidget() {
                 isLast
                 level={0}
                 node={filteredTreeRoot}
+                onDragEnd={() => setDraggedFolder(null)}
                 onDragLeave={handleFolderDragLeave}
                 onDragOver={handleFolderDrag}
+                onDragStart={handleFolderDragStart}
                 onDrop={handleFolderDrop}
                 onSelect={selectFolder}
               />
@@ -619,13 +757,15 @@ function StorageSidebarWidget() {
   );
 }
 
-function FolderTreeNodeView({ dropTarget, node, level, isLast, onDragLeave, onDragOver, onDrop, onSelect }: {
+function FolderTreeNodeView({ dropTarget, node, level, isLast, onDragEnd, onDragLeave, onDragOver, onDragStart, onDrop, onSelect }: {
   dropTarget: FolderTreeDropTarget | null;
   isLast: boolean;
   level: number;
   node: FolderTreeNode;
+  onDragEnd: () => void;
   onDragLeave: (event: DragEvent<HTMLElement>, node: FolderTreeNode) => void;
   onDragOver: (event: DragEvent<HTMLElement>, node: FolderTreeNode) => void;
+  onDragStart: (event: DragEvent<HTMLElement>, node: FolderTreeNode) => void;
   onDrop: (event: DragEvent<HTMLElement>, node: FolderTreeNode) => void;
   onSelect: (node: FolderTreeNode) => void;
 }) {
@@ -637,13 +777,16 @@ function FolderTreeNodeView({ dropTarget, node, level, isLast, onDragLeave, onDr
       <TreeNodeTrigger
         className={nodeDropStatus === 'ready' ? 'storage-folder-tree-drop-ready' : nodeDropStatus === 'blocked' ? 'storage-folder-tree-drop-blocked' : ''}
         onClick={() => onSelect(node)}
+        draggable={node.role !== 'all' && Boolean(node.relativePath)}
+        onDragEnd={onDragEnd}
         onDragEnter={(event) => onDragOver(event, node)}
         onDragLeave={(event) => onDragLeave(event, node)}
         onDragOver={(event) => onDragOver(event, node)}
+        onDragStartCapture={(event) => onDragStart(event, node)}
         onDrop={(event) => onDrop(event, node)}
       >
         <TreeExpander hasChildren={hasChildren} />
-        <TreeIcon hasChildren />
+        <TreeIcon className="storage-folder-drag-icon-source" hasChildren />
         <TreeLabel title={node.workspaceRelativePath}>{node.label}</TreeLabel>
       </TreeNodeTrigger>
       <TreeNodeContent hasChildren={hasChildren}>
@@ -654,8 +797,10 @@ function FolderTreeNodeView({ dropTarget, node, level, isLast, onDragLeave, onDr
             key={child.id}
             level={level + 1}
             node={child}
+            onDragEnd={onDragEnd}
             onDragLeave={onDragLeave}
             onDragOver={onDragOver}
+            onDragStart={onDragStart}
             onDrop={onDrop}
             onSelect={onSelect}
           />

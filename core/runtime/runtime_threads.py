@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import asdict, replace
 from datetime import UTC, datetime
 from typing import Callable
@@ -10,6 +11,10 @@ from uuid import uuid4
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_thread import RuntimeThreadRecord
 from core.runtime.store import RuntimeStore
+from core.runtime.thread_titles import (
+    DEFAULT_THREAD_TITLE,
+    runtime_thread_title_for_user_message,
+)
 
 
 RuntimeCleanupCallback = Callable[[str, str], dict[str, object]]
@@ -153,7 +158,7 @@ def create_runtime_thread(
 def _default_thread_title(session: RuntimeSessionRecord) -> str:
     if session.agent_id.strip():
         return session.agent_id.strip()
-    return "New chat"
+    return DEFAULT_THREAD_TITLE
 
 
 def find_runtime_thread_by_session(
@@ -233,6 +238,10 @@ def reconcile_runtime_thread_availability(
         if thread.last_completed_response_at is None or thread.last_completed_response_at < expected_completed_at:
             patch["last_completed_response_at"] = expected_completed_at
             patch["last_completed_turn_id"] = expected_completed_turn_id
+    if thread.title.strip() == DEFAULT_THREAD_TITLE:
+        expected_title = runtime_thread_title_for_user_message(store, thread.runtime_session_id)
+        if expected_title != DEFAULT_THREAD_TITLE and expected_title != thread.title:
+            patch["title"] = expected_title
     if not patch:
         return thread
     patch["updated_at"] = now or utcnow()
@@ -268,20 +277,31 @@ def mark_runtime_thread_user_message(
     *,
     workspace_id: str,
     runtime_session_id: str,
+    input_text: object = "",
+    attachments: Iterable[Mapping[str, object]] | None = None,
+    app_references: Iterable[Mapping[str, object]] | None = None,
     now: datetime | None = None,
 ) -> RuntimeThreadRecord | None:
     thread = find_runtime_thread_by_session(store, workspace_id=workspace_id, runtime_session_id=runtime_session_id)
     if thread is None:
         return None
     timestamp = now or utcnow()
-    return store.save_thread(
-        replace(
-            thread,
-            availability=runtime_thread_availability_for_session(store, runtime_session_id=runtime_session_id),
-            last_user_message_at=timestamp,
-            updated_at=timestamp,
+    patch: dict[str, object] = {
+        "availability": runtime_thread_availability_for_session(store, runtime_session_id=runtime_session_id),
+        "last_user_message_at": timestamp,
+        "updated_at": timestamp,
+    }
+    if thread.title.strip() == DEFAULT_THREAD_TITLE:
+        title = runtime_thread_title_for_user_message(
+            store,
+            runtime_session_id,
+            input_text=input_text,
+            attachments=attachments,
+            app_references=app_references,
         )
-    )
+        if title != DEFAULT_THREAD_TITLE and title != thread.title:
+            patch["title"] = title
+    return store.save_thread(replace(thread, **patch))
 
 
 def mark_runtime_thread_response_completed(

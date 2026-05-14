@@ -4,7 +4,7 @@ Official Maverick app SDK developer UI for creating, validating, and managing wo
 
 ## Contract Notes
 
-- `developer-kit` is intentionally frontend-centric.
+- `developer-kit` is a supporting SDK surface, not a primary workspace app view; its contract uses `presentation.frontend_role: supporting`.
 - The UI calls the core-owned `/api/app-sdk` surface documented by the SDK architecture instead of declaring app-owned backend, CLI, MCP, or lifecycle hooks.
 - The app keeps only lightweight UI state under `data/developer-kit/state.json`.
 - Because the control plane is core-owned, the contract intentionally leaves `reference_entities`, `data_events`, and persisted `view_surfaces` empty for now.

@@ -4,7 +4,7 @@ Agent-facing document generation and document text extraction app for DOCX, PPTX
 
 ## Contract Notes
 
-- Frontend, backend, CLI, and MCP entrypoints are declared in `app_contract.json`.
+- Backend, CLI, MCP, and supporting frontend entrypoints are declared in `app_contract.json`; the frontend is marked `presentation.frontend_role: supporting` because document generation is primarily used through tools and app-owned data surfaces.
 - The contract declares the bundled `document-generator-docs` skill and the `document` reference entity.
 - App-owned storage lives under `data/document-generator/` for state, templates, and generation jobs.
 - Persisted `view_surfaces` cover generated document job filters and curated generated-document selections.

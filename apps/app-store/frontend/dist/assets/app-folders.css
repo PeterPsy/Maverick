@@ -14,6 +14,10 @@
   padding-top: 18px;
 }
 
+.app-folder-grid--skeleton {
+  pointer-events: none;
+}
+
 .app-folder-card {
   align-items: center;
   animation: app-folder-enter 640ms cubic-bezier(0.16, 1, 0.3, 1) both;
@@ -28,7 +32,6 @@
   min-height: 320px;
   min-width: 0;
   outline: none;
-  overflow: hidden;
   padding: 28px;
   perspective: 1200px;
   position: relative;
@@ -135,6 +138,43 @@
   z-index: 31;
 }
 
+.app-folder-card--skeleton {
+  cursor: default;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.app-folder-card--skeleton .app-folder-glow {
+  opacity: 0.1;
+}
+
+.app-folder-card--skeleton .app-folder-back,
+.app-folder-card--skeleton .app-folder-front,
+.app-folder-card--skeleton .app-folder-tab {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.03) 58%),
+    var(--folder-gradient);
+  overflow: hidden;
+}
+
+.app-folder-card--skeleton .app-folder-shine {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.26), transparent 62%);
+  opacity: 0.8;
+  overflow: hidden;
+}
+
+.app-folder-card--skeleton .app-folder-back::after,
+.app-folder-card--skeleton .app-folder-front::after,
+.app-folder-card--skeleton .app-folder-tab::after,
+.app-folder-card--skeleton .app-folder-shine::after {
+  animation: store-loading-skeleton-shimmer 1.45s ease-in-out infinite;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.16), transparent);
+  content: "";
+  inset: 0;
+  position: absolute;
+  transform: translateX(-100%);
+}
+
 .app-folder-card:hover .app-folder-back,
 .app-folder-card:focus-visible .app-folder-back,
 .app-folder-card.is-hovered .app-folder-back {
@@ -197,14 +237,18 @@
 }
 
 .app-folder-preview-frame {
+  align-items: center;
   background: var(--store-panel-solid);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
   box-shadow: 0 18px 34px rgba(0, 0, 0, 0.32);
-  display: block;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   height: 100%;
-  overflow: hidden;
+  justify-content: center;
   position: relative;
+  padding: 10px 7px;
   transition:
     box-shadow 500ms cubic-bezier(0.16, 1, 0.3, 1),
     transform 500ms cubic-bezier(0.16, 1, 0.3, 1);
@@ -218,34 +262,23 @@
   transform: translateY(-24px) scale(1.24);
 }
 
-.app-folder-preview img {
-  display: block;
-  height: 100%;
-  object-fit: cover;
-  width: 100%;
-}
-
-.app-folder-preview-shade {
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.22), transparent);
-  inset: 0;
-  position: absolute;
+.app-folder-preview-icon.app-row-icon {
+  border-radius: 12px;
+  height: 42px;
+  width: 42px;
 }
 
 .app-folder-preview-title {
-  bottom: 7px;
-  color: #fff;
+  color: var(--store-text);
   display: block;
-  font-size: 9px;
-  font-weight: 900;
-  left: 7px;
+  font-size: 10px;
+  font-weight: 400;
   letter-spacing: 0;
   line-height: 1.1;
   overflow: hidden;
-  position: absolute;
-  right: 7px;
+  text-align: center;
   text-overflow: ellipsis;
-  text-transform: uppercase;
-  white-space: nowrap;
+  width: 100%;
 }
 
 .app-folder-copy {
@@ -254,10 +287,16 @@
   z-index: 2;
 }
 
+.app-folder-copy--skeleton {
+  display: grid;
+  justify-items: center;
+  width: 100%;
+}
+
 .app-folder-copy h3 {
   color: var(--store-text);
   font-size: 19px;
-  font-weight: 900;
+  font-weight: 400;
   margin: 18px 0 0;
   transition: transform 500ms ease;
 }
@@ -268,18 +307,11 @@
   transform: translateY(2px);
 }
 
-.app-folder-copy p {
-  color: var(--store-muted);
-  font-size: 14px;
-  font-weight: 750;
-  margin: 6px 0 0;
-}
-
 .app-folder-hint {
   bottom: 16px;
   color: var(--store-soft);
   font-size: 11px;
-  font-weight: 850;
+  font-weight: 400;
   letter-spacing: 0;
   left: 50%;
   opacity: 0.58;
@@ -291,11 +323,20 @@
     transform 500ms ease;
 }
 
-.app-folder-card:hover .app-folder-hint,
-.app-folder-card:focus-visible .app-folder-hint,
-.app-folder-card.is-hovered .app-folder-hint {
-  opacity: 0;
-  transform: translate(-50%, 10px);
+.app-folder-hint--skeleton {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.store-loading-skeleton__line--folder-title {
+  height: 19px;
+  width: min(11rem, 74%);
+}
+
+.store-loading-skeleton__line--folder-hint {
+  height: 10px;
+  width: 4.6rem;
 }
 
 @keyframes app-folder-enter {

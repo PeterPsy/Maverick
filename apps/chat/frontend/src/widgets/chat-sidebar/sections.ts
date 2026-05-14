@@ -11,7 +11,7 @@ export type FolderSection = {
 export function buildSections(projects: ChatProject[], threads: ChatThread[]): FolderSection[] {
   const sections: FolderSection[] = projects
     .slice()
-    .sort((left, right) => left.name.localeCompare(right.name, "it", { sensitivity: "base" }))
+    .sort((left, right) => left.name.localeCompare(right.name, "en", { sensitivity: "base" }))
     .map((project) => ({
       id: project.project_id,
       projectId: project.project_id,
@@ -25,7 +25,7 @@ export function buildSections(projects: ChatProject[], threads: ChatThread[]): F
     sections.unshift({
       id: "unassigned",
       projectId: null,
-      title: "Senza progetto",
+      title: "No project",
       canManage: false,
       items: unassigned,
     });

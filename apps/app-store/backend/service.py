@@ -35,7 +35,13 @@ def app_events_for_action(action: str) -> list[dict]:
     return []
 
 
-def handle_action(data_root: Path, body: dict[str, Any], *, workspace_root: Path | None = None) -> tuple[int, dict[str, Any]]:
+def handle_action(
+    data_root: Path,
+    body: dict[str, Any],
+    *,
+    workspace_root: Path | None = None,
+    launchable_app_ids: list[str] | None = None,
+) -> tuple[int, dict[str, Any]]:
     action = str(body.get("action") or "catalog")
     if action == "state":
         return 200, {"state": load_state(data_root), "core_catalog_endpoint": "/api/app-store/apps"}
@@ -79,13 +85,20 @@ def handle_action(data_root: Path, body: dict[str, Any], *, workspace_root: Path
     if action == "pinned_apps.list":
         return 200, {"pinned_apps": pinned_apps(data_root)}
     if action == "pinned_apps.set":
+        if launchable_app_ids is None:
+            raise AppStoreValidationError("Pinned app mutations require workspace app registry context.")
         raw_app_ids = body.get("app_ids")
         app_ids = [str(item).strip() for item in raw_app_ids] if isinstance(raw_app_ids, list) else []
-        return 200, {"state": set_pinned_apps(data_root, app_ids)}
+        return 200, {"state": set_pinned_apps(data_root, _launchable_pinned_app_ids(app_ids, launchable_app_ids))}
     if action == "pinned_apps.toggle":
+        if launchable_app_ids is None:
+            raise AppStoreValidationError("Pinned app mutations require workspace app registry context.")
         app_id = str(body.get("app_id") or "").strip()
         if not app_id:
             raise AppStoreValidationError("app_id is required.")
+        current = pinned_apps(data_root)
+        if app_id not in current and app_id not in _launchable_app_id_set(launchable_app_ids):
+            raise AppStoreValidationError(f"App `{app_id}` does not expose a launchable workspace frontend.")
         return 200, {"state": toggle_pinned_app(data_root, app_id)}
     if action == "remember_install":
         app_id = str(body.get("app_id") or "").strip()
@@ -132,6 +145,15 @@ def handle_action(data_root: Path, body: dict[str, Any], *, workspace_root: Path
             "source_updated_at": "",
         }
     raise AppStoreValidationError(f"Unknown action `{action}`.")
+
+
+def _launchable_pinned_app_ids(app_ids: list[str], launchable_app_ids: list[str]) -> list[str]:
+    launchable = _launchable_app_id_set(launchable_app_ids)
+    return [app_id for app_id in app_ids if app_id in launchable]
+
+
+def _launchable_app_id_set(app_ids: list[str]) -> set[str]:
+    return {str(app_id).strip() for app_id in app_ids if str(app_id).strip()}
 
 
 def _resolve_public_submission_source(*, body: dict[str, Any], workspace_root: Path | None) -> Path:

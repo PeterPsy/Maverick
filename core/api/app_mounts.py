@@ -11,7 +11,7 @@ from typing import Any
 
 from core.api.app_event_publication import declared_data_event_resources, publish_declared_app_events
 from core.api.app_runtime_cleanup_requests import apply_runtime_cleanup_requests
-from core.api.app_registry import resolve_app_surface
+from core.api.app_registry import enabled_app_items, resolve_app_surface
 from core.api.http import StartResponse, json_response, query_params, read_json_body, status_line, text_response
 from core.api.platform_state import PlatformState
 from core.apps.dependencies import resolve_app_dependencies
@@ -346,6 +346,14 @@ def handle_app_backend(
                     user=user,
                     start_path=start_path,
                 ),
+                "workspace_apps": {
+                    "items": enabled_app_items(
+                        state,
+                        workspace_id=workspace_id,
+                        start_path=start_path,
+                        user=user,
+                    )
+                },
                 "runtime_session_id": "",
                 "turn_id": "",
                 "app_secrets": _resolve_app_secret_payload(

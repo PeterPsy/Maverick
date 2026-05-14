@@ -18,6 +18,6 @@ This matrix tracks the repository-wide completeness baseline for first-party Mav
 | `storage` | yes | repo-wide baseline plus app-local coverage when present | Bundled `storage-ops` skill now declared in the contract; file-preview widget remains the embedded surface. |
 | `memory` | yes | repo-wide baseline plus app-local coverage when present | Reference app for durable graph state, references, and persisted custom views. |
 | `skills` | yes | repo-wide baseline | Contract declares bundled skill template ids, skill references, and standard catalog view state. |
-| `user-admin` | yes | repo-wide baseline | Frontend, CLI, and MCP only for now; app-owned backend and hooks remain intentionally absent while admin state stays core-owned. |
+| `settings` | yes | repo-wide baseline | Frontend, CLI, and MCP only for now; app-owned backend and hooks remain intentionally absent while admin state stays core-owned. |
 
 The repo-wide automated check for this baseline lives in `tests/test_app_contract_baseline.py`; it now also requires every referenceable app to declare standard view-state actions and matching MCP tools.

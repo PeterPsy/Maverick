@@ -208,6 +208,9 @@ Minimum valid frontend-only workspace-local contract:
     "mode": "workspace_local",
     "source_access": "editable"
   },
+  "presentation": {
+    "frontend_role": "workspace"
+  },
   "capabilities": {
     "mcp_tools": [],
     "cli_commands": [],

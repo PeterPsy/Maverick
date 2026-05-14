@@ -23,8 +23,6 @@
   --maverick-accent-soft: rgba(255, 255, 255, 0.12);
   --maverick-accent-hover: rgba(255, 255, 255, 0.18);
   --maverick-text-on-accent: #0a0a0b;
-  --maverick-success: #4ade80;
-  --maverick-warning: #f59e0b;
   --maverick-danger: #ff4d8d;
   --maverick-focus: rgba(255, 255, 255, 0.32);
   --maverick-shadow-soft: 0 12px 30px rgba(0, 0, 0, 0.22);
@@ -192,6 +190,10 @@ button {
   transition: background 150ms ease, border-color 150ms ease, transform 150ms ease;
 }
 
+.app-shortcuts__row.is-not-pinnable {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .app-shortcuts__row:hover,
 .app-shortcuts__row.is-active {
   border-color: var(--maverick-border-strong);
@@ -207,6 +209,10 @@ button {
 
 .app-shortcuts__row:active {
   transform: scale(0.985);
+}
+
+.app-shortcuts__row.is-not-pinnable:active {
+  transform: none;
 }
 
 .app-shortcuts__row--skeleton {
@@ -235,6 +241,11 @@ button {
   cursor: default;
 }
 
+.app-shortcuts__button:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
 .app-shortcuts__button:focus-visible,
 .app-shortcuts__pin:focus-visible,
 .app-shortcuts__scope-button:focus-visible {
@@ -257,6 +268,13 @@ button {
 .app-shortcuts__icon.is-glyph {
   background: var(--maverick-accent);
   color: var(--maverick-text-on-accent);
+}
+
+.app-shortcuts__icon.is-glyph.is-non-launchable,
+.app-shortcuts__icon.is-glyph.is-supporting-frontend {
+  background: var(--maverick-text-on-accent);
+  border: 1px solid var(--maverick-accent);
+  color: var(--maverick-accent);
 }
 
 .app-shortcuts__icon img {

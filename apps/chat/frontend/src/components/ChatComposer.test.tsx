@@ -19,20 +19,39 @@ const providers: ProviderItem[] = [
   },
 ];
 
+class FakeDataTransfer {
+  dropEffect: DataTransfer["dropEffect"] = "none";
+  files: File[] = [];
+  types: string[] = [];
+  private readonly data = new Map<string, string>();
+
+  getData(type: string) {
+    return this.data.get(type.toLowerCase()) || "";
+  }
+
+  setData(type: string, value: string) {
+    const normalizedType = type.toLowerCase();
+    this.data.set(normalizedType, value);
+    if (!this.types.includes(normalizedType)) {
+      this.types.push(normalizedType);
+    }
+  }
+}
+
 const checklistReference: AppReference = {
   type: "entity",
   app_id: "checklist",
   entity_type: "checklist",
   entity_id: "check_6f4e74d9f31d",
-  label: "Link checklist nella chat con @",
-  summary: "Checklist operativa",
+  label: "Checklist link in chat with @",
+  summary: "Operational checklist",
   deep_link: "/app/checklist/checklists/check_6f4e74d9f31d",
 };
 
 const checklistMention: MentionItem = {
   id: "entity:checklist:checklist:check_6f4e74d9f31d",
   label: checklistReference.label,
-  description: "checklist · checklist · Checklist operativa",
+  description: "checklist · checklist · Operational checklist",
   kind: "entity",
   reference: checklistReference,
 };
@@ -86,9 +105,11 @@ afterEach(() => {
 });
 
 async function renderComposer({
+  onAddAttachments = () => undefined,
   onReferenceAdd = () => undefined,
   onSearchReferences = async () => [],
 }: {
+  onAddAttachments?: (files: File[]) => void;
   onReferenceAdd?: (reference: AppReference) => void;
   onSearchReferences?: (query: string, signal: AbortSignal) => Promise<MentionItem[]>;
 } = {}) {
@@ -110,7 +131,7 @@ async function renderComposer({
         executionMode={null}
         isSending={false}
         mentionItems={[]}
-        onAddAttachments={() => undefined}
+        onAddAttachments={onAddAttachments}
         onChange={(nextValue) => {
           latestValue = nextValue;
           setValue(nextValue);
@@ -160,6 +181,28 @@ async function typeInEditor(text: string) {
   });
 }
 
+async function dropOnEditor(dataTransfer: FakeDataTransfer) {
+  const editor = container?.querySelector('[role="textbox"]');
+  expect(editor).toBeInstanceOf(HTMLElement);
+
+  await act(async () => {
+    const event = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "dataTransfer", { value: dataTransfer });
+    editor!.dispatchEvent(event);
+  });
+}
+
+async function dragOverEditor(dataTransfer: FakeDataTransfer) {
+  const editor = container?.querySelector('[role="textbox"]');
+  expect(editor).toBeInstanceOf(HTMLElement);
+
+  await act(async () => {
+    const event = new Event("dragover", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "dataTransfer", { value: dataTransfer });
+    editor!.dispatchEvent(event);
+  });
+}
+
 async function settleReferenceSearch() {
   await act(async () => {
     vi.advanceTimersByTime(180);
@@ -189,11 +232,11 @@ describe("ChatComposer reference search", () => {
     const panels = element.querySelectorAll(".chatapp-mention-panel");
     expect(panels).toHaveLength(1);
     expect(panels[0].classList.contains("chatapp-mention-panel--app-picker")).toBe(true);
-    const searchInput = element.querySelector('[aria-label="Cerca app, file o cartelle"]');
+    const searchInput = element.querySelector('[aria-label="Search apps, files, or folders"]');
     expect(searchInput).toBeInstanceOf(HTMLInputElement);
     expect((searchInput as HTMLInputElement).value).toBe("Link");
-    expect(element.textContent).toContain("@Link checklist nella chat con @");
-    expect(element.textContent).toContain("checklist · checklist · Checklist operativa");
+    expect(element.textContent).toContain("@Checklist link in chat with @");
+    expect(element.textContent).toContain("checklist · checklist · Operational checklist");
   });
 
   it("loads checklist entities when the toolbar app picker opens", async () => {
@@ -201,7 +244,7 @@ describe("ChatComposer reference search", () => {
     HTMLElement.prototype.scrollIntoView = vi.fn();
     const onSearchReferences = vi.fn(async () => [checklistMention]);
     const { element } = await renderComposer({ onSearchReferences });
-    const pickerButton = element.querySelector('[aria-label="App citabili"]');
+    const pickerButton = element.querySelector('[aria-label="Apps and references"]');
     expect(pickerButton).toBeInstanceOf(HTMLButtonElement);
 
     await act(async () => {
@@ -213,9 +256,9 @@ describe("ChatComposer reference search", () => {
     const panels = element.querySelectorAll(".chatapp-mention-panel");
     expect(panels).toHaveLength(1);
     expect(panels[0].classList.contains("chatapp-mention-panel--app-picker")).toBe(true);
-    expect(element.querySelector('[aria-label="Cerca app, file o cartelle"]')).toBeInstanceOf(HTMLInputElement);
-    expect(element.textContent).toContain("@Link checklist nella chat con @");
-    expect(element.textContent).toContain("checklist · checklist · Checklist operativa");
+    expect(element.querySelector('[aria-label="Search apps, files, or folders"]')).toBeInstanceOf(HTMLInputElement);
+    expect(element.textContent).toContain("@Checklist link in chat with @");
+    expect(element.textContent).toContain("checklist · checklist · Operational checklist");
   });
 
   it("keeps storage folders visible after the first storage file references", async () => {
@@ -226,7 +269,7 @@ describe("ChatComposer reference search", () => {
       storageFolderMention,
     ]);
     const { element } = await renderComposer({ onSearchReferences });
-    const pickerButton = element.querySelector('[aria-label="App citabili"]');
+    const pickerButton = element.querySelector('[aria-label="Apps and references"]');
     expect(pickerButton).toBeInstanceOf(HTMLButtonElement);
 
     await act(async () => {
@@ -247,7 +290,7 @@ describe("ChatComposer reference search", () => {
     const { element, getValue } = await renderComposer({ onReferenceAdd, onSearchReferences });
 
     await typeInEditor("@");
-    const searchInput = element.querySelector('[aria-label="Cerca app, file o cartelle"]');
+    const searchInput = element.querySelector('[aria-label="Search apps, files, or folders"]');
     expect(searchInput).toBeInstanceOf(HTMLInputElement);
     expect(searchInput?.closest(".chatapp-mention-panel")?.classList.contains("chatapp-mention-panel--app-picker")).toBe(true);
 
@@ -260,7 +303,7 @@ describe("ChatComposer reference search", () => {
     expect(getValue()).toBe("@Link");
 
     const referenceButton = Array.from(element.querySelectorAll(".chatapp-mention-panel__item")).find((button) =>
-      button.textContent?.includes("@Link checklist nella chat con @"),
+      button.textContent?.includes("@Checklist link in chat with @"),
     );
     expect(referenceButton).toBeInstanceOf(HTMLButtonElement);
 
@@ -269,7 +312,7 @@ describe("ChatComposer reference search", () => {
     });
 
     expect(onReferenceAdd).toHaveBeenCalledWith(checklistReference);
-    expect(getValue()).toContain("@Link checklist nella chat con @ [ref:checklist/checklist/check_6f4e74d9f31d]");
+    expect(getValue()).toContain("@Checklist link in chat with @ [ref:checklist/checklist/check_6f4e74d9f31d]");
   });
 
   it("searches checklist entities from the toolbar app picker and inserts the selected reference", async () => {
@@ -278,13 +321,13 @@ describe("ChatComposer reference search", () => {
     const onReferenceAdd = vi.fn();
     const onSearchReferences = vi.fn(async () => [checklistMention]);
     const { element, getValue } = await renderComposer({ onReferenceAdd, onSearchReferences });
-    const pickerButton = element.querySelector('[aria-label="App citabili"]');
+    const pickerButton = element.querySelector('[aria-label="Apps and references"]');
     expect(pickerButton).toBeInstanceOf(HTMLButtonElement);
 
     await act(async () => {
       (pickerButton as HTMLButtonElement).click();
     });
-    const searchInput = element.querySelector('[aria-label="Cerca app, file o cartelle"]');
+    const searchInput = element.querySelector('[aria-label="Search apps, files, or folders"]');
     expect(searchInput).toBeInstanceOf(HTMLInputElement);
 
     await act(async () => {
@@ -293,10 +336,10 @@ describe("ChatComposer reference search", () => {
     await settleReferenceSearch();
 
     expect(onSearchReferences).toHaveBeenCalledWith("Link", expect.any(AbortSignal));
-    expect(element.textContent).toContain("@Link checklist nella chat con @");
+    expect(element.textContent).toContain("@Checklist link in chat with @");
 
     const referenceButton = Array.from(element.querySelectorAll(".chatapp-mention-panel__item")).find((button) =>
-      button.textContent?.includes("@Link checklist nella chat con @"),
+      button.textContent?.includes("@Checklist link in chat with @"),
     );
     expect(referenceButton).toBeInstanceOf(HTMLButtonElement);
 
@@ -305,7 +348,7 @@ describe("ChatComposer reference search", () => {
     });
 
     expect(onReferenceAdd).toHaveBeenCalledWith(checklistReference);
-    expect(getValue()).toContain("@Link checklist nella chat con @ [ref:checklist/checklist/check_6f4e74d9f31d]");
+    expect(getValue()).toContain("@Checklist link in chat with @ [ref:checklist/checklist/check_6f4e74d9f31d]");
   });
 
   it("shows reference search failures instead of clearing the panel silently", async () => {
@@ -319,6 +362,72 @@ describe("ChatComposer reference search", () => {
     await typeInEditor("@Link");
     await settleReferenceSearch();
 
-    expect(element.textContent).toContain("Impossibile cercare app o record");
+    expect(element.textContent).toContain("Unable to search apps or records");
+  });
+
+  it("inserts dragged Storage items as reference mentions", async () => {
+    const onReferenceAdd = vi.fn();
+    const { getValue } = await renderComposer({ onReferenceAdd });
+    const dataTransfer = new FakeDataTransfer();
+    dataTransfer.setData(
+      "application/x-maverick-storage-selection",
+      JSON.stringify({
+        owner_app_id: "storage",
+        files: [
+          {
+            file_id: "file_123",
+            name: "report.md",
+            owner_app_id: "storage",
+            preview_kind: "markdown",
+            relative_path: "Reports/report.md",
+            role: "generated",
+            workspace_relative_path: "storage/generated/Reports/report.md",
+          },
+        ],
+        folders: [
+          {
+            folder_id: "generated:Client Docs/",
+            name: "Client Docs",
+            owner_app_id: "storage",
+            relative_path: "Client Docs",
+            role: "generated",
+            workspace_relative_path: "storage/generated/Client Docs",
+          },
+        ],
+      }),
+    );
+
+    await dropOnEditor(dataTransfer);
+
+    expect(getValue()).toBe("@report.md [ref:storage/file/file_123] @Client Docs [ref:storage/folder/generated:Client%20Docs/] ");
+    expect(onReferenceAdd).toHaveBeenCalledWith({
+      type: "entity",
+      app_id: "storage",
+      entity_type: "file",
+      entity_id: "file_123",
+      label: "report.md",
+      summary: "markdown file in generated",
+      deep_link: "/app/storage/files/file_123",
+    });
+    expect(onReferenceAdd).toHaveBeenCalledWith({
+      type: "entity",
+      app_id: "storage",
+      entity_type: "folder",
+      entity_id: "generated:Client%20Docs/",
+      label: "Client Docs",
+      summary: "Storage folder in generated",
+      deep_link: "/app/storage/folders/generated/Client%20Docs",
+    });
+  });
+
+  it("does not render a file drop overlay inside the composer", async () => {
+    const { element } = await renderComposer();
+    const dataTransfer = new FakeDataTransfer();
+    dataTransfer.types.push("Files");
+    dataTransfer.files = [new File(["notes"], "notes.txt", { type: "text/plain" })];
+
+    await dragOverEditor(dataTransfer);
+
+    expect(element.querySelector(".chatapp-chat-dropzone")).toBeNull();
   });
 });

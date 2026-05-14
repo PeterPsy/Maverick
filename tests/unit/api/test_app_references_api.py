@@ -303,10 +303,13 @@ class AppReferencesApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
         self.assertEqual(registry_item["public_app_id"], "vendor-records")
         self.assertEqual(registry_item["mount_app_id"], "records-mount")
         self.assertEqual(registry_item["frontend_mount"], "/apps/records-mount/")
+        self.assertEqual(registry_item["frontend_role"], "workspace")
+        self.assertTrue(registry_item["frontend_launchable"])
         self.assertEqual(frontend_status, 200)
         self.assertIn(b"Vendor Records", frontend_body)
         self.assertEqual(cli_item["public_app_id"], "vendor-records")
         self.assertEqual(cli_item["mount_app_id"], "records-mount")
+        self.assertEqual(cli_item["capabilities"]["frontend"], {"mounted": True, "role": "workspace", "launchable": True})
 
     def test_reference_payload_entity_type_must_match_requested_declared_type(self) -> None:
         provider = {

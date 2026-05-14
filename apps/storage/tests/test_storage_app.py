@@ -850,6 +850,223 @@ class StorageAppTestCase(unittest.TestCase):
             self.assertEqual(invalid_role["status_code"], 400)
             self.assertEqual(invalid_path["status_code"], 400)
 
+    def test_backend_moves_folder_tree_inside_storage_role(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            generated_root = root / "storage" / "generated"
+            uploaded_root = root / "storage" / "uploaded"
+            data_root = root / "data" / "storage"
+            report_folder = generated_root / "Reports"
+            nested_folder = report_folder / "Q1"
+            nested_folder.mkdir(parents=True)
+            uploaded_root.mkdir(parents=True)
+            (report_folder / "summary.md").write_text("# summary", encoding="utf-8")
+            (nested_folder / "data.txt").write_text("data", encoding="utf-8")
+
+            original_catalog = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={"action": "catalog", "role": "generated", "folder_path": "Reports", "sync": True},
+            )
+            created_archive = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={"action": "create_folder", "role": "generated", "folder_name": "Archive"},
+            )
+            moved = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={
+                    "action": "move_folder",
+                    "role": "generated",
+                    "relative_path": "Reports",
+                    "target_folder_relative_path": "Archive",
+                },
+            )
+            moved_catalog = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={"action": "catalog", "role": "generated", "folder_path": "Archive/Reports"},
+            )
+
+            self.assertEqual(original_catalog["status_code"], 200)
+            self.assertEqual(created_archive["status_code"], 200)
+            self.assertEqual(moved["status_code"], 200)
+            self.assertEqual(moved["json"]["folder"]["workspace_relative_path"], "storage/generated/Archive/Reports")
+            self.assertFalse(report_folder.exists())
+            self.assertTrue((generated_root / "Archive" / "Reports" / "summary.md").is_file())
+            self.assertTrue((generated_root / "Archive" / "Reports" / "Q1" / "data.txt").is_file())
+            original_summary = next(item for item in original_catalog["json"]["files"] if item["relative_path"] == "Reports/summary.md")
+            moved_summary = next(item for item in moved_catalog["json"]["files"] if item["relative_path"] == "Archive/Reports/summary.md")
+            self.assertEqual(moved_summary["id"], original_summary["id"])
+            folder_paths = {item["workspace_relative_path"] for item in moved_catalog["json"]["folders"]}
+            self.assertIn("storage/generated/Archive/Reports", folder_paths)
+            self.assertIn("storage/generated/Archive/Reports/Q1", folder_paths)
+            self.assertNotIn("storage/generated/Reports", folder_paths)
+
+            rejected_child = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={
+                    "action": "move_folder",
+                    "role": "generated",
+                    "relative_path": "Archive/Reports",
+                    "target_folder_relative_path": "Archive/Reports/Q1",
+                },
+            )
+            recreated_reports = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={"action": "create_folder", "role": "generated", "folder_name": "Reports"},
+            )
+            rejected_collision = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={
+                    "action": "move_folder",
+                    "role": "generated",
+                    "relative_path": "Reports",
+                    "target_folder_relative_path": "Archive",
+                },
+            )
+            rejected_root = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={
+                    "action": "move_folder",
+                    "role": "generated",
+                    "relative_path": "",
+                    "target_folder_relative_path": "Archive",
+                },
+            )
+            rejected_escape = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={
+                    "action": "move_folder",
+                    "role": "generated",
+                    "relative_path": "../Reports",
+                    "target_folder_relative_path": "Archive",
+                },
+            )
+
+            self.assertEqual(rejected_child["status_code"], 400)
+            self.assertEqual(recreated_reports["status_code"], 200)
+            self.assertEqual(rejected_collision["status_code"], 400)
+            self.assertEqual(rejected_root["status_code"], 400)
+            self.assertEqual(rejected_escape["status_code"], 400)
+
+    def test_backend_batch_moves_files_and_folders_under_one_action(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            generated_root = root / "storage" / "generated"
+            uploaded_root = root / "storage" / "uploaded"
+            data_root = root / "data" / "storage"
+            report_folder = generated_root / "Reports"
+            nested_folder = report_folder / "Q1"
+            archive_folder = generated_root / "Archive"
+            nested_folder.mkdir(parents=True)
+            archive_folder.mkdir(parents=True)
+            uploaded_root.mkdir(parents=True)
+            (generated_root / "loose.md").write_text("# loose", encoding="utf-8")
+            (report_folder / "summary.md").write_text("# summary", encoding="utf-8")
+            (nested_folder / "data.txt").write_text("data", encoding="utf-8")
+
+            original_catalog = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={"action": "catalog", "role": "generated", "sync": True},
+            )
+            moved = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={
+                    "action": "move_items",
+                    "role": "generated",
+                    "target_folder_relative_path": "Archive",
+                    "files": [
+                        {"role": "generated", "relative_path": "loose.md"},
+                        {"role": "generated", "relative_path": "Reports/Q1/data.txt"},
+                    ],
+                    "folders": [{"role": "generated", "relative_path": "Reports"}],
+                },
+            )
+            moved_catalog = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={"action": "catalog", "role": "generated", "folder_path": "Archive", "sync": True},
+            )
+
+            self.assertEqual(original_catalog["status_code"], 200)
+            self.assertEqual(moved["status_code"], 200)
+            self.assertEqual(
+                [item["file"]["workspace_relative_path"] for item in moved["json"]["files"]],
+                ["storage/generated/Archive/loose.md"],
+            )
+            self.assertEqual(
+                [item["folder"]["workspace_relative_path"] for item in moved["json"]["folders"]],
+                ["storage/generated/Archive/Reports"],
+            )
+            self.assertFalse((generated_root / "loose.md").exists())
+            self.assertFalse(report_folder.exists())
+            self.assertTrue((generated_root / "Archive" / "loose.md").is_file())
+            self.assertTrue((generated_root / "Archive" / "Reports" / "summary.md").is_file())
+            self.assertTrue((generated_root / "Archive" / "Reports" / "Q1" / "data.txt").is_file())
+            original_loose = next(item for item in original_catalog["json"]["files"] if item["relative_path"] == "loose.md")
+            moved_loose = next(item for item in moved_catalog["json"]["files"] if item["relative_path"] == "Archive/loose.md")
+            self.assertEqual(moved_loose["id"], original_loose["id"])
+            self.assertEqual(moved["json"]["files"][0]["previous"]["relative_path"], "loose.md")
+            self.assertEqual(moved["json"]["folders"][0]["previous"]["relative_path"], "Reports")
+
+            (generated_root / "again.md").write_text("# again", encoding="utf-8")
+            (generated_root / "Archive" / "again.md").write_text("# collision", encoding="utf-8")
+            rejected_collision = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={
+                    "action": "move_items",
+                    "role": "generated",
+                    "target_folder_relative_path": "Archive",
+                    "files": [{"role": "generated", "relative_path": "again.md"}],
+                    "folders": [],
+                },
+            )
+            self.assertEqual(rejected_collision["status_code"], 400)
+            self.assertTrue((generated_root / "again.md").is_file())
+
+            (generated_root / "second.md").write_text("# second", encoding="utf-8")
+            rejected_partial_move = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={
+                    "action": "move_items",
+                    "role": "generated",
+                    "target_folder_relative_path": "Archive",
+                    "files": [
+                        {"role": "generated", "relative_path": "second.md"},
+                        {"role": "generated", "relative_path": "again.md"},
+                    ],
+                    "folders": [],
+                },
+            )
+            self.assertEqual(rejected_partial_move["status_code"], 400)
+            self.assertTrue((generated_root / "second.md").is_file())
+            self.assertFalse((generated_root / "Archive" / "second.md").exists())
+
     def test_backend_uploads_file_into_existing_folder(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

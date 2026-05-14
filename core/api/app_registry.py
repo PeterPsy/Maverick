@@ -8,6 +8,7 @@ from pathlib import Path
 from core.api.platform_state import PlatformState
 from core.apps.errors import AppHostingError, WorkspaceAppBindingNotFoundError
 from core.apps.models import AppVisibilityDeclaration
+from core.apps.presentation import app_frontend_is_launchable
 from core.apps.surfaces import enabled_workspace_app_bindings, resolve_workspace_app_surface
 from core.authorization.service import can_mount_app_visibility
 from core.identity.models import UserRecord
@@ -62,6 +63,7 @@ def enabled_app_items(
             local_app_id = binding.app_id
             public_app_id = binding.public_app_id or parsed.app_id
             mount_app_id = binding.mount_app_id or local_app_id
+            frontend_mount = f"/apps/{mount_app_id}/" if parsed.contract.entrypoints.frontend else ""
             item = {
                 "app_id": local_app_id,
                 "public_app_id": public_app_id,
@@ -99,7 +101,9 @@ def enabled_app_items(
                     if logo_path.exists()
                     else None
                 ),
-                "frontend_mount": f"/apps/{mount_app_id}/" if parsed.contract.entrypoints.frontend else "",
+                "frontend_mount": frontend_mount,
+                "frontend_role": parsed.contract.presentation.frontend_role,
+                "frontend_launchable": app_frontend_is_launchable(parsed.contract),
                 "backend_mount": f"/api/apps/{mount_app_id}/backend" if parsed.contract.entrypoints.backend else "",
             }
             if parsed.contract.visibility.platform_roles or parsed.contract.visibility.workspace_roles or parsed.contract.visibility.capabilities:

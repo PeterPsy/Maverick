@@ -17,6 +17,8 @@ export type AppRegistryItem = {
   requires: AppRequiredInterfaceDeclaration[];
   logo: AppLogo | null;
   frontend_mount: string;
+  frontend_role: "workspace" | "supporting" | "none" | string;
+  frontend_launchable: boolean;
   backend_mount: string;
 };
 
@@ -207,24 +209,6 @@ export type RuntimeStatus = ProviderStatus & {
   cleanup_scope?: "none" | "workspace" | "server";
 };
 
-export type RuntimeCleanupPayload = {
-  cleared_sessions: number;
-  terminated_processes: number;
-  cancelled_turns: number;
-  deleted_threads: number;
-  deleted_thread_ids: string[];
-  runtime_roots_deleted: number;
-  deleted: Record<string, number>;
-  results: Array<{
-    session_id: string;
-    workspace_id: string;
-    deleted: Record<string, number>;
-    deleted_threads: number;
-    runtime_root_deleted: boolean;
-  }>;
-  sessions: RuntimeSessionItem[];
-};
-
 export type PlatformSettings = {
   user: SessionUser;
   workspace: WorkspaceItem;
@@ -355,6 +339,8 @@ export function normalizeAppRegistryItem(value: unknown): AppRegistryItem {
     requires: Array.isArray(item.requires) ? item.requires.map(normalizeRequiredInterface).filter((entry) => entry.alias) : [],
     logo: normalizeLogo(item.logo),
     frontend_mount: stringField(item.frontend_mount),
+    frontend_role: stringField(item.frontend_role, "none"),
+    frontend_launchable: item.frontend_launchable === true,
     backend_mount: stringField(item.backend_mount),
   };
 }
@@ -498,18 +484,6 @@ export function getRuntimeStatus(): Promise<RuntimeStatus> {
 
 export function getPlatformSettings(): Promise<PlatformSettings> {
   return requestJson<PlatformSettings>("/api/settings/platform");
-}
-
-export function listRuntimeSessions(): Promise<{ items: RuntimeSessionItem[] }> {
-  return requestJson<{ items: RuntimeSessionItem[] }>("/api/settings/runtime-sessions");
-}
-
-export function clearRuntimeSessions(session_ids?: string[], reason = "base_shell_settings_cleared"): Promise<RuntimeCleanupPayload> {
-  return requestJson<RuntimeCleanupPayload>("/api/settings/runtime-sessions/clear", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ session_ids, reason }),
-  });
 }
 
 export function runtimeThreadWebSocketUrl(): string {

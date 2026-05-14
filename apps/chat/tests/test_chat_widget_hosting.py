@@ -46,9 +46,9 @@ class ChatWidgetHostingTests(unittest.TestCase):
         self.assertIn('"shell.sidebar.footer"', contract_source)
         self.assertIn('"widgets/chat-sidebar-footer/index": "frontend/widgets/chat-sidebar-footer/index.html"', vite_source)
         self.assertNotIn("bs-chat-sidebar-footer", sidebar_source)
-        self.assertNotIn("Nuova chat</span>", sidebar_source)
+        self.assertNotIn("New chat</span>", sidebar_source)
         self.assertIn("bs-chat-sidebar-footer__new-chat", footer_source)
-        self.assertIn("Nuova chat</span>", footer_source)
+        self.assertIn("New chat</span>", footer_source)
         self.assertIn("maverick.widget.open-app", footer_source)
         self.assertIn("new_chat_request_id", footer_source)
 

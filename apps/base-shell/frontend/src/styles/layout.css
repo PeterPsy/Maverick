@@ -32,7 +32,7 @@
   right: 0;
   z-index: 37;
   height: var(--bs-mobile-shell-status-bar-height);
-  background: linear-gradient(180deg, rgba(7, 7, 8, 0.92), rgba(7, 7, 8, 0.62));
+  background: linear-gradient(180deg, rgba(7, 7, 8, 0.42), rgba(7, 7, 8, 0.18) 42%, transparent 78%);
   content: "";
   pointer-events: none;
 }
@@ -106,10 +106,8 @@
     0.12rem
     calc(env(safe-area-inset-left, 0px) + 0.7rem);
   border: 0;
-  background: rgba(7, 7, 8, 0.5);
+  background: transparent;
   box-shadow: none;
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
 }
 
 .bs-shell.is-mobile-layout .bs-mobile-shell-header {

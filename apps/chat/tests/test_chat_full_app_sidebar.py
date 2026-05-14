@@ -35,12 +35,24 @@ class ChatFullAppSidebarTests(unittest.TestCase):
         self.assertIn("deleteProject", sidebar_widget_source)
         self.assertNotIn("window.confirm", sidebar_widget_source)
         self.assertIn("pendingProjectDeletion", sidebar_widget_source)
-        self.assertIn("Questa azione non puo essere annullata.", sidebar_widget_source)
+        self.assertIn("This action cannot be undone.", sidebar_widget_source)
         self.assertIn("ChatSidebarWidget", sidebar_widget_source)
         self.assertNotIn("ChatAppSidebar", floating_widget_source)
         self.assertNotIn("chatapp-app-sidebar", floating_widget_source)
         self.assertNotIn("ChatAppSidebar", sidebar_widget_source)
         self.assertNotIn("chatapp-app-sidebar", sidebar_widget_source)
+
+    def test_first_draft_send_queues_turn_before_thread_navigation(self) -> None:
+        app_source = (CHAT_ROOT / "frontend" / "src" / "App.tsx").read_text()
+        submit_start = app_source.index("async function submitMessage")
+        first_draft_turn = app_source.index("response = await createRuntimeSessionWithTurn", submit_start)
+        send_turn = app_source.index("response = await sendRuntimeTurn", submit_start)
+        thread_navigation = app_source.index("openChatThreadRouteInShell(optimisticThread.thread_id", submit_start)
+
+        self.assertLess(first_draft_turn, thread_navigation)
+        self.assertLess(send_turn, thread_navigation)
+        self.assertIn("createRuntimeSessionWithTurn", app_source)
+        self.assertNotIn("thread = await createChat", app_source)
 
 
 if __name__ == "__main__":

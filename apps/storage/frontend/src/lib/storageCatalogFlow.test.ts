@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { StorageFile } from '../types';
 import {
   breadcrumbRefreshPlan,
+  catalogBrowserDisplayState,
   catalogLoadedCountAfterPage,
   catalogLoadedCountAfterRefresh,
-  deleteFileWithCatalogRefresh,
   folderOpenRefreshPlan,
   missingNavigationTargetPlan,
   resolvedFileNavigationPlan,
@@ -133,21 +133,28 @@ describe('storage catalog flow planning', () => {
     expect(catalogLoadedCountAfterPage(500, 0)).toBe(500);
   });
 
-  it('refreshes the catalog after deleting a file', async () => {
-    const deleted = file('generated', 'Reports/Q1/deep.txt');
-    const calls: string[] = [];
+  it('keeps the browser in skeleton state while a catalog transition is loading', () => {
+    expect(catalogBrowserDisplayState({
+      initialLoading: false,
+      transitionLoading: true,
+      visibleFileCount: 0,
+      visibleFolderCount: 0,
+    })).toBe('loading');
+  });
 
-    await deleteFileWithCatalogRefresh(deleted, {
-      clearSelectedFile: (fileId) => calls.push(`clear:${fileId}`),
-      deleteFile: async (item) => {
-        calls.push(`delete:${item.id}`);
-      },
-      refresh: async () => {
-        calls.push('refresh');
-      },
-    });
-
-    expect(calls).toEqual([`delete:${deleted.id}`, `clear:${deleted.id}`, 'refresh']);
+  it('shows empty state only after loading settles with no visible entries', () => {
+    expect(catalogBrowserDisplayState({
+      initialLoading: false,
+      transitionLoading: false,
+      visibleFileCount: 0,
+      visibleFolderCount: 0,
+    })).toBe('empty');
+    expect(catalogBrowserDisplayState({
+      initialLoading: false,
+      transitionLoading: false,
+      visibleFileCount: 1,
+      visibleFolderCount: 0,
+    })).toBe('ready');
   });
 
   it('clears missing navigation targets after a failed resolve', () => {

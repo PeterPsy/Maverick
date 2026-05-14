@@ -770,6 +770,47 @@ class ShellCoreApiTestCase(unittest.TestCase):
             self.assertEqual(threads["threads"][0]["runtime_session_id"], session["session_id"])
             self.assertEqual(threads["threads"][0]["availability"], "free")
 
+    def test_runtime_session_creation_can_queue_initial_async_turn(self) -> None:
+        state = bootstrap_platform_state(start_path=self.make_repo_root())
+        self.configure_default_provider(state)
+        app = PlatformHost(state, start_path=state.repository_root)
+        cookie = self.login(app)
+
+        with patch.dict("os.environ", {"MAVERICK_RUNTIME_FAKE_RESPONSE": "async hello"}):
+            status, payload, _headers = self.invoke(
+                app,
+                path="/api/runtime/sessions",
+                method="POST",
+                body={
+                    "agent_id": "chat",
+                    "source_app_id": "chat",
+                    "title": "New chat",
+                    "input_text": "ho un problema con il drag and drop nello storage",
+                    "client_message_id": "client-message-initial",
+                    "async": True,
+                },
+                cookie=cookie,
+            )
+            for _attempt in range(20):
+                _status_events, events, _events_headers = self.invoke(
+                    app,
+                    path=f"/api/runtime/sessions/{payload['session']['session_id']}/events",
+                    cookie=cookie,
+                )
+                event_types = [event["event_type"] for event in events["items"]]
+                if "runtime.turn.completed" in event_types:
+                    break
+                time.sleep(0.05)
+
+        self.assertEqual(status, 202)
+        self.assertEqual(payload["turn"]["status"], "queued")
+        self.assertEqual(payload["turn"]["session_id"], payload["session"]["session_id"])
+        self.assertEqual(payload["thread"]["runtime_session_id"], payload["session"]["session_id"])
+        self.assertEqual(payload["thread"]["title"], "Problema Drag Drop Storage")
+        self.assertIn("runtime.turn.completed", event_types)
+        queued_event = next(event for event in payload["events"] if event["event_type"] == "runtime.turn.queued")
+        self.assertEqual(queued_event["payload"]["client_message_id"], "client-message-initial")
+
     def test_workspace_file_upload_persists_under_workspace_storage(self) -> None:
         repo_root = self.make_repo_root()
         state = bootstrap_platform_state(start_path=repo_root)

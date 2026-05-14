@@ -606,6 +606,8 @@ class BuiltinAppsTestCase(unittest.TestCase):
         self.assertEqual(items["base-shell"]["source_access"], "none")
         self.assertEqual(items["base-shell"]["description"], "Maverick product shell app that hosts enabled app frontends through the platform registry.")
         self.assertEqual(items["base-shell"]["views"], ["shell"])
+        self.assertEqual(items["base-shell"]["frontend_role"], "supporting")
+        self.assertFalse(items["base-shell"]["frontend_launchable"])
         self.assertEqual(
             set(items["base-shell"]),
             {
@@ -622,6 +624,8 @@ class BuiltinAppsTestCase(unittest.TestCase):
                 "requires",
                 "logo",
                 "frontend_mount",
+                "frontend_role",
+                "frontend_launchable",
                 "backend_mount",
             },
         )

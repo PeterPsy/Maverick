@@ -15,6 +15,8 @@ export type ResolvedFileNavigationPlan = {
   refreshOptions: { fileIds: []; folderPath: string; viewMode: 'search'; workspacePaths: [] };
 };
 
+export type CatalogBrowserDisplayState = 'loading' | 'empty' | 'ready';
+
 export const NAVIGATION_TARGET_NOT_FOUND_MESSAGE = 'Storage file not found.';
 
 export function folderOpenRefreshPlan({
@@ -78,22 +80,29 @@ export function catalogLoadedCountAfterPage(currentLoadedCount: number, pageLeng
   return Math.max(0, currentLoadedCount) + Math.max(0, pageLength);
 }
 
+export function catalogBrowserDisplayState({
+  initialLoading,
+  transitionLoading,
+  visibleFileCount,
+  visibleFolderCount,
+}: {
+  initialLoading: boolean;
+  transitionLoading: boolean;
+  visibleFileCount: number;
+  visibleFolderCount: number;
+}): CatalogBrowserDisplayState {
+  if (initialLoading || transitionLoading) {
+    return 'loading';
+  }
+  if (visibleFileCount <= 0 && visibleFolderCount <= 0) {
+    return 'empty';
+  }
+  return 'ready';
+}
+
 export function missingNavigationTargetPlan() {
   return {
     clearPending: true,
     error: NAVIGATION_TARGET_NOT_FOUND_MESSAGE,
   };
-}
-
-export async function deleteFileWithCatalogRefresh(
-  file: StorageFile,
-  actions: {
-    clearSelectedFile: (fileId: string) => void;
-    deleteFile: (file: StorageFile) => Promise<unknown>;
-    refresh: () => Promise<unknown>;
-  }
-) {
-  await actions.deleteFile(file);
-  actions.clearSelectedFile(file.id);
-  await actions.refresh();
 }

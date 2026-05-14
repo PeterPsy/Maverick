@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { readDynamicView, toDynamicViewPayload } from '../../api';
+import { DynamicViewWidgetSkeleton } from '../../components/DynamicViewLoadingSkeletons';
 import { DynamicViewFrame } from '../../dynamicViewFrame';
 import type { DynamicViewPayload } from '../../types';
 import './styles.css';
@@ -74,7 +75,7 @@ function DynamicViewWidget() {
   }, [payload]);
 
   if (error) return <main className="dv-widget"><p className="dv-widget__empty">{error}</p></main>;
-  if (!payload) return <main className="dv-widget"><p className="dv-widget__empty">Loading dynamic view...</p></main>;
+  if (!payload) return <DynamicViewWidgetSkeleton />;
 
   return (
     <main className="dv-widget">

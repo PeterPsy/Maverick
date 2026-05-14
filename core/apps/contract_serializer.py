@@ -47,6 +47,9 @@ def app_contract_payload(parsed: ParsedAppContract) -> dict[str, Any]:
             "source_access": parsed.contract.distribution.source_access,
         },
         "visibility": _visibility_payload(parsed),
+        "presentation": {
+            "frontend_role": parsed.contract.presentation.frontend_role,
+        },
         "permissions": {
             "secrets": {
                 "read": parsed.contract.permissions.secrets.read,

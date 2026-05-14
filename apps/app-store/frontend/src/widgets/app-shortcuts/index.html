@@ -7,23 +7,24 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..700,0..1,0&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="/api/apps/widgets/app-store/app-shortcuts/frontend/styles.css?v=20260512-skeleton-loading" />
+    <link rel="stylesheet" href="/api/apps/widgets/app-store/app-shortcuts/frontend/styles.css?v=20260514-all-apps-sidebar" />
   </head>
   <body>
     <main class="app-shortcuts" aria-label="App selector">
       <section class="app-shortcuts__selector" aria-label="App filters">
         <label class="app-shortcuts__search-frame" for="appShortcutSearch">
           <span aria-hidden="true" class="material-symbols-rounded">search</span>
-          <input id="appShortcutSearch" class="app-shortcuts__search" type="search" placeholder="Cerca app" />
+          <input id="appShortcutSearch" class="app-shortcuts__search" type="search" placeholder="Search apps" />
         </label>
         <div class="app-shortcuts__scope" role="tablist" aria-label="App scope">
-          <button id="appShortcutScopeAll" class="app-shortcuts__scope-button is-active" type="button" role="tab" aria-selected="true">Tutte</button>
-          <button id="appShortcutScopePinned" class="app-shortcuts__scope-button" type="button" role="tab" aria-selected="false">Fissate</button>
+          <button id="appShortcutScopeAll" class="app-shortcuts__scope-button is-active" type="button" role="tab" aria-selected="true">All</button>
+          <button id="appShortcutScopePinned" class="app-shortcuts__scope-button" type="button" role="tab" aria-selected="false">Pinned</button>
         </div>
       </section>
       <div id="appShortcutList" class="app-shortcuts__list"></div>
     </main>
-    <script src="/apps/app-store/assets/app-icons.js?v=20260512-app-icons"></script>
-    <script src="/api/apps/widgets/app-store/app-shortcuts/frontend/main.js?v=20260512-skeleton-loading"></script>
+    <script src="/apps/app-store/assets/frontend-presentation.js?v=20260514-all-apps-sidebar"></script>
+    <script src="/apps/app-store/assets/app-icons.js?v=20260514-all-apps-sidebar"></script>
+    <script src="/api/apps/widgets/app-store/app-shortcuts/frontend/main.js?v=20260514-all-apps-sidebar"></script>
   </body>
 </html>

@@ -107,6 +107,8 @@ It may contain:
 
 The Maverick App Store itself is also an app. Its UI, backend, CLI, MCP, skills, and workspace-owned state live under `apps/app-store` and `workspaces/<workspace_id>/data/app-store/`. It may present the remote catalog only through core-owned App Store APIs such as `/api/app-store/apps`; the app backend must not fetch the public catalog or submission transport directly. It may show installation-level server app sources that are not necessarily installed in the active workspace, show whether catalog apps are already installed in selected workspaces, show workspace-local app projects for the selected workspace context, open installed app frontends through generic shell navigation, and collect install, uninstall, complete workspace-local deletion, workspace assignment, and shortcut pinning choices, but it does not bypass platform boundaries: remote catalog retrieval, public submission transport, authenticated server source reads, authenticated installation state reads, checksum verification, source registration, workspace-local project registration, workspace binding, workspace-local project deletion, and uninstall binding removal remain generic core app-hosting operations.
 
+The App Store's app shortcut sidebar may list every visible workspace app in its "all apps" scope, including apps without a workspace frontend and apps whose frontend role is only supporting. Only launchable workspace frontends may be opened or pinned from that sidebar. Non-launchable apps are shown as app records, not shortcuts: they must not expose pin controls or send shell open requests.
+
 The workspace-level `workspaces/<workspace_id>/apps` directory is not the app store.
 
 It contains:
@@ -474,13 +476,40 @@ Rules:
 - visibility affects app registry responses, mounted frontend/backend access, widgets, CLI discovery/invocation, MCP discovery/invocation, and compact app discovery
 - visibility also affects user-facing App Store catalog, installed-app, and workspace-local app listings
 - visibility does not move business logic into the core
-- visibility must not be implemented as app-specific conditionals such as `if app_id == "user-admin"`
+- visibility must not be implemented as app-specific conditionals such as `if app_id == "internal-admin-tool"`
 
 App Store management views may show restricted apps to users who can manage apps for the relevant workspace, such as platform admins or workspace admins.
 
 Users without app-management authority should see only apps they can actually mount or use. Workspace-local projects that are not installed are management material and should not be listed to ordinary members.
 
 An admin tool app can therefore be a normal sealed app under installation-level `/apps/<public_app_id>/` while user records, platform roles, sessions, memberships, and workspace governance remain core-owned control-plane state.
+
+### Presentation Declaration
+
+App presentation is contract metadata that tells shell-facing surfaces whether a frontend is a user-openable workspace app or only a supporting asset surface.
+
+Canonical shape:
+
+```json
+"presentation": {
+  "frontend_role": "workspace"
+}
+```
+
+Allowed `frontend_role` values:
+
+- `workspace`: the app declares `entrypoints.frontend` and exposes a meaningful user-facing workspace app view. Shell app navigation, App Store open actions, and pinned shortcuts may target it.
+- `supporting`: the app declares `entrypoints.frontend`, but the frontend is a supporting platform or plugin surface rather than a primary workspace app view. The core may still serve its assets, but shell navigation and pinning must not treat it as launchable.
+- `none`: the app has no frontend entrypoint.
+
+Rules:
+
+- `workspace` and `supporting` require `entrypoints.frontend`
+- an app with `entrypoints.frontend` must use either `workspace` or `supporting`
+- App Store catalog and installed-app payloads expose both the declared role and a derived `frontend_launchable` boolean
+- Remote catalog entries are normalized by the core before they reach the App Store UI so `presentation`, `frontend_role`, `frontend_launchable`, and `surfaces` have the same meaning as server, local, and installation payloads.
+- user-facing grouping and icon styling must be derived from the contract role, not from hardcoded app ids
+- direct `/apps/<mount_app_id>/` asset serving remains available for declared frontends even when the role is `supporting`
 
 The recommended mental model is:
 
@@ -1131,7 +1160,9 @@ The shell attaches only to platform protocols such as:
 - mounted app frontend routes under `/apps/<mount_app_id>/`
 - mounted app backend routes under `/api/apps/<mount_app_id>/...`
 
-The shell must derive app navigation from registry records such as `local_app_id`, `public_app_id`, `name`, `description`, `views`, `frontend_mount`, `backend_mount`, and optional icon or logo metadata.
+The shell must derive app navigation from registry records such as `local_app_id`, `public_app_id`, `name`, `description`, `views`, `frontend_mount`, `frontend_role`, `frontend_launchable`, `backend_mount`, and optional icon or logo metadata.
+
+The shell and App Store pinning APIs must treat `frontend_launchable` as the app-open and pinning gate. `frontend_mount` alone means the platform can serve frontend assets; it does not imply the app should appear as a user-openable workspace app.
 
 The `base-shell` port may retain shell-owned local preferences in the browser, such as the last active app and sidebar state.
 
@@ -1139,7 +1170,7 @@ Those preferences are shell UI state only. They are not core workspace records, 
 
 If the active workspace has no configured runtime provider, `base-shell` may open a startup provider setup dialog and persist the selected provider/model through the generic core provider API. This is workspace governance state, not shell-local preference and not chat-app state.
 
-Pinned app shortcuts are not shell-owned browser preferences. They are App Store app data, exposed through an App Store-owned sidebar widget that `base-shell` mounts through the generic widget registry.
+Pinned app shortcuts are not shell-owned browser preferences. They are App Store app data, exposed through an App Store-owned sidebar widget that `base-shell` mounts through the generic widget registry. Pin mutations require current workspace app registry context so non-launchable supporting apps cannot be newly pinned; stale uninstalled, non-launchable, or orphaned entries may still be removed. If an orphaned pinned app id no longer appears in catalog, server, local, or installed app listings, App Store UI should expose a cleanup row instead of requiring direct API use.
 
 Mounted app frontends should be treated as stable app documents after first open.
 
@@ -1183,7 +1214,7 @@ The initial iframe URL remains the registry-provided `frontend_mount`.
 
 Shell-mounted app and widget iframes may use browser sandboxing, but they must preserve access to their own mounted frontend assets. The shell sandbox must include `allow-same-origin` so app documents can behave as same-origin clients for core APIs. Without that token, the browser assigns the iframe an opaque `null` origin, authenticated same-origin API calls fail as CORS/401 errors, and targeted `postMessage` delivery to the mounted app or widget can fail. The static asset route still needs to tolerate opaque `null` origins because old mounted frames, widget frames, or browser module/style CORS behavior may request `/apps/<mount_app_id>/assets/...` without session cookies; those asset responses should be cross-origin readable and must never carry user-specific data.
 
-On mobile, the shell may render transparent chrome above mounted app iframes. To let app content scroll visually underneath that chrome while keeping the first app content below it, the shell exposes host layout CSS variables on same-origin mounted app documents. `--maverick-shell-mobile-content-top-offset` is the top inset that app-owned scroll containers should add to their own top padding. The shell must not crop the mounted iframe below its mobile header, because that prevents app content from appearing behind shell blur.
+On mobile, the shell may render transparent chrome above mounted app iframes. To let app content scroll visually underneath that chrome while keeping the first app content below it, the shell exposes host layout CSS variables on same-origin mounted app documents. `--maverick-shell-mobile-content-top-offset` is the top inset that app-owned scroll containers should add to their own top padding. The shell must not crop the mounted iframe below its mobile header, because that prevents app content from appearing behind the transparent mobile header chrome.
 
 The shell must notify mounted app and widget iframes when their host surface becomes visible or hidden by sending `maverick.app.visibility-changed`. App frontends must treat hidden as a signal to suspend nonessential intervals, runtime replay, and background refresh. Hidden iframes may keep state in memory, but they must not continue live polling as if they were the active work surface.
 
@@ -1702,6 +1733,9 @@ The following example shows the kind of app contract Maverick should expect at p
   "distribution": {
     "mode": "source_available",
     "source_access": "forkable"
+  },
+  "presentation": {
+    "frontend_role": "workspace"
   },
   "capabilities": {
     "mcp_tools": [

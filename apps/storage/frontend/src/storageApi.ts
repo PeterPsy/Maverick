@@ -1,4 +1,4 @@
-import type { CatalogPayload, CreateFolderPayload, DeleteFilePayload, DeleteFolderPayload, DownloadFolderPayload, FileRole, StorageFile, StorageFolder, StorageViewFilter, MoveFilePayload, PreviewTablePayload, PreviewTextPayload, ReadFilePayload, RenderPreviewPayload, UpdateMarkdownPayload, UploadFilePayload } from './types';
+import type { CatalogPayload, CreateFolderPayload, DeleteFilePayload, DeleteFolderPayload, DownloadFolderPayload, FileRole, StorageFile, StorageFolder, StorageViewFilter, MoveFilePayload, MoveFolderPayload, MoveItemsPayload, PreviewTablePayload, PreviewTextPayload, ReadFilePayload, RenderPreviewPayload, UpdateMarkdownPayload, UploadFilePayload } from './types';
 
 const DEFAULT_APP_ID = 'storage';
 
@@ -6,6 +6,12 @@ export type StorageApiOptions = {
   appId?: string;
   endpoint?: string;
   fetchImpl?: typeof fetch;
+};
+
+export type StorageMoveReference = {
+  role: FileRole;
+  relative_path: string;
+  workspace_relative_path?: string;
 };
 
 export async function callBackend<T>(body: Record<string, unknown>, options: StorageApiOptions = {}): Promise<T> {
@@ -188,6 +194,37 @@ export async function moveFileReference(file: Pick<StorageFile, 'role' | 'relati
     relative_path: file.relative_path,
     target_folder_relative_path: targetFolderRelativePath
   });
+}
+
+export async function moveFolder(folder: StorageFolder, targetFolderRelativePath: string) {
+  return moveFolderReference(folder, targetFolderRelativePath);
+}
+
+export async function moveFolderReference(folder: Pick<StorageFolder, 'role' | 'relative_path'>, targetFolderRelativePath: string) {
+  return callBackend<MoveFolderPayload>({
+    action: 'move_folder',
+    role: folder.role,
+    relative_path: folder.relative_path,
+    target_folder_relative_path: targetFolderRelativePath
+  });
+}
+
+export async function moveItemsReferences(files: StorageMoveReference[], folders: StorageMoveReference[], role: FileRole, targetFolderRelativePath: string) {
+  return callBackend<MoveItemsPayload>({
+    action: 'move_items',
+    role,
+    target_folder_relative_path: targetFolderRelativePath,
+    files: files.map(moveReferencePayload),
+    folders: folders.map(moveReferencePayload)
+  });
+}
+
+function moveReferencePayload(item: StorageMoveReference) {
+  return {
+    role: item.role,
+    relative_path: item.relative_path,
+    ...(item.workspace_relative_path ? { workspace_relative_path: item.workspace_relative_path } : {})
+  };
 }
 
 function fileToBase64(file: File) {

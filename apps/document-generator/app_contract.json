@@ -38,6 +38,9 @@
   "visibility": {
     "platform_roles": null
   },
+  "presentation": {
+    "frontend_role": "supporting"
+  },
   "permissions": {
     "secrets": {
       "read": [],

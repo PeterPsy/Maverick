@@ -8,7 +8,7 @@
   .chatapp-editorial-board__hero,
   .chatapp-editorial-board__controls,
   .chatapp-gallery__hero,
-  .chatapp-user-admin-page__hero,
+  .chatapp-settings-page__hero,
   .chatapp-sidebar__header,
   .chatapp-role-picker__header,
   .chatapp-dialog__actions {
@@ -31,18 +31,18 @@
     justify-content: flex-start;
   }
 
-  .chatapp-user-admin-page__hero-meta {
+  .chatapp-settings-page__hero-meta {
     justify-content: flex-start;
   }
 
-  .chatapp-user-admin-console__hero-actions,
-  .chatapp-user-admin-console__hero-buttons,
-  .chatapp-user-admin-console__toolbar-footer,
-  .chatapp-user-admin-console__detail-head,
-  .chatapp-user-admin-console__panel-head,
-  .chatapp-user-admin-console__section-head,
-  .chatapp-user-admin-console__profile-hero,
-  .chatapp-user-admin-console__profile-hero-main {
+  .chatapp-settings-console__hero-actions,
+  .chatapp-settings-console__hero-buttons,
+  .chatapp-settings-console__toolbar-footer,
+  .chatapp-settings-console__detail-head,
+  .chatapp-settings-console__panel-head,
+  .chatapp-settings-console__section-head,
+  .chatapp-settings-console__profile-hero,
+  .chatapp-settings-console__profile-hero-main {
     flex-direction: column;
     align-items: stretch;
   }
@@ -106,89 +106,89 @@
   .chatapp-editorial-board__controls-grid,
   .chatapp-editorial-board__editor-grid,
   .chatapp-editorial-board__detail-meta,
-  .chatapp-user-admin__content,
-  .chatapp-user-admin__create-grid,
-  .chatapp-user-admin__editor-grid,
-  .chatapp-user-admin-console__shell,
-  .chatapp-user-admin-console__toolbar-grid,
-  .chatapp-user-admin-console__form-grid,
-  .chatapp-user-admin-console__security-grid {
+  .chatapp-settings__content,
+  .chatapp-settings__create-grid,
+  .chatapp-settings__editor-grid,
+  .chatapp-settings-console__shell,
+  .chatapp-settings-console__toolbar-grid,
+  .chatapp-settings-console__form-grid,
+  .chatapp-settings-console__security-grid {
     grid-template-columns: 1fr;
   }
 
-  .chatapp-user-admin-console__toolbar-grid.is-mobile-collapsed {
+  .chatapp-settings-console__toolbar-grid.is-mobile-collapsed {
     grid-template-columns: 1fr;
   }
 
-  .chatapp-user-admin__hero,
-  .chatapp-user-admin__hero-main {
+  .chatapp-settings__hero,
+  .chatapp-settings__hero-main {
     flex-direction: column;
     align-items: flex-start;
   }
 
-  .chatapp-user-admin__hero-badges {
+  .chatapp-settings__hero-badges {
     justify-content: flex-start;
   }
 
-  .chatapp-user-admin-page {
+  .chatapp-settings-page {
     padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);
   }
 
-  .chatapp-user-admin__list-scroll {
+  .chatapp-settings__list-scroll {
     max-height: none;
     overflow: visible;
     padding-right: 0;
   }
 
-  .chatapp-user-admin-console__list-panel {
+  .chatapp-settings-console__list-panel {
     position: static;
     max-height: none;
     overflow: visible;
   }
 
-  .chatapp-user-admin-console__user-list {
+  .chatapp-settings-console__user-list {
     overflow: visible;
     padding-right: 0;
   }
 
-  .chatapp-user-admin-console__workspace-row {
+  .chatapp-settings-console__workspace-row {
     grid-template-columns: 1fr;
     align-items: start;
   }
 
-  .chatapp-user-admin-console__workspace-actions,
-  .chatapp-user-admin-console__security-actions,
-  .chatapp-user-admin-console__dialog-actions,
-  .chatapp-user-admin-console__danger-actions {
+  .chatapp-settings-console__workspace-actions,
+  .chatapp-settings-console__security-actions,
+  .chatapp-settings-console__dialog-actions,
+  .chatapp-settings-console__danger-actions {
     justify-content: stretch;
   }
 
-  .chatapp-user-admin-console__workspace-actions .chat-ui-button,
-  .chatapp-user-admin-console__security-actions .chat-ui-button,
-  .chatapp-user-admin-console__dialog-actions .chat-ui-button,
-  .chatapp-user-admin-console__danger-actions .chat-ui-button {
+  .chatapp-settings-console__workspace-actions .chat-ui-button,
+  .chatapp-settings-console__security-actions .chat-ui-button,
+  .chatapp-settings-console__dialog-actions .chat-ui-button,
+  .chatapp-settings-console__danger-actions .chat-ui-button {
     width: 100%;
   }
 
-  .chatapp-user-admin-console__toolbar {
+  .chatapp-settings-console__toolbar {
     gap: 0.7rem;
     padding: 0.85rem;
   }
 
-  .chatapp-user-admin-console__toolbar-footer {
+  .chatapp-settings-console__toolbar-footer {
     display: none;
   }
 
-  .chatapp-user-admin-console__mobile-toolbar {
+  .chatapp-settings-console__mobile-toolbar {
     display: grid;
     gap: 0.6rem;
   }
 
-  .chatapp-user-admin-console__mobile-toolbar-actions .chat-ui-button {
+  .chatapp-settings-console__mobile-toolbar-actions .chat-ui-button {
     flex: 1 1 0;
   }
 
-  .chatapp-user-admin-console__mobile-nav {
+  .chatapp-settings-console__mobile-nav {
     display: grid;
     gap: 0.7rem;
     padding: 0.8rem 0.85rem;
@@ -198,17 +198,17 @@
       linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
   }
 
-  .chatapp-user-admin-console__mobile-nav-group {
+  .chatapp-settings-console__mobile-nav-group {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .chatapp-user-admin-console__mobile-nav-toggle {
+  .chatapp-settings-console__mobile-nav-toggle {
     min-height: 40px;
     justify-content: center;
   }
 
-  .chatapp-user-admin-console__mobile-selected {
+  .chatapp-settings-console__mobile-selected {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
@@ -219,96 +219,96 @@
     background: var(--chatapp-soft-surface);
   }
 
-  .chatapp-user-admin-console__hero {
+  .chatapp-settings-console__hero {
     gap: 0.9rem;
     padding: 0.9rem;
   }
 
-  .chatapp-user-admin-console__hero-actions,
-  .chatapp-user-admin-console__hero-buttons {
+  .chatapp-settings-console__hero-actions,
+  .chatapp-settings-console__hero-buttons {
     justify-items: stretch;
   }
 
-  .chatapp-user-admin-console__hero-buttons .chat-ui-button {
+  .chatapp-settings-console__hero-buttons .chat-ui-button {
     width: 100%;
   }
 
-  .chatapp-user-admin-console__shell {
+  .chatapp-settings-console__shell {
     gap: 0.75rem;
   }
 
-  .chatapp-user-admin-console__list-panel,
-  .chatapp-user-admin-console__detail-panel {
+  .chatapp-settings-console__list-panel,
+  .chatapp-settings-console__detail-panel {
     gap: 0.8rem;
     padding: 0.85rem;
     border-radius: var(--chatapp-cell-radius);
   }
 
-  .chatapp-user-admin-console__panel-head,
-  .chatapp-user-admin-console__detail-head,
-  .chatapp-user-admin-console__section-head {
+  .chatapp-settings-console__panel-head,
+  .chatapp-settings-console__detail-head,
+  .chatapp-settings-console__section-head {
     gap: 0.65rem;
   }
 
-  .chatapp-user-admin-console__detail-head h3 {
+  .chatapp-settings-console__detail-head h3 {
     font-size: 1.08rem;
   }
 
-  .chatapp-user-admin-console__detail-subtitle {
+  .chatapp-settings-console__detail-subtitle {
     font-size: 0.82rem;
     line-height: 1.45;
   }
 
-  .chatapp-user-admin-console__user-row {
+  .chatapp-settings-console__user-row {
     gap: 0.65rem;
     padding: 0.78rem;
     border-radius: 16px;
   }
 
-  .chatapp-user-admin-console__user-row-top {
+  .chatapp-settings-console__user-row-top {
     flex-direction: row;
     justify-content: space-between;
     align-items: baseline;
     gap: 0.4rem;
   }
 
-  .chatapp-user-admin-console__user-row-top strong {
+  .chatapp-settings-console__user-row-top strong {
     font-size: 0.88rem;
   }
 
-  .chatapp-user-admin-console__user-row-top span,
-  .chatapp-user-admin-console__user-row-meta span,
-  .chatapp-user-admin-console__user-row-subtitle {
+  .chatapp-settings-console__user-row-top span,
+  .chatapp-settings-console__user-row-meta span,
+  .chatapp-settings-console__user-row-subtitle {
     font-size: 0.72rem;
   }
 
-  .chatapp-user-admin-console__user-row-meta {
+  .chatapp-settings-console__user-row-meta {
     justify-content: flex-start;
     gap: 0.35rem;
   }
 
-  .chatapp-user-admin-console__profile-hero {
+  .chatapp-settings-console__profile-hero {
     gap: 0.8rem;
     padding: 0.85rem;
     border-radius: var(--chatapp-cell-radius);
   }
 
-  .chatapp-user-admin-console__profile-hero-copy strong {
+  .chatapp-settings-console__profile-hero-copy strong {
     font-size: 0.98rem;
   }
 
-  .chatapp-user-admin-console__profile-hero-copy p {
+  .chatapp-settings-console__profile-hero-copy p {
     font-size: 0.76rem;
     line-height: 1.45;
   }
 
-  .chatapp-user-admin-console__section {
+  .chatapp-settings-console__section {
     gap: 0.75rem;
     padding: 0.85rem;
     border-radius: var(--chatapp-cell-radius);
   }
 
-  .chatapp-user-admin-console__workspace-row {
+  .chatapp-settings-console__workspace-row {
     gap: 0.55rem;
     padding: 0.75rem 0.8rem;
   }
@@ -904,32 +904,32 @@
     word-break: break-word;
   }
 
-  .chatapp-user-admin__hero-title {
+  .chatapp-settings__hero-title {
     white-space: normal;
   }
 
-  .chatapp-user-admin__workspace-grid {
+  .chatapp-settings__workspace-grid {
     grid-template-columns: 1fr;
   }
 
-  .chatapp-user-admin__user-shell,
-  .chatapp-user-admin__user-top {
+  .chatapp-settings__user-shell,
+  .chatapp-settings__user-top {
     align-items: flex-start;
   }
 
-  .chatapp-user-admin__user-top {
+  .chatapp-settings__user-top {
     flex-direction: column;
   }
 
-  .chatapp-user-admin .chatapp-dialog__actions {
+  .chatapp-settings .chatapp-dialog__actions {
     align-items: stretch;
   }
 
-  .chatapp-user-admin .chatapp-dialog__actions .chat-ui-button {
+  .chatapp-settings .chatapp-dialog__actions .chat-ui-button {
     width: 100%;
   }
 
-  .chatapp-user-admin-console__list-panel {
+  .chatapp-settings-console__list-panel {
     max-height: calc(100vh - 12rem);
   }
 
@@ -1138,23 +1138,6 @@
   .chatapp-composer__toolbar {
     gap: 0.65rem;
     padding: 0.72rem 0.78rem;
-  }
-
-  .chatapp-chat-dropzone {
-    inset: 0.38rem;
-    padding: 0.55rem;
-    border-radius: calc(var(--chatapp-cell-radius) - 4px);
-  }
-
-  .chatapp-chat-dropzone__content {
-    gap: 0.52rem;
-    max-width: 100%;
-    font-size: 0.88rem;
-  }
-
-  .chatapp-chat-dropzone__icon {
-    width: 1.85rem;
-    height: 1.85rem;
   }
 
   .chatapp-composer__tools {

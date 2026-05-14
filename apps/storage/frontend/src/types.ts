@@ -105,6 +105,21 @@ export type MoveFilePayload = {
   file: StorageFile;
 };
 
+export type MoveFolderPayload = {
+  folder: StorageFolder;
+};
+
+export type MoveItemPrevious = {
+  role: FileRole;
+  relative_path: string;
+  workspace_relative_path: string;
+};
+
+export type MoveItemsPayload = {
+  files: { previous: MoveItemPrevious; file: StorageFile }[];
+  folders: { previous: MoveItemPrevious; folder: StorageFolder }[];
+};
+
 export type UploadFilePayload = {
   file: StorageFile;
   bytes_written: number;

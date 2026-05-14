@@ -23,10 +23,12 @@ from core.runtime.runtime_threads import (
     create_runtime_thread,
     delete_runtime_thread_complete,
     ensure_runtime_threads_for_sessions,
+    find_runtime_thread_by_session,
     mark_runtime_thread_completed_response_read,
     thread_payload,
     update_runtime_thread,
 )
+from core.runtime.thread_titles import runtime_thread_title_for_session
 from core.runtime.service import (
     create_runtime_session,
     reconcile_runtime_session_policy,
@@ -105,12 +107,7 @@ def _publish_thread_change(
 
 
 def _thread_title_for_session(state: PlatformState, session: RuntimeSessionRecord) -> str:
-    turns = state.runtime_store.list_turns(session.session_id)
-    for turn in sorted(turns, key=lambda item: item.created_at):
-        title = str(turn.input_text or "").strip()
-        if title:
-            return title[:80]
-    return session.agent_id.strip() or "New chat"
+    return runtime_thread_title_for_session(state.runtime_store, session)
 
 
 def _list_session_payloads(state: PlatformState, *, workspace_id: str, start_path) -> list[dict[str, object]]:
@@ -200,6 +197,8 @@ def _handle_session_collection(state: PlatformState, context: RequestSession, me
         except AuthorizationError as error:
             status = "429 Too Many Requests" if error.reason == "max_agent_instances_reached" else "403 Forbidden"
             return json_response(start_response, {"error": error.reason}, status=status)
+        if _runtime_turn_requested(body):
+            return _submit_runtime_turn_response(state, context, session, body, start_response, start_path=start_path)
         return json_response(start_response, _session_payload(session, provider_id=_resolved_provider_id(state, session)), status="201 Created")
     return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")
 
@@ -517,6 +516,23 @@ def _handle_session_turns(state: PlatformState, context: RequestSession, session
         return json_response(start_response, {"items": [_turn_payload(turn) for turn in state.runtime_store.list_turns(session_id)]})
     if method != "POST":
         return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")
+    return _submit_runtime_turn_response(state, context, session, body, start_response, start_path=start_path)
+
+
+def _runtime_turn_requested(body: dict) -> bool:
+    attachments = body.get("attachments") if isinstance(body.get("attachments"), list) else []
+    return bool(str(body.get("input_text") or body.get("message") or "").strip() or attachments)
+
+
+def _submit_runtime_turn_response(
+    state: PlatformState,
+    context: RequestSession,
+    session: RuntimeSessionRecord,
+    body: dict,
+    start_response: StartResponse,
+    *,
+    start_path,
+):
     client_message_id = str(body.get("client_message_id") or "").strip() or None
     attachments = body.get("attachments") if isinstance(body.get("attachments"), list) else []
     attachment_items = [item for item in attachments if isinstance(item, dict)]
@@ -531,6 +547,7 @@ def _handle_session_turns(state: PlatformState, context: RequestSession, session
         start_path=start_path,
     )
     async_requested = bool(body.get("async"))
+
     def notify_source_app_queued(queued_turn: RuntimeTurnRecord, _events: list[RuntimeEventRecord]) -> None:
         dispatch_source_app_runtime_event(
             state,
@@ -569,13 +586,21 @@ def _handle_session_turns(state: PlatformState, context: RequestSession, session
             _provider_unavailable_response(state, session.workspace_id, error),
             status="409 Conflict",
         )
+    thread = find_runtime_thread_by_session(
+        state.runtime_store,
+        workspace_id=session.workspace_id,
+        runtime_session_id=session.session_id,
+    )
+    payload = {
+        "session": _session_payload(session, provider_id=_resolved_provider_id(state, session)),
+        "turn": _turn_payload(turn),
+        "events": [_event_payload(event) for event in events],
+    }
+    if thread is not None:
+        payload["thread"] = thread_payload(thread, viewer_user_id=context.user.user_id)
     return json_response(
         start_response,
-        {
-            "session": _session_payload(session, provider_id=_resolved_provider_id(state, session)),
-            "turn": _turn_payload(turn),
-            "events": [_event_payload(event) for event in events],
-        },
+        payload,
         status=status,
     )
 

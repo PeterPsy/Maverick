@@ -58,9 +58,9 @@ export function buildComposerAttachments(files: File[], existingCount = 0): Comp
       objectUrl: isImage ? URL.createObjectURL(file) : null,
       isImage,
       warning: isTooLarge
-        ? `File oltre il limite di ${formatFileSize(MAX_ATTACHMENT_SIZE_BYTES)}`
+        ? `File exceeds the ${formatFileSize(MAX_ATTACHMENT_SIZE_BYTES)} limit`
         : hasUnsupportedType
-          ? "Tipo file non supportato"
+          ? "Unsupported file type"
           : null,
     };
   });

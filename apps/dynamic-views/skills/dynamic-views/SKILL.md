@@ -88,5 +88,5 @@ The service also accepts snake_case equivalents for `data_bindings`, `snapshot_m
 - Keep combined HTML, CSS, and JavaScript below the app source size limit.
 - Prefer `snapshotMode: "snapshot"` unless the user explicitly wants live data semantics.
 - Use `dataBindings` when the view is grounded in a remembered source.
-- Make the view responsive. The widget iframe clamps its height between roughly 260px and 960px and auto-resizes from document height reports.
+- Make the view responsive. The iframe auto-resizes from document height reports and should let page-level scrolling handle tall content instead of relying on an internal iframe scrollbar.
 - Return or reference the tool result instead of duplicating source code in the assistant response.

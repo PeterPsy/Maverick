@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { callBackend, currentStorageAppId, storageBackendEndpoint } from './storageApi';
+import { callBackend, currentStorageAppId, moveItemsReferences, storageBackendEndpoint } from './storageApi';
 
 describe('storage api client', () => {
   it('derives the mounted app backend from app and widget routes', () => {
@@ -17,6 +17,36 @@ describe('storage api client', () => {
       '/api/apps/storage-fork/backend',
       expect.objectContaining({
         body: JSON.stringify({ action: 'catalog' }),
+        method: 'POST'
+      })
+    );
+  });
+
+  it('sends selected file and folder moves as one backend action', async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ files: [], folders: [] }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchImpl);
+
+    try {
+      await moveItemsReferences(
+        [{ role: 'generated', relative_path: 'loose.md', workspace_relative_path: 'storage/generated/loose.md' }],
+        [{ role: 'generated', relative_path: 'Reports', workspace_relative_path: 'storage/generated/Reports' }],
+        'generated',
+        'Archive'
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      '/api/apps/storage/backend',
+      expect.objectContaining({
+        body: JSON.stringify({
+          action: 'move_items',
+          role: 'generated',
+          target_folder_relative_path: 'Archive',
+          files: [{ role: 'generated', relative_path: 'loose.md', workspace_relative_path: 'storage/generated/loose.md' }],
+          folders: [{ role: 'generated', relative_path: 'Reports', workspace_relative_path: 'storage/generated/Reports' }]
+        }),
         method: 'POST'
       })
     );

@@ -1,4 +1,12 @@
-import type { DynamicViewCreatePayload, DynamicViewInstance, DynamicViewPayload, DynamicViewsListPayload } from './types';
+import type { DynamicViewInstance, DynamicViewPayload, DynamicViewsListPayload } from './types';
+
+export type DynamicViewsListOptions = {
+  limit?: number;
+  query?: string;
+  refs?: Array<{ entity_id: string; entity_type: 'view' }>;
+  status?: string;
+  view_ids?: string[];
+};
 
 export async function callBackend<T>(body: Record<string, unknown>): Promise<T> {
   const response = await fetch('/api/apps/dynamic-views/backend', {
@@ -12,15 +20,8 @@ export async function callBackend<T>(body: Record<string, unknown>): Promise<T> 
   return payload as T;
 }
 
-export function listDynamicViews() {
-  return callBackend<DynamicViewsListPayload>({ action: 'list' });
-}
-
-export function createDynamicView(payload: DynamicViewCreatePayload) {
-  return callBackend<{ instance: DynamicViewInstance; chat_render: { payload: DynamicViewPayload } }>({
-    action: 'create',
-    payload
-  });
+export function listDynamicViews(options: DynamicViewsListOptions = {}) {
+  return callBackend<DynamicViewsListPayload>({ action: 'list', ...options });
 }
 
 export function readDynamicView(instanceId: string) {
@@ -28,10 +29,6 @@ export function readDynamicView(instanceId: string) {
     action: 'read',
     id: instanceId
   });
-}
-
-export function deleteDynamicView(instanceId: string) {
-  return callBackend<{ status: string; deleted: number }>({ action: 'delete', id: instanceId });
 }
 
 export function toDynamicViewPayload(instance: DynamicViewInstance): DynamicViewPayload {
@@ -50,7 +47,7 @@ export function toDynamicViewPayload(instance: DynamicViewInstance): DynamicView
       css: instance.package.css,
       javascript: instance.package.javascript,
       securityReport: instance.package.security_report,
-      tags: instance.package.tags
+      tags: instance.package.tags || []
     },
     data: instance.data,
     dataBindings: instance.data_bindings.map((binding) => ({

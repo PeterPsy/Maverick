@@ -13,13 +13,32 @@ def _response(status_code: int, payload: dict) -> None:
     print(json.dumps({"status_code": status_code, "json": payload}, ensure_ascii=False))
 
 
+def _launchable_app_ids(payload: dict) -> list[str]:
+    workspace_apps = payload.get("workspace_apps")
+    if not isinstance(workspace_apps, dict):
+        return []
+    raw_items = workspace_apps.get("items")
+    if not isinstance(raw_items, list):
+        return []
+    return [
+        str(item.get("app_id") or "").strip()
+        for item in raw_items
+        if isinstance(item, dict) and item.get("frontend_launchable") is True and str(item.get("app_id") or "").strip()
+    ]
+
+
 def main() -> None:
     payload = json.loads(sys.stdin.read() or "{}")
     body = payload.get("body") if isinstance(payload.get("body"), dict) else {}
     action = str(body.get("action") or "catalog")
     try:
         workspace_root = Path(payload["workspace_root"]) if payload.get("workspace_root") else None
-        status_code, result = handle_action(Path(payload["data_root"]), body, workspace_root=workspace_root)
+        status_code, result = handle_action(
+            Path(payload["data_root"]),
+            body,
+            workspace_root=workspace_root,
+            launchable_app_ids=_launchable_app_ids(payload),
+        )
     except AppStoreValidationError as error:
         _response(400, {"error": "validation_error", "detail": str(error)})
         return

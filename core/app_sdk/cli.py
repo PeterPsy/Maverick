@@ -23,6 +23,7 @@ from core.app_sdk.cli_surfaces import (
     _wants_help,
 )
 from core.apps.surfaces import enabled_workspace_app_bindings, resolve_workspace_app_surface
+from core.apps.presentation import app_frontend_is_launchable
 from core.authorization.service import can_mount_app_visibility
 from core.cli.models import CliInvocationContext
 from core.cli.service import run_core_cli_command
@@ -111,6 +112,11 @@ def _run_apps(tokens: list[str], *, state, trusted_context: CliInvocationContext
                 "description": parsed.description,
                 "version": parsed.version,
                 "capabilities": {
+                    "frontend": {
+                        "mounted": parsed.contract.entrypoints.frontend is not None,
+                        "role": parsed.contract.presentation.frontend_role,
+                        "launchable": app_frontend_is_launchable(parsed.contract),
+                    },
                     "cli": bool(parsed.contract.capabilities.cli_commands),
                     "mcp": bool(parsed.contract.capabilities.mcp_tools),
                     "skills": list(parsed.contract.capabilities.skills),

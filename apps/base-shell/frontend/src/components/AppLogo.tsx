@@ -32,7 +32,7 @@ function defaultIcon(app: AppRegistryItem): string {
     "maverick-monitor": "monitor_heart",
     memory: "database",
     skills: "school",
-    "user-admin": "admin_panel_settings",
+    "settings": "admin_panel_settings",
   };
   if (iconByAppId[app.app_id]) {
     return iconByAppId[app.app_id];

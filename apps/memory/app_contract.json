@@ -40,6 +40,9 @@
   "visibility": {
     "platform_roles": null
   },
+  "presentation": {
+    "frontend_role": "workspace"
+  },
   "permissions": {
     "secrets": {
       "read": [],

@@ -117,7 +117,7 @@ describe("base-shell api normalization", () => {
   it("prefills provider setup from available providers when no provider is active", () => {
     const draft = buildProviderSetupDraft({
       user: {
-        user_id: "user-admin",
+        user_id: "settings",
         username: "admin",
         email: null,
         display_name: null,

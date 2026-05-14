@@ -1,9 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "../../App";
+import type { ExternalFileDrop, ExternalMentionDrop } from "../../App";
 import type { ChatThread } from "../../api/client";
 import { deleteThread, getWidgetContext, markThreadRead, updateThread } from "../../api/client";
 import { useRuntimeThreads } from "../../hooks/useRuntimeThreads";
+import { filesFromDataTransfer, hasFileDropData } from "../../lib/fileDropAttachments";
+import { hasStorageReferenceDragData, storageReferenceMentionItemsFromDataTransfer } from "../../lib/storageDragReferences";
 import { isThreadBusy, isThreadUnread } from "../chat-sidebar/sections";
 import {
   floatingWidgetSize,
@@ -374,6 +377,8 @@ function ChatFloatingWindow({
 }) {
   const [editingThreadId, setEditingThreadId] = useState<string | null>(null);
   const [editingThreadTitle, setEditingThreadTitle] = useState("");
+  const [externalFileDrop, setExternalFileDrop] = useState<ExternalFileDrop | null>(null);
+  const [externalMentionDrop, setExternalMentionDrop] = useState<ExternalMentionDrop | null>(null);
   const [isThreadMenuOpen, setIsThreadMenuOpen] = useState(false);
   const threadMenuRef = useRef<HTMLDivElement | null>(null);
   const activeThread = threads.find((thread) => thread.thread_id === windowItem.threadId) || null;
@@ -424,6 +429,43 @@ function ChatFloatingWindow({
     }
   }
 
+  function handleFloatingDragOver(event: React.DragEvent<HTMLElement>) {
+    if (!hasStorageReferenceDragData(event.dataTransfer) && !hasFileDropData(event.dataTransfer)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "copy";
+  }
+
+  function handleFloatingDrop(event: React.DragEvent<HTMLElement>) {
+    if (!hasStorageReferenceDragData(event.dataTransfer)) {
+      const files = filesFromDataTransfer(event.dataTransfer);
+      if (!files.length) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      onCollapseChange(windowItem.id, false);
+      setExternalFileDrop({
+        files,
+        requestId: crypto.randomUUID(),
+      });
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    const items = storageReferenceMentionItemsFromDataTransfer(event.dataTransfer);
+    if (!items.length) {
+      return;
+    }
+    onCollapseChange(windowItem.id, false);
+    setExternalMentionDrop({
+      items,
+      requestId: crypto.randomUUID(),
+    });
+  }
+
   function startRenameThread(thread: ChatThread) {
     setEditingThreadId(thread.thread_id);
     setEditingThreadTitle(thread.title || "New chat");
@@ -445,9 +487,11 @@ function ChatFloatingWindow({
     <>
       <button
         aria-busy={isActiveThreadBusy || undefined}
-        aria-label={isActiveThreadBusy ? "Apri chat in corso" : isActiveThreadUnread ? "Apri chat con risposta da leggere" : "Apri chat"}
+        aria-label={isActiveThreadBusy ? "Open active chat" : isActiveThreadUnread ? "Open chat with unread response" : "Open chat"}
         className={`chat-floating-widget-launcher ${windowItem.isCollapsed ? "" : "is-hidden"} ${isActiveThreadBusy ? "is-busy" : ""} ${isActiveThreadUnread ? "is-unread" : ""}`}
         onClick={openCollapsedThread}
+        onDragOver={handleFloatingDragOver}
+        onDrop={handleFloatingDrop}
         type="button"
       >
         {isActiveThreadBusy ? <BusyChatGlow /> : null}
@@ -455,14 +499,19 @@ function ChatFloatingWindow({
           forum
         </span>
       </button>
-      <section className={`chat-floating-widget-shell ${windowItem.isCollapsed ? "is-hidden" : ""}`} aria-label="Chat">
+      <section
+        className={`chat-floating-widget-shell ${windowItem.isCollapsed ? "is-hidden" : ""}`}
+        aria-label="Chat"
+        onDragOver={handleFloatingDragOver}
+        onDrop={handleFloatingDrop}
+      >
         <header className="chat-floating-widget-shell__bar">
           <div className="chat-floating-widget-shell__thread-tools">
             <div className="chat-floating-thread-menu" ref={threadMenuRef}>
               <button
                 aria-expanded={isThreadMenuOpen}
                 aria-haspopup="menu"
-                aria-label="Scegli chat"
+                aria-label="Choose chat"
                 className={`chat-floating-thread-menu__trigger ${isActiveThreadBusy ? "is-busy" : ""} ${isActiveThreadUnread ? "is-unread" : ""}`}
                 disabled={threads.length === 0}
                 onClick={() => setIsThreadMenuOpen((current) => !current)}
@@ -489,7 +538,7 @@ function ChatFloatingWindow({
                         {isBusy ? <BusyChatGlow /> : null}
                         {isEditing ? (
                           <input
-                            aria-label="Rinomina chat"
+                            aria-label="Rename chat"
                             autoFocus
                             className="chat-floating-thread-menu__rename-input"
                             onChange={(event) => setEditingThreadTitle(event.target.value)}
@@ -515,7 +564,7 @@ function ChatFloatingWindow({
                         )}
                         <div className="chat-floating-thread-menu__item-actions">
                           <button
-                            aria-label={`Rinomina ${thread.title || "chat"}`}
+                            aria-label={`Rename ${thread.title || "chat"}`}
                             className="chat-floating-thread-menu__icon-action"
                             onClick={(event) => {
                               event.stopPropagation();
@@ -528,7 +577,7 @@ function ChatFloatingWindow({
                             </span>
                           </button>
                           <button
-                            aria-label={`Cancella ${thread.title || "chat"}`}
+                            aria-label={`Delete ${thread.title || "chat"}`}
                             className="chat-floating-thread-menu__icon-action is-danger"
                             onClick={(event) => {
                               event.stopPropagation();
@@ -550,7 +599,7 @@ function ChatFloatingWindow({
           </div>
           <div className="chat-floating-widget-shell__actions">
             <button
-              aria-label="Nuova chat"
+              aria-label="New chat"
               className="chat-floating-widget-shell__button"
               onClick={() => onCreateDraftChat(windowItem.id, activeThread?.project_id || null)}
               type="button"
@@ -559,13 +608,13 @@ function ChatFloatingWindow({
                 add
               </span>
             </button>
-            <button aria-label="Collassa chat" className="chat-floating-widget-shell__button" onClick={() => onCollapseChange(windowItem.id, true)} type="button">
+            <button aria-label="Collapse chat" className="chat-floating-widget-shell__button" onClick={() => onCollapseChange(windowItem.id, true)} type="button">
               <span aria-hidden="true" className="material-symbols-rounded">
                 keyboard_arrow_down
               </span>
             </button>
             <button
-              aria-label="Chiudi chat"
+              aria-label="Close chat"
               className="chat-floating-widget-shell__button chat-floating-widget-shell__button--danger chat-floating-widget-shell__button--close"
               onClick={() => onClose(windowItem.id)}
               type="button"
@@ -579,6 +628,8 @@ function ChatFloatingWindow({
         <div className="chat-floating-widget-shell__body">
           <App
             enablePageCapture
+            externalFileDrop={externalFileDrop}
+            externalMentionDrop={externalMentionDrop}
             navigationScope={windowItem.id}
             newChatProjectId={windowItem.draftProjectId}
             newChatRequestId={windowItem.isDraft ? windowItem.id : null}

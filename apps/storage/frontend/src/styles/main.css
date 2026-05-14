@@ -251,6 +251,34 @@ p {
   flex: 0 0 auto;
 }
 
+.storage-selection-toolbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 2.25rem;
+  border: 1px solid var(--storage-border);
+  border-radius: 999px;
+  background: var(--storage-surface);
+  padding: 0 6px 0 12px;
+  color: var(--storage-text);
+  font-size: 0.8rem;
+}
+
+.storage-selection-toolbar button {
+  display: inline-grid;
+  place-items: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--storage-muted);
+}
+
+.storage-selection-toolbar button:hover {
+  background: var(--storage-surface-hover);
+  color: var(--storage-text);
+}
+
 .icon-button,
 .card-action {
   display: inline-grid;
@@ -557,6 +585,7 @@ h3 {
 }
 
 .folder-card {
+  position: relative;
   min-width: 0;
   border: 1px solid var(--storage-border);
   border-radius: 12px;
@@ -596,6 +625,28 @@ h3 {
 
 .folder-card.drop-blocked .folder-card-icon {
   color: var(--storage-danger);
+}
+
+.folder-card.selection-selected {
+  border-color: var(--storage-accent);
+  background: var(--storage-accent-soft);
+  box-shadow: 0 0 0 1px rgba(179, 211, 255, 0.18);
+}
+
+.storage-browser.list .folder-card.selection-selected {
+  border-color: var(--storage-border);
+  background: var(--storage-surface);
+  box-shadow: none;
+}
+
+.folder-card.is-dragging {
+  opacity: 0.18;
+  filter: saturate(0.75);
+}
+
+.folder-card.is-dragging .folder-card-actions,
+.folder-card.is-dragging .folder-card-main {
+  opacity: 0;
 }
 
 .storage-folder-skeleton {
@@ -815,6 +866,61 @@ h3 {
   transition: opacity 120ms ease, filter 120ms ease;
 }
 
+.animated-file-item.selection-selected .animated-file-preview-button {
+  box-shadow: 0 0 0 2px var(--storage-accent), 0 8px 24px rgba(0, 0, 0, 0.22);
+}
+
+.animated-file-item.is-list.selection-mode.selection-selected .animated-file-preview-button,
+.animated-file-item.is-list.selection-mode.selected .animated-file-preview-button {
+  box-shadow: none;
+}
+
+.storage-selection-toggle {
+  position: absolute;
+  z-index: 20;
+  top: 6px;
+  left: 6px;
+  display: inline-grid;
+  place-items: center;
+  width: 1.45rem;
+  height: 1.45rem;
+  border: 1px solid var(--storage-border-strong);
+  border-radius: 999px;
+  background: rgba(8, 8, 10, 0.76);
+  color: var(--storage-muted);
+  padding: 0;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+}
+
+.storage-selection-toggle:hover {
+  border-color: var(--storage-accent);
+  color: var(--storage-text);
+}
+
+.storage-selection-toggle.selected {
+  border-color: var(--storage-accent);
+  background: var(--storage-accent);
+  color: var(--maverick-text-on-accent);
+}
+
+.storage-selection-toggle:disabled {
+  cursor: default;
+  opacity: 0.38;
+}
+
+.storage-selection-toggle-box {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.storage-selection-toggle .storage-icon {
+  width: 0.82rem;
+  height: 0.82rem;
+}
+
 .animated-file-item.is-dragging {
   opacity: 0.18;
   filter: saturate(0.75);
@@ -894,7 +1000,27 @@ h3 {
   border-radius: 13px;
   background: var(--storage-preview);
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.36), 0 0 0 1px var(--storage-border-strong);
-  overflow: hidden;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.storage-drag-count-badge {
+  position: absolute;
+  right: -9px;
+  top: -9px;
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.45rem;
+  height: 1.45rem;
+  border: 1px solid rgba(255, 255, 255, 0.46);
+  border-radius: 999px;
+  background: var(--storage-accent);
+  color: var(--maverick-text-on-accent);
+  padding: 0 0.32rem;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.32);
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1;
   pointer-events: none;
 }
 
@@ -951,6 +1077,12 @@ h3 {
   margin: 0 !important;
   object-fit: contain;
   padding: 0 !important;
+}
+
+.animated-file-item.is-card .animated-file-preview-image-frame > img.animated-file-preview-image {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain;
 }
 
 .animated-file-preview iframe {
@@ -1694,6 +1826,15 @@ h3 {
     display: flex;
     justify-content: flex-end;
     min-width: 0;
+  }
+
+  .storage-selection-toolbar {
+    gap: 0;
+    padding: 0.25rem;
+  }
+
+  .storage-selection-count {
+    display: none;
   }
 
   .storage-browser.card {

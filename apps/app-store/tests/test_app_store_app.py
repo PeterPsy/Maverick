@@ -8,6 +8,8 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
+import subprocess
 import tarfile
 from threading import Thread
 import tempfile
@@ -34,9 +36,9 @@ class AppStoreAppTestCase(unittest.TestCase):
     def make_repo_root(self) -> Path:
         repo_root = make_temp_repo_root(self)
         link_app_sources(repo_root, ["app-store"])
-        self.write_remote_app_contract(repo_root / "apps" / "base-shell", app_id="base-shell", name="Base Shell")
-        self.write_remote_app_contract(repo_root / "apps" / "chat", app_id="chat", name="Chat")
-        self.write_remote_app_contract(repo_root / "apps" / "agents", app_id="agents", name="Agents")
+        self.write_remote_app_contract(repo_root / "apps" / "base-shell", app_id="base-shell", name="Base Shell", frontend_role="supporting")
+        self.write_remote_app_contract(repo_root / "apps" / "chat", app_id="chat", name="Chat", frontend_role="workspace")
+        self.write_remote_app_contract(repo_root / "apps" / "agents", app_id="agents", name="Agents", frontend_role="workspace")
         return repo_root
 
     def invoke(
@@ -130,7 +132,9 @@ class AppStoreAppTestCase(unittest.TestCase):
         app_id: str = "notes",
         name: str = "Notes",
         platform_roles: list[str] | None = None,
+        frontend_role: str = "none",
     ) -> None:
+        has_frontend = frontend_role in {"workspace", "supporting"}
         contract = {
             "app_id": app_id,
             "contract_version": "1.0",
@@ -143,8 +147,9 @@ class AppStoreAppTestCase(unittest.TestCase):
             "requires": [],
             "distribution": {"mode": "sealed", "source_access": "none"},
             **({"visibility": {"platform_roles": platform_roles}} if platform_roles is not None else {}),
-            "capabilities": {"mcp_tools": [], "cli_commands": [], "skills": [], "views": []},
-            "entrypoints": {"hooks": {}},
+            "presentation": {"frontend_role": frontend_role},
+            "capabilities": {"mcp_tools": [], "cli_commands": [], "skills": [], "views": ["main"] if has_frontend else []},
+            "entrypoints": {"frontend": "frontend/dist", "hooks": {}} if has_frontend else {"hooks": {}},
             "storage": {
                 "storage_kind": "json",
                 "data_schema_version": "1",
@@ -185,6 +190,10 @@ class AppStoreAppTestCase(unittest.TestCase):
             "rollback_support": {"bundle": False, "data": False, "repair_only": False},
         }
         app_root.mkdir(parents=True)
+        if has_frontend:
+            frontend_root = app_root / "frontend" / "dist"
+            frontend_root.mkdir(parents=True)
+            (frontend_root / "index.html").write_text(f"<h1>{name}</h1>", encoding="utf-8")
         (app_root / "app_contract.json").write_text(json.dumps(contract, indent=2), encoding="utf-8")
 
     def write_workspace_local_app_contract(
@@ -206,6 +215,7 @@ class AppStoreAppTestCase(unittest.TestCase):
             "requires": [],
             "distribution": {"mode": "workspace_local", "source_access": "editable"},
             **({"visibility": {"platform_roles": platform_roles}} if platform_roles is not None else {}),
+            "presentation": {"frontend_role": "workspace" if frontend else "none"},
             "capabilities": {"mcp_tools": [], "cli_commands": [], "skills": [], "views": ["main"] if frontend else []},
             "entrypoints": {"frontend": "frontend/dist", "hooks": {}} if frontend else {"hooks": {}},
             "storage": {
@@ -387,6 +397,7 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertIn("text/html", headers["Content-Type"])
         self.assertIn(b"App Store", payload)
         self.assertIn(b"catalog-folder-section", payload)
+        self.assertIn(b"stalePinsSection", payload)
         self.assertIn(b"app-folder-data.js", payload)
         self.assertIn(b"app-folder-lightbox.js", payload)
         self.assertNotIn(b"Most Popular Apps", payload)
@@ -398,9 +409,13 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertIn(b'detail-title-separator', payload)
         self.assertNotIn(b'today-heading', payload)
         self.assertNotIn(b'todayLabel', payload)
-        self.assertIn(b"/apps/app-store/assets/main.css?v=20260512-skeleton-loading", payload)
-        self.assertIn(b"/apps/app-store/assets/app-icons.js?v=20260512-app-icons", payload)
-        self.assertIn(b"/apps/app-store/assets/main.js?v=20260514-folder-only", payload)
+        self.assertIn(b"/apps/app-store/assets/main.css?v=20260514-stale-pin-cleanup", payload)
+        self.assertIn(b"/apps/app-store/assets/frontend-presentation.js?v=20260514-stale-pin-cleanup", payload)
+        self.assertIn(b"/apps/app-store/assets/app-icons.js?v=20260514-stale-pin-cleanup", payload)
+        self.assertIn(b"/apps/app-store/assets/app-folder-data.js?v=20260514-stale-pin-cleanup", payload)
+        self.assertIn(b"/apps/app-store/assets/app-folder-lightbox.js?v=20260514-stale-pin-cleanup", payload)
+        self.assertIn(b"/apps/app-store/assets/app-folders.js?v=20260514-stale-pin-cleanup", payload)
+        self.assertIn(b"/apps/app-store/assets/main.js?v=20260514-stale-pin-cleanup", payload)
 
     def test_frontend_dist_separates_server_promotion_from_public_submission(self) -> None:
         app_root = Path(__file__).resolve().parents[1]
@@ -433,24 +448,158 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertIn('"app-store": "storefront"', icon_js)
         self.assertIn("mergeCatalogAndServerApps", frontend_js)
         self.assertIn("state.apps = mergeCatalogAndServerApps(state.catalogApps, state.serverApps)", frontend_js)
-        self.assertIn('renderIcon(app, "app-row-icon")', frontend_js)
+        self.assertIn('renderIcon(app, "app-row-icon", installation)', frontend_js)
+        self.assertIn("frontendAvailabilityLabel", frontend_js)
+        self.assertIn("isFrontendLaunchable", frontend_js)
+        self.assertIn("function canTogglePinnedApp", frontend_js)
+        self.assertIn("return installState.installedCount > 0 && installState.launchableCount > 0", frontend_js)
+        self.assertIn("disabled: isPending || !canTogglePinnedApp(app, installState)", frontend_js)
+        self.assertIn("function stalePinnedAppIds", frontend_js)
+        self.assertIn("function renderStalePinnedShortcuts", frontend_js)
+        self.assertIn("stale-pin-remove", frontend_js)
+        self.assertIn(".stale-pins-section", frontend_css)
+        self.assertIn("is-supporting-frontend", icon_js)
+        self.assertIn("is-non-launchable", icon_js)
+        self.assertIn(".app-row-icon.is-glyph.is-non-launchable", frontend_css)
+        self.assertIn(".app-row-icon.is-glyph.is-supporting-frontend", frontend_css)
         self.assertNotIn("slice(0, 1).toUpperCase()", frontend_js)
         self.assertIn(".app-row-icon.is-glyph", frontend_css)
+
+    def test_frontend_dist_groups_app_folders_by_all_declared_surfaces(self) -> None:
+        app_root = Path(__file__).resolve().parents[1]
+        folder_data_js = (app_root / "frontend" / "dist" / "assets" / "app-folder-data.js").read_text(encoding="utf-8")
+        folder_js = (app_root / "frontend" / "dist" / "assets" / "app-folders.js").read_text(encoding="utf-8")
+        folder_css = (app_root / "frontend" / "dist" / "assets" / "app-folders.css").read_text(encoding="utf-8")
+        frontend_js = (app_root / "frontend" / "dist" / "assets" / "main.js").read_text(encoding="utf-8")
+        frontend_css = (app_root / "frontend" / "dist" / "assets" / "main.css").read_text(encoding="utf-8")
+        lightbox_css = (app_root / "frontend" / "dist" / "assets" / "app-folder-lightbox.css").read_text(encoding="utf-8")
+        frontend_html = (app_root / "frontend" / "dist" / "index.html").read_text(encoding="utf-8")
+
+        self.assertIn("function folderIdsForApp", folder_data_js)
+        self.assertIn("Platform Extensions", folder_data_js)
+        self.assertIn("supporting_frontend", folder_data_js)
+        self.assertIn("No App View", (app_root / "frontend" / "dist" / "assets" / "app-folder-lightbox.js").read_text(encoding="utf-8"))
+        self.assertIn("matchedFolderIds", folder_data_js)
+        self.assertIn("folderIdsForApp(app, activeSurface).forEach", folder_data_js)
+        self.assertIn("shouldUseTwoStepFolderOpen", folder_js)
+        self.assertIn("primeFolderFan", folder_js)
+        self.assertIn('card.classList.add("is-hovered")', folder_js)
+        self.assertIn('card.classList.contains("is-touch-primed")', folder_js)
+        self.assertIn("renderPreviewIcon", folder_js)
+        self.assertIn("app-folder-preview-icon", folder_js)
+        self.assertIn("app-folder-preview-icon", folder_css)
+        self.assertIn("folderAppCount", folder_js)
+        self.assertNotIn("appImage", folder_js)
+        self.assertNotIn("app-folder-preview-shade", folder_js)
+        self.assertNotIn("app-folder-preview-shade", folder_css)
+        self.assertNotIn(".app-folder-preview img", folder_css)
+        self.assertNotIn("folderIdForApp", folder_data_js)
+        self.assertNotIn("renderCount", folder_data_js)
+        self.assertNotIn("renderCount", folder_js)
+        self.assertNotIn("Hover", folder_js)
+        self.assertNotIn("Empty", folder_js)
+        self.assertNotIn("apps in folders", frontend_js)
+        self.assertNotIn("refreshButton", frontend_js)
+        self.assertNotIn("refreshButton", frontend_html)
+        self.assertNotIn("statusText", frontend_js)
+        self.assertNotIn("statusText", frontend_html)
+        self.assertNotIn("action-group", frontend_html)
+        self.assertNotIn(".action-group", frontend_css)
+        self.assertNotIn(".status-pill", frontend_css)
+        self.assertNotIn(".icon-button", frontend_css)
+        card_rule = re.search(r"\.app-folder-card \{(?P<body>.*?)\n\}", folder_css, re.DOTALL)
+        self.assertIsNotNone(card_rule)
+        self.assertNotIn("overflow: hidden", card_rule.group("body"))
+        heavy_weight_rules = []
+        for name, css in {
+            "main.css": frontend_css,
+            "app-folders.css": folder_css,
+            "app-folder-lightbox.css": lightbox_css,
+        }.items():
+            for match in re.finditer(r"(?P<selectors>[^{}]+)\{[^{}]*font-weight:\s*(?P<weight>bold|[789][0-9]{2})\s*;", css, re.DOTALL):
+                heavy_weight_rules.append((name, " ".join(match.group("selectors").split()), match.group("weight")))
+        self.assertEqual(heavy_weight_rules, [("app-folder-lightbox.css", ".folder-lightbox-copy h3", "900")])
+
+    def test_frontend_presentation_helper_drives_foldering_and_installed_launchability(self) -> None:
+        app_root = Path(__file__).resolve().parents[1]
+        script = f"""
+const fs = require("fs");
+const vm = require("vm");
+const root = {json.dumps(str(app_root))};
+function createElement(tagName) {{
+  return {{
+    tagName,
+    children: [],
+    className: "",
+    textContent: "",
+    classList: {{
+      classes: [],
+      add(name) {{ this.classes.push(name); }},
+    }},
+    setAttribute() {{}},
+    append(...nodes) {{ this.children.push(...nodes); }},
+  }};
+}}
+const context = {{ window: {{}}, document: {{ createElement }} }};
+vm.createContext(context);
+vm.runInContext(fs.readFileSync(`${{root}}/frontend/dist/assets/frontend-presentation.js`, "utf8"), context);
+vm.runInContext(fs.readFileSync(`${{root}}/frontend/dist/assets/app-icons.js`, "utf8"), context);
+vm.runInContext(fs.readFileSync(`${{root}}/frontend/dist/assets/app-folder-data.js`, "utf8"), context);
+const presentation = context.window.MaverickFrontendPresentation;
+const icons = context.window.MaverickAppIcons;
+const foldersApi = context.window.MaverickAppFolderData;
+function assert(condition, message) {{
+  if (!condition) throw new Error(message);
+}}
+const supporting = presentation.frontendPresentation({{
+  app_id: "developer-kit",
+  frontend_role: "supporting",
+  surfaces: [],
+}});
+assert(supporting.launchable === false, "supporting apps are not launchable");
+assert(supporting.surfaces.includes("supporting_frontend"), "supporting role synthesizes supporting_frontend");
+const folders = foldersApi.buildFolders([{{
+  app_id: "developer-kit",
+  frontend_role: "supporting",
+  surfaces: [],
+}}], "");
+const platformExtensions = folders.find((folder) => folder.id === "supporting_frontend");
+assert(platformExtensions.apps.some((app) => app.app_id === "developer-kit"), "supporting apps land in Platform Extensions");
+const installed = presentation.frontendPresentation(
+  {{ app_id: "reporter", frontend_role: "workspace", frontend_launchable: true, surfaces: ["frontend"] }},
+  {{ app_id: "reporter", frontend_role: "supporting", frontend_launchable: false, surfaces: [] }},
+);
+assert(installed.launchable === false, "installed binding launchability overrides catalog latest");
+assert(installed.role === "supporting", "installed binding role overrides catalog latest");
+const icon = icons.renderIcon(
+  {{ app_id: "reporter", frontend_role: "workspace", frontend_launchable: true, surfaces: ["frontend"] }},
+  "test-icon",
+  {{ app_id: "reporter", frontend_role: "supporting", frontend_launchable: false, surfaces: [] }},
+);
+assert(icon.classList.classes.includes("is-supporting-frontend"), "icons use installed binding role");
+assert(icon.classList.classes.includes("is-non-launchable"), "icons use installed binding launchability");
+"""
+        result = subprocess.run(["node", "-e", script], check=False, capture_output=True, text=True)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_frontend_dist_has_skeleton_loading_states(self) -> None:
         app_root = Path(__file__).resolve().parents[1]
         frontend_js = (app_root / "frontend" / "dist" / "assets" / "main.js").read_text(encoding="utf-8")
         frontend_css = (app_root / "frontend" / "dist" / "assets" / "main.css").read_text(encoding="utf-8")
+        folder_css = (app_root / "frontend" / "dist" / "assets" / "app-folders.css").read_text(encoding="utf-8")
         shortcut_js = (app_root / "frontend" / "dist" / "widgets" / "app-shortcuts" / "main.js").read_text(encoding="utf-8")
         shortcut_css = (app_root / "frontend" / "dist" / "widgets" / "app-shortcuts" / "styles.css").read_text(encoding="utf-8")
 
         self.assertIn("renderLoading", frontend_js)
-        self.assertIn("feature-card--skeleton", frontend_js)
+        self.assertIn("renderFolderGridSkeleton", frontend_js)
+        self.assertIn("app-folder-card--skeleton", frontend_js)
         self.assertIn('aria-busy", "true"', frontend_js)
         self.assertIn("width: min(100%, 1440px)", frontend_css)
         self.assertIn("max-width: 1440px", frontend_css)
         self.assertIn("store-loading-skeleton-shimmer", frontend_css)
-        self.assertIn(".app-row--skeleton", frontend_css)
+        self.assertIn(".app-folder-grid--skeleton", folder_css)
+        self.assertIn(".store-loading-skeleton__line--folder-title", folder_css)
         self.assertIn("renderSkeleton", shortcut_js)
         self.assertIn("app-shortcuts__row--skeleton", shortcut_js)
         self.assertIn("app-shortcuts-skeleton-shimmer", shortcut_css)
@@ -552,9 +701,10 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertEqual(status_widget, 200)
         self.assertIn("text/html", widget_headers["Content-Type"])
         self.assertIn(b"App shortcuts", widget_body)
-        self.assertIn(b"styles.css?v=20260512-skeleton-loading", widget_body)
-        self.assertIn(b"app-icons.js?v=20260512-app-icons", widget_body)
-        self.assertIn(b"main.js?v=20260512-skeleton-loading", widget_body)
+        self.assertIn(b"styles.css?v=20260514-all-apps-sidebar", widget_body)
+        self.assertIn(b"frontend-presentation.js?v=20260514-all-apps-sidebar", widget_body)
+        self.assertIn(b"app-icons.js?v=20260514-all-apps-sidebar", widget_body)
+        self.assertIn(b"main.js?v=20260514-all-apps-sidebar", widget_body)
         shortcut_script = (
             Path(__file__).resolve().parents[1] / "frontend" / "dist" / "widgets" / "app-shortcuts" / "main.js"
         ).read_text()
@@ -563,11 +713,19 @@ class AppStoreAppTestCase(unittest.TestCase):
             Path(__file__).resolve().parents[1] / "frontend" / "dist" / "widgets" / "app-shortcuts" / "styles.css"
         ).read_text()
         self.assertIn("MaverickAppIcons.renderIcon", shortcut_script)
-        self.assertIn("app.logo?.kind === \"image\"", icon_script)
-        self.assertIn("app.logo?.kind === \"glyph\"", icon_script)
+        self.assertIn("logo?.kind === \"image\"", icon_script)
+        self.assertIn("logo?.kind === \"glyph\"", icon_script)
         self.assertIn("pinned_apps.toggle", shortcut_script)
+        self.assertIn("state.apps = registry.items || []", shortcut_script)
+        self.assertIn("state.apps.filter(isFrontendLaunchable).map", shortcut_script)
+        self.assertNotIn("state.apps = (registry.items || []).filter(isFrontendLaunchable)", shortcut_script)
+        self.assertIn("row.classList.add(\"is-not-pinnable\")", shortcut_script)
+        self.assertIn("button.disabled = true", shortcut_script)
+        self.assertIn("row.append(button);", shortcut_script)
         self.assertIn(".app-shortcuts__icon img", shortcut_styles)
         self.assertIn(".app-shortcuts__search-frame", shortcut_styles)
+        self.assertIn(".app-shortcuts__row.is-not-pinnable", shortcut_styles)
+        self.assertIn(".app-shortcuts__button:disabled", shortcut_styles)
 
     @integration_test("app-store platform integration suite; run with scripts/test_suite.py --level integration")
     def test_catalog_and_install_require_maverick_authentication(self) -> None:
@@ -705,7 +863,7 @@ class AppStoreAppTestCase(unittest.TestCase):
             ],
         }
 
-        with patch("core.api.app_store_api.fetch_remote_catalog", return_value=catalog):
+        with patch("core.api.app_store_http.fetch_remote_catalog", return_value=catalog):
             admin_status, admin_payload, _admin_headers = self.invoke(app, path="/api/app-store/apps", cookie=admin_cookie)
             member_status, member_payload, _member_headers = self.invoke(app, path="/api/app-store/apps", cookie=member_cookie)
 
@@ -714,6 +872,46 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertIn("admin-panel", {item["app_id"] for item in admin_payload["items"]})
         self.assertNotIn("admin-panel", {item["app_id"] for item in member_payload["items"]})
         self.assertEqual(member_payload["count"], 1)
+
+    @integration_test("app-store platform integration suite; run with scripts/test_suite.py --level integration")
+    def test_catalog_api_normalizes_frontend_presentation_metadata(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+        cookie = self.login(app)
+        catalog = {
+            "count": 2,
+            "items": [
+                {
+                    "app_id": "developer-kit",
+                    "name": "Developer Kit",
+                    "presentation": {"frontend_role": "supporting"},
+                    "surfaces": [],
+                    "versions": [{"version": "1.0.0", "surfaces": []}],
+                },
+                {
+                    "app_id": "notes",
+                    "name": "Notes",
+                    "surfaces": ["frontend", "mcp"],
+                    "versions": [{"version": "1.0.0", "surfaces": ["frontend"]}],
+                },
+            ],
+        }
+
+        with patch("core.api.app_store_http.fetch_remote_catalog", return_value=catalog):
+            status, payload, _headers = self.invoke(app, path="/api/app-store/apps", cookie=cookie)
+
+        self.assertEqual(status, 200)
+        items = {item["app_id"]: item for item in payload["items"]}
+        self.assertEqual(items["developer-kit"]["frontend_role"], "supporting")
+        self.assertFalse(items["developer-kit"]["frontend_launchable"])
+        self.assertEqual(items["developer-kit"]["presentation"], {"frontend_role": "supporting"})
+        self.assertIn("supporting_frontend", items["developer-kit"]["surfaces"])
+        self.assertIn("supporting_frontend", items["developer-kit"]["versions"][0]["surfaces"])
+        self.assertEqual(items["notes"]["frontend_role"], "workspace")
+        self.assertTrue(items["notes"]["frontend_launchable"])
+        self.assertIn("frontend", items["notes"]["surfaces"])
+        self.assertIn("mcp", items["notes"]["surfaces"])
 
     @integration_test("app-store platform integration suite; run with scripts/test_suite.py --level integration")
     def test_installations_api_reports_enabled_builtin_apps(self) -> None:
@@ -730,6 +928,14 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertIn(("default", "app-store"), installed)
         self.assertIn(("default", "base-shell"), installed)
         self.assertIn(("default", "chat"), installed)
+        base_shell = next(item for item in payload["items"] if item["app_id"] == "base-shell")
+        chat = next(item for item in payload["items"] if item["app_id"] == "chat")
+        self.assertEqual(base_shell["presentation"], {"frontend_role": "supporting"})
+        self.assertFalse(base_shell["frontend_launchable"])
+        self.assertIn("supporting_frontend", base_shell["surfaces"])
+        self.assertEqual(chat["presentation"], {"frontend_role": "workspace"})
+        self.assertTrue(chat["frontend_launchable"])
+        self.assertIn("frontend", chat["surfaces"])
 
     @integration_test("app-store platform integration suite; run with scripts/test_suite.py --level integration")
     def test_member_installations_api_hides_admin_only_installed_apps(self) -> None:
@@ -744,7 +950,7 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertEqual(status, 200)
         installed_app_ids = {item["app_id"] for item in payload["items"]}
         self.assertIn("chat", installed_app_ids)
-        self.assertNotIn("user-admin", installed_app_ids)
+        self.assertNotIn("settings", installed_app_ids)
 
     @integration_test("app-store platform integration suite; run with scripts/test_suite.py --level integration")
     def test_installations_api_reports_workspace_local_apps(self) -> None:
@@ -860,7 +1066,7 @@ class AppStoreAppTestCase(unittest.TestCase):
         invalid_items = [item for item in payload["local_apps"] if item["app_id"] == "broken-local"]
         self.assertEqual(len(invalid_items), 1)
         self.assertEqual(invalid_items[0]["status"], "invalid")
-        self.assertIn("publisher", invalid_items[0]["validation_error"])
+        self.assertIn("non-empty string", invalid_items[0]["validation_error"])
 
     @integration_test("app-store platform integration suite; run with scripts/test_suite.py --level integration")
     def test_register_local_api_reports_contract_validation_errors(self) -> None:
@@ -1212,7 +1418,7 @@ class AppStoreAppTestCase(unittest.TestCase):
             app,
             path="/api/apps/app-store/backend",
             method="POST",
-            body={"action": "pinned_apps.set", "app_ids": ["skills", "chat", "skills", "", "agents"]},
+            body={"action": "pinned_apps.set", "app_ids": ["agents", "chat", "agents", "", "base-shell"]},
             cookie=cookie,
         )
 
@@ -1221,7 +1427,54 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertEqual(status_toggle, 200)
         self.assertEqual(toggled["state"]["pinned_apps"], ["chat", "agents"])
         self.assertEqual(status_set, 200)
-        self.assertEqual(ordered["state"]["pinned_apps"], ["skills", "chat", "agents"])
+        self.assertEqual(ordered["state"]["pinned_apps"], ["agents", "chat"])
+
+    @integration_test("app-store platform integration suite; run with scripts/test_suite.py --level integration")
+    def test_app_store_backend_rejects_non_launchable_pin_but_removes_stale_pin(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+        cookie = self.login(app)
+
+        status_reject, rejected, _reject_headers = self.invoke(
+            app,
+            path="/api/apps/app-store/backend",
+            method="POST",
+            body={"action": "pinned_apps.toggle", "app_id": "base-shell"},
+            cookie=cookie,
+        )
+
+        app_store_binding = state.app_store.get_workspace_app_binding(workspace_id="default", app_id="app-store")
+        data_root = Path(app_store_binding.data_root)
+        state_path = data_root / "state.json"
+        state_payload = json.loads(state_path.read_text(encoding="utf-8"))
+        state_payload["pinned_apps"] = ["chat", "base-shell"]
+        state_path.write_text(json.dumps(state_payload, indent=2), encoding="utf-8")
+        status_remove, removed, _remove_headers = self.invoke(
+            app,
+            path="/api/apps/app-store/backend",
+            method="POST",
+            body={"action": "pinned_apps.toggle", "app_id": "base-shell"},
+            cookie=cookie,
+        )
+        status_set, filtered, _set_headers = self.invoke(
+            app,
+            path="/api/apps/app-store/backend",
+            method="POST",
+            body={"action": "pinned_apps.set", "app_ids": ["chat", "base-shell", "agents"]},
+            cookie=cookie,
+        )
+
+        self.assertEqual(status_reject, 400)
+        self.assertEqual(rejected["error"], "validation_error")
+        self.assertIn("launchable workspace frontend", rejected["detail"])
+        self.assertEqual(status_remove, 200)
+        self.assertEqual(removed["state"]["pinned_apps"], ["chat"])
+        self.assertEqual(status_set, 200)
+        self.assertEqual(filtered["state"]["pinned_apps"], ["chat", "agents"])
+        service_py = (Path(__file__).resolve().parents[1] / "backend" / "service.py").read_text(encoding="utf-8")
+        self.assertIn("def _launchable_pinned_app_ids(app_ids: list[str], launchable_app_ids: list[str])", service_py)
+        self.assertNotIn("return app_ids\n    launchable = _launchable_app_id_set(launchable_app_ids)", service_py)
 
     @integration_test("app-store platform integration suite; run with scripts/test_suite.py --level integration")
     def test_app_store_backend_persists_catalog_view_state(self) -> None:
@@ -1646,6 +1899,45 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertEqual(cli_payload["status_code"], 400)
         self.assertEqual(cli_payload["error"], "validation_error")
         self.assertIn("core `/api/app-store/apps` API", cli_payload["detail"])
+
+    @integration_test("app-store platform integration suite; run with scripts/test_suite.py --level integration")
+    def test_mcp_and_cli_reject_pinned_app_mutations_without_registry_context(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+
+        mcp_payload = call_mcp_tool(
+            tool_name="app.app-store.maverick_app_store",
+            context=McpInvocationContext(
+                caller_kind="sandbox_agent",
+                workspace_id="default",
+                agent_id="tester",
+                effective_mode="sandbox",
+            ),
+            arguments={"action": "pinned_apps.toggle", "app_id": "base-shell"},
+            app_store=state.app_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+        cli_payload = run_core_cli_command(
+            command_id="app.app-store.app-store",
+            context=CliInvocationContext(
+                caller_kind="operator",
+                workspace_id="default",
+                agent_id=None,
+                effective_mode=None,
+            ),
+            arguments={"action": "pinned_apps.toggle", "app_id": "base-shell"},
+            app_store=state.app_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+
+        self.assertEqual(mcp_payload["status_code"], 400)
+        self.assertEqual(mcp_payload["error"], "validation_error")
+        self.assertIn("registry context", mcp_payload["detail"])
+        self.assertEqual(cli_payload["status_code"], 400)
+        self.assertEqual(cli_payload["error"], "validation_error")
+        self.assertIn("registry context", cli_payload["detail"])
 
 
 if __name__ == "__main__":

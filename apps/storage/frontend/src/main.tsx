@@ -4,16 +4,20 @@ import { createRoot } from 'react-dom/client';
 import { Home } from 'lucide-react';
 import { AnimatedFileCollection, CollectionViewToggle, type CollectionViewMode } from './components/ui/animated-collection';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from './components/ui/breadcramb';
-import { CATALOG_PAGE_LIMIT, clearCustomView, currentStorageAppId, decodeBase64, deleteFile, deleteFolder, downloadFolder, loadCatalog, loadViewFilter, moveFileReference, readFile, renameFile, setViewFilter, updateMarkdownFile, uploadFile } from './storageApi';
+import { CATALOG_PAGE_LIMIT, clearCustomView, currentStorageAppId, decodeBase64, deleteFile, deleteFolder, downloadFolder, loadCatalog, loadViewFilter, moveFileReference, moveFolderReference, moveItemsReferences, readFile, renameFile, setViewFilter, updateMarkdownFile, uploadFile } from './storageApi';
 import { canInlinePreview, canTextPreview, StoragePreview } from './filePreview';
 import { formatBytes, formatMegabytes, kindLabels, roleLabels } from './storageMeta';
 import { Icon } from './Icon';
+import { useLongPressSelection } from './hooks/useLongPressSelection';
 import { notifyActiveStorageFolderSelection, notifyActiveStorageSelection } from './lib/activeStorageSelection';
-import { breadcrumbRefreshPlan, catalogLoadedCountAfterPage, catalogLoadedCountAfterRefresh, deleteFileWithCatalogRefresh, folderOpenRefreshPlan, missingNavigationTargetPlan, resolvedFileNavigationPlan } from './lib/storageCatalogFlow';
+import { breadcrumbRefreshPlan, catalogBrowserDisplayState, catalogLoadedCountAfterPage, catalogLoadedCountAfterRefresh, folderOpenRefreshPlan, missingNavigationTargetPlan, resolvedFileNavigationPlan } from './lib/storageCatalogFlow';
+import { applyStorageFilesDelta, applyStorageFoldersDelta, type StorageCatalogDelta } from './lib/storageCatalogDelta';
 import { fileFolderSelection, folderParentPath, folderStatsForSelection, normalizeFolderPath } from './lib/storageFolderLayer';
-import { readStorageFileDragData, storageDragPayloadFromFile, storageFileDropStatus, writeStorageFileDragData } from './lib/storageDragDrop';
+import { attachStorageFolderDragImage } from './lib/storageDragImage';
+import { readStorageFileDragData, readStorageFolderDragData, readStorageSelectionDragData, storageDragPayloadFromFile, storageDragPayloadFromFolder, storageDragPayloadFromSelection, storageMoveDropStatus, writeStorageFileDragData, writeStorageFolderDragData, writeStorageSelectionDragData, type StorageFileDragPayload, type StorageMoveDropStatus, type StorageSelectionDragPayload } from './lib/storageDragDrop';
 import { storageTargetFromParams, type StorageNavigationParams, type StorageNavigationTarget } from './lib/storageNavigationParams';
 import { storageCustomScopedFiles, storageViewVisibleFiles, storageViewVisibleFolders } from './lib/storageSearch';
+import { storageViewFilterFromMessage } from './lib/storageViewFilterEvents';
 import { loadFullPreview } from './previewCache';
 import type { CatalogPayload, FileRole, StorageFile, StorageFolder, StorageViewFilter, PreviewKind, PreviewTablePayload } from './types';
 import './styles/main.css';
@@ -29,9 +33,24 @@ type DropFeedback = 'idle' | 'ready' | 'blocked' | 'uploading' | 'success' | 'er
 type PendingDelete =
   | { kind: 'file'; file: StorageFile }
   | { kind: 'folder'; folder: StorageFolder };
+type DraggingSelectionState = {
+  fileIds: Set<string>;
+  folderIds: Set<string>;
+};
+type CatalogRefreshLoading = 'foreground' | 'background';
+type CatalogRequestOptions = {
+  fileIds?: string[];
+  folderPath?: string;
+  viewMode?: StorageViewFilter['mode'];
+  workspacePaths?: string[];
+};
+type CatalogRefreshOptions = CatalogRequestOptions & {
+  loading?: CatalogRefreshLoading;
+};
 
 const viewKinds = new Set<PreviewKind | 'all'>(['all', 'image', 'video', 'audio', 'pdf', 'document', 'presentation', 'spreadsheet', 'markdown', 'text', 'file']);
 const storageRootRoles: FileRole[] = ['uploaded', 'generated'];
+const emptyIdSet = new Set<string>();
 
 type PreviewImageSize = {
   width: number;
@@ -77,10 +96,102 @@ function storageRootFolder(role: FileRole): StorageFolder {
   };
 }
 
-function folderContainsPath(folder: StorageFolder, relativePath: string) {
+function folderContainsPath(folder: Pick<StorageFolder, 'relative_path'>, relativePath: string) {
   const folderPath = normalizeFolderPath(folder.relative_path);
   const childPath = normalizeFolderPath(relativePath);
   return !folderPath || childPath === folderPath || childPath.startsWith(`${folderPath}/`);
+}
+
+function fileMatchesReference(file: StorageFile | null | undefined, reference: Pick<StorageFile, 'role' | 'relative_path'> & Partial<Pick<StorageFile, 'id' | 'file_id' | 'workspace_relative_path'>>) {
+  return Boolean(file && (
+    (reference.id && file.id === reference.id)
+    || (reference.file_id && file.file_id === reference.file_id)
+    || (reference.workspace_relative_path && file.workspace_relative_path === reference.workspace_relative_path)
+    || (file.role === reference.role && file.relative_path === reference.relative_path)
+  ));
+}
+
+function fileMatchesDragPayload(file: StorageFile | null | undefined, payload: Pick<StorageFileDragPayload, 'file_id' | 'relative_path' | 'role' | 'workspace_relative_path'>) {
+  return fileMatchesReference(file, {
+    file_id: payload.file_id,
+    relative_path: payload.relative_path,
+    role: payload.role,
+    workspace_relative_path: payload.workspace_relative_path,
+  });
+}
+
+function folderMoveTargetBlocked(source: Pick<StorageFolder, 'relative_path' | 'role'>, targetRole: FileRole, targetFolderPath: string) {
+  if (source.role !== targetRole) {
+    return true;
+  }
+  const sourcePath = normalizeFolderPath(source.relative_path);
+  const targetPath = normalizeFolderPath(targetFolderPath);
+  if (!sourcePath) {
+    return true;
+  }
+  return targetPath === sourcePath || targetPath.startsWith(`${sourcePath}/`);
+}
+
+function storageSelectionMoveTargetBlocked(selection: StorageSelectionDragPayload, targetRole: FileRole, targetFolderPath: string) {
+  return selection.files.some((file) => file.role !== targetRole)
+    || selection.folders.some((folder) => folder.role !== targetRole || folderMoveTargetBlocked(folder, targetRole, targetFolderPath));
+}
+
+function storageSelectionItemCount(selection: Pick<StorageSelectionDragPayload, 'files' | 'folders'>) {
+  return selection.files.length + selection.folders.length;
+}
+
+function storageSelectionMovePlan(files: StorageFile[], folders: StorageFolder[]) {
+  const movableFolders = folders
+    .filter((folder) => Boolean(folder.relative_path))
+    .filter((folder) => !folders.some((parent) => (
+      parent.id !== folder.id
+      && parent.role === folder.role
+      && Boolean(parent.relative_path)
+      && folderContainsPath(parent, folder.relative_path)
+    )));
+  const movableFiles = files.filter((file) => !movableFolders.some((folder) => folder.role === file.role && folderContainsPath(folder, file.relative_path)));
+  return { files: movableFiles, folders: movableFolders };
+}
+
+function storageDragSelectionMovePlan(selection: StorageSelectionDragPayload) {
+  const movableFolders = selection.folders.filter((folder) => !selection.folders.some((parent) => (
+    parent.folder_id !== folder.folder_id
+    && parent.role === folder.role
+    && folderContainsPath(parent, folder.relative_path)
+  )));
+  const movableFiles = selection.files.filter((file) => !movableFolders.some((folder) => folder.role === file.role && folderContainsPath(folder, file.relative_path)));
+  return { files: movableFiles, folders: movableFolders };
+}
+
+function pruneSelection(current: Set<string>, visibleIds: Set<string>) {
+  let changed = false;
+  const next = new Set<string>();
+  current.forEach((id) => {
+    if (visibleIds.has(id)) {
+      next.add(id);
+    } else {
+      changed = true;
+    }
+  });
+  return changed ? next : current;
+}
+
+function pathAfterFolderMove(path: string, sourceFolderPath: string, movedFolderPath: string) {
+  const normalizedPath = normalizeFolderPath(path);
+  const normalizedSource = normalizeFolderPath(sourceFolderPath);
+  const normalizedTarget = normalizeFolderPath(movedFolderPath);
+  if (!normalizedSource) {
+    return normalizedPath;
+  }
+  if (normalizedPath === normalizedSource) {
+    return normalizedTarget;
+  }
+  if (normalizedPath.startsWith(`${normalizedSource}/`)) {
+    const suffix = normalizedPath.slice(normalizedSource.length + 1);
+    return normalizedTarget ? `${normalizedTarget}/${suffix}` : suffix;
+  }
+  return normalizedPath;
 }
 
 function initialLayoutMode(): CollectionViewMode {
@@ -123,19 +234,33 @@ function uploadTargetLabel(role: FileRole | 'all', folderPath: string) {
   return `${roleLabels[role]}${folderPath ? ` / ${folderPath}` : ''}`;
 }
 
-function FolderCard({ canDelete, folder, onDelete, onDownload, onDropFile, onOpen, onShowDetails }: {
+function FolderCard({ canDelete, dragging, folder, onDelete, onDownload, onDragEnd, onDragStart, onDropStatus, onDropStorageItem, onLongPress, onOpen, onShowDetails, onToggleSelection, selected, selectionMode }: {
   canDelete: boolean;
+  dragging: boolean;
   folder: StorageFolder;
   onDelete: () => void;
   onDownload: () => void;
+  onDragEnd: () => void;
+  onDragStart: (event: DragEvent<HTMLElement>, folder: StorageFolder) => void;
+  onLongPress: () => void;
   onOpen: () => void;
-  onDropFile: (event: DragEvent<HTMLElement>, folder: StorageFolder) => void;
+  onDropStorageItem: (event: DragEvent<HTMLElement>, folder: StorageFolder) => void;
+  onDropStatus: (event: DragEvent<HTMLElement>, folder: StorageFolder) => StorageMoveDropStatus;
   onShowDetails: () => void;
+  onToggleSelection: () => void;
+  selected: boolean;
+  selectionMode: boolean;
 }) {
   const [dropStatus, setDropStatus] = useState<'idle' | 'ready' | 'blocked'>('idle');
+  const { cancelLongPress, longPressHandlers } = useLongPressSelection({
+    disabled: !canDelete,
+    item: folder,
+    onLongPress,
+    shouldIgnoreTarget: isFolderLongPressIgnored,
+  });
 
   function handleStorageDrag(event: DragEvent<HTMLElement>) {
-    const status = storageFileDropStatus(event.dataTransfer, folder.role);
+    const status = onDropStatus(event, folder);
     if (status === 'none') {
       return;
     }
@@ -146,7 +271,7 @@ function FolderCard({ canDelete, folder, onDelete, onDownload, onDropFile, onOpe
   }
 
   function handleStorageDragLeave(event: DragEvent<HTMLElement>) {
-    if (storageFileDropStatus(event.dataTransfer, folder.role) === 'none') {
+    if (onDropStatus(event, folder) === 'none') {
       return;
     }
     event.preventDefault();
@@ -155,26 +280,62 @@ function FolderCard({ canDelete, folder, onDelete, onDownload, onDropFile, onOpe
   }
 
   function handleStorageDrop(event: DragEvent<HTMLElement>) {
-    const status = storageFileDropStatus(event.dataTransfer, folder.role);
+    const status = onDropStatus(event, folder);
     if (status === 'none') {
       return;
     }
     event.preventDefault();
     event.stopPropagation();
     setDropStatus('idle');
-    onDropFile(event, folder);
+    onDropStorageItem(event, folder);
+  }
+
+  function handleOpen() {
+    if (selectionMode && canDelete) {
+      onToggleSelection();
+      return;
+    }
+    onOpen();
+  }
+
+  function handleDragStart(event: DragEvent<HTMLElement>) {
+    cancelLongPress();
+    onDragStart(event, folder);
   }
 
   return (
     <article
-      className={`folder-card ${dropStatus === 'ready' ? 'drop-ready' : dropStatus === 'blocked' ? 'drop-blocked' : ''}`}
+      className={`folder-card ${dropStatus === 'ready' ? 'drop-ready' : dropStatus === 'blocked' ? 'drop-blocked' : ''} ${selectionMode ? 'selection-mode' : ''} ${selected ? 'selection-selected' : ''} ${dragging ? 'is-dragging' : ''}`}
       onDragEnter={handleStorageDrag}
       onDragLeave={handleStorageDragLeave}
       onDragOver={handleStorageDrag}
       onDrop={handleStorageDrop}
+      draggable={canDelete}
+      onDragEnd={onDragEnd}
+      onDragStart={handleDragStart}
+      {...longPressHandlers}
     >
-      <button className="folder-card-open" type="button" onClick={onOpen}>
-        <Icon name="folder" className="folder-card-icon" />
+      {selectionMode ? (
+        <button
+          aria-label={`${selected ? 'Deselect' : 'Select'} ${folder.name}`}
+          aria-pressed={selected}
+          className={`storage-selection-toggle ${selected ? 'selected' : ''}`}
+          disabled={!canDelete}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (canDelete) onToggleSelection();
+          }}
+          title={canDelete ? `${selected ? 'Deselect' : 'Select'} ${folder.name}` : 'Storage roots cannot be selected'}
+          type="button"
+        >
+          <span className="storage-selection-toggle-box">
+            {selected ? <Icon name="check" /> : null}
+          </span>
+        </button>
+      ) : null}
+      <button className="folder-card-open" type="button" onClick={handleOpen}>
+        <Icon name="folder" className="folder-card-icon storage-folder-drag-icon-source" />
         <span className="folder-card-main">
           <strong>{folder.name}</strong>
         </span>
@@ -201,6 +362,11 @@ function FolderCard({ canDelete, folder, onDelete, onDownload, onDropFile, onOpe
   );
 }
 
+function isFolderLongPressIgnored(target: EventTarget | null) {
+  const element = target instanceof Element ? target : null;
+  return Boolean(element?.closest('.folder-card-actions, .storage-selection-toggle'));
+}
+
 function App() {
   const storageAppId = useMemo(() => currentStorageAppId(), []);
   const [files, setFiles] = useState<StorageFile[]>([]);
@@ -213,7 +379,13 @@ function App() {
   const [kind, setKind] = useState('all');
   const [currentFolderPath, setCurrentFolderPath] = useState('');
   const [draggedFile, setDraggedFile] = useState<StorageFile | null>(null);
+  const [draggedFolder, setDraggedFolder] = useState<StorageFolder | null>(null);
+  const [draggingSelection, setDraggingSelection] = useState<DraggingSelectionState | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(() => new Set());
+  const [selectedFolderIds, setSelectedFolderIds] = useState<Set<string>>(() => new Set());
   const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isCatalogTransitionLoading, setIsCatalogTransitionLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [dragDepth, setDragDepth] = useState(0);
   const [dropFeedback, setDropFeedback] = useState<DropFeedback>('idle');
@@ -243,13 +415,14 @@ function App() {
   const [markdownCopied, setMarkdownCopied] = useState(false);
   const [renameValue, setRenameValue] = useState('');
   const [error, setError] = useState('');
-  const viewFilterUpdatedAtRef = useRef('');
+  const viewFilterUpdatedAtRef = useRef<string | null>(null);
   const viewFilterWriteRef = useRef<number | null>(null);
   const viewFilterPendingRef = useRef(false);
   const markdownCopyTimerRef = useRef<number | null>(null);
   const dropFeedbackTimerRef = useRef<number | null>(null);
   const previewHeaderRef = useRef<HTMLElement | null>(null);
   const filesRef = useRef<StorageFile[]>([]);
+  const draggedSelectionRef = useRef<StorageSelectionDragPayload | null>(null);
   const catalogLoadedCountRef = useRef(0);
   const currentFolderPathRef = useRef('');
   const customFileIdsRef = useRef<string[]>([]);
@@ -258,6 +431,9 @@ function App() {
   const activeRoleRef = useRef<FileRole | 'all'>('all');
   const kindRef = useRef<PreviewKind | 'all'>('all');
   const viewModeRef = useRef<'search' | 'custom'>('search');
+  const catalogRefreshRequestRef = useRef(0);
+  const catalogTransitionMinRequestRef = useRef<number | null>(null);
+  const catalogTransitionTokenRef = useRef(0);
   const pendingNavigationTargetRef = useRef<StorageNavigationTarget | null>(storageTargetFromParams(Object.fromEntries(new URLSearchParams(window.location.search).entries())));
 
   function setCurrentFolderPathScoped(path: string) {
@@ -266,8 +442,32 @@ function App() {
     setCurrentFolderPath(normalizedPath);
   }
 
+  function beginCatalogTransitionLoading(minRequestId = catalogRefreshRequestRef.current + 1) {
+    const token = ++catalogTransitionTokenRef.current;
+    catalogTransitionMinRequestRef.current = minRequestId;
+    setIsCatalogTransitionLoading(true);
+    return token;
+  }
+
+  function clearCatalogTransitionLoading(token?: number) {
+    if (token !== undefined && token !== catalogTransitionTokenRef.current) {
+      return;
+    }
+    catalogTransitionMinRequestRef.current = null;
+    setIsCatalogTransitionLoading(false);
+  }
+
+  function settleCatalogTransitionLoading(requestId: number) {
+    const minRequestId = catalogTransitionMinRequestRef.current;
+    if (minRequestId !== null && requestId === catalogRefreshRequestRef.current && requestId >= minRequestId) {
+      clearCatalogTransitionLoading();
+    }
+  }
+
   function applyRemoteViewFilter(filter: StorageViewFilter) {
-    if (viewFilterPendingRef.current || filter.updated_at === viewFilterUpdatedAtRef.current) return;
+    if (viewFilterPendingRef.current || (viewFilterUpdatedAtRef.current !== null && filter.updated_at === viewFilterUpdatedAtRef.current)) {
+      return false;
+    }
     viewFilterUpdatedAtRef.current = filter.updated_at;
     viewModeRef.current = filter.mode;
     customFileIdsRef.current = filter.file_ids;
@@ -282,12 +482,47 @@ function App() {
     setQuery(filter.query);
     setActiveRole(filter.role);
     setKind(filter.kind);
+    return true;
+  }
+
+  function refreshForViewFilter(filter: StorageViewFilter) {
+    return refresh(
+      { query: filter.query, role: filter.role, kind: filter.kind },
+      {
+        fileIds: filter.mode === 'custom' ? filter.file_ids : [],
+        loading: 'foreground',
+        viewMode: filter.mode,
+        workspacePaths: filter.mode === 'custom' ? filter.workspace_relative_paths : [],
+      }
+    );
+  }
+
+  function applyLocalCatalogDelta(delta: StorageCatalogDelta) {
+    catalogRefreshRequestRef.current += 1;
+    setFiles((current) => {
+      const nextFiles = applyStorageFilesDelta(current, delta);
+      filesRef.current = nextFiles;
+      catalogLoadedCountRef.current = nextFiles.length;
+      return nextFiles;
+    });
+    setFolders((current) => {
+      const nextFolders = applyStorageFoldersDelta(current, delta);
+      return nextFolders;
+    });
+    setCatalogPagination(null);
+  }
+
+  function revalidateCatalog(
+    filter?: Partial<Pick<StorageViewFilter, 'query' | 'role' | 'kind'>>,
+    options: CatalogRefreshOptions = {}
+  ) {
+    refresh(filter, options).catch((err: Error) => setError(err.message));
   }
 
   function catalogRequest(
     filter?: Partial<Pick<StorageViewFilter, 'query' | 'role' | 'kind'>>,
     offset = 0,
-    options: { fileIds?: string[]; folderPath?: string; viewMode?: StorageViewFilter['mode']; workspacePaths?: string[] } = {}
+    options: CatalogRequestOptions = {}
   ) {
     const catalogFilter = {
       query: filter?.query ?? queryRef.current,
@@ -312,46 +547,57 @@ function App() {
 
   async function refresh(
     filter?: Partial<Pick<StorageViewFilter, 'query' | 'role' | 'kind'>>,
-    options: { fileIds?: string[]; folderPath?: string; viewMode?: StorageViewFilter['mode']; workspacePaths?: string[] } = {}
+    options: CatalogRefreshOptions = {}
   ) {
-    let request = catalogRequest(filter, 0, options);
-    let payload = await loadCatalog(request);
-    let remoteFilter = normalizedViewFilter(payload.state.view_filter);
-    if (remoteFilter.mode === 'custom' && !request.file_ids?.length && !request.workspace_relative_paths?.length) {
-      request = catalogRequest(
-        { query: remoteFilter.query, role: remoteFilter.role, kind: remoteFilter.kind },
-        0,
-        {
-          fileIds: remoteFilter.file_ids,
-          folderPath: options.folderPath,
-          viewMode: remoteFilter.mode,
-          workspacePaths: remoteFilter.workspace_relative_paths,
-        }
-      );
-      payload = await loadCatalog(request);
-      remoteFilter = normalizedViewFilter(payload.state.view_filter);
+    const requestId = ++catalogRefreshRequestRef.current;
+    const { loading = 'background', ...requestOptions } = options;
+    if (loading === 'foreground') {
+      beginCatalogTransitionLoading(requestId);
     }
-    filesRef.current = payload.files;
-    catalogLoadedCountRef.current = catalogLoadedCountAfterRefresh(payload.files.length);
-    setFiles(payload.files);
-    setFolders(payload.folders || []);
-    setCatalogPagination(payload.pagination || null);
-    applyRemoteViewFilter(remoteFilter);
-    const pendingFile = fileFromNavigationTarget(payload.files, pendingNavigationTargetRef.current);
-    if (pendingFile) {
-      pendingNavigationTargetRef.current = null;
-      await focusResolvedNavigationFile(pendingFile);
-    } else if (pendingNavigationTargetRef.current?.targetType === 'file') {
-      const target = pendingNavigationTargetRef.current;
-      const targetFile = await loadNavigationTarget(target);
-      if (targetFile) {
-        pendingNavigationTargetRef.current = null;
-        await focusResolvedNavigationFile(targetFile);
-      } else {
-        const missingTarget = missingNavigationTargetPlan();
-        if (missingTarget.clearPending) pendingNavigationTargetRef.current = null;
-        setError(missingTarget.error);
+    try {
+      let request = catalogRequest(filter, 0, requestOptions);
+      let payload = await loadCatalog(request);
+      if (requestId !== catalogRefreshRequestRef.current) return;
+      let remoteFilter = normalizedViewFilter(payload.state.view_filter);
+      if (remoteFilter.mode === 'custom' && !request.file_ids?.length && !request.workspace_relative_paths?.length) {
+        request = catalogRequest(
+          { query: remoteFilter.query, role: remoteFilter.role, kind: remoteFilter.kind },
+          0,
+          {
+            fileIds: remoteFilter.file_ids,
+            folderPath: requestOptions.folderPath,
+            viewMode: remoteFilter.mode,
+            workspacePaths: remoteFilter.workspace_relative_paths,
+          }
+        );
+        payload = await loadCatalog(request);
+        if (requestId !== catalogRefreshRequestRef.current) return;
+        remoteFilter = normalizedViewFilter(payload.state.view_filter);
       }
+      filesRef.current = payload.files;
+      catalogLoadedCountRef.current = catalogLoadedCountAfterRefresh(payload.files.length);
+      setFiles(payload.files);
+      setFolders(payload.folders || []);
+      setCatalogPagination(payload.pagination || null);
+      applyRemoteViewFilter(remoteFilter);
+      const pendingFile = fileFromNavigationTarget(payload.files, pendingNavigationTargetRef.current);
+      if (pendingFile) {
+        pendingNavigationTargetRef.current = null;
+        await focusResolvedNavigationFile(pendingFile);
+      } else if (pendingNavigationTargetRef.current?.targetType === 'file') {
+        const target = pendingNavigationTargetRef.current;
+        const targetFile = await loadNavigationTarget(target);
+        if (targetFile) {
+          pendingNavigationTargetRef.current = null;
+          await focusResolvedNavigationFile(targetFile);
+        } else {
+          const missingTarget = missingNavigationTargetPlan();
+          if (missingTarget.clearPending) pendingNavigationTargetRef.current = null;
+          setError(missingTarget.error);
+        }
+      }
+    } finally {
+      settleCatalogTransitionLoading(requestId);
     }
   }
 
@@ -385,7 +631,10 @@ function App() {
 
   async function syncViewFilter() {
     const payload = await loadViewFilter();
-    applyRemoteViewFilter(normalizedViewFilter(payload.state.view_filter));
+    const remoteFilter = normalizedViewFilter(payload.state.view_filter);
+    if (applyRemoteViewFilter(remoteFilter)) {
+      await refreshForViewFilter(remoteFilter);
+    }
   }
 
   useEffect(() => {
@@ -451,15 +700,23 @@ function App() {
         resource?: string;
         type?: string;
       };
-      if (payload.type === 'maverick.app.navigate' && (!payload.app_id || payload.app_id === 'storage')) {
+      if (payload.type === 'maverick.app.navigate' && (!payload.app_id || payload.app_id === storageAppId)) {
         handleNavigationParams(payload.params || {});
         return;
       }
-      if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === 'storage') {
+      if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === storageAppId) {
         if (payload.resource === 'files') {
           refresh().catch((err: Error) => setError(err.message));
         }
         if (payload.resource === 'view-state') {
+          const detailedFilter = storageViewFilterFromMessage(payload, storageAppId);
+          if (detailedFilter) {
+            const remoteFilter = normalizedViewFilter(detailedFilter);
+            if (applyRemoteViewFilter(remoteFilter)) {
+              refreshForViewFilter(remoteFilter).catch((err: Error) => setError(err.message));
+            }
+            return;
+          }
           syncViewFilter().catch((err: Error) => setError(err.message));
         }
       }
@@ -492,9 +749,11 @@ function App() {
 
   function updateViewFilter(
     filter: Partial<Pick<StorageViewFilter, 'query' | 'role' | 'kind'>>,
-    options: { folderPath?: string; preserveCustom?: boolean } = {}
+    options: { folderPath?: string; loading?: CatalogRefreshLoading; preserveCustom?: boolean } = {}
   ) {
     const preserveCustom = options.preserveCustom ?? viewMode === 'custom';
+    const loading = options.loading ?? 'foreground';
+    const transitionToken = loading === 'foreground' ? beginCatalogTransitionLoading() : null;
     const next = normalizedViewFilter({ query, role: activeRole, kind: kind as PreviewKind | 'all', ...filter });
     queryRef.current = next.query;
     activeRoleRef.current = next.role;
@@ -514,21 +773,29 @@ function App() {
     viewFilterPendingRef.current = true;
     if (viewFilterWriteRef.current !== null) window.clearTimeout(viewFilterWriteRef.current);
     viewFilterWriteRef.current = window.setTimeout(() => {
+      let refreshStarted = false;
       setViewFilter({ query: next.query, role: next.role, kind: next.kind, preserve_custom: preserveCustom })
         .then((payload) => {
           const remote = normalizedViewFilter(payload.state.view_filter);
           viewFilterUpdatedAtRef.current = remote.updated_at;
+          refreshStarted = true;
           return refresh(
             { query: remote.query, role: remote.role, kind: remote.kind },
             {
               fileIds: preserveCustom ? remote.file_ids : [],
               folderPath: options.folderPath,
+              loading,
               viewMode: preserveCustom ? remote.mode : 'search',
               workspacePaths: preserveCustom ? remote.workspace_relative_paths : [],
             }
           );
         })
-        .catch((err: Error) => setError(err.message))
+        .catch((err: Error) => {
+          setError(err.message);
+          if (!refreshStarted && transitionToken !== null) {
+            clearCatalogTransitionLoading(transitionToken);
+          }
+        })
         .finally(() => {
           viewFilterPendingRef.current = false;
           viewFilterWriteRef.current = null;
@@ -537,6 +804,7 @@ function App() {
   }
 
   async function focusResolvedNavigationFile(file: StorageFile) {
+    const transitionToken = beginCatalogTransitionLoading();
     const plan = resolvedFileNavigationPlan(file);
     queryRef.current = plan.filter.query;
     activeRoleRef.current = plan.filter.role;
@@ -553,14 +821,18 @@ function App() {
     setCustomWorkspacePaths([]);
     setCurrentFolderPathScoped(plan.folderPath);
 
-    const payload = await loadCatalog(catalogRequest(plan.filter, 0, plan.refreshOptions));
-    const nextFiles = mergeUniqueFiles(payload.files, [file]);
-    filesRef.current = nextFiles;
-    catalogLoadedCountRef.current = catalogLoadedCountAfterRefresh(payload.files.length);
-    setFiles(nextFiles);
-    setFolders(payload.folders || []);
-    setCatalogPagination(payload.pagination || null);
-    focusFile(file, { persistFilter: true, preserveCustom: false, query: plan.filter.query });
+    try {
+      const payload = await loadCatalog(catalogRequest(plan.filter, 0, plan.refreshOptions));
+      const nextFiles = mergeUniqueFiles(payload.files, [file]);
+      filesRef.current = nextFiles;
+      catalogLoadedCountRef.current = catalogLoadedCountAfterRefresh(payload.files.length);
+      setFiles(nextFiles);
+      setFolders(payload.folders || []);
+      setCatalogPagination(payload.pagination || null);
+      focusFile(file, { persistFilter: true, preserveCustom: false, query: plan.filter.query });
+    } finally {
+      clearCatalogTransitionLoading(transitionToken);
+    }
   }
 
   function focusFile(file: StorageFile, options: { persistFilter?: boolean; preserveCustom?: boolean; query?: string } = {}) {
@@ -608,7 +880,7 @@ function App() {
       if (target.role) {
         updateViewFilter({ query: '', role: target.role }, { folderPath: targetFolderPath, preserveCustom: false });
       } else {
-        refresh({ query: '' }, { folderPath: targetFolderPath }).catch((err: Error) => setError(err.message));
+        refresh({ query: '' }, { folderPath: targetFolderPath, loading: 'foreground' }).catch((err: Error) => setError(err.message));
       }
       pendingNavigationTargetRef.current = null;
       return;
@@ -620,7 +892,7 @@ function App() {
       focusResolvedNavigationFile(file).catch((err: Error) => setError(err.message));
       return;
     }
-    refresh().catch((err: Error) => setError(err.message));
+    refresh(undefined, { loading: 'foreground' }).catch((err: Error) => setError(err.message));
   }
 
   function clearCustomFileView() {
@@ -632,6 +904,7 @@ function App() {
           { query: remote.query, role: remote.role, kind: remote.kind },
           {
             fileIds: remote.file_ids,
+            loading: 'foreground',
             viewMode: remote.mode,
             workspacePaths: remote.workspace_relative_paths,
           }
@@ -657,7 +930,7 @@ function App() {
     if (plan.shouldWriteViewFilter) {
       updateViewFilter(plan.filter, plan.viewFilterOptions);
     } else {
-      refresh(plan.filter, plan.refreshOptions).catch((err: Error) => setError(err.message));
+      refresh(plan.filter, { ...plan.refreshOptions, loading: 'foreground' }).catch((err: Error) => setError(err.message));
     }
     notifyActiveStorageFolderSelection(folder);
   }
@@ -689,6 +962,50 @@ function App() {
     setPreviewModalOpen(false);
     setDetailsOpen(false);
     setFolderDetailsOpen(true);
+  }
+
+  function clearSelectionMode() {
+    setSelectionMode(false);
+    setSelectedFileIds(new Set());
+    setSelectedFolderIds(new Set());
+  }
+
+  function activateFileSelection(file: StorageFile) {
+    setSelectionMode(true);
+    setSelectedFileIds((current) => new Set(current).add(file.id));
+  }
+
+  function activateFolderSelection(folder: StorageFolder) {
+    if (!folder.relative_path) return;
+    setSelectionMode(true);
+    setSelectedFolderIds((current) => new Set(current).add(folder.id));
+  }
+
+  function toggleFileSelection(file: StorageFile) {
+    setSelectionMode(true);
+    setSelectedFileIds((current) => {
+      const next = new Set(current);
+      if (next.has(file.id)) {
+        next.delete(file.id);
+      } else {
+        next.add(file.id);
+      }
+      return next;
+    });
+  }
+
+  function toggleFolderSelection(folder: StorageFolder) {
+    if (!folder.relative_path) return;
+    setSelectionMode(true);
+    setSelectedFolderIds((current) => {
+      const next = new Set(current);
+      if (next.has(folder.id)) {
+        next.delete(folder.id);
+      } else {
+        next.add(folder.id);
+      }
+      return next;
+    });
   }
 
   const customScopedFiles = useMemo(() => {
@@ -731,12 +1048,25 @@ function App() {
       viewMode,
     });
   }, [activeRole, currentFolderPath, customScopedFiles, kind, query, viewMode]);
+  const selectedFiles = useMemo(() => filteredFiles.filter((file) => selectedFileIds.has(file.id)), [filteredFiles, selectedFileIds]);
+  const selectedFolders = useMemo(() => visibleFolders.filter((folder) => selectedFolderIds.has(folder.id) && Boolean(folder.relative_path)), [selectedFolderIds, visibleFolders]);
+  const selectedMoveItems = useMemo(() => storageSelectionMovePlan(selectedFiles, selectedFolders), [selectedFiles, selectedFolders]);
+  const selectedItemCount = selectedFiles.length + selectedFolders.length;
+  const draggingFileIds = draggingSelection?.fileIds || emptyIdSet;
+  const draggingFolderIds = draggingSelection?.folderIds || emptyIdSet;
   const selectedFolderStats = useMemo(() => {
     return selectedFolder ? folderStatsForSelection({ role: selectedFolder.role, relativePath: selectedFolder.relative_path }, files, folders) : null;
   }, [files, folders, selectedFolder]);
   const currentFolderStats = useMemo(() => {
     return folderStatsForSelection({ role: activeRole, relativePath: activeRole === 'all' ? '' : currentFolderPath }, files, folders);
   }, [activeRole, currentFolderPath, files, folders]);
+  const catalogDisplayState = catalogBrowserDisplayState({
+    initialLoading: isInitialLoading,
+    transitionLoading: isCatalogTransitionLoading,
+    visibleFileCount: filteredFiles.length,
+    visibleFolderCount: visibleFolders.length,
+  });
+  const isCatalogContentLoading = catalogDisplayState === 'loading';
   const currentFolderSizeLabel = formatMegabytes(currentFolderStats.sizeBytes);
   const visibleFileTotal = catalogPagination?.total ?? filteredFiles.length;
   const fileCountLabel = visibleFileTotal > filteredFiles.length
@@ -751,6 +1081,24 @@ function App() {
     ? 'This removes the folder and every file inside it from workspace storage.'
     : 'This removes the file from workspace storage.';
   const pendingDeleteActionLabel = pendingDelete?.kind === 'folder' ? 'Delete folder' : 'Delete file';
+
+  useEffect(() => {
+    const visibleFileIds = new Set(filteredFiles.map((file) => file.id));
+    const visibleFolderIds = new Set(visibleFolders.filter((folder) => folder.relative_path).map((folder) => folder.id));
+    setSelectedFileIds((current) => pruneSelection(current, visibleFileIds));
+    setSelectedFolderIds((current) => pruneSelection(current, visibleFolderIds));
+  }, [filteredFiles, visibleFolders]);
+
+  useEffect(() => {
+    if (!selectionMode) return;
+    function handleSelectionKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        clearSelectionMode();
+      }
+    }
+    window.addEventListener('keydown', handleSelectionKeyDown);
+    return () => window.removeEventListener('keydown', handleSelectionKeyDown);
+  }, [selectionMode]);
 
   useEffect(() => {
     setPreviewText('');
@@ -885,8 +1233,9 @@ function App() {
   async function saveRename() {
     if (!selectedFile) return;
     const payload = await renameFile(selectedFile, renameValue);
-    await refresh();
+    applyLocalCatalogDelta({ type: 'upsert_file', file: payload.file, previous: selectedFile });
     setSelectedFile(payload.file);
+    revalidateCatalog();
   }
 
   async function saveMarkdown() {
@@ -894,10 +1243,11 @@ function App() {
     setMarkdownSaving(true);
     try {
       const payload = await updateMarkdownFile(selectedFile, markdownDraft);
-      await refresh();
+      applyLocalCatalogDelta({ type: 'upsert_file', file: payload.file, previous: selectedFile });
       setSelectedFile(payload.file);
       setPreviewText(markdownDraft);
       setMarkdownEditing(false);
+      revalidateCatalog();
     } finally {
       setMarkdownSaving(false);
     }
@@ -946,13 +1296,14 @@ function App() {
       for (const file of selectedFiles) {
         const payload = await uploadFile(targetRole, targetFolderPath, file);
         lastUploadedFile = payload.file;
+        applyLocalCatalogDelta({ type: 'upsert_file', file: payload.file });
       }
-      await refresh();
       if (lastUploadedFile) setSelectedFile(lastUploadedFile);
       setError('');
       setDropFeedback('success');
       setDropMessage(`Uploaded ${selectedFiles.length === 1 ? selectedFiles[0].name : `${selectedFiles.length} files`} to ${uploadTargetLabel(targetRole, targetFolderPath)}`);
       clearDropFeedbackLater();
+      revalidateCatalog();
     } catch (err) {
       setDropFeedback('error');
       setDropMessage(err instanceof Error ? err.message : 'Upload failed.');
@@ -1000,35 +1351,203 @@ function App() {
     uploadSelectedFiles(droppedFiles).catch((err: Error) => setError(err.message));
   }
 
-  function handleStorageFileDragStart(event: DragEvent<HTMLDivElement>, file: StorageFile) {
-    writeStorageFileDragData(event.dataTransfer, storageDragPayloadFromFile(file, storageAppId));
-    setDraggedFile(file);
+  function startDraggingSelection(selectionPayload: StorageSelectionDragPayload) {
+    draggedSelectionRef.current = selectionPayload;
+    setDraggingSelection({
+      fileIds: new Set(selectedFiles.map((selected) => selected.id)),
+      folderIds: new Set(selectedFolders.map((selected) => selected.id)),
+    });
+    setDraggedFile(null);
+    setDraggedFolder(null);
   }
 
-  async function moveDroppedStorageFile(event: DragEvent<HTMLElement>, targetFolderPath: string, targetRole: FileRole) {
-    const draggedReference = readStorageFileDragData(event.dataTransfer, storageAppId)
-      || (draggedFile ? storageDragPayloadFromFile(draggedFile, storageAppId) : null);
-    if (!draggedReference) {
-      setError('Only Storage files can be moved into folders.');
-      setDraggedFile(null);
+  function handleStorageFileDragStart(event: DragEvent<HTMLDivElement>, file: StorageFile) {
+    const selectionPayload = selectedFileIds.has(file.id) && selectedItemCount > 1
+      ? storageDragPayloadFromSelection(selectedMoveItems, storageAppId)
+      : null;
+    if (selectionPayload && storageSelectionItemCount(selectionPayload) > 0) {
+      writeStorageSelectionDragData(event.dataTransfer, selectionPayload);
+      startDraggingSelection(selectionPayload);
+      return selectedItemCount;
+    }
+    writeStorageFileDragData(event.dataTransfer, storageDragPayloadFromFile(file, storageAppId));
+    setDraggedFile(file);
+    setDraggedFolder(null);
+    setDraggingSelection(null);
+    draggedSelectionRef.current = null;
+    return 1;
+  }
+
+  function handleStorageFolderDragStart(event: DragEvent<HTMLElement>, folder: StorageFolder) {
+    if (!folder.relative_path) {
+      event.preventDefault();
       return;
     }
-    if (targetRole !== draggedReference.role) {
-      setError('Files can only be moved within their current storage section.');
-      setDraggedFile(null);
+    const selectionPayload = selectedFolderIds.has(folder.id) && selectedItemCount > 1
+      ? storageDragPayloadFromSelection(selectedMoveItems, storageAppId)
+      : null;
+    if (selectionPayload && storageSelectionItemCount(selectionPayload) > 0) {
+      attachStorageFolderDragImage(event, selectedItemCount);
+      writeStorageSelectionDragData(event.dataTransfer, selectionPayload);
+      startDraggingSelection(selectionPayload);
       return;
     }
-    const payload = await moveFileReference(draggedReference, targetFolderPath);
-    await refresh();
-    if (
-      selectedFile?.id === draggedReference.file_id
-      || selectedFile?.file_id === draggedReference.file_id
-      || (selectedFile?.role === draggedReference.role && selectedFile.relative_path === draggedReference.relative_path)
-    ) {
-      setSelectedFile(payload.file);
-    }
-    setError('');
+    attachStorageFolderDragImage(event);
+    writeStorageFolderDragData(event.dataTransfer, storageDragPayloadFromFolder(folder, storageAppId));
+    setDraggedFolder(folder);
     setDraggedFile(null);
+    setDraggingSelection(null);
+    draggedSelectionRef.current = null;
+  }
+
+  function clearStorageDragState() {
+    setDraggedFile(null);
+    setDraggedFolder(null);
+    setDraggingSelection(null);
+    draggedSelectionRef.current = null;
+  }
+
+  function storageDropStatusForFolder(event: DragEvent<HTMLElement>, targetFolder: StorageFolder) {
+    const status = storageMoveDropStatus(event.dataTransfer, targetFolder.role);
+    if (status !== 'ready') {
+      return status;
+    }
+    const draggedSelectionReference = readStorageSelectionDragData(event.dataTransfer, storageAppId) || draggedSelectionRef.current;
+    if (draggedSelectionReference && storageSelectionMoveTargetBlocked(draggedSelectionReference, targetFolder.role, targetFolder.relative_path)) {
+      return 'blocked';
+    }
+    const draggedFolderReference = readStorageFolderDragData(event.dataTransfer, storageAppId) || draggedFolder;
+    if (draggedFolderReference && folderMoveTargetBlocked(draggedFolderReference, targetFolder.role, targetFolder.relative_path)) {
+      return 'blocked';
+    }
+    return status;
+  }
+
+  async function moveDroppedStorageSelection(selection: StorageSelectionDragPayload, targetFolderPath: string, targetRole: FileRole) {
+    if (!storageSelectionItemCount(selection)) {
+      setError('This Storage selection drag could not be read.');
+      return;
+    }
+    if (storageSelectionMoveTargetBlocked(selection, targetRole, targetFolderPath)) {
+      setError('Selected items can only be moved within their current storage section, and folders cannot move into themselves or child folders.');
+      return;
+    }
+    const movePlan = storageDragSelectionMovePlan(selection);
+
+    let nextSelectedFile: StorageFile | null = null;
+    const selectedFileInsideMovedFolder = selectedFile
+      ? movePlan.folders.some((folder) => selectedFile.role === folder.role && folderContainsPath(folder, selectedFile.relative_path))
+      : false;
+    const selectedFolderInsideMovedFolder = selectedFolder
+      ? movePlan.folders.some((folder) => selectedFolder.role === folder.role && folderContainsPath(folder, selectedFolder.relative_path))
+      : false;
+    let nextCurrentFolderPath = currentFolderPath;
+    let currentFolderMoved = false;
+
+    const payload = await moveItemsReferences(movePlan.files, movePlan.folders, targetRole, targetFolderPath);
+    for (const movedFile of payload.files) {
+      applyLocalCatalogDelta({ type: 'upsert_file', file: movedFile.file, previous: movedFile.previous });
+      if (fileMatchesReference(selectedFile, movedFile.previous)) {
+        nextSelectedFile = movedFile.file;
+      }
+    }
+
+    for (const movedFolder of payload.folders) {
+      applyLocalCatalogDelta({ type: 'move_folder', previous: movedFolder.previous, folder: movedFolder.folder });
+      if (activeRole === targetRole && folderContainsPath(movedFolder.previous, nextCurrentFolderPath)) {
+        nextCurrentFolderPath = pathAfterFolderMove(nextCurrentFolderPath, movedFolder.previous.relative_path, movedFolder.folder.relative_path);
+        currentFolderMoved = true;
+      }
+    }
+
+    if (selectedFolderInsideMovedFolder) {
+      setSelectedFolder(null);
+      setFolderDetailsOpen(false);
+    }
+    if (selectedFileInsideMovedFolder && !nextSelectedFile) {
+      setSelectedFile(null);
+      setDetailsOpen(false);
+      setPreviewModalOpen(false);
+    } else if (nextSelectedFile) {
+      setSelectedFile(nextSelectedFile);
+    }
+
+    if (currentFolderMoved) {
+      setCurrentFolderPathScoped(nextCurrentFolderPath);
+      revalidateCatalog({ role: targetRole }, { folderPath: nextCurrentFolderPath, loading: 'foreground' });
+    } else {
+      revalidateCatalog();
+    }
+    clearSelectionMode();
+    setError('');
+  }
+
+  async function moveDroppedStorageItem(event: DragEvent<HTMLElement>, targetFolderPath: string, targetRole: FileRole) {
+    try {
+      const draggedSelectionReference = readStorageSelectionDragData(event.dataTransfer, storageAppId) || draggedSelectionRef.current;
+      if (draggedSelectionReference) {
+        await moveDroppedStorageSelection(draggedSelectionReference, targetFolderPath, targetRole);
+        return;
+      }
+
+      const draggedFileReference = readStorageFileDragData(event.dataTransfer, storageAppId)
+        || (draggedFile ? storageDragPayloadFromFile(draggedFile, storageAppId) : null);
+      if (draggedFileReference) {
+        if (targetRole !== draggedFileReference.role) {
+          setError('Files can only be moved within their current storage section.');
+          return;
+        }
+        const payload = await moveFileReference(draggedFileReference, targetFolderPath);
+        applyLocalCatalogDelta({ type: 'upsert_file', file: payload.file, previous: draggedFileReference });
+        if (
+          selectedFile?.id === draggedFileReference.file_id
+          || selectedFile?.file_id === draggedFileReference.file_id
+          || (selectedFile?.role === draggedFileReference.role && selectedFile.relative_path === draggedFileReference.relative_path)
+        ) {
+          setSelectedFile(payload.file);
+        }
+        setError('');
+        revalidateCatalog();
+        return;
+      }
+
+      const draggedFolderReference = readStorageFolderDragData(event.dataTransfer, storageAppId)
+        || (draggedFolder ? storageDragPayloadFromFolder(draggedFolder, storageAppId) : null);
+      if (!draggedFolderReference) {
+        setError('Only Storage files or folders can be moved into folders.');
+        return;
+      }
+      if (targetRole !== draggedFolderReference.role) {
+        setError('Folders can only be moved within their current storage section.');
+        return;
+      }
+      if (folderMoveTargetBlocked(draggedFolderReference, targetRole, targetFolderPath)) {
+        setError('Folders cannot be moved into themselves or one of their child folders.');
+        return;
+      }
+      const payload = await moveFolderReference(draggedFolderReference, targetFolderPath);
+      applyLocalCatalogDelta({ type: 'move_folder', previous: draggedFolderReference, folder: payload.folder });
+      const nextFolderPath = payload.folder.relative_path;
+      if (selectedFolder?.role === draggedFolderReference.role && folderContainsPath(draggedFolderReference, selectedFolder.relative_path)) {
+        setSelectedFolder(null);
+        setFolderDetailsOpen(false);
+      }
+      if (selectedFile?.role === draggedFolderReference.role && normalizeFolderPath(selectedFile.relative_path).startsWith(`${normalizeFolderPath(draggedFolderReference.relative_path)}/`)) {
+        setSelectedFile(null);
+        setDetailsOpen(false);
+        setPreviewModalOpen(false);
+      }
+      if (activeRole === targetRole && folderContainsPath(draggedFolderReference, currentFolderPath)) {
+        const movedCurrentFolderPath = pathAfterFolderMove(currentFolderPath, draggedFolderReference.relative_path, nextFolderPath);
+        setCurrentFolderPathScoped(movedCurrentFolderPath);
+        revalidateCatalog({ role: targetRole }, { folderPath: movedCurrentFolderPath, loading: 'foreground' });
+      } else {
+        revalidateCatalog();
+      }
+      setError('');
+    } finally {
+      clearStorageDragState();
+    }
   }
 
   function requestFileDelete(file: StorageFile) {
@@ -1046,28 +1565,26 @@ function App() {
   }
 
   async function removeFile(file: StorageFile) {
-    await deleteFileWithCatalogRefresh(file, {
-      clearSelectedFile: (fileId) => {
-        if (selectedFile?.id === fileId) setSelectedFile(null);
-      },
-      deleteFile,
-      refresh,
-    });
+    await deleteFile(file);
+    applyLocalCatalogDelta({ type: 'delete_file', file });
+    if (selectedFile?.id === file.id) setSelectedFile(null);
+    revalidateCatalog();
   }
 
   async function removeFolder(folder: StorageFolder) {
     const deletedPath = normalizeFolderPath(folder.relative_path);
     const parentPath = folderParentPath(deletedPath);
     await deleteFolder(folder);
+    applyLocalCatalogDelta({ type: 'delete_folder', folder });
     if (selectedFolder?.id === folder.id) {
       setSelectedFolder(null);
       setFolderDetailsOpen(false);
     }
     if (activeRole === folder.role && folderContainsPath(folder, currentFolderPath)) {
       setCurrentFolderPathScoped(parentPath);
-      await refresh({ role: folder.role }, { folderPath: parentPath });
+      revalidateCatalog({ role: folder.role }, { folderPath: parentPath, loading: 'foreground' });
     } else {
-      await refresh();
+      revalidateCatalog();
     }
   }
 
@@ -1116,6 +1633,14 @@ function App() {
             <input aria-label="Search in Storage" placeholder="Search in Storage" value={query} onChange={(event) => updateViewFilter({ query: event.target.value })} />
           </label>
           <div className="topbar-actions">
+            {selectionMode ? (
+              <div className="storage-selection-toolbar" aria-live="polite">
+                <span className="storage-selection-count">{selectedItemCount} selected</span>
+                <button aria-label="Clear selection" onClick={clearSelectionMode} title="Clear selection" type="button">
+                  <Icon name="close" />
+                </button>
+              </div>
+            ) : null}
             <CollectionViewToggle view={layoutMode} onChange={chooseLayoutMode} />
           </div>
         </header>
@@ -1174,7 +1699,7 @@ function App() {
                               if (plan.shouldWriteViewFilter) {
                                 updateViewFilter(plan.filter, plan.viewFilterOptions);
                               } else {
-                                refresh(plan.filter, plan.refreshOptions).catch((err: Error) => setError(err.message));
+                                refresh(plan.filter, { ...plan.refreshOptions, loading: 'foreground' }).catch((err: Error) => setError(err.message));
                               }
                             }}
                           >
@@ -1205,7 +1730,7 @@ function App() {
                                 if (plan.shouldWriteViewFilter) {
                                   updateViewFilter(plan.filter, plan.viewFilterOptions);
                                 } else {
-                                  refresh(plan.filter, plan.refreshOptions).catch((err: Error) => setError(err.message));
+                                  refresh(plan.filter, { ...plan.refreshOptions, loading: 'foreground' }).catch((err: Error) => setError(err.message));
                                 }
                               }}
                             >
@@ -1219,11 +1744,19 @@ function App() {
                 })}
               </BreadcrumbList>
             </Breadcrumb>
-            <div className="content-counts">
-              <span>{visibleFolders.length} folders</span>
-              <span>{fileCountLabel}</span>
-              <span aria-label={`Folder size ${currentFolderSizeLabel}`} title="Folder size">{currentFolderSizeLabel}</span>
-            </div>
+            {isCatalogTransitionLoading ? (
+              <div className="content-counts storage-counts-skeleton" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </div>
+            ) : (
+              <div className="content-counts">
+                <span>{visibleFolders.length} folders</span>
+                <span>{fileCountLabel}</span>
+                <span aria-label={`Folder size ${currentFolderSizeLabel}`} title="Folder size">{currentFolderSizeLabel}</span>
+              </div>
+            )}
               </>
             )}
           </div>
@@ -1241,39 +1774,52 @@ function App() {
             </section>
           ) : null}
 
-          <section className={`storage-browser ${layoutMode}`} aria-label="Workspace storage">
-            {isInitialLoading ? (
+          <section className={`storage-browser ${layoutMode}`} aria-busy={isCatalogContentLoading} aria-label="Workspace storage">
+            {isCatalogContentLoading ? (
               <StorageAppSkeleton view={layoutMode} />
             ) : null}
-            {!isInitialLoading ? visibleFolders.map((folder) => (
+            {!isCatalogContentLoading ? visibleFolders.map((folder) => (
               <FolderCard
                 canDelete={Boolean(folder.relative_path)}
+                dragging={draggedFolder?.id === folder.id || draggingFolderIds.has(folder.id)}
                 key={folder.id}
                 folder={folder}
                 onDelete={() => requestFolderDelete(folder)}
+                onDragEnd={clearStorageDragState}
+                onDragStart={handleStorageFolderDragStart}
                 onDownload={() => downloadFolderArchive(folder).catch((err: Error) => setError(err.message))}
+                onLongPress={() => activateFolderSelection(folder)}
                 onOpen={() => openFolder(folder)}
-                onDropFile={(event, targetFolder) => moveDroppedStorageFile(event, targetFolder.relative_path, targetFolder.role).catch((err: Error) => setError(err.message))}
+                onDropStatus={storageDropStatusForFolder}
+                onDropStorageItem={(event, targetFolder) => moveDroppedStorageItem(event, targetFolder.relative_path, targetFolder.role).catch((err: Error) => setError(err.message))}
                 onShowDetails={() => showFolderDetails(folder)}
+                onToggleSelection={() => toggleFolderSelection(folder)}
+                selected={selectedFolderIds.has(folder.id)}
+                selectionMode={selectionMode}
               />
             )) : null}
-            {!isInitialLoading && filteredFiles.length ? (
+            {!isCatalogContentLoading && filteredFiles.length ? (
               <AnimatedFileCollection
+                draggingFileIds={draggingFileIds}
                 files={filteredFiles}
                 onDelete={requestFileDelete}
                 onDownload={(file) => download(file).catch((err: Error) => setError(err.message))}
-                onDragEnd={() => setDraggedFile(null)}
+                onDragEnd={clearStorageDragState}
                 onDragStart={handleStorageFileDragStart}
+                onLongPress={activateFileSelection}
                 onOpen={openFilePreview}
                 onShowDetails={showFileDetails}
+                onToggleSelection={toggleFileSelection}
                 selectedFileId={selectedFile?.id}
+                selectedFileIds={selectedFileIds}
+                selectionMode={selectionMode}
                 view={layoutMode}
               />
             ) : null}
-            {!isInitialLoading && !filteredFiles.length && !visibleFolders.length ? (
+            {catalogDisplayState === 'empty' ? (
               <div className="empty-state">{viewMode === 'custom' ? 'No files from this custom view are currently available.' : query.trim() ? 'No matching folders or files.' : 'No folders or files here yet.'}</div>
             ) : null}
-            {!isInitialLoading && catalogPagination?.has_more ? (
+            {!isCatalogContentLoading && catalogPagination?.has_more ? (
               <div className="catalog-page-actions">
                 <button className="secondary-action" disabled={catalogLoadingMore} onClick={() => loadMoreFiles().catch((err: Error) => setError(err.message))} type="button">
                   {catalogLoadingMore ? 'Loading' : 'Load more'}

@@ -23,6 +23,8 @@ function app(app_id: string): AppRegistryItem {
     description: "",
     distribution_mode: "sealed",
     frontend_mount: `/apps/${app_id}/`,
+    frontend_role: "workspace",
+    frontend_launchable: true,
     logo: null,
     name: app_id,
     publisher: "maverick",
@@ -122,13 +124,12 @@ describe("Sidebar desktop layout contract", () => {
     expect(layoutStyles).toContain("--bs-mobile-shell-header-height: 2.75rem;");
     expect(layoutStyles).toContain("var(--bs-mobile-shell-status-bar-height) +");
     expect(statusBarRule).toContain("height: var(--bs-mobile-shell-status-bar-height);");
-    expect(statusBarRule).toContain("linear-gradient(180deg, rgba(7, 7, 8, 0.92), rgba(7, 7, 8, 0.62));");
+    expect(statusBarRule).toContain("linear-gradient(180deg, rgba(7, 7, 8, 0.42), rgba(7, 7, 8, 0.18) 42%, transparent 78%);");
     expect(headerRule).toContain("top: var(--bs-mobile-shell-status-bar-height);");
     expect(headerRule).toContain("border: 0;");
-    expect(headerRule).toContain("background: rgba(7, 7, 8, 0.5);");
+    expect(headerRule).toContain("background: transparent;");
     expect(headerRule).toContain("box-shadow: none;");
-    expect(headerRule).toContain("backdrop-filter: blur(18px);");
-    expect(headerRule).toContain("-webkit-backdrop-filter: blur(18px);");
+    expect(headerRule).not.toContain("backdrop-filter");
     expect(headerAppLogoRule).toContain("border: 0;");
     expect(headerAppLogoRule).toContain("background: transparent;");
     expect(headerAppLogoRule).toContain("box-shadow: none;");

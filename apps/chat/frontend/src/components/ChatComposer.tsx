@@ -6,6 +6,8 @@ import { hasInvalidAttachments } from "../lib/attachments";
 import { activeMentionAt, applyMention, filterMentionItems, findMentionTokens, mentionText, removeMentionToken } from "../lib/mentions";
 import { referenceKey } from "../lib/mentions";
 import type { MentionItem, MentionToken } from "../lib/mentions";
+import { mentionItemKindLabel } from "../lib/referenceKindLabels";
+import { hasStorageReferenceDragData, storageReferenceMentionItemsFromDataTransfer } from "../lib/storageDragReferences";
 import { AttachmentMenu } from "./AttachmentMenu";
 import { AttachmentPreviewStrip } from "./AttachmentPreviewStrip";
 import { ProviderSelector } from "./ProviderSelector";
@@ -18,7 +20,7 @@ type ComposerNode = ChildNode & {
   };
 };
 
-const REFERENCE_SEARCH_ERROR_MESSAGE = "Impossibile cercare app o record. Riprova o ricarica la pagina.";
+const REFERENCE_SEARCH_ERROR_MESSAGE = "Unable to search apps or records. Try again or reload the page.";
 const APP_PICKER_REFERENCE_LIMIT = 16;
 
 function isAbortError(error: unknown): boolean {
@@ -199,7 +201,7 @@ function mentionChipElement(token: MentionToken, disabled: boolean, onRemove: (t
 
   const kind = document.createElement("span");
   kind.className = "chatapp-mention-chip__kind";
-  kind.textContent = token.item.kind === "entity" ? "Record" : token.item.kind === "app" ? "App" : "Skill";
+  kind.textContent = mentionItemKindLabel(token.item);
 
   const label = document.createElement("span");
   label.className = "chatapp-mention-chip__label";
@@ -208,7 +210,7 @@ function mentionChipElement(token: MentionToken, disabled: boolean, onRemove: (t
   const remove = document.createElement("button");
   remove.type = "button";
   remove.className = "chatapp-mention-chip__remove";
-  remove.setAttribute("aria-label", `Rimuovi ${token.item.label}`);
+  remove.setAttribute("aria-label", `Remove ${token.item.label}`);
   remove.disabled = disabled;
   remove.addEventListener("click", (event) => {
     event.preventDefault();
@@ -310,7 +312,6 @@ export function ChatComposer({
   queuedPreview: string | null;
   value: string;
 }) {
-  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const [caretIndex, setCaretIndex] = useState(value.length);
   const [dismissedMentionStart, setDismissedMentionStart] = useState<number | null>(null);
   const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
@@ -522,18 +523,27 @@ export function ChatComposer({
   }
 
   function insertAppMention(item: MentionItem) {
+    insertAppMentions([item]);
+  }
+
+  function insertAppMentions(items: MentionItem[]) {
+    if (!items.length) {
+      return;
+    }
     const boundedCaret = Math.max(0, Math.min(caretIndex, value.length));
     const before = value.slice(0, boundedCaret);
     const after = value.slice(boundedCaret);
     const prefix = before && !/\s$/.test(before) ? " " : "";
     const suffix = after && /^\s/.test(after) ? "" : " ";
-    const insertion = `${prefix}${mentionText(item)}${suffix}`;
+    const insertion = `${prefix}${items.map((item) => mentionText(item)).join(" ")}${suffix}`;
     const nextValue = `${before}${insertion}${after}`;
     const nextCaret = before.length + insertion.length;
     pendingCaretIndexRef.current = nextCaret;
     onChange(nextValue);
-    if (item.reference) {
-      onReferenceAdd?.(item.reference);
+    for (const item of items) {
+      if (item.reference) {
+        onReferenceAdd?.(item.reference);
+      }
     }
     setCaretIndex(nextCaret);
     setDismissedMentionStart(null);
@@ -638,20 +648,28 @@ export function ChatComposer({
   }
 
   function onDragOver(event: DragEvent<HTMLDivElement>) {
-    if (!event.dataTransfer.types.includes("Files")) {
+    if (disabled) {
       return;
     }
-    event.preventDefault();
-    setIsDraggingFiles(true);
+    if (hasStorageReferenceDragData(event.dataTransfer)) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.dataTransfer.dropEffect = "copy";
+      return;
+    }
   }
 
   function onDrop(event: DragEvent<HTMLDivElement>) {
-    if (!event.dataTransfer.files.length) {
+    if (disabled) {
       return;
     }
-    event.preventDefault();
-    setIsDraggingFiles(false);
-    onAddAttachments(Array.from(event.dataTransfer.files));
+    if (hasStorageReferenceDragData(event.dataTransfer)) {
+      event.preventDefault();
+      event.stopPropagation();
+      const droppedItems = storageReferenceMentionItemsFromDataTransfer(event.dataTransfer);
+      insertAppMentions(droppedItems);
+      return;
+    }
   }
 
   function onPaste(event: ClipboardEvent<HTMLDivElement>) {
@@ -666,7 +684,6 @@ export function ChatComposer({
   return (
     <>
       <section className={`chat-ui-surface chatapp-composer ${isEmptyMode ? "is-empty-mode" : "is-docked"}`}>
-        {isDraggingFiles ? <DropOverlay /> : null}
         <form className="chatapp-form-stack" onSubmit={submit}>
           <AttachmentPreviewStrip attachments={attachments} disabled={isSending} onRemoveAttachment={onRemoveAttachment} />
           <QueuedMessageNotice queuedCount={queuedCount} queuedPreview={queuedPreview} />
@@ -682,7 +699,7 @@ export function ChatComposer({
                 onSearchQueryChange={updateActiveAppMentionQuery}
                 query={appMentionPickerQuery}
                 searchInputRef={appPickerSearchRef}
-                searchPlaceholder="Cerca app, file o cartelle"
+                searchPlaceholder="Search apps, files, or folders"
                 searchQuery={appMentionPickerQuery}
                 statusMessage={appPickerSearchError}
                 ref={appPickerPanelRef}
@@ -693,9 +710,8 @@ export function ChatComposer({
                 aria-disabled={disabled}
                 className={`chat-ui-input chat-ui-input--textarea chatapp-composer__field chatapp-composer__editor ${value ? "" : "is-empty"}`}
                 contentEditable={!disabled}
-                data-placeholder="Scrivi a Maverick..."
+                data-placeholder="Message Maverick..."
                 onClick={(event) => syncCaret(event.currentTarget)}
-                onDragLeave={() => setIsDraggingFiles(false)}
                 onDragOver={onDragOver}
                 onDrop={onDrop}
                 onInput={(event) => updateComposerFromEditor(event.currentTarget)}
@@ -724,7 +740,7 @@ export function ChatComposer({
                 <button
                   aria-expanded={isAppMentionPickerOpen}
                   aria-haspopup="listbox"
-                  aria-label="App citabili"
+                  aria-label="Apps and references"
                   className={`chatapp-composer__tool-button ${isAppMentionPickerOpen ? "is-active" : ""}`}
                   disabled={disabled}
                   onClick={() => {
@@ -830,21 +846,21 @@ function MentionPanel({
     activeItemRef.current?.scrollIntoView({ block: "nearest" });
   }, [activeIndex]);
 
-  const panelLabel = kind === "app" ? "Suggerimenti app, file e cartelle" : "Suggerimenti skill";
-  const panelTitle = kind === "app" ? "App, file e cartelle" : "Skill";
+  const panelLabel = kind === "app" ? "App, file, and folder suggestions" : "Skill suggestions";
+  const panelTitle = kind === "app" ? "Apps, files, and folders" : "Skills";
 
   return (
     <div className={`chatapp-mention-panel ${className}`} ref={ref} role="listbox" aria-label={panelLabel}>
       <div className="chatapp-mention-panel__header">{panelTitle}</div>
       {onSearchQueryChange ? (
         <label className="chatapp-mention-panel__search">
-          <span className="chatapp-mention-panel__search-label">Cerca</span>
+          <span className="chatapp-mention-panel__search-label">Search</span>
           <input
-            aria-label="Cerca app, file o cartelle"
+            aria-label="Search apps, files, or folders"
             className="chatapp-mention-panel__search-input"
             onChange={(event) => onSearchQueryChange(event.currentTarget.value)}
             onKeyDown={onSearchKeyDown}
-            placeholder={searchPlaceholder || "Cerca"}
+            placeholder={searchPlaceholder || "Search"}
             ref={searchInputRef}
             type="search"
             value={searchQuery || ""}
@@ -878,7 +894,7 @@ function MentionPanel({
           </button>
         ))
       ) : statusMessage ? null : (
-        <div className="chatapp-mention-panel__empty">Nessun risultato per {query.trim() || "questo riferimento"}</div>
+        <div className="chatapp-mention-panel__empty">No results for {query.trim() || "this reference"}</div>
       )}
     </div>
   );
@@ -908,33 +924,18 @@ function ComposerActions({
         </button>
       ) : null}
       <button
-        aria-label={isSending ? "Metti in coda il messaggio" : "Invia messaggio"}
+        aria-label={isSending ? "Queue message" : "Send message"}
         className="chatapp-composer__icon-action is-send"
         disabled={!canSend}
         onClick={onSubmit}
-        title={isSending ? "Metti in coda" : "Invia"}
+        title={isSending ? "Queue" : "Send"}
         type="button"
       >
         <span aria-hidden="true" className="material-symbols-rounded">
           send
         </span>
-        <span className="chatapp-composer__send-label">Invia</span>
+        <span className="chatapp-composer__send-label">Send</span>
       </button>
-    </div>
-  );
-}
-
-function DropOverlay() {
-  return (
-    <div className="chatapp-chat-dropzone" aria-hidden="true">
-      <div className="chatapp-chat-dropzone__content">
-        <span className="chatapp-chat-dropzone__icon">
-          <span className="material-symbols-rounded" aria-hidden="true">
-            add
-          </span>
-        </span>
-        <span>Rilascia il tuo file qui per allegarlo in chat</span>
-      </div>
     </div>
   );
 }
@@ -946,8 +947,8 @@ function QueuedMessageNotice({ queuedCount, queuedPreview }: { queuedCount: numb
   return (
     <div className="chatapp-composer-queue" aria-live="polite">
       <div className="chatapp-composer-queue__eyebrow">
-        <strong>{queuedCount} messaggi in coda</strong>
-        <span>Invio automatico dopo il turn attivo</span>
+        <strong>{queuedCount} {queuedCount === 1 ? "message" : "messages"} queued</strong>
+        <span>Sends automatically after the active turn</span>
       </div>
       {queuedPreview ? <div className="chatapp-composer-queue__preview">{queuedPreview}</div> : null}
     </div>

@@ -61,6 +61,9 @@ def _queue_turn_with_event(
         state,
         workspace_id=session.workspace_id,
         runtime_session_id=session.session_id,
+        input_text=input_text,
+        attachments=attachments,
+        app_references=app_references,
         now=turn.created_at,
     )
     return turn, [event]

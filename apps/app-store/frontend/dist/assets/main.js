@@ -12,10 +12,20 @@ const state = {
   publicIdentities: {},
 };
 
-const CATALOG_SKELETON_COUNT = 5;
+const FOLDER_SKELETONS = [
+  { accent: "#00c6ff", gradient: "linear-gradient(135deg, rgba(0, 198, 255, 0.44), rgba(0, 114, 255, 0.24))" },
+  { accent: "#d4d4d4", gradient: "linear-gradient(135deg, rgba(212, 212, 212, 0.38), rgba(115, 115, 115, 0.2))" },
+  { accent: "#f5f5f5", gradient: "linear-gradient(135deg, rgba(255, 255, 255, 0.18), rgba(245, 245, 245, 0.34))" },
+  { accent: "#f59e0b", gradient: "linear-gradient(135deg, rgba(245, 158, 11, 0.42), rgba(239, 68, 68, 0.24))" },
+  { accent: "#e5e5e5", gradient: "linear-gradient(135deg, rgba(229, 229, 229, 0.34), rgba(82, 82, 82, 0.2))" },
+  { accent: "#f80759", gradient: "linear-gradient(135deg, rgba(248, 7, 89, 0.42), rgba(188, 78, 156, 0.24))" },
+  { accent: "#8e2de2", gradient: "linear-gradient(135deg, rgba(142, 45, 226, 0.42), rgba(74, 0, 224, 0.24))" },
+];
 
 const storeShell = document.querySelector(".store-shell");
 const catalogGrid = document.querySelector("#catalogGrid");
+const stalePinsSection = document.querySelector("#stalePinsSection");
+const stalePinList = document.querySelector("#stalePinList");
 const featuredAppsNode = document.querySelector("#featuredApps");
 const searchNode = document.querySelector("#search");
 const surfaceNode = document.querySelector("#surface");
@@ -27,8 +37,6 @@ const publicSubmissionId = document.querySelector("#publicSubmissionId");
 const publicSubmissionLookup = document.querySelector("#publicSubmissionLookup");
 const publicSubmissionResult = document.querySelector("#publicSubmissionResult");
 const workspaceList = document.querySelector("#workspaceList");
-const statusText = document.querySelector("#statusText");
-const refreshButton = document.querySelector("#refreshButton");
 const navigationButtons = [...document.querySelectorAll("[data-target]")];
 const promotionModal = document.querySelector("#promotionModal");
 const promotionModalTitle = document.querySelector("#promotionModalTitle");
@@ -50,10 +58,7 @@ async function requestJson(url, options = {}) {
   return payload;
 }
 
-function setStatus(text, kind = "idle") {
-  statusText.textContent = text;
-  statusText.dataset.kind = kind;
-}
+function setStatus() {}
 
 function setBusy(node, busy) {
   if (!node) return;
@@ -66,7 +71,7 @@ function setBusy(node, busy) {
 
 function syncLoadingChrome() {
   storeShell?.classList.toggle("is-loading", state.isLoading);
-  [searchNode, surfaceNode, publicSubmissionId, publicSubmissionLookup, refreshButton].forEach((node) => {
+  [searchNode, surfaceNode, publicSubmissionId, publicSubmissionLookup].forEach((node) => {
     if (node) {
       node.disabled = state.isLoading;
     }
@@ -115,32 +120,48 @@ function renderStatsSkeleton() {
   catalogStatsNode.append(skeletonLine("stats"), skeletonLine("stats-short"), skeletonLine("stats"));
 }
 
-function renderRowSkeleton() {
-  const row = skeletonBlock("app-row app-row--skeleton", "article");
-  const icon = skeletonBlock("app-row-icon app-row-icon--skeleton");
-  const copy = skeletonBlock("app-row-copy store-loading-skeleton__stack", "div");
-  copy.append(skeletonLine("row-title"), skeletonLine("row-copy"));
-  const details = skeletonBlock("app-row-details", "div");
-  const meta = skeletonBlock("app-row-meta", "div");
-  meta.append(skeletonBlock("store-loading-skeleton__badge"), skeletonBlock("store-loading-skeleton__status"));
-  details.append(meta, skeletonLine("surface"));
-  const actions = skeletonBlock("app-row-actions", "div");
-  actions.append(skeletonBlock("store-loading-skeleton__control"), skeletonBlock("store-loading-skeleton__control"));
-  row.append(icon, copy, details, actions);
-  return row;
+function renderFolderSkeletonCard(definition, index) {
+  const card = skeletonBlock("app-folder-card app-folder-card--skeleton", "article");
+  card.style.setProperty("--folder-gradient", definition.gradient);
+  card.style.setProperty("--folder-accent", definition.accent);
+  card.style.animationDelay = `${90 + index * 55}ms`;
+
+  const glow = skeletonBlock("app-folder-glow", "div");
+
+  const scene = skeletonBlock("app-folder-scene", "div");
+  scene.append(
+    skeletonBlock("app-folder-back", "div"),
+    skeletonBlock("app-folder-tab", "div"),
+    skeletonBlock("app-folder-front", "div"),
+    skeletonBlock("app-folder-shine", "div"),
+  );
+
+  const copy = skeletonBlock("app-folder-copy app-folder-copy--skeleton", "div");
+  copy.append(skeletonLine("folder-title"));
+
+  const hint = skeletonBlock("app-folder-hint app-folder-hint--skeleton", "div");
+  hint.append(skeletonLine("folder-hint"));
+
+  card.append(glow, scene, copy, hint);
+  return card;
 }
 
-function renderListSkeleton(listNode, rowCount) {
-  if (!listNode) return;
-  listNode.replaceChildren();
-  setBusy(listNode, true);
-  Array.from({ length: rowCount }).forEach(() => {
-    listNode.append(renderRowSkeleton());
+function renderFolderGridSkeleton() {
+  if (!catalogGrid) return;
+  const grid = skeletonBlock("app-folder-grid app-folder-grid--skeleton", "div");
+  FOLDER_SKELETONS.forEach((definition, index) => {
+    grid.append(renderFolderSkeletonCard(definition, index));
   });
+  catalogGrid.replaceChildren(grid);
+  setBusy(catalogGrid, true);
 }
 
 function renderLoading() {
-  renderListSkeleton(catalogGrid, CATALOG_SKELETON_COUNT);
+  if (stalePinsSection) {
+    stalePinsSection.hidden = true;
+  }
+  stalePinList?.replaceChildren();
+  renderFolderGridSkeleton();
 }
 
 function clearLoadingState() {
@@ -166,21 +187,72 @@ function formatBytes(value) {
   return `${size.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
 }
 
-function categoryLabel(app) {
-  const surfaces = app.surfaces || [];
-  if (surfaces.includes("frontend")) return "Design for workspaces";
+function categoryLabel(app, installation = null) {
+  const surfaces = normalizeSurfaces(app, installation);
+  if (frontendRole(app, installation) === "workspace") return "Workspace frontend";
+  if (frontendRole(app, installation) === "supporting") return "Supporting extension";
   if (surfaces.includes("mcp")) return "Agent-ready tools";
   if (surfaces.includes("cli")) return "Command utilities";
   if (surfaces.includes("backend")) return "Server extensions";
   return "Maverick apps";
 }
 
+function frontendPresentation(app = {}, installation = null) {
+  if (window.MaverickFrontendPresentation?.frontendPresentation) {
+    return window.MaverickFrontendPresentation.frontendPresentation(app, installation);
+  }
+  const source = installation ? { ...app, ...installation } : app;
+  const role = String(source.frontend_role || source.presentation?.frontend_role || "").trim();
+  const surfaces = Array.isArray(source.surfaces) ? source.surfaces.filter(Boolean) : [];
+  const normalizedRole = ["workspace", "supporting", "none"].includes(role)
+    ? role
+    : surfaces.includes("supporting_frontend")
+      ? "supporting"
+      : surfaces.includes("frontend") || source.frontend_launchable === true
+        ? "workspace"
+        : "none";
+  return {
+    role: normalizedRole,
+    launchable: normalizedRole === "workspace" && source.frontend_launchable !== false,
+    surfaces,
+    presentation: { frontend_role: normalizedRole },
+  };
+}
+
+function normalizeSurfaces(app = {}, installation = null) {
+  return frontendPresentation(app, installation).surfaces;
+}
+
+function frontendRole(app = {}, installation = null) {
+  return frontendPresentation(app, installation).role;
+}
+
+function isFrontendLaunchable(app = {}, installation = null) {
+  return frontendPresentation(app, installation).launchable;
+}
+
+function frontendAvailabilityLabel(app = {}, installation = null) {
+  const role = frontendRole(app, installation);
+  if (role === "workspace") {
+    return "Workspace frontend";
+  }
+  if (role === "supporting") {
+    return "Supporting frontend";
+  }
+  return "No frontend";
+}
+
+function canOpenInstalledApp(app, installState) {
+  return installState.launchableCount > 0;
+}
+
 function filteredStoreApps() {
   const query = (searchNode?.value || "").trim().toLowerCase();
   const surface = surfaceNode?.value || "";
   return state.apps.filter((app) => {
-    const text = `${app.app_id} ${app.name} ${app.description} ${app.publisher} ${(app.surfaces || []).join(" ")}`.toLowerCase();
-    const surfaceMatch = !surface || (app.surfaces || []).includes(surface);
+    const surfaces = normalizeSurfaces(app);
+    const text = `${app.app_id} ${app.name} ${app.description} ${app.publisher} ${frontendAvailabilityLabel(app)} ${surfaces.join(" ")}`.toLowerCase();
+    const surfaceMatch = !surface || surfaces.includes(surface);
     return surfaceMatch && (!query || text.includes(query));
   });
 }
@@ -244,10 +316,17 @@ function isAppPending(appId) {
 
 function selectedInstallState(appId) {
   const workspaceIds = selectedWorkspaceIds();
-  const installedCount = selectedInstallations(appId).length;
+  const installations = selectedInstallations(appId);
+  const app = appById(appId);
+  const launchableInstallations = installations.filter((installation) => isFrontendLaunchable(app || {}, installation));
+  const presentationInstallation = launchableInstallations[0] || installations[0] || null;
+  const installedCount = installations.length;
   return {
     workspaceCount: workspaceIds.length,
     installedCount,
+    launchableCount: launchableInstallations.length,
+    launchableWorkspaceId: launchableInstallations[0]?.workspace_id || null,
+    presentationInstallation,
     isInstalledEverywhere: workspaceIds.length > 0 && installedCount === workspaceIds.length,
     isPartiallyInstalled: installedCount > 0 && installedCount < workspaceIds.length,
   };
@@ -255,6 +334,13 @@ function selectedInstallState(appId) {
 
 function isPinned(appId) {
   return state.pinnedApps.includes(appId);
+}
+
+function canTogglePinnedApp(app, installState = selectedInstallState(app.app_id)) {
+  if (isPinned(app.app_id)) {
+    return true;
+  }
+  return installState.installedCount > 0 && installState.launchableCount > 0;
 }
 
 function appById(appId) {
@@ -280,15 +366,34 @@ function titleizeAppId(appId) {
 
 function appSummary(appId) {
   const app = appById(appId);
-  const installation = state.installations.find((item) => item.app_id === appId);
+  const selected = new Set(selectedWorkspaceIds());
+  const installation = state.installations.find((item) => item.app_id === appId && selected.has(item.workspace_id));
+  const presentation = frontendPresentation(app || {}, installation);
   return {
     app_id: appId,
     description: app?.description || "Installed workspace app.",
     latest_version: app?.latest_version || installation?.active_version || "",
     name: app?.name || titleizeAppId(appId),
     publisher: app?.publisher || "",
-    surfaces: app?.surfaces || [],
+    surfaces: presentation.surfaces,
+    presentation: presentation.presentation,
+    frontend_role: presentation.role,
+    frontend_launchable: presentation.launchable,
     versions: app?.versions || [],
+  };
+}
+
+function stalePinnedAppSummary(appId) {
+  return {
+    app_id: appId,
+    description: "This pinned shortcut no longer matches any catalog, server, local, or installed app.",
+    frontend_launchable: false,
+    frontend_role: "none",
+    latest_version: "",
+    name: titleizeAppId(appId),
+    presentation: { frontend_role: "none" },
+    surfaces: [],
+    versions: [],
   };
 }
 
@@ -296,13 +401,17 @@ function localAppSummary(item) {
   const invalid = item.status === "invalid";
   const identityKey = `${item.workspace_id || ""}:${item.app_id}`;
   const publicIdentity = state.publicIdentities[identityKey] || {};
+  const presentation = frontendPresentation(item);
   return {
     app_id: item.app_id,
     description: invalid && item.validation_error ? item.validation_error : item.description || "Workspace-local app project.",
     latest_version: item.version || item.active_version || "",
     name: item.name || titleizeAppId(item.app_id),
     publisher: item.publisher || "workspace",
-    surfaces: item.surfaces || [],
+    surfaces: presentation.surfaces,
+    presentation: presentation.presentation,
+    frontend_role: presentation.role,
+    frontend_launchable: presentation.launchable,
     versions: [{ version: item.version || item.active_version || "" }],
     localStatus: item.status || "uninstalled",
     validation_error: item.validation_error || "",
@@ -317,10 +426,26 @@ function localAppSummary(item) {
   };
 }
 
-function surfaceLabel(app) {
-  const surfaces = app.surfaces || [];
-  if (surfaces.length === 0) return "No declared surfaces";
-  return surfaces.join(" / ");
+function surfaceLabel(app, installation = null) {
+  const surfaces = normalizeSurfaces(app, installation);
+  const labels = [];
+  if (frontendRole(app, installation) !== "none") {
+    labels.push(frontendAvailabilityLabel(app, installation));
+  }
+  surfaces.forEach((surface) => {
+    if (surface === "frontend" || surface === "supporting_frontend") {
+      return;
+    }
+    labels.push({
+      backend: "Backend",
+      cli: "CLI",
+      mcp: "MCP",
+      skills: "Skills",
+      widgets: "Widgets",
+    }[surface] || surface);
+  });
+  if (labels.length === 0) return "No declared surfaces";
+  return labels.join(" / ");
 }
 
 function sourceKindLabel(app) {
@@ -386,12 +511,18 @@ function renderWorkspaces() {
   });
 }
 
-function renderAppIcon(app) {
+function renderAppIcon(app, installation = null) {
   if (window.MaverickAppIcons?.renderIcon) {
-    return window.MaverickAppIcons.renderIcon(app, "app-row-icon");
+    return window.MaverickAppIcons.renderIcon(app, "app-row-icon", installation);
   }
   const frame = document.createElement("span");
   frame.className = "app-row-icon is-glyph";
+  if (frontendRole(app, installation) === "supporting") {
+    frame.classList.add("is-supporting-frontend");
+  }
+  if (!isFrontendLaunchable(app, installation)) {
+    frame.classList.add("is-non-launchable");
+  }
   frame.setAttribute("aria-hidden", "true");
   const glyph = document.createElement("span");
   glyph.className = "material-symbols-rounded";
@@ -466,6 +597,15 @@ function renderMenuItem({ label, icon, disabled = false, danger = false, action 
   return button;
 }
 
+function workspaceAssignmentKey(app, version, mode, workspaceId) {
+  const sourceKey = mode === "server" ? version?.source_id || version?.version : version?.version;
+  return `${app.app_id}:${sourceKey || app.latest_version || ""}:${workspaceId}`;
+}
+
+function canAssignWorkspace(mode, version) {
+  return mode === "server" ? Boolean(version?.source_id || version?.version) : Boolean(version?.version);
+}
+
 function renderWorkspaceAssignmentsMenu(app, version, mode) {
   const assignments = document.createElement("div");
   assignments.className = "app-row-menu-section";
@@ -475,14 +615,14 @@ function renderWorkspaceAssignmentsMenu(app, version, mode) {
   assignments.append(title);
   state.workspaces.forEach((workspace) => {
     const workspaceId = workspace.workspace_id;
-    const assignmentKey = `${app.app_id}:${version?.version || app.latest_version || ""}:${workspaceId}`;
+    const assignmentKey = workspaceAssignmentKey(app, version, mode, workspaceId);
     const label = document.createElement("label");
     label.className = "app-row-menu-check";
     label.title = `Toggle ${app.name} in ${workspace.name || workspaceId}`;
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.checked = Boolean(installationFor(app.app_id, workspaceId));
-    checkbox.disabled = mode === "local" || !version?.version || state.pending.has(assignmentKey);
+    checkbox.disabled = mode === "local" || !canAssignWorkspace(mode, version) || state.pending.has(assignmentKey);
     checkbox.addEventListener("click", (event) => event.stopPropagation());
     checkbox.addEventListener("change", (event) => {
       event.stopPropagation();
@@ -494,6 +634,201 @@ function renderWorkspaceAssignmentsMenu(app, version, mode) {
     assignments.append(label);
   });
   return assignments;
+}
+
+function renderDetailSettingsSection(labelText) {
+  const section = document.createElement("section");
+  section.className = "app-detail-settings__section";
+  const label = document.createElement("p");
+  label.className = "app-detail-settings__label";
+  label.textContent = labelText;
+  section.append(label);
+  return section;
+}
+
+function renderDetailSettingsGrid() {
+  const grid = document.createElement("div");
+  grid.className = "app-detail-settings__grid";
+  return grid;
+}
+
+function renderDetailSettingsNote(text) {
+  const note = document.createElement("p");
+  note.className = "app-detail-settings__note";
+  note.textContent = text;
+  return note;
+}
+
+function renderDetailSettingButton({ label, icon, disabled = false, danger = false, action }) {
+  const button = document.createElement("button");
+  button.className = "app-detail-setting-button";
+  button.type = "button";
+  button.disabled = disabled;
+  if (danger) {
+    button.dataset.intent = "danger";
+  }
+  const iconEl = document.createElement("span");
+  iconEl.className = "material-symbols-rounded";
+  iconEl.setAttribute("aria-hidden", "true");
+  iconEl.textContent = icon;
+  const text = document.createElement("span");
+  text.textContent = label;
+  button.append(iconEl, text);
+  button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    if (!disabled) {
+      action();
+    }
+  });
+  return button;
+}
+
+function renderWorkspaceAssignmentsSettings(app, version, mode) {
+  const section = renderDetailSettingsSection("Workspaces");
+  const list = document.createElement("div");
+  list.className = "app-detail-settings__check-list";
+  if (!state.workspaces.length) {
+    list.append(renderDetailSettingsNote("No workspaces available."));
+    section.append(list);
+    return section;
+  }
+  state.workspaces.forEach((workspace) => {
+    const workspaceId = workspace.workspace_id;
+    const assignmentKey = workspaceAssignmentKey(app, version, mode, workspaceId);
+    const label = document.createElement("label");
+    label.className = "app-detail-settings__check";
+    label.title = `Toggle ${app.name} in ${workspace.name || workspaceId}`;
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = Boolean(installationFor(app.app_id, workspaceId));
+    checkbox.disabled = mode === "local" || !canAssignWorkspace(mode, version) || state.pending.has(assignmentKey);
+    checkbox.addEventListener("click", (event) => event.stopPropagation());
+    checkbox.addEventListener("change", (event) => {
+      event.stopPropagation();
+      setWorkspaceAssignment(app, version, mode, workspaceId, checkbox.checked);
+    });
+    const text = document.createElement("span");
+    text.textContent = workspace.name || workspaceId;
+    label.append(checkbox, text);
+    list.append(label);
+  });
+  section.append(list);
+  return section;
+}
+
+function renderAppSettings(app, mode, version, installState) {
+  const settings = document.createElement("div");
+  settings.className = "app-detail-settings";
+  const installed = installState.installedCount > 0;
+  const isPending = isAppPending(app.app_id);
+  const launchable = installed ? installState.launchableCount > 0 : isFrontendLaunchable(app);
+  const presentationInstallation = installed ? installState.presentationInstallation : null;
+  const pinned = isPinned(app.app_id);
+
+  const shortcutSection = renderDetailSettingsSection("Shortcut");
+  const shortcutGrid = renderDetailSettingsGrid();
+  shortcutGrid.append(
+    renderDetailSettingButton({
+      label: pinned ? "Unpin shortcut" : "Pin shortcut",
+      icon: "push_pin",
+      disabled: isPending || !canTogglePinnedApp(app, installState),
+      action: () => togglePinnedApp(app),
+    }),
+  );
+  shortcutSection.append(shortcutGrid);
+  if (!launchable) {
+    const note = frontendRole(app, presentationInstallation) === "supporting"
+      ? "Supporting frontend apps cannot be opened or pinned in the shell."
+      : "Apps without a workspace frontend cannot be opened or pinned in the shell.";
+    shortcutSection.append(renderDetailSettingsNote(note));
+  }
+  settings.append(shortcutSection);
+
+  const installSection = renderDetailSettingsSection(mode === "local" ? "Workspace project" : "Installation");
+  const installGrid = renderDetailSettingsGrid();
+  if (mode === "server") {
+    installGrid.append(
+      renderDetailSettingButton({
+        label: installState.isInstalledEverywhere ? "Uninstall from selected" : "Install in selected",
+        icon: installState.isInstalledEverywhere ? "delete" : "download",
+        danger: installState.isInstalledEverywhere,
+        disabled: !version?.source_id || installState.workspaceCount === 0 || isPending,
+        action: () => (installState.isInstalledEverywhere ? uninstallApp(app, version) : installServerApp(app, version)),
+      }),
+    );
+    installSection.append(installGrid);
+    settings.append(installSection);
+
+    const sourceSection = renderDetailSettingsSection(sourceKindLabel(app));
+    sourceSection.append(renderDetailSettingsNote(version?.version ? `Available source ${version.version}` : "Registered server source"));
+    settings.append(sourceSection, renderWorkspaceAssignmentsSettings(app, version, mode));
+    return settings;
+  }
+
+  if (mode === "local") {
+    const invalid = app.localStatus === "invalid";
+    installGrid.append(
+      renderDetailSettingButton({
+        label: installed ? "Uninstall from workspace" : "Install in workspace",
+        icon: installed ? "delete" : "download",
+        danger: installed,
+        disabled: invalid || !app.workspace_id || isPending,
+        action: () => (installed ? uninstallLocalApp(app) : installLocalApp(app)),
+      }),
+    );
+    installSection.append(installGrid);
+    if (app.workspace_id || app.localStatus) {
+      installSection.append(renderDetailSettingsNote(`${app.workspace_id || "workspace"} · ${app.localStatus || "uninstalled"}`));
+    }
+    settings.append(installSection);
+
+    const distributionSection = renderDetailSettingsSection("Distribution");
+    const distributionGrid = renderDetailSettingsGrid();
+    distributionGrid.append(
+      renderDetailSettingButton({
+        label: app.promotion_kind === "update" ? "Push server update" : "Promote to server app",
+        icon: "upload",
+        disabled: isPending,
+        action: () => promoteLocalApp(app),
+      }),
+      renderDetailSettingButton({
+        label: app.has_public_identity ? "Update public app" : "Request public publication",
+        icon: "approval",
+        disabled: invalid || isPending,
+        action: () => requestPublicPublication(app),
+      }),
+    );
+    distributionSection.append(distributionGrid);
+    settings.append(distributionSection);
+
+    const dangerSection = renderDetailSettingsSection("Danger zone");
+    const dangerGrid = renderDetailSettingsGrid();
+    dangerGrid.append(
+      renderDetailSettingButton({
+        label: "Delete app completely",
+        icon: "delete_forever",
+        danger: true,
+        disabled: !app.can_delete || !app.workspace_id || isPending,
+        action: () => deleteLocalApp(app),
+      }),
+    );
+    dangerSection.append(dangerGrid);
+    settings.append(dangerSection);
+    return settings;
+  }
+
+  installGrid.append(
+    renderDetailSettingButton({
+      label: installState.isInstalledEverywhere ? "Uninstall from selected" : "Install in selected",
+      icon: installState.isInstalledEverywhere ? "delete" : "download",
+      danger: installState.isInstalledEverywhere,
+      disabled: !version?.version || installState.workspaceCount === 0 || isPending,
+      action: () => (installState.isInstalledEverywhere ? uninstallApp(app, version) : installApp(app, version)),
+    }),
+  );
+  installSection.append(installGrid);
+  settings.append(installSection, renderWorkspaceAssignmentsSettings(app, version, mode));
+  return settings;
 }
 
 function renderMoreOptions(app, mode, version, installState) {
@@ -523,11 +858,12 @@ function renderMoreOptions(app, mode, version, installState) {
   panel.className = "app-row-menu-panel";
   const installed = installState.installedCount > 0;
   const isPending = isAppPending(app.app_id);
+  const pinned = isPinned(app.app_id);
   panel.append(
     renderMenuItem({
-      label: isPinned(app.app_id) ? "Unpin shortcut" : "Pin shortcut",
+      label: pinned ? "Unpin shortcut" : "Pin shortcut",
       icon: "push_pin",
-      disabled: !installed || isPending,
+      disabled: isPending || !canTogglePinnedApp(app, installState),
       action: () => togglePinnedApp(app),
     }),
   );
@@ -620,13 +956,17 @@ function fileToBase64(file) {
 function renderRow(app, mode) {
   const version = latestVersion(app) || { version: app.latest_version || "" };
   const installState = selectedInstallState(app.app_id);
+  const canOpen = canOpenInstalledApp(app, installState);
+  const openWorkspaceId = mode === "local" ? app.workspace_id : installState.launchableWorkspaceId;
+  const presentationInstallation = installState.presentationInstallation;
   const row = document.createElement("article");
   row.className = "app-row";
   row.dataset.mode = mode;
-  row.title = installState.installedCount > 0 ? `Open ${app.name}` : `${app.name} is not installed`;
+  row.dataset.frontendRole = frontendRole(app, presentationInstallation);
+  row.title = canOpen ? `Open ${app.name}` : installState.installedCount > 0 ? `${app.name} has no app view` : `${app.name} is not installed`;
   row.addEventListener("click", () => {
-    if (installState.installedCount > 0) {
-      openApp(app.app_id, mode === "local" ? app.workspace_id : null);
+    if (canOpen) {
+      openApp(app.app_id, openWorkspaceId || null);
     }
   });
 
@@ -664,13 +1004,13 @@ function renderRow(app, mode) {
   if (mode === "store") {
     const surfaces = document.createElement("span");
     surfaces.className = "app-row-surfaces";
-    surfaces.textContent = surfaceLabel(app);
+    surfaces.textContent = surfaceLabel(app, presentationInstallation);
     details.append(surfaces);
   }
   if (mode === "server") {
     const serverMeta = document.createElement("span");
     serverMeta.className = "app-row-surfaces";
-    serverMeta.textContent = `${sourceKindLabel(app)} · ${surfaceLabel(app)}`;
+    serverMeta.textContent = `${sourceKindLabel(app)} · ${surfaceLabel(app, presentationInstallation)}`;
     details.append(serverMeta);
   }
 
@@ -680,8 +1020,8 @@ function renderRow(app, mode) {
   const chevron = document.createElement("button");
   chevron.className = "app-row-chevron";
   chevron.type = "button";
-  chevron.disabled = installState.installedCount === 0;
-  chevron.setAttribute("aria-label", `Open ${app.name}`);
+  chevron.disabled = !canOpen;
+  chevron.setAttribute("aria-label", canOpen ? `Open ${app.name}` : `${app.name} has no app view`);
   const chevronIcon = document.createElement("span");
   chevronIcon.className = "material-symbols-rounded";
   chevronIcon.setAttribute("aria-hidden", "true");
@@ -689,14 +1029,91 @@ function renderRow(app, mode) {
   chevron.append(chevronIcon);
   chevron.addEventListener("click", (event) => {
     event.stopPropagation();
-    if (installState.installedCount > 0) {
-      openApp(app.app_id, mode === "local" ? app.workspace_id : null);
+    if (canOpen) {
+      openApp(app.app_id, openWorkspaceId || null);
     }
   });
   actionWrap.append(chevron);
 
+  row.append(renderAppIcon(app, presentationInstallation), copy, details, actionWrap);
+  return row;
+}
+
+function knownAppIds() {
+  const ids = new Set();
+  [state.apps, state.serverApps, state.localApps, state.installations].forEach((items) => {
+    items.forEach((item) => {
+      if (item?.app_id) {
+        ids.add(item.app_id);
+      }
+    });
+  });
+  return ids;
+}
+
+function stalePinnedAppIds() {
+  const known = knownAppIds();
+  return state.pinnedApps.filter((appId) => appId && !known.has(appId));
+}
+
+function renderStalePinnedShortcut(appId) {
+  const app = stalePinnedAppSummary(appId);
+  const row = document.createElement("article");
+  row.className = "app-row app-row--stale-pin";
+  row.dataset.frontendRole = "none";
+  const copy = document.createElement("div");
+  copy.className = "app-row-copy";
+  const title = document.createElement("h3");
+  title.textContent = app.name;
+  const description = document.createElement("p");
+  description.textContent = app.description;
+  copy.append(title, description);
+
+  const details = document.createElement("div");
+  details.className = "app-row-details";
+  const meta = document.createElement("div");
+  meta.className = "app-row-meta";
+  const status = document.createElement("span");
+  status.className = "app-row-status";
+  status.dataset.state = "partial";
+  status.textContent = "Stale shortcut";
+  meta.append(status);
+  const surfaces = document.createElement("span");
+  surfaces.className = "app-row-surfaces";
+  surfaces.textContent = "No matching app source";
+  details.append(meta, surfaces);
+
+  const actionWrap = document.createElement("div");
+  actionWrap.className = "app-row-actions";
+  const action = document.createElement("button");
+  action.className = "stale-pin-remove";
+  action.type = "button";
+  action.disabled = isAppPending(appId);
+  action.setAttribute("aria-label", `Remove stale shortcut ${app.name}`);
+  const actionLabel = document.createElement("span");
+  actionLabel.textContent = "Unpin";
+  const actionIcon = document.createElement("span");
+  actionIcon.className = "material-symbols-rounded";
+  actionIcon.setAttribute("aria-hidden", "true");
+  actionIcon.textContent = "keep_off";
+  action.append(actionLabel, actionIcon);
+  action.addEventListener("click", () => togglePinnedApp(app));
+  actionWrap.append(action);
+
   row.append(renderAppIcon(app), copy, details, actionWrap);
   return row;
+}
+
+function renderStalePinnedShortcuts() {
+  if (!stalePinsSection || !stalePinList) {
+    return;
+  }
+  const staleAppIds = stalePinnedAppIds();
+  stalePinsSection.hidden = staleAppIds.length === 0;
+  stalePinList.replaceChildren();
+  staleAppIds.forEach((appId) => {
+    stalePinList.append(renderStalePinnedShortcut(appId));
+  });
 }
 
 function renderInstalled() {
@@ -730,7 +1147,9 @@ function renderFeatured() {
     card.className = `feature-card feature-card--${index + 1}`;
     const copy = document.createElement("div");
     const category = document.createElement("p");
-    category.textContent = categoryLabel(app);
+    const installState = selectedInstallState(app.app_id);
+    const presentationInstallation = installState.presentationInstallation;
+    category.textContent = categoryLabel(app, presentationInstallation);
     const title = document.createElement("h2");
     title.textContent = app.name || app.app_id;
     const description = document.createElement("span");
@@ -739,16 +1158,20 @@ function renderFeatured() {
     const action = document.createElement("button");
     action.className = "feature-link";
     action.type = "button";
-    action.textContent = selectedInstallState(app.app_id).installedCount > 0 ? "Open" : "Get";
+    const launchable = installState.installedCount > 0 ? installState.launchableCount > 0 : isFrontendLaunchable(app);
+    action.textContent = installState.installedCount > 0 ? (launchable ? "Open" : "Installed") : "Get";
+    action.disabled = installState.installedCount > 0 && !launchable;
     action.addEventListener("click", () => {
       const version = latestVersion(app);
-      if (selectedInstallState(app.app_id).installedCount > 0) {
-        openApp(app.app_id);
+      const currentInstallState = selectedInstallState(app.app_id);
+      const currentLaunchable = currentInstallState.installedCount > 0 ? currentInstallState.launchableCount > 0 : isFrontendLaunchable(app);
+      if (currentInstallState.installedCount > 0 && currentLaunchable) {
+        openApp(app.app_id, currentInstallState.launchableWorkspaceId || null);
       } else if (version) {
         installApp(app, version);
       }
     });
-    const icon = renderAppIcon(app);
+    const icon = renderAppIcon(app, presentationInstallation);
     icon.classList.add("feature-icon");
     card.append(copy, action, icon);
     featuredAppsNode.append(card);
@@ -757,7 +1180,7 @@ function renderFeatured() {
 
 function renderStats(filtered) {
   if (!catalogStatsNode) return;
-  const surfaces = new Set(state.apps.flatMap((app) => app.surfaces || []));
+  const surfaces = new Set(state.apps.flatMap((app) => normalizeSurfaces(app)));
   catalogStatsNode.innerHTML = `
     <strong>${state.apps.length}</strong> apps available<br />
     <strong>${surfaces.size}</strong> surfaces supported<br />
@@ -785,7 +1208,10 @@ function renderStore() {
         selectedInstallState,
         statusLabel,
         surfaceLabel,
-        renderMoreOptions,
+        frontendAvailabilityLabel,
+        isFrontendLaunchable,
+        canOpenInstalledApp,
+        renderAppSettings,
         renderIcon: renderAppIcon,
         installApp,
         installServerApp,
@@ -875,6 +1301,7 @@ function render() {
   }
   clearLoadingState();
   renderStore();
+  renderStalePinnedShortcuts();
 }
 
 async function installApp(app, version) {
@@ -963,7 +1390,9 @@ async function installLocalApp(app) {
     });
     await refreshInstallations();
     setStatus(`Installed ${app.name}`, "ok");
-    openApp(app.app_id, workspaceId);
+    if (isFrontendLaunchable(app)) {
+      openApp(app.app_id, workspaceId);
+    }
   } catch (error) {
     setStatus(error.message, "error");
   } finally {
@@ -1292,6 +1721,11 @@ async function refreshPinnedApps() {
 }
 
 async function togglePinnedApp(app) {
+  const installState = selectedInstallState(app.app_id);
+  if (!canTogglePinnedApp(app, installState)) {
+    setStatus(`${app.name || app.app_id} has no app view to pin`, "error");
+    return;
+  }
   const pendingKey = `${app.app_id}:pin`;
   state.pending.add(pendingKey);
   render();
@@ -1362,7 +1796,7 @@ async function load() {
     state.isLoading = false;
     renderWorkspaces();
     render();
-    setStatus(`${folderCatalogApps().length} apps in folders`, "ok");
+    setStatus("Ready", "ok");
   } catch (error) {
     state.isLoading = false;
     renderWorkspaces();
@@ -1370,12 +1804,6 @@ async function load() {
     throw error;
   }
 }
-
-refreshButton?.addEventListener("click", () => {
-  load().catch((error) => {
-    setStatus(error.message, "error");
-  });
-});
 
 navigationButtons.forEach((button) => {
   button.addEventListener("click", () => {

@@ -7,6 +7,7 @@ from core.apps.errors import AppContractValidationError
 from core.apps.models import (
     AppDistributionDeclaration,
     AppFailureSemantics,
+    AppPresentationDeclaration,
     AppHealthContract,
     AppHookTimeouts,
     AppLifecycleDeclaration,
@@ -66,6 +67,18 @@ def parse_visibility_section(payload: dict[str, object]) -> AppVisibilityDeclara
         workspace_roles=workspace_roles,
         capabilities=capabilities,
     )
+
+
+def parse_presentation_section(payload: dict[str, object], *, has_frontend_entrypoint: bool) -> AppPresentationDeclaration:
+    _reject_unexpected_fields(payload, {"frontend_role"}, label="presentation")
+    role = _expect_string(payload, "frontend_role")
+    if role not in {"workspace", "supporting", "none"}:
+        raise AppContractValidationError("`presentation.frontend_role` must be workspace, supporting, or none.")
+    if role in {"workspace", "supporting"} and not has_frontend_entrypoint:
+        raise AppContractValidationError("A workspace or supporting frontend role requires `entrypoints.frontend`.")
+    if role == "none" and has_frontend_entrypoint:
+        raise AppContractValidationError("Apps with `entrypoints.frontend` must use frontend_role workspace or supporting.")
+    return AppPresentationDeclaration(frontend_role=role)
 
 
 def parse_lifecycle_section(payload: dict[str, object]) -> AppLifecycleDeclaration:

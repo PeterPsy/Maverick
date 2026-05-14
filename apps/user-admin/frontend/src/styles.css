@@ -144,7 +144,7 @@ h2 {
   margin: 0 0 0.46rem;
   color: var(--maverick-text-soft);
   font-size: 0.7rem;
-  font-weight: 900;
+  font-weight: 400;
   letter-spacing: 0;
   text-transform: uppercase;
 }
@@ -278,7 +278,7 @@ h2 {
   color: var(--maverick-text);
   padding: 0.6rem 0.7rem;
   font-size: 0.82rem;
-  font-weight: 800;
+  font-weight: 400;
   animation: ua-panel-enter 180ms ease-out both;
 }
 
@@ -398,7 +398,7 @@ button {
   color: var(--maverick-text-on-accent);
   padding: 0 0.84rem;
   font-size: 0.76rem;
-  font-weight: 900;
+  font-weight: 400;
   transition: background 160ms ease, border-color 160ms ease, color 160ms ease, opacity 160ms ease, transform 160ms ease;
 }
 
@@ -424,7 +424,7 @@ button:hover:not(:disabled) {
   color: var(--maverick-success);
   padding: 0 0.68rem;
   font-size: 0.7rem;
-  font-weight: 900;
+  font-weight: 400;
   text-transform: uppercase;
   white-space: nowrap;
 }
@@ -445,7 +445,7 @@ button:hover:not(:disabled) {
   gap: 0.44rem;
   color: var(--maverick-text-muted);
   font-size: 0.76rem;
-  font-weight: 800;
+  font-weight: 400;
 }
 
 .ua-password {
@@ -513,7 +513,7 @@ button:hover:not(:disabled) {
   color: var(--maverick-text);
   font-size: 0.78rem;
   font-style: normal;
-  font-weight: 900;
+  font-weight: 400;
 }
 
 .ua-progress-track {
@@ -590,7 +590,7 @@ button.ua-adapter-card {
   padding: 14px;
   text-align: left;
   font-size: 0.82rem;
-  font-weight: 800;
+  font-weight: 400;
 }
 
 .ua-adapter-card:hover:not(:disabled) {
@@ -628,7 +628,7 @@ button.ua-adapter-card {
   color: var(--maverick-text-muted);
   font-size: 0.68rem;
   font-style: normal;
-  font-weight: 900;
+  font-weight: 400;
   padding: 0.26rem 0.55rem;
   text-transform: uppercase;
 }
@@ -679,7 +679,7 @@ button.ua-adapter-card {
   width: max-content;
   color: var(--maverick-text-muted);
   font-size: 0.82rem;
-  font-weight: 800;
+  font-weight: 400;
 }
 
 .ua-toggle input,
@@ -754,7 +754,7 @@ button.ua-adapter-card {
   gap: 8px;
   color: var(--maverick-text-muted);
   font-size: 0.76rem;
-  font-weight: 850;
+  font-weight: 400;
   white-space: nowrap;
 }
 

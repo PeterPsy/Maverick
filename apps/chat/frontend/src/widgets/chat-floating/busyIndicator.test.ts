@@ -37,7 +37,7 @@ describe("floating chat busy indicator", () => {
   });
 
   it("round-trips persisted draft window state", () => {
-    const source = readWidgetFile("main.tsx");
+    const source = readWidgetFile("floatingState.ts");
 
     expect(source).toContain("draftProjectId: typeof windowItem.draftProjectId");
     expect(source).toContain("isDraft: windowItem.isDraft === true");

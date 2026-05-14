@@ -11,33 +11,19 @@ import {
   isHorizontalDragIntent,
   isVerticalDragIntent,
 } from "./floatingLayout";
+import {
+  FALLBACK_WIDGET_STATE_STORAGE_KEY,
+  type FloatingChatWindow,
+  createWindow,
+  persistWindows,
+  readPersistedOrDefaultWindows,
+  reconcileWindowsWithThreads,
+  widgetStateStorageKey,
+} from "./floatingState";
 import "../../styles/main.css";
 import "./styles.css";
 
-const WIDGET_STATE_STORAGE_KEY_PREFIX = "maverick.chat.floating-widget.state.v1";
-const FALLBACK_WIDGET_STATE_STORAGE_KEY = `${WIDGET_STATE_STORAGE_KEY_PREFIX}:global`;
 const THREAD_SYNC_DEBUG_STORAGE_KEY = "maverick.chat.debug.thread-sync";
-
-type ChatWindow = {
-  draftProjectId: string | null;
-  id: string;
-  isDraft: boolean;
-  isCollapsed: boolean;
-  threadId: string;
-};
-
-type PersistedChatWindow = {
-  draftProjectId?: string | null;
-  id: string;
-  isDraft?: boolean;
-  isCollapsed: boolean;
-  threadId: string;
-};
-
-type PersistedWidgetState = {
-  version: 1;
-  windows: PersistedChatWindow[];
-};
 
 type FloatingStackDragState = {
   isDragging: boolean;
@@ -46,86 +32,6 @@ type FloatingStackDragState = {
   startX: number;
   startY: number;
 };
-
-function createWindow(threadId = "", isDraft = false, draftProjectId: string | null = null): ChatWindow {
-  return {
-    draftProjectId,
-    id: `window-${crypto.randomUUID()}`,
-    isDraft,
-    isCollapsed: false,
-    threadId,
-  };
-}
-
-function windowFromPersistedState(windowItem: PersistedChatWindow): ChatWindow {
-  return {
-    draftProjectId: typeof windowItem.draftProjectId === "string" ? windowItem.draftProjectId : null,
-    id: windowItem.id,
-    isDraft: windowItem.isDraft === true,
-    isCollapsed: windowItem.isCollapsed,
-    threadId: windowItem.threadId,
-  };
-}
-
-function widgetStateStorageKey(workspaceId: string) {
-  return `${WIDGET_STATE_STORAGE_KEY_PREFIX}:${workspaceId}`;
-}
-
-function readPersistedWindowsFromKey(storageKey: string): ChatWindow[] | null {
-  try {
-    const rawValue = window.localStorage.getItem(storageKey);
-    if (!rawValue) {
-      return null;
-    }
-    const payload = JSON.parse(rawValue) as Partial<PersistedWidgetState>;
-    if (payload.version !== 1 || !Array.isArray(payload.windows) || payload.windows.length === 0) {
-      return null;
-    }
-    const windows = payload.windows
-      .map((windowItem) => {
-        if (!windowItem || typeof windowItem !== "object") {
-          return null;
-        }
-        const id = typeof windowItem.id === "string" && windowItem.id ? windowItem.id : "";
-        if (!id) {
-          return null;
-        }
-        return windowFromPersistedState({
-          draftProjectId: typeof windowItem.draftProjectId === "string" ? windowItem.draftProjectId : null,
-          id,
-          isDraft: windowItem.isDraft === true,
-          isCollapsed: windowItem.isCollapsed === true,
-          threadId: typeof windowItem.threadId === "string" ? windowItem.threadId : "",
-        });
-      })
-      .filter((windowItem): windowItem is ChatWindow => Boolean(windowItem));
-    return windows.length > 0 ? windows : null;
-  } catch {
-    return null;
-  }
-}
-
-function readPersistedWindows(storageKey = FALLBACK_WIDGET_STATE_STORAGE_KEY): ChatWindow[] {
-  return readPersistedWindowsFromKey(storageKey) || [createWindow()];
-}
-
-function persistWindows(storageKey: string, windows: ChatWindow[]) {
-  try {
-    const payload: PersistedWidgetState = {
-      version: 1,
-      windows: windows.map((windowItem) => ({
-        draftProjectId: windowItem.draftProjectId,
-        id: windowItem.id,
-        isDraft: windowItem.isDraft,
-        isCollapsed: windowItem.isCollapsed,
-        threadId: windowItem.threadId,
-      })),
-    };
-    window.localStorage.setItem(storageKey, JSON.stringify(payload));
-  } catch {
-    // Persistence is best-effort UI state; runtime behavior must keep working.
-  }
-}
 
 async function loadWidgetStateStorageKey(): Promise<string> {
   const token = widgetContextToken();
@@ -150,7 +56,7 @@ function widgetContextToken(): string {
   return new URLSearchParams(hash).get("context") || new URLSearchParams(window.location.search).get("context") || "";
 }
 
-function postWidgetSize(windows: ChatWindow[]) {
+function postWidgetSize(windows: FloatingChatWindow[]) {
   window.parent?.postMessage(
     {
       ...floatingWidgetSize(windows),
@@ -184,10 +90,11 @@ function shouldIgnoreFloatingStackDrag(target: EventTarget | null): boolean {
 }
 
 function ChatFloatingMount() {
-  const [storageKey, setStorageKey] = useState(FALLBACK_WIDGET_STATE_STORAGE_KEY);
+  const [storageKey, setStorageKey] = useState<string | null>(null);
+  const [isWindowStateReady, setIsWindowStateReady] = useState(false);
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [, setRuntimeThreadError] = useState<string | null>(null);
-  const [windows, setWindows] = useState<ChatWindow[]>(readPersistedWindows);
+  const [windows, setWindows] = useState<FloatingChatWindow[]>([]);
   const readReceiptInFlightRef = useRef<Set<string>>(new Set());
   const stackDragRef = useRef<FloatingStackDragState | null>(null);
   const stackRef = useRef<HTMLDivElement | null>(null);
@@ -198,31 +105,43 @@ function ChatFloatingMount() {
 
   useEffect(() => {
     threadsRef.current = threads;
+    if (!isWindowStateReady) {
+      return;
+    }
     setWindows((current) => reconcileWindowsWithThreads(current, threads));
-  }, [threads]);
+  }, [isWindowStateReady, threads]);
 
   useEffect(() => {
     windowsRef.current = windows;
+    if (!isWindowStateReady || !storageKey) {
+      return;
+    }
     postWidgetSize(windows);
     persistWindows(storageKey, windows);
-  }, [storageKey, windows]);
+  }, [isWindowStateReady, storageKey, windows]);
 
   useEffect(() => {
     let cancelled = false;
     async function loadScopedWidgetState() {
       const nextStorageKey = await loadWidgetStateStorageKey();
-      if (cancelled || nextStorageKey === storageKey) {
+      if (cancelled) {
         return;
       }
+      const persistedWindows = readPersistedOrDefaultWindows(nextStorageKey);
       setStorageKey(nextStorageKey);
-      const persistedWindows = readPersistedWindowsFromKey(nextStorageKey);
-      if (persistedWindows) {
-        setWindows(persistedWindows);
-      }
+      setWindows(persistedWindows);
+      setIsWindowStateReady(true);
+      postWidgetSize(persistedWindows);
     }
 
     void loadScopedWidgetState();
 
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     function handleWidgetMessage(event: MessageEvent) {
       if (event.origin !== window.location.origin || !event.data || typeof event.data !== "object") {
         return;
@@ -244,15 +163,17 @@ function ChatFloatingMount() {
         navigationScope,
         windows: currentWindows.map((windowItem) => ({ id: windowItem.id, threadId: windowItem.threadId })),
       });
+      if (!isWindowStateReady) {
+        return;
+      }
       setWindows((current) => reconcileWindowsWithThreads(current, threadsRef.current, activeThreadId, navigationScope));
     }
 
     window.addEventListener("message", handleWidgetMessage);
     return () => {
-      cancelled = true;
       window.removeEventListener("message", handleWidgetMessage);
     };
-  }, []);
+  }, [isWindowStateReady]);
 
   function navigateChat(windowId: string, params: Record<string, string | boolean | null>) {
     window.postMessage({ type: "maverick.app.navigate", app_id: "chat", navigation_scope: windowId, params }, window.location.origin);
@@ -398,6 +319,10 @@ function ChatFloatingMount() {
 
   const hasMultipleWindows = windows.length > 1;
 
+  if (!isWindowStateReady) {
+    return null;
+  }
+
   return (
     <div
       className={`chat-floating-widget-stack ${hasMultipleWindows ? "has-multiple-windows" : "has-single-window"}`}
@@ -445,7 +370,7 @@ function ChatFloatingWindow({
   onRenameThread: (threadId: string, title: string) => Promise<void>;
   onSelectThread: (windowId: string, threadId: string) => void;
   threads: ChatThread[];
-  windowItem: ChatWindow;
+  windowItem: FloatingChatWindow;
 }) {
   const [editingThreadId, setEditingThreadId] = useState<string | null>(null);
   const [editingThreadTitle, setEditingThreadTitle] = useState("");
@@ -677,33 +602,6 @@ function BusyChatGlow() {
     </span>
   );
 }
-
-function reconcileWindowsWithThreads(windows: ChatWindow[], threads: ChatThread[], preferredThreadId = "", navigationScope = "") {
-  const firstThreadId = threads[0]?.thread_id || "";
-  return windows.map((windowItem) => {
-    if (windowItem.isDraft && (!navigationScope || windowItem.id !== navigationScope)) {
-      return windowItem;
-    }
-    if (windowItem.isDraft && navigationScope === windowItem.id && !preferredThreadId) {
-      return windowItem;
-    }
-    if (!navigationScope) {
-      return windowItem.threadId && threads.some((thread) => thread.thread_id === windowItem.threadId) ? windowItem : { ...windowItem, threadId: firstThreadId };
-    }
-    if (navigationScope && windowItem.id !== navigationScope) {
-      return threads.some((thread) => thread.thread_id === windowItem.threadId) ? windowItem : { ...windowItem, threadId: firstThreadId };
-    }
-    const nextThreadId =
-      preferredThreadId && threads.some((thread) => thread.thread_id === preferredThreadId)
-        ? preferredThreadId
-        : windowItem.threadId && threads.some((thread) => thread.thread_id === windowItem.threadId)
-          ? windowItem.threadId
-          : firstThreadId;
-    return { ...windowItem, draftProjectId: null, isDraft: false, threadId: nextThreadId };
-  });
-}
-
-postWidgetSize(readPersistedWindows());
 
 createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

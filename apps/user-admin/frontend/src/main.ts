@@ -511,20 +511,14 @@ function render() {
   const root = document.getElementById('app');
   const user = selectedUser();
   if (!root) return;
-  const activeUsers = users.filter((item) => item.is_active).length;
   root.innerHTML = `<main class="ua-shell">
     <section class="ua-main">
       <div class="ua-content">
-        <header class="ua-page-header">
-          <div>
-            <p class="ua-kicker">Maverick</p>
-            <h1>User Admin</h1>
-            <p class="ua-copy">Manage users, platform roles, workspace access, app visibility, and control-plane persistence.</p>
-          </div>
-          <div class="ua-page-stats" aria-label="Admin summary">
-            <span class="ua-stat"><strong>${users.length}</strong><small>users</small></span>
-            <span class="ua-stat"><strong>${activeUsers}</strong><small>active</small></span>
-            <span class="ua-stat"><strong>${workspaces.length}</strong><small>workspaces</small></span>
+        <header class="detail-header">
+          <div class="detail-title-block">
+            <h2>User Admin</h2>
+            <span class="detail-title-separator" aria-hidden="true"></span>
+            <p>Manage users, platform roles, workspace access, app visibility, and control-plane persistence.</p>
           </div>
         </header>
         ${noticeHtml()}

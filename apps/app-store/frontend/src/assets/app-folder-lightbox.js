@@ -80,6 +80,7 @@
     const installState = selectedInstallState(app, helpers);
     const pending = helpers.isAppPending ? helpers.isAppPending(app.app_id) : false;
     const installed = installState.installedCount > 0;
+    const mode = app.storeMode || "store";
     const statusText = helpers.statusLabel ? helpers.statusLabel(app.app_id) : installed ? "Installed" : "Not installed";
     const surfaceText = helpers.surfaceLabel ? helpers.surfaceLabel(app) : normalizeSurfaces(app).join(" / ") || "No declared surfaces";
 
@@ -96,7 +97,7 @@
     lightbox.actions.replaceChildren();
     const primary = createNode("button", "folder-lightbox-primary");
     primary.type = "button";
-    primary.disabled = pending || (!installed && (!version?.version || installState.workspaceCount === 0));
+    primary.disabled = pending || primaryDisabled({ app, mode, version, installState, installed });
     const primaryLabel = createNode("span");
     primaryLabel.textContent = installed ? "Open App" : "Get App";
     const primaryIcon = createNode("span", "material-symbols-rounded");
@@ -106,7 +107,11 @@
     primary.addEventListener("click", (event) => {
       event.stopPropagation();
       if (installed) {
-        helpers.openApp?.(app.app_id);
+        helpers.openApp?.(app.app_id, mode === "local" ? app.workspace_id : null);
+      } else if (mode === "server") {
+        helpers.installServerApp?.(app, version);
+      } else if (mode === "local") {
+        helpers.installLocalApp?.(app);
       } else if (version?.version) {
         helpers.installApp?.(app, version);
       }
@@ -114,10 +119,23 @@
     lightbox.actions.append(primary);
 
     if (helpers.renderMoreOptions) {
-      const moreOptions = helpers.renderMoreOptions(app, "store", version, installState);
+      const moreOptions = helpers.renderMoreOptions(app, mode, version, installState);
       moreOptions.classList.add("folder-lightbox-options");
       lightbox.actions.append(moreOptions);
     }
+  }
+
+  function primaryDisabled({ app, mode, version, installState, installed }) {
+    if (installed) {
+      return false;
+    }
+    if (mode === "local") {
+      return app.localStatus === "invalid" || !app.workspace_id;
+    }
+    if (mode === "server") {
+      return !version?.source_id || installState.workspaceCount === 0;
+    }
+    return !version?.version || installState.workspaceCount === 0;
   }
 
   function navigate(lightbox, nextIndex) {

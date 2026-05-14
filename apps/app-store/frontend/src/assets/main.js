@@ -1,5 +1,6 @@
 const state = {
   apps: [],
+  catalogApps: [],
   serverApps: [],
   installations: [],
   localApps: [],
@@ -11,11 +12,7 @@ const state = {
   publicIdentities: {},
 };
 
-const FEATURE_SKELETON_COUNT = 3;
 const CATALOG_SKELETON_COUNT = 5;
-const MANAGEMENT_SKELETON_COUNT = 3;
-const LOCAL_SKELETON_COUNT = 2;
-const WORKSPACE_SKELETON_COUNT = 3;
 
 const storeShell = document.querySelector(".store-shell");
 const catalogGrid = document.querySelector("#catalogGrid");
@@ -88,9 +85,10 @@ function skeletonLine(size) {
 }
 
 function renderWorkspaceSkeleton() {
+  if (!workspaceList) return;
   workspaceList.replaceChildren();
   setBusy(workspaceList, true);
-  Array.from({ length: WORKSPACE_SKELETON_COUNT }).forEach((_, index) => {
+  Array.from({ length: 3 }).forEach((_, index) => {
     const chip = skeletonBlock("workspace-chip workspace-chip--skeleton", "span");
     chip.append(skeletonLine(index === 0 ? "workspace-wide" : "workspace"));
     workspaceList.append(chip);
@@ -98,9 +96,10 @@ function renderWorkspaceSkeleton() {
 }
 
 function renderFeaturedSkeleton() {
+  if (!featuredAppsNode) return;
   featuredAppsNode.replaceChildren();
   setBusy(featuredAppsNode, true);
-  Array.from({ length: FEATURE_SKELETON_COUNT }).forEach((_, index) => {
+  Array.from({ length: 3 }).forEach((_, index) => {
     const card = skeletonBlock(`feature-card feature-card--${index + 1} feature-card--skeleton`, "article");
     const copy = skeletonBlock("store-loading-skeleton__stack", "div");
     copy.append(skeletonLine("kicker"), skeletonLine(index === 0 ? "feature-title-wide" : "feature-title"), skeletonLine("feature-copy"));
@@ -110,6 +109,7 @@ function renderFeaturedSkeleton() {
 }
 
 function renderStatsSkeleton() {
+  if (!catalogStatsNode) return;
   catalogStatsNode.replaceChildren();
   catalogStatsNode.classList.add("store-stats--skeleton");
   catalogStatsNode.append(skeletonLine("stats"), skeletonLine("stats-short"), skeletonLine("stats"));
@@ -131,6 +131,7 @@ function renderRowSkeleton() {
 }
 
 function renderListSkeleton(listNode, rowCount) {
+  if (!listNode) return;
   listNode.replaceChildren();
   setBusy(listNode, true);
   Array.from({ length: rowCount }).forEach(() => {
@@ -139,25 +140,14 @@ function renderListSkeleton(listNode, rowCount) {
 }
 
 function renderLoading() {
-  renderWorkspaceSkeleton();
-  renderFeaturedSkeleton();
-  renderStatsSkeleton();
   renderListSkeleton(catalogGrid, CATALOG_SKELETON_COUNT);
-  renderListSkeleton(installedList, MANAGEMENT_SKELETON_COUNT);
-  renderListSkeleton(serverList, MANAGEMENT_SKELETON_COUNT);
-  renderListSkeleton(localList, LOCAL_SKELETON_COUNT);
 }
 
 function clearLoadingState() {
   [
-    featuredAppsNode,
     catalogGrid,
-    installedList,
-    serverList,
-    localList,
-    workspaceList,
   ].forEach((node) => setBusy(node, false));
-  catalogStatsNode.classList.remove("store-stats--skeleton");
+  catalogStatsNode?.classList.remove("store-stats--skeleton");
 }
 
 function latestVersion(app) {
@@ -193,6 +183,46 @@ function filteredStoreApps() {
     const surfaceMatch = !surface || (app.surfaces || []).includes(surface);
     return surfaceMatch && (!query || text.includes(query));
   });
+}
+
+function folderCatalogApps() {
+  const entries = [];
+  const seenKeys = new Set();
+  const seenAppIds = new Set();
+  const catalogIds = new Set(state.catalogApps.map((app) => app.app_id));
+  const selected = new Set(selectedWorkspaceIds());
+
+  const addEntry = (app, mode, key = `${mode}:${app.app_id}`) => {
+    if (!app?.app_id || seenKeys.has(key)) {
+      return;
+    }
+    seenKeys.add(key);
+    seenAppIds.add(app.app_id);
+    entries.push({ ...app, storeMode: mode });
+  };
+
+  state.catalogApps.forEach((app) => addEntry(app, "store"));
+  state.serverApps.forEach((app) => {
+    if (!catalogIds.has(app.app_id)) {
+      addEntry(app, "server");
+    }
+  });
+  state.localApps
+    .filter((item) => selected.has(item.workspace_id))
+    .forEach((item) => {
+      const summary = localAppSummary(item);
+      addEntry(summary, "local", `local:${summary.workspace_id || ""}:${summary.app_id}`);
+    });
+
+  [...new Set(state.installations.filter((item) => selected.has(item.workspace_id)).map((item) => item.app_id))]
+    .sort()
+    .forEach((appId) => {
+      if (!seenAppIds.has(appId)) {
+        addEntry(appSummary(appId), "installed");
+      }
+    });
+
+  return entries;
 }
 
 function selectedWorkspaceIds() {
@@ -272,7 +302,7 @@ function localAppSummary(item) {
     latest_version: item.version || item.active_version || "",
     name: item.name || titleizeAppId(item.app_id),
     publisher: item.publisher || "workspace",
-    surfaces: [],
+    surfaces: item.surfaces || [],
     versions: [{ version: item.version || item.active_version || "" }],
     localStatus: item.status || "uninstalled",
     validation_error: item.validation_error || "",
@@ -332,6 +362,7 @@ function notifyPinnedAppsChanged() {
 }
 
 function renderWorkspaces() {
+  if (!workspaceList) return;
   workspaceList.replaceChildren();
   setBusy(workspaceList, false);
   state.workspaces.forEach((workspace) => {
@@ -725,6 +756,7 @@ function renderFeatured() {
 }
 
 function renderStats(filtered) {
+  if (!catalogStatsNode) return;
   const surfaces = new Set(state.apps.flatMap((app) => app.surfaces || []));
   catalogStatsNode.innerHTML = `
     <strong>${state.apps.length}</strong> apps available<br />
@@ -735,12 +767,12 @@ function renderStats(filtered) {
 
 function renderStore() {
   catalogGrid.replaceChildren();
-  const apps = filteredStoreApps();
+  const apps = folderCatalogApps();
   renderStats(apps);
   if (!apps.length) {
     const empty = document.createElement("p");
     empty.className = "empty-state";
-    empty.textContent = state.apps.length ? "No apps match the current filters." : "No apps are available in the configured catalog.";
+    empty.textContent = "No apps are available in this workspace yet.";
     catalogGrid.append(empty);
     return;
   }
@@ -748,7 +780,6 @@ function renderStore() {
     window.MaverickAppFolderView.render({
       mount: catalogGrid,
       apps,
-      activeSurface: surfaceNode?.value || "",
       helpers: {
         latestVersion,
         selectedInstallState,
@@ -757,13 +788,16 @@ function renderStore() {
         renderMoreOptions,
         renderIcon: renderAppIcon,
         installApp,
+        installServerApp,
+        installLocalApp,
         openApp,
         isAppPending,
       },
     });
+    apps.filter((app) => app.storeMode === "local").forEach(loadPublicIdentity);
     return;
   }
-  apps.forEach((app) => catalogGrid.append(renderRow(app, "store")));
+  apps.forEach((app) => catalogGrid.append(renderRow(app, app.storeMode || "store")));
 }
 
 function renderServer() {
@@ -840,11 +874,7 @@ function render() {
     return;
   }
   clearLoadingState();
-  renderFeatured();
-  renderInstalled();
   renderStore();
-  renderServer();
-  renderLocal();
 }
 
 async function installApp(app, version) {
@@ -1204,7 +1234,7 @@ async function loadPublicIdentity(app) {
     });
     state.publicIdentities[key] = payload.identity || {};
     if (state.publicIdentities[key].public_app_uuid) {
-      renderLocal();
+      render();
     }
   } catch (_error) {
     state.publicIdentities[key] = { public_app_uuid: "", has_public_identity: false };
@@ -1323,7 +1353,8 @@ async function load() {
     ]);
     state.workspaces = workspaces.items || [];
     state.serverApps = serverApps.items || [];
-    state.apps = mergeCatalogAndServerApps(catalog.items || [], state.serverApps);
+    state.catalogApps = catalog.items || [];
+    state.apps = mergeCatalogAndServerApps(state.catalogApps, state.serverApps);
     state.installations = installations.items || [];
     state.localApps = installations.local_apps || [];
     state.pinnedApps = pinned.pinned_apps || [];
@@ -1331,7 +1362,7 @@ async function load() {
     state.isLoading = false;
     renderWorkspaces();
     render();
-    setStatus(`${state.apps.length} catalog apps · ${state.serverApps.length} server apps`, "ok");
+    setStatus(`${folderCatalogApps().length} apps in folders`, "ok");
   } catch (error) {
     state.isLoading = false;
     renderWorkspaces();
@@ -1340,7 +1371,7 @@ async function load() {
   }
 }
 
-refreshButton.addEventListener("click", () => {
+refreshButton?.addEventListener("click", () => {
   load().catch((error) => {
     setStatus(error.message, "error");
   });
@@ -1356,6 +1387,7 @@ navigationButtons.forEach((button) => {
 
 document.querySelectorAll(".quick-link").forEach((button) => {
   button.addEventListener("click", () => {
+    if (!surfaceNode || !searchNode) return;
     surfaceNode.value = button.dataset.filterSurface || "";
     searchNode.value = "";
     render();
@@ -1363,11 +1395,11 @@ document.querySelectorAll(".quick-link").forEach((button) => {
   });
 });
 
-searchNode.addEventListener("input", render);
-surfaceNode.addEventListener("change", render);
+searchNode?.addEventListener("input", render);
+surfaceNode?.addEventListener("change", render);
 
-publicSubmissionLookup.addEventListener("click", lookupPublicSubmission);
-publicSubmissionId.addEventListener("keydown", (event) => {
+publicSubmissionLookup?.addEventListener("click", lookupPublicSubmission);
+publicSubmissionId?.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
     lookupPublicSubmission();
   }
@@ -1380,8 +1412,8 @@ document.addEventListener("keydown", (event) => {
     closePromotionModal();
   }
 });
-promotionModalClose.addEventListener("click", closePromotionModal);
-promotionModal.addEventListener("click", (event) => {
+promotionModalClose?.addEventListener("click", closePromotionModal);
+promotionModal?.addEventListener("click", (event) => {
   if (event.target === promotionModal) {
     closePromotionModal();
   }

@@ -3,6 +3,10 @@
   padding-top: 0;
 }
 
+.catalog-folder-section {
+  padding-top: 28px;
+}
+
 .app-folder-grid {
   display: grid;
   gap: 28px;
@@ -40,6 +44,17 @@
   border-color: color-mix(in srgb, var(--folder-accent) 40%, transparent);
   box-shadow: var(--maverick-glass-edge), 0 26px 72px color-mix(in srgb, var(--folder-accent) 18%, transparent);
   transform: scale(1.04) rotate(-1.5deg);
+}
+
+.app-folder-card.is-empty {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.app-folder-card.is-empty:hover {
+  border-color: var(--store-border);
+  box-shadow: var(--maverick-glass-edge);
+  transform: none;
 }
 
 .app-folder-glow {

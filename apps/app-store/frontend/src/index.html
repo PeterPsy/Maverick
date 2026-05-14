@@ -28,86 +28,9 @@
             </button>
           </div>
         </header>
-        <div class="feature-rail" id="featuredApps" aria-label="Featured apps"></div>
-      </section>
-
-      <section class="content-layout" id="catalog">
-        <div class="catalog-column">
-          <div class="section-heading">
-            <div>
-              <p class="section-kicker">Recommended</p>
-              <h2>Most Popular Apps</h2>
-            </div>
-            <section class="catalog-controls" aria-label="Catalog filters">
-              <input id="search" type="search" placeholder="Search apps" />
-              <select id="surface">
-                <option value="">All surfaces</option>
-                <option value="frontend">Frontend</option>
-                <option value="backend">Backend</option>
-                <option value="mcp">MCP</option>
-                <option value="cli">CLI</option>
-                <option value="skills">Skills</option>
-                <option value="widgets">Widgets</option>
-              </select>
-            </section>
-          </div>
+        <section class="catalog-folder-section" id="catalog" aria-label="App folders">
           <div id="catalogGrid" class="app-list app-list--store"></div>
-        </div>
-
-        <aside class="quick-links" aria-label="Quick links">
-          <div>
-            <p class="section-kicker">Quick Links</p>
-            <h2>Browse</h2>
-          </div>
-          <div class="quick-link-list">
-            <button type="button" class="quick-link" data-filter-surface="">All apps</button>
-            <button type="button" class="quick-link" data-filter-surface="frontend">Frontend apps</button>
-            <button type="button" class="quick-link" data-filter-surface="backend">Backend services</button>
-            <button type="button" class="quick-link" data-filter-surface="mcp">MCP tools</button>
-            <button type="button" class="quick-link" data-filter-surface="cli">CLI utilities</button>
-          </div>
-          <div class="store-stats" id="catalogStats">Loading catalog...</div>
-        </aside>
-      </section>
-
-      <section class="manage-section" id="manage" aria-labelledby="manageTitle">
-        <div class="manage-heading">
-          <div>
-            <p class="section-kicker">Maverick</p>
-            <h2 id="manageTitle">Manage Apps</h2>
-          </div>
-          <section class="workspace-strip" aria-label="Workspace selection">
-            <p class="workspace-strip__label">Install target</p>
-            <div id="workspaceList" class="workspace-list"></div>
-          </section>
-        </div>
-
-        <div class="management-grid">
-          <section class="management-panel">
-            <p class="section-kicker">Workspace</p>
-            <h3>Installed Apps</h3>
-            <div id="installedList" class="app-list app-list--installed"></div>
-          </section>
-          <section class="management-panel">
-            <p class="section-kicker">Server</p>
-            <h3>Server Apps</h3>
-            <div id="serverList" class="app-list app-list--server"></div>
-          </section>
-          <section class="management-panel">
-            <p class="section-kicker">Workspace-local</p>
-            <h3>Local Apps</h3>
-            <div id="localList" class="app-list app-list--local"></div>
-          </section>
-          <section class="management-panel">
-            <p class="section-kicker">Public store</p>
-            <h3>Publication Requests</h3>
-            <div class="public-request-lookup">
-              <input id="publicSubmissionId" type="text" placeholder="Submission ID" />
-              <button id="publicSubmissionLookup" type="button">Check status</button>
-            </div>
-            <div id="publicSubmissionResult" class="app-list app-list--public"></div>
-          </section>
-        </div>
+        </section>
       </section>
     </main>
     <div class="app-modal-backdrop is-hidden" id="promotionModal" aria-hidden="true">

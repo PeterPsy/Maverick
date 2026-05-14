@@ -116,15 +116,13 @@
   }
 
   function buildFolders(apps, activeSurface) {
-    const folders = new Map();
+    const folders = new Map(FOLDER_TYPES.map((definition) => [definition.id, { ...definition, apps: [] }]));
     apps.forEach((app) => {
       const folderId = folderIdForApp(app, activeSurface);
-      if (!folders.has(folderId)) {
-        folders.set(folderId, { ...folderDefinition(folderId), apps: [] });
-      }
-      folders.get(folderId).apps.push(app);
+      const folder = folders.get(folderId) || folders.get("other");
+      folder.apps.push(app);
     });
-    return FOLDER_TYPES.map((definition) => folders.get(definition.id)).filter(Boolean);
+    return FOLDER_TYPES.map((definition) => folders.get(definition.id));
   }
 
   function appImage(app, folderId, index) {

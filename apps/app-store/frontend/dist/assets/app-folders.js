@@ -48,11 +48,16 @@
 
   function renderFolder(folder, folderIndex, options) {
     const card = createNode("article", "app-folder-card");
-    card.tabIndex = 0;
     card.style.setProperty("--folder-gradient", folder.gradient);
     card.style.setProperty("--folder-accent", folder.accent);
     card.style.animationDelay = `${120 + folderIndex * 80}ms`;
     card.setAttribute("aria-label", `${folder.title}, ${renderCount(folder)}`);
+    if (folder.apps.length) {
+      card.tabIndex = 0;
+    } else {
+      card.classList.add("is-empty");
+      card.setAttribute("aria-disabled", "true");
+    }
 
     const glow = createNode("div", "app-folder-glow");
     const scene = createNode("div", "app-folder-scene");
@@ -68,8 +73,10 @@
     });
 
     scene.append(back, tab, previewLayer, front, shine);
-    card.append(glow, scene, renderFolderCopy(folder), renderHint());
-    bindFolderEvents(card, folder, options);
+    card.append(glow, scene, renderFolderCopy(folder), renderHint(folder));
+    if (folder.apps.length) {
+      bindFolderEvents(card, folder, options);
+    }
     return card;
   }
 
@@ -83,9 +90,9 @@
     return copy;
   }
 
-  function renderHint() {
+  function renderHint(folder) {
     const hint = createNode("div", "app-folder-hint");
-    hint.textContent = "Hover";
+    hint.textContent = folder.apps.length ? "Hover" : "Empty";
     return hint;
   }
 

@@ -226,13 +226,18 @@
 }
 
 .reference-list,
-.relationship-list {
+.relationship-list,
+.claim-list,
+.lint-list {
   display: grid;
   gap: 0.5rem;
 }
 
 .reference-card,
-.relationship-list button {
+.relationship-list button,
+.compiled-card,
+.claim-card,
+.lint-card {
   display: grid;
   gap: 0.32rem;
   border: 1px solid var(--maverick-border);
@@ -243,9 +248,39 @@
   text-align: left;
 }
 
+.compiled-card {
+  gap: 0.65rem;
+}
+
+.compiled-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  color: var(--maverick-text-muted);
+  font-size: 0.74rem;
+}
+
+.claim-card strong,
+.lint-card strong {
+  font-size: 0.82rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.lint-card--error {
+  border-color: rgba(255, 110, 110, 0.42);
+}
+
+.lint-card--warning {
+  border-color: rgba(255, 190, 100, 0.38);
+}
+
 .reference-card span,
 .relationship-list span,
 .relationship-list small,
+.claim-card span,
+.claim-card small,
+.lint-card span,
 .muted {
   color: var(--maverick-text-muted);
   font-size: 0.76rem;

@@ -94,10 +94,14 @@ class MemoryAppTestCase(unittest.TestCase):
         self.assertEqual(parsed.contract.entrypoints.backend, "backend/app_backend.py")
         self.assertEqual(parsed.contract.entrypoints.frontend, "frontend/dist")
         self.assertIn("memory_context", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("memory_compile", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("memory_lint", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("memory_wiki_query", parsed.contract.capabilities.mcp_tools)
         self.assertIn("memory_reference_manifest", parsed.contract.capabilities.mcp_tools)
         self.assertIn("memory_set_view_filter", parsed.contract.capabilities.mcp_tools)
         self.assertEqual(parsed.contract.capabilities.cli_commands, ["memory"])
         self.assertEqual(parsed.contract.storage.storage_kind, "sqlite+files")
+        self.assertEqual(parsed.contract.storage.data_schema_version, "2")
         self.assertEqual(parsed.contract.capabilities.reference_entities[0].entity_type, "node")
         view_surface = parsed.contract.capabilities.view_surfaces[0]
         self.assertEqual(view_surface.view_id, "memory")
@@ -132,7 +136,7 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertTrue((data_root / "memory.sqlite").is_file())
             self.assertTrue((data_root / "artifacts" / "extracted").is_dir())
             health = run_json_entrypoint(MEMORY_ROOT / "hooks" / "health_check.py", payload=payload, cwd=MEMORY_ROOT)
-            self.assertEqual(health["schema_version"], "1")
+            self.assertEqual(health["schema_version"], "2")
 
     def test_sqlite_wal_cache_tracks_recreated_database_file(self) -> None:
         database = self.import_backend_module("database")
@@ -242,6 +246,79 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual(len(graph["nodes"]), 2)
             self.assertEqual(len(graph["edges"]), 1)
             self.assertEqual(graph["edges"][0]["kind"], "mentions")
+
+    def test_compile_builds_internal_wiki_context_and_search_matches(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            node = self.run_backend(
+                data_root,
+                {
+                    "action": "remember",
+                    "title": "Acme support agreement",
+                    "body": "Acme signed the 2026 support agreement. Renewal owner is the platform team.",
+                    "type": "fact",
+                },
+            )["json"]["node"]
+            file_ref = self.run_backend(
+                data_root,
+                {
+                    "action": "attach_file",
+                    "node_id": node["id"],
+                    "file_id": "file_acme_support",
+                    "workspace_relative_path": "storage/generated/reports/acme-support.md",
+                    "title": "Acme support source",
+                },
+            )["json"]["external_ref"]
+
+            compiled = self.run_backend(data_root, {"action": "compile", "node_id": node["id"]})
+            inspect = self.run_backend(data_root, {"action": "inspect", "node_id": node["id"]})
+            context = self.run_backend(data_root, {"action": "context", "query": "renewal owner"})
+            search = self.run_backend(data_root, {"action": "search", "query": "renewal owner"})
+            wiki_query = self.run_backend(data_root, {"action": "wiki_query", "query": "support agreement"})
+
+            self.assertEqual(compiled["status_code"], 200)
+            self.assertEqual(compiled["json"]["compiled_page"]["title"], "Acme support agreement")
+            self.assertEqual(compiled["json"]["claims"][0]["citations"][0]["external_ref_id"], file_ref["id"])
+            self.assertFalse(any(finding["finding_type"] == "missing_citation" for finding in compiled["json"]["lint_findings"]))
+            self.assertEqual(inspect["json"]["node"]["compiled_page"]["node_id"], node["id"])
+            self.assertTrue(inspect["json"]["node"]["sources"])
+            self.assertEqual(context["status_code"], 200)
+            self.assertEqual(context["json"]["items"][0]["compiled"]["wiki_page_id"], compiled["json"]["compiled_page"]["id"])
+            self.assertIn("claim", search["json"]["results"][0]["match_sources"])
+            self.assertEqual(wiki_query["json"]["results"][0]["kind"], "wiki_page")
+
+    def test_lint_reports_uncited_claims_and_contradictions(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            first = self.run_backend(
+                data_root,
+                {"action": "remember", "title": "Launch date", "body": "Launch is planned for June.", "type": "fact"},
+            )["json"]["node"]
+            second = self.run_backend(
+                data_root,
+                {"action": "remember", "title": "Launch conflict", "body": "Launch is blocked until July.", "type": "fact"},
+            )["json"]["node"]
+            self.run_backend(
+                data_root,
+                {
+                    "action": "link",
+                    "source_node_id": first["id"],
+                    "target_node_id": second["id"],
+                    "kind": "contradicts",
+                    "reason": "The dates disagree.",
+                },
+            )
+
+            self.run_backend(data_root, {"action": "compile", "node_id": first["id"]})
+            lint = self.run_backend(data_root, {"action": "lint", "node_id": first["id"]})
+            missing_lint = self.run_backend(data_root, {"action": "lint", "node_id": "node_missing"})
+
+            self.assertEqual(lint["status_code"], 200)
+            finding_types = {finding["finding_type"] for finding in lint["json"]["findings"]}
+            self.assertIn("missing_citation", finding_types)
+            self.assertIn("contradiction", finding_types)
+            self.assertTrue(lint["json"]["summary"]["has_errors"])
+            self.assertEqual(missing_lint["status_code"], 400)
 
     def test_backend_normalizes_errors_and_keeps_graph_payload_light(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

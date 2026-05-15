@@ -8,6 +8,7 @@ import sqlite3
 from typing import Any
 
 from database import connect, ensure_schema, normalize_limit, record_event, row_payload
+from wiki_queries import compact_compiled_payload, search_compiled_node_ids
 
 TOKEN_PATTERN = re.compile(r"[A-Za-z0-9_]+")
 
@@ -42,7 +43,31 @@ def search_nodes(data_root: Path, query: str, *, limit: int = 10) -> list[dict[s
                 rows = []
         else:
             rows = []
-        if not rows:
+        results = [row_payload(row) or {} for row in rows]
+        for result in results:
+            result["match_sources"] = ["node"]
+        if len(results) < normalized_limit:
+            known_ids = {result["id"] for result in results}
+            compiled_matches = search_compiled_node_ids(db, query, limit=normalized_limit)
+            for node_id, match_source in compiled_matches:
+                if node_id in known_ids:
+                    for result in results:
+                        if result["id"] == node_id and match_source not in result["match_sources"]:
+                            result["match_sources"].append(match_source)
+                    continue
+                node_row = db.execute(
+                    "SELECT *, 0.0 AS score FROM nodes WHERE id = ? AND status = 'active'",
+                    (node_id,),
+                ).fetchone()
+                if node_row is None:
+                    continue
+                payload = row_payload(node_row) or {}
+                payload["match_sources"] = [match_source]
+                results.append(payload)
+                known_ids.add(node_id)
+                if len(results) >= normalized_limit:
+                    break
+        if not results:
             like = f"%{query.strip()}%"
             rows = list(
                 db.execute(
@@ -55,7 +80,10 @@ def search_nodes(data_root: Path, query: str, *, limit: int = 10) -> list[dict[s
                     (like, like, like, normalized_limit),
                 )
             )
-        return [row_payload(row) or {} for row in rows]
+            results = [row_payload(row) or {} for row in rows]
+            for result in results:
+                result["match_sources"] = ["node"]
+        return results[:normalized_limit]
 
 
 def context_payload(data_root: Path, query: str, *, limit: int = 8, record_access_event: bool = False) -> dict[str, Any]:
@@ -80,6 +108,7 @@ def context_payload(data_root: Path, query: str, *, limit: int = 8, record_acces
                     "summary": node["summary"] or node["body_text"][:280],
                     "relevance": round(max(0.1, 1.0 - (index * 0.08)), 3),
                     "provenance": refs,
+                    "compiled": compact_compiled_payload(db, node["id"]),
                 }
             )
             related = db.execute(
@@ -106,6 +135,7 @@ def context_payload(data_root: Path, query: str, *, limit: int = 8, record_acces
                         "relevance": round(float(related_payload.get("weight") or 0.5) * float(related_payload.get("confidence") or 1.0), 3),
                         "reason": related_payload.get("reason") or f"Related through {related_payload.get('kind')}",
                         "provenance": [],
+                        "compiled": compact_compiled_payload(db, related_payload["id"]),
                     }
                 )
             if len(items) >= normalized_limit:

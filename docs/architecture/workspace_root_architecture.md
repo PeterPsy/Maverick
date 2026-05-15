@@ -1797,10 +1797,13 @@ Everything related to memory must be modeled as app-owned workspace data.
 This includes:
 
 - note records
-- link records
-- file references
-- app-owned indices
-- app-owned retrieval caches
+- node and edge records
+- file and app-entity references
+- source and source-version records derived from those references
+- compiled wiki pages
+- atomic claims and citations
+- compile runs and lint findings
+- app-owned indices and retrieval caches
 - exports and snapshots produced by the memory app
 
 ### Memory isolation
@@ -1815,16 +1818,22 @@ No silent cross-tenant fallback should exist.
 
 For the current Maverick target, the memory app should model:
 
-- notes
-- links between notes
-- references from notes to workspace files
+- human-facing graph nodes
+- typed links between nodes
+- references from nodes to workspace files and app-owned entities
+- a hidden compiled wiki layer per node or topic
+- claim and citation records derived from attached sources
+- lint findings for contradictions, stale compiled pages, missing citations, orphan nodes, and duplicate or low-quality graph structure
 
-This is enough to support the desired use case:
+The user-facing app remains a visual knowledge map, not a separate wiki navigation app. The wiki layer is app-owned compiled evidence that supports retrieval, inspection, citations, and linting for users and agents.
+
+This is enough to support use cases such as:
 
 - company X
 - known at event Y
 - linked to contract Z
 - linked to email thread A
+- decision B derived from source documents C and D
 
 without forcing a rigid global schema for every memory item.
 
@@ -1834,7 +1843,7 @@ The memory app chooses its own internal storage model inside `data/memory/`.
 
 Recommended shape:
 
-- embedded database for notes and links
+- embedded database for graph nodes, links, sources, compiled pages, claims, citations, compile runs, and lint findings
 - optional markdown inside note bodies for readability
 - file references to workspace storage by stable `file_id`
 
@@ -1845,16 +1854,17 @@ The important rule is:
 - memory is app-owned
 - memory data lives under `data/memory/`
 - the memory app can use an embedded database or another app-local storage model
+- compiled wiki data stays inside the Memory app data root and never becomes a core-owned knowledge database
 
-### Notes
+### Graph nodes
 
-Each note should use a small common structure plus a flexible payload.
+Each graph node should use a small common structure plus a flexible payload.
 
 Recommended base fields:
 
 - `id`
 - `title`
-- `note_type`
+- `node_type`
 - `summary`
 - `body_markdown`
 - `payload`
@@ -1865,15 +1875,15 @@ Recommended base fields:
 - `created_at`
 - `updated_at`
 
-### Links between notes
+### Links between nodes
 
-Links between notes should be first-class records, not implicit text-only references.
+Links between nodes should be first-class records, not implicit text-only references.
 
 Recommended base fields:
 
 - `id`
-- `from_note_id`
-- `to_note_id`
+- `from_node_id`
+- `to_node_id`
 - `relation_type`
 - `status`
 - `confidence`
@@ -1882,9 +1892,25 @@ Recommended base fields:
 - `created_at`
 - `updated_at`
 
+### Compiled wiki layer
+
+Memory may compile a node or topic into an internal wiki page. This page is not a user-facing route. It is a workspace-owned artifact used by the node inspector, `memory.context`, `memory.inspect_node`, `memory.search`, compile/lint surfaces, and future LLM-assisted refinement.
+
+The compiled layer should keep raw source identity separate from derived knowledge:
+
+- `sources` point to Storage files, generated artifacts, chat/app entities, or other app-owned records by stable references
+- `source_versions` capture observed hashes and extracted text or extracted-reference pointers
+- `wiki_pages` store compiled markdown per node or topic
+- `claims` store atomic statements with status, confidence, and stale markers
+- `citations` connect claims to source versions, chunks, ranges, or external refs
+- `compile_runs` record who or what compiled a page and which inputs were used
+- `lint_findings` record contradictions, stale sources, missing citations, orphan graph nodes, and other quality issues
+
+The first implementation may compile deterministically from existing node text, references, and relationships before any LLM call exists. Later LLM compilation must still preserve citations, lint/probe results, and the raw source references that support rollback and audit.
+
 ### Memory file references
 
-Notes should reference workspace files by stable `file_id`, with path retained only as a secondary navigation aid.
+Nodes should reference workspace files by stable `file_id`, with path retained only as a secondary navigation aid.
 
 The note can store:
 

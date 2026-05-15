@@ -5,7 +5,10 @@ from edges import create_edge, soft_delete_edge
 from nodes import create_node, inspect_node, update_node, soft_delete_node
 from references import add_external_ref
 from retrieval import audit_events, context_payload, graph_payload, search_nodes
+from lint import lint_memory
 from view_state import clear_custom_view_payload, load_view_state, set_custom_view_payload, set_view_filter_payload
+from wiki import compile_node
+from wiki_queries import wiki_query
 
 __all__ = [
     "add_external_ref",
@@ -18,6 +21,8 @@ __all__ = [
     "health_payload",
     "graph_payload",
     "inspect_node",
+    "compile_node",
+    "lint_memory",
     "load_view_state",
     "search_nodes",
     "set_custom_view_payload",
@@ -25,4 +30,5 @@ __all__ = [
     "soft_delete_edge",
     "soft_delete_node",
     "update_node",
+    "wiki_query",
 ]

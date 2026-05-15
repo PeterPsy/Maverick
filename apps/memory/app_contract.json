@@ -71,6 +71,9 @@
       "memory_attach_file",
       "memory_attach_app_entity",
       "memory_inspect_node",
+      "memory_compile",
+      "memory_lint",
+      "memory_wiki_query",
       "memory_audit",
       "memory_view_filter",
       "memory_set_view_filter",
@@ -98,6 +101,10 @@
       {
         "resource": "view-state",
         "description": "Emitted when Memory view filters or custom graph views change through official Memory surfaces."
+      },
+      {
+        "resource": "wiki",
+        "description": "Emitted when Memory compiled wiki pages, claims, citations, sources, or lint findings change through official Memory surfaces."
       }
     ],
     "reference_entities": [
@@ -194,7 +201,7 @@
   },
   "storage": {
     "storage_kind": "sqlite+files",
-    "data_schema_version": "1",
+    "data_schema_version": "2",
     "primary_paths": [
       "data/memory/memory.sqlite",
       "data/memory/artifacts",

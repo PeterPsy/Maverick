@@ -12,12 +12,14 @@ from store import (
     add_external_ref,
     audit_events,
     clear_custom_view_payload,
+    compile_node,
     context_payload,
     create_edge,
     create_node,
     graph_payload,
     health_payload,
     inspect_node,
+    lint_memory,
     load_view_state,
     search_nodes,
     set_custom_view_payload,
@@ -25,6 +27,7 @@ from store import (
     soft_delete_edge,
     soft_delete_node,
     update_node,
+    wiki_query,
 )
 
 
@@ -60,14 +63,22 @@ DATA_CHANGED_RESOURCES = {
     "attach_file",
     "attach_entity",
     "attach_app_entity",
+    "compile",
+    "lint",
 }
 VIEW_STATE_ACTIONS = {"set_view_filter", "set_custom_view", "clear_custom_view"}
+WIKI_ACTIONS = {"compile", "lint"}
 
 
 def app_events_for_action(action: str) -> list[dict[str, str]]:
     if action not in DATA_CHANGED_RESOURCES:
         return []
-    resource = "view-state" if action in VIEW_STATE_ACTIONS else "graph"
+    if action in VIEW_STATE_ACTIONS:
+        resource = "view-state"
+    elif action in WIKI_ACTIONS:
+        resource = "wiki"
+    else:
+        resource = "graph"
     return [{"type": "maverick.app.data-changed", "resource": resource}]
 
 
@@ -83,6 +94,9 @@ def action_from_tool(tool_name: str, fallback: str) -> str:
         "memory_attach_file": "attach_file",
         "memory_attach_app_entity": "attach_entity",
         "memory_inspect_node": "inspect",
+        "memory_compile": "compile",
+        "memory_lint": "lint",
+        "memory_wiki_query": "wiki_query",
         "memory_audit": "audit",
         "memory_view_filter": "view_filter",
         "memory_set_view_filter": "set_view_filter",
@@ -148,6 +162,14 @@ def _handle_action(data_root: Path, body: dict[str, Any], *, app_id: str = "memo
         query = str(body.get("query") or "").strip()
         limit = normalize_limit(body.get("limit"), default=10, minimum=1, maximum=50)
         return 200, {"results": search_nodes(data_root, query, limit=limit)}
+    if action == "compile":
+        return 200, compile_node(data_root, body)
+    if action == "lint":
+        return 200, lint_memory(data_root, body)
+    if action == "wiki_query":
+        query = str(body.get("query") or "").strip()
+        limit = normalize_limit(body.get("limit"), default=10, minimum=1, maximum=50)
+        return 200, wiki_query(data_root, query, limit=limit)
     if action == "context":
         query = str(body.get("query") or "").strip()
         return 200, context_payload(

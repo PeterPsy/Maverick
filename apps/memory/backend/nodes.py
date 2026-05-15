@@ -20,6 +20,7 @@ from database import (
     transaction,
 )
 from errors import MemoryValidationError
+from wiki_queries import compiled_payload_for_node
 
 
 def create_node(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
@@ -160,6 +161,7 @@ def get_node_with_details(db: sqlite3.Connection, node_id: str) -> dict[str, Any
     node["external_refs"] = [item for item in refs if item is not None]
     node["outgoing_edges"] = [item for item in outgoing if item is not None]
     node["incoming_edges"] = [item for item in incoming if item is not None]
+    node.update(compiled_payload_for_node(db, node_id))
     return node
 
 

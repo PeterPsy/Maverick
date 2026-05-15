@@ -39,6 +39,42 @@ export function FloatingNodePanel({ node, relationships, onClose, onSelect }: Fl
         </section>
       )}
 
+      {details.compiled_page ? (
+        <section>
+          <h3>Compiled wiki</h3>
+          <div className="compiled-card">
+            <div className="compiled-card__meta">
+              <span>{details.compiled_page.freshness || "fresh"}</span>
+              <span>{formatDate(details.compiled_page.compiled_at)}</span>
+            </div>
+            {details.compiled_page.summary ? <p className="summary">{details.compiled_page.summary}</p> : null}
+            <div className="claim-list">
+              {(details.claims || []).slice(0, 5).map((claim) => (
+                <div className="claim-card" key={claim.id}>
+                  <strong>{claim.claim_text}</strong>
+                  <span>{confidenceLabel(claim.confidence)} confidence</span>
+                  {(claim.citations || []).length ? <small>{claim.citations?.length} citation{claim.citations?.length === 1 ? "" : "s"}</small> : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {(details.lint_findings || []).length ? (
+        <section>
+          <h3>Lint findings</h3>
+          <div className="lint-list">
+            {(details.lint_findings || []).map((finding) => (
+              <div className={`lint-card lint-card--${finding.severity || "info"}`} key={finding.id}>
+                <strong>{finding.finding_type.replace(/_/g, " ")}</strong>
+                <span>{finding.message}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       <section>
         <h3>Timeline</h3>
         <dl className="detail-list">

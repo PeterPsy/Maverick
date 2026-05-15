@@ -3,12 +3,20 @@
 from __future__ import annotations
 
 import os
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
 from core.app_sdk.cli import _bootstrap_options_for_cli, _bootstrap_state_for_cli
+
+
+NO_RUNTIME_ENV = {
+    "MAVERICK_RUNTIME_API_TOKEN": "",
+    "MAVERICK_RUNTIME_ROOT": "",
+    "MAVERICK_RUNTIME_SESSION_ID": "",
+}
 
 
 class _FakeAppStore:
@@ -78,7 +86,7 @@ class CliBootstrapTests(unittest.TestCase):
 
         with patch.dict(
             os.environ,
-            {"MAVERICK_RUNTIME_API_TOKEN": "", "MAVERICK_RUNTIME_SESSION_ID": ""},
+            NO_RUNTIME_ENV,
             clear=False,
         ):
             with patch(
@@ -116,7 +124,7 @@ class CliBootstrapTests(unittest.TestCase):
 
         with patch.dict(
             os.environ,
-            {"MAVERICK_RUNTIME_API_TOKEN": "", "MAVERICK_RUNTIME_SESSION_ID": ""},
+            NO_RUNTIME_ENV,
             clear=False,
         ):
             with patch(
@@ -130,19 +138,54 @@ class CliBootstrapTests(unittest.TestCase):
 
         self.assertIs(state, full_state)
 
-    def test_runtime_sidecar_discovery_does_not_retry_host_bootstrap(self) -> None:
+    def test_stale_runtime_session_id_does_not_suppress_host_bootstrap_retry(self) -> None:
         light_state = _state()
+        full_state = _state(sources=[object()], bindings=[SimpleNamespace(status="enabled")])
 
         with patch.dict(
             os.environ,
-            {"MAVERICK_RUNTIME_API_TOKEN": "token", "MAVERICK_RUNTIME_SESSION_ID": "sess-1"},
+            {
+                **NO_RUNTIME_ENV,
+                "MAVERICK_RUNTIME_SESSION_ID": "stale-session",
+            },
             clear=False,
         ):
-            with patch("core.app_sdk.cli.bootstrap_platform_state", return_value=light_state) as bootstrap:
+            with patch(
+                "core.app_sdk.cli.bootstrap_platform_state",
+                side_effect=[light_state, full_state],
+            ) as bootstrap:
                 state = _bootstrap_state_for_cli(
                     ["apps", "list", "--json"],
                     repository_root=Path("/repo"),
                 )
+
+        self.assertIs(state, full_state)
+        self.assertEqual(bootstrap.call_count, 2)
+
+    def test_runtime_sidecar_discovery_does_not_retry_host_bootstrap(self) -> None:
+        light_state = _state()
+
+        with tempfile.TemporaryDirectory() as temp:
+            runtime_root = Path(temp)
+            shim = runtime_root / "bin" / "maverick"
+            shim.parent.mkdir(parents=True)
+            shim.write_text("#!/bin/sh\n", encoding="utf-8")
+            shim.chmod(0o755)
+
+            with patch.dict(
+                os.environ,
+                {
+                    "MAVERICK_RUNTIME_API_TOKEN": "token",
+                    "MAVERICK_RUNTIME_ROOT": str(runtime_root),
+                    "MAVERICK_RUNTIME_SESSION_ID": "sess-1",
+                },
+                clear=False,
+            ):
+                with patch("core.app_sdk.cli.bootstrap_platform_state", return_value=light_state) as bootstrap:
+                    state = _bootstrap_state_for_cli(
+                        ["apps", "list", "--json"],
+                        repository_root=Path("/repo"),
+                    )
 
         self.assertIs(state, light_state)
         bootstrap.assert_called_once()

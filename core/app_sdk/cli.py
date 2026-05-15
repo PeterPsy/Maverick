@@ -94,10 +94,16 @@ def _should_retry_with_host_bootstrap(args: list[str], *, state) -> bool:
 
 
 def _running_in_runtime_session() -> bool:
-    return bool(
-        str(os.environ.get("MAVERICK_RUNTIME_API_TOKEN") or "").strip()
-        or str(os.environ.get("MAVERICK_RUNTIME_SESSION_ID") or "").strip()
-    )
+    runtime_root = str(os.environ.get("MAVERICK_RUNTIME_ROOT") or "").strip()
+    token = str(os.environ.get("MAVERICK_RUNTIME_API_TOKEN") or "").strip()
+    if not runtime_root or not token:
+        return False
+    shim = Path(runtime_root) / "bin" / "maverick"
+    try:
+        resolved_shim = shim.resolve(strict=True)
+    except OSError:
+        return False
+    return os.access(resolved_shim, os.X_OK)
 
 
 def _command_depends_on_app_state(args: list[str]) -> bool:

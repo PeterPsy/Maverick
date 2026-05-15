@@ -237,6 +237,12 @@ function changeInputValue(input: HTMLInputElement, value: string) {
   input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
+function dispatchPointerDown(target: Element, pointerType: string) {
+  const event = new Event("pointerdown", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "pointerType", { value: pointerType });
+  target.dispatchEvent(event);
+}
+
 describe("ChatComposer reference search", () => {
   it("opens the agent selector and selects an agent runner", async () => {
     const onSelectAgent = vi.fn();
@@ -259,6 +265,20 @@ describe("ChatComposer reference search", () => {
     });
 
     expect(onSelectAgent).toHaveBeenCalledWith("agent-type-social-video-content-strategist");
+  });
+
+  it("keeps the agent selector open after a mobile tap sequence", async () => {
+    const { element } = await renderComposer();
+    const agentButton = element.querySelector('[aria-label="Agent runner: Default Chat"]');
+    expect(agentButton).toBeInstanceOf(HTMLButtonElement);
+
+    await act(async () => {
+      dispatchPointerDown(agentButton as HTMLButtonElement, "touch");
+      (agentButton as HTMLButtonElement).click();
+    });
+
+    expect(agentButton?.getAttribute("aria-expanded")).toBe("true");
+    expect(element.textContent).toContain("Social Video Content Strategist");
   });
 
   it("renders checklist entity search results after typing an @ query", async () => {

@@ -1,4 +1,4 @@
-import { ClipboardEvent, DragEvent, FormEvent, KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { ClipboardEvent, DragEvent, FormEvent, KeyboardEvent, PointerEvent as ReactPointerEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Ref } from "react";
 import type { AgentTypeSummary, AppReference, ProviderItem } from "../api/client";
 import type { ComposerAttachment } from "../lib/attachments";
@@ -842,6 +842,8 @@ function AgentSelector({
   const [isOpen, setIsOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const suppressNextClickRef = useRef(false);
+  const suppressClickResetRef = useRef<number | null>(null);
   const selectedAgent = agents.find((agent) => agent.id === selectedAgentTypeId) || null;
   const label = selectedAgent?.name || "Default Chat";
   const isDisabled = disabled || locked;
@@ -871,9 +873,46 @@ function AgentSelector({
     };
   }, [isOpen]);
 
+  useEffect(() => {
+    return () => {
+      if (suppressClickResetRef.current !== null) {
+        window.clearTimeout(suppressClickResetRef.current);
+      }
+    };
+  }, []);
+
   function selectAgent(agentTypeId: string) {
     onSelect(agentTypeId);
     setIsOpen(false);
+  }
+
+  function handleTriggerPointerDown(event: ReactPointerEvent<HTMLButtonElement>) {
+    if (event.pointerType === "mouse") {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    suppressNextClickRef.current = true;
+    if (suppressClickResetRef.current !== null) {
+      window.clearTimeout(suppressClickResetRef.current);
+    }
+    suppressClickResetRef.current = window.setTimeout(() => {
+      suppressNextClickRef.current = false;
+      suppressClickResetRef.current = null;
+    }, 700);
+    setIsOpen((current) => !current);
+  }
+
+  function handleTriggerClick() {
+    if (suppressNextClickRef.current) {
+      suppressNextClickRef.current = false;
+      if (suppressClickResetRef.current !== null) {
+        window.clearTimeout(suppressClickResetRef.current);
+        suppressClickResetRef.current = null;
+      }
+      return;
+    }
+    setIsOpen((current) => !current);
   }
 
   return (
@@ -884,7 +923,8 @@ function AgentSelector({
         aria-label={`Agent runner: ${label}`}
         className={`chatapp-composer__tool-button chatapp-agent-selector__trigger ${selectedAgentTypeId || isOpen ? "is-active" : ""}`}
         disabled={isDisabled}
-        onClick={() => setIsOpen((current) => !current)}
+        onClick={handleTriggerClick}
+        onPointerDown={handleTriggerPointerDown}
         ref={buttonRef}
         title={locked ? "This chat is already running with its selected agent" : `Agent runner: ${label}`}
         type="button"

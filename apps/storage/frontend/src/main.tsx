@@ -15,6 +15,7 @@ import { applyStorageFilesDelta, applyStorageFoldersDelta, type StorageCatalogDe
 import { fileFolderSelection, folderParentPath, folderStatsForSelection, normalizeFolderPath } from './lib/storageFolderLayer';
 import { attachStorageFolderDragImage } from './lib/storageDragImage';
 import { readStorageFileDragData, readStorageFolderDragData, readStorageSelectionDragData, storageDragPayloadFromFile, storageDragPayloadFromFolder, storageDragPayloadFromSelection, storageMoveDropStatus, writeStorageFileDragData, writeStorageFolderDragData, writeStorageSelectionDragData, type StorageFileDragPayload, type StorageMoveDropStatus, type StorageSelectionDragPayload } from './lib/storageDragDrop';
+import { canRequestFullscreen, elementIsFullscreen, exitDocumentFullscreen, requestElementFullscreen } from './lib/browserFullscreen';
 import { storageTargetFromParams, type StorageNavigationParams, type StorageNavigationTarget } from './lib/storageNavigationParams';
 import { storageCustomScopedFiles, storageViewVisibleFiles, storageViewVisibleFolders } from './lib/storageSearch';
 import { storageViewFilterFromMessage } from './lib/storageViewFilterEvents';
@@ -30,6 +31,7 @@ const PREVIEW_IMAGE_MAX_WIDTH = 1040;
 const PREVIEW_IMAGE_MIN_SIZE = 120;
 
 type DropFeedback = 'idle' | 'ready' | 'blocked' | 'uploading' | 'success' | 'error';
+type PreviewFullscreenMode = 'none' | 'native' | 'expanded';
 type PendingDelete =
   | { kind: 'file'; file: StorageFile }
   | { kind: 'folder'; folder: StorageFolder };
@@ -400,6 +402,7 @@ function App() {
   const [previewTable, setPreviewTable] = useState<PreviewTablePayload | undefined>(undefined);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [previewFullscreenMode, setPreviewFullscreenMode] = useState<PreviewFullscreenMode>('none');
   const [previewImageSize, setPreviewImageSize] = useState<PreviewImageSize | null>(null);
   const [previewViewportSize, setPreviewViewportSize] = useState<PreviewImageSize>(() => ({ width: window.innerWidth, height: window.innerHeight }));
   const [previewHeaderHeight, setPreviewHeaderHeight] = useState(72);
@@ -420,6 +423,7 @@ function App() {
   const viewFilterPendingRef = useRef(false);
   const markdownCopyTimerRef = useRef<number | null>(null);
   const dropFeedbackTimerRef = useRef<number | null>(null);
+  const previewModalRef = useRef<HTMLElement | null>(null);
   const previewHeaderRef = useRef<HTMLElement | null>(null);
   const filesRef = useRef<StorageFile[]>([]);
   const draggedSelectionRef = useRef<StorageSelectionDragPayload | null>(null);
@@ -435,6 +439,7 @@ function App() {
   const catalogTransitionMinRequestRef = useRef<number | null>(null);
   const catalogTransitionTokenRef = useRef(0);
   const pendingNavigationTargetRef = useRef<StorageNavigationTarget | null>(storageTargetFromParams(Object.fromEntries(new URLSearchParams(window.location.search).entries())));
+  const previewFullscreenActive = previewFullscreenMode !== 'none';
 
   function setCurrentFolderPathScoped(path: string) {
     const normalizedPath = normalizeFolderPath(path);
@@ -736,7 +741,11 @@ function App() {
     if (!previewModalOpen && !detailsOpen && !folderDetailsOpen) return;
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
-        setPreviewModalOpen(false);
+        if (previewFullscreenActive) {
+          exitPreviewFullscreenIfNeeded();
+          return;
+        }
+        closePreviewModal();
         setDetailsOpen(false);
         setFolderDetailsOpen(false);
       }
@@ -745,7 +754,7 @@ function App() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [detailsOpen, folderDetailsOpen, previewModalOpen]);
+  }, [detailsOpen, folderDetailsOpen, previewFullscreenActive, previewModalOpen]);
 
   function updateViewFilter(
     filter: Partial<Pick<StorageViewFilter, 'query' | 'role' | 'kind'>>,
@@ -950,16 +959,47 @@ function App() {
     setPreviewModalOpen(true);
   }
 
+  function exitPreviewFullscreenIfNeeded() {
+    if (elementIsFullscreen(previewModalRef.current)) {
+      exitDocumentFullscreen().catch(() => undefined);
+    }
+    setPreviewFullscreenMode('none');
+  }
+
+  function closePreviewModal() {
+    exitPreviewFullscreenIfNeeded();
+    setPreviewModalOpen(false);
+  }
+
+  async function togglePreviewFullscreen() {
+    if (previewFullscreenActive) {
+      exitPreviewFullscreenIfNeeded();
+      return;
+    }
+    const previewModal = previewModalRef.current;
+    if (!previewModal) return;
+    if (canRequestFullscreen(previewModal)) {
+      try {
+        await requestElementFullscreen(previewModal);
+        setPreviewFullscreenMode('native');
+        return;
+      } catch {
+        // Fall through to an in-app fullscreen layout when iframe policy blocks native fullscreen.
+      }
+    }
+    setPreviewFullscreenMode('expanded');
+  }
+
   function showFileDetails(file: StorageFile) {
     setSelectedFile(file);
-    setPreviewModalOpen(false);
+    closePreviewModal();
     setDetailsOpen(true);
     setFolderDetailsOpen(false);
   }
 
   function showFolderDetails(folder: StorageFolder) {
     setSelectedFolder(folder);
-    setPreviewModalOpen(false);
+    closePreviewModal();
     setDetailsOpen(false);
     setFolderDetailsOpen(true);
   }
@@ -1116,7 +1156,7 @@ function App() {
     setRenameValue(selectedFile?.name || '');
     setPreviewImageSize(null);
     if (!selectedFile) {
-      setPreviewModalOpen(false);
+      closePreviewModal();
       setDetailsOpen(false);
       return;
     }
@@ -1125,6 +1165,14 @@ function App() {
   useEffect(() => {
     if (!previewModalOpen) return;
     function updatePreviewViewportSize() {
+      const previewModal = previewModalRef.current;
+      if (previewFullscreenActive && previewModal) {
+        const rect = previewModal.getBoundingClientRect();
+        if (rect.width > 0 && rect.height > 0) {
+          setPreviewViewportSize({ width: Math.floor(rect.width), height: Math.floor(rect.height) });
+          return;
+        }
+      }
       setPreviewViewportSize({ width: window.innerWidth, height: window.innerHeight });
     }
     updatePreviewViewportSize();
@@ -1133,6 +1181,25 @@ function App() {
     return () => {
       window.removeEventListener('resize', updatePreviewViewportSize);
       window.removeEventListener('orientationchange', updatePreviewViewportSize);
+    };
+  }, [previewFullscreenActive, previewModalOpen]);
+
+  useEffect(() => {
+    if (!previewModalOpen) return;
+    function syncPreviewFullscreenState() {
+      if (elementIsFullscreen(previewModalRef.current)) {
+        setPreviewFullscreenMode('native');
+        return;
+      }
+      setPreviewFullscreenMode((current) => current === 'native' ? 'none' : current);
+    }
+    document.addEventListener('fullscreenchange', syncPreviewFullscreenState);
+    document.addEventListener('webkitfullscreenchange', syncPreviewFullscreenState);
+    document.addEventListener('MSFullscreenChange', syncPreviewFullscreenState);
+    return () => {
+      document.removeEventListener('fullscreenchange', syncPreviewFullscreenState);
+      document.removeEventListener('webkitfullscreenchange', syncPreviewFullscreenState);
+      document.removeEventListener('MSFullscreenChange', syncPreviewFullscreenState);
     };
   }, [previewModalOpen]);
 
@@ -1203,12 +1270,20 @@ function App() {
     return fittedPreviewImageSize(previewImageSize, previewViewportSize, previewHeaderHeight);
   }, [previewHeaderHeight, previewImageSize, previewModalOpen, previewViewportSize, selectedFile?.preview_kind]);
 
-  const previewModalStyle: PreviewImageStyle | undefined = previewImageLayout
+  const previewModalStyle: PreviewImageStyle | undefined = previewImageLayout && !previewFullscreenActive
     ? {
       width: `${previewImageLayout.width}px`,
       '--preview-image-height': `${previewImageLayout.height}px`
     }
     : undefined;
+  const previewFullscreenLabel = previewFullscreenActive ? 'Exit full screen' : 'Open preview full screen';
+  const previewFullscreenIcon = previewFullscreenActive ? 'fullscreen_exit' : 'fullscreen';
+  const previewModalClassName = [
+    'preview-modal',
+    previewImageLayout ? 'image-preview' : '',
+    previewFullscreenActive ? 'is-fullscreen' : ''
+  ].filter(Boolean).join(' ');
+  const previewBackdropClassName = previewFullscreenActive ? 'preview-modal-backdrop is-fullscreen-preview' : 'preview-modal-backdrop';
 
   async function download(file: StorageFile) {
     const payload = await readFile(file, DOWNLOAD_BYTES);
@@ -1467,7 +1542,7 @@ function App() {
     if (selectedFileInsideMovedFolder && !nextSelectedFile) {
       setSelectedFile(null);
       setDetailsOpen(false);
-      setPreviewModalOpen(false);
+      closePreviewModal();
     } else if (nextSelectedFile) {
       setSelectedFile(nextSelectedFile);
     }
@@ -1535,7 +1610,7 @@ function App() {
       if (selectedFile?.role === draggedFolderReference.role && normalizeFolderPath(selectedFile.relative_path).startsWith(`${normalizeFolderPath(draggedFolderReference.relative_path)}/`)) {
         setSelectedFile(null);
         setDetailsOpen(false);
-        setPreviewModalOpen(false);
+        closePreviewModal();
       }
       if (activeRole === targetRole && folderContainsPath(draggedFolderReference, currentFolderPath)) {
         const movedCurrentFolderPath = pathAfterFolderMove(currentFolderPath, draggedFolderReference.relative_path, nextFolderPath);
@@ -1958,24 +2033,27 @@ function App() {
         </div>
       ) : null}
       {previewModalOpen && selectedFile ? (
-        <div className="preview-modal-backdrop" onMouseDown={() => setPreviewModalOpen(false)}>
-          <section className={previewImageLayout ? 'preview-modal image-preview' : 'preview-modal'} style={previewModalStyle} role="dialog" aria-modal="true" aria-labelledby="preview-modal-title" onMouseDown={(event) => event.stopPropagation()}>
+        <div className={previewBackdropClassName} onMouseDown={closePreviewModal}>
+          <section className={previewModalClassName} ref={previewModalRef} style={previewModalStyle} role="dialog" aria-modal="true" aria-labelledby="preview-modal-title" onMouseDown={(event) => event.stopPropagation()}>
             <header className="preview-modal-header" ref={previewHeaderRef}>
               <div>
                 <p className="storage-eyebrow">{roleLabels[selectedFile.role]} · {kindLabels[selectedFile.preview_kind]}</p>
                 <h2 id="preview-modal-title">{selectedFile.name}</h2>
               </div>
               <div className="preview-modal-actions">
+                <button className="icon-button" type="button" onClick={() => togglePreviewFullscreen().catch((err: Error) => setError(err.message))} aria-label={previewFullscreenLabel} aria-pressed={previewFullscreenActive} title={previewFullscreenLabel}>
+                  <Icon name={previewFullscreenIcon} />
+                </button>
                 <button className="icon-button" type="button" onClick={() => showFileDetails(selectedFile)} aria-label="Show file details" title="Details">
                   <Icon name="info" />
                 </button>
                 <button className="icon-button" type="button" onClick={() => download(selectedFile).catch((err: Error) => setError(err.message))} aria-label="Download file" title="Download">
                   <Icon name="download" />
                 </button>
-                <button className="icon-button danger" type="button" onClick={() => requestFileDelete(selectedFile)} aria-label="Delete file" title="Delete">
+                <button className="icon-button danger" type="button" onClick={() => { exitPreviewFullscreenIfNeeded(); requestFileDelete(selectedFile); }} aria-label="Delete file" title="Delete">
                   <Icon name="delete" />
                 </button>
-                <button className="icon-button" type="button" onClick={() => setPreviewModalOpen(false)} aria-label="Close preview" title="Close">
+                <button className="icon-button" type="button" onClick={closePreviewModal} aria-label="Close preview" title="Close">
                   <Icon name="close" />
                 </button>
               </div>

@@ -1262,6 +1262,11 @@ h3 {
   padding: 22px;
 }
 
+.preview-modal-backdrop.is-fullscreen-preview {
+  background: var(--storage-bg);
+  padding: 0;
+}
+
 .delete-confirmation-backdrop {
   position: fixed;
   z-index: 80;
@@ -1378,6 +1383,26 @@ h3 {
   max-height: calc(100dvh - 44px);
 }
 
+.preview-modal.is-fullscreen,
+.preview-modal:fullscreen,
+.preview-modal:-webkit-full-screen {
+  width: 100vw;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  border: 0;
+  border-radius: 0;
+  background: var(--storage-surface);
+  box-shadow: none;
+}
+
+.preview-modal.image-preview.is-fullscreen,
+.preview-modal.image-preview:fullscreen,
+.preview-modal.image-preview:-webkit-full-screen {
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100dvh;
+}
+
 .preview-modal-header {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -1418,6 +1443,12 @@ h3 {
 .preview-modal.image-preview .preview-modal-body {
   width: 100%;
   height: var(--preview-image-height);
+}
+
+.preview-modal.image-preview.is-fullscreen .preview-modal-body,
+.preview-modal.image-preview:fullscreen .preview-modal-body,
+.preview-modal.image-preview:-webkit-full-screen .preview-modal-body {
+  height: auto;
 }
 
 .preview-modal-body > img,

@@ -36,6 +36,7 @@ Workspace file storage for uploaded files and generated artifacts.
 - Text, Markdown, CSV, and XLSX previews are bounded by server-side byte, row, column, and archive budgets before extraction.
 - Markdown previews render common Markdown structure, including headings, lists, code blocks, links, blockquotes, and pipe tables, in both the Storage app and the file-preview widget instead of showing raw Markdown text.
 - Markdown files can be edited from the Storage preview modal with a source editor and live rendered preview, copied in full to the clipboard, then saved back to the same validated workspace storage path.
+- The Storage preview modal header exposes a fullscreen toggle; it uses the browser Fullscreen API when allowed and falls back to an in-app fullscreen layout when iframe policy blocks native fullscreen.
 
 ## SDK Flow
 

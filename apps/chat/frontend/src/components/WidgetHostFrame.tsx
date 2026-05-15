@@ -104,6 +104,7 @@ export function WidgetHostFrame({
         ref={frameRef}
         key={`${hostAppId}:${messageId}:${state.widget.owner_app_id}:${state.widget.widget_id}:${state.contextToken}`}
         sandbox={MAVERICK_WIDGET_IFRAME_SANDBOX}
+        scrolling="no"
         src={src}
         style={frameHeight ? { height: `${frameHeight}px` } : undefined}
         title={title || `${content.kind} widget`}

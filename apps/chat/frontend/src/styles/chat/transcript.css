@@ -687,7 +687,7 @@ button.chatapp-message-reference-chip {
   display: block;
   width: min(100%, 760px);
   min-height: 160px;
-  max-height: min(82dvh, 65rem);
+  max-height: min(90dvh, 65rem);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--chatapp-cell-radius);
   background: var(--chatapp-soft-surface);
@@ -938,7 +938,7 @@ button.chatapp-message-reference-chip {
 
 .chatapp-structured-widget {
   width: min(100%, 54rem);
-  max-height: min(82dvh, 65rem);
+  max-height: min(90dvh, 65rem);
   border-color: rgba(255, 255, 255, 0.055);
   border-radius: var(--chatapp-cell-radius);
   background: var(--chatapp-soft-surface);

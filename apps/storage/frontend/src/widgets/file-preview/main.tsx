@@ -15,8 +15,8 @@ type WidgetContext = {
 };
 
 const PREVIEW_BYTES = 8 * 1024 * 1024;
-const WIDGET_MIN_HEIGHT_PX = 220;
-const WIDGET_MAX_HEIGHT_PX = 960;
+const WIDGET_MIN_HEIGHT_PX = 420;
+const WIDGET_MAX_HEIGHT_PX = 1040;
 
 function contextToken() {
   const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;
@@ -65,9 +65,15 @@ function openStorage(file?: StorageFile) {
   );
 }
 
-function postWidgetResize(element: HTMLElement) {
+function postWidgetResize(element: HTMLElement, scrollElement?: HTMLElement | null) {
   const visibleHeight = Math.ceil(element.getBoundingClientRect().height);
-  const contentHeight = Math.max(element.scrollHeight, visibleHeight);
+  const scrollHeight = scrollElement
+    ? Math.max(
+        scrollElement.scrollHeight,
+        scrollElement.firstElementChild instanceof HTMLElement ? scrollElement.firstElementChild.scrollHeight : 0
+      )
+    : 0;
+  const contentHeight = Math.max(element.scrollHeight, visibleHeight, scrollHeight);
   const height = Math.min(WIDGET_MAX_HEIGHT_PX, Math.max(WIDGET_MIN_HEIGHT_PX, contentHeight));
   window.parent?.postMessage(
     {
@@ -106,10 +112,13 @@ function Preview({ file, loading, previewUrl, previewText }: { file: StorageFile
 
 function StorageFilePreviewWidget() {
   const rootRef = useRef<HTMLElement | null>(null);
+  const documentRef = useRef<HTMLElement | null>(null);
+  const scrollIdleTimerRef = useRef<number | null>(null);
   const [file, setFile] = useState<StorageFile | null>(null);
   const [previewUrl, setPreviewUrl] = useState('');
   const [previewText, setPreviewText] = useState('');
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [isScrolling, setIsScrolling] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -153,18 +162,31 @@ function StorageFilePreviewWidget() {
   useEffect(() => {
     const element = rootRef.current;
     if (!element) return undefined;
-    const update = () => postWidgetResize(element);
+    const update = () => postWidgetResize(element, documentRef.current);
     update();
     const frame = window.requestAnimationFrame(update);
+    const delayedUpdate = window.setTimeout(update, 120);
     const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;
     observer?.observe(element);
+    if (documentRef.current) observer?.observe(documentRef.current);
+    element.addEventListener('load', update, true);
+    element.addEventListener('loadedmetadata', update, true);
     window.addEventListener('resize', update);
     return () => {
       window.cancelAnimationFrame(frame);
+      window.clearTimeout(delayedUpdate);
       observer?.disconnect();
+      element.removeEventListener('load', update, true);
+      element.removeEventListener('loadedmetadata', update, true);
       window.removeEventListener('resize', update);
     };
   }, [error, file, previewLoading, previewText, previewUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (scrollIdleTimerRef.current !== null) window.clearTimeout(scrollIdleTimerRef.current);
+    };
+  }, []);
 
   const openFile = () => {
     if (file) openStorage(file);
@@ -182,6 +204,15 @@ function StorageFilePreviewWidget() {
     openFile();
   };
 
+  const handleDocumentScroll = () => {
+    setIsScrolling(true);
+    if (scrollIdleTimerRef.current !== null) window.clearTimeout(scrollIdleTimerRef.current);
+    scrollIdleTimerRef.current = window.setTimeout(() => {
+      setIsScrolling(false);
+      scrollIdleTimerRef.current = null;
+    }, 900);
+  };
+
   if (error) {
     return <main className="file-widget file-widget--state" ref={rootRef}><p className="file-widget__empty">{error}</p></main>;
   }
@@ -192,12 +223,14 @@ function StorageFilePreviewWidget() {
   return (
     <main className="file-widget" ref={rootRef}>
       <section
-        className="file-widget__document"
+        className={`file-widget__document ${isScrolling ? 'is-scrolling' : ''}`}
+        ref={documentRef}
         role="button"
         tabIndex={0}
         aria-label={`Open ${file.name} in Storage`}
         onClick={handleDocumentClick}
         onKeyDown={handleDocumentKeyDown}
+        onScroll={handleDocumentScroll}
       >
         <Preview file={file} loading={previewLoading} previewUrl={previewUrl} previewText={previewText} />
       </section>

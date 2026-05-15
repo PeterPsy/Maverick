@@ -22,7 +22,17 @@ describe('storage file preview widget styles', () => {
   it('keeps the document surface tall enough for previews', () => {
     const styles = readStyle('styles.css');
 
-    expect(styles).toContain('--widget-max-document-height: min(60rem, 76dvh);');
-    expect(styles).toContain('min-height: 14rem;');
+    expect(styles).toContain('--widget-max-document-height: 65rem;');
+    expect(styles).toContain('min-height: 26.25rem;');
+    expect(styles).not.toContain('dvh');
+  });
+
+  it('keeps iframe scrolling hidden and exposes a transient document scrollbar', () => {
+    const styles = readStyle('styles.css');
+
+    expect(styles).toMatch(/html,[\s\S]*body,[\s\S]*#storage-file-preview-root\s*{[\s\S]*overflow:\s*hidden;/);
+    expect(styles).toContain('scrollbar-width: none;');
+    expect(styles).toContain('.file-widget__document.is-scrolling');
+    expect(styles).toContain('.file-widget__document.is-scrolling::-webkit-scrollbar-thumb');
   });
 });

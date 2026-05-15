@@ -6,7 +6,9 @@
   --widget-text: #ececec;
   --widget-muted: rgba(236, 236, 236, 0.66);
   --widget-link: #d8dde8;
-  --widget-max-document-height: min(60rem, 76dvh);
+  --widget-max-document-height: 65rem;
+  --widget-scroll-thumb: rgba(236, 236, 236, 0.34);
+  --widget-scroll-thumb-hover: rgba(236, 236, 236, 0.52);
   background: transparent;
   color: var(--widget-text);
   font-family: "Avenir Next", "Sohne", "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
@@ -20,8 +22,10 @@ html,
 body,
 #storage-file-preview-root {
   width: 100%;
+  height: 100%;
   min-height: 100%;
   margin: 0;
+  overflow: hidden;
 }
 
 body {
@@ -44,7 +48,8 @@ h3 {
 
 .file-widget {
   width: 100%;
-  min-height: 14rem;
+  height: 100%;
+  min-height: 26.25rem;
   overflow: hidden;
   border-radius: 8px;
   background: transparent;
@@ -54,19 +59,64 @@ h3 {
 .file-widget--state {
   display: grid;
   place-items: center;
+  height: 100%;
   padding: 1rem;
 }
 
 .file-widget__document {
   display: block;
   width: 100%;
-  min-height: 14rem;
-  max-height: var(--widget-max-document-height);
+  height: 100%;
+  min-height: 26.25rem;
+  max-height: none;
   overflow: auto;
+  overscroll-behavior: contain;
   border-radius: inherit;
   color: inherit;
   cursor: pointer;
   outline: none;
+  scrollbar-color: transparent transparent;
+  scrollbar-width: none;
+}
+
+.file-widget__document:hover,
+.file-widget__document:focus-visible,
+.file-widget__document.is-scrolling {
+  scrollbar-color: var(--widget-scroll-thumb) transparent;
+  scrollbar-width: thin;
+}
+
+.file-widget__document::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.file-widget__document:hover::-webkit-scrollbar,
+.file-widget__document:focus-visible::-webkit-scrollbar,
+.file-widget__document.is-scrolling::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.file-widget__document::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.file-widget__document::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  background-clip: padding-box;
+}
+
+.file-widget__document:hover::-webkit-scrollbar-thumb,
+.file-widget__document:focus-visible::-webkit-scrollbar-thumb,
+.file-widget__document.is-scrolling::-webkit-scrollbar-thumb {
+  background-color: var(--widget-scroll-thumb);
+}
+
+.file-widget__document::-webkit-scrollbar-thumb:hover {
+  background-color: var(--widget-scroll-thumb-hover);
 }
 
 .file-widget__document:focus-visible {
@@ -82,13 +132,14 @@ h3 {
 .file-widget__document iframe {
   display: block;
   width: 100%;
-  max-height: var(--widget-max-document-height);
+  max-height: none;
   border: 0;
   object-fit: contain;
 }
 
 .file-widget__document iframe {
-  min-height: min(42rem, 76dvh);
+  height: 100%;
+  min-height: 42rem;
 }
 
 .file-widget__document audio {
@@ -99,17 +150,19 @@ h3 {
 
 .file-widget__document pre {
   width: 100%;
-  max-height: var(--widget-max-document-height);
+  min-height: 100%;
+  max-height: none;
   margin: 0;
-  overflow: auto;
+  overflow: visible;
   padding: 1rem;
   white-space: pre-wrap;
 }
 
 .markdown-preview {
   width: 100%;
-  max-height: var(--widget-max-document-height);
-  overflow: auto;
+  min-height: 100%;
+  max-height: none;
+  overflow: visible;
   padding: 1rem;
   color: var(--widget-text);
   font-size: 0.8rem;
@@ -208,7 +261,7 @@ h3 {
   display: grid;
   place-items: center;
   gap: 0.45rem;
-  min-height: 14rem;
+  min-height: 26.25rem;
   padding: 1.3rem;
   text-align: center;
 }

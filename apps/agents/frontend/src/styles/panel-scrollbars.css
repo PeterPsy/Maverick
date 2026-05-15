@@ -1,0 +1,74 @@
+.bento-card-common textarea,
+.agent-skill-picker {
+  scrollbar-color: transparent transparent;
+  scrollbar-width: thin;
+}
+
+.bento-card-common textarea {
+  overflow-y: auto;
+  padding-right: 14px;
+}
+
+.agent-skill-picker {
+  padding-right: 8px;
+}
+
+.bento-card-common:hover textarea,
+.bento-card-common:focus-within textarea,
+.bento-card-common textarea:hover,
+.bento-card-common textarea:focus,
+.bento-card-skills:hover .agent-skill-picker,
+.bento-card-skills:focus-within .agent-skill-picker,
+.agent-skill-picker:hover,
+.agent-skill-picker:focus {
+  scrollbar-color: rgba(255, 255, 255, 0.42) transparent;
+}
+
+.bento-card-common textarea::-webkit-scrollbar,
+.agent-skill-picker::-webkit-scrollbar {
+  width: 8px;
+}
+
+.bento-card-common textarea::-webkit-scrollbar-track,
+.agent-skill-picker::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.bento-card-common textarea::-webkit-scrollbar-thumb,
+.agent-skill-picker::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-color: transparent;
+  background-clip: padding-box;
+  transition: background-color 160ms ease;
+}
+
+.bento-card-common:hover textarea::-webkit-scrollbar-thumb,
+.bento-card-common:focus-within textarea::-webkit-scrollbar-thumb,
+.bento-card-common textarea:hover::-webkit-scrollbar-thumb,
+.bento-card-common textarea:focus::-webkit-scrollbar-thumb,
+.bento-card-skills:hover .agent-skill-picker::-webkit-scrollbar-thumb,
+.bento-card-skills:focus-within .agent-skill-picker::-webkit-scrollbar-thumb,
+.agent-skill-picker:hover::-webkit-scrollbar-thumb,
+.agent-skill-picker:focus::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.42);
+}
+
+.agent-skill-picker .skill-choice {
+  align-items: center;
+  min-height: 3.05rem;
+  padding-top: 0.48rem;
+  padding-bottom: 0.48rem;
+}
+
+.agent-skill-picker .skill-choice span {
+  align-content: center;
+  align-self: center;
+  gap: 0.16rem;
+  min-height: 1.8rem;
+}
+
+.agent-skill-picker .skill-choice strong,
+.agent-skill-picker .skill-choice small {
+  line-height: 1.15;
+}

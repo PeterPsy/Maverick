@@ -19,4 +19,23 @@ describe('agents app scrollbars', () => {
     expect(detailStyles).toMatch(/\.agents-detail\s*\{[^}]*overflow: auto;[^}]*scrollbar-width: none;/);
     expect(detailStyles).toContain('.agents-detail::-webkit-scrollbar');
   });
+
+  it('uses reveal-on-interaction scrollbars for common prompt and skills panels', () => {
+    const panelStyles = readStyle('panel-scrollbars.css');
+
+    expect(panelStyles).toMatch(/\.bento-card-common textarea,\s*\.agent-skill-picker\s*\{[^}]*scrollbar-color: transparent transparent;/);
+    expect(panelStyles).toMatch(
+      /\.bento-card-common:hover textarea,\s*\.bento-card-common:focus-within textarea,[\s\S]*\.agent-skill-picker:focus\s*\{[^}]*scrollbar-color: rgba\(255, 255, 255, 0\.42\) transparent;/
+    );
+    expect(panelStyles).toContain('.bento-card-skills:hover .agent-skill-picker::-webkit-scrollbar-thumb');
+    expect(panelStyles).toContain('background-color: rgba(255, 255, 255, 0.42);');
+  });
+
+  it('centers skill row title and subtitle as one block inside the skills panel', () => {
+    const panelStyles = readStyle('panel-scrollbars.css');
+
+    expect(panelStyles).toMatch(/\.agent-skill-picker \.skill-choice\s*\{[^}]*align-items: center;/);
+    expect(panelStyles).toMatch(/\.agent-skill-picker \.skill-choice span\s*\{[^}]*align-content: center;[^}]*align-self: center;/);
+    expect(panelStyles).toMatch(/\.agent-skill-picker \.skill-choice strong,\s*\.agent-skill-picker \.skill-choice small\s*\{[^}]*line-height: 1\.15;/);
+  });
 });

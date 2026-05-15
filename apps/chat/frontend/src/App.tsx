@@ -1,23 +1,30 @@
 import { type CSSProperties, type DragEvent, type MutableRefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AppDependenciesPayload,
+  AgentTypeSummary,
   ChatMessageAttachment,
   ChatThread,
   createRuntimeSessionWithTurn,
   createThread,
+  getAgentDefinition,
+  getAppDependencies,
   AppReference,
   isRuntimeSessionUnavailableError,
   getWidgetContext,
   interruptRuntimeTurn,
+  listAgentCatalog,
   listApps,
   listProviders,
   listSkills,
   markThreadRead,
+  previewAgentPrompt,
   ProviderItem,
   RuntimeEvent,
   RuntimeSession,
   RuntimeTurn,
   orderChatThreads,
   selectProvider,
+  selectedDependencyProviderAppId,
   sendRuntimeTurn,
 } from "./api/client";
 import { ChatComposer } from "./components/ChatComposer";
@@ -49,6 +56,7 @@ type ShellNavigationMessage = {
   deleted_thread_id?: string;
   error?: string;
   files?: unknown[];
+  dependencies?: AppDependenciesPayload;
   navigation_scope?: string;
   owner_app_id?: string;
   app_id?: string;
@@ -75,6 +83,16 @@ type DraftChat = {
   systemPrompt: string;
 };
 
+type AgentRuntimeConfig = {
+  agent_id: string;
+  agent_role_id: string;
+  agent_type_id: string;
+  skill_ids: string[];
+  source_app_id: string;
+  system_prompt: string;
+  title: string;
+};
+
 type ActiveAppContext = {
   app_id: string;
   description: string;
@@ -93,6 +111,7 @@ export type ExternalFileDrop = {
 };
 
 const MESSAGE_HISTORY_LIMIT = 50;
+const AGENT_CATALOG_DEPENDENCY_ALIAS = "agent-catalog";
 const QUEUED_MESSAGES_STORAGE_PREFIX = "maverick.chat.queued-messages.v1";
 const THREAD_SYNC_DEBUG_STORAGE_KEY = "maverick.chat.debug.thread-sync";
 
@@ -119,6 +138,9 @@ export function App({
 } = {}) {
   const [providers, setProviders] = useState<ProviderItem[]>([]);
   const [activeProviderId, setActiveProviderId] = useState("");
+  const [agentCatalogAppId, setAgentCatalogAppId] = useState("");
+  const [agentOptions, setAgentOptions] = useState<AgentTypeSummary[]>([]);
+  const [selectedAgentTypeId, setSelectedAgentTypeId] = useState("");
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [activeThread, setActiveThread] = useState<ChatThread | null>(null);
   const [draftChat, setDraftChat] = useState<DraftChat | null>(null);
@@ -185,6 +207,11 @@ export function App({
   const executionMode = activeSession?.effective_mode === "sandbox" || activeSession?.effective_mode === "full-access" ? activeSession.effective_mode : null;
   const canStopTurn = activeTurn?.status === "queued" || activeTurn?.status === "active";
   const isRuntimeBusy = canStopTurn;
+  const composerSelectedAgentTypeId = activeThread
+    ? activeThread.source_app_id && activeThread.source_app_id !== "chat"
+      ? activeThread.agent_type_id
+      : ""
+    : selectedAgentTypeId;
   const isTranscriptHistoryPending = Boolean(activeThread?.runtime_session_id && !hasLoadedHistory && messages.length === 0);
   const isEmptyChatView =
     Boolean(draftChat) && messages.length === 0 && !isRuntimeBusy && !isBootstrapping && !isHistoryLoading && !isTranscriptHistoryPending && !error;
@@ -284,7 +311,7 @@ export function App({
     try {
       const widgetActiveAppContext = await loadWidgetActiveAppContext();
       setActiveAppContext(widgetActiveAppContext);
-      const providerPayload = await listProviders();
+      const [providerPayload] = await Promise.all([listProviders(), loadAgentOptions()]);
       setProviders(providerPayload.items || providerPayload.available_providers || (providerPayload.active_provider ? [providerPayload.active_provider] : []));
       setActiveProviderId(providerPayload.active_provider?.provider_id || "");
       setError(null);
@@ -297,6 +324,42 @@ export function App({
     loadInitialState();
     void loadMentionItems();
   }, []);
+
+  async function loadAgentOptions() {
+    try {
+      const dependencies = await getAppDependencies("chat");
+      await loadAgentOptionsFromDependencies(dependencies);
+    } catch {
+      clearAgentOptions();
+    }
+  }
+
+  async function loadAgentOptionsFromDependencies(dependencies: AppDependenciesPayload) {
+    try {
+      const providerAppId = selectedDependencyProviderAppId(dependencies, AGENT_CATALOG_DEPENDENCY_ALIAS);
+      await loadAgentOptionsFromProvider(providerAppId);
+    } catch {
+      clearAgentOptions();
+    }
+  }
+
+  async function loadAgentOptionsFromProvider(providerAppId: string) {
+    if (!providerAppId) {
+      clearAgentOptions();
+      return;
+    }
+    const catalog = await listAgentCatalog(providerAppId);
+    const nextAgentOptions = catalog.agent_types || [];
+    setAgentCatalogAppId(providerAppId);
+    setAgentOptions(nextAgentOptions);
+    setSelectedAgentTypeId((current) => (current && !nextAgentOptions.some((agent) => agent.id === current) ? "" : current));
+  }
+
+  function clearAgentOptions() {
+    setAgentCatalogAppId("");
+    setAgentOptions([]);
+    setSelectedAgentTypeId("");
+  }
 
   useEffect(() => {
     if (!externalMentionDrop || consumedExternalMentionDrops.current.has(externalMentionDrop.requestId)) {
@@ -433,6 +496,14 @@ export function App({
         setActiveAppContext(activeAppContextFromWidgetContext(payload.context || {}));
         return;
       }
+      if (payload.type === "maverick.app.dependencies" && payload.app_id === "chat" && payload.dependencies) {
+        void loadAgentOptionsFromDependencies(payload.dependencies);
+        return;
+      }
+      if (payload.type === "maverick.app.data-changed" && payload.owner_app_id === agentCatalogAppId && payload.resource === "configuration") {
+        void loadAgentOptions();
+        return;
+      }
       if (navigationScope && payload.navigation_scope !== navigationScope) {
         return;
       }
@@ -447,7 +518,7 @@ export function App({
 
     window.addEventListener("message", handleShellMessage);
     return () => window.removeEventListener("message", handleShellMessage);
-  }, [activeThread?.thread_id, threads]);
+  }, [activeThread?.thread_id, agentCatalogAppId, threads]);
 
   async function handleUnavailableRuntimeSession(runtimeSessionId: string) {
     if (!runtimeSessionId) {
@@ -483,6 +554,37 @@ export function App({
     } catch (selectError) {
       setError(selectError instanceof Error ? selectError.message : "Unable to select provider.");
     }
+  }
+
+  function handleSelectAgent(agentTypeId: string) {
+    if (activeThread) {
+      return;
+    }
+    setSelectedAgentTypeId(agentTypeId);
+    setComposerError(null);
+  }
+
+  async function selectedAgentRuntimeConfig(activeApp: ActiveAppContext | null): Promise<AgentRuntimeConfig | null> {
+    if (!selectedAgentTypeId || !agentCatalogAppId) {
+      return null;
+    }
+    const [definitionPayload, promptPayload] = await Promise.all([
+      getAgentDefinition(agentCatalogAppId, selectedAgentTypeId),
+      previewAgentPrompt(agentCatalogAppId, selectedAgentTypeId),
+    ]);
+    const definition = definitionPayload.agent_definition;
+    if (!definitionPayload.exists || !definition) {
+      throw new Error("Selected agent is no longer available.");
+    }
+    return {
+      agent_id: definition.name,
+      agent_role_id: definition.role_id,
+      agent_type_id: definition.id,
+      skill_ids: definition.skill_ids || [],
+      source_app_id: agentCatalogAppId,
+      system_prompt: promptWithActiveAppContext(promptPayload.rendered || "", activeApp),
+      title: definition.name,
+    };
   }
 
   function resetActiveConversation() {
@@ -820,17 +922,22 @@ export function App({
       let thread = activeThread;
       let response: Awaited<ReturnType<typeof sendRuntimeTurn>>;
       if (!thread) {
-        const systemPrompt = draftChat?.systemPrompt || (await loadDefaultSystemPrompt(activeAppContext));
+        const agentRuntimeConfig = await selectedAgentRuntimeConfig(activeAppContext);
+        const systemPrompt = agentRuntimeConfig?.system_prompt || draftChat?.systemPrompt || (await loadDefaultSystemPrompt(activeAppContext));
         response = await createRuntimeSessionWithTurn({
           appReferences: message.appReferences,
           attachments: message.attachments,
           clientMessageId: message.clientMessageId,
           inputText: message.content,
           options: {
+            agent_id: agentRuntimeConfig?.agent_id,
+            agent_role_id: agentRuntimeConfig?.agent_role_id,
+            agent_type_id: agentRuntimeConfig?.agent_type_id,
             project_id: draftChat?.projectId ?? null,
-            source_app_id: "chat",
+            source_app_id: agentRuntimeConfig?.source_app_id || "chat",
             system_prompt: systemPrompt,
-            title: "New chat",
+            skill_ids: agentRuntimeConfig?.skill_ids || [],
+            title: agentRuntimeConfig?.title || "New chat",
           },
         });
         setDraftChat(null);
@@ -987,6 +1094,8 @@ export function App({
                 </div>
                 <ChatComposer
                   activeProviderId={activeProviderId}
+                  agentSelectorLocked={Boolean(activeThread)}
+                  agents={agentOptions}
                   attachments={attachments}
                   canStopTurn={canStopTurn}
                   disabled={isThreadLoading}
@@ -1001,6 +1110,7 @@ export function App({
                   onReferenceAdd={handleReferenceAdd}
                   onReferenceRemove={handleReferenceRemove}
                   onSearchReferences={handleSearchReferences}
+                  onSelectAgent={handleSelectAgent}
                   onSelectProvider={handleSelectProvider}
                   onRemoveAttachment={removeAttachment}
                   onStopTurn={handleStopTurn}
@@ -1008,6 +1118,7 @@ export function App({
                   providers={providers}
                   queuedCount={queuedMessages.length}
                   queuedPreview={queuedMessages[0]?.content || null}
+                  selectedAgentTypeId={composerSelectedAgentTypeId}
                   value={composer}
                 />
               </div>
@@ -1024,6 +1135,8 @@ export function App({
               <div className="chatapp-composer-dock" ref={dockedComposerRef}>
                 <ChatComposer
                   activeProviderId={activeProviderId}
+                  agentSelectorLocked={Boolean(activeThread)}
+                  agents={agentOptions}
                   attachments={attachments}
                   canStopTurn={canStopTurn}
                   disabled={isThreadLoading}
@@ -1037,6 +1150,7 @@ export function App({
                   onReferenceAdd={handleReferenceAdd}
                   onReferenceRemove={handleReferenceRemove}
                   onSearchReferences={handleSearchReferences}
+                  onSelectAgent={handleSelectAgent}
                   onSelectProvider={handleSelectProvider}
                   onRemoveAttachment={removeAttachment}
                   onStopTurn={handleStopTurn}
@@ -1044,6 +1158,7 @@ export function App({
                   providers={providers}
                   queuedCount={queuedMessages.length}
                   queuedPreview={queuedMessages[0]?.content || null}
+                  selectedAgentTypeId={composerSelectedAgentTypeId}
                   value={composer}
                 />
               </div>

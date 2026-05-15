@@ -5,7 +5,7 @@ import { act, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AppReference, ProviderItem } from "../api/client";
+import type { AgentTypeSummary, AppReference, ProviderItem } from "../api/client";
 import type { MentionItem } from "../lib/mentions";
 import { ChatComposer } from "./ChatComposer";
 
@@ -16,6 +16,18 @@ const providers: ProviderItem[] = [
     description: "",
     status: "configured",
     default_model_family: null,
+  },
+];
+
+const agents: AgentTypeSummary[] = [
+  {
+    id: "agent-type-social-video-content-strategist",
+    name: "Social Video Content Strategist",
+    description: "Turns notes into high-retention social video scripts.",
+    role_id: "social-video-content-strategist",
+    skill_ids: [],
+    trace_verbosity: "compact",
+    enabled: true,
   },
 ];
 
@@ -105,13 +117,17 @@ afterEach(() => {
 });
 
 async function renderComposer({
+  agentOptions = agents,
   onAddAttachments = () => undefined,
   onReferenceAdd = () => undefined,
   onSearchReferences = async () => [],
+  onSelectAgent = () => undefined,
 }: {
+  agentOptions?: AgentTypeSummary[];
   onAddAttachments?: (files: File[]) => void;
   onReferenceAdd?: (reference: AppReference) => void;
   onSearchReferences?: (query: string, signal: AbortSignal) => Promise<MentionItem[]>;
+  onSelectAgent?: (agentTypeId: string) => void;
 } = {}) {
   container = document.createElement("div");
   document.body.append(container);
@@ -124,6 +140,7 @@ async function renderComposer({
     return (
       <ChatComposer
         activeProviderId="codex"
+        agents={agentOptions}
         attachments={[]}
         canStopTurn={false}
         disabled={false}
@@ -138,6 +155,7 @@ async function renderComposer({
         }}
         onReferenceAdd={onReferenceAdd}
         onSearchReferences={onSearchReferences}
+        onSelectAgent={onSelectAgent}
         onSelectProvider={() => undefined}
         onRemoveAttachment={() => undefined}
         onStopTurn={() => undefined}
@@ -145,6 +163,7 @@ async function renderComposer({
         providers={providers}
         queuedCount={0}
         queuedPreview={null}
+        selectedAgentTypeId=""
         value={value}
       />
     );
@@ -219,6 +238,29 @@ function changeInputValue(input: HTMLInputElement, value: string) {
 }
 
 describe("ChatComposer reference search", () => {
+  it("opens the agent selector and selects an agent runner", async () => {
+    const onSelectAgent = vi.fn();
+    const { element } = await renderComposer({ onSelectAgent });
+    const agentButton = element.querySelector('[aria-label="Agent runner: Default Chat"]');
+    expect(agentButton).toBeInstanceOf(HTMLButtonElement);
+
+    await act(async () => {
+      (agentButton as HTMLButtonElement).click();
+    });
+
+    expect(element.textContent).toContain("Social Video Content Strategist");
+    const socialAgent = Array.from(element.querySelectorAll(".chatapp-agent-menu__item")).find((button) =>
+      button.textContent?.includes("Social Video Content Strategist"),
+    );
+    expect(socialAgent).toBeInstanceOf(HTMLButtonElement);
+
+    await act(async () => {
+      (socialAgent as HTMLButtonElement).click();
+    });
+
+    expect(onSelectAgent).toHaveBeenCalledWith("agent-type-social-video-content-strategist");
+  });
+
   it("renders checklist entity search results after typing an @ query", async () => {
     vi.useFakeTimers();
     HTMLElement.prototype.scrollIntoView = vi.fn();

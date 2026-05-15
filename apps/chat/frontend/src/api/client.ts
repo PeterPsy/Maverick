@@ -16,6 +16,67 @@ export type ProviderPayload = {
   available_providers?: ProviderItem[];
 };
 
+export type DependencyProviderCandidate = {
+  app_id: string;
+  name: string;
+  version: string;
+  interface: string;
+  interface_version: string;
+  description: string;
+  surfaces: string[];
+};
+
+export type DependencyResolutionItem = {
+  alias: string;
+  interface: string;
+  version: string;
+  required: boolean;
+  cardinality: string;
+  description: string;
+  status: string;
+  candidates: DependencyProviderCandidate[];
+  selected_provider_app_ids: string[];
+  stale_provider_app_ids: string[];
+  blocked_reason: string | null;
+};
+
+export type AppDependenciesPayload = {
+  workspace_id: string;
+  consumer_app_id: string;
+  status: string;
+  dependencies: DependencyResolutionItem[];
+};
+
+export type AgentTypeSummary = {
+  id: string;
+  name: string;
+  description: string;
+  role_id: string;
+  skill_ids: string[];
+  trace_verbosity: string;
+  enabled: boolean;
+};
+
+export type AgentCatalogPayload = {
+  workspace_id?: string;
+  agent_types?: AgentTypeSummary[];
+};
+
+export type AgentDefinition = AgentTypeSummary & {
+  role_name?: string;
+  role_description?: string;
+  instructions?: string;
+};
+
+export type AgentDefinitionPayload = {
+  exists: boolean;
+  agent_definition?: AgentDefinition;
+};
+
+export type AgentPromptPreviewPayload = {
+  rendered: string;
+};
+
 export type ChatThread = {
   thread_id: string;
   runtime_session_id: string;
@@ -260,6 +321,7 @@ export type SkillSummary = {
 };
 
 export type RuntimeSessionOptions = {
+  agent_id?: string;
   agent_role_id?: string;
   agent_type_id?: string;
   project_id?: string | null;
@@ -322,6 +384,18 @@ function stringField(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
 }
 
+function stringArrayField(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function booleanField(value: unknown, fallback = false): boolean {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function objectField(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
 export async function listApps(): Promise<AppRegistryItem[]> {
   const payload = await requestJson<{ items?: unknown[] }>("/api/apps");
   return (payload.items || [])
@@ -338,6 +412,96 @@ export async function listApps(): Promise<AppRegistryItem[]> {
       };
     })
     .filter((item) => item.app_id && item.status === "enabled");
+}
+
+function normalizeDependencyCandidate(value: unknown): DependencyProviderCandidate {
+  const item = objectField(value);
+  return {
+    app_id: stringField(item.app_id),
+    name: stringField(item.name),
+    version: stringField(item.version),
+    interface: stringField(item.interface),
+    interface_version: stringField(item.interface_version),
+    description: stringField(item.description),
+    surfaces: stringArrayField(item.surfaces),
+  };
+}
+
+function normalizeDependencyResolution(value: unknown): DependencyResolutionItem {
+  const item = objectField(value);
+  return {
+    alias: stringField(item.alias),
+    interface: stringField(item.interface),
+    version: stringField(item.version),
+    required: booleanField(item.required, true),
+    cardinality: stringField(item.cardinality, "one"),
+    description: stringField(item.description),
+    status: stringField(item.status, "unknown"),
+    candidates: Array.isArray(item.candidates) ? item.candidates.map(normalizeDependencyCandidate).filter((candidate) => candidate.app_id) : [],
+    selected_provider_app_ids: stringArrayField(item.selected_provider_app_ids),
+    stale_provider_app_ids: stringArrayField(item.stale_provider_app_ids),
+    blocked_reason: item.blocked_reason === null ? null : stringField(item.blocked_reason) || null,
+  };
+}
+
+export function getAppDependencies(consumerAppId: string): Promise<AppDependenciesPayload> {
+  const params = new URLSearchParams({ consumer_app_id: consumerAppId });
+  return requestJson<unknown>(`/api/apps/dependencies?${params.toString()}`).then((value) => {
+    const payload = objectField(value);
+    return {
+      workspace_id: stringField(payload.workspace_id, "default"),
+      consumer_app_id: stringField(payload.consumer_app_id, consumerAppId),
+      status: stringField(payload.status, "unknown"),
+      dependencies: Array.isArray(payload.dependencies)
+        ? payload.dependencies.map(normalizeDependencyResolution).filter((item) => item.alias)
+        : [],
+    };
+  });
+}
+
+export function selectedDependencyProviderAppId(payload: AppDependenciesPayload, alias: string): string {
+  const dependency = payload.dependencies.find((item) => item.alias === alias);
+  return dependency?.selected_provider_app_ids[0] || dependency?.candidates[0]?.app_id || "";
+}
+
+function normalizeAgentType(value: unknown): AgentTypeSummary {
+  const item = objectField(value);
+  return {
+    id: stringField(item.id),
+    name: stringField(item.name),
+    description: stringField(item.description),
+    role_id: stringField(item.role_id),
+    skill_ids: stringArrayField(item.skill_ids),
+    trace_verbosity: stringField(item.trace_verbosity, "compact"),
+    enabled: item.enabled !== false,
+  };
+}
+
+export function listAgentCatalog(providerAppId: string): Promise<AgentCatalogPayload> {
+  return requestJson<{ workspace_id?: string; agent_types?: unknown[] }>(`/api/apps/${encodeURIComponent(providerAppId)}/backend`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "catalog.compact", entity_type: "agent_type", limit: 100 }),
+  }).then((payload) => ({
+    workspace_id: payload.workspace_id,
+    agent_types: (payload.agent_types || []).map(normalizeAgentType).filter((item) => item.id && item.enabled),
+  }));
+}
+
+export function getAgentDefinition(providerAppId: string, agentTypeId: string): Promise<AgentDefinitionPayload> {
+  return requestJson<AgentDefinitionPayload>(`/api/apps/${encodeURIComponent(providerAppId)}/backend`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "get_agent_definition", id: agentTypeId }),
+  });
+}
+
+export function previewAgentPrompt(providerAppId: string, agentTypeId: string): Promise<AgentPromptPreviewPayload> {
+  return requestJson<AgentPromptPreviewPayload>(`/api/apps/${encodeURIComponent(providerAppId)}/backend`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "preview_prompt", agent_type_id: agentTypeId }),
+  });
 }
 
 export async function listSkills(): Promise<SkillSummary[]> {
@@ -385,7 +549,7 @@ export function createRuntimeSession(options: RuntimeSessionOptions = {}): Promi
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      agent_id: "chat",
+      agent_id: options.agent_id || "chat",
       agent_role_id: options.agent_role_id || "",
       agent_type_id: options.agent_type_id || "",
       project_id: options.project_id || null,
@@ -421,7 +585,7 @@ export function createRuntimeSessionWithTurn({
   events: RuntimeEvent[];
 }> {
   const body: Record<string, unknown> = {
-    agent_id: "chat",
+    agent_id: options.agent_id || "chat",
     agent_role_id: options.agent_role_id || "",
     agent_type_id: options.agent_type_id || "",
     project_id: options.project_id || null,

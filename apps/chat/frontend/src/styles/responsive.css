@@ -1175,6 +1175,11 @@
     right: 0.7rem;
   }
 
+  .chatapp-agent-menu {
+    left: 0;
+    width: min(18rem, calc(100vw - 1.4rem));
+  }
+
   .chatapp-composer {
     padding: 0.34rem 0.5rem;
   }
@@ -1249,6 +1254,7 @@
   .chatapp-composer:has(.chatapp-composer__tool-button:active) .chatapp-composer__input-shell,
   .chatapp-composer:has(.chatapp-attachment-picker__trigger:active) .chatapp-composer__input-shell,
   .chatapp-composer:has(.chatapp-composer__input-shell.has-app-picker) .chatapp-composer__input-shell,
+  .chatapp-composer:has(.chatapp-agent-menu) .chatapp-composer__input-shell,
   .chatapp-composer:has(.chatapp-attachment-strip) .chatapp-composer__input-shell,
   .chatapp-composer:has(.chatapp-composer-queue) .chatapp-composer__input-shell,
   .chatapp-composer:has(.chatapp-composer__error) .chatapp-composer__input-shell {
@@ -1265,6 +1271,7 @@
   .chatapp-composer:has(.chatapp-composer__tool-button:active) .chatapp-composer__text-area,
   .chatapp-composer:has(.chatapp-attachment-picker__trigger:active) .chatapp-composer__text-area,
   .chatapp-composer:has(.chatapp-composer__input-shell.has-app-picker) .chatapp-composer__text-area,
+  .chatapp-composer:has(.chatapp-agent-menu) .chatapp-composer__text-area,
   .chatapp-composer:has(.chatapp-attachment-strip) .chatapp-composer__text-area,
   .chatapp-composer:has(.chatapp-composer-queue) .chatapp-composer__text-area,
   .chatapp-composer:has(.chatapp-composer__error) .chatapp-composer__text-area {
@@ -1275,6 +1282,7 @@
   .chatapp-composer:has(.chatapp-composer__tool-button:active) .chat-ui-input.chatapp-composer__editor,
   .chatapp-composer:has(.chatapp-attachment-picker__trigger:active) .chat-ui-input.chatapp-composer__editor,
   .chatapp-composer:has(.chatapp-composer__input-shell.has-app-picker) .chat-ui-input.chatapp-composer__editor,
+  .chatapp-composer:has(.chatapp-agent-menu) .chat-ui-input.chatapp-composer__editor,
   .chatapp-composer:has(.chatapp-attachment-strip) .chat-ui-input.chatapp-composer__editor,
   .chatapp-composer:has(.chatapp-composer-queue) .chat-ui-input.chatapp-composer__editor,
   .chatapp-composer:has(.chatapp-composer__error) .chat-ui-input.chatapp-composer__editor {
@@ -1289,6 +1297,7 @@
   .chatapp-composer:has(.chatapp-composer__tool-button:active) .chatapp-composer__toolbar,
   .chatapp-composer:has(.chatapp-attachment-picker__trigger:active) .chatapp-composer__toolbar,
   .chatapp-composer:has(.chatapp-composer__input-shell.has-app-picker) .chatapp-composer__toolbar,
+  .chatapp-composer:has(.chatapp-agent-menu) .chatapp-composer__toolbar,
   .chatapp-composer:has(.chatapp-attachment-strip) .chatapp-composer__toolbar,
   .chatapp-composer:has(.chatapp-composer-queue) .chatapp-composer__toolbar,
   .chatapp-composer:has(.chatapp-composer__error) .chatapp-composer__toolbar {
@@ -1300,6 +1309,7 @@
   .chatapp-composer:has(.chatapp-composer__tool-button:active) .chatapp-composer__tools,
   .chatapp-composer:has(.chatapp-attachment-picker__trigger:active) .chatapp-composer__tools,
   .chatapp-composer:has(.chatapp-composer__input-shell.has-app-picker) .chatapp-composer__tools,
+  .chatapp-composer:has(.chatapp-agent-menu) .chatapp-composer__tools,
   .chatapp-composer:has(.chatapp-attachment-strip) .chatapp-composer__tools,
   .chatapp-composer:has(.chatapp-composer-queue) .chatapp-composer__tools,
   .chatapp-composer:has(.chatapp-composer__error) .chatapp-composer__tools {
@@ -1312,6 +1322,7 @@
   .chatapp-composer:has(.chatapp-composer__tool-button:active) .chatapp-composer__actions,
   .chatapp-composer:has(.chatapp-attachment-picker__trigger:active) .chatapp-composer__actions,
   .chatapp-composer:has(.chatapp-composer__input-shell.has-app-picker) .chatapp-composer__actions,
+  .chatapp-composer:has(.chatapp-agent-menu) .chatapp-composer__actions,
   .chatapp-composer:has(.chatapp-attachment-strip) .chatapp-composer__actions,
   .chatapp-composer:has(.chatapp-composer-queue) .chatapp-composer__actions,
   .chatapp-composer:has(.chatapp-composer__error) .chatapp-composer__actions {
@@ -1323,6 +1334,7 @@
   .chatapp-composer:has(.chatapp-composer__tool-button:active) .chatapp-composer__icon-action,
   .chatapp-composer:has(.chatapp-attachment-picker__trigger:active) .chatapp-composer__icon-action,
   .chatapp-composer:has(.chatapp-composer__input-shell.has-app-picker) .chatapp-composer__icon-action,
+  .chatapp-composer:has(.chatapp-agent-menu) .chatapp-composer__icon-action,
   .chatapp-composer:has(.chatapp-attachment-strip) .chatapp-composer__icon-action,
   .chatapp-composer:has(.chatapp-composer-queue) .chatapp-composer__icon-action,
   .chatapp-composer:has(.chatapp-composer__error) .chatapp-composer__icon-action {

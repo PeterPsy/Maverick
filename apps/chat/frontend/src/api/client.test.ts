@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, deleteProject } from "./client";
+import { ApiError, deleteProject, selectedDependencyProviderAppId, type AppDependenciesPayload } from "./client";
 
 function jsonResponse(payload: unknown, status = 200): Response {
   return {
@@ -8,6 +8,46 @@ function jsonResponse(payload: unknown, status = 200): Response {
     json: async () => payload,
   } as Response;
 }
+
+function dependencyPayload(selectedProviderAppIds: string[]): AppDependenciesPayload {
+  return {
+    workspace_id: "default",
+    consumer_app_id: "chat",
+    status: "resolved",
+    dependencies: [
+      {
+        alias: "agent-catalog",
+        interface: "agent.catalog",
+        version: "^1",
+        required: false,
+        cardinality: "one",
+        description: "Agent catalog",
+        status: selectedProviderAppIds.length ? "resolved" : "optional_unset",
+        candidates: [
+          {
+            app_id: "agents",
+            name: "Agents",
+            version: "0.1.0",
+            interface: "agent.catalog",
+            interface_version: "1",
+            description: "Agent catalog",
+            surfaces: ["backend"],
+          },
+        ],
+        selected_provider_app_ids: selectedProviderAppIds,
+        stale_provider_app_ids: [],
+        blocked_reason: null,
+      },
+    ],
+  };
+}
+
+describe("Chat API dependency helpers", () => {
+  it("uses the explicit dependency provider or the first available catalog", () => {
+    expect(selectedDependencyProviderAppId(dependencyPayload(["agents"]), "agent-catalog")).toBe("agents");
+    expect(selectedDependencyProviderAppId(dependencyPayload([]), "agent-catalog")).toBe("agents");
+  });
+});
 
 describe("deleteProject", () => {
   afterEach(() => {

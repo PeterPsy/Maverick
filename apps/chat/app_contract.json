@@ -21,7 +21,16 @@
       ]
     }
   ],
-  "requires": [],
+  "requires": [
+    {
+      "alias": "agent-catalog",
+      "interface": "agent.catalog",
+      "version": "^1",
+      "required": false,
+      "cardinality": "one",
+      "description": "Optional workspace agent catalog used by the Chat composer to choose the agent that will run a new runtime session."
+    }
+  ],
   "distribution": {
     "mode": "sealed",
     "source_access": "none"

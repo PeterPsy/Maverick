@@ -6,7 +6,14 @@
   min-width: 0;
   min-height: 0;
   overflow: auto;
+  scrollbar-width: none;
   padding: 28px;
+}
+
+.skills-detail::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .skills-detail > * {

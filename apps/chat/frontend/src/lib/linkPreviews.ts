@@ -1,4 +1,5 @@
 import type { StructuredContent } from "../api/client";
+import { workspaceStoragePathFromTarget } from "./storageLinks";
 
 type LinkCandidate = {
   label?: string;
@@ -11,29 +12,6 @@ const WORKSPACE_STORAGE_PATTERN = /(?:^|[\s(["'`])((?:\/[\w.\-]+)*\/?storage\/(?
 
 function trimLinkTarget(value: string): string {
   return value.trim().replace(/[.,;:!?]+$/, "");
-}
-
-function decodePath(value: string): string {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
-}
-
-function workspaceRelativePath(target: string): string {
-  const cleaned = trimLinkTarget(target);
-  let path = cleaned;
-  try {
-    const url = new URL(cleaned);
-    path = url.pathname;
-  } catch {
-    path = cleaned;
-  }
-
-  const decoded = decodePath(path).replace(/\\/g, "/");
-  const match = decoded.match(/(?:^|\/)(storage\/(?:generated|uploaded)\/.+)$/);
-  return match ? trimLinkTarget(match[1]) : "";
 }
 
 function filenameFromPath(path: string): string {
@@ -67,7 +45,7 @@ export function structuredContentFromAgentLinks(text: string): StructuredContent
   const items: StructuredContent[] = [];
   const seenPaths = new Set<string>();
   for (const candidate of linkCandidates(text)) {
-    const path = workspaceRelativePath(candidate.target);
+    const path = workspaceStoragePathFromTarget(candidate.target);
     if (!path || seenPaths.has(path)) {
       continue;
     }

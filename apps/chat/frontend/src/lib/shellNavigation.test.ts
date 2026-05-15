@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { openAppRouteInShell, openChatRootRouteInShell, openChatThreadRouteInShell } from "./shellNavigation";
+import { openAppRouteInShell, openChatRootRouteInShell, openChatThreadRouteInShell, openStoragePathInShell } from "./shellNavigation";
 
 function messageTarget() {
   const messages: Array<{ message: unknown; targetOrigin: string }> = [];
@@ -81,6 +81,23 @@ describe("chat shell navigation", () => {
       type: "maverick.app.open-app",
       app_id: "checklist",
       params: { app_page: "checklists/check_123" },
+    });
+  });
+
+  it("can ask the shell to open Storage on a workspace file path", () => {
+    const parent = messageTarget();
+
+    const posted = openStoragePathInShell("storage/generated/report.md", {
+      currentWindow: {},
+      origin: "https://maverick.test",
+      parentWindow: parent.target,
+    });
+
+    expect(posted).toBe(true);
+    expect(parent.messages[0]?.message).toEqual({
+      type: "maverick.app.open-app",
+      app_id: "storage",
+      params: { workspace_relative_path: "storage/generated/report.md" },
     });
   });
 });

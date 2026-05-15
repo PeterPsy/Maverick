@@ -196,7 +196,28 @@ export function eventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
       status: closeActive ? "complete" : "pending",
     }, segment.order);
     appendRenderedOutput(turnId, segment.text);
+    if (closeActive) {
+      pushLinkPreviews(turnId, `stream:${segment.index}`, segment.text, segment.order, segment.createdAt);
+    }
     outputSegmentsByTurn.delete(turnId);
+  }
+
+  function pushLinkPreviews(turnId: string, sourceId: string, text: string, order: number, createdAt: string) {
+    structuredContentFromAgentLinks(text).forEach((linkPreview, index) => {
+      const structuredKey = structuredPayloadKey(turnId, linkPreview);
+      if (renderedStructuredOutput.has(structuredKey)) {
+        return;
+      }
+      renderedStructuredOutput.add(structuredKey);
+      pushMessage({
+        id: `${turnId}:link-preview:${sourceId}:${index}`,
+        role: "structured",
+        content: linkPreview.kind,
+        createdAt,
+        status: "complete",
+        structuredContent: linkPreview,
+      }, order);
+    });
   }
 
   function flushToolSegment(turnId: string, closeActive = false) {
@@ -306,16 +327,7 @@ export function eventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
           status: "complete",
         }, eventIndex);
       }
-      structuredContentFromAgentLinks(finalText).forEach((linkPreview, index) => {
-        pushMessage({
-          id: `${turnId}:link-preview:${event.event_id}:${index}`,
-          role: "structured",
-          content: linkPreview.kind,
-          createdAt: event.created_at,
-          status: "complete",
-          structuredContent: linkPreview,
-        }, eventIndex);
-      });
+      pushLinkPreviews(turnId, event.event_id, finalText, eventIndex, event.created_at);
     }
     const toolCall = toolCallPayload(event);
     if (toolCall) {

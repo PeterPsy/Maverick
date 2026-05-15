@@ -146,6 +146,43 @@ describe("runtime event transcript projection", () => {
     ]);
   });
 
+  it("creates workspace file previews from completed streamed output", () => {
+    const messages = eventsToMessages([
+      event({
+        event_id: "delta-with-file",
+        event_type: "runtime.output.delta",
+        payload: {
+          text: "Ho preparato il report qui:\n\n[agents-cli-mcp-speed-report.md](/home/ubuntu/projects/maverick-v3/workspaces/default/storage/generated/agents-cli-mcp-speed-report.md:1)",
+        },
+      }),
+      event({
+        event_id: "final-empty",
+        event_type: "runtime.output.final",
+        payload: { text: "" },
+      }),
+    ]);
+
+    expect(messages).toMatchObject([
+      {
+        role: "agent",
+        content:
+          "Ho preparato il report qui:\n\n[agents-cli-mcp-speed-report.md](/home/ubuntu/projects/maverick-v3/workspaces/default/storage/generated/agents-cli-mcp-speed-report.md:1)",
+        status: "complete",
+      },
+      {
+        role: "structured",
+        structuredContent: {
+          kind: "workspace.file.preview",
+          payload: {
+            label: "agents-cli-mcp-speed-report.md",
+            target: "storage/generated/agents-cli-mcp-speed-report.md",
+            workspace_relative_path: "storage/generated/agents-cli-mcp-speed-report.md",
+          },
+        },
+      },
+    ]);
+  });
+
   it("extracts workspace file previews from hosted storage URLs without previewing generic web links", () => {
     const messages = eventsToMessages([
       event({

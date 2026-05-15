@@ -8,6 +8,7 @@ type ShellRouteOptions = {
   origin?: string;
   parentWindow?: ShellPostTarget | null;
 };
+type ShellRouteParams = Record<string, string | boolean | null>;
 
 export function openChatThreadRouteInShell(threadId: string, options: ShellRouteOptions = {}): boolean {
   const normalizedThreadId = threadId.trim();
@@ -29,11 +30,19 @@ export function openAppRouteInShell(appId: string, appPage: string, options: She
   return postAppRouteToShell(normalizedAppId, { app_page: appPage.trim().replace(/^\/+/, "") }, options);
 }
 
-function postChatRouteToShell(params: Record<string, string>, options: ShellRouteOptions): boolean {
+export function openStoragePathInShell(workspaceRelativePath: string, options: ShellRouteOptions = {}): boolean {
+  const normalizedPath = workspaceRelativePath.trim();
+  if (!normalizedPath) {
+    return false;
+  }
+  return postAppRouteToShell("storage", { workspace_relative_path: normalizedPath }, options);
+}
+
+function postChatRouteToShell(params: ShellRouteParams, options: ShellRouteOptions): boolean {
   return postAppRouteToShell("chat", params, options);
 }
 
-function postAppRouteToShell(appId: string, params: Record<string, string>, options: ShellRouteOptions): boolean {
+function postAppRouteToShell(appId: string, params: ShellRouteParams, options: ShellRouteOptions): boolean {
   if (options.navigationScope) {
     return false;
   }

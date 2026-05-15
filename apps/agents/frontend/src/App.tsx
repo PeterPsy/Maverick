@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { callBackend, callSkillsBackend } from './api';
+import { callBackend, callProviderBackend, getAppDependencies } from './api';
 import { AgentsDetail } from './components/AgentsDetail';
 import { DeleteAgentTypeDialog } from './components/DeleteAgentTypeDialog';
 import { NewAgentModal } from './components/NewAgentModal';
 import { agentTypeIdFromParams, scalarString, shouldOpenNewAgent } from './lib/agentNavigationParams';
 import { notifyActiveAgentSelection } from './lib/activeAgentSelection';
-import type { AgentEdits, Catalog, Preview, SkillSummary } from './types';
+import { selectedProviderAppId, skillIdsForAgentSave } from './lib/dependencies';
+import type { AgentEdits, AppDependenciesPayload, Catalog, Preview, SkillSummary } from './types';
 
 const emptyCatalog: Catalog = { common_prompt: '', roles: [], agent_types: [] };
 
@@ -20,12 +21,6 @@ function slugify(value: string) {
 function initialAgentTypeId() {
   const query = new URLSearchParams(window.location.search);
   return query.get('agent_type_id') || '';
-}
-
-function sameSet(left: string[], right: string[]) {
-  if (left.length !== right.length) return false;
-  const rightSet = new Set(right);
-  return left.every((item) => rightSet.has(item));
 }
 
 function selectedAgentTypeIdFromCatalog(catalog: Catalog, currentAgentTypeId: string, preferredAgentTypeId?: string) {
@@ -44,6 +39,7 @@ export function App() {
   const [preview, setPreview] = useState('');
   const [previewLoadingAgentTypeId, setPreviewLoadingAgentTypeId] = useState('');
   const [skills, setSkills] = useState<SkillSummary[]>([]);
+  const [skillProviderAppId, setSkillProviderAppId] = useState('');
   const [error, setError] = useState('');
   const [isCatalogLoading, setIsCatalogLoading] = useState(true);
   const [hasLoadedCatalog, setHasLoadedCatalog] = useState(false);
@@ -62,18 +58,38 @@ export function App() {
     try {
       const [next, skillCatalog] = await Promise.all([
         callBackend<Catalog>({ action: 'catalog' }),
-        callSkillsBackend<{ skills: SkillSummary[] }>({ action: 'catalog' })
+        loadSkillCatalog()
       ]);
       const nextSelectedAgentTypeId = selectedAgentTypeIdFromCatalog(next, selectedAgentTypeIdRef.current, preferredAgentTypeId);
       selectedAgentTypeIdRef.current = nextSelectedAgentTypeId;
       setCatalog(next);
-      setSkills(skillCatalog.skills.filter((skill) => skill.enabled));
+      setSkills(skillCatalog.skills);
+      setSkillProviderAppId(skillCatalog.providerAppId);
       setSelectedAgentTypeId(nextSelectedAgentTypeId);
       setHasLoadedCatalog(true);
       return nextSelectedAgentTypeId;
     } finally {
       setIsCatalogLoading(false);
     }
+  }
+
+  async function loadSkillCatalog(dependencies?: AppDependenciesPayload) {
+    const resolvedDependencies = dependencies || await getAppDependencies('agents');
+    const providerAppId = selectedProviderAppId(resolvedDependencies);
+    if (!providerAppId) {
+      return { providerAppId: '', skills: [] };
+    }
+    const catalogPayload = await callProviderBackend<{ skills: SkillSummary[] }>(providerAppId, { action: 'catalog' });
+    return {
+      providerAppId,
+      skills: catalogPayload.skills.filter((skill) => skill.enabled)
+    };
+  }
+
+  async function refreshSkillsFromDependencies(dependencies?: AppDependenciesPayload) {
+    const skillCatalog = await loadSkillCatalog(dependencies);
+    setSkillProviderAppId(skillCatalog.providerAppId);
+    setSkills(skillCatalog.skills);
   }
 
   async function refreshPreview(agentTypeId: string, options: { showCached?: boolean } = {}) {
@@ -116,9 +132,14 @@ export function App() {
         params?: Record<string, string | boolean | null>;
         resource?: string;
         type?: string;
+        dependencies?: AppDependenciesPayload;
       };
       if (payload.type === 'maverick.app.navigate' && (!payload.app_id || payload.app_id === 'agents')) {
         void handleNavigationParams(payload.params || {});
+        return;
+      }
+      if (payload.type === 'maverick.app.dependencies' && payload.app_id === 'agents' && payload.dependencies) {
+        void refreshSkillsFromDependencies(payload.dependencies).catch((err: Error) => setError(err.message));
         return;
       }
       if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === 'agents' && payload.resource === 'configuration') {
@@ -132,11 +153,14 @@ export function App() {
           })
           .catch((err: Error) => setError(err.message));
       }
+      if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === skillProviderAppId && payload.resource === 'skills') {
+        void refreshSkillsFromDependencies().catch((err: Error) => setError(err.message));
+      }
     }
 
     window.addEventListener('message', handleShellMessage);
     return () => window.removeEventListener('message', handleShellMessage);
-  }, [catalog.agent_types, selectedAgentTypeId]);
+  }, [catalog.agent_types, selectedAgentTypeId, skillProviderAppId]);
 
   useEffect(() => {
     if (!selectedAgentTypeId) {
@@ -190,44 +214,28 @@ export function App() {
     setSavingEdits(true);
     setError('');
     try {
-      const implicitSkillIds = selectedAgentType.skill_ids.length ? selectedAgentType.skill_ids : skills.map((skill) => skill.id);
-      const skillIdsChanged = !sameSet(edits.skillIds, implicitSkillIds);
-      const operations: Promise<unknown>[] = [];
-
-      if (
+      const skillSelection = skillIdsForAgentSave(selectedAgentType, edits.skillIds, skills);
+      const hasEdits =
         edits.name !== selectedAgentType.name ||
         edits.description !== selectedAgentType.description ||
-        skillIdsChanged
-      ) {
-        operations.push(
-          callBackend({
-            action: 'update_agent_type',
-            id: selectedAgentType.id,
-            role_id: selectedAgentType.role_id,
-            name: edits.name,
-            description: edits.description,
-            skill_ids: skillIdsChanged ? edits.skillIds : selectedAgentType.skill_ids,
-            trace_verbosity: selectedAgentType.trace_verbosity,
-            enabled: selectedAgentType.enabled
-          })
-        );
-      }
-      if (edits.instructions !== selectedRole.instructions) {
-        operations.push(
-          callBackend({
-            action: 'update_role',
-            id: selectedRole.id,
-            name: selectedRole.name,
-            description: selectedRole.description,
-            instructions: edits.instructions
-          })
-        );
-      }
-      if (edits.commonPrompt !== catalog.common_prompt) {
-        operations.push(callBackend({ action: 'set_common_prompt', prompt: edits.commonPrompt }));
-      }
-      if (operations.length) {
-        await Promise.all(operations);
+        edits.instructions !== selectedRole.instructions ||
+        edits.commonPrompt !== catalog.common_prompt ||
+        skillSelection.changed;
+
+      if (hasEdits) {
+        await callBackend({
+          action: 'upsert_agent_definition',
+          id: selectedAgentType.id,
+          role_id: selectedAgentType.role_id,
+          name: edits.name,
+          description: edits.description,
+          role_description: selectedRole.description,
+          instructions: edits.instructions,
+          skill_ids: skillSelection.skillIds,
+          trace_verbosity: selectedAgentType.trace_verbosity,
+          enabled: selectedAgentType.enabled,
+          ...(edits.commonPrompt !== catalog.common_prompt ? { common_prompt: edits.commonPrompt } : {})
+        });
         previewCacheRef.current.clear();
         await refresh(selectedAgentType.id);
         await refreshPreview(selectedAgentType.id, { showCached: false });
@@ -248,18 +256,13 @@ export function App() {
     setError('');
     try {
       await callBackend({
-        action: 'create_role',
-        id: roleId,
-        name: payload.name,
-        description: `Role prompt for ${payload.name}.`,
-        instructions: payload.prompt
-      });
-      await callBackend({
-        action: 'create_agent_type',
+        action: 'upsert_agent_definition',
         id: agentTypeId,
+        role_id: roleId,
         name: payload.name,
         description: payload.prompt.slice(0, 180),
-        role_id: roleId,
+        role_description: `Role prompt for ${payload.name}.`,
+        instructions: payload.prompt,
         skill_ids: payload.skillIds,
         trace_verbosity: 'compact',
         enabled: true

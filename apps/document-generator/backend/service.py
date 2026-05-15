@@ -12,6 +12,7 @@ from generators.docx_generator import generate_docx
 from generators.pdf_generator import generate_pdf
 from generators.pptx_generator import generate_pptx
 from generators.xlsx_generator import generate_xlsx
+from markdown_converter import convert_workspace_file_to_markdown
 from models import normalize_spec
 from store import (
     list_jobs,
@@ -46,7 +47,7 @@ REFERENCE_MANIFEST = {
 
 
 def app_events_for_action(action: str) -> list[dict]:
-    if action == "generate_document":
+    if action in {"generate_document", "convert_to_markdown"}:
         return [{"type": "maverick.app.data-changed", "resource": "documents"}]
     if action in {"set_view_filter", "set_custom_view", "clear_custom_view"}:
         return [{"type": "maverick.app.data-changed", "resource": "view-state"}]
@@ -58,13 +59,18 @@ def _workspace_relative(path: Path, generated_root: Path) -> str:
 
 
 def _document_reference(record: dict[str, Any]) -> dict[str, Any]:
+    summary = f"{str(record.get('format') or '').upper()} generated document"
+    metadata = record.get("metadata") if isinstance(record.get("metadata"), dict) else {}
+    if metadata.get("kind") == "markdown_conversion":
+        source_format = str(metadata.get("source_format") or "document").upper()
+        summary = f"Markdown converted from {source_format}"
     return {
         "app_id": "document-generator",
         "entity_type": "document",
         "entity_id": str(record["job_id"]),
         "title": str(record.get("title") or record.get("filename") or "Generated document"),
         "subtitle": str(record.get("workspace_relative_path") or ""),
-        "summary": f"{str(record.get('format') or '').upper()} generated document",
+        "summary": summary,
         "confidence": 1.0,
         "deep_link": f"/apps/storage?path={record.get('workspace_relative_path')}",
         "workspace_relative_path": record.get("workspace_relative_path"),
@@ -113,7 +119,14 @@ def validate_spec(raw_spec: Any) -> dict[str, Any]:
     }
 
 
-def handle_action(data_root: Path, generated_root: Path, body: dict[str, Any], uploaded_root: Path | None = None) -> tuple[int, dict[str, Any]]:
+def handle_action(
+    data_root: Path,
+    generated_root: Path,
+    body: dict[str, Any],
+    uploaded_root: Path | None = None,
+    *,
+    local_app_id: str = "document-generator",
+) -> tuple[int, dict[str, Any]]:
     action = str(body.get("action") or "generate_document")
     if action == "generate_document":
         return 200, generate_document(data_root, generated_root, body.get("spec"))
@@ -121,6 +134,8 @@ def handle_action(data_root: Path, generated_root: Path, body: dict[str, Any], u
         return 200, validate_spec(body.get("spec"))
     if action == "extract_text":
         return 200, extract_text_from_workspace_file(uploaded_root, generated_root, body)
+    if action == "convert_to_markdown":
+        return 200, convert_workspace_file_to_markdown(data_root, uploaded_root, generated_root, body, local_app_id=local_app_id)
     if action == "list_templates":
         return 200, {"templates": list_templates(data_root)}
     if action == "list_outputs":

@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import json
 
+from core.apps.contracts import build_provided_interface_declaration, build_required_interface_declaration
+from core.apps.dependencies import save_app_dependency_selection
+from core.apps.errors import AppHostingError
+from core.skills.runtime_catalog import runtime_skill_catalog_app_id_for_request
 from tests.support.surfaces import *
 
 
@@ -93,3 +97,133 @@ class TestSkillSurfaces(SurfaceTestBase):
 
         with self.assertRaises(ValueError):
             resolve_runtime_skills(session, start_path=repo_root)
+
+    def test_runtime_skill_resolution_uses_session_skill_catalog_app_id(self) -> None:
+        runtime_store = self.make_runtime_store()
+        repo_root = self.make_repo_root()
+        custom_skill_root = repo_root / "workspaces" / "default" / "data" / "custom-skills" / "skills" / "task-helper"
+        custom_skill_root.mkdir(parents=True)
+        custom_skill_root.joinpath("SKILL.md").write_text(
+            "---\nname: Custom Task Helper\ndescription: Use custom skill provider.\n---\n\n# Custom Task Helper\n",
+            encoding="utf-8",
+        )
+        session = create_runtime_session(
+            runtime_store,
+            session_id="sess-custom-skills",
+            workspace_id="default",
+            agent_id="agent-1",
+            now=datetime.now(tz=UTC),
+            requested_mode="sandbox",
+            start_path=repo_root,
+            skill_ids=["task-helper"],
+            skill_catalog_app_id="custom-skills",
+        )
+
+        skills = resolve_runtime_skills(session, start_path=repo_root)
+
+        self.assertEqual([skill.skill_id for skill in skills], ["task-helper"])
+        self.assertIn("/data/custom-skills/skills/task-helper", skills[0].source_root)
+
+    def test_runtime_skill_catalog_provider_resolves_from_source_app_dependency(self) -> None:
+        app_store = self.make_app_store()
+        repo_root = self.make_repo_root()
+        provider_root = repo_root / "apps" / "custom-skills"
+        consumer_root = repo_root / "apps" / "runtime-consumer"
+        write_app_contract_file(
+            provider_root,
+            build_parsed_app_contract(
+                app_id="custom-skills",
+                name="Custom Skills",
+                version="1.0.0",
+                description="Custom skill catalog provider.",
+                publisher="maverick",
+                contract=build_app_contract(
+                    provides=[
+                        build_provided_interface_declaration(
+                            interface="skill.catalog",
+                            description="Custom workspace skill catalog.",
+                        )
+                    ]
+                ),
+            ),
+        )
+        write_app_contract_file(
+            consumer_root,
+            build_parsed_app_contract(
+                app_id="runtime-consumer",
+                name="Runtime Consumer",
+                version="1.0.0",
+                description="Runtime consumer app.",
+                publisher="maverick",
+                contract=build_app_contract(
+                    requires=[
+                        build_required_interface_declaration(
+                            alias="runtime-skills",
+                            interface="skill.catalog",
+                            description="Runtime skill catalog.",
+                        )
+                    ]
+                ),
+            ),
+        )
+        for app_root in (provider_root, consumer_root):
+            source = register_app_source_from_contract(app_store, source_kind="platform", source_path=str(app_root))
+            install_store_app(app_store, source_id=source.source_id, workspace_id="default", start_path=repo_root)
+        save_app_dependency_selection(
+            app_store,
+            workspace_id="default",
+            consumer_app_id="runtime-consumer",
+            alias="runtime-skills",
+            provider_app_ids=["custom-skills"],
+            start_path=repo_root,
+        )
+
+        provider_app_id = runtime_skill_catalog_app_id_for_request(
+            app_store,
+            workspace_id="default",
+            source_app_id="runtime-consumer",
+            start_path=repo_root,
+        )
+
+        self.assertEqual(provider_app_id, "custom-skills")
+
+    def test_explicit_runtime_skill_catalog_provider_must_provide_skill_catalog(self) -> None:
+        app_store = self.make_app_store()
+        repo_root = self.make_repo_root()
+        provider_root = repo_root / "apps" / "custom-skills"
+        write_app_contract_file(
+            provider_root,
+            build_parsed_app_contract(
+                app_id="custom-skills",
+                name="Custom Skills",
+                version="1.0.0",
+                description="Custom skill catalog provider.",
+                publisher="maverick",
+                contract=build_app_contract(
+                    provides=[
+                        build_provided_interface_declaration(
+                            interface="skill.catalog",
+                            description="Custom workspace skill catalog.",
+                        )
+                    ]
+                ),
+            ),
+        )
+        source = register_app_source_from_contract(app_store, source_kind="platform", source_path=str(provider_root))
+        install_store_app(app_store, source_id=source.source_id, workspace_id="default", start_path=repo_root)
+
+        provider_app_id = runtime_skill_catalog_app_id_for_request(
+            app_store,
+            workspace_id="default",
+            explicit_app_id="custom-skills",
+            start_path=repo_root,
+        )
+        with self.assertRaisesRegex(AppHostingError, "not an enabled `skill.catalog` provider"):
+            runtime_skill_catalog_app_id_for_request(
+                app_store,
+                workspace_id="default",
+                explicit_app_id="missing-skills",
+                start_path=repo_root,
+            )
+
+        self.assertEqual(provider_app_id, "custom-skills")

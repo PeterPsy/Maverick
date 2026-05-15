@@ -6,14 +6,14 @@ This matrix tracks the repository-wide completeness baseline for first-party Mav
 
 | App | README | Smoke Coverage | Contract Notes |
 | --- | --- | --- | --- |
-| `agents` | yes | repo-wide baseline | Bundled `agents-ops` skill now declared in the contract. |
+| `agents` | yes | repo-wide baseline | Bundled `agents-ops` skill and the `runtime-skills` dependency on `skill.catalog` are declared in the contract. |
 | `app-store` | yes | repo-wide baseline | Bundled `app-store-ops` skill now declared in the contract. |
 | `base-shell` | yes | repo-wide baseline | No app-owned backend, hooks, references, or view surface state by design; shell hosting remains a core/platform concern. |
 | `chat` | yes | repo-wide baseline | Bundled `chat-ops` skill, thread/project references, standard view state, and shell widgets are declared. |
 | `checklist` | yes | app-local contract tests | Repository reference app for complete workspace-stateful contract coverage. |
 | `developer-kit` | yes | repo-wide baseline | Frontend-only by design; uses the core-owned `/api/app-sdk` surface instead of app-owned backend, CLI, or MCP. |
 | `docs-studio` | yes | repo-wide baseline | Documentation workspace app with declared backend, CLI, MCP, references, view state, and docs-owned storage paths. |
-| `document-generator` | yes | repo-wide baseline | Bundled `document-generator-docs` skill, generated-document references, and standard job view state are declared. |
+| `document-generator` | yes | repo-wide baseline plus app-local coverage | Bundled `document-generator-docs` skill, generated-document references, Docling-backed Markdown conversion, CLI/MCP descriptor sidecars, and standard job view state are declared. |
 | `dynamic-views` | yes | repo-wide baseline | Bundled `dynamic-views` skill, dynamic-view references, standard library view state, and chat widget are declared. |
 | `storage` | yes | repo-wide baseline plus app-local coverage when present | Bundled `storage-ops` skill now declared in the contract; file-preview widget remains the embedded surface. |
 | `memory` | yes | repo-wide baseline plus app-local coverage when present | Reference app for durable graph state, references, and persisted custom views. |

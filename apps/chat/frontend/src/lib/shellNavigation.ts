@@ -30,6 +30,14 @@ export function openAppRouteInShell(appId: string, appPage: string, options: She
   return postAppRouteToShell(normalizedAppId, { app_page: appPage.trim().replace(/^\/+/, "") }, options);
 }
 
+export function openAppParamsInShell(appId: string, params: ShellRouteParams = {}, options: ShellRouteOptions = {}): boolean {
+  const normalizedAppId = appId.trim();
+  if (!normalizedAppId) {
+    return false;
+  }
+  return postAppRouteToShell(normalizedAppId, params, options);
+}
+
 export function openStoragePathInShell(workspaceRelativePath: string, options: ShellRouteOptions = {}): boolean {
   const normalizedPath = workspaceRelativePath.trim();
   if (!normalizedPath) {

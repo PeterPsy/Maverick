@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { SkillSummary } from '../types';
 
 type NewAgentModalProps = {
@@ -10,7 +10,6 @@ type NewAgentModalProps = {
 };
 
 export function NewAgentModal({ open, skills, saving, onClose, onCreate }: NewAgentModalProps) {
-  const enabledSkills = useMemo(() => skills.filter((skill) => skill.enabled), [skills]);
   const [name, setName] = useState('');
   const [prompt, setPrompt] = useState('');
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([]);
@@ -19,8 +18,8 @@ export function NewAgentModal({ open, skills, saving, onClose, onCreate }: NewAg
     if (!open) return;
     setName('');
     setPrompt('');
-    setSelectedSkillIds(enabledSkills.map((skill) => skill.id));
-  }, [enabledSkills, open]);
+    setSelectedSkillIds(skills.map((skill) => skill.id));
+  }, [skills, open]);
 
   if (!open) return null;
 
@@ -61,11 +60,11 @@ export function NewAgentModal({ open, skills, saving, onClose, onCreate }: NewAg
           <details className="skill-collapsible" open>
             <summary>
               <span>Skills</span>
-              <small>{selectedSkillIds.length}/{enabledSkills.length} selected</small>
+              <small>{selectedSkillIds.length}/{skills.length} selected</small>
             </summary>
             <div className="skill-picker modal-skill-picker">
-              {enabledSkills.length ? (
-                enabledSkills.map((skill) => (
+              {skills.length ? (
+                skills.map((skill) => (
                   <label className="skill-choice" key={skill.id}>
                     <input
                       type="checkbox"
@@ -79,7 +78,7 @@ export function NewAgentModal({ open, skills, saving, onClose, onCreate }: NewAg
                   </label>
                 ))
               ) : (
-                <div className="empty-state compact">No workspace skills available.</div>
+                <div className="empty-state compact">No linked workspace skills available.</div>
               )}
             </div>
           </details>

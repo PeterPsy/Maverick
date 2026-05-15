@@ -1,0 +1,337 @@
+{
+  "tools": {
+    "maverick_agents_app": {
+      "description": "Generic Agents app operations tool. With no arguments, returns operations.manifest; use dedicated tools for compact catalog reads and upserts.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "default": "operations.manifest",
+            "enum": [
+              "operations.manifest",
+              "catalog.compact",
+              "catalog",
+              "get_agent_definition",
+              "upsert_agent_definition",
+              "preview_prompt",
+              "references.manifest",
+              "references.search",
+              "references.resolve",
+              "references.summarize",
+              "view_filter",
+              "set_view_filter",
+              "set_custom_view",
+              "clear_custom_view"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "description": "Agent type id or slug for get/upsert."
+          },
+          "agent_type_id": {
+            "type": "string",
+            "description": "Alias for id."
+          },
+          "name": {
+            "type": "string"
+          },
+          "instructions": {
+            "type": "string",
+            "description": "Full role prompt instructions. Required when creating a new agent definition."
+          },
+          "query": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 50
+          },
+          "include_content": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "additionalProperties": true
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    "agents_catalog_compact": {
+      "description": "List workspace agent roles and agent types compactly without common prompt or role instruction content.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": {
+            "type": "string",
+            "enum": ["agent_type", "role_prompt"]
+          },
+          "query": {
+            "type": "string"
+          },
+          "q": {
+            "type": "string",
+            "description": "Alias for query."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 50
+          }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status_code": {"type": "integer"},
+          "payload_profile": {"type": "string"},
+          "counts": {"type": "object"},
+          "roles": {"type": "array"},
+          "agent_types": {"type": "array"}
+        }
+      }
+    },
+    "agents_get_agent_definition": {
+      "description": "Read one full agent definition by agent type id; long prompt content is returned only for that explicit record.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "agent_type_id": {
+            "type": "string"
+          },
+          "entity_id": {
+            "type": "string"
+          },
+          "include_common_prompt": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "anyOf": [
+          {"required": ["id"]},
+          {"required": ["agent_type_id"]},
+          {"required": ["entity_id"]}
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    "agents_upsert_agent_definition": {
+      "description": "Create or update an agent role prompt and agent type in one idempotent workspace-scoped write.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Agent type id or slug. Slugs are normalized to agent-type-*."
+          },
+          "agent_type_id": {
+            "type": "string",
+            "description": "Alias for id."
+          },
+          "entity_id": {
+            "type": "string",
+            "description": "Alias for id."
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "instructions": {
+            "type": "string",
+            "description": "Full role prompt instructions."
+          },
+          "role_instructions": {
+            "type": "string",
+            "description": "Alias for instructions."
+          },
+          "prompt": {
+            "type": "string",
+            "description": "Alias for instructions."
+          },
+          "role_id": {
+            "type": "string"
+          },
+          "role_prompt_id": {
+            "type": "string",
+            "description": "Alias for role_id."
+          },
+          "role_description": {
+            "type": "string"
+          },
+          "skill_ids": {
+            "type": "array",
+            "items": {"type": "string"},
+            "default": []
+          },
+          "trace_verbosity": {
+            "type": "string",
+            "enum": ["compact", "verbose"],
+            "default": "compact"
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          },
+          "common_prompt": {
+            "type": "string",
+            "description": "Optional full common prompt replacement."
+          },
+          "include_content": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": ["name"],
+        "allOf": [
+          {
+            "anyOf": [
+              {"required": ["id"]},
+              {"required": ["agent_type_id"]},
+              {"required": ["entity_id"]}
+            ]
+          },
+          {
+            "anyOf": [
+              {"required": ["instructions"]},
+              {"required": ["role_instructions"]},
+              {"required": ["prompt"]}
+            ]
+          }
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status_code": {"type": "integer"},
+          "operation": {"type": "string"},
+          "created": {"type": "object"},
+          "changed": {"type": "object"},
+          "agent_definition": {"type": "object"},
+          "app_events": {"type": "array"}
+        }
+      }
+    },
+    "agents_view_filter": {
+      "description": "Read the persisted Agents catalog view filter state.",
+      "input_schema": {"type": "object", "additionalProperties": false},
+      "output_schema": {"type": "object"}
+    },
+    "agents_set_view_filter": {
+      "description": "Set the persisted Agents catalog search query and entity type filter.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string"},
+          "entity_type": {"type": "string", "enum": ["agent_type", "role_prompt"]},
+          "preserve_custom": {"type": "boolean", "default": false}
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
+    "agents_set_custom_view": {
+      "description": "Show a curated Agents view from explicit agent_type or role_prompt references.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "title": {"type": "string"},
+          "refs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "entity_type": {"type": "string", "enum": ["agent_type", "role_prompt"]},
+                "entity_id": {"type": "string"}
+              },
+              "required": ["entity_type", "entity_id"],
+              "additionalProperties": false
+            }
+          },
+          "query": {"type": "string"},
+          "entity_type": {"type": "string", "enum": ["agent_type", "role_prompt"]}
+        },
+        "required": ["refs"],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
+    "agents_clear_custom_view": {
+      "description": "Clear a curated Agents view and return to normal catalog browsing.",
+      "input_schema": {"type": "object", "additionalProperties": false},
+      "output_schema": {"type": "object"}
+    },
+    "agents_reference_manifest": {
+      "description": "Describe Agents reference entity types for app references.",
+      "input_schema": {"type": "object", "additionalProperties": false},
+      "output_schema": {"type": "object"}
+    },
+    "agents_reference_search": {
+      "description": "Search agent_type or role_prompt references compactly.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": {"type": "string", "enum": ["agent_type", "role_prompt"]},
+          "type": {"type": "string", "enum": ["agent_type", "role_prompt"]},
+          "query": {"type": "string"},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 10}
+        },
+        "anyOf": [
+          {"required": ["entity_type"]},
+          {"required": ["type"]}
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
+    "agents_reference_resolve": {
+      "description": "Resolve one agent_type or role_prompt reference by id.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": {"type": "string", "enum": ["agent_type", "role_prompt"]},
+          "type": {"type": "string", "enum": ["agent_type", "role_prompt"]},
+          "entity_id": {"type": "string"}
+        },
+        "required": ["entity_id"],
+        "anyOf": [
+          {"required": ["entity_type"]},
+          {"required": ["type"]}
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
+    "agents_reference_summarize": {
+      "description": "Return a token-efficient summary for one agent_type or role_prompt reference.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": {"type": "string", "enum": ["agent_type", "role_prompt"]},
+          "type": {"type": "string", "enum": ["agent_type", "role_prompt"]},
+          "entity_id": {"type": "string"}
+        },
+        "required": ["entity_id"],
+        "anyOf": [
+          {"required": ["entity_type"]},
+          {"required": ["type"]}
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    }
+  }
+}

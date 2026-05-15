@@ -78,7 +78,7 @@ def normalize_view_filter(raw_filter: object) -> dict[str, Any]:
     if not isinstance(raw_filter, dict):
         raw_filter = {}
     output_format = str(raw_filter.get("format") or "all").strip().lower() or "all"
-    if output_format not in {"all", "docx", "pptx", "pdf", "xlsx"}:
+    if output_format not in {"all", "docx", "pptx", "pdf", "xlsx", "md"}:
         output_format = "all"
     refs = []
     for item in raw_filter.get("refs") if isinstance(raw_filter.get("refs"), list) else []:

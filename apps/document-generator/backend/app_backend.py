@@ -20,7 +20,13 @@ def main() -> None:
     action = str(body.get("action") or "generate_document")
     try:
         uploaded_root = Path(payload["uploaded_storage_root"]) if payload.get("uploaded_storage_root") else None
-        status_code, result = handle_action(Path(payload["data_root"]), Path(payload["generated_storage_root"]), body, uploaded_root)
+        status_code, result = handle_action(
+            Path(payload["data_root"]),
+            Path(payload["generated_storage_root"]),
+            body,
+            uploaded_root,
+            local_app_id=str(payload.get("app_id") or "document-generator"),
+        )
     except DocumentValidationError as error:
         _response(400, {"error": "validation_error", "detail": str(error)})
         return

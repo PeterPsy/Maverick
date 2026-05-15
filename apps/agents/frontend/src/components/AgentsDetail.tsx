@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Bot, FileText, Gauge, Puzzle, Save, ScrollText, Trash2, UserRound } from 'lucide-react';
+import { effectiveSkillIds } from '../lib/dependencies';
 import type { AgentEdits, AgentType, Catalog, Role, SkillSummary } from '../types';
 
 type AgentsDetailProps = {
@@ -79,10 +80,6 @@ function skillMatchesSearch(skill: SkillSummary, query: string) {
     .split(/[^a-z0-9]+/)
     .filter(Boolean);
   return queryParts.every((queryPart) => skillParts.some((skillPart) => skillPart.startsWith(queryPart)));
-}
-
-function effectiveSkillIds(agentType: AgentType, skills: SkillSummary[]) {
-  return agentType.skill_ids.length ? agentType.skill_ids : skills.map((skill) => skill.id);
 }
 
 function sameSet(left: string[], right: string[]) {

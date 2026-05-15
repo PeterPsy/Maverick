@@ -19,13 +19,15 @@ def _root_inventory(root: Path) -> dict:
         if line.strip() and not line.strip().startswith("#")
     ]
     package_json = _read_json(root / "package.json")
+    optional_dependencies = pyproject["project"].get("optional-dependencies", {})
     return {
         "python": {
             "name": pyproject["project"]["name"],
             "version": pyproject["project"]["version"],
             "requires_python": pyproject["project"]["requires-python"],
             "runtime_dependencies": list(pyproject["project"].get("dependencies", [])),
-            "dev_dependencies": list(pyproject["project"]["optional-dependencies"].get("dev", [])),
+            "optional_dependencies": {name: list(values) for name, values in sorted(optional_dependencies.items())},
+            "dev_dependencies": list(optional_dependencies.get("dev", [])),
             "requirements_dev": requirements,
         },
         "node": {

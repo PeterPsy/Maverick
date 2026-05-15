@@ -96,7 +96,7 @@ function SpreadsheetPreview({ table, compact = false }: { table?: PreviewTablePa
     return (
       <div className={compact ? 'spreadsheet-empty compact' : 'spreadsheet-empty'}>
         <Icon name="table" />
-        <strong>{table ? 'No tabular preview available' : 'Loading table preview...'}</strong>
+        <strong>No tabular preview available</strong>
       </div>
     );
   }
@@ -180,6 +180,7 @@ function CardImagePreview({ src }: { src: string }) {
 }
 
 export function StoragePreview({ file, loading = false, previewUrl, previewText, previewTable }: { file: StorageFile; loading?: boolean; previewUrl: string; previewText: string; previewTable?: PreviewTablePayload }) {
+  if (loading) return <FileTypeFallback file={file} loading />;
   if (canTablePreview(file)) return <SpreadsheetPreview table={previewTable} />;
   if (file.preview_kind === 'image' && previewUrl) return <img src={previewUrl} alt={file.name} />;
   if (file.preview_kind === 'video' && previewUrl) return <video src={previewUrl} controls />;
@@ -187,12 +188,11 @@ export function StoragePreview({ file, loading = false, previewUrl, previewText,
   if (['pdf', 'document', 'presentation', 'spreadsheet'].includes(file.preview_kind) && previewUrl) {
     return <iframe className="document-render-frame" src={previewUrl} title={file.name} />;
   }
-  if (file.preview_kind === 'markdown') return previewText ? <MarkdownPreview text={previewText} /> : <pre>Loading preview...</pre>;
-  if (file.preview_kind === 'text') return <pre>{previewText || 'Loading preview...'}</pre>;
+  if (file.preview_kind === 'markdown') return <MarkdownPreview text={previewText} />;
+  if (file.preview_kind === 'text') return <pre>{previewText}</pre>;
   if (['document', 'presentation', 'spreadsheet'].includes(file.preview_kind) && previewText) return <pre>{previewText}</pre>;
-  const isLoadingMediaPreview = loading && (file.preview_kind === 'image' || file.preview_kind === 'video');
   return (
-    <div className={`format-preview ${isLoadingMediaPreview ? 'is-loading-preview' : ''}`}>
+    <div className="format-preview">
       <Icon name={iconForKind(file.preview_kind)} />
       <strong>{kindLabels[file.preview_kind]}</strong>
       <p>{file.name}</p>

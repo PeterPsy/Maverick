@@ -1,0 +1,145 @@
+{
+  "tools": {
+    "maverick_document_generator": {
+      "description": "Generic Document Generator operations tool. Use dedicated tools for document text extraction, Markdown conversion, references, and view-state actions when available.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "default": "generate_document",
+            "enum": [
+              "generate_document",
+              "validate_spec",
+              "extract_text",
+              "convert_to_markdown",
+              "list_templates",
+              "list_outputs",
+              "view_filter",
+              "set_view_filter",
+              "set_custom_view",
+              "clear_custom_view",
+              "references.manifest",
+              "references.search",
+              "references.resolve",
+              "references.summarize",
+              "health.check"
+            ]
+          },
+          "spec": {
+            "type": "object",
+            "description": "Document generation specification for generate_document or validate_spec."
+          },
+          "workspace_relative_path": {
+            "type": "string",
+            "description": "Input file under storage/uploaded/ or storage/generated/ for extract_text or convert_to_markdown."
+          },
+          "return_markdown": {
+            "type": "boolean",
+            "default": false
+          },
+          "max_return_chars": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200000,
+            "default": 20000
+          }
+        },
+        "additionalProperties": true
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    "document_generator_convert_to_markdown": {
+      "description": "Convert one workspace PDF, DOCX, PPTX, or XLSX under storage/uploaded/ or storage/generated/ into an agent-ready Markdown artifact using Docling.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workspace_relative_path": {
+            "type": "string",
+            "description": "Required source file path under storage/uploaded/ or storage/generated/. Source file must be 10 MiB or smaller."
+          },
+          "output_filename": {
+            "type": "string",
+            "description": "Optional plain Markdown filename. Defaults to the source title with .md."
+          },
+          "title": {
+            "type": "string",
+            "description": "Optional display title for the converted Markdown artifact."
+          },
+          "metadata": {
+            "type": "object",
+            "description": "Optional caller metadata stored under document.metadata.request_metadata."
+          },
+          "return_markdown": {
+            "type": "boolean",
+            "default": false,
+            "description": "When true, include bounded Markdown text in the response. The Markdown file is always written."
+          },
+          "max_return_chars": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200000,
+            "default": 20000,
+            "description": "Maximum Markdown characters returned inline when return_markdown is true."
+          }
+        },
+        "required": ["workspace_relative_path"],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status_code": {"type": "integer"},
+          "document": {
+            "type": "object",
+            "properties": {
+              "job_id": {"type": "string"},
+              "format": {"type": "string", "const": "md"},
+              "filename": {"type": "string"},
+              "workspace_relative_path": {"type": "string"},
+              "metadata": {"type": "object"}
+            }
+          },
+          "source": {"type": "object"},
+          "markdown_path": {"type": "string"},
+          "manifest_path": {"type": "string"},
+          "markdown_length": {"type": "integer"},
+          "markdown": {"type": "string"},
+          "markdown_truncated": {"type": "boolean"},
+          "app_events": {"type": "array"}
+        }
+      }
+    },
+    "document_generator_extract_text": {
+      "description": "Extract bounded plain text from one workspace PDF, DOCX, PPTX, or XLSX under storage/uploaded/ or storage/generated/.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workspace_relative_path": {
+            "type": "string"
+          },
+          "max_chars": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200000,
+            "default": 50000
+          }
+        },
+        "required": ["workspace_relative_path"],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status_code": {"type": "integer"},
+          "document": {"type": "object"},
+          "text": {"type": "string"},
+          "text_length": {"type": "integer"},
+          "truncated": {"type": "boolean"}
+        }
+      }
+    }
+  }
+}

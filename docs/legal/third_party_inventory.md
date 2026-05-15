@@ -10,6 +10,6 @@ Regenerate it with:
 python3 scripts/generate_dependency_inventory.py
 ```
 
-This inventory is meant to make dependency review easier during the first public open source phase.
+This inventory includes direct runtime dependencies, Python optional extras, developer verification dependencies, and direct frontend app dependencies. It is meant to make dependency review easier during the first public open source phase.
 
 It is not yet a full transitive SBOM or signed provenance artifact.

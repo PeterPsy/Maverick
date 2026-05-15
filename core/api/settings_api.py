@@ -81,6 +81,7 @@ def _runtime_session_settings_payload(state: PlatformState, session: RuntimeSess
         "workspace_name": workspace_name,
         "agent_id": session.agent_id,
         "source_app_id": session.source_app_id,
+        "skill_catalog_app_id": session.skill_catalog_app_id,
         "provider_id": session.provider_id,
         "provider_thread_id": session.provider_thread_id,
         "status": session.status,

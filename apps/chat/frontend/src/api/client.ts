@@ -75,6 +75,7 @@ export type RuntimeSession = {
   agent_id: string;
   status: string;
   effective_mode: string;
+  skill_catalog_app_id?: string | null;
   provider_id?: string;
 };
 
@@ -264,6 +265,7 @@ export type RuntimeSessionOptions = {
   project_id?: string | null;
   system_prompt?: string;
   source_app_id?: string;
+  skill_catalog_app_id?: string;
   skill_ids?: string[];
   title?: string;
 };
@@ -389,6 +391,7 @@ export function createRuntimeSession(options: RuntimeSessionOptions = {}): Promi
       project_id: options.project_id || null,
       source_app_id: options.source_app_id || "chat",
       system_prompt: options.system_prompt || undefined,
+      skill_catalog_app_id: options.skill_catalog_app_id || undefined,
       skill_ids: options.skill_ids || [],
       title: options.title || "New chat",
     }),
@@ -424,6 +427,7 @@ export function createRuntimeSessionWithTurn({
     project_id: options.project_id || null,
     source_app_id: options.source_app_id || "chat",
     system_prompt: options.system_prompt || undefined,
+    skill_catalog_app_id: options.skill_catalog_app_id || undefined,
     skill_ids: options.skill_ids || [],
     title: options.title || "New chat",
     input_text: inputText,

@@ -21,6 +21,9 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
+document-generator = [
+    "docling>=2.93,<3",
+]
 mongo = [
     "pymongo>=4.6",
 ]

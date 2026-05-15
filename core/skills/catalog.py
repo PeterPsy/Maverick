@@ -9,22 +9,40 @@ from core.skills.models import SkillDefinition
 from core.apps.paths import workspace_app_data_root
 
 
-def workspace_skills_data_root(workspace_id: str, start_path: Path | None = None) -> Path:
-    """Return the Skills app data root for one workspace."""
-    return workspace_app_data_root(workspace_id=workspace_id, app_id="skills", start_path=start_path)
+DEFAULT_SKILL_CATALOG_APP_ID = "skills"
 
 
-def workspace_skills_root(workspace_id: str, start_path: Path | None = None) -> Path:
-    """Return the workspace-owned skill directory for one workspace."""
-    return workspace_skills_data_root(workspace_id=workspace_id, start_path=start_path) / "skills"
+def workspace_skills_data_root(
+    workspace_id: str,
+    start_path: Path | None = None,
+    *,
+    app_id: str = DEFAULT_SKILL_CATALOG_APP_ID,
+) -> Path:
+    """Return one workspace skill catalog app data root."""
+    return workspace_app_data_root(workspace_id=workspace_id, app_id=app_id, start_path=start_path)
 
 
-def list_workspace_skills(*, workspace_id: str, start_path: Path | None = None) -> list[SkillDefinition]:
+def workspace_skills_root(
+    workspace_id: str,
+    start_path: Path | None = None,
+    *,
+    app_id: str = DEFAULT_SKILL_CATALOG_APP_ID,
+) -> Path:
+    """Return the workspace-owned skill directory for one skill catalog app."""
+    return workspace_skills_data_root(workspace_id=workspace_id, start_path=start_path, app_id=app_id) / "skills"
+
+
+def list_workspace_skills(
+    *,
+    workspace_id: str,
+    start_path: Path | None = None,
+    app_id: str = DEFAULT_SKILL_CATALOG_APP_ID,
+) -> list[SkillDefinition]:
     """List enabled workspace-owned skills available to Codex runtimes."""
-    root = workspace_skills_root(workspace_id=workspace_id, start_path=start_path)
+    root = workspace_skills_root(workspace_id=workspace_id, start_path=start_path, app_id=app_id)
     if not root.exists():
         return []
-    metadata = _workspace_skill_metadata(workspace_id=workspace_id, start_path=start_path)
+    metadata = _workspace_skill_metadata(workspace_id=workspace_id, start_path=start_path, app_id=app_id)
     skills: list[SkillDefinition] = []
     for skill_root in sorted((path for path in root.iterdir() if path.is_dir()), key=lambda item: item.name):
         skill_file = skill_root / "SKILL.md"
@@ -59,6 +77,7 @@ def resolve_workspace_skills(
     workspace_id: str,
     skill_ids: list[str],
     start_path: Path | None = None,
+    app_id: str = DEFAULT_SKILL_CATALOG_APP_ID,
 ) -> list[SkillDefinition]:
     """Resolve explicit skill ids from the workspace-owned skill catalog."""
     requested: list[str] = []
@@ -69,15 +88,23 @@ def resolve_workspace_skills(
             continue
         seen.add(normalized)
         requested.append(normalized)
-    available = {skill.skill_id: skill for skill in list_workspace_skills(workspace_id=workspace_id, start_path=start_path)}
+    available = {
+        skill.skill_id: skill
+        for skill in list_workspace_skills(workspace_id=workspace_id, start_path=start_path, app_id=app_id)
+    }
     missing = [skill_id for skill_id in requested if skill_id not in available]
     if missing:
         raise ValueError(f"Unknown workspace skill ids for workspace `{workspace_id}`: {', '.join(missing)}")
     return [available[skill_id] for skill_id in requested]
 
 
-def _workspace_skill_metadata(*, workspace_id: str, start_path: Path | None = None) -> dict[str, dict]:
-    state_path = workspace_skills_data_root(workspace_id=workspace_id, start_path=start_path) / "state.json"
+def _workspace_skill_metadata(
+    *,
+    workspace_id: str,
+    start_path: Path | None = None,
+    app_id: str = DEFAULT_SKILL_CATALOG_APP_ID,
+) -> dict[str, dict]:
+    state_path = workspace_skills_data_root(workspace_id=workspace_id, start_path=start_path, app_id=app_id) / "state.json"
     if not state_path.is_file():
         return {}
     try:

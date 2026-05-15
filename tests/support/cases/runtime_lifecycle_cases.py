@@ -117,6 +117,7 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
             agent_id="agent-1",
             system_prompt="You are a focused test agent.",
             skill_ids=["agents-ops"],
+            skill_catalog_app_id="custom-skills",
             source_app_id="source-app",
             now=now,
             start_path=repo_root,
@@ -130,6 +131,7 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
         self.assertEqual(Path(session.runtime_root), repo_root / "workspaces" / "acme" / "runtime" / "sessions" / "sess-1")
         self.assertEqual(session.system_prompt, "You are a focused test agent.")
         self.assertEqual(session.skill_ids, ["agents-ops"])
+        self.assertEqual(session.skill_catalog_app_id, "custom-skills")
         self.assertEqual(session.source_app_id, "source-app")
         self.assertIsNone(session.provider_thread_id)
         self.assertEqual(store.get_state("sess-1").session_status, "created")

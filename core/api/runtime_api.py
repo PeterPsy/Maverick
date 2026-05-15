@@ -12,6 +12,7 @@ from core.api.platform_state import PlatformState
 from core.api.provider_api import workspace_provider_status
 from core.api.runtime_cleanup import cleanup_runtime_session
 from core.api.session_api import RequestSession, require_session
+from core.apps.errors import AppHostingError
 from core.apps.runtime_event_hooks import dispatch_source_app_runtime_event
 from core.authorization.errors import AuthorizationError
 from core.authorization.service import authorize_runtime_session_create, require_runtime_session_operation
@@ -46,6 +47,7 @@ from core.runtime.turn_submission import (
     submit_runtime_turn_async,
 )
 from core.runtime.thread_catalog_events import set_thread_availability
+from core.skills.runtime_catalog import runtime_skill_catalog_app_id_for_request
 
 
 def _session_payload(session: RuntimeSessionRecord, *, provider_id: str | None = None) -> dict[str, object]:
@@ -143,6 +145,7 @@ def _create_session(state: PlatformState, context: RequestSession, body: dict, *
         user=context.user,
         workspace_id=context.workspace_id,
     )
+    source_app_id = str(body.get("source_app_id") or "").strip() or None
     session = create_runtime_session(
         state.runtime_store,
         session_id=str(uuid4()),
@@ -151,7 +154,17 @@ def _create_session(state: PlatformState, context: RequestSession, body: dict, *
         requested_mode=body.get("requested_mode"),
         system_prompt=str(body.get("system_prompt") or "").strip() or None,
         skill_ids=body.get("skill_ids") if isinstance(body.get("skill_ids"), list) else [],
-        source_app_id=str(body.get("source_app_id") or "").strip() or None,
+        skill_catalog_app_id=runtime_skill_catalog_app_id_for_request(
+            state.app_store,
+            workspace_id=context.workspace_id,
+            source_app_id=source_app_id,
+            explicit_app_id=str(body.get("skill_catalog_app_id") or "").strip() or None,
+            user=context.user,
+            workspace_store=state.workspace_store,
+            start_path=start_path,
+            allow_missing_source_app=True,
+        ),
+        source_app_id=source_app_id,
         owner_user_id=context.user.user_id,
         created_by_user_id=context.user.user_id,
         grants=[],
@@ -197,6 +210,12 @@ def _handle_session_collection(state: PlatformState, context: RequestSession, me
         except AuthorizationError as error:
             status = "429 Too Many Requests" if error.reason == "max_agent_instances_reached" else "403 Forbidden"
             return json_response(start_response, {"error": error.reason}, status=status)
+        except AppHostingError as error:
+            return json_response(
+                start_response,
+                {"error": "runtime_skill_catalog_unavailable", "detail": str(error)},
+                status="400 Bad Request",
+            )
         if _runtime_turn_requested(body):
             return _submit_runtime_turn_response(state, context, session, body, start_response, start_path=start_path)
         return json_response(start_response, _session_payload(session, provider_id=_resolved_provider_id(state, session)), status="201 Created")

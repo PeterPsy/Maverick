@@ -31,7 +31,16 @@
       ]
     }
   ],
-  "requires": [],
+  "requires": [
+    {
+      "alias": "runtime-skills",
+      "interface": "skill.catalog",
+      "version": "^1",
+      "required": true,
+      "cardinality": "one",
+      "description": "Workspace-owned runtime skill catalog used for agent type skill selection."
+    }
+  ],
   "distribution": {
     "mode": "sealed",
     "source_access": "none"
@@ -61,6 +70,9 @@
   "capabilities": {
     "mcp_tools": [
       "maverick_agents_app",
+      "agents_catalog_compact",
+      "agents_get_agent_definition",
+      "agents_upsert_agent_definition",
       "agents_view_filter",
       "agents_set_view_filter",
       "agents_set_custom_view",

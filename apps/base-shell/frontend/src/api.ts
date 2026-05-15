@@ -164,6 +164,7 @@ export type RuntimeSessionItem = {
   workspace_name?: string;
   agent_id: string;
   source_app_id?: string | null;
+  skill_catalog_app_id?: string | null;
   provider_id?: string | null;
   provider_thread_id?: string | null;
   status: string;

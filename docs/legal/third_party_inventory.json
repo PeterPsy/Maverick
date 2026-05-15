@@ -9,6 +9,17 @@
       "runtime_dependencies": [
         "uvicorn[standard]>=0.30"
       ],
+      "optional_dependencies": {
+        "dev": [
+          "pip-audit>=2.7"
+        ],
+        "document-generator": [
+          "docling>=2.93,<3"
+        ],
+        "mongo": [
+          "pymongo>=4.6"
+        ]
+      },
       "dev_dependencies": [
         "pip-audit>=2.7"
       ],

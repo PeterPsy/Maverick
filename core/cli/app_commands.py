@@ -11,6 +11,7 @@ from core.api.app_event_publication import declared_data_event_resources, publis
 from core.apps.runtime_requests import apply_app_runtime_requests
 from core.apps.surfaces import enabled_workspace_app_bindings, resolve_workspace_app_surface
 from core.apps.store import AppStore
+from core.apps.surface_descriptors import app_cli_command_metadata
 from core.authorization.service import can_mount_app_visibility
 from core.cli.models import CliCommandDefinition, CliInvocationContext, CliInvocationPolicy
 from core.secrets.service import resolve_app_secret
@@ -121,6 +122,12 @@ def _workspace_app_command_specs(
             local_app_id = binding.app_id
             public_app_id = binding.public_app_id or parsed.app_id
             command_id = f"app.{local_app_id}.{command_name}"
+            default_description = f"Workspace app CLI command `{command_name}` for `{local_app_id}`."
+            description, argument_schema = app_cli_command_metadata(
+                source_root,
+                command_name,
+                default_description=default_description,
+            )
 
             def _handler(
                 arguments: dict[str, Any],
@@ -209,8 +216,8 @@ def _workspace_app_command_specs(
                     CliCommandDefinition(
                         command_id=command_id,
                         path_segments=["app", local_app_id, command_name],
-                        description=f"Workspace app CLI command `{command_name}` for `{local_app_id}`.",
-                        argument_schema={"type": "object"},
+                        description=description,
+                        argument_schema=argument_schema,
                         owner_kind="app",
                         owner_id=local_app_id,
                         workspace_id=workspace_id,

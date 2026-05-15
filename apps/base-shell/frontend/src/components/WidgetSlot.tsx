@@ -443,6 +443,8 @@ export function WidgetSlot({
         style={slotStyle}
       >
         <iframe
+          allow="fullscreen"
+          allowFullScreen
           className="bs-widget-slot__frame"
           key={`${activeWorkspaceId}:${widget.owner_app_id}:${widget.widget_id}:${contextToken}:${frameRevision}`}
           onLoad={postWidgetContextChanged}

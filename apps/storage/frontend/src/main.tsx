@@ -954,6 +954,11 @@ function App() {
   }
 
   function openFilePreview(file: StorageFile) {
+    setPreviewText('');
+    setPreviewUrl('');
+    setPreviewTable(undefined);
+    setPreviewImageSize(null);
+    setPreviewLoading(canInlinePreview(file));
     setSelectedFile(file);
     setDetailsOpen(false);
     setPreviewModalOpen(true);
@@ -1271,6 +1276,7 @@ function App() {
   }, [previewHeaderHeight, previewImageSize, previewModalOpen, previewViewportSize, selectedFile?.preview_kind]);
 
   const previewModalStyle: PreviewImageStyle | undefined = previewImageLayout && !previewFullscreenActive
+    && previewViewportSize.width > 780
     ? {
       width: `${previewImageLayout.width}px`,
       '--preview-image-height': `${previewImageLayout.height}px`
@@ -2041,7 +2047,7 @@ function App() {
                 <h2 id="preview-modal-title">{selectedFile.name}</h2>
               </div>
               <div className="preview-modal-actions">
-                <button className="icon-button" type="button" onClick={() => togglePreviewFullscreen().catch((err: Error) => setError(err.message))} aria-label={previewFullscreenLabel} aria-pressed={previewFullscreenActive} title={previewFullscreenLabel}>
+                <button className="icon-button preview-fullscreen-action" type="button" onClick={() => togglePreviewFullscreen().catch((err: Error) => setError(err.message))} aria-label={previewFullscreenLabel} aria-pressed={previewFullscreenActive} title={previewFullscreenLabel}>
                   <Icon name={previewFullscreenIcon} />
                 </button>
                 <button className="icon-button" type="button" onClick={() => showFileDetails(selectedFile)} aria-label="Show file details" title="Details">

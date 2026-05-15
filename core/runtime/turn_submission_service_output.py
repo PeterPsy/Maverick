@@ -17,6 +17,7 @@ from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.service import queue_runtime_turn, record_runtime_event
 from core.runtime.thread_catalog_events import mark_thread_user_message_queued, set_thread_availability
 from core.runtime.workspace_api_token import register_workspace_api_token
+from core.skills.catalog import DEFAULT_SKILL_CATALOG_APP_ID
 from core.skills.service import list_available_workspace_skills, resolve_runtime_skills
 
 if TYPE_CHECKING:
@@ -124,7 +125,11 @@ def _build_launch_spec_for_execution(state: PlatformState, *, session: RuntimeSe
     skills = (
         resolve_runtime_skills(session, start_path=state.repository_root)
         if session.skill_ids
-        else list_available_workspace_skills(workspace_id=session.workspace_id, start_path=state.repository_root)
+        else list_available_workspace_skills(
+            workspace_id=session.workspace_id,
+            start_path=state.repository_root,
+            app_id=session.skill_catalog_app_id or DEFAULT_SKILL_CATALOG_APP_ID,
+        )
     )
     if skills:
         prepare_runtime_skills(state.provider_store, session=session, skills=skills)

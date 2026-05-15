@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 import sys
 
-from service import app_events_for_action, handle_action
+from service import app_events_for_result, handle_action, validation_error_payload
 from store import AgentsValidationError
 
 
@@ -20,13 +20,13 @@ def main() -> None:
     data_root = Path(payload["data_root"])
     action = str(body.get("action") or "catalog")
     try:
-        status_code, result = handle_action(data_root, body)
+        status_code, result = handle_action(data_root, {"action": action, **body})
     except AgentsValidationError as error:
-        _response(400, {"error": "validation_error", "detail": str(error)})
+        _response(400, validation_error_payload(error, action))
         return
     response = {"status_code": status_code, "json": result}
     if status_code < 400:
-        response["app_events"] = app_events_for_action(action)
+        response["app_events"] = app_events_for_result(action, result)
     print(json.dumps(response, ensure_ascii=False))
 
 

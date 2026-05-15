@@ -23,6 +23,7 @@ from core.apps.contracts import (
     write_app_contract_file,
 )
 from core.apps.models import WorkspaceAppBindingRecord
+from core.apps.dependencies import save_app_dependency_selection
 from core.apps.service import install_workspace_local_app, register_app_source_from_contract, register_workspace_local_app_project_from_contract
 from core.apps.store import AppCollections, AppDocumentStore
 from core.cli.service import list_core_cli_commands
@@ -852,6 +853,39 @@ class BuiltinAppsTestCase(unittest.TestCase):
         self.assertEqual(payload["thread"]["agent_type_id"], "backend-systems-engineer")
         self.assertEqual(payload["thread"]["agent_role_id"], "backend-systems-engineer")
         self.assertEqual(payload["thread"]["source_app_id"], "agents")
+
+    def test_direct_runtime_session_uses_source_app_skill_catalog_dependency(self) -> None:
+        repo_root = self.make_product_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        save_app_dependency_selection(
+            state.app_store,
+            workspace_id="default",
+            consumer_app_id="agents",
+            alias="runtime-skills",
+            provider_app_ids=["skills"],
+            workspace_store=state.workspace_store,
+            start_path=repo_root,
+        )
+        app = PlatformHost(state, start_path=repo_root)
+        cookie = self.login(app)
+
+        session_status, session_body, _ = self.invoke(
+            app,
+            path="/api/runtime/sessions",
+            method="POST",
+            body={
+                "agent_id": "Backend Systems Engineer",
+                "agent_type_id": "backend-systems-engineer",
+                "source_app_id": "agents",
+                "title": "Backend Systems Engineer",
+            },
+            cookie=cookie,
+        )
+        session = json.loads(session_body.decode("utf-8"))
+
+        self.assertEqual(session_status, 201)
+        self.assertEqual(session["source_app_id"], "agents")
+        self.assertEqual(session["skill_catalog_app_id"], "skills")
 
     def test_core_runtime_thread_stores_system_prompt(self) -> None:
         repo_root = self.make_repo_root()

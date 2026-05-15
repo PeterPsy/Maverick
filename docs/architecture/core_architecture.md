@@ -278,6 +278,7 @@ This includes:
 - process lifecycle
 - runtime sessions that can carry an app-provided materialized `system_prompt`
 - runtime sessions that can carry selected `skill_ids` when an agent type narrows the workspace default
+- runtime sessions that can carry the selected `skill.catalog` provider app id used to resolve those `skill_ids`
 - runtime sessions that can identify the app surface that created them with `source_app_id`
 - runtime turns that can carry structured app references when an app UI parses human-facing mention text; `type: "app"` references carry a stable `app_id`, while `type: "entity"` references carry `app_id`, `entity_type`, `entity_id`, and optional safe label, summary, existence, and deep-link metadata
 
@@ -344,7 +345,7 @@ The Codex adapter should own the provider-specific protocol:
 - populate that runtime home from a configurable operator Codex home, using `MAVERICK_CODEX_HOME`, `CODEX_HOME`, or the current user's default Codex home
 - copy only required identity and configuration material into the runtime home, such as Codex auth, version, installation identity, sanitized config, and rules
 - avoid hardcoded host paths for Codex identity or configuration
-- keep runtime skills materialized separately through the workspace Skills app data rather than loading user-global or core-bundled skills into every runtime
+- keep runtime skills materialized separately through the selected workspace `skill.catalog` provider's data rather than loading user-global or core-bundled skills into every runtime
 - create a persistent Codex thread with `thread/start` when no provider thread exists
 - resume the existing Codex thread with `thread/resume` when a runtime session already has a provider thread id
 - submit each user turn with `turn/start` against the same provider thread id
@@ -699,6 +700,7 @@ The intended sidebar shape is:
 - `base-shell` keeps the iframe-mounted widget alive while the sidebar is hidden, so opening and closing the menu does not reload app-owned widget state
 - `base-shell` may react to a generic browser message asking it to open an app with scalar navigation params, but it must not import chat code or call chat-private internals
 - `base-shell` keeps mounted app iframe documents alive after first open and sends app navigation through a generic `postMessage` protocol instead of rebuilding iframe URLs for every internal app route
+- `base-shell` should keep the previously visible app frame on screen while a newly requested app frame cold-mounts hidden, then reveal the target frame only after the target acknowledges first render readiness or reaches a bounded post-load fallback
 - `base-shell` listens to the core app-event WebSocket and may remount only the affected app iframe after a successful official frontend rebuild event
 - `chat` owns project settings panels and "new chat" UI behavior; thread rename, move, delete, and delete-all operations call core runtime thread APIs
 
@@ -784,7 +786,7 @@ Mounted apps should also emit:
 }
 ```
 
-The shell should treat this as a lifecycle acknowledgement and resend the latest pending navigation params for that mounted app.
+The shell should treat this as a lifecycle acknowledgement that the app has completed its first useful render, which may still be an app-owned loading skeleton. The shell should then reveal a cold-mounted target frame and resend the latest pending navigation params for that mounted app.
 
 This keeps navigation reliable after login/logout cycles and cold iframe mounts without switching back to query-string driven iframe reloads.
 
@@ -1256,7 +1258,7 @@ The Codex adapter owns Maverick's managed Codex model selection for runtime agen
 
 The Codex app-server command for Maverick-managed runtimes must also disable Codex's built-in `apps` and `plugins` features. Runtime config preparation must write a managed Codex `[features]` section with `apps`, `plugins`, and `skill_mcp_dependency_install` disabled, instead of inheriting those feature switches from the operator home. Runtime-home preparation must remove plugin/app connector residue such as `plugins/`, `cache/codex_apps_tools/`, `.tmp/plugins/`, `.tmp/plugins.sha`, and `.tmp/app-server-remote-plugin-sync-v1` before launch so Codex does not attempt to start the `codex_apps` MCP bridge.
 
-Codex may also generate provider-bundled system skills under `CODEX_HOME/skills/.system` when app-server starts. Maverick-managed Codex runtimes must remove that provider-generated `.system` tree during runtime-home preparation and again after app-server initialization before starting or resuming a provider thread. The only runtime skills visible to Maverick agents are workspace Skills app copies materialized by Maverick.
+Codex may also generate provider-bundled system skills under `CODEX_HOME/skills/.system` when app-server starts. Maverick-managed Codex runtimes must remove that provider-generated `.system` tree during runtime-home preparation and again after app-server initialization before starting or resuming a provider thread. The only runtime skills visible to Maverick agents are workspace-owned skill copies from the runtime session's selected `skill.catalog` provider and materialized by Maverick.
 
 For sandboxed Codex sessions, sanitized runtime config must also drop inherited Codex `[projects.*]` trust entries that point outside the workspace root. This is provider-specific defense in depth: the generic Maverick runtime policy remains provider-agnostic, while the Codex adapter prevents Codex-specific trust configuration from weakening a Maverick sandbox.
 
@@ -1278,9 +1280,9 @@ If the host cannot create that read/write confinement, sandbox runtime launch mu
 
 It must not copy user-global, plugin-provided, or repository-local skills into the runtime home by default.
 
-Maverick core has no preinstalled runtime skills. Skills are extension data owned by the workspace Skills app. The Skills app seeds bundled skill templates from `apps/*/skills/` into `workspaces/<workspace_id>/data/skills/skills/` during install and migration. Operators enable or disable workspace skill copies from that editable workspace data.
+Maverick core has no preinstalled runtime skills. Skills are extension data owned by a workspace `skill.catalog` provider. The built-in Skills app is the canonical provider and seeds bundled skill templates from `apps/*/skills/` into `workspaces/<workspace_id>/data/skills/skills/` during install and migration. Another selected `skill.catalog` provider may own the same kind of editable catalog under its own workspace data root. Operators enable or disable workspace skill copies from that selected provider's editable workspace data.
 
-At turn launch, the runtime materializes skills from the workspace-owned Skills app catalog. A base session with no explicit `skill_ids` receives every enabled workspace skill. A session created from an agent type may pass `skill_ids` to narrow that set to the agent type's selected skills.
+At turn launch, the runtime materializes skills from the workspace-owned skill catalog selected for the runtime session. The canonical default provider is the built-in Skills app. If a runtime-owning app declares and selects a `runtime-skills` dependency for the `skill.catalog` interface, the runtime session must persist that selected provider app id and resolve both explicit `skill_ids` and implicit default skills from that provider's workspace data. Direct core runtime session creation through `/api/runtime/sessions` follows the same rule for the request `source_app_id` when that source app has a selected `runtime-skills` dependency, and may also accept an explicitly supplied `skill_catalog_app_id` only after validating that the app is an enabled `skill.catalog` provider in the workspace. A base session with no explicit `skill_ids` receives every enabled workspace skill from the selected catalog. A session created from an agent type may pass `skill_ids` to narrow that set to the agent type's selected skills.
 
 Materialized runtime skills and rules must be copied into the session-local runtime home for sandbox sessions, not symlinked to source repository or operator home paths outside the workspace boundary.
 
@@ -1922,15 +1924,15 @@ Runtime authority and policy enforcement must continue to live in MCP, CLI, prov
 
 The skill catalog is platform-managed and may include:
 
-Enabled workspace-owned skills from the Skills app catalog, optionally narrowed by explicit session `skill_ids`.
+Enabled workspace-owned skills from the runtime session's selected `skill.catalog` provider, optionally narrowed by explicit session `skill_ids`. The built-in Skills app is the canonical default provider.
 
 How those skill assets are installed into a runtime home is provider-specific.
 
 That installation strategy belongs to the selected provider adapter, because different backends such as Codex, Claude Code, or Gemini CLI may require different runtime-home layouts or sync behavior.
 
-Visible runtime skill ids are plain workspace skill ids, for example `maverick-code-skill` or `chat-ops`. They are intentionally not namespaced by core or source app, because the workspace Skills app is the single owner of the editable runtime catalog and must prevent or resolve name collisions before saving a skill.
+Visible runtime skill ids are plain workspace skill ids, for example `maverick-code-skill` or `chat-ops`. They are intentionally not namespaced by core or source app. The selected `skill.catalog` provider owns the editable runtime catalog for that session and must prevent or resolve name collisions before saving a skill.
 
-The workspace app named `Skills` is the authoritative operator view for runtime skills.
+The workspace app named `Skills` is the canonical built-in operator view for runtime skills.
 
 It owns editable workspace skills under `workspaces/<workspace_id>/data/skills/skills/`.
 
@@ -2230,7 +2232,7 @@ It should own:
 - recovery
 - MCP surface
 - CLI surface
-- workspace Skills app catalog resolution
+- workspace skill catalog resolution through the runtime session's selected `skill.catalog` provider
 
 It should not own:
 

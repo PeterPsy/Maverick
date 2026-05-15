@@ -45,6 +45,7 @@ class RuntimeSessionRecord:
     last_progress_at: datetime | None
     system_prompt: str | None = None
     skill_ids: list[str] = field(default_factory=list)
+    skill_catalog_app_id: str | None = None
     source_app_id: str | None = None
     owner_user_id: str | None = None
     created_by_user_id: str | None = None

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { createWidgetContext, listWidgets } from "../api/client";
 import type { StructuredContent, WidgetRegistryItem } from "../api/client";
+import { openAppParamsInShell } from "../lib/shellNavigation";
 import { boundedWidgetHeightPx } from "../lib/widgetResize";
 
 const MAVERICK_WIDGET_IFRAME_SANDBOX = "allow-downloads allow-forms allow-popups allow-same-origin allow-scripts";
@@ -96,10 +97,32 @@ export function WidgetHostFrame({
     return () => window.removeEventListener("message", handleMessage);
   }, [state]);
 
+  useEffect(() => {
+    if (state.status !== "ready") {
+      return;
+    }
+
+    function handleMessage(event: MessageEvent) {
+      if (event.origin !== window.location.origin || event.source !== frameRef.current?.contentWindow || !event.data || typeof event.data !== "object") {
+        return;
+      }
+      const payload = event.data as { type?: string; app_id?: string; params?: unknown };
+      if (payload.type !== "maverick.widget.open-app" || typeof payload.app_id !== "string") {
+        return;
+      }
+      openAppParamsInShell(payload.app_id, shellRouteParamsFromWidgetParams(payload.params));
+    }
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [state]);
+
   if (state.status === "ready") {
     const src = `${state.widget.frontend_mount}#context=${encodeURIComponent(state.contextToken)}`;
     return (
       <iframe
+        allow="fullscreen"
+        allowFullScreen
         className="chatapp-structured-widget"
         ref={frameRef}
         key={`${hostAppId}:${messageId}:${state.widget.owner_app_id}:${state.widget.widget_id}:${state.contextToken}`}
@@ -113,6 +136,19 @@ export function WidgetHostFrame({
   }
 
   return <>{fallback(state)}</>;
+}
+
+function shellRouteParamsFromWidgetParams(params: unknown): Record<string, string | boolean | null> {
+  if (!params || typeof params !== "object" || Array.isArray(params)) {
+    return {};
+  }
+  const routeParams: Record<string, string | boolean | null> = {};
+  for (const [key, value] of Object.entries(params)) {
+    if (typeof value === "string" || typeof value === "boolean" || value === null) {
+      routeParams[key] = value;
+    }
+  }
+  return routeParams;
 }
 
 function stableContentSignature(content: StructuredContent): string {

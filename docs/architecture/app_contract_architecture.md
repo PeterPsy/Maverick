@@ -517,14 +517,14 @@ The recommended mental model is:
 
 - `mcp/` = structured tool surface
 - `cli/` = command-oriented local surface
-- `skills/` = procedural skill templates that the Skills app can copy into workspace data
+- `skills/` = procedural skill templates that a skill catalog app, canonically the built-in Skills app, can copy into workspace data
 
 Important distinction:
 
 - `mcp/` and `cli/` are executable capability surfaces
 - `skills/` is an instructional asset layer
 - `skills/` is not a runtime interface, security boundary, or governance surface by itself
-- runtime agents may use only workspace-owned skill copies under `data/skills/skills/`
+- runtime agents may use only workspace-owned skill copies from the runtime session's selected `skill.catalog` provider; the canonical built-in provider stores them under `data/skills/skills/`
 
 ### Referenceable Entity Declaration
 
@@ -658,7 +658,7 @@ Runtime event hooks are opt-in. The core must not call every source app backend 
 
 Apps that declare `permissions.runtime.create_sessions: true` may ask the platform host to create or reuse runtime sessions and submit asynchronous turns by returning a generic `runtime_session_requests` list from an app backend or hook result. The core applies these requests as platform runtime operations; it does not interpret app-owned workflow concepts such as Fleet nodes, edges, handoff text, loop goals, or queue state.
 
-Each request may include `agent_id`, optional `runtime_session_id`, `system_prompt` or a generic dependency-backed `system_prompt_request`, `skill_ids`, `input_text`, `app_references`, and a callback action. `app_references` is a generic union: `type: "app"` carries a stable `app_id`, while `type: "entity"` carries `app_id`, `entity_type`, `entity_id`, and optional safe label, summary, existence, and deep-link metadata. The platform stamps the created session with the requesting app as `source_app_id`, submits the turn through the core runtime, and invokes the app callback with the created `runtime_session_id` and `turn_id` or an error. The callback lets the app persist its own projection state without the core writing app-owned data.
+Each request may include `agent_id`, optional `runtime_session_id`, `system_prompt` or a generic dependency-backed `system_prompt_request`, `skill_ids`, `input_text`, `app_references`, and a callback action. If the requesting app has a selected `runtime-skills` dependency for `skill.catalog`, the platform persists that selected provider app id on the runtime session so both explicit `skill_ids` and implicit default skills resolve from the same catalog. `app_references` is a generic union: `type: "app"` carries a stable `app_id`, while `type: "entity"` carries `app_id`, `entity_type`, `entity_id`, and optional safe label, summary, existence, and deep-link metadata. The platform stamps the created session with the requesting app as `source_app_id`, submits the turn through the core runtime, and invokes the app callback with the created `runtime_session_id` and `turn_id` or an error. The callback lets the app persist its own projection state without the core writing app-owned data.
 
 Apps may also return `runtime_turn_interrupt_requests` for turns that belong to a runtime session sourced by that same app. The core validates workspace and source-app ownership, performs the generic interrupt operation, records the runtime terminal event, and dispatches the same source-app runtime event hook. The app still owns any product-level decision to mark its own node, job, or workflow as stopped or failed.
 
@@ -807,7 +807,7 @@ The rule is:
 
 Examples:
 
-- `chat` may expose a frontend for the user, a backend for app-specific server logic, MCP tools for agents, CLI commands for operators or agents, and bundled skill templates that the Skills app can copy into workspace data
+- `chat` may expose a frontend for the user, a backend for app-specific server logic, MCP tools for agents, CLI commands for operators or agents, and bundled skill templates that a skill catalog app can copy into workspace data
 - `base-shell` may expose a frontend shell that hosts the frontend of other apps while still being itself only another app mounted by the core
 
 The core remains responsible for:
@@ -869,7 +869,7 @@ The intended split is:
 - `frontend/` for human-facing visual interaction
 - `backend/` for app-specific server logic
 - `mcp/` and `cli/` for agent and operator execution surfaces
-- `skills/` for skill templates owned by the app source but copied into workspace Skills app data before runtime use
+- `skills/` for skill templates owned by the app source but copied into workspace skill catalog data before runtime use
 
 This is a core design principle.
 
@@ -1205,7 +1205,7 @@ Mounted app frontends should acknowledge readiness with the matching app-owned l
 }
 ```
 
-The host should resend the latest pending navigation params for that app when it receives `maverick.app.ready`, but repeated readiness messages for the same app, frame, and navigation signature must not fan out duplicate navigation deliveries.
+The readiness message means the mounted frontend has reached its first useful render, which may still be an app-owned loading skeleton while app data is loading. The host should reveal a cold-mounted target iframe and resend the latest pending navigation params for that app when it receives `maverick.app.ready`, but repeated readiness messages for the same app, frame, and navigation signature must not fan out duplicate navigation deliveries.
 
 This avoids losing navigation requests when an app iframe is freshly mounted after login, logout, refresh, or recovery and the host message arrives before the app has installed its listener.
 - the host may know the target `app_id`, but must not know app-private storage or route internals
@@ -1214,7 +1214,9 @@ This avoids losing navigation requests when an app iframe is freshly mounted aft
 
 The initial iframe URL remains the registry-provided `frontend_mount`.
 
-Shell-mounted app and widget iframes may use browser sandboxing, but they must preserve access to their own mounted frontend assets. The shell sandbox must include `allow-same-origin` so app documents can behave as same-origin clients for core APIs. Without that token, the browser assigns the iframe an opaque `null` origin, authenticated same-origin API calls fail as CORS/401 errors, and targeted `postMessage` delivery to the mounted app or widget can fail. The static asset route still needs to tolerate opaque `null` origins because old mounted frames, widget frames, or browser module/style CORS behavior may request `/apps/<mount_app_id>/assets/...` without session cookies; those asset responses should be cross-origin readable and must never carry user-specific data.
+During shell app switches, a host may keep the previously visible app frame on screen while the newly requested iframe loads hidden. If a third-party app does not yet emit `maverick.app.ready`, the host may use a bounded post-load fallback to reveal the frame, but it should avoid exposing the browser's initial blank iframe canvas during normal cold mounts.
+
+Shell-mounted app and widget iframes may use browser sandboxing, but they must preserve access to their own mounted frontend assets. The shell sandbox must include `allow-same-origin` so app documents can behave as same-origin clients for core APIs. Without that token, the browser assigns the iframe an opaque `null` origin, authenticated same-origin API calls fail as CORS/401 errors, and targeted `postMessage` delivery to the mounted app or widget can fail. Mounted app and widget iframes must also allow the browser `fullscreen` feature so app-owned preview surfaces can request real fullscreen from a user gesture while still falling back to in-frame fullscreen when the browser denies it. The static asset route still needs to tolerate opaque `null` origins because old mounted frames, widget frames, or browser module/style CORS behavior may request `/apps/<mount_app_id>/assets/...` without session cookies; those asset responses should be cross-origin readable and must never carry user-specific data.
 
 On mobile, the shell may render transparent chrome above mounted app iframes. To let app content scroll visually underneath that chrome while keeping the first app content below it, the shell exposes host layout CSS variables on same-origin mounted app documents. `--maverick-shell-mobile-content-top-offset` is the top inset that app-owned scroll containers should add to their own top padding. The shell must not crop the mounted iframe below its mobile header, because that prevents app content from appearing behind the transparent mobile header chrome.
 
@@ -1631,7 +1633,7 @@ Agents may use:
 - chat CLI commands
 - workspace-owned skill copies seeded from chat skill templates
 
-The core decides whether executable MCP and CLI surfaces are available in the current workspace. Runtime skills are selected from the workspace Skills app catalog.
+The core decides whether executable MCP and CLI surfaces are available in the current workspace. Runtime skills are selected from the runtime session's workspace skill catalog. The canonical default provider is the built-in Skills app, while apps may select another `skill.catalog` provider through a declared dependency such as `runtime-skills`.
 
 The `base-shell` app may visually host the `chat` frontend.
 
@@ -1892,7 +1894,7 @@ The contract declares which surfaces the app exposes, but the platform still dec
 
 - MCP and CLI are mounted through core-managed platform hosts
 - app source skills are templates, not directly visible runtime skills
-- the Skills app copies bundled skill templates into workspace-owned editable skill data
+- a skill catalog app copies bundled skill templates into workspace-owned editable skill data; the built-in Skills app is the canonical provider
 - provider-specific runtime installation of enabled workspace skill assets, optionally narrowed by explicit session skill ids, is handled by the selected provider adapter
 
 Workspace agents and users must invoke core-owned and app-owned CLI and MCP capabilities through scoped core-managed workspace surfaces, not by discovering or executing files under installation-level `apps/<public_app_id>/`.
@@ -1940,6 +1942,22 @@ The wrapper resolves the current workspace, checks the enabled app registry, app
 Sandboxed workspace agents therefore do not need to know where an app source artifact lives outside the workspace.
 
 When app-owned MCP tools are surfaced through the platform, the host may apply namespacing to avoid collisions with core-owned assets or assets from other apps.
+
+Apps may also provide app-owned discovery descriptor sidecars beside their executable entrypoints:
+
+```text
+apps/<app_id>/cli/command_schemas.json
+apps/<app_id>/mcp/tool_schemas.json
+```
+
+These sidecars are optional metadata for the generic core hosts. They do not add commands or tools; the executable surface still comes from `app_contract.json`. When present, the core reads them generically to populate app command/tool descriptions and JSON schemas in `list` and `inspect` responses. If absent or invalid, the core falls back to the generic app-owned description and `{"type": "object"}` schema for that command or tool instead of breaking workspace discovery.
+
+The descriptor files must stay app-owned and declarative:
+
+- CLI descriptors use a top-level `commands` object keyed by declared command name, with optional `description` and `argument_schema`.
+- MCP descriptors use a top-level `tools` object keyed by declared tool name, with optional `description`, `input_schema`, and `output_schema`.
+- Descriptor metadata must not replace app-owned validation inside the entrypoint.
+- Descriptor metadata must not grant policy or expose undeclared surfaces.
 
 ## Core Boundary Rule
 

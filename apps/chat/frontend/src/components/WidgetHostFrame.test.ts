@@ -11,4 +11,19 @@ describe("WidgetHostFrame", () => {
 
     expect(source).toContain('scrolling="no"');
   });
+
+  it("allows widget previews to request browser fullscreen", () => {
+    const source = readFileSync(resolve(currentDir, "WidgetHostFrame.tsx"), "utf8");
+
+    expect(source).toContain('allow="fullscreen"');
+    expect(source).toContain("allowFullScreen");
+  });
+
+  it("forwards nested widget open-app messages to the shell app host", () => {
+    const source = readFileSync(resolve(currentDir, "WidgetHostFrame.tsx"), "utf8");
+
+    expect(source).toContain('"maverick.widget.open-app"');
+    expect(source).toContain("openAppParamsInShell(payload.app_id");
+    expect(source).toContain("event.source !== frameRef.current?.contentWindow");
+  });
 });

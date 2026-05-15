@@ -1,15 +1,15 @@
 ---
 name: document-generator-docs
-description: "Use the Document Generator app CLI or MCP tool to create DOCX, PPTX, PDF, and XLSX files in workspace generated storage, or extract text from workspace documents."
+description: "Use the Document Generator app CLI or MCP tool to create DOCX, PPTX, PDF, and XLSX files in workspace generated storage, extract text from workspace documents, or convert workspace documents to Markdown."
 ---
 
 # Document Generator Docs
 
-Use this skill when a user asks an agent to create a document file or read text from a workspace document.
+Use this skill when a user asks an agent to create a document file, read text from a workspace document, or convert a workspace document into Markdown.
 
 ## App Scripts
 
-The app exposes one official CLI command plus MCP tools for generation, extraction, references, and view state. Use those surfaces for real work.
+The app exposes one official CLI command plus MCP tools for generation, extraction, Markdown conversion, references, and view state. Use those surfaces for real work.
 
 Implementation scripts behind those surfaces:
 
@@ -17,6 +17,7 @@ Implementation scripts behind those surfaces:
 - MCP entrypoint: `<repo>/apps/document-generator/mcp/server.py`
 - shared service: `<repo>/apps/document-generator/backend/service.py`
 - text extractor: `<repo>/apps/document-generator/backend/extractors.py`
+- Markdown converter: `<repo>/apps/document-generator/backend/markdown_converter.py`
 - DOCX writer: `<repo>/apps/document-generator/backend/generators/docx_generator.py`
 - PPTX writer: `<repo>/apps/document-generator/backend/generators/pptx_generator.py`
 - PDF writer: `<repo>/apps/document-generator/backend/generators/pdf_generator.py`
@@ -41,6 +42,17 @@ Text extraction supports the same modern document formats:
 - `xlsx`
 
 Do not request `xls`; this app intentionally supports only `xlsx` for spreadsheets.
+
+Markdown conversion supports:
+
+- `pdf`
+- `docx`
+- `pptx`
+- `xlsx`
+
+Markdown conversion uses Docling. If `convert_to_markdown` reports that Docling is unavailable, the platform environment needs the `document-generator` Python extra installed.
+
+Markdown conversion runs synchronously through the app entrypoint and accepts source files up to 10 MiB. For larger or scanned-heavy PDFs, ask the user to split or reduce the source before conversion.
 
 ## CLI Procedure
 
@@ -185,6 +197,38 @@ Extraction inputs should identify a workspace file under `storage/uploaded/` or 
   "action": "extract_text",
   "workspace_relative_path": "storage/uploaded/file-id/example.pdf",
   "max_chars": 50000
+}
+```
+
+For document-to-Markdown conversion, prefer:
+
+- CLI command `app.document-generator.document-generator` with action `convert_to_markdown`
+- MCP tool `app.document-generator.document_generator_convert_to_markdown`
+
+Conversion inputs should identify a workspace file under `storage/uploaded/` or `storage/generated/`:
+
+```json
+{
+  "action": "convert_to_markdown",
+  "workspace_relative_path": "storage/uploaded/file-id/example.pdf",
+  "output_filename": "example.md",
+  "return_markdown": false
+}
+```
+
+Expected conversion shape:
+
+```json
+{
+  "status_code": 200,
+  "document": {
+    "format": "md",
+    "filename": "example.md",
+    "workspace_relative_path": "storage/generated/document-generator/markdown/job-id/example.md"
+  },
+  "markdown_path": "storage/generated/document-generator/markdown/job-id/example.md",
+  "manifest_path": "data/<local_app_id>/jobs/job-id.json",
+  "markdown_length": 1234
 }
 ```
 

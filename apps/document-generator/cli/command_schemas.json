@@ -1,0 +1,113 @@
+{
+  "commands": {
+    "document-generator": {
+      "description": "Create DOCX, PPTX, PDF, and XLSX documents, extract text from workspace documents, convert workspace documents to agent-ready Markdown, and manage Document Generator references/view state.",
+      "argument_schema": {
+        "type": "object",
+        "description": "Document Generator command arguments. With no action, generates a document from spec.",
+        "properties": {
+          "action": {
+            "type": "string",
+            "default": "generate_document",
+            "enum": [
+              "generate_document",
+              "validate_spec",
+              "extract_text",
+              "convert_to_markdown",
+              "list_templates",
+              "list_outputs",
+              "view_filter",
+              "set_view_filter",
+              "set_custom_view",
+              "clear_custom_view",
+              "references.manifest",
+              "references.search",
+              "references.resolve",
+              "references.summarize",
+              "health.check"
+            ]
+          },
+          "spec": {
+            "type": "object",
+            "description": "Document generation specification for generate_document or validate_spec."
+          },
+          "workspace_relative_path": {
+            "type": "string",
+            "description": "Input file under storage/uploaded/ or storage/generated/. Required for extract_text and convert_to_markdown; Markdown conversion accepts files up to 10 MiB."
+          },
+          "output_filename": {
+            "type": "string",
+            "description": "Plain Markdown output filename for convert_to_markdown, for example report.md."
+          },
+          "title": {
+            "type": "string",
+            "description": "Optional display title for a converted Markdown artifact."
+          },
+          "metadata": {
+            "type": "object",
+            "description": "Optional caller metadata stored under document.metadata.request_metadata for Markdown conversion."
+          },
+          "return_markdown": {
+            "type": "boolean",
+            "default": false,
+            "description": "When true, include bounded Markdown text in the response. The Markdown file is always written."
+          },
+          "max_return_chars": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200000,
+            "default": 20000,
+            "description": "Maximum Markdown characters returned inline when return_markdown is true."
+          },
+          "max_chars": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200000,
+            "default": 50000,
+            "description": "Maximum extracted text characters returned by extract_text."
+          },
+          "query": {
+            "type": "string",
+            "description": "Search/filter query for list/reference/view actions."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 10
+          },
+          "entity_id": {
+            "type": "string",
+            "description": "Document reference id for reference resolve/summarize actions."
+          },
+          "format": {
+            "type": "string",
+            "enum": ["all", "docx", "pptx", "pdf", "xlsx", "md"],
+            "description": "View filter format."
+          },
+          "refs": {
+            "type": "array",
+            "description": "Document references for set_custom_view.",
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "additionalProperties": true,
+        "examples": [
+          {
+            "action": "convert_to_markdown",
+            "workspace_relative_path": "storage/uploaded/example.pdf",
+            "output_filename": "example.md",
+            "return_markdown": false
+          },
+          {
+            "action": "extract_text",
+            "workspace_relative_path": "storage/generated/report.docx",
+            "max_chars": 50000
+          }
+        ]
+      }
+    }
+  }
+}

@@ -7,7 +7,6 @@ from typing import Any
 from uuid import uuid4
 
 from core.api.app_event_publication import declared_data_event_resources, publish_declared_app_events
-from core.apps.dependencies import resolve_app_dependencies
 from core.apps.errors import AppHostingError, WorkspaceAppBindingNotFoundError
 from core.apps.models import ParsedAppContract
 from core.apps.runtime_event_hooks import dispatch_source_app_runtime_event
@@ -19,6 +18,7 @@ from core.runtime.runtime_threads import create_runtime_thread
 from core.runtime.service import create_runtime_session, record_runtime_event, transition_runtime_session, transition_runtime_turn
 from core.runtime.thread_catalog_events import set_thread_availability
 from core.runtime.turn_submission import interrupt_runtime_provider_turn, release_idle_runtime_processes, submit_runtime_turn_async
+from core.skills.runtime_catalog import runtime_skill_catalog_app_id_for_request
 from core.shared.entrypoints import run_json_entrypoint
 
 
@@ -236,6 +236,13 @@ def _runtime_session_for_request(
         requested_mode=request.get("requested_mode"),
         system_prompt=system_prompt,
         skill_ids=_list_of_text(request.get("skill_ids")),
+        skill_catalog_app_id=runtime_skill_catalog_app_id_for_request(
+            state.app_store,
+            workspace_id=workspace_id,
+            source_app_id=app_id,
+            workspace_store=state.workspace_store,
+            start_path=start_path,
+        ),
         source_app_id=app_id,
         owner_user_id=None,
         created_by_user_id=None,

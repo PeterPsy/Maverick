@@ -1,0 +1,138 @@
+{
+  "commands": {
+    "agents": {
+      "description": "Manage workspace-owned agent roles, agent types, compact catalog reads, prompt previews, and idempotent agent definition upserts.",
+      "argument_schema": {
+        "type": "object",
+        "description": "Agents CLI command arguments. With no arguments, returns operations.manifest.",
+        "properties": {
+          "action": {
+            "type": "string",
+            "default": "operations.manifest",
+            "enum": [
+              "operations.manifest",
+              "catalog.compact",
+              "catalog",
+              "get_agent_definition",
+              "upsert_agent_definition",
+              "preview_prompt",
+              "list_roles",
+              "get_role",
+              "create_role",
+              "update_role",
+              "delete_role",
+              "list_agent_types",
+              "get_agent_type",
+              "create_agent_type",
+              "update_agent_type",
+              "delete_agent_type",
+              "get_common_prompt",
+              "set_common_prompt",
+              "view_filter",
+              "set_view_filter",
+              "set_custom_view",
+              "clear_custom_view",
+              "references.manifest",
+              "references.search",
+              "references.resolve",
+              "references.summarize",
+              "health.check"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "description": "Agent type id for get/upsert. Accepts agent-type-* or a slug that will be normalized to agent-type-*."
+          },
+          "agent_type_id": {
+            "type": "string",
+            "description": "Alias for id."
+          },
+          "entity_id": {
+            "type": "string",
+            "description": "Alias for id when resolving an app reference."
+          },
+          "name": {
+            "type": "string",
+            "description": "Agent definition display name."
+          },
+          "description": {
+            "type": "string",
+            "description": "Compact agent type description."
+          },
+          "instructions": {
+            "type": "string",
+            "description": "Full role prompt instructions. Required when creating a new agent definition."
+          },
+          "role_instructions": {
+            "type": "string",
+            "description": "Alias for instructions."
+          },
+          "prompt": {
+            "type": "string",
+            "description": "Alias for instructions."
+          },
+          "role_id": {
+            "type": "string",
+            "description": "Role prompt id. Defaults to the agent id slug."
+          },
+          "skill_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": []
+          },
+          "trace_verbosity": {
+            "type": "string",
+            "enum": ["compact", "verbose"],
+            "default": "compact"
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          },
+          "entity_type": {
+            "type": "string",
+            "enum": ["agent_type", "role_prompt"]
+          },
+          "query": {
+            "type": "string",
+            "description": "Search text for compact catalog or reference search."
+          },
+          "q": {
+            "type": "string",
+            "description": "Alias for query."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 50
+          },
+          "include_content": {
+            "type": "boolean",
+            "default": false
+          },
+          "include_common_prompt": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "additionalProperties": true,
+        "examples": [
+          {
+            "action": "upsert_agent_definition",
+            "id": "agent-type-example-specialist",
+            "name": "Example Specialist",
+            "instructions": "# Example Specialist\n\nHandle one focused task."
+          },
+          {
+            "action": "catalog.compact",
+            "query": "engineer",
+            "limit": 10
+          }
+        ]
+      }
+    }
+  }
+}

@@ -4,6 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from agent_definitions import (
+    UPSERT_ERROR_HINT,
+    compact_catalog,
+    get_agent_definition,
+    upsert_agent_definition,
+)
 from seeds import seed_defaults
 from store import (
     AgentsValidationError,
@@ -18,6 +24,7 @@ from store import (
     save_role,
     write_common_prompt,
 )
+from surface_manifest import OPERATIONS_MANIFEST
 from view_state import clear_custom_view_payload, load_view_state, set_custom_view_payload, set_view_filter_payload
 
 REFERENCE_MANIFEST = {
@@ -37,6 +44,7 @@ DATA_CHANGED_ACTIONS = {
     "update_agent_type",
     "delete_agent_type",
     "set_common_prompt",
+    "upsert_agent_definition",
 }
 VIEW_STATE_ACTIONS = {"set_view_filter", "set_custom_view", "clear_custom_view"}
 
@@ -47,6 +55,26 @@ def app_events_for_action(action: str) -> list[dict]:
     if action in VIEW_STATE_ACTIONS:
         return [{"type": "maverick.app.data-changed", "resource": "view-state"}]
     return []
+
+
+def app_events_for_result(action: str, result: dict) -> list[dict]:
+    if action == "upsert_agent_definition":
+        changed = result.get("changed") if isinstance(result.get("changed"), dict) else {}
+        created = result.get("created") if isinstance(result.get("created"), dict) else {}
+        if not any(bool(value) for value in changed.values()) and not any(bool(value) for value in created.values()):
+            return []
+    return app_events_for_action(action)
+
+
+def validation_error_payload(error: AgentsValidationError, operation: str) -> dict:
+    payload = {
+        "error": "validation_error",
+        "operation": operation,
+        "detail": str(error),
+    }
+    if operation == "upsert_agent_definition":
+        payload.update(UPSERT_ERROR_HINT)
+    return payload
 
 
 def catalog(data_root: Path) -> dict:
@@ -75,7 +103,7 @@ def prompt_preview(data_root: Path, body: dict) -> dict:
             "content": (
                 f"Name: {agent_type['name']}\n"
                 f"Trace verbosity: {agent_type['trace_verbosity']}\n"
-                f"Skills: {', '.join(agent_type['skill_ids']) if agent_type['skill_ids'] else 'none'}"
+                f"Skills: {', '.join(agent_type['skill_ids']) if agent_type['skill_ids'] else 'all enabled workspace skills'}"
             ),
         },
     ]
@@ -149,10 +177,18 @@ def reference_summarize(data_root: Path, body: dict) -> dict:
 
 
 def handle_action(data_root: Path, body: dict) -> tuple[int, dict]:
-    action = str(body.get("action") or "catalog")
+    action = str(body.get("action") or "operations.manifest")
     seed_defaults(data_root)
+    if action == "operations.manifest":
+        return 200, OPERATIONS_MANIFEST
+    if action == "catalog.compact":
+        return 200, compact_catalog(data_root, body)
     if action in {"catalog", "agent.catalog.get"}:
         return 200, catalog(data_root)
+    if action == "get_agent_definition":
+        return 200, get_agent_definition(data_root, body)
+    if action == "upsert_agent_definition":
+        return 200, upsert_agent_definition(data_root, body)
     if action == "list_roles":
         return 200, {"roles": list_roles(data_root)}
     if action == "get_role":

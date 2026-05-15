@@ -7,8 +7,10 @@ import json
 import os
 from pathlib import Path
 import shutil
+import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 import zipfile
 
 from core.api.platform_host import PlatformHost
@@ -94,6 +96,19 @@ class DocumentGeneratorAppTestCase(unittest.TestCase):
             cwd=APP_ROOT,
         )
 
+    def run_mcp(self, *, data_root: Path, generated_root: Path, tool_name: str, arguments: dict, uploaded_root: Path | None = None) -> dict:
+        return run_json_entrypoint(
+            APP_ROOT / "mcp" / "server.py",
+            payload={
+                "data_root": str(data_root),
+                "uploaded_storage_root": str(uploaded_root) if uploaded_root is not None else "",
+                "generated_storage_root": str(generated_root),
+                "tool_name": tool_name,
+                "arguments": arguments,
+            },
+            cwd=APP_ROOT,
+        )
+
     def test_contract_declares_agent_facing_surfaces(self) -> None:
         parsed = parse_app_contract_file(APP_ROOT)
 
@@ -102,12 +117,57 @@ class DocumentGeneratorAppTestCase(unittest.TestCase):
         self.assertEqual(parsed.contract.entrypoints.frontend, "frontend/dist")
         self.assertEqual(parsed.contract.capabilities.cli_commands, ["document-generator"])
         self.assertIn("maverick_document_generator", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("document_generator_convert_to_markdown", parsed.contract.capabilities.mcp_tools)
         self.assertIn("document_generator_extract_text", parsed.contract.capabilities.mcp_tools)
         self.assertIn("document_generator_set_view_filter", parsed.contract.capabilities.mcp_tools)
         self.assertIn("document-generator-docs", parsed.contract.capabilities.skills)
         self.assertEqual(parsed.contract.capabilities.view_surfaces[0].view_id, "document-generator")
         self.assertEqual(parsed.contract.capabilities.view_surfaces[0].entity_types, ["document"])
+        self.assertTrue((APP_ROOT / "cli" / "command_schemas.json").is_file())
+        self.assertTrue((APP_ROOT / "mcp" / "tool_schemas.json").is_file())
         self.assertTrue((APP_ROOT / "frontend" / "dist" / "index.html").is_file())
+
+    def test_descriptor_sidecars_describe_markdown_conversion(self) -> None:
+        cli_schema = json.loads((APP_ROOT / "cli" / "command_schemas.json").read_text(encoding="utf-8"))
+        mcp_schema = json.loads((APP_ROOT / "mcp" / "tool_schemas.json").read_text(encoding="utf-8"))
+
+        command_properties = cli_schema["commands"]["document-generator"]["argument_schema"]["properties"]
+        tool = mcp_schema["tools"]["document_generator_convert_to_markdown"]
+        tool_input_properties = tool["input_schema"]["properties"]
+        tool_output_properties = tool["output_schema"]["properties"]
+
+        self.assertIn("convert_to_markdown", command_properties["action"]["enum"])
+        self.assertIn("workspace_relative_path", command_properties)
+        self.assertIn("return_markdown", command_properties)
+        self.assertIn("max_return_chars", command_properties)
+        self.assertIn("Docling", tool["description"])
+        self.assertEqual(tool["input_schema"]["required"], ["workspace_relative_path"])
+        self.assertIn("workspace_relative_path", tool_input_properties)
+        self.assertIn("return_markdown", tool_input_properties)
+        self.assertIn("max_return_chars", tool_input_properties)
+        self.assertIn("markdown_path", tool_output_properties)
+        self.assertIn("manifest_path", tool_output_properties)
+        self.assertIn("markdown_truncated", tool_output_properties)
+
+    def test_dedicated_mcp_tool_action_cannot_be_overridden_by_arguments(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data_root = root / "data" / "document-generator"
+            generated_root = root / "storage" / "generated"
+
+            result = self.run_mcp(
+                data_root=data_root,
+                generated_root=generated_root,
+                tool_name="document_generator_convert_to_markdown",
+                arguments={
+                    "action": "validate_spec",
+                    "spec": {"format": "docx", "title": "Wrong action", "sections": []},
+                },
+            )
+
+            self.assertEqual(result["status_code"], 400)
+            self.assertEqual(result["error"], "validation_error")
+            self.assertIn("workspace_relative_path is required", result["detail"])
 
     def test_backend_generates_supported_document_formats(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -169,6 +229,128 @@ class DocumentGeneratorAppTestCase(unittest.TestCase):
             self.assertIn("Delta", combined_text)
             self.assertIn("xlsx text", combined_text)
 
+    def test_markdown_converter_writes_docling_markdown_artifact(self) -> None:
+        backend_path = str(APP_ROOT / "backend")
+        if backend_path not in sys.path:
+            sys.path.insert(0, backend_path)
+        from markdown_converter import convert_workspace_file_to_markdown
+
+        class FakeDoclingDocument:
+            def export_to_markdown(self) -> str:
+                return "# Converted Brief\n\nAgent-ready body."
+
+        class FakeDoclingResult:
+            document = FakeDoclingDocument()
+
+        class FakeDoclingConverter:
+            def convert(self, source: Path) -> FakeDoclingResult:
+                self.source = source
+                return FakeDoclingResult()
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data_root = root / "data" / "document-generator"
+            generated_root = root / "storage" / "generated"
+            source = generated_root / "source.docx"
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_bytes(b"docx placeholder")
+
+            with patch("markdown_converter._load_docling_converter_class", return_value=FakeDoclingConverter), patch(
+                "markdown_converter._docling_version",
+                return_value="test-docling",
+            ):
+                result = convert_workspace_file_to_markdown(
+                    data_root,
+                    None,
+                    generated_root,
+                    {
+                        "workspace_relative_path": "storage/generated/source.docx",
+                        "title": "Converted Brief",
+                        "output_filename": "brief.md",
+                        "return_markdown": True,
+                    },
+                )
+
+            document = result["document"]
+            output_path = root / document["workspace_relative_path"]
+            manifest_path = root / result["manifest_path"]
+
+            self.assertEqual(document["format"], "md")
+            self.assertEqual(result["markdown"], "# Converted Brief\n\nAgent-ready body.")
+            self.assertFalse(result["markdown_truncated"])
+            self.assertEqual(result["markdown_path"], document["workspace_relative_path"])
+            self.assertTrue(output_path.is_file())
+            self.assertEqual(output_path.read_text(encoding="utf-8"), "# Converted Brief\n\nAgent-ready body.\n")
+            self.assertTrue(manifest_path.is_file())
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(manifest["metadata"]["engine"], "docling")
+            self.assertEqual(manifest["metadata"]["engine_version"], "test-docling")
+            self.assertEqual(manifest["metadata"]["source_workspace_relative_path"], "storage/generated/source.docx")
+
+    def test_markdown_converter_rejects_large_sync_sources_before_docling(self) -> None:
+        backend_path = str(APP_ROOT / "backend")
+        if backend_path not in sys.path:
+            sys.path.insert(0, backend_path)
+        from errors import DocumentValidationError
+        from markdown_converter import MAX_MARKDOWN_SOURCE_FILE_BYTES, convert_workspace_file_to_markdown
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data_root = root / "data" / "document-generator"
+            generated_root = root / "storage" / "generated"
+            source = generated_root / "large.pdf"
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_bytes(b"0" * (MAX_MARKDOWN_SOURCE_FILE_BYTES + 1))
+
+            with patch("markdown_converter._load_docling_converter_class", side_effect=AssertionError("Docling should not load")):
+                with self.assertRaises(DocumentValidationError) as context:
+                    convert_workspace_file_to_markdown(
+                        data_root,
+                        None,
+                        generated_root,
+                        {"workspace_relative_path": "storage/generated/large.pdf"},
+                    )
+
+            self.assertIn("10 MiB", str(context.exception))
+
+    def test_markdown_converter_manifest_path_uses_local_app_id(self) -> None:
+        backend_path = str(APP_ROOT / "backend")
+        if backend_path not in sys.path:
+            sys.path.insert(0, backend_path)
+        from markdown_converter import convert_workspace_file_to_markdown
+
+        class FakeDoclingDocument:
+            def export_to_markdown(self) -> str:
+                return "Converted body."
+
+        class FakeDoclingResult:
+            document = FakeDoclingDocument()
+
+        class FakeDoclingConverter:
+            def convert(self, source: Path) -> FakeDoclingResult:
+                return FakeDoclingResult()
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            local_app_id = "document-tools"
+            data_root = root / "data" / local_app_id
+            generated_root = root / "storage" / "generated"
+            source = generated_root / "source.pdf"
+            source.parent.mkdir(parents=True, exist_ok=True)
+            source.write_bytes(b"%PDF-1.4 placeholder")
+
+            with patch("markdown_converter._load_docling_converter_class", return_value=FakeDoclingConverter):
+                result = convert_workspace_file_to_markdown(
+                    data_root,
+                    None,
+                    generated_root,
+                    {"workspace_relative_path": "storage/generated/source.pdf"},
+                    local_app_id=local_app_id,
+                )
+
+            self.assertTrue((root / result["manifest_path"]).is_file())
+            self.assertTrue(result["manifest_path"].startswith(f"data/{local_app_id}/jobs/"))
+
     def test_backend_extract_text_rejects_paths_outside_workspace_storage(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -208,8 +390,14 @@ class DocumentGeneratorAppTestCase(unittest.TestCase):
         frontend_status, frontend_payload, _headers = self.invoke(app, path="/apps/document-generator/", cookie=cookie)
 
         self.assertIn("app.document-generator.maverick_document_generator", [tool.tool_name for tool in tools])
+        self.assertIn("app.document-generator.document_generator_convert_to_markdown", [tool.tool_name for tool in tools])
         self.assertIn("app.document-generator.document_generator_extract_text", [tool.tool_name for tool in tools])
         self.assertIn("app.document-generator.document-generator", [command.command_id for command in commands])
+        markdown_tool = next(tool for tool in tools if tool.tool_name == "app.document-generator.document_generator_convert_to_markdown")
+        document_command = next(command for command in commands if command.command_id == "app.document-generator.document-generator")
+        self.assertIn("agent-ready Markdown", markdown_tool.description)
+        self.assertIn("workspace_relative_path", markdown_tool.input_schema["properties"])
+        self.assertIn("convert_to_markdown", document_command.argument_schema["properties"]["action"]["enum"])
         self.assertIn("document-generator-docs", [skill.skill_id for skill in skills])
         self.assertEqual(frontend_status, 200)
         self.assertIn(b"Document Generator", frontend_payload)

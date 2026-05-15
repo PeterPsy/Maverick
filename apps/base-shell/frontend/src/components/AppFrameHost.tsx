@@ -28,6 +28,7 @@ type DependencyCache = Record<string, AppDependenciesPayload>;
 const DEPENDENCY_CACHE_STORAGE_KEY = "maverick.baseShell.appDependencies";
 const DEPENDENCY_DEBUG_STORAGE_KEY = "maverick.baseShell.debug.dependencies";
 const DEPENDENCY_LOG_PREFIX = "[Maverick dependencies]";
+const APP_READY_LOAD_FALLBACK_MS = 900;
 
 export function AppFrameHost({
   activeApp,
@@ -47,23 +48,33 @@ export function AppFrameHost({
     { app: activeApp, mountKey: activeMountKey },
   ]);
   const [frameRevisions, setFrameRevisions] = useState<Record<string, number>>({});
+  const [readyFrames, setReadyFrames] = useState<Record<string, boolean>>(() => ({
+    [appFrameInstanceKey(activeMountKey, 0)]: true,
+  }));
+  const [visibleFrameKey, setVisibleFrameKey] = useState<string | null>(() => appFrameInstanceKey(activeMountKey, 0));
   const [dependencies, setDependencies] = useState<AppDependenciesPayload | null>(null);
   const [dependencyCache, setDependencyCache] = useState<DependencyCache>(() => loadDependencyCache());
   const [dependencyError, setDependencyError] = useState<string | null>(null);
   const [isDependencyPanelOpen, setIsDependencyPanelOpen] = useState(false);
   const [isDependencyLoading, setIsDependencyLoading] = useState(false);
   const frameRefs = useRef<Record<string, HTMLIFrameElement | null>>({});
+  const readyFallbackTimersRef = useRef<Record<string, number>>({});
   const latestNavigationRef = useRef<{ appId: string; params: AppFrameParams }>({
     appId: activeApp.app_id,
     params: activeAppParams,
   });
   const latestDependenciesRef = useRef<AppDependenciesPayload | null>(null);
   const dependencyCacheRef = useRef<DependencyCache>(dependencyCache);
-  const readyNavigationSignaturesRef = useRef<Record<string, string>>({});
+  const readyDeliveredNavigationSignaturesRef = useRef<Record<string, string>>({});
   const paramsSignature = JSON.stringify(activeAppParams);
   const hasDeclaredDependencies = activeApp.requires.length > 0;
   const dependencyStatus = dependencyError ? "error" : dependencies?.status || (isDependencyLoading ? "loading" : "unknown");
   const activeDependencyCacheKey = dependencyCacheKey(activeWorkspaceId, activeApp.app_id);
+  const activeFrameRevision = frameRevisions[activeMountKey] || 0;
+  const activeFrameKey = appFrameInstanceKey(activeMountKey, activeFrameRevision);
+  const activeFrameReady = Boolean(readyFrames[activeFrameKey]);
+  const visibleFrameIsMounted = mountedApps.some(({ mountKey }) => appFrameInstanceKey(mountKey, frameRevisions[mountKey] || 0) === visibleFrameKey);
+  const showPendingState = !visibleFrameIsMounted && !activeFrameReady;
 
   async function refreshDependencies(appId = activeApp.app_id) {
     setIsDependencyLoading(true);
@@ -138,21 +149,46 @@ export function AppFrameHost({
   }, [activeApp, activeMountKey, activeWorkspaceId]);
 
   useEffect(() => {
+    if (activeFrameReady) {
+      setVisibleFrameKey(activeFrameKey);
+    } else if (!visibleFrameIsMounted) {
+      setVisibleFrameKey(null);
+    }
+  }, [activeFrameKey, activeFrameReady, visibleFrameIsMounted]);
+
+  useEffect(() => {
+    const mountedFrameKeys = new Set(
+      mountedApps.map(({ mountKey }) => appFrameInstanceKey(mountKey, frameRevisions[mountKey] || 0)),
+    );
+    setReadyFrames((current) => filterFrameRecord(current, mountedFrameKeys));
+    Object.keys(readyDeliveredNavigationSignaturesRef.current).forEach((frameKey) => {
+      if (!mountedFrameKeys.has(frameKey)) {
+        delete readyDeliveredNavigationSignaturesRef.current[frameKey];
+      }
+    });
+    Object.keys(readyFallbackTimersRef.current).forEach((frameKey) => {
+      if (!mountedFrameKeys.has(frameKey)) {
+        clearReadyFallbackTimer(frameKey);
+      }
+    });
+  }, [frameRevisions, mountedApps]);
+
+  useEffect(() => {
     latestNavigationRef.current = { appId: activeApp.app_id, params: activeAppParams };
     postNavigation(frameRefs.current[activeApp.app_id], activeApp.app_id, activeAppParams);
-    readyNavigationSignaturesRef.current[activeApp.app_id] = appNavigationSignature(activeApp.app_id, activeAppParams);
     postDependencies(frameRefs.current[activeApp.app_id], activeApp.app_id, latestDependenciesRef.current);
   }, [activeApp.app_id, paramsSignature]);
 
   useEffect(() => {
-    mountedApps.forEach(({ app }) => {
+    mountedApps.forEach(({ app, mountKey }) => {
+      const frameKey = appFrameInstanceKey(mountKey, frameRevisions[mountKey] || 0);
       syncAppFrameShellLayout(frameRefs.current[app.app_id], isMobileLayout);
       postMaverickFrameVisibility(frameRefs.current[app.app_id], {
         app_id: app.app_id,
-        visible: app.app_id === activeApp.app_id,
+        visible: frameKey === visibleFrameKey,
       });
     });
-  }, [activeApp.app_id, isMobileLayout, mountedApps]);
+  }, [frameRevisions, isMobileLayout, mountedApps, visibleFrameKey]);
 
   useEffect(() => {
     latestDependenciesRef.current = null;
@@ -202,7 +238,6 @@ export function AppFrameHost({
       }
       window.postMessage(event, window.location.origin);
       const eventMountKey = `${activeWorkspaceId}:${event.owner_app_id}`;
-      delete readyNavigationSignaturesRef.current[event.owner_app_id];
       setFrameRevisions((current) => ({
         ...current,
         [eventMountKey]: (current[eventMountKey] || 0) + 1,
@@ -247,12 +282,20 @@ export function AppFrameHost({
         if (!frame || event.source !== frame.contentWindow) {
           return;
         }
+        const frameKey = frameKeyForApp(payload.app_id, mountedApps, frameRevisions);
+        if (frameKey) {
+          markFrameReady(frameKey);
+          if (latestNavigationRef.current.appId === payload.app_id) {
+            setVisibleFrameKey(frameKey);
+          }
+        }
         const latestNavigation = latestNavigationRef.current;
-        if (latestNavigation.appId === payload.app_id) {
+        if (latestNavigation.appId === payload.app_id && frameKey) {
           const navigationSignature = appNavigationSignature(payload.app_id, latestNavigation.params);
-          if (readyNavigationSignaturesRef.current[payload.app_id] !== navigationSignature) {
-            postNavigation(frame, payload.app_id, latestNavigation.params);
-            readyNavigationSignaturesRef.current[payload.app_id] = navigationSignature;
+          if (readyDeliveredNavigationSignaturesRef.current[frameKey] !== navigationSignature) {
+            if (postNavigation(frame, payload.app_id, latestNavigation.params)) {
+              readyDeliveredNavigationSignaturesRef.current[frameKey] = navigationSignature;
+            }
           }
           postDependencies(frame, payload.app_id, latestDependenciesRef.current);
         }
@@ -267,7 +310,33 @@ export function AppFrameHost({
 
     window.addEventListener("message", handleAppMessage);
     return () => window.removeEventListener("message", handleAppMessage);
-  }, [onOpenApp]);
+  }, [frameRevisions, mountedApps, onOpenApp]);
+
+  useEffect(() => {
+    return () => {
+      Object.keys(readyFallbackTimersRef.current).forEach((frameKey) => clearReadyFallbackTimer(frameKey));
+    };
+  }, []);
+
+  function clearReadyFallbackTimer(frameKey: string) {
+    const timer = readyFallbackTimersRef.current[frameKey];
+    if (timer !== undefined) {
+      window.clearTimeout(timer);
+      delete readyFallbackTimersRef.current[frameKey];
+    }
+  }
+
+  function markFrameReady(frameKey: string) {
+    clearReadyFallbackTimer(frameKey);
+    setReadyFrames((current) => (current[frameKey] ? current : { ...current, [frameKey]: true }));
+  }
+
+  function scheduleFrameReadyFallback(frameKey: string) {
+    clearReadyFallbackTimer(frameKey);
+    readyFallbackTimersRef.current[frameKey] = window.setTimeout(() => {
+      markFrameReady(frameKey);
+    }, APP_READY_LOAD_FALLBACK_MS);
+  }
 
   return (
     <section className="bs-workspace-app-panel" aria-label={`${activeApp.name} app`}>
@@ -295,22 +364,27 @@ export function AppFrameHost({
           </button>
         ) : null}
         {mountedApps.map(({ app, mountKey }) => {
-          const isActive = app.app_id === activeApp.app_id;
           const revision = frameRevisions[mountKey] || 0;
+          const frameKey = appFrameInstanceKey(mountKey, revision);
+          const isDisplayed = frameKey === visibleFrameKey;
           return (
             <iframe
-              aria-hidden={!isActive}
-              className={`bs-workspace-app-frame ${isActive ? "is-active" : "is-hidden"}`}
-              key={`${mountKey}:${revision}`}
+              allow="fullscreen"
+              allowFullScreen
+              aria-hidden={!isDisplayed}
+              className={`bs-workspace-app-frame ${isDisplayed ? "is-active" : "is-hidden"}`}
+              key={frameKey}
               onLoad={(event) => {
                 syncAppFrameShellLayout(event.currentTarget, isMobileLayout);
                 postMaverickFrameVisibility(event.currentTarget, {
                   app_id: app.app_id,
-                  visible: isActive,
+                  visible: isDisplayed,
                 });
                 if (app.app_id === activeApp.app_id) {
                   postNavigation(event.currentTarget, app.app_id, activeAppParams);
-                  readyNavigationSignaturesRef.current[app.app_id] = appNavigationSignature(app.app_id, activeAppParams);
+                }
+                if (!readyFrames[frameKey]) {
+                  scheduleFrameReadyFallback(frameKey);
                 }
               }}
               ref={(frame) => {
@@ -322,6 +396,11 @@ export function AppFrameHost({
             />
           );
         })}
+        {showPendingState ? (
+          <div className="bs-workspace-app-pending" role="status" aria-label={`Loading ${activeApp.name}`}>
+            <span className="bs-workspace-app-pending__mark" aria-hidden="true" />
+          </div>
+        ) : null}
         {hasDeclaredDependencies ? (
           <AppDependencySetup
             dependencies={dependencies}
@@ -354,9 +433,30 @@ export function AppFrameHost({
   );
 }
 
-function postNavigation(frame: HTMLIFrameElement | null | undefined, appId: string, params: AppFrameParams) {
+function appFrameInstanceKey(mountKey: string, revision: number): string {
+  return `${mountKey}:${revision}`;
+}
+
+function frameKeyForApp(
+  appId: string,
+  mountedApps: Array<{ app: AppRegistryItem; mountKey: string }>,
+  frameRevisions: Record<string, number>,
+): string | null {
+  const mountedApp = mountedApps.find(({ app }) => app.app_id === appId);
+  if (!mountedApp) {
+    return null;
+  }
+  return appFrameInstanceKey(mountedApp.mountKey, frameRevisions[mountedApp.mountKey] || 0);
+}
+
+function filterFrameRecord(current: Record<string, boolean>, mountedFrameKeys: Set<string>): Record<string, boolean> {
+  const next = Object.fromEntries(Object.entries(current).filter(([frameKey]) => mountedFrameKeys.has(frameKey)));
+  return Object.keys(next).length === Object.keys(current).length ? current : next;
+}
+
+function postNavigation(frame: HTMLIFrameElement | null | undefined, appId: string, params: AppFrameParams): boolean {
   if (!frame?.contentWindow) {
-    return;
+    return false;
   }
   postToMaverickFrame(
     frame,
@@ -366,6 +466,7 @@ function postNavigation(frame: HTMLIFrameElement | null | undefined, appId: stri
       params: normalizeParams(params),
     },
   );
+  return true;
 }
 
 function postDependencies(

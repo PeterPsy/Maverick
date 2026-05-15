@@ -7,6 +7,7 @@ This document explains the current supply-chain posture for the first public Mav
 ## Current Policy
 
 - root Python dependencies are declared in `pyproject.toml`
+- root Python optional extras are declared in `pyproject.toml` and included in the direct dependency inventory
 - developer verification dependencies are mirrored in `requirements-dev.txt`
 - built-in frontend apps keep per-app `package.json` and `package-lock.json`
 - the repository includes GitHub Actions CI and secret-scanning workflows

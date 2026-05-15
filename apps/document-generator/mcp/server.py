@@ -15,6 +15,7 @@ from service import app_events_for_action, handle_action
 payload = json.loads(sys.stdin.read() or "{}")
 arguments = payload.get("arguments") if isinstance(payload.get("arguments"), dict) else {}
 tool_actions = {
+    "document_generator_convert_to_markdown": "convert_to_markdown",
     "document_generator_extract_text": "extract_text",
     "document_generator_reference_manifest": "references.manifest",
     "document_generator_reference_search": "references.search",
@@ -25,10 +26,22 @@ tool_actions = {
     "document_generator_set_custom_view": "set_custom_view",
     "document_generator_clear_custom_view": "clear_custom_view",
 }
-body = {"action": tool_actions.get(str(payload.get("tool_name") or ""), arguments.get("action") or "generate_document"), **arguments}
+tool_name = str(payload.get("tool_name") or "")
+body = dict(arguments)
+mapped_action = tool_actions.get(tool_name)
+if mapped_action is None:
+    body.setdefault("action", "generate_document")
+else:
+    body["action"] = mapped_action
 try:
     uploaded_root = Path(payload["uploaded_storage_root"]) if payload.get("uploaded_storage_root") else None
-    status_code, result = handle_action(Path(payload["data_root"]), Path(payload["generated_storage_root"]), body, uploaded_root)
+    status_code, result = handle_action(
+        Path(payload["data_root"]),
+        Path(payload["generated_storage_root"]),
+        body,
+        uploaded_root,
+        local_app_id=str(payload.get("app_id") or "document-generator"),
+    )
 except DocumentValidationError as error:
     status_code, result = 400, {"error": "validation_error", "detail": str(error)}
 

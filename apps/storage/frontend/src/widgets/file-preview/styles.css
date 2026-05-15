@@ -65,6 +65,16 @@ button {
   color: var(--widget-text);
 }
 
+.file-widget.is-fullscreen,
+.file-widget:fullscreen,
+.file-widget:-webkit-full-screen {
+  width: 100vw;
+  height: 100dvh;
+  min-height: 0;
+  border-radius: 0;
+  background: #101114;
+}
+
 .file-widget--state {
   display: grid;
   place-items: center;
@@ -92,6 +102,14 @@ button {
   white-space: nowrap;
 }
 
+.file-widget__actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.16rem;
+  min-width: 0;
+}
+
 .file-widget__title-button {
   display: block;
   width: 100%;
@@ -112,7 +130,7 @@ button {
   outline: none;
 }
 
-.file-widget__open {
+.file-widget__action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -123,8 +141,8 @@ button {
   color: var(--widget-muted);
 }
 
-.file-widget__open:hover,
-.file-widget__open:focus-visible {
+.file-widget__action:hover,
+.file-widget__action:focus-visible {
   background: rgba(255, 255, 255, 0.06);
   color: var(--widget-text);
   outline: none;
@@ -331,10 +349,6 @@ button {
   background: var(--widget-panel);
 }
 
-.file-widget__fallback.is-loading-preview .storage-icon {
-  animation: file-widget-preview-icon-pulse 1.25s ease-in-out infinite;
-}
-
 .file-widget__fallback strong {
   font-size: 0.92rem;
   font-weight: 600;
@@ -396,17 +410,6 @@ button {
   margin-top: 0.2rem;
 }
 
-@keyframes file-widget-preview-icon-pulse {
-  0%,
-  100% {
-    opacity: 0.72;
-  }
-
-  50% {
-    opacity: 1;
-  }
-}
-
 @keyframes file-widget-skeleton-pulse {
   0%,
   100% {
@@ -415,5 +418,48 @@ button {
 
   50% {
     opacity: 0.82;
+  }
+}
+
+@media (max-width: 780px) {
+  .file-widget {
+    border-radius: 0;
+  }
+
+  .file-widget__bar {
+    align-items: start;
+    gap: 0.4rem;
+    min-height: 2.8rem;
+    padding: 0.46rem max(0.5rem, env(safe-area-inset-right)) 0.42rem max(0.72rem, env(safe-area-inset-left));
+  }
+
+  .file-widget__bar h3 {
+    overflow: visible;
+    overflow-wrap: anywhere;
+    font-size: 0.88rem;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .file-widget__title-button {
+    overflow: visible;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .file-widget__actions {
+    gap: 0.08rem;
+    align-self: start;
+    justify-self: end;
+  }
+
+  .file-widget__action {
+    width: 2.18rem;
+    height: 2.18rem;
+  }
+
+  .file-widget__document {
+    border-radius: 0;
   }
 }

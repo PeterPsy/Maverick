@@ -316,6 +316,8 @@
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
   margin: 0;
@@ -326,6 +328,10 @@
     )
     clamp(0.85rem, 2.2vw, 1.45rem)
     calc(var(--chatapp-composer-overlay-height, 0px) + 1.35rem);
+}
+
+.chatapp-chat-scroll__inner::-webkit-scrollbar {
+  display: none;
 }
 
 .chatapp-chat-scroll__inner--centered {

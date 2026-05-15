@@ -9,6 +9,12 @@ function readStyle(filename: string) {
   return readFileSync(resolve(currentDir, filename), "utf8");
 }
 
+function cssBlock(styles: string, selector: string): string {
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = styles.match(new RegExp(`${escapedSelector}\\s*{([\\s\\S]*?)}`));
+  return match?.[1] || "";
+}
+
 describe("mobile chat composer layout", () => {
   it("collapses the normal composer on mobile and opens it on focus", () => {
     const responsiveStyles = readStyle("responsive.css");
@@ -56,5 +62,15 @@ describe("mobile chat composer layout", () => {
     expect(transcriptStyles).toContain("color: inherit;");
     expect(transcriptStyles).toContain(".chatapp-human-message__attachments .chatapp-attachment-card__icon");
     expect(transcriptStyles).toContain("color: currentColor;");
+  });
+
+  it("hides the normal chat transcript scrollbar without disabling scrolling", () => {
+    const layoutStyles = readStyle("chat/layout.css");
+    const transcriptBlock = cssBlock(layoutStyles, ".chatapp-chat-scroll__inner");
+
+    expect(transcriptBlock).toContain("overflow-y: auto;");
+    expect(transcriptBlock).toContain("scrollbar-width: none;");
+    expect(transcriptBlock).toContain("-ms-overflow-style: none;");
+    expect(layoutStyles).toMatch(/\.chatapp-chat-scroll__inner::-webkit-scrollbar\s*{[\s\S]*display:\s*none;/);
   });
 });

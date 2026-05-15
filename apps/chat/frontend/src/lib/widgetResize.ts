@@ -1,5 +1,5 @@
 export const STRUCTURED_WIDGET_MIN_HEIGHT_PX = 140;
-export const STRUCTURED_WIDGET_MAX_HEIGHT_PX = 1040;
+export const STRUCTURED_WIDGET_MAX_HEIGHT_PX = 520;
 
 export function boundedWidgetHeightPx(value: unknown): number | null {
   if (typeof value !== "string") {

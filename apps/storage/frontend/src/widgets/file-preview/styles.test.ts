@@ -21,9 +21,10 @@ describe('storage file preview widget styles', () => {
 
   it('keeps the document surface tall enough for previews', () => {
     const styles = readStyle('styles.css');
+    const source = readStyle('main.tsx');
 
-    expect(styles).toContain('--widget-max-document-height: 65rem;');
-    expect(styles).toContain('min-height: 26.25rem;');
+    expect(styles).toContain('min-height: 20rem;');
+    expect(source).toContain('const WIDGET_MAX_HEIGHT_PX = 520;');
     expect(styles).not.toContain('dvh');
   });
 
@@ -34,5 +35,14 @@ describe('storage file preview widget styles', () => {
     expect(styles).toContain('scrollbar-width: none;');
     expect(styles).toContain('.file-widget__document.is-scrolling');
     expect(styles).toContain('.file-widget__document.is-scrolling::-webkit-scrollbar-thumb');
+  });
+
+  it('keeps open-in-storage on the title action instead of the whole document', () => {
+    const source = readStyle('main.tsx');
+
+    expect(source).toContain('className="file-widget__bar"');
+    expect(source).toContain('className="file-widget__open"');
+    expect(source).not.toContain('role="button"');
+    expect(source).not.toContain('handleDocumentClick');
   });
 });

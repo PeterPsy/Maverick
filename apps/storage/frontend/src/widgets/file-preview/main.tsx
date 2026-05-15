@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import type { KeyboardEvent, MouseEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import { callBackend, decodeBase64, readFile } from '../../storageApi';
 import { iconForKind, kindLabels } from '../../storageMeta';
@@ -15,8 +14,8 @@ type WidgetContext = {
 };
 
 const PREVIEW_BYTES = 8 * 1024 * 1024;
-const WIDGET_MIN_HEIGHT_PX = 420;
-const WIDGET_MAX_HEIGHT_PX = 1040;
+const WIDGET_MIN_HEIGHT_PX = 320;
+const WIDGET_MAX_HEIGHT_PX = 520;
 
 function contextToken() {
   const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;
@@ -73,7 +72,8 @@ function postWidgetResize(element: HTMLElement, scrollElement?: HTMLElement | nu
         scrollElement.firstElementChild instanceof HTMLElement ? scrollElement.firstElementChild.scrollHeight : 0
       )
     : 0;
-  const contentHeight = Math.max(element.scrollHeight, visibleHeight, scrollHeight);
+  const chromeHeight = scrollElement ? Math.max(0, element.scrollHeight - scrollElement.clientHeight) : 0;
+  const contentHeight = Math.max(element.scrollHeight, visibleHeight, scrollHeight + chromeHeight);
   const height = Math.min(WIDGET_MAX_HEIGHT_PX, Math.max(WIDGET_MIN_HEIGHT_PX, contentHeight));
   window.parent?.postMessage(
     {
@@ -84,12 +84,6 @@ function postWidgetResize(element: HTMLElement, scrollElement?: HTMLElement | nu
       width: '100%'
     },
     window.location.origin
-  );
-}
-
-function isInteractiveTarget(target: EventTarget | null) {
-  return target instanceof Element && Boolean(
-    target.closest('a, button, input, textarea, select, summary, video, audio, iframe, [contenteditable="true"]')
   );
 }
 
@@ -188,22 +182,6 @@ function StorageFilePreviewWidget() {
     };
   }, []);
 
-  const openFile = () => {
-    if (file) openStorage(file);
-  };
-
-  const handleDocumentClick = (event: MouseEvent<HTMLElement>) => {
-    if (isInteractiveTarget(event.target)) return;
-    openFile();
-  };
-
-  const handleDocumentKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    if (isInteractiveTarget(event.target)) return;
-    if (event.key !== 'Enter' && event.key !== ' ') return;
-    event.preventDefault();
-    openFile();
-  };
-
   const handleDocumentScroll = () => {
     setIsScrolling(true);
     if (scrollIdleTimerRef.current !== null) window.clearTimeout(scrollIdleTimerRef.current);
@@ -222,14 +200,20 @@ function StorageFilePreviewWidget() {
 
   return (
     <main className="file-widget" ref={rootRef}>
+      <header className="file-widget__bar">
+        <h3>{file.name}</h3>
+        <button
+          className="file-widget__open"
+          type="button"
+          onClick={() => openStorage(file)}
+          aria-label={`Open ${file.name} in Storage`}
+        >
+          <Icon name="open_in_new" />
+        </button>
+      </header>
       <section
         className={`file-widget__document ${isScrolling ? 'is-scrolling' : ''}`}
         ref={documentRef}
-        role="button"
-        tabIndex={0}
-        aria-label={`Open ${file.name} in Storage`}
-        onClick={handleDocumentClick}
-        onKeyDown={handleDocumentKeyDown}
         onScroll={handleDocumentScroll}
       >
         <Preview file={file} loading={previewLoading} previewUrl={previewUrl} previewText={previewText} />

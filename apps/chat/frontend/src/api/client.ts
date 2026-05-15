@@ -461,7 +461,53 @@ export function getAppDependencies(consumerAppId: string): Promise<AppDependenci
 
 export function selectedDependencyProviderAppId(payload: AppDependenciesPayload, alias: string): string {
   const dependency = payload.dependencies.find((item) => item.alias === alias);
-  return dependency?.selected_provider_app_ids[0] || dependency?.candidates[0]?.app_id || "";
+  return selectedProviderIdsForDependency(dependency)[0] || "";
+}
+
+export function selectedSharedDependencyProviderAppId(payload: AppDependenciesPayload, aliases: string[]): string {
+  const dependencies = aliases
+    .map((alias) => payload.dependencies.find((item) => item.alias === alias))
+    .filter((item): item is DependencyResolutionItem => Boolean(item));
+  if (dependencies.length !== aliases.length) {
+    return "";
+  }
+  const [primary, ...rest] = dependencies;
+  for (const providerAppId of selectedProviderIdsForDependency(primary)) {
+    if (rest.every((dependency) => selectedProviderIdsForDependency(dependency).includes(providerAppId))) {
+      return providerAppId;
+    }
+  }
+  return "";
+}
+
+function selectedProviderIdsForDependency(dependency: DependencyResolutionItem | undefined): string[] {
+  if (!dependency) {
+    return [];
+  }
+  const backendProviderIds = backendCandidateProviderIds(dependency);
+  if (dependency.selected_provider_app_ids.length) {
+    return dependency.selected_provider_app_ids.filter((providerAppId) => backendProviderIds.includes(providerAppId));
+  }
+  if (canUseAutomaticDependencyProvider(dependency)) {
+    return backendProviderIds;
+  }
+  return [];
+}
+
+function canUseAutomaticDependencyProvider(dependency: DependencyResolutionItem): boolean {
+  return (
+    dependency.status === "optional_unset" &&
+    dependency.cardinality === "one" &&
+    dependency.stale_provider_app_ids.length === 0 &&
+    !dependency.blocked_reason &&
+    backendCandidateProviderIds(dependency).length > 0
+  );
+}
+
+function backendCandidateProviderIds(dependency: DependencyResolutionItem): string[] {
+  return dependency.candidates
+    .filter((candidate) => candidate.surfaces.includes("backend"))
+    .map((candidate) => candidate.app_id);
 }
 
 function normalizeAgentType(value: unknown): AgentTypeSummary {

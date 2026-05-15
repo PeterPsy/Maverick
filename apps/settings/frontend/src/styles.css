@@ -855,6 +855,116 @@ button.settings-adapter-card {
   scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
 }
 
+.settings-app-link-list,
+.settings-app-link-dependencies,
+.settings-app-link-candidates {
+  display: grid;
+  gap: 10px;
+}
+
+.settings-app-link-consumer {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--maverick-border);
+  border-radius: var(--maverick-control-radius);
+  background: rgba(255, 255, 255, 0.035);
+  padding: 12px;
+}
+
+.settings-app-link-consumer__header,
+.settings-app-link-row__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.settings-app-link-row {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--maverick-border);
+  padding-top: 12px;
+}
+
+.settings-app-link-row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.settings-app-link-row__copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.18rem;
+  margin-right: auto;
+}
+
+.settings-app-link-row__copy strong,
+.settings-app-link-candidate strong {
+  overflow: hidden;
+  color: var(--maverick-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-app-link-row__copy small,
+.settings-app-link-candidate small {
+  color: var(--maverick-text-muted);
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.settings-app-link-candidate {
+  display: grid;
+  grid-template-columns: auto 2.2rem minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid var(--maverick-border);
+  border-radius: var(--maverick-control-radius);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 10px;
+}
+
+.settings-app-link-candidate.is-selected {
+  border-color: rgba(255, 255, 255, 0.26);
+  background: rgba(255, 255, 255, 0.075);
+}
+
+.settings-app-link-candidate input {
+  width: auto;
+  min-height: auto;
+  accent-color: var(--maverick-accent);
+}
+
+.settings-app-link-candidate span {
+  display: grid;
+  min-width: 0;
+  gap: 0.16rem;
+}
+
+.settings-app-link-logo {
+  display: inline-grid;
+  place-items: center;
+  width: 2.2rem;
+  height: 2.2rem;
+  overflow: hidden;
+  border: 1px solid var(--maverick-border);
+  border-radius: 0.78rem;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: var(--maverick-inner-edge);
+  color: var(--maverick-accent);
+}
+
+.settings-app-link-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.settings-app-link-logo .material-symbols-rounded {
+  font-size: 1.1rem;
+}
+
 .settings-platform-runtime-list::-webkit-scrollbar {
   width: 8px;
 }

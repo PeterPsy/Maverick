@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { AppDependenciesPayload, AppRegistryItem, getAppDependencies, saveAppDependencySelection } from "../api";
+import { AppDependenciesPayload, AppRegistryItem, getAppDependencies } from "../api";
 import { MAVERICK_IFRAME_SANDBOX, postMaverickFrameVisibility, postToMaverickFrame } from "../iframePolicy";
 import { syncAppFrameShellLayout } from "../lib/appFrameShellLayout";
-import { AppDependencySetup } from "./AppDependencySetup";
 
 type AppFrameParams = Record<string, string | boolean | null>;
 const APP_EVENTS_WS_PATH = "/api/apps/events/ws";
@@ -54,9 +53,6 @@ export function AppFrameHost({
   const [visibleFrameKey, setVisibleFrameKey] = useState<string | null>(() => appFrameInstanceKey(activeMountKey, 0));
   const [dependencies, setDependencies] = useState<AppDependenciesPayload | null>(null);
   const [dependencyCache, setDependencyCache] = useState<DependencyCache>(() => loadDependencyCache());
-  const [dependencyError, setDependencyError] = useState<string | null>(null);
-  const [isDependencyPanelOpen, setIsDependencyPanelOpen] = useState(false);
-  const [isDependencyLoading, setIsDependencyLoading] = useState(false);
   const frameRefs = useRef<Record<string, HTMLIFrameElement | null>>({});
   const readyFallbackTimersRef = useRef<Record<string, number>>({});
   const latestNavigationRef = useRef<{ appId: string; params: AppFrameParams }>({
@@ -68,7 +64,6 @@ export function AppFrameHost({
   const readyDeliveredNavigationSignaturesRef = useRef<Record<string, string>>({});
   const paramsSignature = JSON.stringify(activeAppParams);
   const hasDeclaredDependencies = activeApp.requires.length > 0;
-  const dependencyStatus = dependencyError ? "error" : dependencies?.status || (isDependencyLoading ? "loading" : "unknown");
   const activeDependencyCacheKey = dependencyCacheKey(activeWorkspaceId, activeApp.app_id);
   const activeFrameRevision = frameRevisions[activeMountKey] || 0;
   const activeFrameKey = appFrameInstanceKey(activeMountKey, activeFrameRevision);
@@ -77,7 +72,6 @@ export function AppFrameHost({
   const showPendingState = !visibleFrameIsMounted && !activeFrameReady;
 
   async function refreshDependencies(appId = activeApp.app_id) {
-    setIsDependencyLoading(true);
     logDependencySetup("fetch:start", {
       appId,
       cacheKey: dependencyCacheKey(activeWorkspaceId, appId),
@@ -91,7 +85,6 @@ export function AppFrameHost({
         dependencyCount: payload.dependencies.length,
       });
       setDependencies(payload);
-      setDependencyError(null);
       latestDependenciesRef.current = payload;
       updateDependencyCache(dependencyCacheKey(activeWorkspaceId, appId), payload);
       postDependencies(frameRefs.current[appId], appId, payload);
@@ -101,10 +94,7 @@ export function AppFrameHost({
         message: error instanceof Error ? error.message : String(error),
       });
       setDependencies(null);
-      setDependencyError(error instanceof Error ? error.message : "Dependency setup failed.");
       latestDependenciesRef.current = null;
-    } finally {
-      setIsDependencyLoading(false);
     }
   }
 
@@ -193,14 +183,11 @@ export function AppFrameHost({
   useEffect(() => {
     latestDependenciesRef.current = null;
     setDependencies(null);
-    setDependencyError(null);
-    setIsDependencyPanelOpen(false);
     if (!hasDeclaredDependencies) {
       logDependencySetup("skip:no-requires", {
         appId: activeApp.app_id,
         workspaceId: activeWorkspaceId,
       });
-      setIsDependencyLoading(false);
       return;
     }
     const cached = dependencyCacheRef.current[activeDependencyCacheKey] || null;
@@ -212,7 +199,6 @@ export function AppFrameHost({
       });
       setDependencies(cached);
       latestDependenciesRef.current = cached;
-      setIsDependencyLoading(false);
       postDependencies(frameRefs.current[activeApp.app_id], activeApp.app_id, cached);
       return;
     }
@@ -275,6 +261,25 @@ export function AppFrameHost({
       }
       const senderIsMountedApp = Object.values(frameRefs.current).some((frame) => frame?.contentWindow === event.source);
       if (!senderIsMountedApp) {
+        return;
+      }
+      if (payload.type === "maverick.app.dependencies-changed") {
+        const dependencyAppId = payload.app_id;
+        getAppDependencies(dependencyAppId)
+          .then((nextDependencies) => {
+            updateDependencyCache(dependencyCacheKey(activeWorkspaceId, dependencyAppId), nextDependencies);
+            if (dependencyAppId === activeApp.app_id) {
+              setDependencies(nextDependencies);
+              latestDependenciesRef.current = nextDependencies;
+            }
+            postDependencies(frameRefs.current[dependencyAppId], dependencyAppId, nextDependencies);
+          })
+          .catch((error) => {
+            logDependencySetup("fetch:error", {
+              appId: dependencyAppId,
+              message: error instanceof Error ? error.message : String(error),
+            });
+          });
         return;
       }
       if (payload.type === "maverick.app.ready") {
@@ -341,28 +346,6 @@ export function AppFrameHost({
   return (
     <section className="bs-workspace-app-panel" aria-label={`${activeApp.name} app`}>
       <div className="bs-workspace-app-surface">
-        {hasDeclaredDependencies ? (
-          <button
-            aria-label="Configura collegamenti app"
-            className={`bs-dependency-launcher is-${dependencyStatus}`}
-            onClick={() => {
-              logDependencySetup("panel:open", {
-                appId: activeApp.app_id,
-                status: dependencyStatus,
-                hasDependencies: Boolean(dependencies),
-                hasError: Boolean(dependencyError),
-              });
-              setIsDependencyPanelOpen(true);
-              if (!isDependencyLoading && (!dependencies || dependencyError)) {
-                refreshDependencies(activeApp.app_id);
-              }
-            }}
-            title="Configura collegamenti app"
-            type="button"
-          >
-            <span className="material-symbols-rounded" aria-hidden="true">hub</span>
-          </button>
-        ) : null}
         {mountedApps.map(({ app, mountKey }) => {
           const revision = frameRevisions[mountKey] || 0;
           const frameKey = appFrameInstanceKey(mountKey, revision);
@@ -400,33 +383,6 @@ export function AppFrameHost({
           <div className="bs-workspace-app-pending" role="status" aria-label={`Loading ${activeApp.name}`}>
             <span className="bs-workspace-app-pending__mark" aria-hidden="true" />
           </div>
-        ) : null}
-        {hasDeclaredDependencies ? (
-          <AppDependencySetup
-            dependencies={dependencies}
-            error={dependencyError}
-            isLoading={isDependencyLoading}
-            isOpen={isDependencyPanelOpen}
-            onClose={() => setIsDependencyPanelOpen(false)}
-            onOpenAppStore={(interfaceId) => onOpenApp("app-store", { interface_filter: interfaceId })}
-            onSave={async (alias, providerAppIds) => {
-              logDependencySetup("selection:save:start", {
-                appId: activeApp.app_id,
-                alias,
-                providerAppIds,
-              });
-              const payload = await saveAppDependencySelection(activeApp.app_id, alias, providerAppIds);
-              logDependencySetup("selection:save:success", {
-                appId: activeApp.app_id,
-                alias,
-                status: payload.status,
-              });
-              setDependencies(payload);
-              latestDependenciesRef.current = payload;
-              updateDependencyCache(activeDependencyCacheKey, payload);
-              postDependencies(frameRefs.current[activeApp.app_id], activeApp.app_id, payload);
-            }}
-          />
         ) : null}
       </div>
     </section>

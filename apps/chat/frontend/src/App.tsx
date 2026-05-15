@@ -24,7 +24,7 @@ import {
   RuntimeTurn,
   orderChatThreads,
   selectProvider,
-  selectedDependencyProviderAppId,
+  selectedSharedDependencyProviderAppId,
   sendRuntimeTurn,
 } from "./api/client";
 import { ChatComposer } from "./components/ChatComposer";
@@ -112,6 +112,7 @@ export type ExternalFileDrop = {
 
 const MESSAGE_HISTORY_LIMIT = 50;
 const AGENT_CATALOG_DEPENDENCY_ALIAS = "agent-catalog";
+const AGENT_PROMPT_MATERIALIZER_DEPENDENCY_ALIAS = "agent-prompt-materializer";
 const QUEUED_MESSAGES_STORAGE_PREFIX = "maverick.chat.queued-messages.v1";
 const THREAD_SYNC_DEBUG_STORAGE_KEY = "maverick.chat.debug.thread-sync";
 
@@ -336,7 +337,10 @@ export function App({
 
   async function loadAgentOptionsFromDependencies(dependencies: AppDependenciesPayload) {
     try {
-      const providerAppId = selectedDependencyProviderAppId(dependencies, AGENT_CATALOG_DEPENDENCY_ALIAS);
+      const providerAppId = selectedSharedDependencyProviderAppId(dependencies, [
+        AGENT_CATALOG_DEPENDENCY_ALIAS,
+        AGENT_PROMPT_MATERIALIZER_DEPENDENCY_ALIAS,
+      ]);
       await loadAgentOptionsFromProvider(providerAppId);
     } catch {
       clearAgentOptions();

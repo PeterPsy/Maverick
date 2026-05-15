@@ -1,4 +1,4 @@
-import type { User, WorkspaceApp } from './adminApi';
+import type { AppDependenciesPayload, User, WorkspaceApp } from './adminApi';
 import type { createPersistenceController, MigrationTargetDraft } from './persistenceController';
 import { bindSettingsPanelEvents } from './settingsPanel';
 
@@ -16,6 +16,7 @@ export function bindSettingsEvents(context: {
   persistenceController: PersistenceController;
   render: () => void;
   resetSelectedUserPassword: (form: HTMLFormElement, user: User) => Promise<void>;
+  saveDependencySelection: (consumerAppId: string, alias: string, providerAppIds: string[]) => Promise<void>;
   saveProviderSettingsFromPanel: () => Promise<void>;
   selectedUser: () => User | undefined;
   selectUser: (userId: string) => void;
@@ -25,6 +26,7 @@ export function bindSettingsEvents(context: {
   updateMemberships: (user: User) => Promise<void>;
   updateSelectedUser: (form: HTMLFormElement, user: User) => Promise<void>;
   workspaceApps: () => WorkspaceApp[];
+  appDependencies: () => AppDependenciesPayload[];
 }) {
   document.getElementById('dismiss-notice')?.addEventListener('click', context.dismissNotice);
   document.getElementById('create-user')?.addEventListener('submit', (event) => {
@@ -50,6 +52,7 @@ export function bindSettingsEvents(context: {
     if (user) context.updateMemberships(user).catch(context.showError);
   });
   bindWorkspaceAppEvents(context);
+  bindAppLinkEvents(context);
   bindPersistenceEvents(context);
   bindSettingsPanelEvents({
     onClearAllRuntimeSessions: () => {
@@ -69,6 +72,56 @@ export function bindSettingsEvents(context: {
       context.saveProviderSettingsFromPanel().catch(context.showError);
     },
   });
+}
+
+function bindAppLinkEvents(context: {
+  appDependencies: () => AppDependenciesPayload[];
+  saveDependencySelection: (consumerAppId: string, alias: string, providerAppIds: string[]) => Promise<void>;
+  showError: (error: unknown) => void;
+}) {
+  document.querySelectorAll<HTMLInputElement>('[data-dependency-choice]').forEach((input) => {
+    input.addEventListener('change', () => {
+      const choice = parseDependencyChoice(input.dataset.dependencyChoice || '');
+      if (!choice) {
+        return;
+      }
+      const dependency = context
+        .appDependencies()
+        .find((payload) => payload.consumer_app_id === choice.consumerAppId)
+        ?.dependencies.find((item) => item.alias === choice.alias);
+      if (!dependency) {
+        return;
+      }
+      if (dependency.cardinality === 'one') {
+        context.saveDependencySelection(choice.consumerAppId, choice.alias, [choice.providerAppId]).catch(context.showError);
+        return;
+      }
+      const selected = new Set(dependency.selected_provider_app_ids);
+      if (input.checked) {
+        selected.add(choice.providerAppId);
+      } else {
+        selected.delete(choice.providerAppId);
+      }
+      context.saveDependencySelection(choice.consumerAppId, choice.alias, Array.from(selected)).catch(context.showError);
+    });
+  });
+  document.querySelectorAll<HTMLButtonElement>('[data-dependency-save-default]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const choice = parseDependencyChoice(button.dataset.dependencySaveDefault || '');
+      if (choice) {
+        context.saveDependencySelection(choice.consumerAppId, choice.alias, [choice.providerAppId]).catch(context.showError);
+      }
+    });
+  });
+}
+
+function parseDependencyChoice(value: string) {
+  const [consumerAppId, alias, ...providerParts] = value.split(':');
+  const providerAppId = providerParts.join(':');
+  if (!consumerAppId || !alias || !providerAppId) {
+    return null;
+  }
+  return { alias, consumerAppId, providerAppId };
 }
 
 function bindWorkspaceAppEvents(context: {

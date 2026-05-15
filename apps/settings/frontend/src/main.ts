@@ -18,6 +18,7 @@ import {
   loadWorkspaceApps,
   logout,
   requestJson,
+  type AppDependenciesPayload,
   type PlatformSettings,
   type PersistenceStatus,
   type RuntimeCleanupPayload,
@@ -39,6 +40,8 @@ import {
   type SettingsPageId
 } from './pages';
 import { settingsAppSkeletonHtml } from './appSkeleton';
+import { createAppLinksController } from './appLinksController';
+import { appLinksPageHtml } from './appLinksPage';
 import { bindSettingsEvents } from './bindEvents';
 import { escapeHtml } from './html';
 import { pageSettingsBlockHtml } from './pageFrame';
@@ -71,6 +74,14 @@ const persistenceController = createPersistenceController({
   },
   setPersistence: (status) => {
     persistence = status;
+  },
+});
+
+const appLinksController = createAppLinksController({
+  publishChanged: publishAppDependenciesChanged,
+  render: () => render(),
+  setNotice: (nextNotice) => {
+    notice = nextNotice;
   },
 });
 
@@ -117,6 +128,9 @@ function applyNavigationParams(params: Record<string, unknown>) {
   }
   if (users.length || isLoading) {
     render();
+  }
+  if (pageId === 'app-links') {
+    void ensureAppLinksLoaded();
   }
 }
 
@@ -201,11 +215,16 @@ async function refresh() {
       requestPersistenceStatus(),
       requestPlatformSettingsQuiet()
     ]);
+    const previousWorkspaceId = platformSettings?.workspace.workspace_id || '';
+    const nextWorkspaceId = settingsPayload?.workspace.workspace_id || '';
     users = usersPayload;
     workspaces = workspacesPayload;
     workspaceApps = workspaceAppsPayload;
     persistence = persistencePayload;
     platformSettings = settingsPayload;
+    if (previousWorkspaceId !== nextWorkspaceId) {
+      appLinksController.reset();
+    }
     syncSettingsPanelDraft(settingsPanelState, platformSettings);
     if (!selectedUserId || !users.some((user) => user.user_id === selectedUserId)) {
       selectedUserId = users[0]?.user_id || '';
@@ -214,6 +233,14 @@ async function refresh() {
     isLoading = false;
   }
   render();
+  if (selectedPageId === 'app-links') {
+    void ensureAppLinksLoaded();
+  }
+}
+
+async function ensureAppLinksLoaded(force = false) {
+  const workspaceId = platformSettings?.workspace.workspace_id || '';
+  await appLinksController.ensureLoaded(workspaceId, workspaceApps, force);
 }
 
 async function createUser(form: HTMLFormElement) {
@@ -291,17 +318,24 @@ async function updateMemberships(user: User) {
 
 async function installWorkspaceApp(app: WorkspaceApp) {
   await installWorkspaceAppBinding(app);
+  appLinksController.invalidate();
   await refresh();
 }
 
 async function setWorkspaceAppStatus(app: WorkspaceApp, enabled: boolean) {
   await setWorkspaceAppEnabled(app, enabled);
+  appLinksController.invalidate();
   await refresh();
 }
 
 async function uninstallWorkspaceApp(app: WorkspaceApp) {
   await uninstallWorkspaceAppBinding(app);
+  appLinksController.invalidate();
   await refresh();
+}
+
+async function saveDependencySelection(consumerAppId: string, alias: string, providerAppIds: string[]) {
+  await appLinksController.saveDependencySelection(consumerAppId, alias, providerAppIds);
 }
 
 async function saveProviderSettingsFromPanel() {
@@ -383,6 +417,20 @@ function publishRuntimeCleanupChanged(payload: RuntimeCleanupPayload) {
   });
 }
 
+function publishAppDependenciesChanged(consumerAppId: string, dependencies: AppDependenciesPayload) {
+  if (window.parent === window) {
+    return;
+  }
+  window.parent.postMessage(
+    {
+      type: 'maverick.app.dependencies-changed',
+      app_id: consumerAppId,
+      status: dependencies.status
+    },
+    window.location.origin
+  );
+}
+
 async function logoutFromSettings() {
   if (window.parent && window.parent !== window) {
     window.parent.postMessage({ type: 'maverick.shell.logout' }, window.location.origin);
@@ -401,6 +449,19 @@ function activePageHtml(page: SettingsPage, user: User | undefined) {
   }
   if (page.id === 'workspace-apps') {
     return workspaceAppsPageHtml({ page, workspaceApps, workspaces });
+  }
+  if (page.id === 'app-links') {
+    const appLinks = appLinksController.viewState();
+    return appLinksPageHtml({
+      appRegistry: appLinks.appRegistry,
+      dependencies: appLinks.dependencies,
+      error: appLinks.error,
+      isLoading: appLinks.isLoading,
+      loadErrors: appLinks.loadErrors,
+      page,
+      savingKeys: appLinks.savingKeys,
+      workspaceApps
+    });
   }
   if (page.id === 'platform-settings') {
     return platformSettingsPageHtml(page);
@@ -468,6 +529,7 @@ function bindEvents() {
     persistenceController,
     render,
     resetSelectedUserPassword,
+    saveDependencySelection,
     saveProviderSettingsFromPanel,
     selectedUser,
     selectUser: (userId) => {
@@ -481,6 +543,7 @@ function bindEvents() {
     updateMemberships,
     updateSelectedUser,
     workspaceApps: () => workspaceApps,
+    appDependencies: () => appLinksController.viewState().dependencies,
   });
 }
 

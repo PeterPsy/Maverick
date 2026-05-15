@@ -8,7 +8,8 @@ Admin-only platform settings app for provider/runtime settings, users, workspace
 - `settings` intentionally does not declare an app-owned backend or lifecycle hooks yet; authoritative admin state remains core-owned.
 - Persistence adapter status, platform settings, provider/model selection, runtime-session cleanup, and backend restarts are core-owned admin surfaces. Settings presents those surfaces in the UI.
 - Persistence migration UI must call the core dry-run endpoint before apply. The confirmation dialog exposes target JSON/Mongo connection fields, including Mongo username and password secret ref, and source cleanup is an explicit operator opt-in rather than the default migration behavior.
-- The main app iframe owns the settings work surface and renders one page at a time: platform settings, users, workspace access, workspace apps, or persistence.
+- The main app iframe owns the settings work surface and renders one page at a time: platform settings, users, workspace access, workspace apps, app links, or persistence.
+- The app links page presents generic core app dependency selections for the active workspace, including intra-app provider catalogs such as `agent.catalog`. It calls `/api/apps/dependencies` and does not read another app's private storage.
 - The `settings-sidebar` iframe declared for `shell.sidebar.primary` is a page navigator, matching the page-list pattern used by Docs Studio. Selected-user controls live inside the relevant Settings pages.
 - The platform settings panel is rendered inside the main app work surface rather than as a shell modal or app-local overlay. It calls generic core settings/provider/runtime APIs and keeps the shell boundary app-agnostic.
 - The app stores only admin UI preferences under `data/settings/preferences.json`.

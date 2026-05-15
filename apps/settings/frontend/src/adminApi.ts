@@ -33,6 +33,49 @@ export type WorkspaceApp = {
   status: 'uninstalled' | 'installed' | 'enabled' | 'disabled' | 'failed' | 'updating' | 'rolled_back';
 };
 
+export type AppLogo = {
+  kind: 'glyph' | 'image';
+  value: string;
+};
+
+export type AppRegistryItem = {
+  app_id: string;
+  name: string;
+  views: string[];
+  logo: AppLogo | null;
+};
+
+export type DependencyProviderCandidate = {
+  app_id: string;
+  name: string;
+  version: string;
+  interface: string;
+  interface_version: string;
+  description: string;
+  surfaces: string[];
+};
+
+export type DependencyResolutionItem = {
+  alias: string;
+  interface: string;
+  version: string;
+  required: boolean;
+  cardinality: 'one' | 'many';
+  description: string;
+  status: string;
+  candidates: DependencyProviderCandidate[];
+  selected_provider_app_ids: string[];
+  stale_provider_app_ids: string[];
+  blocked_reason: string | null;
+};
+
+export type AppDependenciesPayload = {
+  workspace_id: string;
+  consumer_app_id: string;
+  status: string;
+  dependencies: DependencyResolutionItem[];
+};
+
 export type PersistenceAdapter = {
   kind: 'json' | 'mongo';
   json_root: string;
@@ -230,6 +273,59 @@ export async function loadWorkspaces(): Promise<Workspace[]> {
 export async function loadWorkspaceApps(): Promise<WorkspaceApp[]> {
   const payload = await requestJson<{ items: WorkspaceApp[] }>('/api/admin/workspace-apps');
   return payload.items;
+}
+
+function stringField(value: unknown, fallback = ''): string {
+  return typeof value === 'string' ? value : fallback;
+}
+
+function stringArrayField(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+function normalizeLogo(value: unknown): AppLogo | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  const candidate = value as Partial<AppLogo>;
+  const kind = candidate.kind === 'image' || candidate.kind === 'glyph' ? candidate.kind : null;
+  return kind && typeof candidate.value === 'string' ? { kind, value: candidate.value } : null;
+}
+
+function normalizeAppRegistryItem(value: unknown): AppRegistryItem {
+  const item = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const appId = stringField(item.app_id);
+  return {
+    app_id: appId,
+    name: stringField(item.name, appId || 'Unnamed app'),
+    views: stringArrayField(item.views),
+    logo: normalizeLogo(item.logo)
+  };
+}
+
+export async function loadAppRegistry(): Promise<AppRegistryItem[]> {
+  const payload = await requestJson<{ items?: unknown[] }>('/api/apps');
+  return (payload.items || []).map(normalizeAppRegistryItem).filter((item) => item.app_id);
+}
+
+export function getAppDependencies(consumerAppId: string): Promise<AppDependenciesPayload> {
+  const params = new URLSearchParams({ consumer_app_id: consumerAppId });
+  return requestJson<AppDependenciesPayload>(`/api/apps/dependencies?${params.toString()}`);
+}
+
+export function saveAppDependencySelection(
+  consumerAppId: string,
+  alias: string,
+  providerAppIds: string[]
+): Promise<AppDependenciesPayload> {
+  return requestJson<AppDependenciesPayload>('/api/apps/dependencies', {
+    method: 'POST',
+    body: JSON.stringify({
+      consumer_app_id: consumerAppId,
+      alias,
+      provider_app_ids: providerAppIds
+    })
+  });
 }
 
 export function getPlatformSettings(): Promise<PlatformSettings> {

@@ -43,6 +43,10 @@ vi.mock("./api/client", () => ({
   selectProvider: vi.fn(),
   selectedDependencyProviderAppId: (payload: AppDependenciesPayload, alias: string) =>
     payload.dependencies.find((dependency) => dependency.alias === alias)?.selected_provider_app_ids[0] || "",
+  selectedSharedDependencyProviderAppId: (payload: AppDependenciesPayload, aliases: string[]) => {
+    const providerIds = aliases.map((alias) => payload.dependencies.find((dependency) => dependency.alias === alias)?.selected_provider_app_ids[0] || "");
+    return providerIds.length && providerIds.every((providerId) => providerId && providerId === providerIds[0]) ? providerIds[0] : "";
+  },
   sendRuntimeTurn: vi.fn(),
 }));
 
@@ -60,10 +64,11 @@ let root: Root | null = null;
 let container: HTMLDivElement | null = null;
 
 function dependencyPayload(selectedProviderAppIds: string[]): AppDependenciesPayload {
+  const status = selectedProviderAppIds.length ? "resolved" : "optional_unset";
   return {
     workspace_id: "default",
     consumer_app_id: "chat",
-    status: "resolved",
+    status,
     dependencies: [
       {
         alias: "agent-catalog",
@@ -72,7 +77,20 @@ function dependencyPayload(selectedProviderAppIds: string[]): AppDependenciesPay
         required: false,
         cardinality: "one",
         description: "Agent catalog",
-        status: selectedProviderAppIds.length ? "resolved" : "optional_unset",
+        status,
+        candidates: [],
+        selected_provider_app_ids: selectedProviderAppIds,
+        stale_provider_app_ids: [],
+        blocked_reason: null,
+      },
+      {
+        alias: "agent-prompt-materializer",
+        interface: "agent.prompt-materializer",
+        version: "^1",
+        required: false,
+        cardinality: "one",
+        description: "Agent prompt materializer",
+        status,
         candidates: [],
         selected_provider_app_ids: selectedProviderAppIds,
         stale_provider_app_ids: [],

@@ -2,6 +2,7 @@ export type SettingsPageId =
   | 'users'
   | 'workspace-access'
   | 'workspace-apps'
+  | 'app-links'
   | 'platform-settings'
   | 'persistence';
 
@@ -30,6 +31,12 @@ export const SETTINGS_PAGES: SettingsPage[] = [
     title: 'Workspace apps',
     summary: 'Install, enable, disable, or uninstall app bindings per workspace.',
     icon: 'deployed_code'
+  },
+  {
+    id: 'app-links',
+    title: 'App links',
+    summary: 'Choose provider apps for intra-app catalogs and cross-app interfaces.',
+    icon: 'hub'
   },
   {
     id: 'platform-settings',

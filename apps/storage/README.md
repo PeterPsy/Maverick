@@ -35,7 +35,7 @@ Workspace file storage for uploaded files and generated artifacts.
 - CSV and XLSX previews expose structured rows to the frontend so the preview modal can render spreadsheet-like tables instead of plain delimited text.
 - Text, Markdown, CSV, and XLSX previews are bounded by server-side byte, row, column, and archive budgets before extraction.
 - Markdown previews render common Markdown structure, including headings, lists, code blocks, links, blockquotes, and pipe tables, in both the Storage app and the file-preview widget instead of showing raw Markdown text.
-- The file-preview chat widget renders the file body as one neutral Chat-style document box with a compact title row, posts bounded height updates, keeps iframe scrolling hidden, and opens Storage through the title-row action.
+- The file-preview chat widget renders the file body as one neutral Chat-style document box with a compact clickable title row, shows a skeleton while loading, posts bounded height updates, keeps iframe scrolling hidden, and opens Storage through the title-row actions.
 - Markdown files can be edited from the Storage preview modal with a source editor and live rendered preview, copied in full to the clipboard, then saved back to the same validated workspace storage path.
 - The Storage preview modal header exposes a fullscreen toggle; it uses the browser Fullscreen API when allowed and falls back to an in-app fullscreen layout when iframe policy blocks native fullscreen.
 

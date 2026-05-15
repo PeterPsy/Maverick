@@ -39,10 +39,23 @@ describe('storage file preview widget styles', () => {
 
   it('keeps open-in-storage on the title action instead of the whole document', () => {
     const source = readStyle('main.tsx');
+    const styles = readStyle('styles.css');
 
     expect(source).toContain('className="file-widget__bar"');
+    expect(source).toContain('className="file-widget__title-button"');
     expect(source).toContain('className="file-widget__open"');
+    expect(styles).toContain('text-decoration: underline;');
     expect(source).not.toContain('role="button"');
     expect(source).not.toContain('handleDocumentClick');
+  });
+
+  it('shows a skeleton while the widget context is loading', () => {
+    const source = readStyle('main.tsx');
+    const styles = readStyle('styles.css');
+
+    expect(source).toContain('file-widget--skeleton');
+    expect(source).toContain('file-widget__skeleton-body');
+    expect(source).not.toContain('Loading file preview...');
+    expect(styles).toContain('@keyframes file-widget-skeleton-pulse');
   });
 });

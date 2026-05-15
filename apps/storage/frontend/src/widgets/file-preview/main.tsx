@@ -195,13 +195,30 @@ function StorageFilePreviewWidget() {
     return <main className="file-widget file-widget--state" ref={rootRef}><p className="file-widget__empty">{error}</p></main>;
   }
   if (!file) {
-    return <main className="file-widget file-widget--state" ref={rootRef}><p className="file-widget__empty">Loading file preview...</p></main>;
+    return (
+      <main className="file-widget file-widget--skeleton" ref={rootRef} aria-busy="true" aria-label="Loading file preview">
+        <header className="file-widget__bar">
+          <span className="file-widget__skeleton-title" />
+          <span className="file-widget__skeleton-icon" />
+        </header>
+        <section className="file-widget__skeleton-body" aria-hidden="true">
+          <span className="file-widget__skeleton-line is-wide" />
+          <span className="file-widget__skeleton-line" />
+          <span className="file-widget__skeleton-line is-short" />
+          <span className="file-widget__skeleton-block" />
+        </section>
+      </main>
+    );
   }
 
   return (
     <main className="file-widget" ref={rootRef}>
       <header className="file-widget__bar">
-        <h3>{file.name}</h3>
+        <h3>
+          <button className="file-widget__title-button" type="button" onClick={() => openStorage(file)}>
+            {file.name}
+          </button>
+        </h3>
         <button
           className="file-widget__open"
           type="button"

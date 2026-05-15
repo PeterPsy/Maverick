@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { KeyboardEvent, MouseEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import { callBackend, decodeBase64, readFile } from '../../storageApi';
-import { formatBytes, iconForKind, kindLabels, roleLabels } from '../../storageMeta';
+import { iconForKind, kindLabels } from '../../storageMeta';
 import { Icon } from '../../Icon';
 import { MarkdownPreview } from '../../markdownPreview';
 import type { StorageFile } from '../../types';
@@ -14,6 +15,8 @@ type WidgetContext = {
 };
 
 const PREVIEW_BYTES = 8 * 1024 * 1024;
+const WIDGET_MIN_HEIGHT_PX = 220;
+const WIDGET_MAX_HEIGHT_PX = 960;
 
 function contextToken() {
   const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;
@@ -62,6 +65,28 @@ function openStorage(file?: StorageFile) {
   );
 }
 
+function postWidgetResize(element: HTMLElement) {
+  const visibleHeight = Math.ceil(element.getBoundingClientRect().height);
+  const contentHeight = Math.max(element.scrollHeight, visibleHeight);
+  const height = Math.min(WIDGET_MAX_HEIGHT_PX, Math.max(WIDGET_MIN_HEIGHT_PX, contentHeight));
+  window.parent?.postMessage(
+    {
+      type: 'maverick.widget.resize',
+      owner_app_id: 'storage',
+      widget_id: 'file-preview',
+      height: `${height}px`,
+      width: '100%'
+    },
+    window.location.origin
+  );
+}
+
+function isInteractiveTarget(target: EventTarget | null) {
+  return target instanceof Element && Boolean(
+    target.closest('a, button, input, textarea, select, summary, video, audio, iframe, [contenteditable="true"]')
+  );
+}
+
 function Preview({ file, loading, previewUrl, previewText }: { file: StorageFile; loading: boolean; previewUrl: string; previewText: string }) {
   if (file.preview_kind === 'image' && previewUrl) return <img src={previewUrl} alt={file.name} />;
   if (file.preview_kind === 'video' && previewUrl) return <video src={previewUrl} controls />;
@@ -80,6 +105,7 @@ function Preview({ file, loading, previewUrl, previewText }: { file: StorageFile
 }
 
 function StorageFilePreviewWidget() {
+  const rootRef = useRef<HTMLElement | null>(null);
   const [file, setFile] = useState<StorageFile | null>(null);
   const [previewUrl, setPreviewUrl] = useState('');
   const [previewText, setPreviewText] = useState('');
@@ -124,36 +150,57 @@ function StorageFilePreviewWidget() {
     };
   }, [file]);
 
-  const meta = useMemo(() => {
-    if (!file) return [];
-    return [roleLabels[file.role], kindLabels[file.preview_kind], formatBytes(file.size_bytes)];
-  }, [file]);
+  useEffect(() => {
+    const element = rootRef.current;
+    if (!element) return undefined;
+    const update = () => postWidgetResize(element);
+    update();
+    const frame = window.requestAnimationFrame(update);
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;
+    observer?.observe(element);
+    window.addEventListener('resize', update);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer?.disconnect();
+      window.removeEventListener('resize', update);
+    };
+  }, [error, file, previewLoading, previewText, previewUrl]);
+
+  const openFile = () => {
+    if (file) openStorage(file);
+  };
+
+  const handleDocumentClick = (event: MouseEvent<HTMLElement>) => {
+    if (isInteractiveTarget(event.target)) return;
+    openFile();
+  };
+
+  const handleDocumentKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (isInteractiveTarget(event.target)) return;
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    openFile();
+  };
 
   if (error) {
-    return <main className="file-widget"><p className="file-widget__empty">{error}</p></main>;
+    return <main className="file-widget file-widget--state" ref={rootRef}><p className="file-widget__empty">{error}</p></main>;
   }
   if (!file) {
-    return <main className="file-widget"><p className="file-widget__empty">Loading file preview...</p></main>;
+    return <main className="file-widget file-widget--state" ref={rootRef}><p className="file-widget__empty">Loading file preview...</p></main>;
   }
 
   return (
-    <main className="file-widget">
-      <header className="file-widget__head">
-        <Icon name={iconForKind(file.preview_kind)} className="file-widget__icon" />
-        <span className="file-widget__title">
-          <h3>{file.name}</h3>
-          <p>{file.workspace_relative_path}</p>
-        </span>
-        <button className="file-widget__open" onClick={() => openStorage(file)} aria-label="Open in Storage">
-          <Icon name="open_in_new" />
-        </button>
-      </header>
-      <section className="file-widget__preview">
+    <main className="file-widget" ref={rootRef}>
+      <section
+        className="file-widget__document"
+        role="button"
+        tabIndex={0}
+        aria-label={`Open ${file.name} in Storage`}
+        onClick={handleDocumentClick}
+        onKeyDown={handleDocumentKeyDown}
+      >
         <Preview file={file} loading={previewLoading} previewUrl={previewUrl} previewText={previewText} />
       </section>
-      <footer className="file-widget__meta">
-        {meta.map((item) => <span key={item}>{item}</span>)}
-      </footer>
     </main>
   );
 }

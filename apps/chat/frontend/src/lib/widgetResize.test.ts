@@ -7,6 +7,7 @@ describe("boundedWidgetHeightPx", () => {
   });
 
   it("clamps very small and very large heights", () => {
+    expect(STRUCTURED_WIDGET_MAX_HEIGHT_PX).toBe(1040);
     expect(boundedWidgetHeightPx("12px")).toBe(STRUCTURED_WIDGET_MIN_HEIGHT_PX);
     expect(boundedWidgetHeightPx("99999px")).toBe(STRUCTURED_WIDGET_MAX_HEIGHT_PX);
   });

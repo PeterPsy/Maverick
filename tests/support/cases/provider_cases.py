@@ -462,6 +462,48 @@ class ProvidersTestCase(unittest.TestCase):
         self.assertEqual(roots, [codex_js.parent])
         self.assertNotIn(node_version_root, roots)
 
+    def test_codex_launch_bypasses_host_wrapper_that_clears_runtime_env(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp)
+            wrapper = home / "bin" / "codex"
+            codex_js = home / "lib" / "node_modules" / "@openai" / "codex" / "bin" / "codex.js"
+            standalone = (
+                home
+                / "lib"
+                / "node_modules"
+                / "@openai"
+                / "codex"
+                / "node_modules"
+                / "@openai"
+                / "codex-linux-x64"
+                / "vendor"
+                / "x86_64-unknown-linux-musl"
+                / "codex"
+                / "codex"
+            )
+            codex_js.parent.mkdir(parents=True)
+            standalone.parent.mkdir(parents=True)
+            wrapper.parent.mkdir(parents=True)
+            codex_js.write_text("#!/usr/bin/env node\n", encoding="utf-8")
+            standalone.write_text("binary\n", encoding="utf-8")
+            wrapper.write_text(
+                "#!/bin/sh\n"
+                f"CODEX_REAL={str(codex_js)!r}\n"
+                "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin\n"
+                "export PATH\n"
+                "unset CODEX_HOME\n"
+                '"$CODEX_REAL" "$@"\n',
+                encoding="utf-8",
+            )
+            adapter = CodexProviderAdapter(codex_command="codex")
+
+            with patch("core.providers.provider_codex.shutil.which", return_value=str(wrapper)):
+                roots = adapter._command_dependency_roots("codex")
+                runtime_command = adapter._runtime_command("codex")
+
+        self.assertEqual(roots, [standalone.parent])
+        self.assertEqual(runtime_command, str(standalone))
+
     def test_codex_full_access_runtime_bin_prefers_vendored_rg_binary(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             home = Path(temp)

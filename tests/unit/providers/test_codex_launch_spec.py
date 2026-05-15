@@ -9,6 +9,7 @@ _SELECTED = {
     'test_codex_launch_spec_is_built_from_provider_adapter_not_runtime_domain',
     'test_codex_nvm_dependency_root_is_standalone_binary_parent',
     'test_codex_nvm_dependency_root_fails_closed_without_standalone_binary',
+    'test_codex_launch_bypasses_host_wrapper_that_clears_runtime_env',
     'test_codex_full_access_runtime_bin_prefers_vendored_rg_binary',
 }
 

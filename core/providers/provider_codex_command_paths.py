@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 import os
 from pathlib import Path
+import shlex
 import shutil
 from typing import TYPE_CHECKING
 
@@ -154,8 +155,13 @@ class CodexCommandPathMixin:
         if command_path is None:
             return command
         resolved = command_path.resolve(strict=False)
-        standalone = self._standalone_codex_binary(resolved)
-        return str(standalone or command_path)
+        launch_path = self._codex_launch_path(command_path)
+        standalone = self._standalone_codex_binary(launch_path)
+        if standalone is not None:
+            return str(standalone)
+        if launch_path != resolved:
+            return str(launch_path)
+        return str(command_path)
 
 
 
@@ -163,7 +169,7 @@ class CodexCommandPathMixin:
         command_path = self._command_path(command)
         if command_path is None:
             return []
-        resolved = command_path.resolve(strict=False)
+        resolved = self._codex_launch_path(command_path)
         if self._is_standalone_codex_binary(resolved):
             return [resolved.parent]
         standalone = self._standalone_codex_binary(resolved)
@@ -181,6 +187,57 @@ class CodexCommandPathMixin:
         if not resolved_value:
             return None
         return Path(resolved_value).expanduser()
+
+
+
+    def _codex_launch_path(self, command_path: Path) -> Path:
+        resolved = command_path.resolve(strict=False)
+        wrapper_target = self._codex_wrapper_target(resolved)
+        return wrapper_target or resolved
+
+
+
+    def _codex_wrapper_target(self, resolved: Path) -> Path | None:
+        if resolved.name == "codex.js" or self._is_standalone_codex_binary(resolved):
+            return None
+        try:
+            if not resolved.is_file():
+                return None
+            with resolved.open("rb") as handle:
+                text = handle.read(8192).decode("utf-8", errors="ignore")
+        except OSError:
+            return None
+        if "CODEX_REAL=" not in text:
+            return None
+        for line in text.splitlines():
+            stripped = line.strip()
+            if not stripped.startswith("CODEX_REAL="):
+                continue
+            raw_value = stripped.split("=", 1)[1].strip()
+            try:
+                parts = shlex.split(raw_value, posix=True)
+            except ValueError:
+                parts = []
+            value = parts[0] if parts else raw_value.strip("\"'")
+            if not value:
+                continue
+            target = Path(value).expanduser()
+            if not target.is_absolute():
+                target = resolved.parent / target
+            target = target.resolve(strict=False)
+            if self._is_codex_node_entrypoint(target):
+                return target
+        return None
+
+
+
+    def _is_codex_node_entrypoint(self, resolved: Path) -> bool:
+        return (
+            resolved.name == "codex.js"
+            and resolved.parent.name == "bin"
+            and resolved.parent.parent.name == "codex"
+            and resolved.is_file()
+        )
 
 
 

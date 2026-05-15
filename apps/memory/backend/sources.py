@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from hashlib import sha256
+import json
+from pathlib import Path
 import sqlite3
 from typing import Any
 
@@ -12,6 +14,7 @@ from database import json_text, new_id, row_payload
 def sync_sources(
     db: sqlite3.Connection,
     *,
+    data_root: Path,
     node_id: str,
     refs: list[sqlite3.Row],
     timestamp: str,
@@ -19,6 +22,7 @@ def sync_sources(
     sources: list[dict[str, Any]] = []
     for ref in refs:
         source_id = _source_id_for_ref(db, ref)
+        snapshot = source_snapshot(ref, data_root)
         source = {
             "id": source_id or new_id("src"),
             "source_kind": ref["ref_kind"],
@@ -30,10 +34,10 @@ def sync_sources(
             "workspace_relative_path": ref["workspace_relative_path"],
             "uri": ref["uri"],
             "title": ref["title"],
-            "content_hash": source_hash(ref),
+            "content_hash": snapshot["hash"],
             "created_at": timestamp,
             "updated_at": timestamp,
-            "metadata_json": ref["metadata_json"],
+            "metadata_json": source_metadata(ref, snapshot),
         }
         db.execute(
             """
@@ -62,7 +66,7 @@ def sync_sources(
             source,
         )
         saved = row_payload(db.execute("SELECT * FROM sources WHERE external_ref_id = ?", (ref["id"],)).fetchone()) or {}
-        version = ensure_source_version(db, source=saved, ref=ref, timestamp=timestamp)
+        version = ensure_source_version(db, source=saved, ref=ref, snapshot=snapshot, timestamp=timestamp)
         ensure_node_source_link(db, node_id=node_id, source_id=saved["id"], external_ref_id=ref["id"], timestamp=timestamp)
         saved["source_version_id"] = version["id"]
         sources.append(saved)
@@ -74,9 +78,10 @@ def ensure_source_version(
     *,
     source: dict[str, Any],
     ref: sqlite3.Row,
+    snapshot: dict[str, Any],
     timestamp: str,
 ) -> dict[str, Any]:
-    version_hash = source["content_hash"]
+    version_hash = snapshot["hash"]
     existing = db.execute(
         "SELECT * FROM source_versions WHERE source_id = ? AND version_hash = ?",
         (source["id"], version_hash),
@@ -87,11 +92,18 @@ def ensure_source_version(
         "id": new_id("srcv"),
         "source_id": source["id"],
         "version_hash": version_hash,
-        "extracted_text": source_text(ref),
+        "extracted_text": snapshot["extracted_text"],
         "extracted_ref": source.get("workspace_relative_path") or source.get("entity_id") or source.get("uri") or "",
         "observed_at": timestamp,
         "created_at": timestamp,
-        "metadata_json": json_text({"deterministic": True}),
+        "metadata_json": json_text(
+            {
+                "deterministic": True,
+                "hash_kind": snapshot["hash_kind"],
+                "extracted_text_available": bool(snapshot["extracted_text"]),
+                "reference_snapshot_hash": reference_snapshot_hash(ref),
+            }
+        ),
     }
     db.execute(
         """
@@ -121,30 +133,37 @@ def ensure_node_source_link(
     )
 
 
-def insert_citation(db: sqlite3.Connection, *, claim_id: str, source: dict[str, Any], timestamp: str) -> None:
-    db.execute(
-        """
-        INSERT INTO citations(id, claim_id, source_id, source_version_id, external_ref_id, locator, quote, created_at, metadata_json)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, '{}')
-        """,
-        (
-            new_id("cite"),
-            claim_id,
-            source["id"],
-            source.get("source_version_id"),
-            source.get("external_ref_id"),
-            source.get("workspace_relative_path") or source.get("entity_id") or source.get("file_id") or "",
-            source.get("title") or source.get("workspace_relative_path") or source.get("entity_id") or "",
-            timestamp,
-        ),
-    )
+def source_snapshot(ref: sqlite3.Row, data_root: Path | None) -> dict[str, Any]:
+    file_path = workspace_file_path(data_root, str(ref["workspace_relative_path"] or ""))
+    if file_path is not None and file_path.is_file():
+        return {
+            "hash": file_hash(file_path),
+            "hash_kind": "file_bytes",
+            "extracted_text": "",
+        }
+    return {
+        "hash": reference_snapshot_hash(ref),
+        "hash_kind": "reference_snapshot",
+        "extracted_text": "",
+    }
 
 
-def source_hash(ref: sqlite3.Row) -> str:
-    return sha256(source_text(ref).encode("utf-8")).hexdigest()
+def source_metadata(ref: sqlite3.Row, snapshot: dict[str, Any]) -> str:
+    try:
+        metadata = json.loads(ref["metadata_json"] or "{}")
+    except json.JSONDecodeError:
+        metadata = {}
+    if not isinstance(metadata, dict):
+        metadata = {}
+    metadata["content_hash_kind"] = snapshot["hash_kind"]
+    return json_text(metadata)
 
 
-def source_text(ref: sqlite3.Row) -> str:
+def reference_snapshot_hash(ref: sqlite3.Row) -> str:
+    return sha256(reference_snapshot_text(ref).encode("utf-8")).hexdigest()
+
+
+def reference_snapshot_text(ref: sqlite3.Row) -> str:
     return "\n".join(
         str(value or "")
         for value in (
@@ -159,6 +178,29 @@ def source_text(ref: sqlite3.Row) -> str:
             ref["metadata_json"],
         )
     )
+
+
+def workspace_file_path(data_root: Path | None, workspace_relative_path: str) -> Path | None:
+    if data_root is None or not workspace_relative_path:
+        return None
+    workspace_root = workspace_root_for_data_root(data_root)
+    if workspace_root is None:
+        return None
+    return workspace_root / workspace_relative_path
+
+
+def workspace_root_for_data_root(data_root: Path) -> Path | None:
+    if data_root.parent.name != "data":
+        return None
+    return data_root.parent.parent
+
+
+def file_hash(path: Path) -> str:
+    digest = sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _source_id_for_ref(db: sqlite3.Connection, ref: sqlite3.Row) -> str | None:

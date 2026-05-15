@@ -68,6 +68,30 @@ DATA_CHANGED_RESOURCES = {
 }
 VIEW_STATE_ACTIONS = {"set_view_filter", "set_custom_view", "clear_custom_view"}
 WIKI_ACTIONS = {"compile", "lint"}
+MCP_TOOL_ACTIONS = {
+    "memory_context": "context",
+    "memory_search": "search",
+    "memory_remember": "remember",
+    "memory_update_node": "update_node",
+    "memory_soft_delete_node": "delete_node",
+    "memory_link_nodes": "link",
+    "memory_unlink_nodes": "unlink",
+    "memory_attach_file": "attach_file",
+    "memory_attach_app_entity": "attach_entity",
+    "memory_inspect_node": "inspect",
+    "memory_compile": "compile",
+    "memory_lint": "lint",
+    "memory_wiki_query": "wiki_query",
+    "memory_audit": "audit",
+    "memory_view_filter": "view_filter",
+    "memory_set_view_filter": "set_view_filter",
+    "memory_set_custom_view": "set_custom_view",
+    "memory_clear_custom_view": "clear_custom_view",
+    "memory_reference_manifest": "references.manifest",
+    "memory_reference_search": "references.search",
+    "memory_reference_resolve": "references.resolve",
+    "memory_reference_summarize": "references.summarize",
+}
 
 
 def app_events_for_action(action: str) -> list[dict[str, str]]:
@@ -83,31 +107,7 @@ def app_events_for_action(action: str) -> list[dict[str, str]]:
 
 
 def action_from_tool(tool_name: str, fallback: str) -> str:
-    mapping = {
-        "memory_context": "context",
-        "memory_search": "search",
-        "memory_remember": "remember",
-        "memory_update_node": "update_node",
-        "memory_soft_delete_node": "delete_node",
-        "memory_link_nodes": "link",
-        "memory_unlink_nodes": "unlink",
-        "memory_attach_file": "attach_file",
-        "memory_attach_app_entity": "attach_entity",
-        "memory_inspect_node": "inspect",
-        "memory_compile": "compile",
-        "memory_lint": "lint",
-        "memory_wiki_query": "wiki_query",
-        "memory_audit": "audit",
-        "memory_view_filter": "view_filter",
-        "memory_set_view_filter": "set_view_filter",
-        "memory_set_custom_view": "set_custom_view",
-        "memory_clear_custom_view": "clear_custom_view",
-        "memory_reference_manifest": "references.manifest",
-        "memory_reference_search": "references.search",
-        "memory_reference_resolve": "references.resolve",
-        "memory_reference_summarize": "references.summarize",
-    }
-    return mapping.get(tool_name, fallback)
+    return MCP_TOOL_ACTIONS.get(tool_name, fallback)
 
 
 def reference_manifest_payload(app_id: str) -> dict[str, Any]:

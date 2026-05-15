@@ -19,13 +19,13 @@ Memory keeps the human product surface graph-first. Under the hood it compiles w
 - Frontend backend calls normalize HTTP and app-level errors and support abort/timeout handling for stale requests.
 - The graph canvas uses pointer gestures across desktop and mobile: drag empty space to pan, drag a node to move/select it, pinch to zoom, and wheel to zoom on pointer devices.
 - The graph action returns a lightweight node/edge summary for canvas and sidebar rendering. Full external references and edge details are loaded through `inspect`.
-- `compile` deterministically builds the internal wiki page for a node from the current node text, external references, and relationships. It records source/version rows, claims, citations, a compile run, and current lint findings without calling an LLM yet.
+- `compile` deterministically builds the internal wiki page for a node from the current node text, external references, and relationships. It records source/version rows, claims, a compile run, and current lint findings without calling an LLM yet. Citations are recorded only when Memory has credible claim-level evidence such as a chunk, locator, range, quote, or extracted reference.
 - `inspect` returns the compiled page, claims, citations, source links, and lint findings for the selected node. `context` includes the compact compiled pack when one exists.
 - `search` covers nodes plus compiled wiki page and claim text; `wiki_query` returns wiki-page and claim matches directly for agents.
 - `lint` refreshes app-owned findings such as missing citations, contradictions, orphan nodes, empty content, and stale compiled pages.
 - SQLite connections enable foreign keys, WAL, `busy_timeout`, and explicit write transactions. Schema creation is skipped after the current schema version has been installed.
 - Numeric request fields reject non-finite values, and SQLite constraint failures are returned as validation errors instead of crashing entrypoints.
-- Context retrieval is read-only by default. Audit telemetry for context generation is opt-in through `record_access_event`.
+- Context retrieval does not write audit telemetry by default; `record_access_event` is opt-in. Inspect, context, wiki query, and lint surfaces may still materialize stale freshness and lint markers when they detect changed node inputs or source file bytes.
 - Sidebar search text is widget-local. Persisted view-state changes are reserved for explicit view actions such as `set_custom_view`, `set_view_filter`, and `clear_custom_view`.
 
 ## SDK Flow

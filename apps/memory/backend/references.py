@@ -7,6 +7,7 @@ from typing import Any
 
 from database import ensure_schema, json_text, new_id, now_timestamp, record_event, row_payload, transaction
 from errors import MemoryValidationError
+from lint import mark_wiki_stale
 
 
 def validate_workspace_relative_path(value: str) -> str:
@@ -65,4 +66,5 @@ def add_external_ref(data_root: Path, body: dict[str, Any], *, ref_kind: str) ->
             external_ref_id=ref["id"],
             payload=ref,
         )
+        mark_wiki_stale(db, node_id, timestamp=timestamp, reason="reference_attached", data_root=data_root)
         return row_payload(db.execute("SELECT * FROM external_refs WHERE id = ?", (ref["id"],)).fetchone()) or {}

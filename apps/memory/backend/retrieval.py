@@ -108,7 +108,7 @@ def context_payload(data_root: Path, query: str, *, limit: int = 8, record_acces
                     "summary": node["summary"] or node["body_text"][:280],
                     "relevance": round(max(0.1, 1.0 - (index * 0.08)), 3),
                     "provenance": refs,
-                    "compiled": compact_compiled_payload(db, node["id"]),
+                    "compiled": compact_compiled_payload(db, node["id"], data_root=data_root),
                 }
             )
             related = db.execute(
@@ -135,7 +135,7 @@ def context_payload(data_root: Path, query: str, *, limit: int = 8, record_acces
                         "relevance": round(float(related_payload.get("weight") or 0.5) * float(related_payload.get("confidence") or 1.0), 3),
                         "reason": related_payload.get("reason") or f"Related through {related_payload.get('kind')}",
                         "provenance": [],
-                        "compiled": compact_compiled_payload(db, related_payload["id"]),
+                        "compiled": compact_compiled_payload(db, related_payload["id"], data_root=data_root),
                     }
                 )
             if len(items) >= normalized_limit:

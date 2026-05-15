@@ -6,8 +6,8 @@ from pathlib import Path
 import sqlite3
 from typing import Any
 
-from database import connect, ensure_schema, normalize_limit, row_payload
-from lint import lint_findings_for_node
+from database import connect, ensure_schema, normalize_limit, now_timestamp, row_payload
+from lint import lint_findings_for_node, refresh_compiled_freshness
 
 
 def wiki_query(data_root: Path, query: str, *, limit: int = 10) -> dict[str, Any]:
@@ -17,19 +17,24 @@ def wiki_query(data_root: Path, query: str, *, limit: int = 10) -> dict[str, Any
     if not query.strip():
         return {"query": query, "results": []}
     with connect(data_root) as db:
-        page_rows = db.execute(
-            """
-            SELECT wp.*, n.type AS node_type
-            FROM wiki_pages wp
-            JOIN nodes n ON n.id = wp.node_id
-            WHERE wp.status = 'active'
-              AND n.status = 'active'
-              AND (wp.title LIKE ? OR wp.summary LIKE ? OR wp.body_markdown LIKE ?)
-            ORDER BY wp.updated_at DESC
-            LIMIT ?
-            """,
-            (needle, needle, needle, normalized_limit),
+        page_rows = list(
+            db.execute(
+                """
+                SELECT wp.*, n.type AS node_type
+                FROM wiki_pages wp
+                JOIN nodes n ON n.id = wp.node_id
+                WHERE wp.status = 'active'
+                  AND n.status = 'active'
+                  AND (wp.title LIKE ? OR wp.summary LIKE ? OR wp.body_markdown LIKE ?)
+                ORDER BY wp.updated_at DESC
+                LIMIT ?
+                """,
+                (needle, needle, needle, normalized_limit),
+            )
         )
+        timestamp = now_timestamp()
+        for row in page_rows:
+            refresh_compiled_freshness(db, row["node_id"], data_root=data_root, timestamp=timestamp)
         results = [
             {
                 "kind": "wiki_page",
@@ -38,27 +43,31 @@ def wiki_query(data_root: Path, query: str, *, limit: int = 10) -> dict[str, Any
                 "title": row["title"],
                 "summary": row["summary"],
                 "node_type": row["node_type"],
-                "freshness": row["freshness"],
+                "freshness": _page_freshness(db, row["id"]) or row["freshness"],
                 "compiled_at": row["compiled_at"],
             }
             for row in page_rows
         ]
         if len(results) < normalized_limit:
-            claim_rows = db.execute(
-                """
-                SELECT c.*, wp.title, wp.freshness, wp.compiled_at
-                FROM claims c
-                JOIN wiki_pages wp ON wp.id = c.wiki_page_id
-                JOIN nodes n ON n.id = c.node_id
-                WHERE c.status = 'active'
-                  AND wp.status = 'active'
-                  AND n.status = 'active'
-                  AND c.claim_text LIKE ?
-                ORDER BY c.updated_at DESC
-                LIMIT ?
-                """,
-                (needle, normalized_limit - len(results)),
+            claim_rows = list(
+                db.execute(
+                    """
+                    SELECT c.*, wp.title, wp.freshness, wp.compiled_at
+                    FROM claims c
+                    JOIN wiki_pages wp ON wp.id = c.wiki_page_id
+                    JOIN nodes n ON n.id = c.node_id
+                    WHERE c.status = 'active'
+                      AND wp.status = 'active'
+                      AND n.status = 'active'
+                      AND c.claim_text LIKE ?
+                    ORDER BY c.updated_at DESC
+                    LIMIT ?
+                    """,
+                    (needle, normalized_limit - len(results)),
+                )
             )
+            for row in claim_rows:
+                refresh_compiled_freshness(db, row["node_id"], data_root=data_root, timestamp=timestamp)
             results.extend(
                 {
                     "kind": "claim",
@@ -67,7 +76,7 @@ def wiki_query(data_root: Path, query: str, *, limit: int = 10) -> dict[str, Any
                     "claim_id": row["id"],
                     "title": row["title"],
                     "summary": row["claim_text"],
-                    "freshness": row["freshness"],
+                    "freshness": _page_freshness(db, row["wiki_page_id"]) or row["freshness"],
                     "compiled_at": row["compiled_at"],
                 }
                 for row in claim_rows
@@ -75,7 +84,18 @@ def wiki_query(data_root: Path, query: str, *, limit: int = 10) -> dict[str, Any
     return {"query": query, "results": results}
 
 
-def compiled_payload_for_node(db: sqlite3.Connection, node_id: str) -> dict[str, Any]:
+def _page_freshness(db: sqlite3.Connection, wiki_page_id: str) -> str:
+    row = db.execute("SELECT freshness FROM wiki_pages WHERE id = ?", (wiki_page_id,)).fetchone()
+    return str(row["freshness"] or "") if row is not None else ""
+
+
+def compiled_payload_for_node(
+    db: sqlite3.Connection,
+    node_id: str,
+    *,
+    data_root: Path | None = None,
+) -> dict[str, Any]:
+    refresh_compiled_freshness(db, node_id, data_root=data_root, timestamp=now_timestamp())
     page = row_payload(db.execute("SELECT * FROM wiki_pages WHERE node_id = ? AND status = 'active'", (node_id,)).fetchone())
     if page is None:
         return {
@@ -109,8 +129,13 @@ def compiled_payload_for_node(db: sqlite3.Connection, node_id: str) -> dict[str,
     }
 
 
-def compact_compiled_payload(db: sqlite3.Connection, node_id: str) -> dict[str, Any] | None:
-    payload = compiled_payload_for_node(db, node_id)
+def compact_compiled_payload(
+    db: sqlite3.Connection,
+    node_id: str,
+    *,
+    data_root: Path | None = None,
+) -> dict[str, Any] | None:
+    payload = compiled_payload_for_node(db, node_id, data_root=data_root)
     page = payload.get("compiled_page")
     if not page:
         return None

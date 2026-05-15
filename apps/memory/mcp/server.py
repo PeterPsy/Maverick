@@ -11,17 +11,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
 from errors import MemoryValidationError
 from entrypoint_errors import storage_error_response
-from service import action_from_tool, app_events_for_action, handle_action
+from service import MCP_TOOL_ACTIONS, action_from_tool, app_events_for_action, handle_action
 
 
 payload = json.loads(sys.stdin.read() or "{}")
 arguments = payload.get("arguments") if isinstance(payload.get("arguments"), dict) else {}
-action = action_from_tool(str(payload.get("tool_name") or ""), str(arguments.get("action") or "context"))
+tool_name = str(payload.get("tool_name") or "")
+action = action_from_tool(tool_name, "context")
 app_id = str(payload.get("app_id") or "memory")
 try:
+    if tool_name in MCP_TOOL_ACTIONS and "action" in arguments:
+        raise MemoryValidationError("MCP tool arguments must not include action.")
     status_code, result = handle_action(
         Path(payload["data_root"]),
-        {"action": action, **arguments},
+        {**arguments, "action": action},
         app_id=app_id,
     )
 except MemoryValidationError as error:

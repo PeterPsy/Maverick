@@ -247,7 +247,7 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual(len(graph["edges"]), 1)
             self.assertEqual(graph["edges"][0]["kind"], "mentions")
 
-    def test_compile_builds_internal_wiki_context_and_search_matches(self) -> None:
+    def test_compile_builds_internal_wiki_context_sources_and_search_matches(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             data_root = Path(temp) / "data" / "memory"
             node = self.run_backend(
@@ -278,14 +278,95 @@ class MemoryAppTestCase(unittest.TestCase):
 
             self.assertEqual(compiled["status_code"], 200)
             self.assertEqual(compiled["json"]["compiled_page"]["title"], "Acme support agreement")
-            self.assertEqual(compiled["json"]["claims"][0]["citations"][0]["external_ref_id"], file_ref["id"])
-            self.assertFalse(any(finding["finding_type"] == "missing_citation" for finding in compiled["json"]["lint_findings"]))
+            self.assertEqual(compiled["json"]["claims"][0]["citations"], [])
+            self.assertEqual(compiled["json"]["citations"], [])
+            self.assertTrue(any(source["external_ref_id"] == file_ref["id"] for source in compiled["json"]["sources"]))
+            self.assertTrue(any(finding["finding_type"] == "missing_citation" for finding in compiled["json"]["lint_findings"]))
             self.assertEqual(inspect["json"]["node"]["compiled_page"]["node_id"], node["id"])
             self.assertTrue(inspect["json"]["node"]["sources"])
             self.assertEqual(context["status_code"], 200)
             self.assertEqual(context["json"]["items"][0]["compiled"]["wiki_page_id"], compiled["json"]["compiled_page"]["id"])
             self.assertIn("claim", search["json"]["results"][0]["match_sources"])
             self.assertEqual(wiki_query["json"]["results"][0]["kind"], "wiki_page")
+
+    def test_node_reference_and_source_changes_mark_compiled_wiki_stale(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            workspace_root = Path(temp)
+            data_root = workspace_root / "data" / "memory"
+            source_path = workspace_root / "storage" / "generated" / "reports" / "acme-support.md"
+            source_path.parent.mkdir(parents=True, exist_ok=True)
+            source_path.write_text("Initial support source.", encoding="utf-8")
+            node = self.run_backend(
+                data_root,
+                {
+                    "action": "remember",
+                    "title": "Acme source freshness",
+                    "body": "Acme support is active.",
+                    "type": "fact",
+                },
+            )["json"]["node"]
+            self.run_backend(
+                data_root,
+                {
+                    "action": "attach_file",
+                    "node_id": node["id"],
+                    "file_id": "file_acme_support",
+                    "workspace_relative_path": "storage/generated/reports/acme-support.md",
+                    "title": "Acme support source",
+                },
+            )
+
+            compiled = self.run_backend(data_root, {"action": "compile", "node_id": node["id"]})["json"]
+            source_path.write_text("Changed support source.", encoding="utf-8")
+            lint_after_source_change = self.run_backend(data_root, {"action": "lint", "node_id": node["id"]})["json"]
+            changed_source_inspect = self.run_backend(data_root, {"action": "inspect", "node_id": node["id"]})["json"]["node"]
+            self.run_backend(data_root, {"action": "compile", "node_id": node["id"]})
+            updated = self.run_backend(
+                data_root,
+                {"action": "update_node", "node_id": node["id"], "body": "Acme support owner changed."},
+            )["json"]["node"]
+            context = self.run_backend(data_root, {"action": "context", "query": "Acme support owner"})["json"]
+
+            self.assertEqual(compiled["compiled_page"]["freshness"], "fresh")
+            self.assertTrue(any(finding["finding_type"] == "stale_page" for finding in lint_after_source_change["findings"]))
+            self.assertEqual(changed_source_inspect["compiled_page"]["freshness"], "stale")
+            self.assertTrue(any(finding["finding_type"] == "stale_page" for finding in changed_source_inspect["lint_findings"]))
+            self.assertEqual(updated["compiled_page"]["freshness"], "stale")
+            self.assertTrue(any(finding["finding_type"] == "stale_page" for finding in updated["lint_findings"]))
+            self.assertEqual(context["items"][0]["compiled"]["freshness"], "stale")
+
+    def test_file_source_versions_use_observed_file_hashes_when_available(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            workspace_root = Path(temp)
+            data_root = workspace_root / "data" / "memory"
+            source_path = workspace_root / "storage" / "generated" / "source.md"
+            source_path.parent.mkdir(parents=True, exist_ok=True)
+            source_path.write_text("first version", encoding="utf-8")
+            node = self.run_backend(
+                data_root,
+                {"action": "remember", "title": "Versioned source", "body": "Source backed claim.", "type": "fact"},
+            )["json"]["node"]
+            self.run_backend(
+                data_root,
+                {
+                    "action": "attach_file",
+                    "node_id": node["id"],
+                    "workspace_relative_path": "storage/generated/source.md",
+                    "title": "Source",
+                },
+            )
+
+            self.run_backend(data_root, {"action": "compile", "node_id": node["id"]})
+            source_path.write_text("second version", encoding="utf-8")
+            self.run_backend(data_root, {"action": "compile", "node_id": node["id"]})
+
+            database = self.import_backend_module("database")
+            with database.connect(data_root) as db:
+                versions = [database.row_payload(row) or {} for row in db.execute("SELECT * FROM source_versions ORDER BY created_at")]
+
+            self.assertEqual(len(versions), 2)
+            self.assertEqual({version["metadata"]["hash_kind"] for version in versions}, {"file_bytes"})
+            self.assertTrue(all(not version["extracted_text"] for version in versions))
 
     def test_lint_reports_uncited_claims_and_contradictions(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -457,6 +538,37 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual(mcp["app_id"], "memory")
             self.assertEqual(mcp["entity_types"][0]["entity_type"], "node")
             self.assertEqual(view_filter["state"]["view_filter"]["query"], "Acme")
+
+    def test_mcp_tool_arguments_cannot_override_declared_tool_action(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            node = run_json_entrypoint(
+                MEMORY_ROOT / "backend" / "app_backend.py",
+                payload={"data_root": str(data_root), "body": {"action": "remember", "title": "Protected node", "body": "Keep me."}},
+                cwd=MEMORY_ROOT,
+            )["json"]["node"]
+
+            malicious = run_json_entrypoint(
+                MEMORY_ROOT / "mcp" / "server.py",
+                payload={
+                    "workspace_id": "default",
+                    "app_id": "memory",
+                    "data_root": str(data_root),
+                    "tool_name": "memory_lint",
+                    "arguments": {"action": "delete_node", "node_id": node["id"]},
+                },
+                cwd=MEMORY_ROOT,
+            )
+            inspect = run_json_entrypoint(
+                MEMORY_ROOT / "backend" / "app_backend.py",
+                payload={"data_root": str(data_root), "body": {"action": "inspect", "node_id": node["id"]}},
+                cwd=MEMORY_ROOT,
+            )
+
+            self.assertEqual(malicious["status_code"], 400)
+            self.assertEqual(malicious["error"], "validation_error")
+            self.assertEqual(inspect["status_code"], 200)
+            self.assertEqual(inspect["json"]["node"]["status"], "active")
 
     @integration_test("memory platform integration suite; run with scripts/test_suite.py --level integration")
     def test_core_mounted_cli_and_mcp_can_use_memory(self) -> None:

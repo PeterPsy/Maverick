@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from hashlib import sha256
+from pathlib import Path
 import re
 import sqlite3
 
-from sources import source_hash
+from sources import source_snapshot
 
 
 SENTENCE_PATTERN = re.compile(r"(?<=[.!?])\s+")
@@ -41,14 +42,20 @@ def claim_texts(node: sqlite3.Row) -> list[str]:
     return [candidate[:500] for candidate in candidates[:8]]
 
 
-def compile_input_hash(node: sqlite3.Row, refs: list[sqlite3.Row], relationships: list[sqlite3.Row]) -> str:
+def compile_input_hash(
+    node: sqlite3.Row,
+    refs: list[sqlite3.Row],
+    relationships: list[sqlite3.Row],
+    *,
+    data_root: Path | None = None,
+) -> str:
     parts = [
         node["id"],
         node["title"],
         node["summary"],
         node["body_text"],
         node["updated_at"],
-        *[ref["updated_at"] + ref["id"] + source_hash(ref) for ref in refs],
+        *[ref["updated_at"] + ref["id"] + source_snapshot(ref, data_root)["hash"] for ref in refs],
         *[edge["updated_at"] + edge["id"] + edge["kind"] + edge["other_title"] for edge in relationships],
     ]
     return sha256("\n".join(str(part or "") for part in parts).encode("utf-8")).hexdigest()

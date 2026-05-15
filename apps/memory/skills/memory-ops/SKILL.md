@@ -1,6 +1,6 @@
 ---
 name: memory-ops
-description: "Use the Memory app to retrieve workspace context, save durable business facts, and link notes to files or app entities."
+description: "Use the Memory app to retrieve workspace context, save durable business facts, and link nodes to files or app entities."
 ---
 
 # Memory Ops

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import sqlite3
 from typing import Any
 
 from database import ensure_schema, json_text, new_id, normalize_limit, now_timestamp, row_payload, transaction
 from errors import MemoryValidationError
+from sources import source_snapshot
 
 
 def lint_memory(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
@@ -19,7 +21,7 @@ def lint_memory(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
     with transaction(data_root, immediate=True) as db:
         node_ids = _target_node_ids(db, node_id=node_id, limit=limit)
         for current_node_id in node_ids:
-            refresh_node_lint(db, current_node_id)
+            refresh_node_lint(db, current_node_id, data_root=data_root)
         findings = active_lint_findings(db, node_ids=node_ids, limit=limit)
     return {
         "findings": findings,
@@ -31,10 +33,16 @@ def lint_memory(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def refresh_node_lint(db: sqlite3.Connection, node_id: str) -> list[dict[str, Any]]:
+def refresh_node_lint(
+    db: sqlite3.Connection,
+    node_id: str,
+    *,
+    data_root: Path | None = None,
+) -> list[dict[str, Any]]:
     node = db.execute("SELECT * FROM nodes WHERE id = ? AND status = 'active'", (node_id,)).fetchone()
     if node is None:
         return []
+    refresh_compiled_freshness(db, node_id, data_root=data_root, timestamp=now_timestamp(), refresh_lint=False)
     wiki_page = db.execute("SELECT * FROM wiki_pages WHERE node_id = ? AND status = 'active'", (node_id,)).fetchone()
     claims = list(db.execute("SELECT * FROM claims WHERE node_id = ? AND status = 'active'", (node_id,)))
     refs = list(db.execute("SELECT * FROM external_refs WHERE node_id = ?", (node_id,)))
@@ -107,6 +115,99 @@ def refresh_node_lint(db: sqlite3.Connection, node_id: str) -> list[dict[str, An
     return active_lint_findings(db, node_ids=[node_id], limit=200)
 
 
+def mark_wiki_stale(
+    db: sqlite3.Connection,
+    node_id: str,
+    *,
+    timestamp: str,
+    reason: str,
+    data_root: Path | None = None,
+    refresh_lint: bool = True,
+) -> bool:
+    page = db.execute("SELECT id, metadata_json FROM wiki_pages WHERE node_id = ? AND status = 'active'", (node_id,)).fetchone()
+    if page is None:
+        return False
+    metadata = _page_metadata(page)
+    metadata["last_stale_reason"] = reason
+    db.execute(
+        "UPDATE wiki_pages SET freshness = 'stale', updated_at = ?, metadata_json = ? WHERE id = ?",
+        (timestamp, json_text(metadata), page["id"]),
+    )
+    db.execute(
+        "UPDATE claims SET stale = 1, updated_at = ? WHERE node_id = ? AND status = 'active'",
+        (timestamp, node_id),
+    )
+    if refresh_lint:
+        refresh_node_lint(db, node_id, data_root=data_root)
+    return True
+
+
+def refresh_compiled_freshness(
+    db: sqlite3.Connection,
+    node_id: str,
+    *,
+    data_root: Path | None,
+    timestamp: str,
+    refresh_lint: bool = True,
+) -> None:
+    page = db.execute("SELECT * FROM wiki_pages WHERE node_id = ? AND status = 'active'", (node_id,)).fetchone()
+    if page is None:
+        return
+    if _compiled_inputs_changed(db, page=page, data_root=data_root):
+        mark_wiki_stale(
+            db,
+            node_id,
+            timestamp=timestamp,
+            reason="compiled_input_changed",
+            data_root=data_root,
+            refresh_lint=refresh_lint,
+        )
+
+
+def _compiled_inputs_changed(db: sqlite3.Connection, *, page: sqlite3.Row, data_root: Path | None) -> bool:
+    compiled_at = str(page["compiled_at"] or "")
+    if str(page["freshness"] or "") != "fresh":
+        return False
+    node = db.execute("SELECT updated_at FROM nodes WHERE id = ? AND status = 'active'", (page["node_id"],)).fetchone()
+    if node is not None and str(node["updated_at"] or "") > compiled_at:
+        return True
+    ref = db.execute("SELECT updated_at FROM external_refs WHERE node_id = ? ORDER BY updated_at DESC LIMIT 1", (page["node_id"],)).fetchone()
+    if ref is not None and str(ref["updated_at"] or "") > compiled_at:
+        return True
+    edge = db.execute(
+        """
+        SELECT updated_at
+        FROM edges
+        WHERE status = 'active' AND (source_node_id = ? OR target_node_id = ?)
+        ORDER BY updated_at DESC
+        LIMIT 1
+        """,
+        (page["node_id"], page["node_id"]),
+    ).fetchone()
+    if edge is not None and str(edge["updated_at"] or "") > compiled_at:
+        return True
+    if data_root is None:
+        return False
+    rows = db.execute(
+        """
+        SELECT er.*, s.content_hash
+        FROM external_refs er
+        JOIN sources s ON s.external_ref_id = er.id
+        WHERE er.node_id = ? AND s.status = 'active'
+        """,
+        (page["node_id"],),
+    )
+    return any(source_snapshot(row, data_root)["hash"] != row["content_hash"] for row in rows)
+
+
+def _page_metadata(page: sqlite3.Row) -> dict[str, object]:
+    try:
+        metadata = json.loads(page["metadata_json"] or "{}")
+    except json.JSONDecodeError:
+        metadata = {}
+    return metadata if isinstance(metadata, dict) else {}
+
+
 def active_lint_findings(
     db: sqlite3.Connection,
     *,
@@ -170,8 +271,14 @@ def _desired_findings(
         findings.append(_finding("orphan_node", "info", "Node has no relationships or evidence sources."))
     if wiki_page is None:
         findings.append(_finding("stale_page", "warning", "Node has not been compiled into the internal wiki."))
+    elif str(wiki_page["freshness"] or "") != "fresh":
+        findings.append(_finding("stale_page", "warning", "Compiled wiki page is stale."))
     elif str(node["updated_at"]) > str(wiki_page["compiled_at"]):
         findings.append(_finding("stale_page", "warning", "Node changed after the last wiki compilation."))
+    elif any(str(ref["updated_at"] or "") > str(wiki_page["compiled_at"] or "") for ref in refs):
+        findings.append(_finding("stale_page", "warning", "Source references changed after the last wiki compilation."))
+    elif _latest_edge_update(db, node_id) > str(wiki_page["compiled_at"] or ""):
+        findings.append(_finding("stale_page", "warning", "Relationships changed after the last wiki compilation."))
     for claim in claims:
         citation = db.execute("SELECT id FROM citations WHERE claim_id = ? LIMIT 1", (claim["id"],)).fetchone()
         if citation is None:
@@ -202,6 +309,20 @@ def _desired_findings(
             message = f"{message} {row['reason']}"
         findings.append(_finding(f"contradiction:{row['id']}", "error", message))
     return findings
+
+
+def _latest_edge_update(db: sqlite3.Connection, node_id: str) -> str:
+    row = db.execute(
+        """
+        SELECT updated_at
+        FROM edges
+        WHERE status = 'active' AND (source_node_id = ? OR target_node_id = ?)
+        ORDER BY updated_at DESC
+        LIMIT 1
+        """,
+        (node_id, node_id),
+    ).fetchone()
+    return str(row["updated_at"] or "") if row is not None else ""
 
 
 def _finding(

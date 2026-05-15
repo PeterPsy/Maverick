@@ -1757,7 +1757,7 @@ The inventory layer should therefore maintain at least:
 
 Rules:
 
-- references from apps and notes should prefer `file_id`
+- references from apps and memory nodes should prefer `file_id`
 - paths remain useful for navigation and debugging
 - overwrite semantics must produce either an explicit version update or a new `file_id`, but never a silent identity collision
 
@@ -1908,11 +1908,13 @@ The compiled layer should keep raw source identity separate from derived knowled
 
 The first implementation may compile deterministically from existing node text, references, and relationships before any LLM call exists. Later LLM compilation must still preserve citations, lint/probe results, and the raw source references that support rollback and audit.
 
+When the Memory app cannot inspect source bytes or extracted text, it must label the stored hash as a reference snapshot hash rather than presenting it as proof of source content. Citations must connect claims to credible source locators, ranges, chunks, quotes, or extracted references; attaching a source to a node is not by itself a citation for every compiled claim.
+
 ### Memory file references
 
 Nodes should reference workspace files by stable `file_id`, with path retained only as a secondary navigation aid.
 
-The note can store:
+The node can store:
 
 - file id
 - current workspace-relative path
@@ -1922,8 +1924,8 @@ The note can store:
 
 Memory retrieval should prefer:
 
-1. direct lookup by note id or entity key
-2. linked note traversal
+1. direct lookup by node id or entity key
+2. linked node traversal
 3. linked file fetch
 4. search expansion only when direct graph traversal is insufficient
 

@@ -20,6 +20,7 @@ from database import (
     transaction,
 )
 from errors import MemoryValidationError
+from lint import mark_wiki_stale
 from wiki_queries import compiled_payload_for_node
 
 
@@ -63,7 +64,7 @@ def create_node(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
         )
         refresh_fts(db, node["id"])
         record_event(db, event_type="node_created", node_id=node["id"], payload={"title": node["title"]})
-        return get_node_with_details(db, node["id"])
+        return get_node_with_details(db, node["id"], data_root=data_root)
 
 
 def update_node(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
@@ -106,8 +107,9 @@ def update_node(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
             values,
         )
         refresh_fts(db, node_id)
+        mark_wiki_stale(db, node_id, timestamp=timestamp, reason="node_updated", data_root=data_root)
         record_event(db, event_type="node_updated", node_id=node_id, payload={"title": values["title"]})
-        return get_node_with_details(db, node_id)
+        return get_node_with_details(db, node_id, data_root=data_root)
 
 
 def soft_delete_node(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
@@ -136,7 +138,7 @@ def soft_delete_node(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
         return {"deleted": True, "node_id": node_id}
 
 
-def get_node_with_details(db: sqlite3.Connection, node_id: str) -> dict[str, Any]:
+def get_node_with_details(db: sqlite3.Connection, node_id: str, *, data_root: Path | None = None) -> dict[str, Any]:
     node = row_payload(db.execute("SELECT * FROM nodes WHERE id = ?", (node_id,)).fetchone())
     if node is None:
         raise MemoryValidationError("node not found.")
@@ -161,11 +163,11 @@ def get_node_with_details(db: sqlite3.Connection, node_id: str) -> dict[str, Any
     node["external_refs"] = [item for item in refs if item is not None]
     node["outgoing_edges"] = [item for item in outgoing if item is not None]
     node["incoming_edges"] = [item for item in incoming if item is not None]
-    node.update(compiled_payload_for_node(db, node_id))
+    node.update(compiled_payload_for_node(db, node_id, data_root=data_root))
     return node
 
 
 def inspect_node(data_root: Path, node_id: str) -> dict[str, Any]:
     ensure_schema(data_root)
     with connect(data_root) as db:
-        return get_node_with_details(db, node_id)
+        return get_node_with_details(db, node_id, data_root=data_root)

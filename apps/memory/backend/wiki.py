@@ -9,7 +9,7 @@ from typing import Any
 from database import ensure_schema, json_text, new_id, now_timestamp, row_payload, transaction
 from errors import MemoryValidationError
 from lint import refresh_node_lint
-from sources import insert_citation, sync_sources
+from sources import sync_sources
 from wiki_content import claim_texts, compile_input_hash, compiled_markdown
 from wiki_queries import compiled_payload_for_node
 
@@ -24,9 +24,9 @@ def compile_node(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
         refs = _external_refs(db, node_id)
         relationships = _relationships(db, node_id)
         timestamp = now_timestamp()
-        input_hash = compile_input_hash(node, refs, relationships)
+        input_hash = compile_input_hash(node, refs, relationships, data_root=data_root)
         run = _create_compile_run(db, node_id=node_id, input_hash=input_hash, timestamp=timestamp)
-        sources = sync_sources(db, node_id=node_id, refs=refs, timestamp=timestamp)
+        sync_sources(db, data_root=data_root, node_id=node_id, refs=refs, timestamp=timestamp)
         page = _upsert_wiki_page(
             db,
             node=node,
@@ -35,15 +35,15 @@ def compile_node(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
             compile_run_id=run["id"],
             timestamp=timestamp,
         )
-        _replace_claims(db, page_id=page["id"], node=node, sources=sources, timestamp=timestamp)
+        _replace_claims(db, page_id=page["id"], node=node, timestamp=timestamp)
         db.execute(
             "UPDATE compile_runs SET status = 'completed', completed_at = ? WHERE id = ?",
             (timestamp, run["id"]),
         )
-        refresh_node_lint(db, node_id)
+        refresh_node_lint(db, node_id, data_root=data_root)
         return {
             "compile_run": row_payload(db.execute("SELECT * FROM compile_runs WHERE id = ?", (run["id"],)).fetchone()),
-            **compiled_payload_for_node(db, node_id),
+            **compiled_payload_for_node(db, node_id, data_root=data_root),
         }
 
 
@@ -149,13 +149,13 @@ def _replace_claims(
     *,
     page_id: str,
     node: sqlite3.Row,
-    sources: list[dict[str, Any]],
     timestamp: str,
 ) -> None:
     old_claim_ids = [row["id"] for row in db.execute("SELECT id FROM claims WHERE wiki_page_id = ?", (page_id,))]
     if old_claim_ids:
         placeholders = ",".join("?" for _item in old_claim_ids)
         db.execute(f"DELETE FROM citations WHERE claim_id IN ({placeholders})", tuple(old_claim_ids))
+        db.execute(f"DELETE FROM lint_findings WHERE claim_id IN ({placeholders})", tuple(old_claim_ids))
     db.execute("DELETE FROM claims WHERE wiki_page_id = ?", (page_id,))
     for claim_text in claim_texts(node):
         claim = {
@@ -175,5 +175,3 @@ def _replace_claims(
             """,
             claim,
         )
-        for source in sources[:3]:
-            insert_citation(db, claim_id=claim["id"], source=source, timestamp=timestamp)

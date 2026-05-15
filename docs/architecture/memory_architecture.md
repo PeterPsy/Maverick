@@ -43,6 +43,10 @@ The internal wiki model is app-owned and should include:
 
 Raw sources stay authoritative. Compiled pages and claims are derived artifacts that can be regenerated.
 
+Deterministic compilation must not create placeholder citations just because a source is linked to a node. Source links show provenance candidates; citations require credible evidence such as a chunk, locator, range, quote, or extracted-reference pointer that supports the specific claim. Until that exists, claims remain uncited and lint should report `missing_citation`.
+
+When source extraction is unavailable, Memory may store a source version with `metadata.hash_kind = reference_snapshot` to capture the observed reference fields. That snapshot is not a content hash. For workspace files, Memory should use observed file-byte hashes when the file can be resolved from the workspace root.
+
 ## Runtime Surfaces
 
 Memory exposes agent-facing surfaces through the app contract:

@@ -1,8 +1,30 @@
 #!/usr/bin/env python3
 """Maverick developer CLI wrapper."""
 
+import os
 import sys
 from pathlib import Path
+
+
+def _runtime_shim() -> Path | None:
+    runtime_root = os.environ.get("MAVERICK_RUNTIME_ROOT", "").strip()
+    token = os.environ.get("MAVERICK_RUNTIME_API_TOKEN", "").strip()
+    if not runtime_root or not token:
+        return None
+    shim = Path(runtime_root) / "bin" / "maverick"
+    try:
+        current = Path(__file__).resolve()
+        resolved_shim = shim.resolve(strict=True)
+    except OSError:
+        return None
+    if resolved_shim == current or not os.access(resolved_shim, os.X_OK):
+        return None
+    return resolved_shim
+
+
+shim = _runtime_shim()
+if shim is not None:
+    os.execv(str(shim), [str(shim), *sys.argv[1:]])
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 

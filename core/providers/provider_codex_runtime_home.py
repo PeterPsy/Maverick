@@ -147,6 +147,7 @@ class CodexRuntimeHomeMixin:
         self,
         session: RuntimeSessionRecord,
         *,
+        runtime_bin: Path | None = None,
         model_id: str | None = None,
         model_reasoning_effort: str | None = None,
     ) -> Path:
@@ -162,6 +163,8 @@ class CodexRuntimeHomeMixin:
             source_home / "config.toml",
             runtime_home / "config.toml",
             workspace_root=Path(session.workspace_root),
+            runtime_root=Path(session.runtime_root),
+            runtime_bin=runtime_bin or Path(session.runtime_root) / "bin",
             execution_mode=session.effective_mode,
             model_id=model_id,
             model_reasoning_effort=model_reasoning_effort,
@@ -233,6 +236,8 @@ class CodexRuntimeHomeMixin:
         destination: Path,
         *,
         workspace_root: Path,
+        runtime_root: Path,
+        runtime_bin: Path,
         execution_mode: str,
         model_id: str | None = None,
         model_reasoning_effort: str | None = None,
@@ -265,6 +270,16 @@ class CodexRuntimeHomeMixin:
         if sanitized_lines:
             output_lines.append("")
             output_lines.extend(sanitized_lines)
+        if output_lines and output_lines[-1].strip():
+            output_lines.append("")
+        output_lines.extend(
+            self._managed_shell_environment_policy_lines(
+                workspace_root=workspace_root,
+                runtime_root=runtime_root,
+                runtime_bin=runtime_bin,
+                execution_mode=execution_mode,
+            )
+        )
         if output_lines and output_lines[-1].strip():
             output_lines.append("")
         output_lines.extend(self._managed_runtime_feature_lines())

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import json
 import os
 from pathlib import Path
 import shutil
@@ -147,6 +148,8 @@ class CodexRuntimeConfigMixin:
 
 
     def _is_disabled_runtime_config_section(self, section: str, *, workspace_root: Path, execution_mode: str) -> bool:
+        if self._is_managed_shell_environment_section(section):
+            return True
         if section in {"[mcp_servers]", "[plugins]", "[features]"}:
             return True
         if section.startswith(("[mcp_servers.", "[plugins.", "[features.")):
@@ -173,6 +176,54 @@ class CodexRuntimeConfigMixin:
         workspace = workspace_root.expanduser().resolve(strict=False)
         project = Path(raw_project).expanduser().resolve(strict=False)
         return project != workspace and not project.is_relative_to(workspace)
+
+
+
+    def _is_managed_shell_environment_section(self, section: str) -> bool:
+        table = section.strip().lstrip("[").rstrip("]").strip()
+        return table == "shell_environment_policy" or table.startswith("shell_environment_policy.")
+
+
+
+    def _managed_shell_environment_policy_lines(
+        self,
+        *,
+        workspace_root: Path,
+        runtime_root: Path,
+        runtime_bin: Path,
+        execution_mode: str,
+    ) -> list[str]:
+        path_value = os.pathsep.join(
+            self._dedupe_path_entries(
+                [
+                    str(runtime_bin),
+                    *str(os.environ.get("PATH") or "").split(os.pathsep),
+                ]
+            )
+        )
+        api_base = str(os.environ.get("MAVERICK_API_BASE") or "http://127.0.0.1:8014").rstrip("/")
+        return [
+            "[shell_environment_policy.set]",
+            f"PATH = {_toml_string(path_value)}",
+            f"MAVERICK_RUNTIME_BIN = {_toml_string(str(runtime_bin))}",
+            f"MAVERICK_RUNTIME_ROOT = {_toml_string(str(runtime_root))}",
+            f"MAVERICK_WORKSPACE_ROOT = {_toml_string(str(workspace_root))}",
+            f"MAVERICK_EFFECTIVE_MODE = {_toml_string(execution_mode)}",
+            f"MAVERICK_API_BASE = {_toml_string(api_base)}",
+        ]
+
+
+
+    def _dedupe_path_entries(self, entries: list[str]) -> list[str]:
+        unique: list[str] = []
+        seen: set[str] = set()
+        for entry in entries:
+            normalized = str(entry or "").strip()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            unique.append(normalized)
+        return unique
 
 
 
@@ -230,3 +281,7 @@ class CodexRuntimeConfigMixin:
             seen.add(entry)
             unique.append(entry)
         return os.pathsep.join(unique)
+
+
+def _toml_string(value: str) -> str:
+    return json.dumps(value, ensure_ascii=True)

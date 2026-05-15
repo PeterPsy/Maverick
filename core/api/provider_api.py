@@ -10,7 +10,7 @@ from core.api.session_api import RequestSession, require_session
 from core.authorization.errors import AuthorizationError
 from core.authorization.service import require_provider_selection_authority
 from core.providers.models import ProviderDefinition, ProviderModelOption, ProviderReasoningOption, ProviderSelection
-from core.providers.service import configure_workspace_provider, list_available_providers, resolve_workspace_provider_status
+from core.providers.service import configure_workspace_provider, resolve_workspace_provider_status
 from core.runtime.runtime_session import RuntimeSessionRecord
 
 
@@ -105,9 +105,18 @@ def runtime_session_payload(session: RuntimeSessionRecord) -> dict[str, object]:
     }
 
 
-def workspace_provider_status(state: PlatformState, *, workspace_id: str) -> dict[str, object]:
+def workspace_provider_status(
+    state: PlatformState,
+    *,
+    workspace_id: str,
+    refresh_model_catalog: bool = False,
+) -> dict[str, object]:
     """Return the active provider state for one workspace."""
-    status = resolve_workspace_provider_status(state.provider_store, workspace_id=workspace_id)
+    status = resolve_workspace_provider_status(
+        state.provider_store,
+        workspace_id=workspace_id,
+        refresh_model_catalog=refresh_model_catalog,
+    )
     active_provider = None if status.active_provider is None else provider_payload(status.active_provider)
     return {
         "workspace_id": workspace_id,
@@ -170,11 +179,12 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
     if method != "GET":
         return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")
     if path == "/api/providers":
+        provider_status = workspace_provider_status(state, workspace_id=context.workspace_id, refresh_model_catalog=True)
         return json_response(
             start_response,
             {
-                "items": [provider_payload(provider) for provider in list_available_providers(state.provider_store)],
-                **workspace_provider_status(state, workspace_id=context.workspace_id),
+                "items": provider_status["available_providers"],
+                **provider_status,
             },
         )
     if path == "/api/providers/active":

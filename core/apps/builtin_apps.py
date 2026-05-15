@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 import logging
 from pathlib import Path
 
-from core.apps.errors import AppCompatibilityError, AppContractValidationError
+from core.apps.errors import AppCompatibilityError, AppContractValidationError, WorkspaceAppBindingNotFoundError
+from core.apps.models import AppSourceRecord
 from core.apps.service import install_store_app, register_app_source_from_contract
+from core.apps.service_common import _ensure_workspace_app_data_root, _write_current_data_state
 from core.apps.store import AppStore
 from core.shared.repository import installation_paths
 from core.workspaces.store import WorkspaceStore
@@ -49,7 +51,7 @@ def register_and_install_builtin_apps(
 ) -> list[str]:
     """Ensure built-in apps are known and enabled in one workspace."""
     ensure_default_workspace_record(workspace_store, now=now)
-    installed: list[str] = []
+    ensured: list[str] = []
     for spec in discover_builtin_apps(start_path=start_path):
         if not spec.source_path.is_dir():
             continue
@@ -61,6 +63,16 @@ def register_and_install_builtin_apps(
                 now=now,
             )
         except AppContractValidationError:
+            continue
+        if _current_builtin_binding_exists(
+            app_store,
+            source=source,
+            workspace_id=workspace_id,
+            enabled=True,
+            start_path=start_path,
+            now=now,
+        ):
+            ensured.append(source.app_id)
             continue
         try:
             install_store_app(
@@ -80,8 +92,54 @@ def register_and_install_builtin_apps(
                 error,
             )
             continue
-        installed.append(source.app_id)
-    return installed
+        ensured.append(source.app_id)
+    return ensured
+
+
+def _current_builtin_binding_exists(
+    app_store: AppStore,
+    *,
+    source: AppSourceRecord,
+    workspace_id: str,
+    enabled: bool,
+    start_path: Path | None,
+    now: datetime | None,
+) -> bool:
+    local_app_id = source.app_id
+    expected_status = "enabled" if enabled else "installed"
+    try:
+        binding = app_store.get_workspace_app_binding(workspace_id=workspace_id, app_id=local_app_id)
+    except WorkspaceAppBindingNotFoundError:
+        return False
+    if (
+        binding.source_record_id != source.source_id
+        or binding.source_kind != source.source_kind
+        or binding.active_version != source.version
+        or binding.status != expected_status
+    ):
+        return False
+    data_root = _ensure_workspace_app_data_root(
+        workspace_id=workspace_id,
+        app_id=local_app_id,
+        start_path=start_path,
+    )
+    updated = replace(
+        binding,
+        data_root=str(data_root),
+        public_app_id=source.public_app_id or source.app_id,
+        local_app_id=local_app_id,
+        mount_app_id=local_app_id,
+    )
+    if updated != binding:
+        app_store.save_workspace_app_binding(updated)
+    _write_current_data_state(
+        data_root=data_root,
+        app_id=local_app_id,
+        app_version=source.version,
+        data_schema_version=source.contract.storage.data_schema_version,
+        now=now,
+    )
+    return True
 
 
 def register_and_install_builtin_apps_for_active_workspaces(

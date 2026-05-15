@@ -247,6 +247,7 @@ class CodexCommandMixin:
         env["MAVERICK_WORKSPACE_ROOT"] = str(workspace_root)
         env["MAVERICK_WORKSPACE_ID"] = session.workspace_id
         env["MAVERICK_RUNTIME_ROOT"] = str(runtime_root)
+        env["MAVERICK_RUNTIME_BIN"] = str(runtime_bin)
         env["MAVERICK_RUNTIME_SESSION_ID"] = session.session_id
         env["MAVERICK_EFFECTIVE_MODE"] = execution_mode
         env["MAVERICK_RUNTIME_API_TOKEN"] = issue_workspace_api_token(

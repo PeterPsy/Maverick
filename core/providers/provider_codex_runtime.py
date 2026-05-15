@@ -158,8 +158,7 @@ class CodexProviderAdapter(
 
     def provider_definition(self) -> ProviderDefinition:
         """Return the canonical definition exposed by this adapter."""
-        options = self.model_options()
-        return build_codex_definition(model_options=options, default_model_id=self.default_model_id(options))
+        return build_codex_definition()
 
 
 def remove_codex_system_skills(runtime_home: Path) -> None:

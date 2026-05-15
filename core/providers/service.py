@@ -8,7 +8,7 @@ from inspect import signature
 from core.observability.service import record_platform_audit, record_platform_event
 from core.providers.errors import ProviderError, ProviderSelectionError
 from core.providers.models import ProviderDefinition, ProviderSelection, RuntimeBackendLaunchSpec, WorkspaceProviderStatus
-from core.providers.provider_codex import CodexProviderAdapter
+from core.providers.provider_codex import CodexProviderAdapter, build_codex_definition
 from core.providers.provider_credentials import resolve_provider_binding
 from core.providers.provider_credentials import bind_provider_credential, disable_provider_binding
 from core.providers.provider_registry import ProviderRegistry, RuntimeBackendAdapter
@@ -27,10 +27,19 @@ def utcnow() -> datetime:
     return datetime.now(tz=UTC)
 
 
-def builtin_provider_registry(*, codex_command: str = "codex") -> ProviderRegistry:
+def builtin_provider_registry(*, codex_command: str = "codex", refresh_model_catalog: bool = False) -> ProviderRegistry:
     """Build the builtin provider registry shipped by the core."""
     registry = ProviderRegistry()
-    registry.register_runtime_adapter(CodexProviderAdapter(codex_command=codex_command))
+    adapter = CodexProviderAdapter(codex_command=codex_command)
+    registry.register_runtime_adapter(adapter)
+    if refresh_model_catalog:
+        options = adapter.model_options()
+        registry.register_provider_definition(
+            build_codex_definition(
+                model_options=options,
+                default_model_id=adapter.default_model_id(options),
+            )
+        )
     return registry
 
 
@@ -39,9 +48,13 @@ def register_builtin_providers(
     *,
     registry: ProviderRegistry | None = None,
     codex_command: str = "codex",
+    refresh_model_catalog: bool = False,
 ) -> list[ProviderDefinition]:
     """Persist builtin provider definitions into the provider store."""
-    active_registry = registry or builtin_provider_registry(codex_command=codex_command)
+    active_registry = registry or builtin_provider_registry(
+        codex_command=codex_command,
+        refresh_model_catalog=refresh_model_catalog,
+    )
     definitions = active_registry.list_provider_definitions()
     for definition in definitions:
         store.save_provider_definition(definition)
@@ -53,10 +66,19 @@ def list_available_providers(
     *,
     registry: ProviderRegistry | None = None,
     codex_command: str = "codex",
+    refresh_model_catalog: bool = False,
 ) -> list[ProviderDefinition]:
     """List provider definitions from the authoritative registry."""
-    active_registry = registry or builtin_provider_registry(codex_command=codex_command)
-    register_builtin_providers(store, registry=active_registry, codex_command=codex_command)
+    active_registry = registry or builtin_provider_registry(
+        codex_command=codex_command,
+        refresh_model_catalog=refresh_model_catalog,
+    )
+    register_builtin_providers(
+        store,
+        registry=active_registry,
+        codex_command=codex_command,
+        refresh_model_catalog=refresh_model_catalog,
+    )
     return active_registry.list_provider_definitions()
 
 
@@ -75,8 +97,16 @@ def configure_workspace_provider(
     now: datetime | None = None,
 ) -> ProviderSelection:
     """Persist the selected runtime provider for one workspace."""
-    active_registry = registry or builtin_provider_registry(codex_command=codex_command)
-    register_builtin_providers(store, registry=active_registry, codex_command=codex_command)
+    active_registry = registry or builtin_provider_registry(
+        codex_command=codex_command,
+        refresh_model_catalog=True,
+    )
+    register_builtin_providers(
+        store,
+        registry=active_registry,
+        codex_command=codex_command,
+        refresh_model_catalog=True,
+    )
     normalized_model_id = str(model_id or "").strip() or None
     normalized_reasoning_effort = str(model_reasoning_effort or "").strip() or None
     adapter = active_registry.get_runtime_adapter(provider_id)
@@ -180,10 +210,19 @@ def resolve_workspace_provider_status(
     workspace_id: str,
     registry: ProviderRegistry | None = None,
     codex_command: str = "codex",
+    refresh_model_catalog: bool = False,
 ) -> WorkspaceProviderStatus:
     """Return provider selection state without falling back to an implicit backend."""
-    active_registry = registry or builtin_provider_registry(codex_command=codex_command)
-    register_builtin_providers(store, registry=active_registry, codex_command=codex_command)
+    active_registry = registry or builtin_provider_registry(
+        codex_command=codex_command,
+        refresh_model_catalog=refresh_model_catalog,
+    )
+    register_builtin_providers(
+        store,
+        registry=active_registry,
+        codex_command=codex_command,
+        refresh_model_catalog=refresh_model_catalog,
+    )
     available_providers = active_registry.list_provider_definitions()
     selection = store.get_provider_selection(workspace_id)
     if selection is None:

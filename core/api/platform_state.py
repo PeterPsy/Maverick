@@ -59,8 +59,11 @@ def bootstrap_platform_state(
     start_path: Path | None = None,
     now: datetime | None = None,
     recover_backend_restart: bool = False,
+    install_builtin_apps: bool = True,
+    register_builtin_provider_definitions: bool = True,
+    bootstrap_admin: bool = True,
 ) -> PlatformState:
-    """Build in-memory platform state and install first-boot built-in apps."""
+    """Build in-memory platform state and optionally run host bootstrap work."""
     repository_root = discover_repository_root(start_path=start_path)
     _remove_legacy_shared_provider_homes(repository_root)
     refresh_workspace_maverick_wrappers(repository_root)
@@ -111,16 +114,19 @@ def bootstrap_platform_state(
         workspace_store=workspace_store,
         app_store=app_store,
         provider_store=provider_store,
+        install_builtin_apps=install_builtin_apps,
+        register_providers=register_builtin_provider_definitions,
         now=now,
     )
-    admin_username, admin_password = _bootstrap_admin_credentials()
-    bootstrap_default_admin(
-        identity_store,
-        workspace_store,
-        username=admin_username,
-        password=admin_password,
-        now=now,
-    )
+    if bootstrap_admin:
+        admin_username, admin_password = _bootstrap_admin_credentials()
+        bootstrap_default_admin(
+            identity_store,
+            workspace_store,
+            username=admin_username,
+            password=admin_password,
+            now=now,
+        )
     state = PlatformState(
         repository_root=repository_root,
         control_store_settings=control_settings,

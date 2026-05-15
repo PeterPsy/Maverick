@@ -12,6 +12,7 @@ from core.apps.builtin_apps import register_and_install_builtin_apps_for_active_
 from core.apps.contracts import (
     build_app_compatibility,
     build_app_contract,
+    build_app_entrypoints,
     build_parsed_app_contract,
     write_app_contract_file,
 )
@@ -75,6 +76,46 @@ class BuiltinAppBootstrapTests(unittest.TestCase):
             with self.assertRaises(WorkspaceAppBindingNotFoundError):
                 app_store.get_workspace_app_binding(workspace_id="ceida", app_id="operator-monitor")
 
+    def test_current_builtin_binding_does_not_rerun_install_hook(self) -> None:
+        now = datetime.now(tz=UTC)
+        with TemporaryDirectory() as temp_dir:
+            repo_root = _make_repo_root(Path(temp_dir))
+            app_root = repo_root / "apps" / "hooked"
+            _write_contract(app_root, ["sandbox"], hooks={"install": "backend/install.py"})
+            install_hook = app_root / "backend" / "install.py"
+            install_hook.parent.mkdir(parents=True, exist_ok=True)
+            install_hook.write_text(
+                "\n".join(
+                    [
+                        "from pathlib import Path",
+                        "counter = Path('install-count.txt')",
+                        "count = int(counter.read_text(encoding='utf-8')) if counter.exists() else 0",
+                        "counter.write_text(str(count + 1), encoding='utf-8')",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            app_store = _make_app_store()
+            workspace_store = _make_workspace_store()
+
+            first = register_and_install_builtin_apps_for_active_workspaces(
+                app_store,
+                workspace_store,
+                start_path=repo_root,
+                now=now,
+            )
+            second = register_and_install_builtin_apps_for_active_workspaces(
+                app_store,
+                workspace_store,
+                start_path=repo_root,
+                now=now,
+            )
+
+            self.assertEqual(first["default"], ["hooked"])
+            self.assertEqual(second["default"], ["hooked"])
+            self.assertEqual((app_root / "install-count.txt").read_text(encoding="utf-8"), "1")
+
 
 def _make_repo_root(root: Path) -> Path:
     (root / "AGENTS.md").write_text("test", encoding="utf-8")
@@ -84,7 +125,7 @@ def _make_repo_root(root: Path) -> Path:
     return root
 
 
-def _write_contract(app_root: Path, workspace_modes: list[str]) -> None:
+def _write_contract(app_root: Path, workspace_modes: list[str], *, hooks: dict[str, str] | None = None) -> None:
     parsed = build_parsed_app_contract(
         app_id=app_root.name,
         name=app_root.name.title(),
@@ -93,6 +134,7 @@ def _write_contract(app_root: Path, workspace_modes: list[str]) -> None:
         publisher="maverick",
         contract=build_app_contract(
             compatibility=build_app_compatibility(supported_workspace_modes=workspace_modes),
+            entrypoints=build_app_entrypoints(hooks=hooks) if hooks is not None else None,
         ),
     )
     write_app_contract_file(app_root, parsed)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import json
 import os
 from pathlib import Path
 import tempfile
@@ -20,6 +21,7 @@ from core.providers.service import (
     build_runtime_backend_launch_spec,
     builtin_provider_registry,
     configure_workspace_provider,
+    list_available_providers,
     register_builtin_providers,
     resolve_provider_for_runtime_session,
 )
@@ -88,6 +90,64 @@ class ProvidersTestCase(unittest.TestCase):
         self.assertEqual(definitions[0].kind, "runtime_backend")
         self.assertEqual(definitions[0].default_model_family, "gpt-5.5")
         self.assertTrue(definitions[0].capabilities.supports_interactive_runtime)
+
+    def test_builtin_registry_does_not_probe_codex_model_catalog(self) -> None:
+        with patch("core.providers.provider_codex_models.subprocess.run") as run:
+            registry = builtin_provider_registry()
+            definitions = registry.list_provider_definitions()
+
+        self.assertEqual([definition.provider_id for definition in definitions], ["codex"])
+        run.assert_not_called()
+
+    def test_provider_settings_can_refresh_codex_model_catalog(self) -> None:
+        provider_store = self.make_provider_store()
+        payload = {
+            "models": [
+                {
+                    "slug": "gpt-settings",
+                    "display_name": "GPT Settings",
+                    "visibility": "list",
+                    "default_reasoning_level": "medium",
+                    "supported_reasoning_levels": [
+                        {"effort": "medium", "description": "Balanced reasoning depth"}
+                    ],
+                }
+            ]
+        }
+        result = type("Result", (), {"stdout": json.dumps(payload)})()
+
+        with patch("core.providers.provider_codex_models.subprocess.run", return_value=result) as run:
+            providers = list_available_providers(provider_store, codex_command="/bin/echo", refresh_model_catalog=True)
+
+        self.assertEqual(run.call_count, 1)
+        self.assertEqual(providers[0].model_options[0].model_id, "gpt-settings")
+        self.assertEqual(provider_store.get_provider_definition("codex").model_options[0].model_id, "gpt-settings")
+
+    def test_codex_model_catalog_is_cached_after_first_probe(self) -> None:
+        payload = {
+            "models": [
+                {
+                    "slug": "gpt-test",
+                    "display_name": "GPT Test",
+                    "description": "Test model.",
+                    "visibility": "list",
+                    "default_reasoning_level": "high",
+                    "supported_reasoning_levels": [
+                        {"effort": "high", "description": "Greater reasoning depth"}
+                    ],
+                }
+            ]
+        }
+        result = type("Result", (), {"stdout": json.dumps(payload)})()
+        adapter = CodexProviderAdapter(codex_command="/bin/echo")
+
+        with patch("core.providers.provider_codex_models.subprocess.run", return_value=result) as run:
+            first = adapter.model_options()
+            second = adapter.model_options()
+
+        self.assertEqual(run.call_count, 1)
+        self.assertEqual([option.model_id for option in first], ["gpt-test"])
+        self.assertEqual([option.model_id for option in second], ["gpt-test"])
 
     def test_application_bootstrap_registers_builtin_providers(self) -> None:
         provider_store = self.make_provider_store()
@@ -234,6 +294,12 @@ class ProvidersTestCase(unittest.TestCase):
         self.assertNotIn("timeout=30", (runtime_bin / "maverick").read_text(encoding="utf-8"))
         self.assertTrue((runtime_bin / "workspace_sandbox.py").is_file())
         self.assertEqual(launch_spec.env_overrides["PATH"].split(os.pathsep)[0], str(runtime_bin))
+        self.assertEqual(launch_spec.env_overrides["MAVERICK_RUNTIME_BIN"], str(runtime_bin))
+        runtime_config = (Path(launch_spec.env_overrides["CODEX_HOME"]) / "config.toml").read_text(encoding="utf-8")
+        self.assertIn("[shell_environment_policy.set]", runtime_config)
+        self.assertIn(f"MAVERICK_RUNTIME_BIN = \"{runtime_bin}\"", runtime_config)
+        self.assertIn(f"MAVERICK_RUNTIME_ROOT = \"{runtime_bin.parent}\"", runtime_config)
+        self.assertIn(f"MAVERICK_WORKSPACE_ROOT = \"{repo_root / 'workspaces' / 'acme'}\"", runtime_config)
         repository_root = Path(__file__).resolve().parents[3]
         self.assertNotIn("PYTHONPATH", launch_spec.env_overrides)
         self.assertNotIn(str(repository_root / "core"), launch_spec.command)

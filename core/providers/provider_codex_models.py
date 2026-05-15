@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import subprocess
+from time import monotonic
 from typing import TYPE_CHECKING
 
 from core.providers.errors import ProviderSelectionError
@@ -21,6 +22,7 @@ CODEX_DISABLED_RUNTIME_FEATURES = ("apps", "plugins")
 CODEX_SYSTEM_SKILLS_ROOT = ".system"
 CODEX_DEFAULT_MODEL = "gpt-5.5"
 CODEX_DEFAULT_REASONING_EFFORT = "high"
+CODEX_MODEL_CATALOG_TTL_SECONDS = 300
 CODEX_MANAGED_TOP_LEVEL_CONFIG_KEYS = {"model", "model_reasoning_effort"}
 CODEX_MANAGED_RUNTIME_FEATURES = {
     "apps": False,
@@ -127,8 +129,32 @@ def _default_reasoning_effort(option: ProviderModelOption | None) -> str | None:
 
 
 class CodexModelMixin:
-    def model_options(self) -> list[ProviderModelOption]:
+    def model_options(self, *, refresh: bool = False) -> list[ProviderModelOption]:
         """Return model options currently reported by the configured Codex binary."""
+        cached = None if refresh else self._cached_model_options()
+        if cached is not None:
+            return cached
+        options = self._discover_model_options()
+        self._store_model_options_cache(options)
+        return list(options)
+
+
+    def _cached_model_options(self) -> list[ProviderModelOption] | None:
+        cached_at = getattr(self, "_model_options_cached_at", None)
+        cached_options = getattr(self, "_model_options_cache", None)
+        if not isinstance(cached_at, (float, int)) or not isinstance(cached_options, list):
+            return None
+        if monotonic() - float(cached_at) > CODEX_MODEL_CATALOG_TTL_SECONDS:
+            return None
+        return list(cached_options)
+
+
+    def _store_model_options_cache(self, options: list[ProviderModelOption]) -> None:
+        self._model_options_cache = list(options)
+        self._model_options_cached_at = monotonic()
+
+
+    def _discover_model_options(self) -> list[ProviderModelOption]:
         command = self._runtime_command(self.codex_command)
         try:
             result = subprocess.run(

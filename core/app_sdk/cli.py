@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import sys
+from typing import Any
 
 from core.api.platform_state import bootstrap_platform_state
 from core.app_sdk.docs import sdk_docs_markdown
@@ -42,10 +43,36 @@ def main(argv: list[str] | None = None) -> int:
         print(_help_text(args))
         return 0
 
-    state = bootstrap_platform_state(start_path=repository_root)
+    state = bootstrap_platform_state(start_path=repository_root, **_bootstrap_options_for_cli(args))
     result = run_cli_json(args, state=state, repository_root=state.repository_root)
     print(json.dumps(result, indent=2, ensure_ascii=True))
     return 0
+
+
+def _bootstrap_options_for_cli(args: list[str]) -> dict[str, bool]:
+    if _is_read_only_sidecar_command(args):
+        return {
+            "install_builtin_apps": False,
+            "register_builtin_provider_definitions": False,
+            "bootstrap_admin": False,
+        }
+    return {}
+
+
+def _is_read_only_sidecar_command(args: list[str]) -> bool:
+    if args[:2] in (["sdk", "docs"], ["sdk", "templates"]):
+        return True
+    if args[:2] == ["apps", "list"]:
+        return True
+    if len(args) >= 4 and args[0] == "core" and args[1] in {"cli", "mcp"}:
+        operation = args[2]
+        if operation in {"list", "inspect"}:
+            return True
+        target = args[3] if len(args) > 3 else ""
+        return operation in {"run", "call"} and target in {"developer-context.list", "developer-context.read"}
+    if len(args) >= 5 and args[0] == "app" and args[2] in {"cli", "mcp"}:
+        return args[3] in {"list", "inspect"}
+    return False
 
 
 def run_cli_json(

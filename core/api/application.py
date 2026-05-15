@@ -20,9 +20,11 @@ def create_application(
     workspace_store: WorkspaceStore | None = None,
     app_store: AppStore | None = None,
     provider_store: ProviderStore | None = None,
+    install_builtin_apps: bool = True,
+    register_providers: bool = True,
     now: datetime | None = None,
 ) -> dict[str, str]:
-    """Bootstrap the installation layout and default workspace state."""
+    """Bootstrap installation layout plus optional app/provider host state."""
     paths = installation_paths(start_path=start_path or Path(__file__))
     paths.core_root.mkdir(parents=True, exist_ok=True)
     paths.apps_root.mkdir(parents=True, exist_ok=True)
@@ -33,7 +35,7 @@ def create_application(
     if workspace_store is not None:
         ensure_default_workspace_record(workspace_store, now=now)
     builtin_app_count = 0
-    if workspace_store is not None and app_store is not None:
+    if install_builtin_apps and workspace_store is not None and app_store is not None:
         installed_by_workspace = register_and_install_builtin_apps_for_active_workspaces(
             app_store,
             workspace_store,
@@ -41,7 +43,7 @@ def create_application(
             now=now,
         )
         builtin_app_count = sum(len(app_ids) for app_ids in installed_by_workspace.values())
-    if provider_store is not None:
+    if register_providers and provider_store is not None:
         register_builtin_providers(provider_store)
     return {
         "name": "maverick-core",

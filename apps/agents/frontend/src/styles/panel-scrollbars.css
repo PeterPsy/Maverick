@@ -1,5 +1,6 @@
 .bento-card-common textarea,
-.agent-skill-picker {
+.agent-skill-picker,
+.prompt-review-band pre {
   scrollbar-color: transparent transparent;
   scrollbar-width: thin;
 }
@@ -13,6 +14,10 @@
   padding-right: 8px;
 }
 
+.prompt-review-band pre {
+  padding-right: 14px;
+}
+
 .bento-card-common:hover textarea,
 .bento-card-common:focus-within textarea,
 .bento-card-common textarea:hover,
@@ -20,22 +25,29 @@
 .bento-card-skills:hover .agent-skill-picker,
 .bento-card-skills:focus-within .agent-skill-picker,
 .agent-skill-picker:hover,
-.agent-skill-picker:focus {
+.agent-skill-picker:focus,
+.prompt-review-band:hover pre,
+.prompt-review-band:focus-within pre,
+.prompt-review-band pre:hover,
+.prompt-review-band pre:focus {
   scrollbar-color: rgba(255, 255, 255, 0.42) transparent;
 }
 
 .bento-card-common textarea::-webkit-scrollbar,
-.agent-skill-picker::-webkit-scrollbar {
+.agent-skill-picker::-webkit-scrollbar,
+.prompt-review-band pre::-webkit-scrollbar {
   width: 8px;
 }
 
 .bento-card-common textarea::-webkit-scrollbar-track,
-.agent-skill-picker::-webkit-scrollbar-track {
+.agent-skill-picker::-webkit-scrollbar-track,
+.prompt-review-band pre::-webkit-scrollbar-track {
   background: transparent;
 }
 
 .bento-card-common textarea::-webkit-scrollbar-thumb,
-.agent-skill-picker::-webkit-scrollbar-thumb {
+.agent-skill-picker::-webkit-scrollbar-thumb,
+.prompt-review-band pre::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 999px;
   background-color: transparent;
@@ -50,7 +62,11 @@
 .bento-card-skills:hover .agent-skill-picker::-webkit-scrollbar-thumb,
 .bento-card-skills:focus-within .agent-skill-picker::-webkit-scrollbar-thumb,
 .agent-skill-picker:hover::-webkit-scrollbar-thumb,
-.agent-skill-picker:focus::-webkit-scrollbar-thumb {
+.agent-skill-picker:focus::-webkit-scrollbar-thumb,
+.prompt-review-band:hover pre::-webkit-scrollbar-thumb,
+.prompt-review-band:focus-within pre::-webkit-scrollbar-thumb,
+.prompt-review-band pre:hover::-webkit-scrollbar-thumb,
+.prompt-review-band pre:focus::-webkit-scrollbar-thumb {
   background-color: rgba(255, 255, 255, 0.42);
 }
 

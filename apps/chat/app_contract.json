@@ -67,6 +67,7 @@
   },
   "capabilities": {
     "mcp_tools": [
+      "chat_operations_manifest",
       "chat_view_filter",
       "chat_set_view_filter",
       "chat_set_custom_view",

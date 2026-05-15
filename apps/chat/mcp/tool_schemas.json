@@ -1,0 +1,216 @@
+{
+  "tools": {
+    "chat_operations_manifest": {
+      "description": "Return the compact Chat operations manifest with supported CLI/MCP workflows, payload profiles, examples, and runtime ownership notes.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status_code": {"type": "integer"},
+          "app_id": {"type": "string"},
+          "schema_version": {"type": "string"},
+          "default_action": {"type": "string"},
+          "recommended": {"type": "array"},
+          "operations": {"type": "object"},
+          "payload_profiles": {"type": "object"},
+          "examples": {"type": "object"},
+          "notes": {"type": "array"}
+        }
+      }
+    },
+    "chat_reference_manifest": {
+      "description": "Describe Chat project reference entities exposed by the Chat app.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status_code": {"type": "integer"},
+          "app_id": {"type": "string"},
+          "schema_version": {"type": "string"},
+          "entity_types": {"type": "array"}
+        }
+      }
+    },
+    "chat_reference_search": {
+      "description": "Search Chat project references compactly. Results never include runtime transcripts or message content.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": {"type": "string", "enum": ["project"]},
+          "type": {"type": "string", "enum": ["project"], "description": "Alias for entity_type."},
+          "query": {"type": "string"},
+          "q": {"type": "string", "description": "Alias for query."},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 10}
+        },
+        "required": ["entity_type"],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status_code": {"type": "integer"},
+          "results": {"type": "array"},
+          "payload_profile": {"type": "string"}
+        }
+      }
+    },
+    "chat_reference_resolve": {
+      "description": "Resolve one Chat project reference by explicit id.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": {"type": "string", "enum": ["project"]},
+          "type": {"type": "string", "enum": ["project"], "description": "Alias for entity_type."},
+          "entity_id": {"type": "string"},
+          "project_id": {"type": "string", "description": "Alias for entity_id."},
+          "id": {"type": "string", "description": "Alias for entity_id."}
+        },
+        "required": ["entity_type"],
+        "anyOf": [
+          {"required": ["entity_id"]},
+          {"required": ["project_id"]},
+          {"required": ["id"]}
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status_code": {"type": "integer"},
+          "exists": {"type": "boolean"},
+          "app_id": {"type": "string"},
+          "entity_type": {"type": "string"},
+          "entity_id": {"type": "string"},
+          "title": {"type": "string"},
+          "deep_link": {"type": "string"}
+        }
+      }
+    },
+    "chat_reference_summarize": {
+      "description": "Return a token-efficient summary for one Chat project reference.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": {"type": "string", "enum": ["project"]},
+          "type": {"type": "string", "enum": ["project"], "description": "Alias for entity_type."},
+          "entity_id": {"type": "string"},
+          "project_id": {"type": "string", "description": "Alias for entity_id."},
+          "id": {"type": "string", "description": "Alias for entity_id."}
+        },
+        "required": ["entity_type"],
+        "anyOf": [
+          {"required": ["entity_id"]},
+          {"required": ["project_id"]},
+          {"required": ["id"]}
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status_code": {"type": "integer"},
+          "summary": {"type": "string"},
+          "safe_fields": {"type": "object"},
+          "source_updated_at": {"type": "string"}
+        }
+      }
+    },
+    "chat_view_filter": {
+      "description": "Read the persisted Chat project/thread browse filter.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status_code": {"type": "integer"},
+          "state": {"type": "object"}
+        }
+      }
+    },
+    "chat_set_view_filter": {
+      "description": "Set Chat project/thread browse query filters.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string"},
+          "entity_type": {"type": "string", "enum": ["all", "thread", "project"]},
+          "preserve_custom": {"type": "boolean", "default": false}
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status_code": {"type": "integer"},
+          "state": {"type": "object"},
+          "app_events": {"type": "array"}
+        }
+      }
+    },
+    "chat_set_custom_view": {
+      "description": "Persist a curated Chat project/thread reference set for the Chat view.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "title": {"type": "string"},
+          "query": {"type": "string"},
+          "entity_type": {"type": "string", "enum": ["all", "thread", "project"]},
+          "refs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "entity_type": {"type": "string", "enum": ["project", "thread"]},
+                "entity_id": {"type": "string"}
+              },
+              "required": ["entity_type", "entity_id"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["refs"],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status_code": {"type": "integer"},
+          "state": {"type": "object"},
+          "app_events": {"type": "array"}
+        }
+      }
+    },
+    "chat_clear_custom_view": {
+      "description": "Clear the curated Chat view and return to normal project/thread browsing.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status_code": {"type": "integer"},
+          "state": {"type": "object"},
+          "app_events": {"type": "array"}
+        }
+      }
+    }
+  }
+}

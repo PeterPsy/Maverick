@@ -5,7 +5,7 @@ Workspace chat app that talks to the selected Maverick runtime provider.
 ## Contract Notes
 
 - Frontend, backend, CLI, and MCP entrypoints are declared in `app_contract.json`.
-- Chat's CLI and MCP inspect metadata lives in `cli/command_schemas.json` and `mcp/tool_schemas.json`; the no-argument CLI call returns the compact `operations.manifest`.
+- Chat's CLI and MCP inspect metadata lives in `cli/command_schemas.json` and `mcp/tool_schemas.json`; the no-argument CLI call and the `chat_operations_manifest` MCP tool return the compact `operations.manifest`.
 - The contract declares the bundled `chat-ops` skill plus the `chat-sidebar`, `chat-sidebar-footer`, `chat-floating`, and Fleet-hosted `chat-runtime-text` widgets.
 - Runtime threads, message sends, and turn interrupts are core-owned runtime operations. Chat does not expose placeholder MCP tools for those operations; the Chat app persists projects and view-filter UI state under `data/chat/state.json`.
 - Chat references are project-owned; thread list, mutation, deletion, and runtime cleanup go through core runtime APIs.

@@ -1,0 +1,90 @@
+{
+  "commands": {
+    "chat": {
+      "description": "Inspect and operate Chat app-owned project references and view state. Runtime messages and turns are core runtime operations, not Chat CLI operations.",
+      "argument_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "operations.manifest",
+              "projects.list",
+              "references.manifest",
+              "references.search",
+              "references.resolve",
+              "references.summarize",
+              "view_filter",
+              "set_view_filter",
+              "set_custom_view",
+              "clear_custom_view"
+            ],
+            "default": "operations.manifest",
+            "description": "Chat app-owned operation to run."
+          },
+          "entity_type": {
+            "type": "string",
+            "enum": ["project"],
+            "description": "Reference entity type for reference operations."
+          },
+          "type": {
+            "type": "string",
+            "enum": ["project"],
+            "description": "Alias for entity_type."
+          },
+          "entity_id": {
+            "type": "string",
+            "description": "Chat project reference id for resolve or summarize."
+          },
+          "project_id": {
+            "type": "string",
+            "description": "Alias for entity_id when resolving project references."
+          },
+          "id": {
+            "type": "string",
+            "description": "Alias for entity_id when resolving project references."
+          },
+          "query": {
+            "type": "string",
+            "description": "Search query or persisted view filter query."
+          },
+          "q": {
+            "type": "string",
+            "description": "Alias for query in reference search."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 10,
+            "description": "Maximum reference search rows to return."
+          },
+          "preserve_custom": {
+            "type": "boolean",
+            "default": false,
+            "description": "Keep the current curated view while changing query filters."
+          },
+          "title": {
+            "type": "string",
+            "description": "Curated view title for set_custom_view."
+          },
+          "refs": {
+            "type": "array",
+            "description": "Curated Chat refs for set_custom_view.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "entity_type": {"type": "string", "enum": ["project", "thread"]},
+                "entity_id": {"type": "string"}
+              },
+              "required": ["entity_type", "entity_id"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    }
+  }
+}

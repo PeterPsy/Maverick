@@ -29,6 +29,7 @@ CODEX_MANAGED_RUNTIME_FEATURES = {
     "plugins": False,
     "skill_mcp_dependency_install": False,
 }
+_MODEL_OPTIONS_CACHE: dict[str, tuple[float, list[ProviderModelOption]]] = {}
 
 
 def utcnow() -> datetime:
@@ -131,31 +132,30 @@ def _default_reasoning_effort(option: ProviderModelOption | None) -> str | None:
 class CodexModelMixin:
     def model_options(self, *, refresh: bool = False) -> list[ProviderModelOption]:
         """Return model options currently reported by the configured Codex binary."""
-        cached = None if refresh else self._cached_model_options()
+        command = self._runtime_command(self.codex_command)
+        cached = None if refresh else self._cached_model_options(command)
         if cached is not None:
             return cached
-        options = self._discover_model_options()
-        self._store_model_options_cache(options)
+        options = self._discover_model_options(command=command)
+        self._store_model_options_cache(command, options)
         return list(options)
 
 
-    def _cached_model_options(self) -> list[ProviderModelOption] | None:
-        cached_at = getattr(self, "_model_options_cached_at", None)
-        cached_options = getattr(self, "_model_options_cache", None)
-        if not isinstance(cached_at, (float, int)) or not isinstance(cached_options, list):
+    def _cached_model_options(self, command: str) -> list[ProviderModelOption] | None:
+        cached = _MODEL_OPTIONS_CACHE.get(command)
+        if cached is None:
             return None
-        if monotonic() - float(cached_at) > CODEX_MODEL_CATALOG_TTL_SECONDS:
+        cached_at, cached_options = cached
+        if monotonic() - cached_at > CODEX_MODEL_CATALOG_TTL_SECONDS:
             return None
         return list(cached_options)
 
 
-    def _store_model_options_cache(self, options: list[ProviderModelOption]) -> None:
-        self._model_options_cache = list(options)
-        self._model_options_cached_at = monotonic()
+    def _store_model_options_cache(self, command: str, options: list[ProviderModelOption]) -> None:
+        _MODEL_OPTIONS_CACHE[command] = (monotonic(), list(options))
 
 
-    def _discover_model_options(self) -> list[ProviderModelOption]:
-        command = self._runtime_command(self.codex_command)
+    def _discover_model_options(self, *, command: str) -> list[ProviderModelOption]:
         try:
             result = subprocess.run(
                 [command, "debug", "models"],

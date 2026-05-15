@@ -117,7 +117,11 @@ class ProvidersTestCase(unittest.TestCase):
         result = type("Result", (), {"stdout": json.dumps(payload)})()
 
         with patch("core.providers.provider_codex_models.subprocess.run", return_value=result) as run:
-            providers = list_available_providers(provider_store, codex_command="/bin/echo", refresh_model_catalog=True)
+            providers = list_available_providers(
+                provider_store,
+                codex_command="/tmp/codex-settings",
+                refresh_model_catalog=True,
+            )
 
         self.assertEqual(run.call_count, 1)
         self.assertEqual(providers[0].model_options[0].model_id, "gpt-settings")
@@ -139,15 +143,17 @@ class ProvidersTestCase(unittest.TestCase):
             ]
         }
         result = type("Result", (), {"stdout": json.dumps(payload)})()
-        adapter = CodexProviderAdapter(codex_command="/bin/echo")
+        adapter = CodexProviderAdapter(codex_command="/tmp/codex-cache")
 
         with patch("core.providers.provider_codex_models.subprocess.run", return_value=result) as run:
-            first = adapter.model_options()
+            first = adapter.model_options(refresh=True)
             second = adapter.model_options()
+            third = CodexProviderAdapter(codex_command="/tmp/codex-cache").model_options()
 
         self.assertEqual(run.call_count, 1)
         self.assertEqual([option.model_id for option in first], ["gpt-test"])
         self.assertEqual([option.model_id for option in second], ["gpt-test"])
+        self.assertEqual([option.model_id for option in third], ["gpt-test"])
 
     def test_application_bootstrap_registers_builtin_providers(self) -> None:
         provider_store = self.make_provider_store()

@@ -148,6 +148,7 @@ class CodexRuntimeHomeMixin:
         session: RuntimeSessionRecord,
         *,
         runtime_bin: Path | None = None,
+        shell_path: str | None = None,
         model_id: str | None = None,
         model_reasoning_effort: str | None = None,
     ) -> Path:
@@ -165,6 +166,7 @@ class CodexRuntimeHomeMixin:
             workspace_root=Path(session.workspace_root),
             runtime_root=Path(session.runtime_root),
             runtime_bin=runtime_bin or Path(session.runtime_root) / "bin",
+            shell_path=shell_path,
             execution_mode=session.effective_mode,
             model_id=model_id,
             model_reasoning_effort=model_reasoning_effort,
@@ -239,6 +241,7 @@ class CodexRuntimeHomeMixin:
         runtime_root: Path,
         runtime_bin: Path,
         execution_mode: str,
+        shell_path: str | None = None,
         model_id: str | None = None,
         model_reasoning_effort: str | None = None,
     ) -> None:
@@ -277,6 +280,7 @@ class CodexRuntimeHomeMixin:
                 workspace_root=workspace_root,
                 runtime_root=runtime_root,
                 runtime_bin=runtime_bin,
+                shell_path=shell_path,
                 execution_mode=execution_mode,
             )
         )

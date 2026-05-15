@@ -33,7 +33,7 @@ def builtin_provider_registry(*, codex_command: str = "codex", refresh_model_cat
     adapter = CodexProviderAdapter(codex_command=codex_command)
     registry.register_runtime_adapter(adapter)
     if refresh_model_catalog:
-        options = adapter.model_options()
+        options = adapter.model_options(refresh=True)
         registry.register_provider_definition(
             build_codex_definition(
                 model_options=options,

@@ -127,6 +127,47 @@ class ProvidersTestCase(unittest.TestCase):
         self.assertEqual(providers[0].model_options[0].model_id, "gpt-settings")
         self.assertEqual(provider_store.get_provider_definition("codex").model_options[0].model_id, "gpt-settings")
 
+    def test_provider_settings_refresh_bypasses_cached_codex_model_catalog(self) -> None:
+        provider_store = self.make_provider_store()
+        first_payload = {
+            "models": [
+                {
+                    "slug": "gpt-old",
+                    "display_name": "GPT Old",
+                    "visibility": "list",
+                    "default_reasoning_level": "high",
+                    "supported_reasoning_levels": [{"effort": "high"}],
+                }
+            ]
+        }
+        refreshed_payload = {
+            "models": [
+                {
+                    "slug": "gpt-refreshed",
+                    "display_name": "GPT Refreshed",
+                    "visibility": "list",
+                    "default_reasoning_level": "medium",
+                    "supported_reasoning_levels": [{"effort": "medium"}],
+                }
+            ]
+        }
+        first_result = type("Result", (), {"stdout": json.dumps(first_payload)})()
+        refreshed_result = type("Result", (), {"stdout": json.dumps(refreshed_payload)})()
+        command = "/tmp/codex-refresh-bypass"
+
+        with patch("core.providers.provider_codex_models.subprocess.run", return_value=first_result):
+            CodexProviderAdapter(codex_command=command).model_options(refresh=True)
+        with patch("core.providers.provider_codex_models.subprocess.run", return_value=refreshed_result) as run:
+            providers = list_available_providers(
+                provider_store,
+                codex_command=command,
+                refresh_model_catalog=True,
+            )
+
+        self.assertEqual(run.call_count, 1)
+        self.assertEqual(providers[0].model_options[0].model_id, "gpt-refreshed")
+        self.assertEqual(provider_store.get_provider_definition("codex").model_options[0].model_id, "gpt-refreshed")
+
     def test_codex_model_catalog_is_cached_after_first_probe(self) -> None:
         payload = {
             "models": [
@@ -154,6 +195,45 @@ class ProvidersTestCase(unittest.TestCase):
         self.assertEqual([option.model_id for option in first], ["gpt-test"])
         self.assertEqual([option.model_id for option in second], ["gpt-test"])
         self.assertEqual([option.model_id for option in third], ["gpt-test"])
+
+    def test_codex_model_catalog_fallback_is_not_cached(self) -> None:
+        old_payload = {
+            "models": [
+                {
+                    "slug": "gpt-before-error",
+                    "display_name": "GPT Before Error",
+                    "visibility": "list",
+                    "default_reasoning_level": "high",
+                    "supported_reasoning_levels": [{"effort": "high"}],
+                }
+            ]
+        }
+        payload = {
+            "models": [
+                {
+                    "slug": "gpt-after-error",
+                    "display_name": "GPT After Error",
+                    "description": "Recovered model.",
+                    "visibility": "list",
+                    "default_reasoning_level": "high",
+                    "supported_reasoning_levels": [{"effort": "high"}],
+                }
+            ]
+        }
+        old_result = type("Result", (), {"stdout": json.dumps(old_payload)})()
+        result = type("Result", (), {"stdout": json.dumps(payload)})()
+        adapter = CodexProviderAdapter(codex_command="/tmp/codex-fallback-not-cached")
+
+        with patch("core.providers.provider_codex_models.subprocess.run", return_value=old_result):
+            adapter.model_options(refresh=True)
+        with patch("core.providers.provider_codex_models.subprocess.run", side_effect=OSError):
+            first = adapter.model_options(refresh=True)
+        with patch("core.providers.provider_codex_models.subprocess.run", return_value=result) as run:
+            second = adapter.model_options()
+
+        self.assertEqual([option.model_id for option in first], ["gpt-5.5"])
+        self.assertEqual(run.call_count, 1)
+        self.assertEqual([option.model_id for option in second], ["gpt-after-error"])
 
     def test_application_bootstrap_registers_builtin_providers(self) -> None:
         provider_store = self.make_provider_store()
@@ -303,6 +383,7 @@ class ProvidersTestCase(unittest.TestCase):
         self.assertEqual(launch_spec.env_overrides["MAVERICK_RUNTIME_BIN"], str(runtime_bin))
         runtime_config = (Path(launch_spec.env_overrides["CODEX_HOME"]) / "config.toml").read_text(encoding="utf-8")
         self.assertIn("[shell_environment_policy.set]", runtime_config)
+        self.assertIn(f'PATH = "{launch_spec.env_overrides["PATH"]}"', runtime_config)
         self.assertIn(f"MAVERICK_RUNTIME_BIN = \"{runtime_bin}\"", runtime_config)
         self.assertIn(f"MAVERICK_RUNTIME_ROOT = \"{runtime_bin.parent}\"", runtime_config)
         self.assertIn(f"MAVERICK_WORKSPACE_ROOT = \"{repo_root / 'workspaces' / 'acme'}\"", runtime_config)

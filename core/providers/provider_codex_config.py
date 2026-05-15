@@ -192,15 +192,18 @@ class CodexRuntimeConfigMixin:
         runtime_root: Path,
         runtime_bin: Path,
         execution_mode: str,
+        shell_path: str | None = None,
     ) -> list[str]:
-        path_value = os.pathsep.join(
-            self._dedupe_path_entries(
-                [
-                    str(runtime_bin),
-                    *str(os.environ.get("PATH") or "").split(os.pathsep),
-                ]
+        path_value = str(shell_path or "").strip()
+        if not path_value:
+            path_value = os.pathsep.join(
+                self._dedupe_path_entries(
+                    [
+                        str(runtime_bin),
+                        *str(os.environ.get("PATH") or "").split(os.pathsep),
+                    ]
+                )
             )
-        )
         api_base = str(os.environ.get("MAVERICK_API_BASE") or "http://127.0.0.1:8014").rstrip("/")
         return [
             "[shell_environment_policy.set]",

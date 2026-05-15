@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import sys
 from typing import Any
@@ -43,10 +44,18 @@ def main(argv: list[str] | None = None) -> int:
         print(_help_text(args))
         return 0
 
-    state = bootstrap_platform_state(start_path=repository_root, **_bootstrap_options_for_cli(args))
+    state = _bootstrap_state_for_cli(args, repository_root=repository_root)
     result = run_cli_json(args, state=state, repository_root=state.repository_root)
     print(json.dumps(result, indent=2, ensure_ascii=True))
     return 0
+
+
+def _bootstrap_state_for_cli(args: list[str], *, repository_root: Path | None):
+    options = _bootstrap_options_for_cli(args)
+    state = bootstrap_platform_state(start_path=repository_root, **options)
+    if options and _should_retry_with_host_bootstrap(args, state=state):
+        return bootstrap_platform_state(start_path=repository_root, bootstrap_admin=False)
+    return state
 
 
 def _bootstrap_options_for_cli(args: list[str]) -> dict[str, bool]:
@@ -73,6 +82,52 @@ def _is_read_only_sidecar_command(args: list[str]) -> bool:
     if len(args) >= 5 and args[0] == "app" and args[2] in {"cli", "mcp"}:
         return args[3] in {"list", "inspect"}
     return False
+
+
+def _should_retry_with_host_bootstrap(args: list[str], *, state) -> bool:
+    if _running_in_runtime_session():
+        return False
+    if not _command_depends_on_app_state(args):
+        return False
+    workspace_id = _app_state_workspace_id(args, state=state)
+    return not _has_persisted_app_state(state, workspace_id=workspace_id)
+
+
+def _running_in_runtime_session() -> bool:
+    return bool(
+        str(os.environ.get("MAVERICK_RUNTIME_API_TOKEN") or "").strip()
+        or str(os.environ.get("MAVERICK_RUNTIME_SESSION_ID") or "").strip()
+    )
+
+
+def _command_depends_on_app_state(args: list[str]) -> bool:
+    if args[:2] == ["apps", "list"]:
+        return True
+    if len(args) >= 4 and args[0] == "core" and args[1] in {"cli", "mcp"}:
+        return args[2] in {"list", "inspect"}
+    if len(args) >= 5 and args[0] == "app" and args[2] in {"cli", "mcp"}:
+        return args[3] in {"list", "inspect"}
+    return False
+
+
+def _app_state_workspace_id(args: list[str], *, state) -> str:
+    option_tokens: list[str]
+    if args[:2] == ["apps", "list"]:
+        option_tokens = args[1:]
+    elif len(args) >= 4 and args[0] == "core" and args[1] in {"cli", "mcp"}:
+        option_tokens = args[3:]
+    elif len(args) >= 5 and args[0] == "app" and args[2] in {"cli", "mcp"}:
+        option_tokens = args[4:]
+    else:
+        option_tokens = []
+    options, _remaining = _split_wrapper_options(option_tokens)
+    return _workspace_id(options, state.repository_root)
+
+
+def _has_persisted_app_state(state, *, workspace_id: str) -> bool:
+    if not state.app_store.list_app_sources():
+        return False
+    return bool(enabled_workspace_app_bindings(state.app_store, workspace_id=workspace_id))
 
 
 def run_cli_json(

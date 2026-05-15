@@ -136,8 +136,11 @@ class CodexModelMixin:
         cached = None if refresh else self._cached_model_options(command)
         if cached is not None:
             return cached
-        options = self._discover_model_options(command=command)
-        self._store_model_options_cache(command, options)
+        options, cacheable = self._discover_model_options(command=command)
+        if cacheable:
+            self._store_model_options_cache(command, options)
+        elif refresh:
+            _MODEL_OPTIONS_CACHE.pop(command, None)
         return list(options)
 
 
@@ -155,7 +158,7 @@ class CodexModelMixin:
         _MODEL_OPTIONS_CACHE[command] = (monotonic(), list(options))
 
 
-    def _discover_model_options(self, *, command: str) -> list[ProviderModelOption]:
+    def _discover_model_options(self, *, command: str) -> tuple[list[ProviderModelOption], bool]:
         try:
             result = subprocess.run(
                 [command, "debug", "models"],
@@ -166,10 +169,10 @@ class CodexModelMixin:
             )
             payload = json.loads(result.stdout)
         except (OSError, subprocess.SubprocessError, json.JSONDecodeError):
-            return _fallback_model_options()
+            return _fallback_model_options(), False
         models = payload.get("models") if isinstance(payload, dict) else None
         if not isinstance(models, list):
-            return _fallback_model_options()
+            return _fallback_model_options(), False
         options = [
             option
             for item in models
@@ -177,7 +180,9 @@ class CodexModelMixin:
             for option in [self._model_option_from_catalog_item(item)]
             if option is not None
         ]
-        return options or _fallback_model_options()
+        if not options:
+            return _fallback_model_options(), False
+        return options, True
 
 
     def default_model_id(self, options: list[ProviderModelOption] | None = None) -> str:

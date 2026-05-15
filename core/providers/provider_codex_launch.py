@@ -167,12 +167,7 @@ class CodexLaunchMixin:
         runtime_root = Path(session.runtime_root)
         host_command = self._runtime_command(self.codex_command)
         runtime_bin = self._prepare_runtime_bin(session, host_command=host_command)
-        runtime_home = self._prepare_runtime_home(
-            session,
-            runtime_bin=runtime_bin,
-            model_id=selected_model,
-            model_reasoning_effort=selected_reasoning,
-        )
+        runtime_home = self._runtime_home(session)
         env = self._build_subprocess_env(
             workdir=workdir,
             workspace_root=workspace_root,
@@ -182,6 +177,13 @@ class CodexLaunchMixin:
             session=session,
             execution_mode=session.effective_mode,
             secret_env=secret_env,
+        )
+        runtime_home = self._prepare_runtime_home(
+            session,
+            runtime_bin=runtime_bin,
+            shell_path=env.get("PATH"),
+            model_id=selected_model,
+            model_reasoning_effort=selected_reasoning,
         )
         return RuntimeBackendLaunchSpec(
             provider_id="codex",

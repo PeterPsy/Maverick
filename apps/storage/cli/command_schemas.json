@@ -86,6 +86,129 @@
           "entity_id": {"type": "string"}
         },
         "additionalProperties": false,
+        "oneOf": [
+          {"maxProperties": 0},
+          {"properties": {"action": {"enum": ["operations.manifest"]}}, "required": ["action"]},
+          {
+            "properties": {"action": {"enum": ["catalog", "file.catalog.list"]}},
+            "required": ["action"]
+          },
+          {"properties": {"action": {"enum": ["view_filter"]}}, "required": ["action"]},
+          {
+            "properties": {"action": {"enum": ["set_view_filter"]}},
+            "required": ["action"]
+          },
+          {
+            "properties": {"action": {"enum": ["set_custom_view"]}},
+            "required": ["action"]
+          },
+          {"properties": {"action": {"enum": ["clear_custom_view"]}}, "required": ["action"]},
+          {
+            "properties": {"action": {"enum": ["file_info"]}},
+            "required": ["action"],
+            "anyOf": [
+              {"required": ["workspace_relative_path"]},
+              {"required": ["role", "relative_path"]}
+            ]
+          },
+          {
+            "properties": {"action": {"enum": ["read_file", "file.content.read"]}},
+            "required": ["action"],
+            "anyOf": [
+              {"required": ["workspace_relative_path"]},
+              {"required": ["role", "relative_path"]}
+            ]
+          },
+          {
+            "properties": {"action": {"enum": ["write", "write-file", "write-content", "write_file", "file.content.write"]}},
+            "required": ["action"],
+            "anyOf": [
+              {"required": ["workspace_relative_path"]},
+              {"required": ["role", "relative_path"]}
+            ],
+            "oneOf": [
+              {"required": ["content"]},
+              {"required": ["content_base64"]}
+            ]
+          },
+          {
+            "properties": {"action": {"enum": ["upload_file"]}},
+            "required": ["action", "role", "file_name", "content_base64"]
+          },
+          {
+            "properties": {"action": {"enum": ["preview_text", "file.preview.text"]}},
+            "required": ["action"],
+            "anyOf": [
+              {"required": ["workspace_relative_path"]},
+              {"required": ["role", "relative_path"]}
+            ]
+          },
+          {
+            "properties": {"action": {"enum": ["preview_table", "file.preview.table"]}},
+            "required": ["action"],
+            "anyOf": [
+              {"required": ["workspace_relative_path"]},
+              {"required": ["role", "relative_path"]}
+            ]
+          },
+          {
+            "properties": {"action": {"enum": ["render_preview", "file.preview.render", "render_thumbnail"]}},
+            "required": ["action"],
+            "anyOf": [
+              {"required": ["workspace_relative_path"]},
+              {"required": ["role", "relative_path"]}
+            ]
+          },
+          {
+            "properties": {"action": {"enum": ["update_markdown_file"]}},
+            "required": ["action", "content"],
+            "anyOf": [
+              {"required": ["workspace_relative_path"]},
+              {"required": ["role", "relative_path"]}
+            ]
+          },
+          {
+            "properties": {"action": {"enum": ["create_folder"]}},
+            "required": ["action", "role", "folder_name"]
+          },
+          {
+            "properties": {"action": {"enum": ["read_folder", "download_folder", "delete_folder", "move_folder"]}},
+            "required": ["action", "role", "relative_path"]
+          },
+          {
+            "properties": {"action": {"enum": ["move_file"]}},
+            "required": ["action", "target_folder_relative_path"],
+            "anyOf": [
+              {"required": ["workspace_relative_path"]},
+              {"required": ["role", "relative_path"]}
+            ]
+          },
+          {
+            "properties": {"action": {"enum": ["move_items"]}},
+            "required": ["action", "role", "target_folder_relative_path"],
+            "anyOf": [
+              {"required": ["files"]},
+              {"required": ["folders"]}
+            ]
+          },
+          {
+            "properties": {"action": {"enum": ["delete_file"]}},
+            "required": ["action"],
+            "anyOf": [
+              {"required": ["workspace_relative_path"]},
+              {"required": ["role", "relative_path"]}
+            ]
+          },
+          {"properties": {"action": {"enum": ["references.manifest", "health.check"]}}, "required": ["action"]},
+          {
+            "properties": {"action": {"enum": ["references.search"]}},
+            "required": ["action"]
+          },
+          {
+            "properties": {"action": {"enum": ["references.resolve", "references.summarize"]}},
+            "required": ["action", "entity_id"]
+          }
+        ],
         "examples": [
           {"action": "operations.manifest"},
           {"action": "catalog", "limit": 20},

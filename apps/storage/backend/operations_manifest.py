@@ -8,6 +8,7 @@ from typing import Any
 STORAGE_ACTIONS = [
     "operations.manifest",
     "catalog",
+    "file.catalog.list",
     "view_filter",
     "set_view_filter",
     "set_custom_view",
@@ -106,6 +107,7 @@ def operations_manifest_payload() -> dict[str, Any]:
         "operations": [
             {
                 "action": "catalog",
+                "aliases": ["file.catalog.list"],
                 "description": "List files and folders from the workspace Storage inventory.",
                 "optional": [
                     "query",
@@ -144,10 +146,19 @@ def operations_manifest_payload() -> dict[str, Any]:
             },
             {
                 "action": "preview_text",
+                "aliases": ["file.preview.text"],
                 "description": "Extract a bounded text preview for supported files.",
                 "required_any": ["workspace_relative_path", "role + relative_path"],
                 "optional": ["max_chars"],
                 "payload_profile": "bounded_preview",
+            },
+            {
+                "action": "preview_table",
+                "aliases": ["file.preview.table"],
+                "description": "Extract bounded table data for CSV and spreadsheet files.",
+                "required_any": ["workspace_relative_path", "role + relative_path"],
+                "optional": ["max_rows", "max_columns"],
+                "payload_profile": "bounded_table_preview",
             },
             {
                 "action": "references.search",
@@ -162,14 +173,27 @@ def operations_manifest_payload() -> dict[str, Any]:
                 "optional": ["entity_type"],
                 "payload_profile": "single_reference",
             },
+            {
+                "action": "references.summarize",
+                "description": "Summarize one Storage file or folder app reference.",
+                "required": ["entity_id"],
+                "optional": ["entity_type"],
+                "payload_profile": "single_reference_summary",
+            },
         ],
         "payload_profiles": {
             "operations.manifest": "compact_default",
             "catalog": "explicit_action_paginated",
+            "file.catalog.list": "explicit_action_paginated",
             "file_info": "metadata_only",
             "file.content.read": "explicit_file_content_only",
             "preview_text": "bounded_preview_only",
+            "file.preview.text": "bounded_preview_only",
+            "preview_table": "bounded_table_preview_only",
+            "file.preview.table": "bounded_table_preview_only",
             "references.search": "compact_results",
+            "references.resolve": "single_reference",
+            "references.summarize": "single_reference_summary",
         },
         "aliases": STORAGE_ACTION_ALIASES,
         "id_patterns": {

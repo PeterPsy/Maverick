@@ -10,6 +10,7 @@
             "enum": [
               "operations.manifest",
               "catalog",
+              "file.catalog.list",
               "file_info",
               "read_file",
               "file.content.read",
@@ -171,7 +172,7 @@
         ],
         "additionalProperties": false
       },
-      "output_schema": {"type": "object", "properties": {"rows": {"type": "array"}, "file": {"type": "object"}}}
+      "output_schema": {"type": "object", "properties": {"sheets": {"type": "array"}, "file": {"type": "object"}}}
     },
     "storage_write_file": {
       "description": "Create or overwrite one workspace Storage file through the official Storage write path.",

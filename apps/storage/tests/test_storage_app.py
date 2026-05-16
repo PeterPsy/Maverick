@@ -1421,6 +1421,9 @@ class StorageAppTestCase(unittest.TestCase):
             self.assertEqual(payload["error"], "validation_error")
             self.assertIn("action", payload["allowed_values"])
             self.assertIn("operations.manifest", payload["allowed_values"]["action"])
+            self.assertIn("file.catalog.list", payload["allowed_values"]["action"])
+            self.assertIn("file.preview.text", payload["allowed_values"]["action"])
+            self.assertIn("file.preview.table", payload["allowed_values"]["action"])
             self.assertEqual(payload["example"]["action"], "operations.manifest")
 
     def test_backend_catalog_filters_direct_files_by_folder_path(self) -> None:
@@ -1586,9 +1589,20 @@ class StorageAppTestCase(unittest.TestCase):
         storage_command = next(command for command in commands if command.command_id == "app.storage.storage")
         self.assertEqual(storage_command.argument_schema["properties"]["action"]["default"], "operations.manifest")
         self.assertIn("catalog", storage_command.argument_schema["properties"]["action"]["enum"])
+        self.assertIn("oneOf", storage_command.argument_schema)
+        action_groups = [
+            entry.get("properties", {}).get("action", {}).get("enum", [])
+            for entry in storage_command.argument_schema["oneOf"]
+        ]
+        flattened_actions = {action for group in action_groups for action in group}
+        self.assertIn("file.catalog.list", flattened_actions)
+        self.assertIn("file.preview.table", flattened_actions)
         write_tool = next(tool for tool in tools if tool.tool_name == "app.storage.storage_write_file")
         self.assertIn("workspace_relative_path", write_tool.input_schema["properties"])
         self.assertIn("oneOf", write_tool.input_schema)
+        table_tool = next(tool for tool in tools if tool.tool_name == "app.storage.storage_preview_table")
+        self.assertIn("sheets", table_tool.output_schema["properties"])
+        self.assertNotIn("rows", table_tool.output_schema["properties"])
 
     @integration_test("storage platform integration suite; run with scripts/test_suite.py --level integration")
     def test_platform_backend_and_frontend_mount_storage(self) -> None:
@@ -1654,6 +1668,12 @@ class StorageAppTestCase(unittest.TestCase):
         self.assertEqual(cli_payload["status_code"], 200)
         self.assertEqual(mcp_payload["default_action"], "operations.manifest")
         self.assertEqual(cli_payload["default_action"], "operations.manifest")
+        operation_by_action = {operation["action"]: operation for operation in mcp_payload["operations"]}
+        self.assertEqual(operation_by_action["catalog"]["aliases"], ["file.catalog.list"])
+        self.assertEqual(operation_by_action["preview_text"]["aliases"], ["file.preview.text"])
+        self.assertEqual(operation_by_action["preview_table"]["aliases"], ["file.preview.table"])
+        self.assertIn("file.catalog.list", mcp_payload["payload_profiles"])
+        self.assertIn("file.preview.table", mcp_payload["payload_profiles"])
         self.assertNotIn("files", mcp_payload)
         self.assertNotIn("files", cli_payload)
 
@@ -1711,6 +1731,65 @@ class StorageAppTestCase(unittest.TestCase):
         self.assertEqual(mcp_payload["files"][0]["workspace_relative_path"], "storage/uploaded/source.txt")
         self.assertEqual(dedicated_payload["files"][0]["workspace_relative_path"], "storage/uploaded/source.txt")
         self.assertEqual(cli_payload["files"][0]["workspace_relative_path"], "storage/uploaded/source.txt")
+
+    @integration_test("storage platform integration suite; run with scripts/test_suite.py --level integration")
+    def test_mcp_dedicated_file_tools_execute_end_to_end(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        generated = repo_root / "workspaces" / "default" / "storage" / "generated"
+        generated.mkdir(parents=True, exist_ok=True)
+        (generated / "report.md").write_text("# Report\n\nhello from storage\n", encoding="utf-8")
+        (generated / "leads.csv").write_text("name,value\nAcme,42\nGlobex,7\n", encoding="utf-8")
+        context = McpInvocationContext(
+            caller_kind="sandbox_agent",
+            workspace_id="default",
+            agent_id="tester",
+            effective_mode="sandbox",
+        )
+
+        info_payload = call_mcp_tool(
+            tool_name="app.storage.storage_file_info",
+            context=context,
+            arguments={"workspace_relative_path": "storage/generated/report.md"},
+            app_store=state.app_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+        read_payload = call_mcp_tool(
+            tool_name="app.storage.storage_read_file",
+            context=context,
+            arguments={"workspace_relative_path": "storage/generated/report.md"},
+            app_store=state.app_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+        text_preview = call_mcp_tool(
+            tool_name="app.storage.storage_preview_text",
+            context=context,
+            arguments={"workspace_relative_path": "storage/generated/report.md", "max_chars": 80},
+            app_store=state.app_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+        table_preview = call_mcp_tool(
+            tool_name="app.storage.storage_preview_table",
+            context=context,
+            arguments={"workspace_relative_path": "storage/generated/leads.csv", "max_rows": 5, "max_columns": 5},
+            app_store=state.app_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+
+        self.assertEqual(info_payload["status_code"], 200)
+        self.assertEqual(info_payload["file"]["workspace_relative_path"], "storage/generated/report.md")
+        self.assertEqual(read_payload["status_code"], 200)
+        self.assertIn("# Report", b64decode(read_payload["content_base64"]).decode("utf-8"))
+        self.assertEqual(text_preview["status_code"], 200)
+        self.assertIn("hello from storage", text_preview["preview_text"])
+        self.assertEqual(table_preview["status_code"], 200)
+        self.assertEqual(table_preview["file"]["workspace_relative_path"], "storage/generated/leads.csv")
+        self.assertEqual(table_preview["sheets"][0]["rows"][0], ["name", "value"])
+        self.assertEqual(table_preview["sheets"][0]["rows"][1], ["Acme", "42"])
 
     @integration_test("storage platform integration suite; run with scripts/test_suite.py --level integration")
     def test_mcp_and_cli_can_write_storage_file_content(self) -> None:

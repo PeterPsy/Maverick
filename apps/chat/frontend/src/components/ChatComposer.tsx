@@ -115,6 +115,27 @@ function composerCaretOffset(root: HTMLElement): number {
   return caretOffsetInNode(root, selection.anchorNode, selection.anchorOffset);
 }
 
+function composerSelectionOffsets(root: HTMLElement): { start: number; end: number } {
+  const selection = window.getSelection();
+  if (
+    !selection ||
+    selection.rangeCount === 0 ||
+    !selection.anchorNode ||
+    !selection.focusNode ||
+    !root.contains(selection.anchorNode) ||
+    !root.contains(selection.focusNode)
+  ) {
+    const end = composerText(root).length;
+    return { start: end, end };
+  }
+  const anchor = caretOffsetInNode(root, selection.anchorNode, selection.anchorOffset);
+  const focus = caretOffsetInNode(root, selection.focusNode, selection.focusOffset);
+  return {
+    start: Math.min(anchor, focus),
+    end: Math.max(anchor, focus),
+  };
+}
+
 function setComposerCaret(root: HTMLElement, offset: number): void {
   const range = document.createRange();
   const selection = window.getSelection();
@@ -241,6 +262,18 @@ function renderComposerContent(root: HTMLElement, text: string, tokens: MentionT
     appendTextSegment(fragment, text.slice(cursor));
   }
   root.replaceChildren(fragment);
+}
+
+function normalizePastedComposerText(text: string): string {
+  return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+}
+
+function isMobileComposerInput(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    (window.matchMedia("(pointer: coarse)").matches || window.matchMedia("(max-width: 720px)").matches)
+  );
 }
 
 function mentionItemKey(item: MentionItem): string {
@@ -378,7 +411,7 @@ export function ChatComposer({
     if (wasFocused) {
       setComposerCaret(editor, nextCaretIndex);
     }
-  }, [caretIndex, disabled, mentionTokens, value]);
+  }, [disabled, mentionTokens, value]);
 
   useEffect(() => {
     setSelectedMentionIndex(0);
@@ -418,10 +451,10 @@ export function ChatComposer({
   }, [appPickerItems]);
 
   useEffect(() => {
-    if (isAppMentionPickerOpen) {
+    if (showAppPicker) {
       appPickerSearchRef.current?.focus();
     }
-  }, [isAppMentionPickerOpen]);
+  }, [showAppPicker]);
 
   useEffect(() => {
     if (!isAppMentionPickerOpen) {
@@ -467,6 +500,25 @@ export function ChatComposer({
     pendingCaretIndexRef.current = nextCaret;
     onChange(nextValue);
     setCaretIndex(nextCaret);
+  }
+
+  function replaceComposerSelectionWithText(editor: HTMLDivElement, text: string) {
+    const currentValue = composerText(editor);
+    const selection = composerSelectionOffsets(editor);
+    const nextValue = `${currentValue.slice(0, selection.start)}${text}${currentValue.slice(selection.end)}`;
+    const nextCaret = selection.start + text.length;
+    pendingCaretIndexRef.current = nextCaret;
+    onChange(nextValue);
+    setCaretIndex(nextCaret);
+    setDismissedMentionStart(null);
+    requestAnimationFrame(() => {
+      const nextEditor = editorRef.current;
+      if (!nextEditor) {
+        return;
+      }
+      nextEditor.focus();
+      setComposerCaret(nextEditor, nextCaret);
+    });
   }
 
   function insertMention(item: MentionItem) {
@@ -597,6 +649,10 @@ export function ChatComposer({
       return true;
     }
     if (!appPickerItems.length) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        return true;
+      }
       return false;
     }
     if (event.key === "ArrowDown") {
@@ -618,6 +674,9 @@ export function ChatComposer({
   }
 
   function onComposerKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (event.nativeEvent.isComposing) {
+      return;
+    }
     if (handleAppMentionPickerKey(event)) {
       return;
     }
@@ -645,14 +704,27 @@ export function ChatComposer({
         }
       }
     }
-    if (event.key === "Enter" && !event.shiftKey && !event.altKey) {
+    if (event.key === "Enter" && (event.shiftKey || event.altKey || isMobileComposerInput())) {
+      event.preventDefault();
+      replaceComposerSelectionWithText(event.currentTarget, "\n");
+      return;
+    }
+    if (event.key === "Enter") {
       event.preventDefault();
       onSubmit();
     }
   }
 
   function onAppPickerSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    handleAppMentionPickerKey(event, true);
+    if (event.nativeEvent.isComposing) {
+      return;
+    }
+    if (handleAppMentionPickerKey(event, true)) {
+      return;
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+    }
   }
 
   function onDragOver(event: DragEvent<HTMLDivElement>) {
@@ -681,12 +753,22 @@ export function ChatComposer({
   }
 
   function onPaste(event: ClipboardEvent<HTMLDivElement>) {
-    if (disabled || !event.clipboardData.files.length) {
+    if (disabled) {
+      return;
+    }
+    if (event.clipboardData.files.length) {
+      event.preventDefault();
+      event.stopPropagation();
+      onAddAttachments(Array.from(event.clipboardData.files));
+      return;
+    }
+    const pastedText = normalizePastedComposerText(event.clipboardData.getData("text/plain"));
+    if (!pastedText) {
       return;
     }
     event.preventDefault();
     event.stopPropagation();
-    onAddAttachments(Array.from(event.clipboardData.files));
+    replaceComposerSelectionWithText(event.currentTarget, pastedText);
   }
 
   return (
@@ -716,6 +798,7 @@ export function ChatComposer({
             <div className={`chatapp-composer__text-area ${isSending ? "is-busy" : "is-idle"}`}>
               <div
                 aria-disabled={disabled}
+                aria-multiline="true"
                 className={`chat-ui-input chat-ui-input--textarea chatapp-composer__field chatapp-composer__editor ${value ? "" : "is-empty"}`}
                 contentEditable={!disabled}
                 data-placeholder="Message Maverick..."
@@ -1036,7 +1119,7 @@ function MentionPanel({
             aria-selected={index === activeIndex}
             className={`chatapp-mention-panel__item ${index === activeIndex ? "is-active" : ""}`}
             key={`${item.kind}:${item.id}`}
-            onMouseDown={(event) => {
+            onPointerDown={(event) => {
               event.preventDefault();
               onSelect(item);
             }}

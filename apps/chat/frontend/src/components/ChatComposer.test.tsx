@@ -114,6 +114,7 @@ afterEach(() => {
   container?.remove();
   container = null;
   vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
 async function renderComposer({
@@ -122,12 +123,14 @@ async function renderComposer({
   onReferenceAdd = () => undefined,
   onSearchReferences = async () => [],
   onSelectAgent = () => undefined,
+  onSubmit = () => undefined,
 }: {
   agentOptions?: AgentTypeSummary[];
   onAddAttachments?: (files: File[]) => void;
   onReferenceAdd?: (reference: AppReference) => void;
   onSearchReferences?: (query: string, signal: AbortSignal) => Promise<MentionItem[]>;
   onSelectAgent?: (agentTypeId: string) => void;
+  onSubmit?: () => void;
 } = {}) {
   container = document.createElement("div");
   document.body.append(container);
@@ -159,7 +162,7 @@ async function renderComposer({
         onSelectProvider={() => undefined}
         onRemoveAttachment={() => undefined}
         onStopTurn={() => undefined}
-        onSubmit={() => undefined}
+        onSubmit={onSubmit}
         providers={providers}
         queuedCount={0}
         queuedPreview={null}
@@ -184,20 +187,79 @@ async function renderComposer({
   };
 }
 
-async function typeInEditor(text: string) {
+function editorElement(): HTMLElement {
   const editor = container?.querySelector('[role="textbox"]');
   expect(editor).toBeInstanceOf(HTMLElement);
+  return editor as HTMLElement;
+}
+
+async function typeInEditor(text: string) {
+  const editor = editorElement();
 
   await act(async () => {
-    editor!.textContent = text;
+    editor.focus();
+    editor.textContent = text;
     const range = document.createRange();
-    range.selectNodeContents(editor!);
+    range.selectNodeContents(editor);
     range.collapse(false);
     const selection = window.getSelection();
     selection?.removeAllRanges();
     selection?.addRange(range);
-    editor!.dispatchEvent(new Event("input", { bubbles: true }));
+    editor.dispatchEvent(new Event("input", { bubbles: true }));
   });
+}
+
+async function selectEditorRange(start: number, end: number) {
+  const editor = editorElement();
+  const textNode = editor.firstChild;
+  expect(textNode?.nodeType).toBe(Node.TEXT_NODE);
+
+  await act(async () => {
+    editor.focus();
+    const range = document.createRange();
+    range.setStart(textNode!, start);
+    range.setEnd(textNode!, end);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  });
+}
+
+async function keyDownEditor(init: KeyboardEventInit) {
+  const editor = editorElement();
+  await act(async () => {
+    editor.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }));
+  });
+}
+
+async function pasteTextInEditor(text: string) {
+  const editor = editorElement();
+  await act(async () => {
+    const event = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", {
+      value: {
+        files: [],
+        getData: (type: string) => (type === "text/plain" ? text : ""),
+      },
+    });
+    editor.dispatchEvent(event);
+  });
+}
+
+function mockMobileInput(matches: boolean) {
+  vi.stubGlobal(
+    "matchMedia",
+    vi.fn((query: string) => ({
+      addEventListener: vi.fn(),
+      addListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+      matches: matches && (query === "(pointer: coarse)" || query === "(max-width: 720px)"),
+      media: query,
+      onchange: null,
+      removeEventListener: vi.fn(),
+      removeListener: vi.fn(),
+    })),
+  );
 }
 
 async function dropOnEditor(dataTransfer: FakeDataTransfer) {
@@ -244,6 +306,168 @@ function dispatchPointerDown(target: Element, pointerType: string) {
 }
 
 describe("ChatComposer reference search", () => {
+  it("preserves a desktop mouse text selection after mouseup", async () => {
+    await renderComposer();
+    await typeInEditor("hello world");
+    await selectEditorRange(0, 5);
+
+    await act(async () => {
+      editorElement().dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true }));
+    });
+
+    expect(window.getSelection()?.toString()).toBe("hello");
+  });
+
+  it("inserts a newline for Shift+Enter without submitting", async () => {
+    const onSubmit = vi.fn();
+    const { getValue } = await renderComposer({ onSubmit });
+    await typeInEditor("hello");
+
+    await keyDownEditor({ key: "Enter", shiftKey: true });
+
+    expect(getValue()).toBe("hello\n");
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("uses Enter as a newline on mobile composer input", async () => {
+    mockMobileInput(true);
+    const onSubmit = vi.fn();
+    const { getValue } = await renderComposer({ onSubmit });
+    await typeInEditor("hello");
+
+    await keyDownEditor({ key: "Enter" });
+
+    expect(getValue()).toBe("hello\n");
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("submits with Enter on desktop composer input", async () => {
+    mockMobileInput(false);
+    const onSubmit = vi.fn();
+    await renderComposer({ onSubmit });
+    await typeInEditor("hello");
+
+    await keyDownEditor({ key: "Enter" });
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  it("normalizes pasted multiline text as plain composer text", async () => {
+    const { getValue } = await renderComposer();
+    await typeInEditor("first");
+
+    await pasteTextInEditor(" second\r\nthird");
+
+    expect(getValue()).toBe("first second\nthird");
+  });
+
+  it("replaces the selected composer range with pasted plain text", async () => {
+    const { getValue } = await renderComposer();
+    await typeInEditor("hello world");
+    await selectEditorRange(6, 11);
+
+    await pasteTextInEditor("Maverick");
+
+    expect(getValue()).toBe("hello Maverick");
+  });
+
+  it("keeps focus in the composer when an @ mention opens suggestions from typing", async () => {
+    vi.useFakeTimers();
+    HTMLElement.prototype.scrollIntoView = vi.fn();
+    const { element } = await renderComposer();
+
+    await typeInEditor("@");
+
+    expect(element.querySelector('[aria-label="Search apps, files, or folders"]')).toBeInstanceOf(HTMLInputElement);
+    expect(document.activeElement).toBe(editorElement());
+  });
+
+  it("does not submit from the @ picker search input when Enter has no result to select", async () => {
+    vi.useFakeTimers();
+    HTMLElement.prototype.scrollIntoView = vi.fn();
+    const onSubmit = vi.fn();
+    const onSearchReferences = vi.fn(async () => []);
+    const { element } = await renderComposer({ onSearchReferences, onSubmit });
+    await typeInEditor("@Missing");
+    await settleReferenceSearch();
+    const searchInput = element.querySelector('[aria-label="Search apps, files, or folders"]');
+    expect(searchInput).toBeInstanceOf(HTMLInputElement);
+
+    await act(async () => {
+      searchInput!.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Enter" }));
+    });
+
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("lets Tab move focus from the @ picker search input when there are no results", async () => {
+    vi.useFakeTimers();
+    HTMLElement.prototype.scrollIntoView = vi.fn();
+    const onSearchReferences = vi.fn(async () => []);
+    const { element } = await renderComposer({ onSearchReferences });
+    await typeInEditor("@Missing");
+    await settleReferenceSearch();
+    const searchInput = element.querySelector('[aria-label="Search apps, files, or folders"]');
+    expect(searchInput).toBeInstanceOf(HTMLInputElement);
+    const tabEvent = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Tab" });
+
+    await act(async () => {
+      searchInput!.dispatchEvent(tabEvent);
+    });
+
+    expect(tabEvent.defaultPrevented).toBe(false);
+  });
+
+  it("does not select an @ suggestion while IME composition is confirming", async () => {
+    vi.useFakeTimers();
+    HTMLElement.prototype.scrollIntoView = vi.fn();
+    const onReferenceAdd = vi.fn();
+    const onSearchReferences = vi.fn(async () => [checklistMention]);
+    const { getValue } = await renderComposer({ onReferenceAdd, onSearchReferences });
+    await typeInEditor("@Link");
+    await settleReferenceSearch();
+    const enterEvent = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Enter" });
+    Object.defineProperty(enterEvent, "isComposing", { value: true });
+
+    await act(async () => {
+      editorElement().dispatchEvent(enterEvent);
+    });
+
+    expect(onReferenceAdd).not.toHaveBeenCalled();
+    expect(enterEvent.defaultPrevented).toBe(false);
+    expect(getValue()).toBe("@Link");
+  });
+
+  it("does not select an @ suggestion from search input while IME composition is confirming", async () => {
+    vi.useFakeTimers();
+    HTMLElement.prototype.scrollIntoView = vi.fn();
+    const onReferenceAdd = vi.fn();
+    const onSearchReferences = vi.fn(async () => [checklistMention]);
+    const { element, getValue } = await renderComposer({ onReferenceAdd, onSearchReferences });
+    const pickerButton = element.querySelector('[aria-label="Apps and references"]');
+    expect(pickerButton).toBeInstanceOf(HTMLButtonElement);
+
+    await act(async () => {
+      (pickerButton as HTMLButtonElement).click();
+    });
+    const searchInput = element.querySelector('[aria-label="Search apps, files, or folders"]');
+    expect(searchInput).toBeInstanceOf(HTMLInputElement);
+    await act(async () => {
+      changeInputValue(searchInput as HTMLInputElement, "Link");
+    });
+    await settleReferenceSearch();
+    const enterEvent = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Enter" });
+    Object.defineProperty(enterEvent, "isComposing", { value: true });
+
+    await act(async () => {
+      searchInput!.dispatchEvent(enterEvent);
+    });
+
+    expect(onReferenceAdd).not.toHaveBeenCalled();
+    expect(enterEvent.defaultPrevented).toBe(false);
+    expect(getValue()).toBe("");
+  });
+
   it("opens the agent selector and selects an agent runner", async () => {
     const onSelectAgent = vi.fn();
     const { element } = await renderComposer({ onSelectAgent });
@@ -370,7 +594,7 @@ describe("ChatComposer reference search", () => {
     expect(referenceButton).toBeInstanceOf(HTMLButtonElement);
 
     await act(async () => {
-      referenceButton!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+      referenceButton!.dispatchEvent(new Event("pointerdown", { bubbles: true, cancelable: true }));
     });
 
     expect(onReferenceAdd).toHaveBeenCalledWith(checklistReference);
@@ -406,7 +630,7 @@ describe("ChatComposer reference search", () => {
     expect(referenceButton).toBeInstanceOf(HTMLButtonElement);
 
     await act(async () => {
-      referenceButton!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+      referenceButton!.dispatchEvent(new Event("pointerdown", { bubbles: true, cancelable: true }));
     });
 
     expect(onReferenceAdd).toHaveBeenCalledWith(checklistReference);

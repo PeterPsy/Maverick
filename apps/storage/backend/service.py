@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from errors import StorageValidationError
+from operations_manifest import STORAGE_ACTION_ALIASES, STORAGE_ACTIONS, operations_manifest_payload
 from reference_entities import (
     REFERENCE_MANIFEST,
     reference_resolve_payload,
@@ -118,7 +119,12 @@ def _bool_value(value: object) -> bool:
 def _catalog_filter_value(body: dict[str, Any], key: str, allowed: set[str], default: str) -> str:
     value = str(body.get(key) or default).strip()
     if value not in allowed:
-        raise StorageValidationError(f"Unsupported catalog {key} `{value}`.")
+        raise StorageValidationError(
+            f"Unsupported catalog {key} `{value}`.",
+            operation="catalog",
+            allowed_values={key: sorted(allowed)},
+            example={"action": "catalog", key: default, "limit": 20},
+        )
     return value
 
 
@@ -147,7 +153,10 @@ def _optional_string_list(body: dict[str, Any], key: str, *, maximum: int = 500)
 
 
 def handle_action(data_root: Path, uploaded_root: Path, generated_root: Path, body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
-    action = str(body.get("action") or "catalog")
+    requested_action = str(body.get("action") or "catalog")
+    action = STORAGE_ACTION_ALIASES.get(requested_action, requested_action)
+    if action == "operations.manifest":
+        return 200, operations_manifest_payload()
     if action in {"catalog", "file.catalog.list"}:
         catalog = catalog_files_payload(
             data_root=data_root,
@@ -441,4 +450,14 @@ def handle_action(data_root: Path, uploaded_root: Path, generated_root: Path, bo
         return 200, reference_resolve_payload(data_root=data_root, uploaded_root=uploaded_root, generated_root=generated_root, body=body)
     if action == "references.summarize":
         return 200, reference_summarize_payload(data_root=data_root, uploaded_root=uploaded_root, generated_root=generated_root, body=body)
-    raise StorageValidationError(f"Unknown action `{action}`.")
+    raise StorageValidationError(
+        f"Unknown action `{action}`.",
+        operation=action,
+        expected_fields=["action"],
+        accepted_aliases={
+            "write": ["write-file", "write-content"],
+            "read_file": ["file.content.read"],
+        },
+        allowed_values={"action": STORAGE_ACTIONS},
+        example={"action": "operations.manifest"},
+    )

@@ -8,19 +8,15 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
-from errors import StorageValidationError
+from errors import StorageValidationError, validation_error_payload
+from operations_manifest import STORAGE_ACTION_ALIASES
 from service import app_events_for_action, handle_action
 
 
 payload = json.loads(sys.stdin.read() or "{}")
 arguments = payload.get("arguments") if isinstance(payload.get("arguments"), dict) else {}
-action_aliases = {
-    "write": "file.content.write",
-    "write-file": "file.content.write",
-    "write-content": "file.content.write",
-}
-requested_action = str(arguments.get("action") or "catalog")
-body = {**arguments, "action": action_aliases.get(requested_action, requested_action)}
+requested_action = str(arguments.get("action") or "operations.manifest")
+body = {**arguments, "action": STORAGE_ACTION_ALIASES.get(requested_action, requested_action)}
 try:
     status_code, result = handle_action(
         Path(payload["data_root"]),
@@ -29,7 +25,7 @@ try:
         body,
     )
 except StorageValidationError as error:
-    status_code, result = 400, {"error": "validation_error", "detail": str(error)}
+    status_code, result = 400, validation_error_payload(error)
 
 response = {"status_code": status_code, "workspace_id": payload.get("workspace_id"), **result}
 if status_code < 400:

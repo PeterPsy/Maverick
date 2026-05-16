@@ -37,6 +37,12 @@ class StorageAppTestCase(unittest.TestCase):
             (repo_root / name).mkdir(parents=True, exist_ok=True)
         (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
         (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
+        shutil.copy2(REPO_ROOT / "core" / "__init__.py", repo_root / "core" / "__init__.py")
+        shutil.copytree(
+            REPO_ROOT / "core" / "app_sdk",
+            repo_root / "core" / "app_sdk",
+            ignore=shutil.ignore_patterns("__pycache__"),
+        )
         source_apps_root = REPO_ROOT / "apps"
         for app_id in ("base-shell", "chat", "storage"):
             shutil.copytree(
@@ -111,6 +117,9 @@ class StorageAppTestCase(unittest.TestCase):
         self.assertEqual(parsed.contract.entrypoints.backend, "backend/app_backend.py")
         self.assertEqual(parsed.contract.entrypoints.frontend, "frontend/dist")
         self.assertIn("maverick_storage", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("storage_list_files", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("storage_read_file", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("storage_preview_text", parsed.contract.capabilities.mcp_tools)
         self.assertIn("storage_set_view_filter", parsed.contract.capabilities.mcp_tools)
         self.assertIn("storage_reference_manifest", parsed.contract.capabilities.mcp_tools)
         self.assertIn("storage_write_file", parsed.contract.capabilities.mcp_tools)
@@ -1396,6 +1405,24 @@ class StorageAppTestCase(unittest.TestCase):
             self.assertEqual(rejected_catalog["status_code"], 400)
             self.assertEqual(rejected_preview["status_code"], 400)
 
+    def test_backend_unknown_action_returns_guided_error(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+
+            rejected = self.run_backend(
+                data_root=root / "data" / "storage",
+                uploaded_root=root / "storage" / "uploaded",
+                generated_root=root / "storage" / "generated",
+                body={"action": "not_real"},
+            )
+
+            self.assertEqual(rejected["status_code"], 400)
+            payload = rejected["json"]
+            self.assertEqual(payload["error"], "validation_error")
+            self.assertIn("action", payload["allowed_values"])
+            self.assertIn("operations.manifest", payload["allowed_values"]["action"])
+            self.assertEqual(payload["example"]["action"], "operations.manifest")
+
     def test_backend_catalog_filters_direct_files_by_folder_path(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -1552,8 +1579,16 @@ class StorageAppTestCase(unittest.TestCase):
         commands = list_core_cli_commands(app_store=state.app_store, workspace_id="default", start_path=repo_root)
 
         self.assertIn("app.storage.maverick_storage", [tool.tool_name for tool in tools])
+        self.assertIn("app.storage.storage_list_files", [tool.tool_name for tool in tools])
+        self.assertIn("app.storage.storage_read_file", [tool.tool_name for tool in tools])
         self.assertIn("app.storage.storage_write_file", [tool.tool_name for tool in tools])
         self.assertIn("app.storage.storage", [command.command_id for command in commands])
+        storage_command = next(command for command in commands if command.command_id == "app.storage.storage")
+        self.assertEqual(storage_command.argument_schema["properties"]["action"]["default"], "operations.manifest")
+        self.assertIn("catalog", storage_command.argument_schema["properties"]["action"]["enum"])
+        write_tool = next(tool for tool in tools if tool.tool_name == "app.storage.storage_write_file")
+        self.assertIn("workspace_relative_path", write_tool.input_schema["properties"])
+        self.assertIn("oneOf", write_tool.input_schema)
 
     @integration_test("storage platform integration suite; run with scripts/test_suite.py --level integration")
     def test_platform_backend_and_frontend_mount_storage(self) -> None:
@@ -1581,6 +1616,48 @@ class StorageAppTestCase(unittest.TestCase):
         self.assertIn(b"Maverick Storage", frontend_payload)
 
     @integration_test("storage platform integration suite; run with scripts/test_suite.py --level integration")
+    def test_mcp_and_cli_default_to_compact_operations_manifest(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        generated = repo_root / "workspaces" / "default" / "storage" / "generated" / "report.txt"
+        generated.parent.mkdir(parents=True, exist_ok=True)
+        generated.write_text("hello", encoding="utf-8")
+
+        mcp_payload = call_mcp_tool(
+            tool_name="app.storage.maverick_storage",
+            context=McpInvocationContext(
+                caller_kind="sandbox_agent",
+                workspace_id="default",
+                agent_id="tester",
+                effective_mode="sandbox",
+            ),
+            arguments={},
+            app_store=state.app_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+        cli_payload = run_core_cli_command(
+            command_id="app.storage.storage",
+            context=CliInvocationContext(
+                caller_kind="sandbox_agent",
+                workspace_id="default",
+                agent_id="tester",
+                effective_mode="sandbox",
+            ),
+            arguments={},
+            app_store=state.app_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+
+        self.assertEqual(mcp_payload["status_code"], 200)
+        self.assertEqual(cli_payload["status_code"], 200)
+        self.assertEqual(mcp_payload["default_action"], "operations.manifest")
+        self.assertEqual(cli_payload["default_action"], "operations.manifest")
+        self.assertNotIn("files", mcp_payload)
+        self.assertNotIn("files", cli_payload)
+
+    @integration_test("storage platform integration suite; run with scripts/test_suite.py --level integration")
     def test_mcp_and_cli_call_storage_catalog(self) -> None:
         repo_root = self.make_repo_root()
         state = bootstrap_platform_state(start_path=repo_root)
@@ -1601,6 +1678,19 @@ class StorageAppTestCase(unittest.TestCase):
             workspace_id="default",
             start_path=repo_root,
         )
+        dedicated_payload = call_mcp_tool(
+            tool_name="app.storage.storage_list_files",
+            context=McpInvocationContext(
+                caller_kind="sandbox_agent",
+                workspace_id="default",
+                agent_id="tester",
+                effective_mode="sandbox",
+            ),
+            arguments={"limit": 10},
+            app_store=state.app_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
         cli_payload = run_core_cli_command(
             command_id="app.storage.storage",
             context=CliInvocationContext(
@@ -1616,8 +1706,10 @@ class StorageAppTestCase(unittest.TestCase):
         )
 
         self.assertEqual(mcp_payload["status_code"], 200)
+        self.assertEqual(dedicated_payload["status_code"], 200)
         self.assertEqual(cli_payload["status_code"], 200)
         self.assertEqual(mcp_payload["files"][0]["workspace_relative_path"], "storage/uploaded/source.txt")
+        self.assertEqual(dedicated_payload["files"][0]["workspace_relative_path"], "storage/uploaded/source.txt")
         self.assertEqual(cli_payload["files"][0]["workspace_relative_path"], "storage/uploaded/source.txt")
 
     @integration_test("storage platform integration suite; run with scripts/test_suite.py --level integration")

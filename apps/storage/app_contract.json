@@ -82,6 +82,11 @@
   "capabilities": {
     "mcp_tools": [
       "maverick_storage",
+      "storage_list_files",
+      "storage_file_info",
+      "storage_read_file",
+      "storage_preview_text",
+      "storage_preview_table",
       "storage_view_filter",
       "storage_set_view_filter",
       "storage_set_custom_view",

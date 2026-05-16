@@ -1,0 +1,98 @@
+{
+  "commands": {
+    "storage": {
+      "description": "Inspect, search, preview, read, write, move, and delete workspace Storage files. Calling without arguments returns a compact operations manifest.",
+      "argument_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "Storage operation to run. Omit for operations.manifest.",
+            "enum": [
+              "operations.manifest",
+              "catalog",
+              "file.catalog.list",
+              "view_filter",
+              "set_view_filter",
+              "set_custom_view",
+              "clear_custom_view",
+              "file_info",
+              "read_file",
+              "file.content.read",
+              "write",
+              "write-file",
+              "write-content",
+              "write_file",
+              "file.content.write",
+              "upload_file",
+              "preview_text",
+              "file.preview.text",
+              "preview_table",
+              "file.preview.table",
+              "render_preview",
+              "file.preview.render",
+              "render_thumbnail",
+              "update_markdown_file",
+              "create_folder",
+              "read_folder",
+              "download_folder",
+              "delete_folder",
+              "move_file",
+              "move_folder",
+              "move_items",
+              "delete_file",
+              "references.manifest",
+              "references.search",
+              "references.resolve",
+              "references.summarize",
+              "health.check"
+            ],
+            "default": "operations.manifest"
+          },
+          "query": {"type": "string"},
+          "role": {"type": "string", "enum": ["all", "uploaded", "generated"]},
+          "kind": {
+            "type": "string",
+            "enum": ["all", "audio", "document", "file", "image", "markdown", "pdf", "presentation", "spreadsheet", "text", "video"]
+          },
+          "folder_path": {"type": "string"},
+          "folder_relative_path": {"type": "string"},
+          "parent_relative_path": {"type": "string"},
+          "folder_name": {"type": "string"},
+          "file_name": {"type": "string"},
+          "file_ids": {"type": "array", "items": {"type": "string"}, "maxItems": 500},
+          "workspace_relative_paths": {"type": "array", "items": {"type": "string"}, "maxItems": 500},
+          "workspace_relative_path": {"type": "string", "pattern": "^storage/(uploaded|generated)/.+$"},
+          "relative_path": {"type": "string"},
+          "offset": {"type": "integer", "minimum": 0},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 2000},
+          "sort_by": {"type": "string", "enum": ["modified_at", "relative_path", "name", "size_bytes", "preview_kind"]},
+          "sort_direction": {"type": "string", "enum": ["asc", "desc"]},
+          "sync": {"type": "boolean", "default": false},
+          "max_bytes": {"type": "integer", "minimum": 1},
+          "max_chars": {"type": "integer", "minimum": 1},
+          "max_rows": {"type": "integer", "minimum": 1},
+          "max_columns": {"type": "integer", "minimum": 1},
+          "content": {"type": "string"},
+          "content_base64": {"type": "string"},
+          "mode": {"type": "string", "enum": ["create", "overwrite"]},
+          "new_name": {"type": "string"},
+          "target_folder_relative_path": {"type": "string"},
+          "files": {"type": "array", "items": {"type": "object"}},
+          "folders": {"type": "array", "items": {"type": "object"}},
+          "title": {"type": "string"},
+          "preserve_custom": {"type": "boolean", "default": false},
+          "entity_type": {"type": "string", "enum": ["file", "folder"]},
+          "entity_id": {"type": "string"}
+        },
+        "additionalProperties": false,
+        "examples": [
+          {"action": "operations.manifest"},
+          {"action": "catalog", "limit": 20},
+          {"action": "file.content.read", "workspace_relative_path": "storage/generated/report.md"},
+          {"action": "file.content.write", "workspace_relative_path": "storage/generated/report.md", "mode": "overwrite", "content": "# Report"}
+        ]
+      }
+    }
+  }
+}

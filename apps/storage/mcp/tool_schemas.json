@@ -1,0 +1,292 @@
+{
+  "tools": {
+    "maverick_storage": {
+      "description": "Generic Storage operation runner. Calling without arguments returns a compact operations manifest; use dedicated Storage tools for common read and write paths.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "operations.manifest",
+              "catalog",
+              "file_info",
+              "read_file",
+              "file.content.read",
+              "write",
+              "write-file",
+              "write-content",
+              "write_file",
+              "file.content.write",
+              "upload_file",
+              "preview_text",
+              "file.preview.text",
+              "preview_table",
+              "file.preview.table",
+              "render_preview",
+              "file.preview.render",
+              "render_thumbnail",
+              "update_markdown_file",
+              "create_folder",
+              "read_folder",
+              "download_folder",
+              "delete_folder",
+              "move_file",
+              "move_folder",
+              "move_items",
+              "delete_file",
+              "view_filter",
+              "set_view_filter",
+              "set_custom_view",
+              "clear_custom_view",
+              "references.manifest",
+              "references.search",
+              "references.resolve",
+              "references.summarize",
+              "health.check"
+            ],
+            "default": "operations.manifest"
+          },
+          "query": {"type": "string"},
+          "role": {"type": "string", "enum": ["all", "uploaded", "generated"]},
+          "kind": {
+            "type": "string",
+            "enum": ["all", "audio", "document", "file", "image", "markdown", "pdf", "presentation", "spreadsheet", "text", "video"]
+          },
+          "folder_path": {"type": "string"},
+          "workspace_relative_path": {"type": "string", "pattern": "^storage/(uploaded|generated)/.+$"},
+          "relative_path": {"type": "string"},
+          "offset": {"type": "integer", "minimum": 0},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 2000},
+          "content": {"type": "string"},
+          "content_base64": {"type": "string"},
+          "mode": {"type": "string", "enum": ["create", "overwrite"]},
+          "entity_type": {"type": "string", "enum": ["file", "folder"]},
+          "entity_id": {"type": "string"}
+        },
+        "additionalProperties": true,
+        "examples": [{"action": "operations.manifest"}, {"action": "catalog", "limit": 20}]
+      },
+      "output_schema": {"type": "object"}
+    },
+    "storage_list_files": {
+      "description": "List workspace Storage files and folders with compact, paginated metadata.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string"},
+          "role": {"type": "string", "enum": ["all", "uploaded", "generated"], "default": "all"},
+          "kind": {
+            "type": "string",
+            "enum": ["all", "audio", "document", "file", "image", "markdown", "pdf", "presentation", "spreadsheet", "text", "video"],
+            "default": "all"
+          },
+          "folder_path": {"type": "string"},
+          "file_ids": {"type": "array", "items": {"type": "string"}, "maxItems": 500},
+          "workspace_relative_paths": {"type": "array", "items": {"type": "string"}, "maxItems": 500},
+          "offset": {"type": "integer", "minimum": 0, "default": 0},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 2000},
+          "sort_by": {"type": "string", "enum": ["modified_at", "relative_path", "name", "size_bytes", "preview_kind"], "default": "modified_at"},
+          "sort_direction": {"type": "string", "enum": ["asc", "desc"], "default": "desc"}
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "files": {"type": "array"},
+          "folders": {"type": "array"},
+          "pagination": {"type": "object"},
+          "inventory": {"type": "object"}
+        }
+      }
+    },
+    "storage_file_info": {
+      "description": "Resolve metadata for one Storage file by workspace_relative_path or role plus relative_path.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workspace_relative_path": {"type": "string", "pattern": "^storage/(uploaded|generated)/.+$"},
+          "role": {"type": "string", "enum": ["uploaded", "generated"]},
+          "relative_path": {"type": "string"}
+        },
+        "anyOf": [
+          {"required": ["workspace_relative_path"]},
+          {"required": ["role", "relative_path"]}
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"file": {"type": "object"}}}
+    },
+    "storage_read_file": {
+      "description": "Read one Storage file as bounded base64 content. Use only after selecting an explicit file.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workspace_relative_path": {"type": "string", "pattern": "^storage/(uploaded|generated)/.+$"},
+          "role": {"type": "string", "enum": ["uploaded", "generated"]},
+          "relative_path": {"type": "string"},
+          "max_bytes": {"type": "integer", "minimum": 1}
+        },
+        "anyOf": [
+          {"required": ["workspace_relative_path"]},
+          {"required": ["role", "relative_path"]}
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"file": {"type": "object"}, "content_base64": {"type": "string"}}}
+    },
+    "storage_preview_text": {
+      "description": "Extract a bounded text preview for a text, Markdown, DOCX, PPTX, or XLSX Storage file.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workspace_relative_path": {"type": "string", "pattern": "^storage/(uploaded|generated)/.+$"},
+          "role": {"type": "string", "enum": ["uploaded", "generated"]},
+          "relative_path": {"type": "string"},
+          "max_chars": {"type": "integer", "minimum": 1}
+        },
+        "anyOf": [
+          {"required": ["workspace_relative_path"]},
+          {"required": ["role", "relative_path"]}
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"preview_text": {"type": "string"}, "file": {"type": "object"}}}
+    },
+    "storage_preview_table": {
+      "description": "Extract bounded tabular rows for CSV and spreadsheet Storage files.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workspace_relative_path": {"type": "string", "pattern": "^storage/(uploaded|generated)/.+$"},
+          "role": {"type": "string", "enum": ["uploaded", "generated"]},
+          "relative_path": {"type": "string"},
+          "max_rows": {"type": "integer", "minimum": 1},
+          "max_columns": {"type": "integer", "minimum": 1}
+        },
+        "anyOf": [
+          {"required": ["workspace_relative_path"]},
+          {"required": ["role", "relative_path"]}
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"rows": {"type": "array"}, "file": {"type": "object"}}}
+    },
+    "storage_write_file": {
+      "description": "Create or overwrite one workspace Storage file through the official Storage write path.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workspace_relative_path": {"type": "string", "pattern": "^storage/(uploaded|generated)/.+$"},
+          "role": {"type": "string", "enum": ["uploaded", "generated"], "default": "generated"},
+          "relative_path": {"type": "string"},
+          "mode": {"type": "string", "enum": ["create", "overwrite"]},
+          "content": {"type": "string"},
+          "content_base64": {"type": "string"}
+        },
+        "anyOf": [
+          {"required": ["workspace_relative_path"]},
+          {"required": ["role", "relative_path"]}
+        ],
+        "oneOf": [
+          {"required": ["content"]},
+          {"required": ["content_base64"]}
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"file": {"type": "object"}}}
+    },
+    "storage_view_filter": {
+      "description": "Read the current Storage UI filter without scanning workspace storage.",
+      "input_schema": {"type": "object", "properties": {}, "additionalProperties": false},
+      "output_schema": {"type": "object", "properties": {"state": {"type": "object"}}}
+    },
+    "storage_set_view_filter": {
+      "description": "Set Storage query, role, and kind filter state.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string"},
+          "role": {"type": "string", "enum": ["all", "uploaded", "generated"]},
+          "kind": {
+            "type": "string",
+            "enum": ["all", "audio", "document", "file", "image", "markdown", "pdf", "presentation", "spreadsheet", "text", "video"]
+          },
+          "preserve_custom": {"type": "boolean", "default": false}
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"state": {"type": "object"}}}
+    },
+    "storage_set_custom_view": {
+      "description": "Set Storage to a curated custom view using file ids and/or workspace-relative paths.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "title": {"type": "string"},
+          "file_ids": {"type": "array", "items": {"type": "string"}, "maxItems": 500},
+          "workspace_relative_paths": {"type": "array", "items": {"type": "string"}, "maxItems": 500},
+          "files": {"type": "array", "items": {"type": "object"}},
+          "query": {"type": "string"},
+          "role": {"type": "string", "enum": ["all", "uploaded", "generated"]},
+          "kind": {
+            "type": "string",
+            "enum": ["all", "audio", "document", "file", "image", "markdown", "pdf", "presentation", "spreadsheet", "text", "video"]
+          }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"state": {"type": "object"}}}
+    },
+    "storage_clear_custom_view": {
+      "description": "Return Storage to normal search mode.",
+      "input_schema": {"type": "object", "properties": {}, "additionalProperties": false},
+      "output_schema": {"type": "object", "properties": {"state": {"type": "object"}}}
+    },
+    "storage_reference_manifest": {
+      "description": "Describe Storage file and folder reference entity support.",
+      "input_schema": {"type": "object", "properties": {}, "additionalProperties": false},
+      "output_schema": {"type": "object", "properties": {"entity_types": {"type": "array"}}}
+    },
+    "storage_reference_search": {
+      "description": "Search Storage file or folder references for mention pickers and agents.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string"},
+          "entity_type": {"type": "string", "enum": ["file", "folder"], "default": "file"},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 10}
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"results": {"type": "array"}}}
+    },
+    "storage_reference_resolve": {
+      "description": "Resolve one Storage file or folder reference by entity id.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": {"type": "string", "enum": ["file", "folder"], "default": "file"},
+          "entity_id": {"type": "string"}
+        },
+        "required": ["entity_id"],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"exists": {"type": "boolean"}}}
+    },
+    "storage_reference_summarize": {
+      "description": "Return a token-efficient Storage reference summary.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": {"type": "string", "enum": ["file", "folder"], "default": "file"},
+          "entity_id": {"type": "string"}
+        },
+        "required": ["entity_id"],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"summary": {"type": "string"}, "safe_fields": {"type": "object"}}}
+    }
+  }
+}

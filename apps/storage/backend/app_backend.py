@@ -6,7 +6,8 @@ import json
 from pathlib import Path
 import sys
 
-from errors import StorageValidationError
+from errors import StorageValidationError, validation_error_payload
+from operations_manifest import STORAGE_ACTION_ALIASES
 from service import app_events_for_action, handle_action
 
 
@@ -17,7 +18,9 @@ def _response(status_code: int, payload: dict) -> None:
 def main() -> None:
     payload = json.loads(sys.stdin.read() or "{}")
     body = payload.get("body") if isinstance(payload.get("body"), dict) else {}
-    action = str(body.get("action") or "catalog")
+    requested_action = str(body.get("action") or "catalog")
+    action = STORAGE_ACTION_ALIASES.get(requested_action, requested_action)
+    body = {**body, "action": action}
     try:
         status_code, result = handle_action(
             Path(payload["data_root"]),
@@ -26,7 +29,7 @@ def main() -> None:
             body,
         )
     except StorageValidationError as error:
-        _response(400, {"error": "validation_error", "detail": str(error)})
+        _response(400, validation_error_payload(error))
         return
     response = {"status_code": status_code, "json": result}
     if status_code < 400:

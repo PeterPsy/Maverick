@@ -5,6 +5,9 @@ Workspace file storage for uploaded files and generated artifacts.
 ## Contract Notes
 
 - Frontend, backend, CLI, and MCP entrypoints are declared in `app_contract.json`.
+- Storage ships app-owned CLI and MCP descriptor sidecars at `cli/command_schemas.json` and `mcp/tool_schemas.json`. These populate `maverick app storage cli inspect storage --json` and `maverick app storage mcp inspect <tool> --json` with operation-specific descriptions and JSON schemas instead of generic `{"type":"object"}` fallbacks.
+- Calling the app-owned CLI command or the generic `maverick_storage` MCP tool without arguments returns the compact `operations.manifest` payload. Catalog reads are explicit through `action: "catalog"` or the dedicated `storage_list_files` MCP tool, and callers should pass `limit` for bounded pages.
+- Storage exposes dedicated MCP read-path tools for common agent workflows: `storage_list_files`, `storage_file_info`, `storage_read_file`, `storage_preview_text`, and `storage_preview_table`. The generic `maverick_storage` tool remains available for less common actions.
 - The contract now declares the bundled `storage-ops` skill, persisted storage view-state actions, the base-shell `storage-sidebar` and `storage-sidebar-footer` widgets, and the `file-preview` chat widget.
 - `file` and `folder` are reference entities. App-owned state lives under `data/storage/state.json`; the derived file and folder inventory lives under `data/storage/files.json`.
 - Storage is one of the repository reference apps for file- and folder-centric references and embedded widget surfaces.

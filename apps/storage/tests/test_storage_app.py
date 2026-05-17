@@ -29,6 +29,31 @@ STORAGE_ROOT = REPO_ROOT / "apps" / "storage"
 
 
 class StorageAppTestCase(unittest.TestCase):
+    def storage_cli_argument_schema(self) -> dict:
+        descriptor = json.loads((STORAGE_ROOT / "cli" / "command_schemas.json").read_text(encoding="utf-8"))
+        return descriptor["commands"]["storage"]["argument_schema"]
+
+    def schema_accepts_payload(self, schema: dict, payload: dict) -> bool:
+        if "maxProperties" in schema and len(payload) > int(schema["maxProperties"]):
+            return False
+        if any(field not in payload for field in schema.get("required", [])):
+            return False
+        properties = schema.get("properties", {})
+        if schema.get("additionalProperties") is False:
+            extra_fields = set(payload) - set(properties)
+            if extra_fields:
+                return False
+        for field, field_schema in properties.items():
+            if field in payload and "enum" in field_schema and payload[field] not in field_schema["enum"]:
+                return False
+        if "anyOf" in schema and not any(self.schema_accepts_payload(option, payload) for option in schema["anyOf"]):
+            return False
+        if "oneOf" in schema:
+            matches = sum(1 for option in schema["oneOf"] if self.schema_accepts_payload(option, payload))
+            if matches != 1:
+                return False
+        return True
+
     def make_repo_root(self) -> Path:
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
@@ -1425,6 +1450,37 @@ class StorageAppTestCase(unittest.TestCase):
             self.assertIn("file.preview.text", payload["allowed_values"]["action"])
             self.assertIn("file.preview.table", payload["allowed_values"]["action"])
             self.assertEqual(payload["example"]["action"], "operations.manifest")
+
+    def test_cli_schema_restricts_file_roles_and_allows_root_folder_reads(self) -> None:
+        schema = self.storage_cli_argument_schema()
+
+        valid_payloads = [
+            {"action": "catalog", "role": "all"},
+            {"action": "file_info", "role": "generated", "relative_path": "report.md"},
+            {"action": "read_file", "role": "uploaded", "relative_path": "source.txt"},
+            {"action": "preview_table", "workspace_relative_path": "storage/generated/leads.csv"},
+            {"action": "read_folder", "role": "generated"},
+            {"action": "download_folder", "role": "uploaded"},
+            {"action": "move_file", "role": "generated", "relative_path": "report.md"},
+            {"action": "move_folder", "role": "generated", "relative_path": "Reports"},
+            {"action": "move_items", "role": "generated", "files": []},
+        ]
+        for payload in valid_payloads:
+            with self.subTest(payload=payload):
+                self.assertTrue(self.schema_accepts_payload(schema, payload))
+
+        invalid_payloads = [
+            {"action": "file_info", "role": "all", "relative_path": "report.md"},
+            {"action": "read_file", "role": "all", "relative_path": "report.md"},
+            {"action": "preview_text", "role": "all", "relative_path": "report.md"},
+            {"action": "create_folder", "role": "all", "folder_name": "Reports"},
+            {"action": "move_items", "role": "all", "target_folder_relative_path": "", "files": []},
+            {"action": "delete_folder", "role": "generated"},
+            {"action": "move_folder", "role": "all", "relative_path": "Reports"},
+        ]
+        for payload in invalid_payloads:
+            with self.subTest(payload=payload):
+                self.assertFalse(self.schema_accepts_payload(schema, payload))
 
     def test_backend_catalog_filters_direct_files_by_folder_path(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

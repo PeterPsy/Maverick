@@ -104,7 +104,10 @@
           },
           {"properties": {"action": {"enum": ["clear_custom_view"]}}, "required": ["action"]},
           {
-            "properties": {"action": {"enum": ["file_info"]}},
+            "properties": {
+              "action": {"enum": ["file_info"]},
+              "role": {"enum": ["uploaded", "generated"]}
+            },
             "required": ["action"],
             "anyOf": [
               {"required": ["workspace_relative_path"]},
@@ -112,7 +115,10 @@
             ]
           },
           {
-            "properties": {"action": {"enum": ["read_file", "file.content.read"]}},
+            "properties": {
+              "action": {"enum": ["read_file", "file.content.read"]},
+              "role": {"enum": ["uploaded", "generated"]}
+            },
             "required": ["action"],
             "anyOf": [
               {"required": ["workspace_relative_path"]},
@@ -120,7 +126,10 @@
             ]
           },
           {
-            "properties": {"action": {"enum": ["write", "write-file", "write-content", "write_file", "file.content.write"]}},
+            "properties": {
+              "action": {"enum": ["write", "write-file", "write-content", "write_file", "file.content.write"]},
+              "role": {"enum": ["uploaded", "generated"]}
+            },
             "required": ["action"],
             "anyOf": [
               {"required": ["workspace_relative_path"]},
@@ -132,11 +141,17 @@
             ]
           },
           {
-            "properties": {"action": {"enum": ["upload_file"]}},
+            "properties": {
+              "action": {"enum": ["upload_file"]},
+              "role": {"enum": ["uploaded", "generated"]}
+            },
             "required": ["action", "role", "file_name", "content_base64"]
           },
           {
-            "properties": {"action": {"enum": ["preview_text", "file.preview.text"]}},
+            "properties": {
+              "action": {"enum": ["preview_text", "file.preview.text"]},
+              "role": {"enum": ["uploaded", "generated"]}
+            },
             "required": ["action"],
             "anyOf": [
               {"required": ["workspace_relative_path"]},
@@ -144,7 +159,10 @@
             ]
           },
           {
-            "properties": {"action": {"enum": ["preview_table", "file.preview.table"]}},
+            "properties": {
+              "action": {"enum": ["preview_table", "file.preview.table"]},
+              "role": {"enum": ["uploaded", "generated"]}
+            },
             "required": ["action"],
             "anyOf": [
               {"required": ["workspace_relative_path"]},
@@ -152,7 +170,10 @@
             ]
           },
           {
-            "properties": {"action": {"enum": ["render_preview", "file.preview.render", "render_thumbnail"]}},
+            "properties": {
+              "action": {"enum": ["render_preview", "file.preview.render", "render_thumbnail"]},
+              "role": {"enum": ["uploaded", "generated"]}
+            },
             "required": ["action"],
             "anyOf": [
               {"required": ["workspace_relative_path"]},
@@ -160,7 +181,10 @@
             ]
           },
           {
-            "properties": {"action": {"enum": ["update_markdown_file"]}},
+            "properties": {
+              "action": {"enum": ["update_markdown_file"]},
+              "role": {"enum": ["uploaded", "generated"]}
+            },
             "required": ["action", "content"],
             "anyOf": [
               {"required": ["workspace_relative_path"]},
@@ -168,31 +192,60 @@
             ]
           },
           {
-            "properties": {"action": {"enum": ["create_folder"]}},
+            "properties": {
+              "action": {"enum": ["create_folder"]},
+              "role": {"enum": ["uploaded", "generated"]}
+            },
             "required": ["action", "role", "folder_name"]
           },
           {
-            "properties": {"action": {"enum": ["read_folder", "download_folder", "delete_folder", "move_folder"]}},
+            "properties": {
+              "action": {"enum": ["read_folder", "download_folder"]},
+              "role": {"enum": ["uploaded", "generated"]}
+            },
+            "required": ["action", "role"]
+          },
+          {
+            "properties": {
+              "action": {"enum": ["delete_folder"]},
+              "role": {"enum": ["uploaded", "generated"]}
+            },
             "required": ["action", "role", "relative_path"]
           },
           {
-            "properties": {"action": {"enum": ["move_file"]}},
-            "required": ["action", "target_folder_relative_path"],
+            "properties": {
+              "action": {"enum": ["move_folder"]},
+              "role": {"enum": ["uploaded", "generated"]}
+            },
+            "required": ["action", "role", "relative_path"]
+          },
+          {
+            "properties": {
+              "action": {"enum": ["move_file"]},
+              "role": {"enum": ["uploaded", "generated"]}
+            },
+            "required": ["action"],
             "anyOf": [
               {"required": ["workspace_relative_path"]},
               {"required": ["role", "relative_path"]}
             ]
           },
           {
-            "properties": {"action": {"enum": ["move_items"]}},
-            "required": ["action", "role", "target_folder_relative_path"],
+            "properties": {
+              "action": {"enum": ["move_items"]},
+              "role": {"enum": ["uploaded", "generated"]}
+            },
+            "required": ["action", "role"],
             "anyOf": [
               {"required": ["files"]},
               {"required": ["folders"]}
             ]
           },
           {
-            "properties": {"action": {"enum": ["delete_file"]}},
+            "properties": {
+              "action": {"enum": ["delete_file"]},
+              "role": {"enum": ["uploaded", "generated"]}
+            },
             "required": ["action"],
             "anyOf": [
               {"required": ["workspace_relative_path"]},

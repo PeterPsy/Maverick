@@ -73,6 +73,7 @@
       "version": "2.0.0",
       "private": true,
       "dependencies": {
+        "@paper-design/shaders-react": "^0.0.76",
         "react": "^19.2.3",
         "react-dom": "^19.2.3"
       },
@@ -80,6 +81,7 @@
         "@types/react": "^19.2.7",
         "@types/react-dom": "^19.2.3",
         "@vitejs/plugin-react": "^5.1.1",
+        "happy-dom": "^20.9.0",
         "typescript": "^5.9.3",
         "vite": "^7.3.0",
         "vitest": "^4.1.4"
@@ -94,6 +96,7 @@
         "react": "^19.2.3",
         "react-dom": "^19.2.3",
         "react-markdown": "^10.1.0",
+        "react-text-to-speech": "^5.1.9",
         "rehype-sanitize": "^6.0.0",
         "remark-gfm": "^4.0.1"
       },
@@ -101,9 +104,31 @@
         "@types/react": "^19.2.7",
         "@types/react-dom": "^19.2.3",
         "@vitejs/plugin-react": "^5.1.1",
+        "happy-dom": "^20.9.0",
         "typescript": "^5.9.3",
         "vite": "^7.3.0",
         "vitest": "^4.1.4"
+      }
+    },
+    {
+      "app_id": "checklist",
+      "package_name": "@maverick/checklist",
+      "version": "0.1.0",
+      "private": true,
+      "dependencies": {
+        "framer-motion": "^12.38.0",
+        "lucide-react": "^1.14.0",
+        "react": "^19.2.3",
+        "react-dom": "^19.2.3"
+      },
+      "dev_dependencies": {
+        "@tailwindcss/vite": "^4.1.17",
+        "@types/react": "^19.2.7",
+        "@types/react-dom": "^19.2.3",
+        "@vitejs/plugin-react": "^5.1.1",
+        "tailwindcss": "^4.1.17",
+        "typescript": "^5.9.3",
+        "vite": "^7.3.0"
       }
     },
     {
@@ -113,6 +138,25 @@
       "private": true,
       "dependencies": {},
       "dev_dependencies": {}
+    },
+    {
+      "app_id": "docs-studio",
+      "package_name": "@maverick/docs-studio",
+      "version": "0.1.0",
+      "private": true,
+      "dependencies": {
+        "lucide-react": "^1.14.0",
+        "react": "^19.2.3",
+        "react-dom": "^19.2.3"
+      },
+      "dev_dependencies": {
+        "@types/react": "^19.2.7",
+        "@types/react-dom": "^19.2.3",
+        "@vitejs/plugin-react": "^5.1.1",
+        "typescript": "^5.9.3",
+        "vite": "^7.3.0",
+        "vitest": "^4.1.4"
+      }
     },
     {
       "app_id": "document-generator",
@@ -140,6 +184,56 @@
       }
     },
     {
+      "app_id": "memory",
+      "package_name": "@maverick/memory",
+      "version": "0.1.0",
+      "private": true,
+      "dependencies": {
+        "lucide-react": "^1.14.0",
+        "react": "^19.2.3",
+        "react-dom": "^19.2.3"
+      },
+      "dev_dependencies": {
+        "@types/react": "^19.2.7",
+        "@types/react-dom": "^19.2.3",
+        "@vitejs/plugin-react": "^5.1.1",
+        "typescript": "^5.9.3",
+        "vite": "^7.3.0",
+        "vitest": "^4.1.4"
+      }
+    },
+    {
+      "app_id": "settings",
+      "package_name": "@maverick/settings",
+      "version": "0.1.0",
+      "private": true,
+      "dependencies": {
+        "typescript": "^5.9.3",
+        "vite": "^7.3.0"
+      },
+      "dev_dependencies": {}
+    },
+    {
+      "app_id": "skills",
+      "package_name": "@maverick/skills",
+      "version": "0.1.0",
+      "private": true,
+      "dependencies": {
+        "framer-motion": "^12.38.0",
+        "lucide-react": "^1.14.0",
+        "react": "^19.2.3",
+        "react-dom": "^19.2.3"
+      },
+      "dev_dependencies": {
+        "@types/react": "^19.2.7",
+        "@types/react-dom": "^19.2.3",
+        "@vitejs/plugin-react": "^5.1.1",
+        "typescript": "^5.9.3",
+        "vite": "^7.3.0",
+        "vitest": "^4.1.4"
+      }
+    },
+    {
       "app_id": "storage",
       "package_name": "@maverick/storage",
       "version": "0.1.0",
@@ -164,42 +258,6 @@
         "vite": "^7.3.0",
         "vitest": "^4.1.4"
       }
-    },
-    {
-      "app_id": "memory",
-      "package_name": "@maverick/memory",
-      "version": "0.1.0",
-      "private": true,
-      "dependencies": {},
-      "dev_dependencies": {}
-    },
-    {
-      "app_id": "skills",
-      "package_name": "@maverick/skills",
-      "version": "0.1.0",
-      "private": true,
-      "dependencies": {
-        "react": "^19.2.3",
-        "react-dom": "^19.2.3"
-      },
-      "dev_dependencies": {
-        "@types/react": "^19.2.7",
-        "@types/react-dom": "^19.2.3",
-        "@vitejs/plugin-react": "^5.1.1",
-        "typescript": "^5.9.3",
-        "vite": "^7.3.0"
-      }
-    },
-    {
-      "app_id": "settings",
-      "package_name": "@maverick/settings",
-      "version": "0.1.0",
-      "private": true,
-      "dependencies": {
-        "typescript": "^5.9.3",
-        "vite": "^7.3.0"
-      },
-      "dev_dependencies": {}
     }
   ]
 }

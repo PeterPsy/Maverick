@@ -7,6 +7,7 @@ import type { MentionItem } from "../lib/mentions";
 import { referenceKindLabel } from "../lib/referenceKindLabels";
 import { openAppRouteInShell } from "../lib/shellNavigation";
 import { MarkdownMessage } from "./MarkdownMessage";
+import { MessageSpeechButton } from "./MessageSpeechButton";
 import { RuntimeStepMessage } from "./RuntimeStepMessage";
 import { StructuredContentMessage } from "./StructuredContentMessage";
 import { ToolCallInlineMessage } from "./ToolCallInlineMessage";
@@ -41,6 +42,7 @@ export function ChatTranscript({
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [showScrollJump, setShowScrollJump] = useState(false);
   const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set());
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
 
   function scrollToBottom() {
     const viewport = viewportRef.current;
@@ -219,7 +221,19 @@ export function ChatTranscript({
                         {expandedMessages.has(message.id) ? "Collapse output" : "Expand full output"}
                       </button>
                     ) : null}
-                    <MessageFooter content={message.content} createdAt={message.createdAt} onCopy={copyMessage} />
+                    <MessageFooter
+                      content={message.content}
+                      createdAt={message.createdAt}
+                      onCopy={copyMessage}
+                      speechControl={
+                        <MessageSpeechButton
+                          activeMessageId={speakingMessageId}
+                          content={visibleContent}
+                          messageId={message.id}
+                          onActiveMessageChange={setSpeakingMessageId}
+                        />
+                      }
+                    />
                   </section>
                 </div>
               )}
@@ -278,10 +292,12 @@ function MessageFooter({
   content,
   createdAt,
   onCopy,
+  speechControl,
 }: {
   content: string;
   createdAt: string;
   onCopy: (content: string) => Promise<void>;
+  speechControl?: ReactNode;
 }) {
   return (
     <div className="chatapp-message-mobile-footer">
@@ -298,6 +314,7 @@ function MessageFooter({
           </span>
         </button>
       ) : null}
+      {speechControl}
       <time className="chatapp-bubble__time" dateTime={createdAt}>
         {formatTime(createdAt)}
       </time>

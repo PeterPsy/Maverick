@@ -741,7 +741,8 @@
     color: rgba(10, 10, 11, 0.48);
   }
 
-  .chatapp-message-action--copy {
+  .chatapp-message-action--copy,
+  .chatapp-message-action--speech {
     align-self: flex-end;
     opacity: 1;
     pointer-events: auto;

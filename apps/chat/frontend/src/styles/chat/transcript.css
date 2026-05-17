@@ -631,6 +631,22 @@ button.chatapp-message-reference-chip {
     color 160ms ease;
 }
 
+.chatapp-message-action--speech {
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 160ms ease,
+    color 160ms ease;
+}
+
+.chatapp-message-action--speech.is-speaking {
+  color: #fff;
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .chatapp-message-action--copy-meta {
   display: none;
 }
@@ -649,7 +665,9 @@ button.chatapp-message-reference-chip {
 }
 
 .chatapp-bubble:hover .chatapp-message-action--copy,
-.chatapp-bubble:focus-within .chatapp-message-action--copy {
+.chatapp-bubble:focus-within .chatapp-message-action--copy,
+.chatapp-bubble:hover .chatapp-message-action--speech,
+.chatapp-bubble:focus-within .chatapp-message-action--speech {
   opacity: 1;
   pointer-events: auto;
 }

@@ -237,8 +237,8 @@
             },
             "required": ["action", "role"],
             "anyOf": [
-              {"required": ["files"]},
-              {"required": ["folders"]}
+              {"properties": {"files": {"minItems": 1}}, "required": ["files"]},
+              {"properties": {"folders": {"minItems": 1}}, "required": ["folders"]}
             ]
           },
           {

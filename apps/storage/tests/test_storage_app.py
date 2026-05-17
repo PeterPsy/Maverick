@@ -46,6 +46,9 @@ class StorageAppTestCase(unittest.TestCase):
         for field, field_schema in properties.items():
             if field in payload and "enum" in field_schema and payload[field] not in field_schema["enum"]:
                 return False
+            if field in payload and "minItems" in field_schema:
+                if not isinstance(payload[field], list) or len(payload[field]) < int(field_schema["minItems"]):
+                    return False
         if "anyOf" in schema and not any(self.schema_accepts_payload(option, payload) for option in schema["anyOf"]):
             return False
         if "oneOf" in schema:
@@ -1463,7 +1466,8 @@ class StorageAppTestCase(unittest.TestCase):
             {"action": "download_folder", "role": "uploaded"},
             {"action": "move_file", "role": "generated", "relative_path": "report.md"},
             {"action": "move_folder", "role": "generated", "relative_path": "Reports"},
-            {"action": "move_items", "role": "generated", "files": []},
+            {"action": "move_items", "role": "generated", "files": [{"relative_path": "report.md"}]},
+            {"action": "move_items", "role": "generated", "files": [], "folders": [{"relative_path": "Reports"}]},
         ]
         for payload in valid_payloads:
             with self.subTest(payload=payload):
@@ -1475,6 +1479,9 @@ class StorageAppTestCase(unittest.TestCase):
             {"action": "preview_text", "role": "all", "relative_path": "report.md"},
             {"action": "create_folder", "role": "all", "folder_name": "Reports"},
             {"action": "move_items", "role": "all", "target_folder_relative_path": "", "files": []},
+            {"action": "move_items", "role": "generated", "files": []},
+            {"action": "move_items", "role": "generated", "folders": []},
+            {"action": "move_items", "role": "generated", "files": [], "folders": []},
             {"action": "delete_folder", "role": "generated"},
             {"action": "move_folder", "role": "all", "relative_path": "Reports"},
         ]

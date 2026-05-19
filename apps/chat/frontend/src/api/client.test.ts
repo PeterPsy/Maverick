@@ -2,8 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ApiError,
   deleteProject,
+  getSpeechCapabilities,
   selectedDependencyProviderAppId,
   selectedSharedDependencyProviderAppId,
+  synthesizeSpeech,
   type AppDependenciesPayload,
 } from "./client";
 
@@ -128,5 +130,32 @@ describe("deleteProject", () => {
       projects: [],
       preferences: { view: "all" },
     });
+  });
+});
+
+describe("speech provider client calls", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("calls the selected provider backend for capabilities and synthesis", async () => {
+    const fetchMock = vi.fn(async (path: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body || "{}"));
+      if (body.action === "capabilities") {
+        return jsonResponse({ interfaces: { "speech.synthesis": { available: true, provider_available: true } } });
+      }
+      return jsonResponse({ audio_data_url: "data:audio/wav;base64,UklGRg==", content_type: "audio/wav" });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getSpeechCapabilities("speech")).resolves.toMatchObject({
+      interfaces: { "speech.synthesis": { available: true } },
+    });
+    await expect(synthesizeSpeech("speech", "Hello")).resolves.toMatchObject({
+      audio_data_url: "data:audio/wav;base64,UklGRg==",
+    });
+
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual(["/api/apps/speech/backend", "/api/apps/speech/backend"]);
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body || "{}"))).toEqual({ action: "synthesize", text: "Hello" });
   });
 });

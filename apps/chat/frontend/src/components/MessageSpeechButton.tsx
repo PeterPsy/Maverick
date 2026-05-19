@@ -1,20 +1,21 @@
 import type { Dispatch, SetStateAction } from "react";
-import { useEffect } from "react";
-import { useSpeech } from "react-text-to-speech";
+import { useEffect, useRef, useState } from "react";
+import { synthesizeSpeech } from "../api/client";
 
 type MessageSpeechButtonProps = {
   activeMessageId: string | null;
   content: string;
   messageId: string;
   onActiveMessageChange: Dispatch<SetStateAction<string | null>>;
+  providerAppId: string;
 };
 
-const SPEECH_CHUNK_SIZE = 280;
+type SpeechPlaybackStatus = "idle" | "loading" | "playing" | "error";
 
 export function MessageSpeechButton(props: MessageSpeechButtonProps) {
   const speechText = speechTextFromMarkdown(props.content);
 
-  if (!speechText || !supportsBrowserSpeechSynthesis()) {
+  if (!speechText || !props.providerAppId) {
     return null;
   }
 
@@ -25,34 +26,96 @@ function SupportedMessageSpeechButton({
   activeMessageId,
   messageId,
   onActiveMessageChange,
+  providerAppId,
   speechText,
 }: MessageSpeechButtonProps & { speechText: string }) {
-  const { speechStatus, start, stop } = useSpeech({
-    text: speechText,
-    stableText: true,
-    preserveUtteranceQueue: false,
-    maxChunkSize: SPEECH_CHUNK_SIZE,
-    onStart: () => onActiveMessageChange(messageId),
-    onStop: () => clearActiveMessage(onActiveMessageChange, messageId),
-    onError: () => clearActiveMessage(onActiveMessageChange, messageId),
-  });
-  const isReading = activeMessageId === messageId && speechStatus !== "stopped";
+  const [status, setStatus] = useState<SpeechPlaybackStatus>("idle");
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const objectUrlRef = useRef<string | null>(null);
+  const requestIdRef = useRef(0);
+  const isActive = activeMessageId === messageId;
+  const isReading = isActive && (status === "loading" || status === "playing");
 
   useEffect(() => {
-    if (activeMessageId !== messageId && speechStatus !== "stopped") {
-      stop();
+    if (!isActive && status !== "idle") {
+      stopPlayback();
     }
-  }, [activeMessageId, messageId, speechStatus, stop]);
+  }, [isActive, status]);
 
-  function toggleSpeech() {
+  useEffect(() => () => stopPlayback(), []);
+
+  async function toggleSpeech() {
     if (isReading) {
-      stop();
+      stopPlayback();
       clearActiveMessage(onActiveMessageChange, messageId);
       return;
     }
 
     onActiveMessageChange(messageId);
-    start();
+    setStatus("loading");
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+    try {
+      const result = await synthesizeSpeech(providerAppId, speechText);
+      if (requestIdRef.current !== requestId) {
+        return;
+      }
+      const audioUrl = audioUrlFromResult(result);
+      const audio = new Audio(audioUrl);
+      audioRef.current = audio;
+      audio.onended = () => {
+        if (requestIdRef.current === requestId) {
+          stopPlayback();
+          clearActiveMessage(onActiveMessageChange, messageId);
+        }
+      };
+      audio.onerror = () => {
+        if (requestIdRef.current === requestId) {
+          setStatus("error");
+          clearActiveMessage(onActiveMessageChange, messageId);
+          releaseAudioUrl();
+        }
+      };
+      await audio.play();
+      if (requestIdRef.current === requestId) {
+        setStatus("playing");
+      }
+    } catch {
+      if (requestIdRef.current === requestId) {
+        setStatus("error");
+        clearActiveMessage(onActiveMessageChange, messageId);
+        releaseAudioUrl();
+      }
+    }
+  }
+
+  function stopPlayback() {
+    requestIdRef.current += 1;
+    audioRef.current?.pause();
+    audioRef.current = null;
+    releaseAudioUrl();
+    setStatus("idle");
+  }
+
+  function releaseAudioUrl() {
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
+  }
+
+  function audioUrlFromResult(result: { audio_data_url?: string; audio_base64?: string; content_type?: string }) {
+    if (result.audio_data_url) {
+      return result.audio_data_url;
+    }
+    if (!result.audio_base64) {
+      throw new Error("Speech provider did not return audio.");
+    }
+    const binary = Uint8Array.from(atob(result.audio_base64), (char) => char.charCodeAt(0));
+    const blob = new Blob([binary], { type: result.content_type || "audio/wav" });
+    const objectUrl = URL.createObjectURL(blob);
+    objectUrlRef.current = objectUrl;
+    return objectUrl;
   }
 
   return (
@@ -61,23 +124,15 @@ function SupportedMessageSpeechButton({
       aria-pressed={isReading}
       className={`chatapp-message-action chatapp-message-action--icon chatapp-message-action--speech ${
         isReading ? "is-speaking" : ""
-      }`}
+      } ${status === "loading" ? "is-loading" : ""} ${status === "error" ? "is-error" : ""}`}
       onClick={toggleSpeech}
-      title={isReading ? "Stop reading" : "Read aloud"}
+      title={status === "error" ? "Speech unavailable" : isReading ? "Stop reading" : "Read aloud"}
       type="button"
     >
       <span aria-hidden="true" className="material-symbols-rounded">
-        {isReading ? "stop_circle" : "volume_up"}
+        {status === "loading" ? "hourglass_empty" : isReading ? "stop_circle" : "volume_up"}
       </span>
     </button>
-  );
-}
-
-function supportsBrowserSpeechSynthesis() {
-  return (
-    typeof window !== "undefined" &&
-    typeof window.speechSynthesis !== "undefined" &&
-    typeof window.SpeechSynthesisUtterance !== "undefined"
   );
 }
 

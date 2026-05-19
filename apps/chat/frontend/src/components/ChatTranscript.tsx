@@ -31,12 +31,14 @@ export function ChatTranscript({
   loadingLabel,
   mentionItems,
   messages,
+  speechProviderAppId = "",
 }: {
   error: string | null;
   isLoading: boolean;
   loadingLabel: string;
   mentionItems: MentionItem[];
   messages: ChatMessage[];
+  speechProviderAppId?: string;
 }) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const [isNearBottom, setIsNearBottom] = useState(true);
@@ -231,6 +233,7 @@ export function ChatTranscript({
                           content={visibleContent}
                           messageId={message.id}
                           onActiveMessageChange={setSpeakingMessageId}
+                          providerAppId={speechProviderAppId}
                         />
                       }
                     />

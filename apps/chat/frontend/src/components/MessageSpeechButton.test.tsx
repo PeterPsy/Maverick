@@ -5,7 +5,12 @@ import { act, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { synthesizeSpeech } from "../api/client";
 import { MessageSpeechButton, speechTextFromMarkdown } from "./MessageSpeechButton";
+
+vi.mock("../api/client", () => ({
+  synthesizeSpeech: vi.fn(),
+}));
 
 let container: HTMLDivElement | null = null;
 let root: Root | null = null;
@@ -16,27 +21,33 @@ afterEach(() => {
   container?.remove();
   container = null;
   vi.restoreAllMocks();
-  Object.defineProperty(window, "speechSynthesis", { configurable: true, value: undefined });
-  Object.defineProperty(window, "SpeechSynthesisUtterance", { configurable: true, value: undefined });
+  vi.unstubAllGlobals();
 });
 
 describe("MessageSpeechButton", () => {
-  it("does not render when browser speech synthesis is unavailable", async () => {
+  it("does not render when no speech provider is available", async () => {
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
 
     await act(async () => {
       root?.render(
-        <MessageSpeechButton activeMessageId={null} content="Agent response" messageId="agent-1" onActiveMessageChange={() => null} />,
+        <MessageSpeechButton
+          activeMessageId={null}
+          content="Agent response"
+          messageId="agent-1"
+          onActiveMessageChange={() => null}
+          providerAppId=""
+        />,
       );
     });
 
     expect(container.querySelector("button")).toBeNull();
   });
 
-  it("starts and stops reading the agent message content", async () => {
-    const speechMock = installSpeechSynthesisMock();
+  it("requests backend synthesis and controls audio playback", async () => {
+    const audioMock = installAudioMock();
+    vi.mocked(synthesizeSpeech).mockResolvedValue({ audio_data_url: "data:audio/wav;base64,UklGRg==", content_type: "audio/wav" });
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -52,8 +63,9 @@ describe("MessageSpeechButton", () => {
       button?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
 
-    const utterance = speechMock.speak.mock.calls[0]?.[0] as MockSpeechSynthesisUtterance | undefined;
-    expect(utterance?.text).toBe("Agent response");
+    expect(synthesizeSpeech).toHaveBeenCalledWith("speech", "Agent response");
+    expect(audioMock.instances[0]?.src).toBe("data:audio/wav;base64,UklGRg==");
+    expect(audioMock.instances[0]?.play).toHaveBeenCalled();
     expect(button?.getAttribute("aria-label")).toBe("Stop reading response");
     expect(button?.textContent?.trim()).toBe("stop_circle");
 
@@ -61,13 +73,14 @@ describe("MessageSpeechButton", () => {
       button?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
 
-    expect(speechMock.cancel).toHaveBeenCalled();
+    expect(audioMock.instances[0]?.pause).toHaveBeenCalled();
     expect(button?.getAttribute("aria-label")).toBe("Read response aloud");
     expect(button?.textContent?.trim()).toBe("volume_up");
   });
 
-  it("stops the first message when a second message starts reading", async () => {
-    const speechMock = installSpeechSynthesisMock();
+  it("stops the first message when a second message starts playback", async () => {
+    const audioMock = installAudioMock();
+    vi.mocked(synthesizeSpeech).mockResolvedValue({ audio_data_url: "data:audio/wav;base64,UklGRg==", content_type: "audio/wav" });
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -84,8 +97,9 @@ describe("MessageSpeechButton", () => {
       buttons[1]?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
 
-    expect(speechMock.cancel).toHaveBeenCalled();
-    expect(speechMock.speak).toHaveBeenCalledTimes(2);
+    expect(synthesizeSpeech).toHaveBeenCalledWith("speech", "First response");
+    expect(synthesizeSpeech).toHaveBeenCalledWith("speech", "Second response");
+    expect(audioMock.instances[0]?.pause).toHaveBeenCalled();
     expect(buttons[0]?.getAttribute("aria-label")).toBe("Read response aloud");
     expect(buttons[1]?.getAttribute("aria-label")).toBe("Stop reading response");
   });
@@ -132,6 +146,7 @@ function SpeechButtonHost() {
       content="Agent response"
       messageId="agent-1"
       onActiveMessageChange={setActiveMessageId}
+      providerAppId="speech"
     />
   );
 }
@@ -146,63 +161,33 @@ function TwoSpeechButtonsHost() {
         content="First response"
         messageId="agent-1"
         onActiveMessageChange={setActiveMessageId}
+        providerAppId="speech"
       />
       <MessageSpeechButton
         activeMessageId={activeMessageId}
         content="Second response"
         messageId="agent-2"
         onActiveMessageChange={setActiveMessageId}
+        providerAppId="speech"
       />
     </>
   );
 }
 
-type SpeechHandler = (() => void) | null;
+function installAudioMock() {
+  const instances: Array<{ src: string; play: ReturnType<typeof vi.fn>; pause: ReturnType<typeof vi.fn>; onended: (() => void) | null; onerror: (() => void) | null }> = [];
+  class MockAudio {
+    onended: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    pause = vi.fn();
+    play = vi.fn(async () => undefined);
+    src: string;
 
-class MockSpeechSynthesisUtterance {
-  lang = "";
-  onboundary: SpeechHandler = null;
-  onend: SpeechHandler = null;
-  onerror: SpeechHandler = null;
-  onstart: SpeechHandler = null;
-  pitch = 1;
-  rate = 1;
-  text = "";
-  voice: SpeechSynthesisVoice | null = null;
-  volume = 1;
-}
-
-function installSpeechSynthesisMock() {
-  let currentUtterance: MockSpeechSynthesisUtterance | null = null;
-  const speechMock = {
-    addEventListener: vi.fn(),
-    cancel: vi.fn(() => {
-      const utterance = currentUtterance;
-      currentUtterance = null;
-      speechMock.speaking = false;
-      utterance?.onend?.();
-    }),
-    getVoices: vi.fn(() => []),
-    paused: false,
-    pause: vi.fn(),
-    removeEventListener: vi.fn(),
-    resume: vi.fn(),
-    speak: vi.fn((utterance: MockSpeechSynthesisUtterance) => {
-      currentUtterance = utterance;
-      speechMock.speaking = true;
-      utterance.onstart?.();
-    }),
-    speaking: false,
-  };
-
-  Object.defineProperty(window, "SpeechSynthesisUtterance", {
-    configurable: true,
-    value: MockSpeechSynthesisUtterance,
-  });
-  Object.defineProperty(window, "speechSynthesis", {
-    configurable: true,
-    value: speechMock,
-  });
-
-  return speechMock;
+    constructor(src: string) {
+      this.src = src;
+      instances.push(this);
+    }
+  }
+  vi.stubGlobal("Audio", MockAudio);
+  return { instances };
 }

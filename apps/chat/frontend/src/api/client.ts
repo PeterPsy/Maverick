@@ -77,6 +77,27 @@ export type AgentPromptPreviewPayload = {
   rendered: string;
 };
 
+export type SpeechCapabilitiesPayload = {
+  app_id?: string;
+  interfaces?: {
+    "speech.synthesis"?: {
+      available?: boolean;
+      provider_available?: boolean;
+      content_types?: string[];
+      max_text_chars?: number;
+    };
+  };
+};
+
+export type SpeechSynthesizePayload = {
+  job_id?: string;
+  content_type?: string;
+  audio_base64?: string;
+  audio_data_url?: string;
+  workspace_relative_path?: string;
+  size_bytes?: number;
+};
+
 export type ChatThread = {
   thread_id: string;
   runtime_session_id: string;
@@ -547,6 +568,22 @@ export function previewAgentPrompt(providerAppId: string, agentTypeId: string): 
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action: "preview_prompt", agent_type_id: agentTypeId }),
+  });
+}
+
+export function getSpeechCapabilities(providerAppId: string): Promise<SpeechCapabilitiesPayload> {
+  return requestJson<SpeechCapabilitiesPayload>(`/api/apps/${encodeURIComponent(providerAppId)}/backend`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "capabilities" }),
+  });
+}
+
+export function synthesizeSpeech(providerAppId: string, text: string): Promise<SpeechSynthesizePayload> {
+  return requestJson<SpeechSynthesizePayload>(`/api/apps/${encodeURIComponent(providerAppId)}/backend`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "synthesize", text }),
   });
 }
 

@@ -647,6 +647,18 @@ button.chatapp-message-reference-chip {
   pointer-events: auto;
 }
 
+.chatapp-message-action--speech.is-loading {
+  color: #facc15;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.chatapp-message-action--speech.is-error {
+  color: #fb7185;
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .chatapp-message-action--copy-meta {
   display: none;
 }

@@ -37,6 +37,14 @@
       "required": false,
       "cardinality": "one",
       "description": "Optional workspace agent prompt materializer used by Chat to build the selected agent runtime prompt before the first turn."
+    },
+    {
+      "alias": "text-to-speech",
+      "interface": "speech.synthesis",
+      "version": "^1",
+      "required": false,
+      "cardinality": "one",
+      "description": "Optional workspace speech provider used by Chat to synthesize visible agent responses for transcript playback."
     }
   ],
   "distribution": {

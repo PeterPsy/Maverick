@@ -6,7 +6,7 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
-import { getAppDependencies, listAgentCatalog, listApps, listProviders, listSkills } from "./api/client";
+import { getAppDependencies, getSpeechCapabilities, listAgentCatalog, listApps, listProviders, listSkills } from "./api/client";
 import type { AgentTypeSummary, AppDependenciesPayload } from "./api/client";
 
 vi.mock("./hooks/useRuntimeEvents", () => ({
@@ -30,6 +30,7 @@ vi.mock("./api/client", () => ({
   createThread: vi.fn(),
   getAgentDefinition: vi.fn(),
   getAppDependencies: vi.fn(),
+  getSpeechCapabilities: vi.fn(),
   getWidgetContext: vi.fn(),
   interruptRuntimeTurn: vi.fn(),
   isRuntimeSessionUnavailableError: vi.fn(() => false),
@@ -96,6 +97,19 @@ function dependencyPayload(selectedProviderAppIds: string[]): AppDependenciesPay
         stale_provider_app_ids: [],
         blocked_reason: null,
       },
+      {
+        alias: "text-to-speech",
+        interface: "speech.synthesis",
+        version: "^1",
+        required: false,
+        cardinality: "one",
+        description: "Speech synthesis",
+        status: "resolved",
+        candidates: [],
+        selected_provider_app_ids: ["speech"],
+        stale_provider_app_ids: [],
+        blocked_reason: null,
+      },
     ],
   };
 }
@@ -110,6 +124,14 @@ beforeEach(() => {
   vi.mocked(listApps).mockResolvedValue([]);
   vi.mocked(listSkills).mockResolvedValue([]);
   vi.mocked(getAppDependencies).mockResolvedValue(dependencyPayload(["agents"]));
+  vi.mocked(getSpeechCapabilities).mockResolvedValue({
+    interfaces: {
+      "speech.synthesis": {
+        available: true,
+        provider_available: true,
+      },
+    },
+  });
   vi.mocked(listAgentCatalog).mockResolvedValue({ agent_types: [socialVideoAgent] });
 });
 

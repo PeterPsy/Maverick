@@ -8,6 +8,7 @@ import {
   createThread,
   getAgentDefinition,
   getAppDependencies,
+  getSpeechCapabilities,
   AppReference,
   isRuntimeSessionUnavailableError,
   getWidgetContext,
@@ -24,6 +25,7 @@ import {
   RuntimeTurn,
   orderChatThreads,
   selectProvider,
+  selectedDependencyProviderAppId,
   selectedSharedDependencyProviderAppId,
   sendRuntimeTurn,
 } from "./api/client";
@@ -113,6 +115,7 @@ export type ExternalFileDrop = {
 const MESSAGE_HISTORY_LIMIT = 50;
 const AGENT_CATALOG_DEPENDENCY_ALIAS = "agent-catalog";
 const AGENT_PROMPT_MATERIALIZER_DEPENDENCY_ALIAS = "agent-prompt-materializer";
+const TEXT_TO_SPEECH_DEPENDENCY_ALIAS = "text-to-speech";
 const QUEUED_MESSAGES_STORAGE_PREFIX = "maverick.chat.queued-messages.v1";
 const THREAD_SYNC_DEBUG_STORAGE_KEY = "maverick.chat.debug.thread-sync";
 
@@ -140,6 +143,7 @@ export function App({
   const [providers, setProviders] = useState<ProviderItem[]>([]);
   const [activeProviderId, setActiveProviderId] = useState("");
   const [agentCatalogAppId, setAgentCatalogAppId] = useState("");
+  const [speechProviderAppId, setSpeechProviderAppId] = useState("");
   const [agentOptions, setAgentOptions] = useState<AgentTypeSummary[]>([]);
   const [selectedAgentTypeId, setSelectedAgentTypeId] = useState("");
   const [threads, setThreads] = useState<ChatThread[]>([]);
@@ -312,7 +316,7 @@ export function App({
     try {
       const widgetActiveAppContext = await loadWidgetActiveAppContext();
       setActiveAppContext(widgetActiveAppContext);
-      const [providerPayload] = await Promise.all([listProviders(), loadAgentOptions()]);
+      const [providerPayload] = await Promise.all([listProviders(), loadAppDependencies()]);
       setProviders(providerPayload.items || providerPayload.available_providers || (providerPayload.active_provider ? [providerPayload.active_provider] : []));
       setActiveProviderId(providerPayload.active_provider?.provider_id || "");
       setError(null);
@@ -326,12 +330,13 @@ export function App({
     void loadMentionItems();
   }, []);
 
-  async function loadAgentOptions() {
+  async function loadAppDependencies() {
     try {
       const dependencies = await getAppDependencies("chat");
-      await loadAgentOptionsFromDependencies(dependencies);
+      await Promise.all([loadAgentOptionsFromDependencies(dependencies), loadSpeechProviderFromDependencies(dependencies)]);
     } catch {
       clearAgentOptions();
+      clearSpeechProvider();
     }
   }
 
@@ -363,6 +368,29 @@ export function App({
     setAgentCatalogAppId("");
     setAgentOptions([]);
     setSelectedAgentTypeId("");
+  }
+
+  async function loadSpeechProviderFromDependencies(dependencies: AppDependenciesPayload) {
+    try {
+      const providerAppId = selectedDependencyProviderAppId(dependencies, TEXT_TO_SPEECH_DEPENDENCY_ALIAS);
+      if (!providerAppId) {
+        clearSpeechProvider();
+        return;
+      }
+      const capabilities = await getSpeechCapabilities(providerAppId);
+      const synthesis = capabilities.interfaces?.["speech.synthesis"];
+      if (synthesis?.available && synthesis.provider_available !== false) {
+        setSpeechProviderAppId(providerAppId);
+        return;
+      }
+      clearSpeechProvider();
+    } catch {
+      clearSpeechProvider();
+    }
+  }
+
+  function clearSpeechProvider() {
+    setSpeechProviderAppId("");
   }
 
   useEffect(() => {
@@ -501,11 +529,11 @@ export function App({
         return;
       }
       if (payload.type === "maverick.app.dependencies" && payload.app_id === "chat" && payload.dependencies) {
-        void loadAgentOptionsFromDependencies(payload.dependencies);
+        void Promise.all([loadAgentOptionsFromDependencies(payload.dependencies), loadSpeechProviderFromDependencies(payload.dependencies)]);
         return;
       }
       if (payload.type === "maverick.app.data-changed" && payload.owner_app_id === agentCatalogAppId && payload.resource === "configuration") {
-        void loadAgentOptions();
+        void loadAppDependencies();
         return;
       }
       if (navigationScope && payload.navigation_scope !== navigationScope) {
@@ -1133,6 +1161,7 @@ export function App({
                 loadingLabel={loadingLabel}
                 mentionItems={mentionItems}
                 messages={messages}
+                speechProviderAppId={speechProviderAppId}
               />
             )}
             {!isEmptyChatView ? (

@@ -6,6 +6,7 @@ import {
   selectedDependencyProviderAppId,
   selectedSharedDependencyProviderAppId,
   synthesizeSpeech,
+  transcribeSpeech,
   type AppDependenciesPayload,
 } from "./client";
 
@@ -75,9 +76,9 @@ function dependencyPayload(selectedProviderAppIds: string[]): AppDependenciesPay
 }
 
 describe("Chat API dependency helpers", () => {
-  it("uses the explicit dependency provider or the first available catalog", () => {
+  it("uses explicit dependency providers only for single dependency consumers", () => {
     expect(selectedDependencyProviderAppId(dependencyPayload(["agents"]), "agent-catalog")).toBe("agents");
-    expect(selectedDependencyProviderAppId(dependencyPayload([]), "agent-catalog")).toBe("agents");
+    expect(selectedDependencyProviderAppId(dependencyPayload([]), "agent-catalog")).toBe("");
   });
 
   it("does not fall back when the dependency is stale", () => {
@@ -97,6 +98,7 @@ describe("Chat API dependency helpers", () => {
 
   it("uses one provider only when catalog and prompt materializer both resolve", () => {
     expect(selectedSharedDependencyProviderAppId(dependencyPayload(["agents"]), ["agent-catalog", "agent-prompt-materializer"])).toBe("agents");
+    expect(selectedSharedDependencyProviderAppId(dependencyPayload([]), ["agent-catalog", "agent-prompt-materializer"])).toBe("agents");
 
     const payload = dependencyPayload([]);
     payload.dependencies[1].status = "missing_provider";
@@ -138,11 +140,19 @@ describe("speech provider client calls", () => {
     vi.unstubAllGlobals();
   });
 
-  it("calls the selected provider backend for capabilities and synthesis", async () => {
+  it("calls the selected provider backend for capabilities, synthesis, and transcription", async () => {
     const fetchMock = vi.fn(async (path: string, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body || "{}"));
       if (body.action === "capabilities") {
-        return jsonResponse({ interfaces: { "speech.synthesis": { available: true, provider_available: true } } });
+        return jsonResponse({
+          interfaces: {
+            "speech.synthesis": { available: true, provider_available: true },
+            "speech.transcription": { available: true, provider_available: true },
+          },
+        });
+      }
+      if (body.action === "transcribe_audio") {
+        return jsonResponse({ text: "Hello transcript", retention: "metadata_only" });
       }
       return jsonResponse({ audio_base64: "UklGRg==", content_type: "audio/wav" });
     });
@@ -154,8 +164,16 @@ describe("speech provider client calls", () => {
     await expect(synthesizeSpeech("speech", "Hello")).resolves.toMatchObject({
       audio_base64: "UklGRg==",
     });
+    await expect(transcribeSpeech("speech", "UklGRg==", "audio/wav")).resolves.toMatchObject({
+      text: "Hello transcript",
+    });
 
-    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual(["/api/apps/speech/backend", "/api/apps/speech/backend"]);
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual(["/api/apps/speech/backend", "/api/apps/speech/backend", "/api/apps/speech/backend"]);
     expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body || "{}"))).toEqual({ action: "synthesize", text: "Hello" });
+    expect(JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body || "{}"))).toEqual({
+      action: "transcribe_audio",
+      audio_base64: "UklGRg==",
+      content_type: "audio/wav",
+    });
   });
 });

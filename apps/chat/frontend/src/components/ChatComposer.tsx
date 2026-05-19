@@ -10,6 +10,7 @@ import { mentionItemKindLabel } from "../lib/referenceKindLabels";
 import { hasStorageReferenceDragData, storageReferenceMentionItemsFromDataTransfer } from "../lib/storageDragReferences";
 import { AttachmentMenu } from "./AttachmentMenu";
 import { AttachmentPreviewStrip } from "./AttachmentPreviewStrip";
+import { ComposerDictationButton } from "./ComposerDictationButton";
 import { ProviderSelector } from "./ProviderSelector";
 
 export type ExecutionMode = "sandbox" | "full-access";
@@ -323,6 +324,8 @@ export function ChatComposer({
   queuedCount,
   queuedPreview,
   selectedAgentTypeId,
+  transcriptionProviderAppId = "",
+  transcriptionProviderAvailable = false,
   value,
 }: {
   activeProviderId: string;
@@ -351,6 +354,8 @@ export function ChatComposer({
   queuedCount: number;
   queuedPreview: string | null;
   selectedAgentTypeId: string;
+  transcriptionProviderAppId?: string;
+  transcriptionProviderAvailable?: boolean;
   value: string;
 }) {
   const [caretIndex, setCaretIndex] = useState(value.length);
@@ -361,6 +366,7 @@ export function ChatComposer({
   const [appPickerQuery, setAppPickerQuery] = useState("");
   const [appPickerReferenceItems, setAppPickerReferenceItems] = useState<MentionItem[]>([]);
   const [appPickerSearchError, setAppPickerSearchError] = useState<string | null>(null);
+  const [dictationError, setDictationError] = useState<string | null>(null);
   const editorRef = useRef<HTMLDivElement | null>(null);
   const appPickerButtonRef = useRef<HTMLButtonElement | null>(null);
   const appPickerPanelRef = useRef<HTMLDivElement | null>(null);
@@ -519,6 +525,22 @@ export function ChatComposer({
       nextEditor.focus();
       setComposerCaret(nextEditor, nextCaret);
     });
+  }
+
+  function insertDictationTranscript(text: string) {
+    const transcript = text.trim();
+    if (!transcript) {
+      setDictationError("No speech detected.");
+      return;
+    }
+    const editor = editorRef.current;
+    if (!editor) {
+      const prefix = value && !/\s$/.test(value) ? " " : "";
+      onChange(`${value}${prefix}${transcript}`);
+      return;
+    }
+    const suffix = value && caretIndex < value.length && !/\s$/.test(transcript) ? " " : "";
+    replaceComposerSelectionWithText(editor, `${transcript}${suffix}`);
   }
 
   function insertMention(item: MentionItem) {
@@ -850,6 +872,13 @@ export function ChatComposer({
                     apps
                   </span>
                 </button>
+                <ComposerDictationButton
+                  disabled={disabled || isSending}
+                  onError={setDictationError}
+                  onTranscript={insertDictationTranscript}
+                  providerAppId={transcriptionProviderAppId}
+                  providerAvailable={transcriptionProviderAvailable}
+                />
                 <AgentSelector
                   agents={agents}
                   disabled={disabled || isSending}
@@ -874,7 +903,9 @@ export function ChatComposer({
               />
             </div>
           </div>
-          {error ? <div className="chat-ui-field__message chat-ui-field__message--error chatapp-composer__error">{error}</div> : null}
+          {dictationError || error ? (
+            <div className="chat-ui-field__message chat-ui-field__message--error chatapp-composer__error">{dictationError || error}</div>
+          ) : null}
         </form>
       </section>
     </>

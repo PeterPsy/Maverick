@@ -428,6 +428,7 @@ export function WidgetSlot({
 
   const src = widgetFrameSrc(widget.frontend_mount, contextToken, frameRevision);
   const isCollapsedOverlay = size === "overlay" && overlaySize.width === COLLAPSED_OVERLAY_SIZE && overlaySize.height === COLLAPSED_OVERLAY_SIZE;
+  const widgetAllowPolicy = widget.owner_app_id === "chat" ? "fullscreen; microphone" : "fullscreen";
   const slotStyle =
     size === "overlay"
       ? overlaySize
@@ -443,7 +444,7 @@ export function WidgetSlot({
         style={slotStyle}
       >
         <iframe
-          allow="fullscreen"
+          allow={widgetAllowPolicy}
           allowFullScreen
           className="bs-widget-slot__frame"
           key={`${activeWorkspaceId}:${widget.owner_app_id}:${widget.widget_id}:${contextToken}:${frameRevision}`}

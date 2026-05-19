@@ -352,7 +352,7 @@ export function AppFrameHost({
           const isDisplayed = frameKey === visibleFrameKey;
           return (
             <iframe
-              allow="fullscreen"
+              allow="fullscreen; microphone"
               allowFullScreen
               aria-hidden={!isDisplayed}
               className={`bs-workspace-app-frame ${isDisplayed ? "is-active" : "is-hidden"}`}

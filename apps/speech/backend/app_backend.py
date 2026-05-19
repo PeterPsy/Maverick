@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 import sys
 
-from errors import SpeechProviderUnavailableError, SpeechValidationError, validation_error_payload
+from errors import SpeechProviderUnavailableError, SpeechTranscriptionError, SpeechValidationError, validation_error_payload
 from service import handle_action
 
 
@@ -22,6 +22,7 @@ def main() -> None:
             Path(payload["data_root"]),
             Path(payload["generated_storage_root"]),
             body,
+            Path(payload["uploaded_storage_root"]) if payload.get("uploaded_storage_root") else None,
         )
     except SpeechValidationError as error:
         _response(400, validation_error_payload(error))
@@ -31,6 +32,15 @@ def main() -> None:
             503,
             {
                 "error": "provider_unavailable",
+                "detail": str(error),
+            },
+        )
+        return
+    except SpeechTranscriptionError as error:
+        _response(
+            502,
+            {
+                "error": "transcription_failed",
                 "detail": str(error),
             },
         )

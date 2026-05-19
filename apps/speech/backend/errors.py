@@ -26,6 +26,10 @@ class SpeechProviderUnavailableError(RuntimeError):
     """Raised when no configured local synthesis engine is available."""
 
 
+class SpeechTranscriptionError(RuntimeError):
+    """Raised when a transcription engine fails after being selected."""
+
+
 def validation_error_payload(error: SpeechValidationError) -> dict:
     payload = {
         "error": "validation_error",

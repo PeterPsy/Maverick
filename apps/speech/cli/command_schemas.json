@@ -1,0 +1,32 @@
+{
+  "commands": {
+    "speech": {
+      "description": "Inspect Speech operations and transcribe bounded workspace Storage audio files. Live microphone streaming is not exposed through CLI.",
+      "argument_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["operations.manifest", "transcribe_file"],
+            "default": "operations.manifest",
+            "description": "Speech app operation to run."
+          },
+          "workspace_relative_path": {
+            "type": "string",
+            "description": "Workspace-relative audio file path under storage/uploaded/ or storage/generated/."
+          },
+          "content_type": {
+            "type": "string",
+            "description": "Optional audio content type override."
+          },
+          "language": {
+            "type": "string",
+            "description": "Optional short language code."
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    }
+  }
+}

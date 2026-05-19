@@ -86,6 +86,14 @@ export type SpeechCapabilitiesPayload = {
       content_types?: string[];
       max_text_chars?: number;
     };
+    "speech.transcription"?: {
+      available?: boolean;
+      provider_available?: boolean;
+      content_types?: string[];
+      max_audio_bytes?: number;
+      max_duration_seconds?: number;
+      streaming_supported?: boolean;
+    };
   };
 };
 
@@ -94,6 +102,19 @@ export type SpeechSynthesizePayload = {
   content_type?: string;
   audio_base64?: string;
   audio_data_url?: string;
+  retention?: string;
+  size_bytes?: number;
+};
+
+export type SpeechTranscribePayload = {
+  job_id?: string;
+  text: string;
+  segments?: Array<{ start?: number; end?: number; text?: string }>;
+  language?: string;
+  language_probability?: number;
+  duration_seconds?: number;
+  engine?: string;
+  model?: string;
   retention?: string;
   size_bytes?: number;
 };
@@ -482,7 +503,7 @@ export function getAppDependencies(consumerAppId: string): Promise<AppDependenci
 
 export function selectedDependencyProviderAppId(payload: AppDependenciesPayload, alias: string): string {
   const dependency = payload.dependencies.find((item) => item.alias === alias);
-  return selectedProviderIdsForDependency(dependency)[0] || "";
+  return selectedExplicitProviderIdsForDependency(dependency)[0] || "";
 }
 
 export function selectedSharedDependencyProviderAppId(payload: AppDependenciesPayload, aliases: string[]): string {
@@ -493,15 +514,15 @@ export function selectedSharedDependencyProviderAppId(payload: AppDependenciesPa
     return "";
   }
   const [primary, ...rest] = dependencies;
-  for (const providerAppId of selectedProviderIdsForDependency(primary)) {
-    if (rest.every((dependency) => selectedProviderIdsForDependency(dependency).includes(providerAppId))) {
+  for (const providerAppId of selectedProviderIdsForDependencyWithAutomaticFallback(primary)) {
+    if (rest.every((dependency) => selectedProviderIdsForDependencyWithAutomaticFallback(dependency).includes(providerAppId))) {
       return providerAppId;
     }
   }
   return "";
 }
 
-function selectedProviderIdsForDependency(dependency: DependencyResolutionItem | undefined): string[] {
+function selectedExplicitProviderIdsForDependency(dependency: DependencyResolutionItem | undefined): string[] {
   if (!dependency) {
     return [];
   }
@@ -509,6 +530,15 @@ function selectedProviderIdsForDependency(dependency: DependencyResolutionItem |
   if (dependency.selected_provider_app_ids.length) {
     return dependency.selected_provider_app_ids.filter((providerAppId) => backendProviderIds.includes(providerAppId));
   }
+  return [];
+}
+
+function selectedProviderIdsForDependencyWithAutomaticFallback(dependency: DependencyResolutionItem | undefined): string[] {
+  const selectedProviderIds = selectedExplicitProviderIdsForDependency(dependency);
+  if (selectedProviderIds.length || !dependency) {
+    return selectedProviderIds;
+  }
+  const backendProviderIds = backendCandidateProviderIds(dependency);
   if (canUseAutomaticDependencyProvider(dependency)) {
     return backendProviderIds;
   }
@@ -584,6 +614,14 @@ export function synthesizeSpeech(providerAppId: string, text: string): Promise<S
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action: "synthesize", text }),
+  });
+}
+
+export function transcribeSpeech(providerAppId: string, audioBase64: string, contentType: string): Promise<SpeechTranscribePayload> {
+  return requestJson<SpeechTranscribePayload>(`/api/apps/${encodeURIComponent(providerAppId)}/backend`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "transcribe_audio", audio_base64: audioBase64, content_type: contentType }),
   });
 }
 

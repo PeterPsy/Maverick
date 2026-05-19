@@ -110,6 +110,19 @@ function dependencyPayload(selectedProviderAppIds: string[]): AppDependenciesPay
         stale_provider_app_ids: [],
         blocked_reason: null,
       },
+      {
+        alias: "speech-to-text",
+        interface: "speech.transcription",
+        version: "^1",
+        required: false,
+        cardinality: "one",
+        description: "Speech transcription",
+        status: "resolved",
+        candidates: [],
+        selected_provider_app_ids: ["speech"],
+        stale_provider_app_ids: [],
+        blocked_reason: null,
+      },
     ],
   };
 }
@@ -127,6 +140,10 @@ beforeEach(() => {
   vi.mocked(getSpeechCapabilities).mockResolvedValue({
     interfaces: {
       "speech.synthesis": {
+        available: true,
+        provider_available: true,
+      },
+      "speech.transcription": {
         available: true,
         provider_available: true,
       },

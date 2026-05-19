@@ -5,9 +5,18 @@ import { act, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ApiError, transcribeSpeech } from "../api/client";
 import type { AgentTypeSummary, AppReference, ProviderItem } from "../api/client";
 import type { MentionItem } from "../lib/mentions";
 import { ChatComposer } from "./ChatComposer";
+
+vi.mock("../api/client", async () => {
+  const actual = await vi.importActual<typeof import("../api/client")>("../api/client");
+  return {
+    ...actual,
+    transcribeSpeech: vi.fn(),
+  };
+});
 
 const providers: ProviderItem[] = [
   {
@@ -113,6 +122,18 @@ afterEach(() => {
   root = null;
   container?.remove();
   container = null;
+  Object.defineProperty(navigator, "permissions", {
+    configurable: true,
+    value: undefined,
+  });
+  Object.defineProperty(document, "permissionsPolicy", {
+    configurable: true,
+    value: undefined,
+  });
+  Object.defineProperty(document, "featurePolicy", {
+    configurable: true,
+    value: undefined,
+  });
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
@@ -124,6 +145,8 @@ async function renderComposer({
   onSearchReferences = async () => [],
   onSelectAgent = () => undefined,
   onSubmit = () => undefined,
+  transcriptionProviderAppId = "",
+  transcriptionProviderAvailable = false,
 }: {
   agentOptions?: AgentTypeSummary[];
   onAddAttachments?: (files: File[]) => void;
@@ -131,6 +154,8 @@ async function renderComposer({
   onSearchReferences?: (query: string, signal: AbortSignal) => Promise<MentionItem[]>;
   onSelectAgent?: (agentTypeId: string) => void;
   onSubmit?: () => void;
+  transcriptionProviderAppId?: string;
+  transcriptionProviderAvailable?: boolean;
 } = {}) {
   container = document.createElement("div");
   document.body.append(container);
@@ -167,6 +192,8 @@ async function renderComposer({
         queuedCount={0}
         queuedPreview={null}
         selectedAgentTypeId=""
+        transcriptionProviderAppId={transcriptionProviderAppId}
+        transcriptionProviderAvailable={transcriptionProviderAvailable}
         value={value}
       />
     );
@@ -185,6 +212,69 @@ async function renderComposer({
     element,
     getValue: () => latestValue,
   };
+}
+
+function mockMediaRecorder() {
+  const stopTrack = vi.fn();
+  const stream = { getTracks: () => [{ stop: stopTrack }] };
+  const getUserMedia = vi.fn(async () => stream);
+  class FakeMediaRecorder {
+    static isTypeSupported = vi.fn((mimeType: string) => mimeType === "audio/webm");
+    mimeType = "audio/webm";
+    ondataavailable: ((event: { data: Blob }) => void) | null = null;
+    onerror: (() => void) | null = null;
+    onstop: (() => void) | null = null;
+
+    constructor() {}
+
+    start() {
+      this.ondataavailable?.({ data: new Blob([new Uint8Array([1, 2, 3, 4, 5])], { type: "audio/webm" }) });
+    }
+
+    stop() {
+      this.onstop?.();
+    }
+  }
+  vi.stubGlobal("MediaRecorder", FakeMediaRecorder);
+  Object.defineProperty(navigator, "mediaDevices", {
+    configurable: true,
+    value: { getUserMedia },
+  });
+  return { getUserMedia, stopTrack };
+}
+
+function mockMicrophoneDenied() {
+  class FakeMediaRecorder {
+    static isTypeSupported = vi.fn((mimeType: string) => mimeType === "audio/webm");
+  }
+  const deniedError = Object.assign(new Error("Permission denied"), { name: "NotAllowedError" });
+  const getUserMedia = vi.fn(async () => {
+    throw deniedError;
+  });
+  vi.stubGlobal("MediaRecorder", FakeMediaRecorder);
+  Object.defineProperty(navigator, "mediaDevices", {
+    configurable: true,
+    value: { getUserMedia },
+  });
+  return { getUserMedia };
+}
+
+function mockMicrophonePermission(state: PermissionState) {
+  const query = vi.fn(async () => ({ state }));
+  Object.defineProperty(navigator, "permissions", {
+    configurable: true,
+    value: { query },
+  });
+  return { query };
+}
+
+function mockMicrophoneFramePolicy(allowed: boolean) {
+  const allowsFeature = vi.fn(() => allowed);
+  Object.defineProperty(document, "permissionsPolicy", {
+    configurable: true,
+    value: { allowsFeature },
+  });
+  return { allowsFeature };
 }
 
 function editorElement(): HTMLElement {
@@ -292,6 +382,22 @@ async function settleReferenceSearch() {
   });
 }
 
+async function waitForComposerAssertion(assertion: () => void) {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    try {
+      assertion();
+      return;
+    } catch (error) {
+      lastError = error;
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+    }
+  }
+  throw lastError;
+}
+
 function changeInputValue(input: HTMLInputElement, value: string) {
   const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   valueSetter?.call(input, value);
@@ -369,6 +475,125 @@ describe("ChatComposer reference search", () => {
     await pasteTextInEditor("Maverick");
 
     expect(getValue()).toBe("hello Maverick");
+  });
+
+  it("keeps dictation disabled when no transcription provider is available", async () => {
+    const { element } = await renderComposer();
+
+    const button = element.querySelector('[aria-label="Dictate"]');
+
+    expect(button).toBeInstanceOf(HTMLButtonElement);
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("records microphone audio and inserts the transcript without submitting", async () => {
+    const onSubmit = vi.fn();
+    const { element, getValue } = await renderComposer({
+      onSubmit,
+      transcriptionProviderAppId: "speech",
+      transcriptionProviderAvailable: true,
+    });
+    const media = mockMediaRecorder();
+    vi.mocked(transcribeSpeech).mockResolvedValue({ text: "Hello transcript", retention: "metadata_only" });
+
+    await act(async () => {
+      element.querySelector<HTMLButtonElement>('[aria-label="Dictate"]')?.click();
+      await Promise.resolve();
+    });
+    expect(element.querySelector<HTMLButtonElement>('[aria-label="Stop dictation"]')).toBeInstanceOf(HTMLButtonElement);
+    await act(async () => {
+      element.querySelector<HTMLButtonElement>('[aria-label="Stop dictation"]')?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await waitForComposerAssertion(() => {
+      expect(transcribeSpeech).toHaveBeenCalledWith("speech", expect.any(String), "audio/webm");
+      expect(getValue()).toBe("Hello transcript");
+    });
+
+    expect(media.getUserMedia).toHaveBeenCalledWith({ audio: true });
+    expect(media.stopTrack).toHaveBeenCalled();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("shows a microphone permission message when the browser blocks getUserMedia", async () => {
+    const { element } = await renderComposer({
+      transcriptionProviderAppId: "speech",
+      transcriptionProviderAvailable: true,
+    });
+    const media = mockMicrophoneDenied();
+
+    await act(async () => {
+      element.querySelector<HTMLButtonElement>('[aria-label="Dictate"]')?.click();
+      await Promise.resolve();
+    });
+
+    expect(media.getUserMedia).toHaveBeenCalledWith({ audio: true });
+    expect(element.textContent).toContain("Microphone permission was blocked");
+  });
+
+  it("still asks getUserMedia when the Permissions API reports denied", async () => {
+    const { element, getValue } = await renderComposer({
+      transcriptionProviderAppId: "speech",
+      transcriptionProviderAvailable: true,
+    });
+    mockMicrophonePermission("denied");
+    const media = mockMediaRecorder();
+    vi.mocked(transcribeSpeech).mockResolvedValue({ text: "Permission query was stale", retention: "metadata_only" });
+
+    await act(async () => {
+      element.querySelector<HTMLButtonElement>('[aria-label="Dictate"]')?.click();
+      await Promise.resolve();
+    });
+    expect(media.getUserMedia).toHaveBeenCalledWith({ audio: true });
+
+    await act(async () => {
+      element.querySelector<HTMLButtonElement>('[aria-label="Stop dictation"]')?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await waitForComposerAssertion(() => {
+      expect(getValue()).toBe("Permission query was stale");
+    });
+  });
+
+  it("shows when the shell frame policy blocks microphone access", async () => {
+    const { element } = await renderComposer({
+      transcriptionProviderAppId: "speech",
+      transcriptionProviderAvailable: true,
+    });
+    mockMicrophoneFramePolicy(false);
+    mockMicrophoneDenied();
+
+    await act(async () => {
+      element.querySelector<HTMLButtonElement>('[aria-label="Dictate"]')?.click();
+      await Promise.resolve();
+    });
+
+    expect(element.textContent).toContain("Maverick shell is blocking microphone access for Chat");
+  });
+
+  it("shows API status details when microphone transcription fails", async () => {
+    const { element } = await renderComposer({
+      transcriptionProviderAppId: "speech",
+      transcriptionProviderAvailable: true,
+    });
+    mockMediaRecorder();
+    vi.mocked(transcribeSpeech).mockRejectedValue(new ApiError("provider_unavailable", { path: "/api/apps/speech/backend", status: 503 }));
+
+    await act(async () => {
+      element.querySelector<HTMLButtonElement>('[aria-label="Dictate"]')?.click();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      element.querySelector<HTMLButtonElement>('[aria-label="Stop dictation"]')?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitForComposerAssertion(() => {
+      expect(element.textContent).toContain("Speech transcription request failed (503): provider_unavailable");
+    });
   });
 
   it("keeps focus in the composer when an @ mention opens suggestions from typing", async () => {

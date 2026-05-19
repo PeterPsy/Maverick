@@ -45,6 +45,14 @@
       "required": false,
       "cardinality": "one",
       "description": "Optional workspace speech provider used by Chat to synthesize visible agent responses for transcript playback."
+    },
+    {
+      "alias": "speech-to-text",
+      "interface": "speech.transcription",
+      "version": "^1",
+      "required": false,
+      "cardinality": "one",
+      "description": "Optional workspace speech provider used by Chat composer dictation to transcribe microphone audio into editable draft text."
     }
   ],
   "distribution": {

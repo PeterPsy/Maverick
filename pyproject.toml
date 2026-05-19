@@ -24,6 +24,9 @@ classifiers = [
 document-generator = [
     "docling>=2.93,<3",
 ]
+speech = [
+    "faster-whisper>=1.1,<2",
+]
 mongo = [
     "pymongo>=4.6",
 ]

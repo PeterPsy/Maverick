@@ -116,6 +116,7 @@ const MESSAGE_HISTORY_LIMIT = 50;
 const AGENT_CATALOG_DEPENDENCY_ALIAS = "agent-catalog";
 const AGENT_PROMPT_MATERIALIZER_DEPENDENCY_ALIAS = "agent-prompt-materializer";
 const TEXT_TO_SPEECH_DEPENDENCY_ALIAS = "text-to-speech";
+const SPEECH_TO_TEXT_DEPENDENCY_ALIAS = "speech-to-text";
 const QUEUED_MESSAGES_STORAGE_PREFIX = "maverick.chat.queued-messages.v1";
 const THREAD_SYNC_DEBUG_STORAGE_KEY = "maverick.chat.debug.thread-sync";
 
@@ -146,6 +147,8 @@ export function App({
   const [speechProviderAppId, setSpeechProviderAppId] = useState("");
   const [speechProviderAvailable, setSpeechProviderAvailable] = useState(false);
   const [speechMaxTextChars, setSpeechMaxTextChars] = useState(0);
+  const [transcriptionProviderAppId, setTranscriptionProviderAppId] = useState("");
+  const [transcriptionProviderAvailable, setTranscriptionProviderAvailable] = useState(false);
   const [agentOptions, setAgentOptions] = useState<AgentTypeSummary[]>([]);
   const [selectedAgentTypeId, setSelectedAgentTypeId] = useState("");
   const [threads, setThreads] = useState<ChatThread[]>([]);
@@ -335,10 +338,15 @@ export function App({
   async function loadAppDependencies() {
     try {
       const dependencies = await getAppDependencies("chat");
-      await Promise.all([loadAgentOptionsFromDependencies(dependencies), loadSpeechProviderFromDependencies(dependencies)]);
+      await Promise.all([
+        loadAgentOptionsFromDependencies(dependencies),
+        loadSpeechProviderFromDependencies(dependencies),
+        loadTranscriptionProviderFromDependencies(dependencies),
+      ]);
     } catch {
       clearAgentOptions();
       clearSpeechProvider();
+      clearTranscriptionProvider();
     }
   }
 
@@ -398,6 +406,31 @@ export function App({
     setSpeechProviderAppId("");
     setSpeechProviderAvailable(false);
     setSpeechMaxTextChars(0);
+  }
+
+  async function loadTranscriptionProviderFromDependencies(dependencies: AppDependenciesPayload) {
+    try {
+      const providerAppId = selectedDependencyProviderAppId(dependencies, SPEECH_TO_TEXT_DEPENDENCY_ALIAS);
+      if (!providerAppId) {
+        clearTranscriptionProvider();
+        return;
+      }
+      const capabilities = await getSpeechCapabilities(providerAppId);
+      const transcription = capabilities.interfaces?.["speech.transcription"];
+      if (!transcription) {
+        clearTranscriptionProvider();
+        return;
+      }
+      setTranscriptionProviderAppId(providerAppId);
+      setTranscriptionProviderAvailable(Boolean(transcription.available && transcription.provider_available !== false));
+    } catch {
+      clearTranscriptionProvider();
+    }
+  }
+
+  function clearTranscriptionProvider() {
+    setTranscriptionProviderAppId("");
+    setTranscriptionProviderAvailable(false);
   }
 
   useEffect(() => {
@@ -536,7 +569,11 @@ export function App({
         return;
       }
       if (payload.type === "maverick.app.dependencies" && payload.app_id === "chat" && payload.dependencies) {
-        void Promise.all([loadAgentOptionsFromDependencies(payload.dependencies), loadSpeechProviderFromDependencies(payload.dependencies)]);
+        void Promise.all([
+          loadAgentOptionsFromDependencies(payload.dependencies),
+          loadSpeechProviderFromDependencies(payload.dependencies),
+          loadTranscriptionProviderFromDependencies(payload.dependencies),
+        ]);
         return;
       }
       if (payload.type === "maverick.app.data-changed" && payload.owner_app_id === agentCatalogAppId && payload.resource === "configuration") {
@@ -1158,6 +1195,8 @@ export function App({
                   queuedCount={queuedMessages.length}
                   queuedPreview={queuedMessages[0]?.content || null}
                   selectedAgentTypeId={composerSelectedAgentTypeId}
+                  transcriptionProviderAppId={transcriptionProviderAppId}
+                  transcriptionProviderAvailable={transcriptionProviderAvailable}
                   value={composer}
                 />
               </div>
@@ -1201,6 +1240,8 @@ export function App({
                   queuedCount={queuedMessages.length}
                   queuedPreview={queuedMessages[0]?.content || null}
                   selectedAgentTypeId={composerSelectedAgentTypeId}
+                  transcriptionProviderAppId={transcriptionProviderAppId}
+                  transcriptionProviderAvailable={transcriptionProviderAvailable}
                   value={composer}
                 />
               </div>

@@ -93,6 +93,7 @@ Do not continue with a wrong `Service user`, `Service group`, or `Install root`.
 
 - bind the core service to `127.0.0.1`
 - terminate TLS at nginx
+- keep the nginx `Permissions-Policy` restrictive, but allow `microphone=(self)` so same-origin app iframes such as Chat dictation can request browser microphone access
 - set upload limits
 - keep logs outside the repository
 - keep the configured control-plane store and `.env.maverick` on restricted filesystem permissions

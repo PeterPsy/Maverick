@@ -3,7 +3,7 @@
   "contract_version": "1.0",
   "name": "Speech",
   "version": "0.1.0",
-  "description": "Backend-only speech provider app for workspace text-to-speech and future transcription surfaces.",
+  "description": "Backend-only speech provider app for workspace text-to-speech and speech-to-text transcription surfaces.",
   "publisher": "maverick",
   "minimum_core_version": "0.1.0",
   "provides": [
@@ -13,6 +13,16 @@
       "description": "Backend text-to-speech synthesis for workspace apps.",
       "surfaces": [
         "backend"
+      ]
+    },
+    {
+      "interface": "speech.transcription",
+      "version": "1",
+      "description": "Backend speech-to-text transcription for workspace apps.",
+      "surfaces": [
+        "backend",
+        "cli",
+        "mcp"
       ]
     }
   ],
@@ -44,8 +54,14 @@
     }
   },
   "capabilities": {
-    "mcp_tools": [],
-    "cli_commands": [],
+    "mcp_tools": [
+      "speech_operations_manifest",
+      "speech_reference_manifest",
+      "speech_transcribe_file"
+    ],
+    "cli_commands": [
+      "speech"
+    ],
     "skills": [],
     "views": [],
     "data_events": [],
@@ -54,8 +70,8 @@
   },
   "widgets": [],
   "entrypoints": {
-    "mcp": null,
-    "cli": null,
+    "mcp": "mcp/server.py",
+    "cli": "cli/app_cli.py",
     "backend": "backend/app_backend.py",
     "frontend": null,
     "skills_root": null,
@@ -67,7 +83,8 @@
     "storage_kind": "json",
     "data_schema_version": "1",
     "primary_paths": [
-      "data/speech/jobs.json"
+      "data/speech/jobs.json",
+      "data/speech/settings.json"
     ],
     "indices": null,
     "supports_export": true,

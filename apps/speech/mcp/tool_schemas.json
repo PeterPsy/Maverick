@@ -1,0 +1,74 @@
+{
+  "tools": {
+    "speech_operations_manifest": {
+      "description": "Return the compact Speech operations manifest.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status_code": {"type": "integer"},
+          "app_id": {"type": "string"},
+          "schema_version": {"type": "string"},
+          "operations": {"type": "object"}
+        }
+      }
+    },
+    "speech_reference_manifest": {
+      "description": "Report the Speech reference entity manifest. Speech currently exposes no reference entities.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status_code": {"type": "integer"},
+          "app_id": {"type": "string"},
+          "schema_version": {"type": "string"},
+          "entity_types": {"type": "array"}
+        }
+      }
+    },
+    "speech_transcribe_file": {
+      "description": "Transcribe a bounded workspace Storage audio file. This tool does not accept live microphone streams or absolute host paths.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workspace_relative_path": {
+            "type": "string",
+            "description": "Workspace-relative audio file path under storage/uploaded/ or storage/generated/."
+          },
+          "content_type": {
+            "type": "string",
+            "description": "Optional audio content type override."
+          },
+          "language": {
+            "type": "string",
+            "description": "Optional short language code."
+          }
+        },
+        "required": ["workspace_relative_path"],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status_code": {"type": "integer"},
+          "job_id": {"type": "string"},
+          "text": {"type": "string"},
+          "segments": {"type": "array"},
+          "language": {"type": "string"},
+          "duration_seconds": {"type": "number"},
+          "retention": {"type": "string"}
+        }
+      }
+    }
+  }
+}

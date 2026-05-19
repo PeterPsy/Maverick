@@ -5,6 +5,7 @@ import { synthesizeSpeech } from "../api/client";
 type MessageSpeechButtonProps = {
   activeMessageId: string | null;
   content: string;
+  maxTextChars?: number;
   messageId: string;
   onActiveMessageChange: Dispatch<SetStateAction<string | null>>;
   providerAppId: string;
@@ -18,8 +19,28 @@ export function MessageSpeechButton(props: MessageSpeechButtonProps) {
   if (!speechText || !props.providerAppId) {
     return null;
   }
+  const maxTextChars = props.maxTextChars || 0;
+  if (maxTextChars > 0 && speechText.length > maxTextChars) {
+    return <UnsupportedLengthSpeechButton maxTextChars={maxTextChars} />;
+  }
 
   return <SupportedMessageSpeechButton {...props} speechText={speechText} />;
+}
+
+function UnsupportedLengthSpeechButton({ maxTextChars }: { maxTextChars: number }) {
+  return (
+    <button
+      aria-label="Read response aloud unavailable: response is too long"
+      className="chatapp-message-action chatapp-message-action--icon chatapp-message-action--speech is-disabled"
+      disabled
+      title={`Speech supports up to ${maxTextChars} characters`}
+      type="button"
+    >
+      <span aria-hidden="true" className="material-symbols-rounded">
+        volume_off
+      </span>
+    </button>
+  );
 }
 
 function SupportedMessageSpeechButton({

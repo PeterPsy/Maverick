@@ -94,7 +94,7 @@ export type SpeechSynthesizePayload = {
   content_type?: string;
   audio_base64?: string;
   audio_data_url?: string;
-  workspace_relative_path?: string;
+  retention?: string;
   size_bytes?: number;
 };
 

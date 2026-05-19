@@ -39,6 +39,8 @@ class SpeechAppTests(unittest.TestCase):
 
         self.assertEqual(status_code, 200)
         self.assertFalse(payload["interfaces"]["speech.synthesis"]["provider_available"])
+        self.assertFalse(payload["interfaces"]["speech.synthesis"]["output"]["workspace_relative_path"])
+        self.assertEqual(payload["interfaces"]["speech.synthesis"]["output"]["retention"], "ephemeral")
         self.assertFalse(payload["interfaces"]["speech.transcription"]["provider_available"])
 
     def test_synthesize_rejects_empty_or_too_long_text(self) -> None:
@@ -52,7 +54,7 @@ class SpeechAppTests(unittest.TestCase):
             with self.assertRaises(SpeechProviderUnavailableError):
                 handle_action(Path("data"), Path("generated"), {"action": "synthesize", "text": "Hello"})
 
-    def test_synthesize_writes_generated_audio_and_job_metadata(self) -> None:
+    def test_synthesize_returns_inline_audio_and_job_metadata(self) -> None:
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             engine_path = root / "espeak"
@@ -78,9 +80,13 @@ class SpeechAppTests(unittest.TestCase):
 
             self.assertEqual(status_code, 200)
             self.assertEqual(base64.b64decode(payload["audio_base64"]), wav_bytes)
-            self.assertTrue((root / "generated" / "speech" / f"{payload['job_id']}.wav").is_file())
+            self.assertEqual(payload["retention"], "ephemeral")
+            self.assertNotIn("workspace_relative_path", payload)
+            self.assertFalse((root / "generated" / "speech" / f"{payload['job_id']}.wav").exists())
             jobs = (root / "data" / "jobs.json").read_text(encoding="utf-8")
             self.assertIn(payload["job_id"], jobs)
+            self.assertIn('"retention": "ephemeral"', jobs)
+            self.assertNotIn("workspace_relative_path", jobs)
 
 
 if __name__ == "__main__":

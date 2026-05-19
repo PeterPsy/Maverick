@@ -144,6 +144,7 @@ export function App({
   const [activeProviderId, setActiveProviderId] = useState("");
   const [agentCatalogAppId, setAgentCatalogAppId] = useState("");
   const [speechProviderAppId, setSpeechProviderAppId] = useState("");
+  const [speechMaxTextChars, setSpeechMaxTextChars] = useState(0);
   const [agentOptions, setAgentOptions] = useState<AgentTypeSummary[]>([]);
   const [selectedAgentTypeId, setSelectedAgentTypeId] = useState("");
   const [threads, setThreads] = useState<ChatThread[]>([]);
@@ -380,7 +381,9 @@ export function App({
       const capabilities = await getSpeechCapabilities(providerAppId);
       const synthesis = capabilities.interfaces?.["speech.synthesis"];
       if (synthesis?.available && synthesis.provider_available !== false) {
+        const maxTextChars = typeof synthesis.max_text_chars === "number" && synthesis.max_text_chars > 0 ? synthesis.max_text_chars : 0;
         setSpeechProviderAppId(providerAppId);
+        setSpeechMaxTextChars(maxTextChars);
         return;
       }
       clearSpeechProvider();
@@ -391,6 +394,7 @@ export function App({
 
   function clearSpeechProvider() {
     setSpeechProviderAppId("");
+    setSpeechMaxTextChars(0);
   }
 
   useEffect(() => {
@@ -1161,6 +1165,7 @@ export function App({
                 loadingLabel={loadingLabel}
                 mentionItems={mentionItems}
                 messages={messages}
+                speechMaxTextChars={speechMaxTextChars}
                 speechProviderAppId={speechProviderAppId}
               />
             )}

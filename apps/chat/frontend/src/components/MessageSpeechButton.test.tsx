@@ -104,6 +104,36 @@ describe("MessageSpeechButton", () => {
     expect(buttons[1]?.getAttribute("aria-label")).toBe("Stop reading response");
   });
 
+  it("disables synthesis before calling the provider when normalized text exceeds the provider limit", async () => {
+    vi.mocked(synthesizeSpeech).mockClear();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <MessageSpeechButton
+          activeMessageId={null}
+          content={"x".repeat(1501)}
+          maxTextChars={1500}
+          messageId="agent-1"
+          onActiveMessageChange={() => null}
+          providerAppId="speech"
+        />,
+      );
+    });
+
+    const button = container.querySelector("button") as HTMLButtonElement | null;
+    expect(button?.getAttribute("aria-label")).toBe("Read response aloud unavailable: response is too long");
+    expect(button?.disabled).toBe(true);
+
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+
+    expect(synthesizeSpeech).not.toHaveBeenCalled();
+  });
+
   it("converts visible Markdown content into readable speech text", () => {
     expect(
       speechTextFromMarkdown(

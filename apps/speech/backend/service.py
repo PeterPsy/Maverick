@@ -89,8 +89,9 @@ def capabilities_payload() -> dict:
                 "max_text_chars": MAX_TEXT_CHARS,
                 "output": {
                     "audio_base64": True,
-                    "workspace_relative_path": True,
+                    "workspace_relative_path": False,
                     "absolute_paths": False,
+                    "retention": "ephemeral",
                 },
             },
             "speech.transcription": {
@@ -128,11 +129,6 @@ def synthesize_payload(*, data_root: Path, generated_storage_root: Path, body: d
             allowed_values={"max_audio_bytes": [str(MAX_AUDIO_BYTES)]},
         )
     job_id = f"tts_{uuid.uuid4().hex}"
-    relative_path = f"speech/{job_id}.wav"
-    output_path = generated_storage_root / relative_path
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_bytes(audio)
-    workspace_relative_path = f"storage/generated/{relative_path}"
     created_at = datetime.now(tz=UTC).isoformat()
     append_job(
         data_root,
@@ -145,7 +141,7 @@ def synthesize_payload(*, data_root: Path, generated_storage_root: Path, body: d
             "engine": engine.name,
             "content_type": "audio/wav",
             "size_bytes": len(audio),
-            "workspace_relative_path": workspace_relative_path,
+            "retention": "ephemeral",
         },
     )
     audio_base64 = base64.b64encode(audio).decode("ascii")
@@ -156,9 +152,9 @@ def synthesize_payload(*, data_root: Path, generated_storage_root: Path, body: d
         "audio_base64": audio_base64,
         "audio_data_url": f"data:audio/wav;base64,{audio_base64}",
         "size_bytes": len(audio),
-        "workspace_relative_path": workspace_relative_path,
         "text_chars": len(text),
         "engine": engine.name,
+        "retention": "ephemeral",
     }
 
 

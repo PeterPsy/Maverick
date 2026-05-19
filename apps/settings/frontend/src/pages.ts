@@ -35,7 +35,7 @@ export const SETTINGS_PAGES: SettingsPage[] = [
   {
     id: 'app-links',
     title: 'App links',
-    summary: 'Choose provider apps for intra-app catalogs and cross-app interfaces.',
+    summary: 'Choose provider apps for app interfaces and shared capabilities.',
     icon: 'hub'
   },
   {

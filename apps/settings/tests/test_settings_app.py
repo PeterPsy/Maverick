@@ -67,6 +67,22 @@ class SettingsFrontendDistTests(unittest.TestCase):
         self.assertIn("selectedPageId", main_source)
         self.assertIn("activePageHtml(page, user)", main_source)
 
+    def test_app_links_copy_covers_speech_provider_interfaces(self) -> None:
+        app_root = Path(__file__).resolve().parents[1]
+        repo_root = app_root.parents[1]
+        app_links_source = (app_root / "frontend" / "src" / "appLinksPage.ts").read_text(encoding="utf-8")
+        pages_source = (app_root / "frontend" / "src" / "pages.ts").read_text(encoding="utf-8")
+        chat_contract = parse_app_contract_file(repo_root / "apps" / "chat")
+        speech_contract = parse_app_contract_file(repo_root / "apps" / "speech")
+        chat_requirements = {item.alias: item for item in chat_contract.contract.requires}
+        speech_interfaces = {item.interface for item in speech_contract.contract.provides}
+
+        self.assertEqual(chat_requirements["text-to-speech"].interface, "speech.synthesis")
+        self.assertIn("speech.synthesis", speech_interfaces)
+        self.assertIn("Provider app links", app_links_source)
+        self.assertIn("shared capabilities", pages_source)
+        self.assertNotIn("Intra-app catalogs", app_links_source)
+
     def test_settings_embeds_platform_settings_panel(self) -> None:
         app_root = Path(__file__).resolve().parents[1]
         main_source = (app_root / "frontend" / "src" / "main.ts").read_text(encoding="utf-8")

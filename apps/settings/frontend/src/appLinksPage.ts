@@ -27,10 +27,10 @@ export function appLinksPageHtml({
       <div class="settings-heading">
         <div>
           <p class="settings-kicker">App links</p>
-          <h2>Intra-app catalogs</h2>
+          <h2>Provider app links</h2>
         </div>
       </div>
-      <p class="settings-card-copy">Provider links are workspace-scoped. A selected provider is reused until it becomes unavailable; otherwise one-provider catalogs use the first available candidate as their automatic default.</p>
+      <p class="settings-card-copy">Provider links are workspace-scoped. A selected provider is reused until it becomes unavailable; otherwise one-provider interface links use the first available candidate as their automatic default.</p>
       ${error ? `<p class="settings-platform-error">${escapeHtml(error)}</p>` : ''}
       ${loadErrors.length ? `<div class="settings-app-link-errors">${loadErrors.map(loadErrorHtml).join('')}</div>` : ''}
       <div class="settings-app-link-list">

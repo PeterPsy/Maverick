@@ -29,6 +29,9 @@ Agents can now discover three CLI surfaces:
 - `checklist-view`
 
 and the matching MCP/reference/view tools through scoped app discovery.
+Checklist ships app-owned discovery sidecars at `cli/command_schemas.json` and `mcp/tool_schemas.json`, so `maverick app checklist cli inspect checklist --json` and `maverick app checklist mcp inspect <tool> --json` expose machine-readable descriptions, JSON schemas, examples, output shapes, and policy metadata instead of the generic `{"type":"object"}` fallback.
+
+Calling the main CLI command or generic MCP tool without arguments returns the compact `operations.manifest` payload. The `list` operation is compact by default and omits `sections` and `metadata`; use `read` for one full checklist by id, or set `include_content: true` only when a full list is explicitly needed by a UI workflow.
 
 Checklist data is owned by this app under the workspace data root.
 
@@ -43,6 +46,32 @@ Checklist data is owned by this app under the workspace data root.
 ```
 
 ## MCP Shape
+
+Discover the app without reading source:
+
+```bash
+maverick app checklist cli list --json
+maverick app checklist cli inspect checklist --json
+maverick app checklist mcp list --json
+maverick app checklist mcp inspect checklist_create --json
+```
+
+Use the compact operation manifest first:
+
+```bash
+maverick app checklist cli run checklist --json
+maverick app checklist mcp call checklist_tasklist --json
+```
+
+Use compact list, then full read by id:
+
+```json
+{"action": "list", "limit": 20}
+```
+
+```json
+{"action": "read", "id": "check_<id>"}
+```
 
 Use `checklist_tasklist` with:
 

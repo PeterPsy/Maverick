@@ -1,0 +1,158 @@
+{
+  "commands": {
+    "checklist": {
+      "description": "Manage workspace checklists and agent plans. Calling without arguments returns a compact operations manifest.",
+      "argument_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "Checklist operation to run. Omit for operations.manifest.",
+            "enum": [
+              "operations.manifest",
+              "describe",
+              "list",
+              "read",
+              "get",
+              "recall",
+              "create",
+              "create_plan",
+              "update",
+              "delete",
+              "add_task",
+              "add_item",
+              "toggle_task",
+              "toggle_item",
+              "set_task_status",
+              "set_subtask_status",
+              "next_actions"
+            ],
+            "default": "operations.manifest"
+          },
+          "id": {"type": "string"},
+          "checklist_id": {"type": "string"},
+          "section_id": {"type": "string"},
+          "task_id": {"type": "string"},
+          "subtask_id": {"type": "string"},
+          "title": {"type": "string"},
+          "summary": {"type": "string"},
+          "mode": {"type": "string", "enum": ["simple", "agent_plan"]},
+          "status": {"type": "string", "enum": ["active", "in-progress", "blocked", "completed", "failed", "pending", "need-help"]},
+          "priority": {"type": "string", "enum": ["low", "medium", "high", "critical"]},
+          "profile": {"type": "string"},
+          "sections": {"type": "array", "items": {"type": "object"}},
+          "payload": {"type": "object"},
+          "offset": {"type": "integer", "minimum": 0},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 500},
+          "ignore_view_state": {"type": "boolean", "default": false},
+          "include_content": {
+            "type": "boolean",
+            "default": false,
+            "description": "Set true only when a full list with sections and metadata is explicitly needed."
+          },
+          "content_profile": {"type": "string", "enum": ["compact", "full"]}
+        },
+        "additionalProperties": false,
+        "oneOf": [
+          {"maxProperties": 0},
+          {"properties": {"action": {"enum": ["operations.manifest", "describe", "next_actions"]}}, "required": ["action"]},
+          {"properties": {"action": {"enum": ["list"]}}, "required": ["action"]},
+          {
+            "properties": {"action": {"enum": ["read", "get", "recall"]}},
+            "required": ["action"],
+            "anyOf": [{"required": ["id"]}, {"required": ["checklist_id"]}]
+          },
+          {
+            "properties": {"action": {"enum": ["create", "create_plan"]}},
+            "required": ["action"],
+            "anyOf": [{"required": ["title"]}, {"required": ["payload"]}]
+          },
+          {
+            "properties": {"action": {"enum": ["update"]}},
+            "required": ["action"],
+            "anyOf": [{"required": ["id"]}, {"required": ["checklist_id"]}]
+          },
+          {
+            "properties": {"action": {"enum": ["delete"]}},
+            "required": ["action"],
+            "anyOf": [{"required": ["id"]}, {"required": ["checklist_id"]}]
+          },
+          {
+            "properties": {"action": {"enum": ["add_task", "add_item"]}},
+            "required": ["action", "title"],
+            "anyOf": [{"required": ["id"]}, {"required": ["checklist_id"]}]
+          },
+          {
+            "properties": {"action": {"enum": ["toggle_task", "toggle_item"]}},
+            "required": ["action", "section_id", "task_id"],
+            "anyOf": [{"required": ["id"]}, {"required": ["checklist_id"]}]
+          },
+          {
+            "properties": {"action": {"enum": ["set_task_status"]}},
+            "required": ["action", "section_id", "task_id", "status"],
+            "anyOf": [{"required": ["id"]}, {"required": ["checklist_id"]}]
+          },
+          {
+            "properties": {"action": {"enum": ["set_subtask_status"]}},
+            "required": ["action", "section_id", "task_id", "subtask_id", "status"],
+            "anyOf": [{"required": ["id"]}, {"required": ["checklist_id"]}]
+          }
+        ],
+        "examples": [
+          {"action": "operations.manifest"},
+          {"action": "list", "limit": 20},
+          {"action": "read", "id": "check_<id>"},
+          {"action": "create", "title": "Launch plan", "mode": "agent_plan"},
+          {"action": "set_task_status", "id": "check_<id>", "section_id": "main", "task_id": "task-1", "status": "completed"}
+        ]
+      }
+    },
+    "checklist-reference": {
+      "description": "Search, resolve, and summarize workspace checklist references for mentions and agent context.",
+      "argument_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["references.manifest", "references.search", "references.resolve", "references.summarize"],
+            "default": "references.manifest"
+          },
+          "query": {"type": "string"},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+          "entity_type": {"type": "string", "enum": ["checklist"], "default": "checklist"},
+          "entity_id": {"type": "string"},
+          "id": {"type": "string"}
+        },
+        "additionalProperties": false,
+        "oneOf": [
+          {"maxProperties": 0},
+          {"properties": {"action": {"enum": ["references.manifest", "references.search"]}}, "required": ["action"]},
+          {"properties": {"action": {"enum": ["references.resolve", "references.summarize"]}}, "required": ["action"], "anyOf": [{"required": ["entity_id"]}, {"required": ["id"]}]}
+        ]
+      }
+    },
+    "checklist-view": {
+      "description": "Read or update the Checklist board view state and curated checklist selections.",
+      "argument_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["view_filter", "set_view_filter", "set_custom_view", "clear_custom_view"],
+            "default": "view_filter"
+          },
+          "query": {"type": "string"},
+          "title": {"type": "string"},
+          "refs": {"type": "array", "items": {"type": "object"}}
+        },
+        "additionalProperties": false,
+        "oneOf": [
+          {"maxProperties": 0},
+          {"properties": {"action": {"enum": ["view_filter", "clear_custom_view"]}}, "required": ["action"]},
+          {"properties": {"action": {"enum": ["set_view_filter"]}}, "required": ["action"]},
+          {"properties": {"action": {"enum": ["set_custom_view"]}}, "required": ["action", "refs"]}
+        ]
+      }
+    }
+  }
+}

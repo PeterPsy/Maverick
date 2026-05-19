@@ -7,6 +7,7 @@ import tempfile
 import unittest
 
 from core.apps.contracts import parse_app_contract_file
+from core.apps.surface_descriptors import app_cli_command_metadata, app_mcp_tool_metadata
 from core.shared.entrypoints import run_json_entrypoint
 
 
@@ -36,6 +37,182 @@ class GeneratedAppContractTest(unittest.TestCase):
         self.assertEqual(widgets["checklist-sidebar-footer"].content_kinds, ["shell.sidebar.footer"])
         self.assertEqual(widgets["design-checklist"].host, "chat")
         self.assertEqual(widgets["design-checklist"].content_kinds, ["checklist.design"])
+
+    def test_cli_and_mcp_descriptors_are_agent_friendly(self) -> None:
+        app_root = Path(__file__).resolve().parents[1]
+
+        cli_description, cli_schema = app_cli_command_metadata(
+            app_root,
+            "checklist",
+            default_description="fallback",
+        )
+        tool_description, tool_input_schema, tool_output_schema = app_mcp_tool_metadata(
+            app_root,
+            "checklist_create",
+            default_description="fallback",
+        )
+
+        self.assertIn("operations manifest", cli_description)
+        self.assertEqual(cli_schema["properties"]["action"]["default"], "operations.manifest")
+        self.assertIn("operations.manifest", cli_schema["properties"]["action"]["enum"])
+        self.assertIn("oneOf", cli_schema)
+        self.assertIn("Create one workspace checklist", tool_description)
+        self.assertIn({"required": ["title"]}, tool_input_schema["anyOf"])
+        self.assertIn({"required": ["payload"]}, tool_input_schema["anyOf"])
+        self.assertFalse(tool_input_schema["additionalProperties"])
+        self.assertEqual(tool_output_schema["properties"]["checklist"]["type"], "object")
+
+    def test_cli_default_returns_compact_operations_manifest(self) -> None:
+        app_root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir) / "data"
+            result = run_json_entrypoint(
+                app_root / "cli" / "app_cli.py",
+                cwd=app_root,
+                payload={
+                    "app_id": "checklist",
+                    "workspace_id": "default",
+                    "data_root": str(data_root),
+                    "command_id": "app.checklist.checklist",
+                    "arguments": {},
+                },
+            )
+
+        self.assertEqual(result["status_code"], 200)
+        self.assertEqual(result["action"], "operations.manifest")
+        self.assertEqual(result["default_action"], "operations.manifest")
+        self.assertIn("checklist_create", [item["name"] for item in result["tools"]])
+        self.assertEqual(result["payload_profiles"]["list"], "compact_by_default")
+        self.assertNotIn("items", result)
+
+    def test_list_is_compact_by_default_and_full_content_is_explicit(self) -> None:
+        app_root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir) / "data"
+            created = run_json_entrypoint(
+                app_root / "backend" / "app_backend.py",
+                cwd=app_root,
+                payload={
+                    "app_id": "checklist",
+                    "workspace_id": "default",
+                    "data_root": str(data_root),
+                    "body": {
+                        "action": "create",
+                        "payload": {
+                            "title": "Payload budget",
+                            "metadata": {"large": "x" * 1000},
+                            "sections": [
+                                {
+                                    "id": "main",
+                                    "title": "Main",
+                                    "tasks": [{"id": "task-1", "title": "Ship compact list", "checked": False}],
+                                }
+                            ],
+                        },
+                    },
+                },
+            )
+            compact = run_json_entrypoint(
+                app_root / "backend" / "app_backend.py",
+                cwd=app_root,
+                payload={
+                    "app_id": "checklist",
+                    "workspace_id": "default",
+                    "data_root": str(data_root),
+                    "body": {"action": "list"},
+                },
+            )
+            full = run_json_entrypoint(
+                app_root / "backend" / "app_backend.py",
+                cwd=app_root,
+                payload={
+                    "app_id": "checklist",
+                    "workspace_id": "default",
+                    "data_root": str(data_root),
+                    "body": {"action": "list", "include_content": True},
+                },
+            )
+
+        self.assertEqual(created["status_code"], 201)
+        self.assertEqual(compact["status_code"], 200)
+        self.assertEqual(compact["json"]["content_profile"], "compact")
+        self.assertNotIn("sections", compact["json"]["items"][0])
+        self.assertNotIn("metadata", compact["json"]["items"][0])
+        self.assertEqual(full["json"]["content_profile"], "full")
+        self.assertIn("sections", full["json"]["items"][0])
+        self.assertIn("metadata", full["json"]["items"][0])
+
+    def test_validation_errors_are_guided(self) -> None:
+        app_root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir) / "data"
+            unsupported = run_json_entrypoint(
+                app_root / "backend" / "app_backend.py",
+                cwd=app_root,
+                payload={
+                    "app_id": "checklist",
+                    "workspace_id": "default",
+                    "data_root": str(data_root),
+                    "body": {"action": "nope"},
+                },
+            )
+            missing_id = run_json_entrypoint(
+                app_root / "backend" / "app_backend.py",
+                cwd=app_root,
+                payload={
+                    "app_id": "checklist",
+                    "workspace_id": "default",
+                    "data_root": str(data_root),
+                    "body": {"action": "read"},
+                },
+            )
+            invalid_limit = run_json_entrypoint(
+                app_root / "backend" / "app_backend.py",
+                cwd=app_root,
+                payload={
+                    "app_id": "checklist",
+                    "workspace_id": "default",
+                    "data_root": str(data_root),
+                    "body": {"action": "list", "limit": "banana"},
+                },
+            )
+            oversized_limit = run_json_entrypoint(
+                app_root / "backend" / "app_backend.py",
+                cwd=app_root,
+                payload={
+                    "app_id": "checklist",
+                    "workspace_id": "default",
+                    "data_root": str(data_root),
+                    "body": {"action": "list", "limit": 1000000},
+                },
+            )
+            missing_record = run_json_entrypoint(
+                app_root / "backend" / "app_backend.py",
+                cwd=app_root,
+                payload={
+                    "app_id": "checklist",
+                    "workspace_id": "default",
+                    "data_root": str(data_root),
+                    "body": {"action": "update", "id": "check_missing"},
+                },
+            )
+
+        self.assertEqual(unsupported["status_code"], 400)
+        self.assertEqual(unsupported["json"]["error"], "unsupported_action")
+        self.assertIn("allowed_values", unsupported["json"])
+        self.assertEqual(unsupported["json"]["example"], {"action": "operations.manifest"})
+        self.assertEqual(missing_id["status_code"], 400)
+        self.assertEqual(missing_id["json"]["operation"], "read")
+        self.assertEqual(missing_id["json"]["expected_fields"], ["id"])
+        self.assertEqual(missing_id["json"]["accepted_aliases"], {"id": ["checklist_id"]})
+        self.assertEqual(invalid_limit["status_code"], 400)
+        self.assertEqual(invalid_limit["json"]["allowed_values"], {"limit": {"minimum": 1, "maximum": 500}})
+        self.assertEqual(oversized_limit["status_code"], 400)
+        self.assertIn("between 1 and 500", oversized_limit["json"]["detail"])
+        self.assertEqual(missing_record["status_code"], 404)
+        self.assertEqual(missing_record["json"]["error"], "not_found")
+        self.assertEqual(missing_record["json"]["expected_fields"], [])
+        self.assertEqual(missing_record["json"]["entity_id"], "check_missing")
 
     def test_checklist_tasklist_creates_chat_render_payload(self) -> None:
         app_root = Path(__file__).resolve().parents[1]

@@ -15,7 +15,12 @@ async function request(body: Record<string, unknown>): Promise<ChecklistActionRe
 }
 
 export async function listChecklists(options: { ignoreViewState?: boolean } = {}): Promise<ChecklistItem[]> {
-  const data = await request({ action: 'list', ignore_view_state: options.ignoreViewState || undefined, limit: 500 });
+  const data = await request({
+    action: 'list',
+    ignore_view_state: options.ignoreViewState || undefined,
+    include_content: true,
+    limit: 500
+  });
   return data.items || [];
 }
 

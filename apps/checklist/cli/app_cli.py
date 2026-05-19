@@ -16,11 +16,11 @@ arguments = dict(payload.arguments)
 command_id = str(payload.raw.get("command_id") or "")
 command_name = command_id.rsplit(".", 1)[-1]
 default_action_by_command = {
-    "checklist": "list",
+    "checklist": "operations.manifest",
     "checklist-reference": "references.manifest",
     "checklist-view": "view_filter",
 }
-arguments.setdefault("action", default_action_by_command.get(command_name, "list"))
+arguments.setdefault("action", default_action_by_command.get(command_name, "operations.manifest"))
 status_code, result = handle_action(Path(payload.data_root), arguments, workspace_id=payload.workspace_id)
 result.update(
     {

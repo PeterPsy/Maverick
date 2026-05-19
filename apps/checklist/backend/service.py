@@ -28,6 +28,7 @@ from store import (
     tool_payload,
     update_checklist,
 )
+from surface_contract import normalize_action, not_found_error, operations_manifest, unsupported_action, validation_error
 
 
 MUTATING_ACTIONS = {
@@ -50,25 +51,45 @@ VIEW_STATE_ACTIONS = {
 
 def handle_action(data_root: Path, body: dict[str, Any], *, workspace_id: str | None = None) -> tuple[int, dict[str, Any]]:
     """Dispatch backend/CLI/MCP actions."""
-    action = str(body.get("action") or "list").strip().lower()
+    action = normalize_action(body.get("action") or "operations.manifest")
     try:
-        if action in {"status", "describe", "schema", "help"}:
+        if action in {"operations.manifest", "manifest", "help"}:
+            return 200, operations_manifest()
+        if action in {"status", "describe", "schema"}:
             return 200, describe(data_root)
         if action == "list":
+            items = list_checklists(
+                data_root,
+                profile=_optional(body.get("profile")),
+                apply_view_state=not bool(body.get("ignore_view_state")),
+            )
+            offset = _optional_int(body.get("offset"), field="offset", minimum=0) or 0
+            limit = _optional_int(body.get("limit"), field="limit", minimum=1, maximum=500)
+            visible_items = items[offset : offset + limit if limit else None]
+            include_content = (
+                bool(body.get("include_content"))
+                or str(body.get("content_profile") or "").lower() == "full"
+            )
             return 200, {
                 "action": "list",
                 "summary": "tasklist list",
-                "items": list_checklists(
-                    data_root,
-                    profile=_optional(body.get("profile")),
-                    limit=_positive_int(body.get("limit")),
-                    apply_view_state=not bool(body.get("ignore_view_state")),
-                ),
+                "content_profile": "full" if include_content else "compact",
+                "items": visible_items if include_content else [_compact_checklist(item) for item in visible_items],
+                "pagination": {
+                    "offset": offset,
+                    "limit": limit,
+                    "total": len(items),
+                    "has_more": bool(limit and offset + limit < len(items)),
+                },
             }
         if action == "references.manifest":
             return 200, reference_manifest()
         if action == "references.search":
-            return 200, reference_search(data_root, query=str(body.get("query") or ""), limit=_positive_int(body.get("limit")))
+            return 200, reference_search(
+                data_root,
+                query=str(body.get("query") or ""),
+                limit=_optional_int(body.get("limit"), field="limit", minimum=1, maximum=50),
+            )
         if action == "references.resolve":
             return 200, reference_resolve(
                 data_root,
@@ -148,8 +169,10 @@ def handle_action(data_root: Path, body: dict[str, Any], *, workspace_id: str | 
             )
             return 200, {"action": "set_subtask_status", "subtask": subtask}
     except ValueError as error:
-        return 400, {"error": "validation_error", "detail": str(error)}
-    return 400, {"error": "unsupported_action", "detail": f"Unsupported action `{action}`."}
+        if " was not found." in str(error):
+            return 404, not_found_error(action, str(error))
+        return 400, validation_error(action, str(error))
+    return 400, unsupported_action(action)
 
 
 def describe(data_root: Path) -> dict[str, Any]:
@@ -190,7 +213,7 @@ def describe(data_root: Path) -> dict[str, Any]:
 
 def app_events_for_action(action: str) -> list[dict[str, str]]:
     """Return app data-change events for mutating actions."""
-    normalized = action.strip().lower()
+    normalized = normalize_action(action)
     if normalized in MUTATING_ACTIONS:
         return [{"type": "maverick.app.data-changed", "owner_app_id": "checklist", "resource": "state"}]
     if normalized in VIEW_STATE_ACTIONS:
@@ -210,7 +233,7 @@ def mcp_result_for_tool(
         return 200, reference_manifest()
     if tool_name == "checklist_tasklist":
         body = _payload(arguments)
-        body["action"] = str(arguments.get("action") or body.get("action") or "list")
+        body["action"] = str(arguments.get("action") or body.get("action") or "operations.manifest")
         if arguments.get("id") and "id" not in body:
             body["id"] = arguments["id"]
         return handle_action(data_root, body, workspace_id=workspace_id)
@@ -251,18 +274,49 @@ def _required_id(body: dict[str, Any]) -> str:
     return value
 
 
-def _positive_int(value: Any) -> int | None:
+def _optional_int(value: Any, *, field: str, minimum: int, maximum: int | None = None) -> int | None:
     if value in {None, ""}:
         return None
     try:
-        return max(1, int(value))
+        parsed = int(value)
     except (TypeError, ValueError):
-        return None
+        raise ValueError(_integer_error(field, minimum=minimum, maximum=maximum)) from None
+    if parsed < minimum:
+        raise ValueError(_integer_error(field, minimum=minimum, maximum=maximum))
+    if maximum is not None and parsed > maximum:
+        raise ValueError(_integer_error(field, minimum=minimum, maximum=maximum))
+    return parsed
+
+
+def _integer_error(field: str, *, minimum: int, maximum: int | None) -> str:
+    if maximum is None:
+        return f"{field} must be an integer greater than or equal to {minimum}."
+    return f"{field} must be an integer between {minimum} and {maximum}."
 
 
 def _optional(value: Any) -> str | None:
     text = str(value if value is not None else "").strip()
     return text or None
+
+
+def _compact_checklist(checklist: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": checklist.get("id"),
+        "kind": checklist.get("kind"),
+        "title": checklist.get("title"),
+        "summary": checklist.get("summary"),
+        "mode": checklist.get("mode"),
+        "status": checklist.get("status"),
+        "priority": checklist.get("priority"),
+        "profile": checklist.get("profile"),
+        "created_at": checklist.get("created_at"),
+        "updated_at": checklist.get("updated_at"),
+        "section_count": len(checklist.get("sections") or []),
+        "task_count": checklist.get("task_count"),
+        "checked_count": checklist.get("checked_count"),
+        "blocked_count": checklist.get("blocked_count"),
+        "failed_count": checklist.get("failed_count"),
+    }
 
 
 def _next_actions(data_root: Path) -> list[dict[str, Any]]:

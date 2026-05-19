@@ -1,0 +1,280 @@
+{
+  "tools": {
+    "checklist_tasklist": {
+      "description": "Generic Checklist operation runner. Calling without arguments returns a compact operations manifest; use dedicated tools for common create, read, list, and status updates.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "operations.manifest",
+              "list",
+              "read",
+              "create",
+              "update",
+              "delete",
+              "add_task",
+              "toggle_task",
+              "set_task_status",
+              "set_subtask_status",
+              "next_actions",
+              "references.search",
+              "references.resolve",
+              "references.summarize",
+              "view_filter",
+              "set_view_filter",
+              "set_custom_view",
+              "clear_custom_view"
+            ],
+            "default": "operations.manifest"
+          },
+          "id": {"type": "string"},
+          "payload": {"type": "object"},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 500},
+          "include_content": {"type": "boolean", "default": false}
+        },
+        "additionalProperties": true,
+        "examples": [{"action": "operations.manifest"}, {"action": "list", "limit": 20}]
+      },
+      "output_schema": {"type": "object"}
+    },
+    "checklist_list": {
+      "description": "List workspace checklists with compact records by default. Set include_content only when sections and metadata are explicitly required.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "profile": {"type": "string"},
+          "offset": {"type": "integer", "minimum": 0, "default": 0},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 500},
+          "ignore_view_state": {"type": "boolean", "default": false},
+          "include_content": {"type": "boolean", "default": false},
+          "content_profile": {"type": "string", "enum": ["compact", "full"]}
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "items": {"type": "array"},
+          "pagination": {"type": "object"},
+          "content_profile": {"type": "string"}
+        }
+      }
+    },
+    "checklist_create": {
+      "description": "Create one workspace checklist or agent plan.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "title": {"type": "string"},
+          "summary": {"type": "string"},
+          "mode": {"type": "string", "enum": ["simple", "agent_plan"], "default": "agent_plan"},
+          "status": {"type": "string", "enum": ["active", "in-progress", "blocked", "completed", "failed"]},
+          "priority": {"type": "string", "enum": ["low", "medium", "high", "critical"]},
+          "profile": {"type": "string"},
+          "sections": {"type": "array", "items": {"type": "object"}},
+          "payload": {"type": "object"}
+        },
+        "anyOf": [{"required": ["title"]}, {"required": ["payload"]}],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"checklist": {"type": "object"}, "chat_render": {"type": "object"}}}
+    },
+    "checklist_read": {
+      "description": "Read one full checklist by id, including sections, tasks, subtasks, and metadata.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "checklist_id": {"type": "string"}
+        },
+        "anyOf": [{"required": ["id"]}, {"required": ["checklist_id"]}],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"checklist": {"type": "object"}}}
+    },
+    "checklist_update": {
+      "description": "Update one checklist by id. Use payload for full updates or direct fields for small changes.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "checklist_id": {"type": "string"},
+          "payload": {"type": "object"},
+          "title": {"type": "string"},
+          "summary": {"type": "string"},
+          "mode": {"type": "string", "enum": ["simple", "agent_plan"]},
+          "status": {"type": "string", "enum": ["active", "in-progress", "blocked", "completed", "failed"]},
+          "priority": {"type": "string", "enum": ["low", "medium", "high", "critical"]},
+          "sections": {"type": "array", "items": {"type": "object"}}
+        },
+        "anyOf": [{"required": ["id"]}, {"required": ["checklist_id"]}],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"checklist": {"type": "object"}}}
+    },
+    "checklist_delete": {
+      "description": "Delete one checklist by id.",
+      "input_schema": {
+        "type": "object",
+        "properties": {"id": {"type": "string"}, "checklist_id": {"type": "string"}},
+        "anyOf": [{"required": ["id"]}, {"required": ["checklist_id"]}],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"status": {"type": "string"}, "deleted_id": {"type": "string"}}}
+    },
+    "checklist_add_task": {
+      "description": "Add one task to a checklist section.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "checklist_id": {"type": "string"},
+          "section_id": {"type": "string"},
+          "title": {"type": "string"},
+          "text": {"type": "string"}
+        },
+        "anyOf": [{"required": ["id"]}, {"required": ["checklist_id"]}],
+        "oneOf": [{"required": ["title"]}, {"required": ["text"]}],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"task": {"type": "object"}}}
+    },
+    "checklist_toggle_task": {
+      "description": "Toggle one task between pending and completed.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "checklist_id": {"type": "string"},
+          "section_id": {"type": "string"},
+          "task_id": {"type": "string"},
+          "item_id": {"type": "string"}
+        },
+        "required": ["section_id"],
+        "anyOf": [{"required": ["id"]}, {"required": ["checklist_id"]}],
+        "oneOf": [{"required": ["task_id"]}, {"required": ["item_id"]}],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"task": {"type": "object"}}}
+    },
+    "checklist_set_task_status": {
+      "description": "Set one task status for an agent plan.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "checklist_id": {"type": "string"},
+          "section_id": {"type": "string"},
+          "task_id": {"type": "string"},
+          "status": {"type": "string", "enum": ["pending", "in-progress", "need-help", "blocked", "completed", "failed"]}
+        },
+        "required": ["section_id", "task_id", "status"],
+        "anyOf": [{"required": ["id"]}, {"required": ["checklist_id"]}],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"task": {"type": "object"}}}
+    },
+    "checklist_set_subtask_status": {
+      "description": "Set one subtask status for an agent plan.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "checklist_id": {"type": "string"},
+          "section_id": {"type": "string"},
+          "task_id": {"type": "string"},
+          "subtask_id": {"type": "string"},
+          "status": {"type": "string", "enum": ["pending", "in-progress", "need-help", "blocked", "completed", "failed"]}
+        },
+        "required": ["section_id", "task_id", "subtask_id", "status"],
+        "anyOf": [{"required": ["id"]}, {"required": ["checklist_id"]}],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"subtask": {"type": "object"}}}
+    },
+    "checklist_next_actions": {
+      "description": "Return up to 50 open tasks sorted by execution status and priority.",
+      "input_schema": {"type": "object", "properties": {}, "additionalProperties": false},
+      "output_schema": {"type": "object", "properties": {"items": {"type": "array"}}}
+    },
+    "checklist_reference_manifest": {
+      "description": "Describe Checklist reference entity support.",
+      "input_schema": {"type": "object", "properties": {}, "additionalProperties": false},
+      "output_schema": {"type": "object", "properties": {"entity_types": {"type": "array"}}}
+    },
+    "checklist_reference_search": {
+      "description": "Search checklist references for mention pickers and agent context.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string"},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 50}
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"results": {"type": "array"}}}
+    },
+    "checklist_reference_resolve": {
+      "description": "Resolve one checklist reference by entity id.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": {"type": "string", "enum": ["checklist"], "default": "checklist"},
+          "entity_id": {"type": "string"},
+          "id": {"type": "string"}
+        },
+        "anyOf": [{"required": ["entity_id"]}, {"required": ["id"]}],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"exists": {"type": "boolean"}, "payload": {"type": "object"}}}
+    },
+    "checklist_reference_summarize": {
+      "description": "Return a token-efficient checklist reference summary.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": {"type": "string", "enum": ["checklist"], "default": "checklist"},
+          "entity_id": {"type": "string"},
+          "id": {"type": "string"}
+        },
+        "anyOf": [{"required": ["entity_id"]}, {"required": ["id"]}],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"summary": {"type": "string"}, "safe_fields": {"type": "object"}}}
+    },
+    "checklist_view_filter": {
+      "description": "Read the current Checklist board view state.",
+      "input_schema": {"type": "object", "properties": {}, "additionalProperties": false},
+      "output_schema": {"type": "object", "properties": {"view_state": {"type": "object"}}}
+    },
+    "checklist_set_view_filter": {
+      "description": "Set the Checklist board query filter.",
+      "input_schema": {
+        "type": "object",
+        "properties": {"query": {"type": "string"}},
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"view_state": {"type": "object"}}}
+    },
+    "checklist_set_custom_view": {
+      "description": "Show a curated set of checklist references on the board.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "title": {"type": "string"},
+          "refs": {"type": "array", "items": {"type": "object"}}
+        },
+        "required": ["refs"],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"view_state": {"type": "object"}}}
+    },
+    "checklist_clear_custom_view": {
+      "description": "Return Checklist to its default board mode.",
+      "input_schema": {"type": "object", "properties": {}, "additionalProperties": false},
+      "output_schema": {"type": "object", "properties": {"view_state": {"type": "object"}}}
+    }
+  }
+}

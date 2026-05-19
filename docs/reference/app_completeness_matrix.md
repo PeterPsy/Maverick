@@ -19,5 +19,6 @@ This matrix tracks the repository-wide completeness baseline for first-party Mav
 | `memory` | yes | repo-wide baseline plus app-local coverage when present | Reference app for durable graph state, references, and persisted custom views. |
 | `skills` | yes | repo-wide baseline | Contract declares bundled skill template ids, skill references, and standard catalog view state. |
 | `settings` | yes | repo-wide baseline | Frontend, CLI, and MCP only for now; app-owned backend and hooks remain intentionally absent while admin state stays core-owned. |
+| `speech` | yes | repo-wide baseline plus app-local coverage | Backend-only speech provider; declares `speech.synthesis` now, reserves `speech.transcription`, and intentionally has no frontend, CLI, MCP, skills, references, widgets, or view state. |
 
 The repo-wide automated check for this baseline lives in `tests/test_app_contract_baseline.py`; it now also requires every referenceable app to declare standard view-state actions and matching MCP tools.

@@ -144,7 +144,7 @@ describe("speech provider client calls", () => {
       if (body.action === "capabilities") {
         return jsonResponse({ interfaces: { "speech.synthesis": { available: true, provider_available: true } } });
       }
-      return jsonResponse({ audio_data_url: "data:audio/wav;base64,UklGRg==", content_type: "audio/wav" });
+      return jsonResponse({ audio_base64: "UklGRg==", content_type: "audio/wav" });
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -152,7 +152,7 @@ describe("speech provider client calls", () => {
       interfaces: { "speech.synthesis": { available: true } },
     });
     await expect(synthesizeSpeech("speech", "Hello")).resolves.toMatchObject({
-      audio_data_url: "data:audio/wav;base64,UklGRg==",
+      audio_base64: "UklGRg==",
     });
 
     expect(fetchMock.mock.calls.map((call) => call[0])).toEqual(["/api/apps/speech/backend", "/api/apps/speech/backend"]);

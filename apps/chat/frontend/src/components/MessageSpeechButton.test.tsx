@@ -47,7 +47,8 @@ describe("MessageSpeechButton", () => {
 
   it("requests backend synthesis and controls audio playback", async () => {
     const audioMock = installAudioMock();
-    vi.mocked(synthesizeSpeech).mockResolvedValue({ audio_data_url: "data:audio/wav;base64,UklGRg==", content_type: "audio/wav" });
+    const objectUrlMock = installObjectUrlMock();
+    vi.mocked(synthesizeSpeech).mockResolvedValue({ audio_base64: "UklGRg==", content_type: "audio/wav" });
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -64,7 +65,8 @@ describe("MessageSpeechButton", () => {
     });
 
     expect(synthesizeSpeech).toHaveBeenCalledWith("speech", "Agent response");
-    expect(audioMock.instances[0]?.src).toBe("data:audio/wav;base64,UklGRg==");
+    expect(objectUrlMock.createObjectURL).toHaveBeenCalled();
+    expect(audioMock.instances[0]?.src).toBe("blob:speech-audio");
     expect(audioMock.instances[0]?.play).toHaveBeenCalled();
     expect(button?.getAttribute("aria-label")).toBe("Stop reading response");
     expect(button?.textContent?.trim()).toBe("stop_circle");
@@ -74,6 +76,7 @@ describe("MessageSpeechButton", () => {
     });
 
     expect(audioMock.instances[0]?.pause).toHaveBeenCalled();
+    expect(objectUrlMock.revokeObjectURL).toHaveBeenCalledWith("blob:speech-audio");
     expect(button?.getAttribute("aria-label")).toBe("Read response aloud");
     expect(button?.textContent?.trim()).toBe("volume_up");
   });
@@ -220,4 +223,15 @@ function installAudioMock() {
   }
   vi.stubGlobal("Audio", MockAudio);
   return { instances };
+}
+
+function installObjectUrlMock() {
+  const createObjectURL = vi.fn(() => "blob:speech-audio");
+  const revokeObjectURL = vi.fn();
+  vi.stubGlobal("URL", {
+    ...URL,
+    createObjectURL,
+    revokeObjectURL,
+  });
+  return { createObjectURL, revokeObjectURL };
 }

@@ -8,7 +8,7 @@ Backend-only speech provider app for workspace text-to-speech and future transcr
 - `speech` provides `speech.synthesis` v1 through its app backend. `speech.transcription` v1 is reserved as the future STT boundary in the backend capability payload, but it is intentionally not declared in `provides` until transcription is implemented.
 - The app stores synthesis job metadata under `data/speech/jobs.json`. Chat and other consumers never read or write this data directly.
 - Synthesis uses an explicit local TTS engine when one is available on the backend host (`espeak` or `espeak-ng`). If no engine is available, `capabilities` reports `provider_available: false` and `synthesize` returns `provider_unavailable`.
-- Synthesis responses return bounded inline WAV audio for immediate playback and are retained as ephemeral output. The app does not write generated audio artifacts under workspace storage; only capped job metadata is persisted.
+- Synthesis responses return bounded inline WAV audio as `audio_base64` plus `content_type` and are retained as ephemeral output. The app does not write generated audio artifacts under workspace storage; only capped job metadata is persisted.
 - The app does not request network or secret permissions. Future cloud provider support must declare outbound targets and logical secret names in the contract instead of storing raw values in `data/speech`.
 
 ## SDK Flow

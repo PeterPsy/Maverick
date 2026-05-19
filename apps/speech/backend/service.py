@@ -150,7 +150,6 @@ def synthesize_payload(*, data_root: Path, generated_storage_root: Path, body: d
         "created_at": created_at,
         "content_type": "audio/wav",
         "audio_base64": audio_base64,
-        "audio_data_url": f"data:audio/wav;base64,{audio_base64}",
         "size_bytes": len(audio),
         "text_chars": len(text),
         "engine": engine.name,

@@ -80,6 +80,7 @@ class SpeechAppTests(unittest.TestCase):
 
             self.assertEqual(status_code, 200)
             self.assertEqual(base64.b64decode(payload["audio_base64"]), wav_bytes)
+            self.assertNotIn("audio_data_url", payload)
             self.assertEqual(payload["retention"], "ephemeral")
             self.assertNotIn("workspace_relative_path", payload)
             self.assertFalse((root / "generated" / "speech" / f"{payload['job_id']}.wav").exists())

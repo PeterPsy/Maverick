@@ -144,6 +144,7 @@ export function App({
   const [activeProviderId, setActiveProviderId] = useState("");
   const [agentCatalogAppId, setAgentCatalogAppId] = useState("");
   const [speechProviderAppId, setSpeechProviderAppId] = useState("");
+  const [speechProviderAvailable, setSpeechProviderAvailable] = useState(false);
   const [speechMaxTextChars, setSpeechMaxTextChars] = useState(0);
   const [agentOptions, setAgentOptions] = useState<AgentTypeSummary[]>([]);
   const [selectedAgentTypeId, setSelectedAgentTypeId] = useState("");
@@ -380,13 +381,14 @@ export function App({
       }
       const capabilities = await getSpeechCapabilities(providerAppId);
       const synthesis = capabilities.interfaces?.["speech.synthesis"];
-      if (synthesis?.available && synthesis.provider_available !== false) {
-        const maxTextChars = typeof synthesis.max_text_chars === "number" && synthesis.max_text_chars > 0 ? synthesis.max_text_chars : 0;
-        setSpeechProviderAppId(providerAppId);
-        setSpeechMaxTextChars(maxTextChars);
+      if (!synthesis) {
+        clearSpeechProvider();
         return;
       }
-      clearSpeechProvider();
+      const maxTextChars = typeof synthesis.max_text_chars === "number" && synthesis.max_text_chars > 0 ? synthesis.max_text_chars : 0;
+      setSpeechProviderAppId(providerAppId);
+      setSpeechProviderAvailable(Boolean(synthesis.available && synthesis.provider_available !== false));
+      setSpeechMaxTextChars(maxTextChars);
     } catch {
       clearSpeechProvider();
     }
@@ -394,6 +396,7 @@ export function App({
 
   function clearSpeechProvider() {
     setSpeechProviderAppId("");
+    setSpeechProviderAvailable(false);
     setSpeechMaxTextChars(0);
   }
 
@@ -1166,6 +1169,7 @@ export function App({
                 mentionItems={mentionItems}
                 messages={messages}
                 speechMaxTextChars={speechMaxTextChars}
+                speechProviderAvailable={speechProviderAvailable}
                 speechProviderAppId={speechProviderAppId}
               />
             )}

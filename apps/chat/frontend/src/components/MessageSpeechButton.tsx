@@ -8,6 +8,7 @@ type MessageSpeechButtonProps = {
   maxTextChars?: number;
   messageId: string;
   onActiveMessageChange: Dispatch<SetStateAction<string | null>>;
+  providerAvailable?: boolean;
   providerAppId: string;
 };
 
@@ -19,21 +20,29 @@ export function MessageSpeechButton(props: MessageSpeechButtonProps) {
   if (!speechText || !props.providerAppId) {
     return null;
   }
+  if (props.providerAvailable === false) {
+    return <DisabledSpeechButton ariaLabel="Speech provider unavailable" title="Speech provider unavailable" />;
+  }
   const maxTextChars = props.maxTextChars || 0;
   if (maxTextChars > 0 && speechText.length > maxTextChars) {
-    return <UnsupportedLengthSpeechButton maxTextChars={maxTextChars} />;
+    return (
+      <DisabledSpeechButton
+        ariaLabel="Read response aloud unavailable: response is too long"
+        title={`Speech supports up to ${maxTextChars} characters`}
+      />
+    );
   }
 
   return <SupportedMessageSpeechButton {...props} speechText={speechText} />;
 }
 
-function UnsupportedLengthSpeechButton({ maxTextChars }: { maxTextChars: number }) {
+function DisabledSpeechButton({ ariaLabel, title }: { ariaLabel: string; title: string }) {
   return (
     <button
-      aria-label="Read response aloud unavailable: response is too long"
+      aria-label={ariaLabel}
       className="chatapp-message-action chatapp-message-action--icon chatapp-message-action--speech is-disabled"
       disabled
-      title={`Speech supports up to ${maxTextChars} characters`}
+      title={title}
       type="button"
     >
       <span aria-hidden="true" className="material-symbols-rounded">

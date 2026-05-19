@@ -137,6 +137,32 @@ describe("MessageSpeechButton", () => {
     expect(synthesizeSpeech).not.toHaveBeenCalled();
   });
 
+  it("renders a disabled control instead of disappearing when the provider is linked but unavailable", async () => {
+    vi.mocked(synthesizeSpeech).mockClear();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <MessageSpeechButton
+          activeMessageId={null}
+          content="Agent response"
+          messageId="agent-1"
+          onActiveMessageChange={() => null}
+          providerAvailable={false}
+          providerAppId="speech"
+        />,
+      );
+    });
+
+    const button = container.querySelector("button") as HTMLButtonElement | null;
+    expect(button?.getAttribute("aria-label")).toBe("Speech provider unavailable");
+    expect(button?.disabled).toBe(true);
+    expect(button?.textContent?.trim()).toBe("volume_off");
+    expect(synthesizeSpeech).not.toHaveBeenCalled();
+  });
+
   it("converts visible Markdown content into readable speech text", () => {
     expect(
       speechTextFromMarkdown(

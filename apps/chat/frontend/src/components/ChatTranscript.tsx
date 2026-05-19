@@ -32,6 +32,7 @@ export function ChatTranscript({
   mentionItems,
   messages,
   speechMaxTextChars = 0,
+  speechProviderAvailable = true,
   speechProviderAppId = "",
 }: {
   error: string | null;
@@ -40,6 +41,7 @@ export function ChatTranscript({
   mentionItems: MentionItem[];
   messages: ChatMessage[];
   speechMaxTextChars?: number;
+  speechProviderAvailable?: boolean;
   speechProviderAppId?: string;
 }) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -236,6 +238,7 @@ export function ChatTranscript({
                           maxTextChars={speechMaxTextChars}
                           messageId={message.id}
                           onActiveMessageChange={setSpeakingMessageId}
+                          providerAvailable={speechProviderAvailable}
                           providerAppId={speechProviderAppId}
                         />
                       }

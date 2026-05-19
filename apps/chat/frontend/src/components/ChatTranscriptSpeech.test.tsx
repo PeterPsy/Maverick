@@ -53,6 +53,31 @@ describe("ChatTranscript speech controls", () => {
     expect(container.querySelectorAll('button[aria-label="Read response aloud"]')).toHaveLength(1);
   });
 
+  it("keeps a disabled speech button visible when the linked provider is unavailable", async () => {
+    const messages: ChatMessage[] = [message("agent-1", "agent", "Here is the summary.")];
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <ChatTranscript
+          error={null}
+          isLoading={false}
+          loadingLabel="Loading"
+          mentionItems={[]}
+          messages={messages}
+          speechProviderAppId="speech"
+          speechProviderAvailable={false}
+        />,
+      );
+    });
+
+    const button = container.querySelector('button[aria-label="Speech provider unavailable"]') as HTMLButtonElement | null;
+    expect(button).not.toBeNull();
+    expect(button?.disabled).toBe(true);
+  });
+
   it("sends visible collapsed Markdown text to the selected speech provider", async () => {
     installAudioMock();
     vi.mocked(synthesizeSpeech).mockResolvedValue({ audio_data_url: "data:audio/wav;base64,UklGRg==", content_type: "audio/wav" });

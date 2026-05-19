@@ -662,6 +662,8 @@ button.chatapp-message-reference-chip {
 .chatapp-message-action--speech.is-disabled {
   color: var(--maverick-text-muted);
   cursor: not-allowed;
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .chatapp-message-action--copy-meta {

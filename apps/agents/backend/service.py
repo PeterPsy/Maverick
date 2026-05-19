@@ -86,8 +86,15 @@ def catalog(data_root: Path) -> dict:
     }
 
 
+def _agent_type_id_from_body(body: dict) -> str:
+    raw = str(body.get("agent_type_id") or body.get("id") or body.get("entity_id") or "").strip()
+    if raw and not raw.startswith("agent-type-"):
+        raw = f"agent-type-{raw}"
+    return raw
+
+
 def prompt_preview(data_root: Path, body: dict) -> dict:
-    agent_type_id = str(body.get("agent_type_id") or "")
+    agent_type_id = _agent_type_id_from_body(body)
     agent_type = get_agent_type(data_root, agent_type_id)
     if agent_type is None:
         raise AgentsValidationError(f"Unknown agent type id: {agent_type_id}")

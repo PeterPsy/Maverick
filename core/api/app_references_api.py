@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import logging
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,7 @@ from core.api.session_api import RequestSession
 
 
 logger = logging.getLogger(__name__)
+REFERENCE_SEARCH_MAX_WORKERS = 8
 
 
 def handle_app_references_api(
@@ -64,6 +66,7 @@ def _search_references(state, *, context: RequestSession, body: dict[str, Any], 
     selected_app_ids = set(_string_list(body.get("app_ids")))
     selected_entity_types = set(_string_list(body.get("entity_types")))
     mcp_context = mcp_context_for_request(state, context)
+    search_specs: list[tuple[int, dict[str, Any], dict[str, Any]]] = []
     candidates: list[tuple[dict[str, Any], int, str]] = []
     errors: list[dict[str, str]] = []
     for provider_index, provider in enumerate(reference_providers(state, context=context, start_path=start_path)):
@@ -77,24 +80,76 @@ def _search_references(state, *, context: RequestSession, body: dict[str, Any], 
             if entity.get("searchable") and (not selected_entity_types or entity.get("entity_type") in selected_entity_types)
         ]
         for entity in searchable_entities:
-            try:
-                result = call_reference_tool(
-                    state,
-                    provider,
-                    "search",
-                    context=mcp_context,
-                    arguments={"entity_type": entity["entity_type"], "query": query, "limit": limit},
-                    start_path=start_path,
-                )
-            except Exception:
-                logger.exception("Reference search failed for app `%s`.", provider["app_id"])
-                errors.append({"app_id": provider["app_id"], "error": "reference_search_failed"})
-                continue
-            for raw_item in _raw_result_items(result):
-                normalized = normalize_reference_item(raw_item, provider=provider, fallback_entity_type=entity["entity_type"])
-                if normalized is not None:
-                    candidates.append((normalized, provider_index, str(entity["entity_type"])))
+            search_specs.append((provider_index, provider, entity))
+    for provider_index, provider, entity, result, error in _run_reference_searches(
+        state,
+        search_specs,
+        context=mcp_context,
+        query=query,
+        limit=limit,
+        start_path=start_path,
+    ):
+        if error is not None:
+            logger.error(
+                "Reference search failed for app `%s`.",
+                provider["app_id"],
+                exc_info=(type(error), error, error.__traceback__),
+            )
+            errors.append({"app_id": provider["app_id"], "error": "reference_search_failed"})
+            continue
+        for raw_item in _raw_result_items(result):
+            normalized = normalize_reference_item(raw_item, provider=provider, fallback_entity_type=entity["entity_type"])
+            if normalized is not None:
+                candidates.append((normalized, provider_index, str(entity["entity_type"])))
     return {"query": query, "items": _ordered_search_items(candidates, query=query, limit=limit), "errors": errors}
+
+
+def _run_reference_searches(
+    state,
+    search_specs: list[tuple[int, dict[str, Any], dict[str, Any]]],
+    *,
+    context,
+    query: str,
+    limit: int,
+    start_path: Path,
+) -> list[tuple[int, dict[str, Any], dict[str, Any], dict[str, Any], BaseException | None]]:
+    if not search_specs:
+        return []
+    if len(search_specs) == 1:
+        return [_call_reference_search(state, search_specs[0], context=context, query=query, limit=limit, start_path=start_path)]
+    max_workers = min(REFERENCE_SEARCH_MAX_WORKERS, len(search_specs))
+    with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="maverick-reference-search") as executor:
+        futures = [
+            executor.submit(_call_reference_search, state, spec, context=context, query=query, limit=limit, start_path=start_path)
+            for spec in search_specs
+        ]
+        return [future.result() for future in futures]
+
+
+def _call_reference_search(
+    state,
+    spec: tuple[int, dict[str, Any], dict[str, Any]],
+    *,
+    context,
+    query: str,
+    limit: int,
+    start_path: Path,
+) -> tuple[int, dict[str, Any], dict[str, Any], dict[str, Any], BaseException | None]:
+    provider_index, provider, entity = spec
+    try:
+        result = call_reference_tool(
+            state,
+            provider,
+            "search",
+            context=context,
+            arguments={"entity_type": entity["entity_type"], "query": query, "limit": limit},
+            start_path=start_path,
+        )
+    except Exception as error:
+        return provider_index, provider, entity, {}, error
+    if not isinstance(result, dict):
+        return provider_index, provider, entity, {}, None
+    return provider_index, provider, entity, result, None
 
 
 def _lookup_reference(

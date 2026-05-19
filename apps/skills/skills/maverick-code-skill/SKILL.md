@@ -19,6 +19,7 @@ maverick core cli run developer-context.read --doc-id <doc_id> --json
 ```
 
 Use `developer-context.list` to discover the canonical working-agreement and architecture documents, then read only the documents needed for the task.
+Do not try to read repository-root architecture paths relative to a workspace cwd; runtime sessions normally start in `workspaces/<workspace_id>`, where those paths may not exist.
 
 If the caller specifically needs MCP transport, use:
 

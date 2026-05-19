@@ -195,14 +195,16 @@ function runtimeSessionRowHtml(session: RuntimeSessionItem, cleanupAllowed: bool
   return `<div class="settings-platform-runtime-row">
     <span class="settings-platform-icon material-symbols-rounded" aria-hidden="true">terminal</span>
     <span class="settings-platform-runtime-copy">
-      <strong>${escapeHtml(session.agent_id || session.session_id)}</strong>
+      <span class="settings-platform-runtime-title">
+        <strong>${escapeHtml(session.agent_id || session.session_id)}</strong>
+        <button type="button" class="settings-secondary settings-platform-runtime-clear" data-runtime-clear="${escapeAttr(session.session_id)}" aria-label="Clean runtime session ${escapeAttr(session.agent_id || session.session_id)}" ${!cleanupAllowed || state.clearingAllRuntime || isCleaning ? 'disabled' : ''}>
+          <span class="material-symbols-rounded" aria-hidden="true">${isCleaning ? 'sync' : 'delete_sweep'}</span>
+          <span class="settings-platform-runtime-clear-label">${isCleaning ? 'Cleaning' : 'Clean'}</span>
+        </button>
+      </span>
       <small>${escapeHtml(session.workspace_name || session.workspace_id)} · ${escapeHtml(session.effective_mode)} · ${escapeHtml(session.status)}</small>
       <code>${escapeHtml(session.session_id)}</code>
     </span>
-    <button type="button" class="settings-secondary" data-runtime-clear="${escapeAttr(session.session_id)}" ${!cleanupAllowed || state.clearingAllRuntime || isCleaning ? 'disabled' : ''}>
-      <span class="material-symbols-rounded" aria-hidden="true">${isCleaning ? 'sync' : 'delete_sweep'}</span>
-      ${isCleaning ? 'Cleaning' : 'Clean'}
-    </button>
   </div>`;
 }
 

@@ -141,7 +141,7 @@ class AgentsAppTestCase(unittest.TestCase):
             status, payload = handle_action(data_root, {"action": "catalog"})
             preview_status, preview_payload = handle_action(
                 data_root,
-                {"action": "preview_prompt", "agent_type_id": "agent-type-server-coding-engineer"},
+                {"action": "preview_prompt", "id": "server-coding-engineer"},
             )
 
             self.assertEqual(status, 200)

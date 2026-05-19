@@ -12,6 +12,20 @@ Before changing structure or implementation, align with these files:
 - `docs/architecture/workspace_root_architecture.md`
 - `docs/architecture/app_contract_architecture.md`
 
+These paths are repository-root source paths, not guaranteed paths relative to a runtime
+workspace cwd such as `workspaces/default`.
+
+Workspace agents must resolve these canonical documents through the core developer-context
+surface before falling back to direct filesystem reads:
+
+- `maverick core cli run developer-context.list --json`
+- `maverick core cli run developer-context.read --doc-id core_architecture --json`
+- `maverick core cli run developer-context.read --doc-id workspace_root_architecture --json`
+- `maverick core cli run developer-context.read --doc-id app_contract_architecture --json`
+
+Do not assume `docs/architecture/...` exists under the current working directory inside a
+workspace runtime session.
+
 If code, structure, and documentation disagree, fix the disagreement immediately.
 
 Do not leave the repository in a state where the implementation has moved but the documentation still describes an older model.

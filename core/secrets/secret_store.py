@@ -5,14 +5,16 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import UTC, datetime
 import re
+from typing import cast
 import unicodedata
 
 from core.secrets.errors import SecretBindingError
-from core.secrets.models import SecretRecord
+from core.secrets.models import SecretKind, SecretRecord
 from core.secrets.store import SecretStore
 
 
 SECRET_NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{1,126}$")
+SECRET_KINDS = {"generic", "password", "api_key", "oauth_token", "private_key"}
 
 
 def utcnow() -> datetime:
@@ -33,6 +35,13 @@ def _validate_name(value: str, *, label: str) -> str:
     return normalized
 
 
+def _validate_kind(value: str) -> SecretKind:
+    normalized = str(value).strip().lower()
+    if normalized not in SECRET_KINDS:
+        raise SecretBindingError(f"Secret kind must be one of {sorted(SECRET_KINDS)}, got `{value}`.")
+    return cast(SecretKind, normalized)
+
+
 def build_secret_ref(*, secret_id: str | None = None, alias: str | None = None) -> str:
     """Build one canonical secret reference."""
     if alias is not None:
@@ -48,6 +57,7 @@ def build_secret_record(
     alias: str | None = None,
     description: str | None = None,
     secret_id: str | None = None,
+    kind: SecretKind = "generic",
     now: datetime | None = None,
 ) -> SecretRecord:
     """Build one platform-owned secret metadata record."""
@@ -62,6 +72,7 @@ def build_secret_record(
         status="active",
         created_at=timestamp,
         updated_at=timestamp,
+        kind=_validate_kind(kind),
     )
 
 
@@ -73,6 +84,7 @@ def create_secret(
     alias: str | None = None,
     description: str | None = None,
     secret_id: str | None = None,
+    kind: SecretKind = "generic",
     now: datetime | None = None,
 ) -> SecretRecord:
     """Persist one secret metadata record and its raw value."""
@@ -81,6 +93,7 @@ def create_secret(
         alias=alias,
         description=description,
         secret_id=secret_id,
+        kind=kind,
         now=now,
     )
     if not raw_value:

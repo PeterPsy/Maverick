@@ -1615,7 +1615,9 @@ Examples of valid workspace-side content:
 
 - secret alias
 - secret binding id
+- secret grant id
 - logical reference name
+- non-sensitive usage policy metadata such as action names or target patterns
 
 Examples of invalid workspace-side content:
 
@@ -1632,8 +1634,10 @@ They access secrets through controlled runtime or backend interfaces.
 That means:
 
 - the workspace may declare which secret reference it needs
-- the runtime resolves that reference through the platform
-- the platform decides whether the secret may be used
+- Vault or another platform-authorized surface may create an app grant that binds the reference to an installed, enabled, and surface-resolvable workspace app, logical name, allowed actions, optional structured HTTP/HTTPS target patterns or platform delivery target patterns, and expiry; `app.backend` grant names must be declared by the target app under `permissions.secrets.read`, and admin UI discovery of those logical names must use a Core Secrets surface rather than the generic `/api/apps` workspace registry
+- the runtime resolves that reference through the platform only for the requested action and target
+- the platform decides whether the grant, workspace, app, action, target, and expiry allow the use
+- mounted app backend, CLI, and MCP entrypoints receive secret values only as ephemeral `app_secrets` input from active, non-expired grants that allow `app.backend`, match `maverick://app.backend/<surface>`, and match contract-declared logical names; declared delivery fails closed and emits audit/event records if a logical name has no current compatible grant
 
 If the runtime receives a resolved secret value, that delivery should be treated as ephemeral runtime input, not as workspace-owned persisted state.
 
@@ -1651,10 +1655,13 @@ Workspace export and import must never include secret values.
 At most, workspace data may include:
 
 - secret references
+- secret grant metadata without raw values
 - unresolved bindings
 - placeholders indicating that secrets must be reconfigured
 
 If a workspace is imported elsewhere, secret values must be re-established in the local platform control plane.
+
+Vault is the workspace-facing management app for this domain. It may display secret metadata, grant metadata, and audit events through core APIs, but it must not create a `data/vault` store for raw values or become the source of authority for secret material. A generic app data-root marker such as `data/vault/.maverick-app.json` may exist as installation metadata for an enabled app binding, but Vault must not persist app-owned records there. Core Secrets remains the only authoritative owner of encrypted values, resolution policy, revocation, and audit.
 
 ### Working directory
 

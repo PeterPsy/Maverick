@@ -105,8 +105,19 @@ def print_response(request, text_field=None):
             print(body)
             return 0
         print(decoded.get(text_field, ""))
-        return 0
+        return response_exit_code(body)
     print(body)
+    return response_exit_code(body)
+
+
+def response_exit_code(body):
+    try:
+        decoded = json.loads(body)
+    except json.JSONDecodeError:
+        return 0
+    status_code = decoded.get("status_code")
+    if isinstance(status_code, int) and status_code >= 400:
+        return 1
     return 0
 
 

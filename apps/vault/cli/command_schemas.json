@@ -1,0 +1,18 @@
+{
+  "commands": {
+    "vault": {
+      "description": "Return Vault's redaction-safe agent operation manifest and the core secret surfaces it delegates to.",
+      "argument_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["manifest"],
+            "default": "manifest"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

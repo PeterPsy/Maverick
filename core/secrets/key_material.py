@@ -29,6 +29,23 @@ def load_secret_store_key(environment: Mapping[str, str] | None = None) -> bytes
     raise RuntimeError("MAVERICK_SECRET_KEY_FILE is required.")
 
 
+def load_secret_store_keyring(environment: Mapping[str, str] | None = None) -> dict[str, bytes]:
+    """Return decryptable secret-store keys keyed by stable key id."""
+    current = load_secret_store_key(environment)
+    keyring = {secret_store_key_id(current): current}
+    env = environment if environment is not None else os.environ
+    previous = env.get("MAVERICK_SECRET_STORE_PREVIOUS_KEYS", "").strip()
+    for item in [part.strip() for part in previous.split(",") if part.strip()]:
+        key = secret_store_key_from_text(item)
+        keyring.setdefault(secret_store_key_id(key), key)
+    return keyring
+
+
 def secret_store_key_from_text(value: str) -> bytes:
     """Derive fixed-length encryption key material from one local secret string."""
     return hashlib.sha256(value.encode("utf-8")).digest()
+
+
+def secret_store_key_id(key: bytes) -> str:
+    """Return a stable non-secret key identifier for an encryption key."""
+    return hashlib.sha256(key).hexdigest()[:16]

@@ -47,6 +47,9 @@ def main(argv: list[str] | None = None) -> int:
     state = _bootstrap_state_for_cli(args, repository_root=repository_root)
     result = run_cli_json(args, state=state, repository_root=state.repository_root)
     print(json.dumps(result, indent=2, ensure_ascii=True))
+    status_code = result.get("status_code")
+    if isinstance(status_code, int) and status_code >= 400:
+        return 1
     return 0
 
 

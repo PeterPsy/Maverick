@@ -20,5 +20,6 @@ This matrix tracks the repository-wide completeness baseline for first-party Mav
 | `skills` | yes | repo-wide baseline | Contract declares bundled skill template ids, skill references, and standard catalog view state. |
 | `settings` | yes | repo-wide baseline | Frontend, CLI, and MCP only for now; app-owned backend and hooks remain intentionally absent while admin state stays core-owned. |
 | `speech` | yes | repo-wide baseline plus app-local coverage | Backend-only speech provider for synthesis plus transcription; exposes CLI/MCP only for bounded Storage file transcription and an empty reference manifest, and intentionally has no frontend, skills, reference entities, widgets, or view state. |
+| `vault` | yes | app-local contract tests plus repo-wide baseline | Built-in sealed admin frontend and sidebar widgets for Core Secrets; declares redaction-safe CLI, MCP, and `vault-ops` skill surfaces, and intentionally has no app-owned storage, backend, references, or app secret permissions. |
 
-The repo-wide automated check for this baseline lives in `tests/test_app_contract_baseline.py`; it now also requires every referenceable app to declare standard view-state actions and matching MCP tools.
+The repo-wide automated check for this baseline lives in `tests/contracts/app_contract/test_repository_contracts.py`; it now also requires every referenceable app to declare standard view-state actions and matching MCP tools.

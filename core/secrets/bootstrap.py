@@ -43,6 +43,7 @@ def create_bootstrap_secret_store(
             secrets=JsonFileCollection(secret_root / "secrets.json"),
             values=JsonFileCollection(secret_root / "values.json"),
             bindings=JsonFileCollection(secret_root / "bindings.json"),
+            grants=JsonFileCollection(secret_root / "grants.json"),
         ),
         key_loader=lambda: load_secret_store_key(environment),
     )

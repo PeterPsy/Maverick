@@ -15,6 +15,7 @@ from core.providers.errors import ProviderCredentialBindingError, ProviderSelect
 from core.providers.models import ProviderCapabilitySet, ProviderDefinition, RuntimeBackendLaunchSpec
 from core.providers.provider_credentials import bind_provider_credential, disable_provider_binding
 from core.providers.provider_codex import CodexProviderAdapter, refresh_workspace_maverick_wrappers
+from core.providers.provider_codex_wrappers import _workspace_maverick_wrapper_source
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.provider_selection import ProviderSelectionService
 from core.providers.service import (
@@ -65,6 +66,7 @@ class ProvidersTestCase(unittest.TestCase):
                 secrets=FakeCollection(),
                 values=FakeCollection(),
                 bindings=FakeCollection(),
+                grants=FakeCollection(),
             )
         )
 
@@ -678,8 +680,17 @@ class ProvidersTestCase(unittest.TestCase):
         self.assertEqual(refreshed, [wrapper])
         self.assertTrue(os.access(wrapper, os.X_OK))
         self.assertIn("maverick core cli run core.app-sdk.create --app-id <app_id>", content)
+        self.assertIn("response_exit_code", content)
         self.assertNotIn("parse_app_create", content)
         self.assertNotIn(legacy_create_command, content)
+
+    def test_workspace_maverick_wrapper_exits_nonzero_for_error_status_payload(self) -> None:
+        namespace: dict[str, object] = {"__name__": "wrapper_test"}
+        exec(_workspace_maverick_wrapper_source(), namespace)
+
+        response_exit_code = namespace["response_exit_code"]
+        self.assertEqual(response_exit_code('{"status_code": 400, "error": "unsupported"}'), 1)  # type: ignore[operator]
+        self.assertEqual(response_exit_code('{"status_code": 200}'), 0)  # type: ignore[operator]
 
     def test_codex_runtime_home_ignores_unreadable_source_config(self) -> None:
         runtime_store = self.make_runtime_store()

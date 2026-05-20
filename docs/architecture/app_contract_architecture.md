@@ -912,7 +912,11 @@ The app only owns the references it expects to use.
 
 Secret values remain under platform control and must not be stored inside the app-owned workspace data root.
 
-Mounted app backends may request app-scoped secret writes through the generic entrypoint result contract. The core persists or rotates the raw value in the platform secret store, binds it to the current `(workspace_id, app_id, logical_name)`, strips the raw write from the HTTP response, and returns only non-sensitive metadata. On later mounted backend, CLI, or MCP calls, the core may deliver only secrets bound to that same app scope through the entrypoint payload. App CLI and MCP entrypoints must consume that delivered `app_secrets` payload; they must not import core secret-store internals, read configured control-plane secret collections directly, or reconstruct secret values from control-plane files.
+Mounted app backends may request app-scoped secret writes through the generic entrypoint result contract. The core persists or rotates the raw value in the platform secret store, creates or reuses an app backend grant for the current `(workspace_id, app_id, logical_name)`, strips the raw write from the HTTP response, and returns only non-sensitive metadata. Automatic secret create, rotate, and grant creation steps emit explicit audit/event records attributed to the app and actor when available. Legacy app bindings are migration input only; app-entrypoint delivery consumes grants. On later mounted backend, CLI, or MCP calls, the core delivers `app_secrets` only from active, non-expired app grants whose logical names are declared by the app contract, whose action allowlist includes `app.backend`, and whose target patterns match the synthetic delivery target `maverick://app.backend/<surface>`, where `<surface>` is `backend`, `cli`, or `mcp`. A grant may use `maverick://app.backend/*` to cover all three app entrypoint delivery surfaces. Delivery fails closed and records audit/event data when any contract-declared logical name has no current compatible grant. App CLI and MCP entrypoints must consume that delivered `app_secrets` payload; they must not import core secret-store internals, read configured control-plane secret collections directly, or reconstruct secret values from control-plane files.
+
+A platform-owned grant binds a secret reference to a workspace, enabled and surface-resolvable app id, logical name, allowed action set, optional structured HTTP/HTTPS or platform delivery target patterns, expiry, and revocation state. Apps store or receive the grant reference and ask the platform to use the secret for a concrete action and target. The core validates the grant before decrypting the value, rejects `app.backend` grants whose logical name is not declared by the target app under `permissions.secrets.read`, returns only redacted metadata to browser clients, strips query strings from audit targets, stores only allowlisted bounded request context, and records allow or deny audit events without raw values. Secret permission logical names are sensitive contract metadata for grant administration: Vault-style UI discovery must use an admin-only Core Secrets endpoint, while generic registry surfaces such as `/api/apps` must omit them. Expired grants are reported as expired derived state, ignored during app-entrypoint delivery selection, and no longer block replacement of the same logical name. Empty targets are accepted only for internal `app.backend` defaults; user-directed actions require explicit targets. `*` target patterns are rejected for mixed-action grants because targets are grant-wide, not per-action.
+
+Vault is a built-in sealed app that provides the user-facing management UI for this model. Vault may call admin-gated Core Secrets APIs to import, rotate, disable, revoke, grant, and audit secrets, but Vault does not own a secret-value data model and must not persist raw values under `data/vault`.
 
 This capability is provider-agnostic. OAuth providers, token shapes, refresh semantics, and account metadata remain app-owned behavior.
 
@@ -1138,7 +1142,7 @@ The generated artifact is part of the app store payload, not part of the core pa
 
 The build source remains app-owned and must not introduce framework-specific assumptions into the core host.
 
-For the first frontend build operation, the core supports app sources that declare a frontend entrypoint and contain a `package.json` with a real `build` script either at the app root or at the frontend source root. The core runs the build from that package root only through an authenticated full-access or operator-authorized host path, verifies that the declared frontend artifact root exists, and only then emits `maverick.app.frontend-changed`.
+For the first frontend build operation, the core supports app sources that declare a frontend entrypoint and contain a `package.json` with a real `build` script either at the app root or at the frontend source root. The core runs the build from that package root only through an authenticated full-access or operator-authorized host path. If `node_modules` is absent, the package root must contain `package-lock.json`; the official build operation runs `npm ci` before `npm run build` so a clean checkout can reproduce the build deterministically. The core verifies that the declared frontend artifact root exists, and only then emits `maverick.app.frontend-changed`.
 
 Mounted app registry, frontend documents, and backend routes are authenticated workspace surfaces. Anonymous requests may load the root shell, the configured root-shell app document, and session endpoints, but `/api/status`, `/api/apps`, direct non-shell app document mounts such as `/apps/<app_id>/`, and `/api/apps/<app_id>/backend` require a valid user session. App and widget frontend HTML documents must be served with `Cache-Control: no-store` because they point at the current built asset hashes and must not pin clients to obsolete bundles after an official frontend rebuild. Static built frontend assets under `/apps/<app_id>/assets/...` and non-HTML static files emitted into the frontend artifact root are public cacheable artifacts and must not contain user, workspace, secret, or app-data payloads. They may be served with cross-origin headers so sandboxed iframes, widget iframes, and Vite-generated `crossorigin` module/style tags can load the app bundle without needing session cookies on every asset request. Workspace-local editable backend entrypoints are additionally workspace-admin gated until a dedicated app backend sandbox/governance model is available.
 
@@ -1660,6 +1664,7 @@ The core should not guess hook names or infer hook behavior from arbitrary files
 
 The contract should allow explicit timeout declarations for operations such as:
 
+- mounted backend entrypoint execution
 - install
 - upgrade
 - migrate
@@ -1669,7 +1674,7 @@ The contract should allow explicit timeout declarations for operations such as:
 - repair after import
 - health check
 
-This prevents non-deterministic hangs during platform lifecycle operations.
+This prevents non-deterministic hangs during platform lifecycle operations and lets long-running provider apps declare backend request budgets without changing the core's default timeout for ordinary apps.
 
 ### Failure semantics
 
@@ -1833,6 +1838,7 @@ The following example shows the kind of app contract Maverick should expect at p
     "workspace_modes": ["sandbox"]
   },
   "hook_timeouts": {
+    "backend_seconds": 30,
     "install_seconds": 60,
     "migrate_seconds": 300,
     "health_check_seconds": 30,

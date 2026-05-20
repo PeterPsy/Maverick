@@ -1,0 +1,14 @@
+{
+  "tools": {
+    "maverick_vault": {
+      "description": "Return Vault's redaction-safe agent operation manifest and the core secret surfaces it delegates to.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    }
+  }
+}

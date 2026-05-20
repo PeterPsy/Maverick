@@ -126,6 +126,10 @@ This keeps the core open to future adapters such as PostgreSQL, SQLite, or anoth
 
 The `core.secrets` domain is the platform-wide secret system. It owns encrypted secret value envelopes and authorization rules for delivering scoped values to apps, providers, runtime sessions, and platform infrastructure code.
 
+Apps and agents must persist only secret references, grant ids, logical names, and non-sensitive metadata. Raw secret values may be accepted only by platform-owned secret write or rotation surfaces, must be encrypted into the core secret store, and must never be returned to browser clients, ordinary CLI/MCP metadata calls, logs, workspace files, chat transcripts, or generated artifacts.
+
+App use is grant-based. A `SecretGrantRecord` binds a `secret_ref` to a workspace, app, logical name, allowed actions, optional target patterns, expiry, and audit metadata. Runtime resolution for app actions must validate the grant before decrypting the value, deliver the value only as ephemeral input to the controlled execution path, and record allow or deny audit events without including the raw value. Declared app-entrypoint delivery is fail-closed for every contract-declared logical name: a missing current grant is a denial with audit/event records, expired active grants are ignored for delivery and replacement selection, non-`app.backend` grants are ignored during entrypoint delivery candidate selection, and audit request context is allowlisted and bounded before persistence.
+
 The core must not introduce a separate product secret system for infrastructure credentials. Pre-adapter infrastructure secrets, such as a MongoDB password needed before a Mongo connection can be opened, may live in a local bootstrap secret store backed by the same `SecretDocumentStore` envelope format and the same secret key loader.
 
 Workspace agents must not receive filesystem access to `.env.maverick`, secret key files, bootstrap secret files, or raw control-plane secret value storage. Full-access sessions are operator break-glass sessions and should be treated as capable of reading host-level secrets.
@@ -1561,25 +1565,35 @@ Owns:
 - secret storage interfaces
 - secret resolution
 - binding logic
+- grant policy for app-scoped use
 
 The secrets layer should distinguish clearly between:
 
 - secret metadata and bindings
+- grants and policy decisions
 - raw secret values
 
-The domain and service layers should work primarily with references, bindings, aliases, and resolution results, not with persistent raw secret payloads.
+The domain and service layers should work primarily with references, bindings, aliases, grants, and resolution results, not with persistent raw secret payloads.
 
 Raw secret values must stay confined to controlled secret-store adapters and short-lived runtime delivery paths.
 
-The first implementation should therefore support:
+The first implementation supports:
 
 - platform-owned secret records and aliases
 - workspace-scoped, app-scoped, or provider-scoped secret bindings
+- app-scoped grants with logical names, action allowlists, structured HTTP/HTTPS or platform delivery target patterns, expiry, revocation, and actor metadata
 - controlled resolution for runtime use
-- app-scoped secret write and rotation requests from mounted app backend entrypoints, with raw values stripped before frontend responses
+- app-scoped secret write and rotation requests from mounted app backend entrypoints, with raw values stripped before frontend responses and explicit audit/event records for automatic secret create, rotate, and delivery-grant creation
+- grant-based ephemeral delivery into mounted app backend, CLI, and MCP entrypoint payloads for grants that allow the `app.backend` action, match the synthetic `maverick://app.backend/<surface>` target, and whose logical names are declared by the app contract, failing closed when any declared logical name lacks a current grant
+- admin HTTP surfaces for Vault to list metadata, create/import values, rotate, disable, revoke, manage grants, and inspect audit history without returning raw values
 - ephemeral secret delivery into provider launch paths under platform authority
 - operator inspection of metadata without exposing raw values
-- operator-facing CLI and policy-gated MCP hooks for create, inspection, rotation, disable, and revoke operations without ever returning raw secret values
+- operator-facing CLI and policy-gated MCP hooks for inspection and full-access create, rotation, disable, and revoke operations without ever returning raw secret values
+- audit records for create, rotate, disable, revoke, grant creation, grant revocation, resolve allow, and resolve deny
+
+Grant creation must validate that the referenced secret exists and is active, the target app is installed, enabled, and surface-resolvable in the current workspace, `app.backend` logical names are declared by the target app under `permissions.secrets.read`, the logical name is unique among non-expired active grants for that app, optional expiry is in the future, and target patterns are either `*`, normalized HTTP/HTTPS URL patterns without query strings or fragments, or the platform delivery target family `maverick://app.backend/*`. Empty or omitted target patterns may default to `*` only for internal `app.backend` delivery grants; external or user-directed actions such as browser autofill require explicit target patterns. `*` is valid only for single-action grants; mixed-action grants must use explicit target patterns because targets are grant-wide rather than per-action. Query strings supplied by runtime targets are ignored for matching and stripped from persisted audit payloads. Disabling or revoking a secret explicitly revokes active grants linked to that secret and records cascade audit entries in each impacted grant workspace so Vault does not continue to present stale active grants. Secret grant target discovery belongs to an admin-only Core Secrets surface such as `/api/secret-grant-targets`; generic workspace app registry responses such as `/api/apps` must not expose secret permission logical names.
+
+Secret value envelopes use authenticated encryption. The JSON control-plane adapter stores values as AES-GCM envelopes with a value format, nonce, ciphertext, and key id; AAD binds the ciphertext to the value format, secret id, and key id. The active key comes from the operator-managed secret-store key material, and `MAVERICK_SECRET_STORE_PREVIOUS_KEYS` may provide previous decrypt-only keys during rotation. Legacy `mvr3secret1` values remain readable for migration.
 
 #### Recommended first file layout
 
@@ -1590,9 +1604,13 @@ secrets/
   store.py
   secret_store.py
   secret_bindings.py
+  grants.py
+  target_policy.py
+  policy.py
   secret_resolution.py
   service.py
-  routes.py  # only when real route wiring exists
+api/
+  secret_api.py
 ```
 
 Suggested responsibilities:
@@ -1600,6 +1618,7 @@ Suggested responsibilities:
 - `models.py`
   - `SecretRecord`
   - `SecretBindingRecord`
+  - `SecretGrantRecord`
   - `ResolvedSecretLease` or equivalent short-lived resolution result
 - `store.py`
   - storage-agnostic store contracts
@@ -1607,12 +1626,18 @@ Suggested responsibilities:
   - concrete secret persistence and encryption adapter wiring
 - `secret_bindings.py`
   - binding and alias logic separate from raw value persistence
+- `grants.py`
+  - grant creation, validation, listing, and revocation logic
+- `policy.py`
+  - action, target, app, workspace, expiry, and grant-status checks before resolution
+- `target_policy.py`
+  - structured target normalization, matching, and audit-safe target redaction
 - `secret_resolution.py`
   - controlled runtime resolution and delivery logic
 - `service.py`
   - orchestration across store, bindings, and resolution
-- `routes.py`
-  - operator-facing or policy-gated surface wiring only
+- `api/secret_api.py`
+  - admin-only HTTP surface used by Vault and platform UI clients; responses contain metadata or redacted leases only
 
 ### `recovery/`
 

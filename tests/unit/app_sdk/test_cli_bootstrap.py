@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import os
 import tempfile
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from core.app_sdk.cli import _bootstrap_options_for_cli, _bootstrap_state_for_cli
+from core.app_sdk.cli import _bootstrap_options_for_cli, _bootstrap_state_for_cli, main
 
 
 NO_RUNTIME_ENV = {
@@ -189,6 +191,17 @@ class CliBootstrapTests(unittest.TestCase):
 
         self.assertIs(state, light_state)
         bootstrap.assert_called_once()
+
+    def test_main_exits_nonzero_for_error_status_payload(self) -> None:
+        output = StringIO()
+
+        with patch("core.app_sdk.cli._bootstrap_state_for_cli", return_value=_state()):
+            with patch("core.app_sdk.cli.run_cli_json", return_value={"status_code": 400, "error": "unsupported"}):
+                with redirect_stdout(output):
+                    exit_code = main(["app", "vault", "cli", "run", "vault", "--action", "bad", "--json"])
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn('"status_code": 400', output.getvalue())
 
 
 if __name__ == "__main__":

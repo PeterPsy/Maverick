@@ -5,9 +5,10 @@ from __future__ import annotations
 from datetime import datetime
 
 from core.secrets.errors import SecretBindingError
-from core.secrets.models import ResolvedSecretLease, SecretBindingRecord, SecretRecord, SecretResolutionContext
+from core.secrets.grants import create_secret_grant, revoke_secret_grant
+from core.secrets.models import ResolvedSecretLease, SecretBindingRecord, SecretGrantRecord, SecretKind, SecretRecord, SecretResolutionContext
 from core.secrets.secret_bindings import bind_secret, resolve_active_binding
-from core.secrets.secret_resolution import resolve_secret_for_runtime
+from core.secrets.secret_resolution import resolve_secret_for_app_use, resolve_secret_for_runtime
 from core.secrets.secret_store import build_secret_ref, create_secret, disable_secret, revoke_secret, rotate_secret_value
 from core.secrets.store import SecretStore
 
@@ -20,6 +21,7 @@ def create_platform_secret(
     alias: str | None = None,
     description: str | None = None,
     secret_id: str | None = None,
+    kind: SecretKind = "generic",
     now: datetime | None = None,
 ) -> SecretRecord:
     """Create one platform-owned secret."""
@@ -30,6 +32,7 @@ def create_platform_secret(
         alias=alias,
         description=description,
         secret_id=secret_id,
+        kind=kind,
         now=now,
     )
 
@@ -132,6 +135,73 @@ def resolve_bound_secret(
     return resolve_secret_for_runtime(store, context=context, binding_id=binding_id)
 
 
+def grant_app_secret_use(
+    store: SecretStore,
+    *,
+    workspace_id: str,
+    app_id: str,
+    logical_name: str,
+    secret_ref: str,
+    actions: list[str],
+    target_patterns: list[str] | None = None,
+    grant_id: str | None = None,
+    expires_at: datetime | None = None,
+    created_by_user_id: str | None = None,
+    reason: str | None = None,
+    now: datetime | None = None,
+) -> SecretGrantRecord:
+    """Grant one app controlled use of a secret for scoped actions and targets."""
+    return create_secret_grant(
+        store,
+        workspace_id=workspace_id,
+        app_id=app_id,
+        logical_name=logical_name,
+        secret_ref=secret_ref,
+        actions=actions,
+        target_patterns=target_patterns,
+        grant_id=grant_id,
+        expires_at=expires_at,
+        created_by_user_id=created_by_user_id,
+        reason=reason,
+        now=now,
+    )
+
+
+def revoke_app_secret_grant(store: SecretStore, *, grant_id: str, now: datetime | None = None) -> SecretGrantRecord:
+    """Revoke one app secret-use grant."""
+    return revoke_secret_grant(store, grant_id=grant_id, now=now)
+
+
+def resolve_app_secret_grant(
+    store: SecretStore,
+    *,
+    workspace_id: str,
+    app_id: str,
+    grant_id: str,
+    action: str,
+    target: str | None = None,
+    runtime_session_id: str | None = None,
+    actor_user_id: str | None = None,
+    request_context: dict[str, str] | None = None,
+    observability_store=None,
+) -> ResolvedSecretLease:
+    """Resolve one app secret through an action and target scoped grant."""
+    return resolve_secret_for_app_use(
+        store,
+        context=SecretResolutionContext(
+            workspace_id=workspace_id,
+            app_id=app_id,
+            runtime_session_id=runtime_session_id,
+            action=action,
+            target=target,
+            actor_user_id=actor_user_id,
+            request_context=request_context,
+        ),
+        grant_id=grant_id,
+        observability_store=observability_store,
+    )
+
+
 def resolve_workspace_secret(
     store: SecretStore,
     *,
@@ -211,10 +281,13 @@ __all__ = [
     "build_secret_ref",
     "create_platform_secret",
     "disable_platform_secret",
+    "grant_app_secret_use",
+    "resolve_app_secret_grant",
     "resolve_app_secret",
     "resolve_bound_secret",
     "resolve_provider_secret",
     "resolve_workspace_secret",
     "revoke_platform_secret",
+    "revoke_app_secret_grant",
     "rotate_platform_secret",
 ]

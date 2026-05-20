@@ -11,6 +11,8 @@ SecretStatus = Literal["active", "disabled", "revoked"]
 SecretBindingStatus = Literal["active", "disabled"]
 SecretBindingScope = Literal["workspace", "app", "provider"]
 SecretRefKind = Literal["secret_id", "alias"]
+SecretKind = Literal["generic", "password", "api_key", "oauth_token", "private_key"]
+SecretGrantStatus = Literal["active", "revoked"]
 
 
 @dataclass(frozen=True)
@@ -24,6 +26,7 @@ class SecretRecord:
     status: SecretStatus
     created_at: datetime
     updated_at: datetime
+    kind: SecretKind = "generic"
 
 
 @dataclass(frozen=True)
@@ -62,6 +65,10 @@ class SecretResolutionContext:
     operator_request: bool = False
     allow_unbound_secret_refs: bool = False
     platform_delivery: bool = False
+    action: str | None = None
+    target: str | None = None
+    actor_user_id: str | None = None
+    request_context: dict[str, str] | None = None
 
 
 @dataclass(frozen=True)
@@ -75,3 +82,23 @@ class ResolvedSecretLease:
     value: str
     redacted_value: str
     issued_at: datetime
+    source_grant_id: str | None = None
+
+
+@dataclass(frozen=True)
+class SecretGrantRecord:
+    """Authorize one app to use a platform secret for scoped actions and targets."""
+
+    grant_id: str
+    workspace_id: str
+    app_id: str
+    secret_ref: str
+    logical_name: str
+    actions: list[str]
+    target_patterns: list[str]
+    status: SecretGrantStatus
+    created_at: datetime
+    updated_at: datetime
+    expires_at: datetime | None = None
+    created_by_user_id: str | None = None
+    reason: str | None = None

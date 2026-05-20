@@ -1,0 +1,161 @@
+{
+  "app_id": "vault",
+  "contract_version": "1.0",
+  "name": "Vault",
+  "version": "0.1.0",
+  "description": "Admin workspace app for managing platform-owned Core Secrets metadata, grants, rotation, revocation, and audit history.",
+  "publisher": "maverick",
+  "minimum_core_version": "0.1.0",
+  "provides": [
+    {
+      "interface": "platform.secrets.vault",
+      "version": "1",
+      "description": "Administrative view over Core Secrets.",
+      "surfaces": [
+        "view",
+        "widget",
+        "cli",
+        "mcp"
+      ]
+    }
+  ],
+  "requires": [],
+  "distribution": {
+    "mode": "sealed",
+    "source_access": "none"
+  },
+  "visibility": {
+    "platform_roles": [
+      "admin"
+    ]
+  },
+  "presentation": {
+    "frontend_role": "workspace"
+  },
+  "permissions": {
+    "secrets": {
+      "read": [],
+      "write": []
+    },
+    "network": {
+      "outbound": []
+    },
+    "runtime": {
+      "create_sessions": false,
+      "cleanup_sessions": false
+    },
+    "host": {
+      "telemetry": false
+    }
+  },
+  "capabilities": {
+    "mcp_tools": [
+      "maverick_vault"
+    ],
+    "cli_commands": [
+      "vault"
+    ],
+    "skills": [
+      "vault-ops"
+    ],
+    "views": [
+      "vault"
+    ],
+    "data_events": [],
+    "view_surfaces": [],
+    "reference_entities": []
+  },
+  "widgets": [
+    {
+      "widget_id": "vault-sidebar",
+      "host": "base-shell",
+      "content_kinds": [
+        "shell.sidebar.primary"
+      ],
+      "frontend": {
+        "kind": "iframe",
+        "mount": "frontend/dist/widgets/vault-sidebar",
+        "spa_fallback": true
+      },
+      "actions": {
+        "backend": false,
+        "mcp": false,
+        "cli": false
+      }
+    },
+    {
+      "widget_id": "vault-sidebar-footer",
+      "host": "base-shell",
+      "content_kinds": [
+        "shell.sidebar.footer"
+      ],
+      "frontend": {
+        "kind": "iframe",
+        "mount": "frontend/dist/widgets/vault-sidebar-footer",
+        "spa_fallback": true
+      },
+      "actions": {
+        "backend": false,
+        "mcp": false,
+        "cli": false
+      }
+    }
+  ],
+  "entrypoints": {
+    "mcp": "mcp/server.py",
+    "cli": "cli/app_cli.py",
+    "backend": null,
+    "frontend": "frontend/dist",
+    "skills_root": "skills",
+    "hooks": {}
+  },
+  "storage": {
+    "storage_kind": "none",
+    "data_schema_version": "1",
+    "primary_paths": [],
+    "indices": null,
+    "supports_export": false,
+    "supports_import": false,
+    "supports_migrations": false
+  },
+  "compatibility": {
+    "workspace_modes": [
+      "sandbox"
+    ]
+  },
+  "hook_timeouts": {
+    "install_seconds": 60,
+    "upgrade_seconds": 120,
+    "migrate_seconds": 300,
+    "export_seconds": 120,
+    "import_seconds": 120,
+    "validate_after_import_seconds": 60,
+    "repair_after_import_seconds": 180,
+    "health_check_seconds": 30
+  },
+  "lifecycle": {
+    "install": false,
+    "upgrade": true,
+    "uninstall": false,
+    "migrate": false,
+    "export": false,
+    "import": false,
+    "validate_after_import": false,
+    "repair_after_import": false,
+    "health_check": false
+  },
+  "health_contract": {
+    "mode": "none",
+    "degraded_on_failure": true
+  },
+  "failure_semantics": {
+    "install_failure": "block_activation",
+    "migrate_failure": "preserve_data_mark_unhealthy",
+    "import_failure": "preserve_payload_mark_failed"
+  },
+  "rollback_support": {
+    "bundle": false,
+    "data": false,
+    "repair_only": false
+  }
+}

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from core.api.http import StartResponse, json_response, read_json_body
+from core.api.http import StartResponse, json_response, read_json_body, status_line
 from core.api.platform_state import PlatformState
 from core.app_sdk.cli import run_cli_json
 from core.authorization.errors import AuthorizationError
@@ -65,14 +65,18 @@ def handle_runtime_cli_api(
         runtime_session_id=session.session_id,
     )
     try:
+        result = run_cli_json(
+            trusted_argv,
+            state=state,
+            repository_root=start_path,
+            trusted_context=trusted_context,
+        )
+        result_status_code = result.get("status_code")
+        response_status = status_line(result_status_code) if isinstance(result_status_code, int) and result_status_code >= 400 else "200 OK"
         return json_response(
             start_response,
-            run_cli_json(
-                trusted_argv,
-                state=state,
-                repository_root=start_path,
-                trusted_context=trusted_context,
-            ),
+            result,
+            status=response_status,
         )
     except SystemExit as error:
         detail = str(error) or "CLI command failed."

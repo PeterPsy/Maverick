@@ -5,17 +5,19 @@ from __future__ import annotations
 import json
 import logging
 import mimetypes
-from pathlib import Path
 import re
+from pathlib import Path
+import uuid
 from typing import Any
 
 from core.api.app_event_publication import declared_data_event_resources, publish_declared_app_events
 from core.api.app_runtime_cleanup_requests import apply_runtime_cleanup_requests
 from core.api.app_registry import enabled_app_items, resolve_app_surface
-from core.api.http import StartResponse, json_response, query_params, read_json_body, status_line, text_response
+from core.api.http import StartResponse, json_response, max_json_body_bytes, query_params, read_json_body, read_request_body_bytes, status_line, text_response
 from core.api.platform_state import PlatformState
 from core.apps.dependencies import resolve_app_dependencies
 from core.apps.errors import AppHostingError, WorkspaceAppBindingNotFoundError
+from core.apps.models import ParsedAppContract
 from core.apps.runtime_requests import apply_app_runtime_requests
 from core.apps.service import build_workspace_app_frontend
 from core.authorization.errors import AuthorizationError
@@ -30,6 +32,10 @@ from core.identity.models import UserRecord
 
 
 logger = logging.getLogger(__name__)
+
+APP_BACKEND_BINARY_BODY_LIMITS = {
+    "speech": 700_000,
+}
 
 
 _PUBLIC_STATIC_EXTENSIONS = {
@@ -314,7 +320,12 @@ def handle_app_backend(
     backend = parsed.contract.entrypoints.backend
     if backend is None:
         return text_response(start_response, "App backend not found", status="404 Not Found")
-    body = read_json_body(environ)
+    try:
+        body, body_file = _read_backend_body(environ, data_root=binding.data_root, app_id=parsed.app_id)
+    except Exception as error:
+        if hasattr(error, "error") and hasattr(error, "status"):
+            return json_response(start_response, {"error": error.error}, status=error.status)
+        raise
     provider_id = None
     try:
         provider, _selection = resolve_provider_for_workspace(state.provider_store, workspace_id=workspace_id)
@@ -338,6 +349,7 @@ def handle_app_backend(
                 "query": query_params(environ),
                 "headers": {"content_type": environ.get("CONTENT_TYPE", "")},
                 "body": body,
+                "body_file": body_file or {},
                 "provider_id": provider_id,
                 "app_dependencies": _app_dependencies_payload(
                     state,
@@ -364,11 +376,18 @@ def handle_app_backend(
                 ),
             },
             cwd=source_root,
+            timeout_seconds=backend_entrypoint_timeout_seconds(parsed),
             shutdown_controller=shutdown_controller,
         )
     except Exception as error:
         logger.exception("App `%s` backend entrypoint failed in workspace `%s`.", app_id, workspace_id)
         return json_response(start_response, {"error": "app_backend_failed"}, status=status_line(500))
+    finally:
+        if body_file and body_file.get("path"):
+            try:
+                Path(str(body_file["path"])).unlink()
+            except FileNotFoundError:
+                pass
     try:
         secret_results = _apply_app_secret_writes(
             state,
@@ -432,6 +451,28 @@ def handle_app_backend(
     if "body" in result:
         return text_response(start_response, str(result["body"]), status=status_line(status_code))
     return json_response(start_response, result, status=status_line(status_code))
+
+
+def backend_entrypoint_timeout_seconds(parsed: ParsedAppContract) -> int:
+    return int(parsed.contract.hook_timeouts.backend_seconds)
+
+
+def _read_backend_body(environ: dict, *, data_root: str, app_id: str = "") -> tuple[dict[str, Any], dict[str, Any] | None]:
+    content_type = str(environ.get("CONTENT_TYPE") or "").split(";", 1)[0].strip().lower()
+    if not content_type or content_type == "application/json":
+        return read_json_body(environ), None
+    raw = read_request_body_bytes(environ, max_bytes=app_backend_binary_body_limit(app_id))
+    if not raw:
+        return {}, None
+    body_dir = Path(data_root) / "run" / "http-body"
+    body_dir.mkdir(parents=True, exist_ok=True)
+    body_path = body_dir / f"body-{uuid.uuid4().hex}.bin"
+    body_path.write_bytes(raw)
+    return {}, {"path": str(body_path), "content_type": content_type, "size_bytes": len(raw)}
+
+
+def app_backend_binary_body_limit(app_id: str) -> int:
+    return APP_BACKEND_BINARY_BODY_LIMITS.get(app_id, max_json_body_bytes())
 
 
 def _app_dependencies_payload(

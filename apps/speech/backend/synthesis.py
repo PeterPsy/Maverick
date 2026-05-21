@@ -4,30 +4,66 @@ from __future__ import annotations
 
 import base64
 from datetime import UTC, datetime
+import hashlib
+import json
+import os
 from pathlib import Path
+import tempfile
+import time
 import uuid
 
 from engines import resolve_local_tts_engine as resolve_local_engine
 from engines import run_local_tts_engine as run_local_engine
+from engines import tts_engine_cache_fingerprint
 from errors import SpeechProviderUnavailableError, SpeechValidationError
-from models import DEFAULT_RATE, DEFAULT_VOICE, MAX_AUDIO_BYTES, MAX_RATE, MAX_TEXT_CHARS, MIN_RATE
-from store import append_job
+from models import (
+    DEFAULT_RATE,
+    DEFAULT_VOICE,
+    MAX_AUDIO_BYTES,
+    MAX_RATE,
+    MAX_TEXT_CHARS,
+    MIN_RATE,
+    TTS_CACHE_MAX_AGE_SECONDS,
+    TTS_CACHE_MAX_BYTES,
+    TTS_CACHE_CLEANUP_INTERVAL_SECONDS,
+    TTS_CACHE_MAX_FILES,
+)
+from store import append_job, read_settings
 
 
 def synthesize_payload(*, data_root: Path, generated_storage_root: Path, body: dict) -> dict:
     text = normalized_text(body.get("text"))
-    voice = normalized_voice(body.get("voice"))
+    requested_voice = normalized_voice(body.get("voice"), default="")
     rate = normalized_rate(body.get("rate"))
-    engine = resolve_local_engine()
+    output_format = normalized_output_format(body.get("format"))
+    settings = read_settings(data_root)
+    engine = resolve_local_engine(settings)
     if engine is None:
-        raise SpeechProviderUnavailableError("No local TTS engine is available for Speech synthesis.")
+        requested = str(settings.get("synthesis_engine") or "auto")
+        raise SpeechProviderUnavailableError(f"No local TTS engine is available for Speech synthesis. Requested engine: {requested}.")
 
-    audio = run_local_engine(engine, text=text, voice=voice, rate=rate)
-    if len(audio) > MAX_AUDIO_BYTES:
-        raise SpeechValidationError(
-            "Synthesized audio exceeds the response size limit.",
-            allowed_values={"max_audio_bytes": [str(MAX_AUDIO_BYTES)]},
-        )
+    voice = selected_voice_id(engine, requested_voice)
+    cache_fingerprint = tts_engine_cache_fingerprint(engine, voice=voice)
+    cache_key = synthesis_cache_key(
+        engine=engine.name,
+        engine_fingerprint=cache_fingerprint,
+        text=text,
+        voice=voice,
+        rate=rate,
+        output_format=output_format,
+    )
+    audio = read_cached_synthesis(data_root, cache_key)
+    cache_hit = audio is not None
+    if audio is None:
+        audio = run_local_engine(engine, text=text, voice=voice or engine.voice_id or DEFAULT_VOICE, rate=rate, data_root=data_root)
+        validate_audio_size(audio)
+        write_cached_synthesis(data_root, cache_key, audio)
+        cache_cleaned = maybe_evict_synthesis_cache(data_root)
+        if not cache_cleaned:
+            enforce_synthesis_cache_size_limits(data_root)
+    else:
+        validate_audio_size(audio)
+        maybe_evict_synthesis_cache(data_root)
     job_id = f"tts_{uuid.uuid4().hex}"
     created_at = datetime.now(tz=UTC).isoformat()
     append_job(
@@ -40,9 +76,12 @@ def synthesize_payload(*, data_root: Path, generated_storage_root: Path, body: d
             "voice": voice,
             "rate": rate,
             "engine": engine.name,
+            "quality_profile": engine.quality_profile,
+            "latency_profile": engine.latency_profile,
             "content_type": "audio/wav",
             "size_bytes": len(audio),
-            "retention": "ephemeral",
+            "cache_hit": cache_hit,
+            "retention": "derived_cache",
         },
     )
     audio_base64 = base64.b64encode(audio).decode("ascii")
@@ -54,7 +93,14 @@ def synthesize_payload(*, data_root: Path, generated_storage_root: Path, body: d
         "size_bytes": len(audio),
         "text_chars": len(text),
         "engine": engine.name,
-        "retention": "ephemeral",
+        "voice": voice,
+        "rate": rate,
+        "format": output_format,
+        "quality_profile": engine.quality_profile,
+        "latency_profile": engine.latency_profile,
+        "cache_hit": cache_hit,
+        "cache": {"enabled": True, "retention": "derived", "exportable": False},
+        "retention": "derived_cache",
     }
 
 
@@ -74,11 +120,34 @@ def normalized_text(value: object) -> str:
     return text
 
 
-def normalized_voice(value: object) -> str:
-    voice = str(value or DEFAULT_VOICE).strip() or DEFAULT_VOICE
+def normalized_voice(value: object, *, default: str = DEFAULT_VOICE) -> str:
+    voice = str(value or default).strip() or default
     if any(part in voice for part in ("/", "\\", "\0")):
         raise SpeechValidationError("voice must be a local engine voice id, not a path.")
     return voice[:40]
+
+
+def selected_voice_id(engine: object, requested_voice: str) -> str:
+    voices = [item for item in getattr(engine, "voices", ()) if isinstance(item, dict)]
+    voice_ids = [str(item.get("voice_id") or "") for item in voices]
+    if requested_voice:
+        for item in voices:
+            voice_id = str(item.get("voice_id") or "")
+            aliases = {
+                voice_id,
+                str(item.get("language") or ""),
+                str(item.get("name") or ""),
+            }
+            if requested_voice in aliases:
+                return voice_id
+        if voice_ids:
+            raise SpeechValidationError(
+                "Unsupported voice for selected synthesis engine.",
+                operation="synthesize",
+                allowed_values={"voice": voice_ids},
+            )
+        return requested_voice
+    return str(getattr(engine, "voice_id", "") or DEFAULT_VOICE)
 
 
 def normalized_rate(value: object) -> int:
@@ -94,3 +163,146 @@ def normalized_rate(value: object) -> int:
             allowed_values={"rate": [f"{MIN_RATE}-{MAX_RATE}"]},
         )
     return rate
+
+
+def normalized_output_format(value: object) -> str:
+    output_format = str(value or "audio/wav").strip().lower()
+    if output_format in {"wav", "audio/wav", ""}:
+        return "audio/wav"
+    raise SpeechValidationError(
+        "Unsupported synthesis format.",
+        operation="synthesize",
+        allowed_values={"format": ["audio/wav"]},
+    )
+
+
+def synthesis_cache_key(*, engine: str, engine_fingerprint: dict, text: str, voice: str, rate: int, output_format: str) -> str:
+    payload = {
+        "engine": engine,
+        "engine_fingerprint": engine_fingerprint,
+        "format": output_format,
+        "rate": rate,
+        "text": text,
+        "voice": voice,
+    }
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+def synthesis_cache_path(data_root: Path, cache_key: str) -> Path:
+    return data_root / "cache" / "tts" / f"{cache_key}.wav"
+
+
+def read_cached_synthesis(data_root: Path, cache_key: str) -> bytes | None:
+    path = synthesis_cache_path(data_root, cache_key)
+    if not path.exists() or not path.is_file():
+        return None
+    try:
+        stat = path.stat()
+    except FileNotFoundError:
+        return None
+    if time.time() - stat.st_mtime > TTS_CACHE_MAX_AGE_SECONDS:
+        path.unlink(missing_ok=True)
+        return None
+    if stat.st_size > MAX_AUDIO_BYTES:
+        path.unlink(missing_ok=True)
+        return None
+    audio = path.read_bytes()
+    if len(audio) > MAX_AUDIO_BYTES:
+        path.unlink(missing_ok=True)
+        return None
+    return audio
+
+
+def write_cached_synthesis(data_root: Path, cache_key: str, audio: bytes) -> None:
+    validate_audio_size(audio)
+    path = synthesis_cache_path(data_root, cache_key)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(audio)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_name, path)
+    finally:
+        try:
+            os.unlink(temp_name)
+        except FileNotFoundError:
+            pass
+
+
+def maybe_evict_synthesis_cache(data_root: Path) -> bool:
+    cache_dir = data_root / "cache" / "tts"
+    if not cache_dir.exists():
+        return False
+    marker_path = cache_dir / ".last_cleanup"
+    now = time.time()
+    try:
+        marker_mtime = marker_path.stat().st_mtime
+    except FileNotFoundError:
+        marker_mtime = 0.0
+    if marker_mtime and now - marker_mtime < TTS_CACHE_CLEANUP_INTERVAL_SECONDS:
+        return False
+    evict_synthesis_cache(data_root)
+    marker_path.touch()
+    return True
+
+
+def validate_audio_size(audio: bytes) -> None:
+    if len(audio) > MAX_AUDIO_BYTES:
+        raise SpeechValidationError(
+            "Synthesized audio exceeds the response size limit.",
+            allowed_values={"max_audio_bytes": [str(MAX_AUDIO_BYTES)]},
+        )
+
+
+def evict_synthesis_cache(data_root: Path) -> None:
+    cache_dir = data_root / "cache" / "tts"
+    if not cache_dir.exists():
+        return
+    now = time.time()
+    entries = collect_synthesis_cache_entries(cache_dir)
+    bounded_entries: list[tuple[float, int, Path]] = []
+    for mtime, size_bytes, path in entries:
+        if size_bytes > MAX_AUDIO_BYTES or now - mtime > TTS_CACHE_MAX_AGE_SECONDS:
+            _unlink_cache_file(path)
+            continue
+        bounded_entries.append((mtime, size_bytes, path))
+    evict_synthesis_cache_entries(bounded_entries)
+
+
+def enforce_synthesis_cache_size_limits(data_root: Path) -> None:
+    cache_dir = data_root / "cache" / "tts"
+    if not cache_dir.exists():
+        return
+    evict_synthesis_cache_entries(collect_synthesis_cache_entries(cache_dir))
+
+
+def collect_synthesis_cache_entries(cache_dir: Path) -> list[tuple[float, int, Path]]:
+    entries: list[tuple[float, int, Path]] = []
+    for path in cache_dir.glob("*.wav"):
+        if not path.is_file():
+            continue
+        try:
+            stat = path.stat()
+        except FileNotFoundError:
+            continue
+        entries.append((stat.st_mtime, stat.st_size, path))
+    entries.sort(key=lambda item: item[0])
+    return entries
+
+
+def evict_synthesis_cache_entries(entries: list[tuple[float, int, Path]]) -> None:
+    total_bytes = sum(item[1] for item in entries)
+    while len(entries) > TTS_CACHE_MAX_FILES or total_bytes > TTS_CACHE_MAX_BYTES:
+        _, size_bytes, path = entries.pop(0)
+        if _unlink_cache_file(path):
+            total_bytes -= size_bytes
+
+
+def _unlink_cache_file(path: Path) -> bool:
+    try:
+        path.unlink()
+        return True
+    except FileNotFoundError:
+        return False

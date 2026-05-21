@@ -65,7 +65,13 @@
           "text": {"type": "string"},
           "segments": {"type": "array"},
           "language": {"type": "string"},
+          "language_probability": {"type": "number"},
           "duration_seconds": {"type": "number"},
+          "engine": {"type": "string"},
+          "model": {"type": "string"},
+          "profile": {"type": "string"},
+          "beam_size": {"type": "integer"},
+          "worker": {"type": "object"},
           "retention": {"type": "string"}
         }
       }

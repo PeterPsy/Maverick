@@ -1,13 +1,21 @@
 {
   "commands": {
     "speech": {
-      "description": "Inspect Speech operations and transcribe bounded workspace Storage audio files. Live microphone streaming is not exposed through CLI.",
+      "description": "Inspect Speech engine health/settings, report or explicitly prewarm persistent STT worker status, and transcribe bounded workspace Storage audio files. Live microphone streaming, inline audio payloads, and worker stop/reload are not exposed through CLI.",
       "argument_schema": {
         "type": "object",
         "properties": {
           "action": {
             "type": "string",
-            "enum": ["operations.manifest", "transcribe_file"],
+            "enum": [
+              "operations.manifest",
+              "list_engines",
+              "engine_health",
+              "get_settings",
+              "worker_status",
+              "prewarm_worker",
+              "transcribe_file"
+            ],
             "default": "operations.manifest",
             "description": "Speech app operation to run."
           },
@@ -22,6 +30,11 @@
           "language": {
             "type": "string",
             "description": "Optional short language code."
+          },
+          "include_voices": {
+            "type": "boolean",
+            "default": false,
+            "description": "Include full voice metadata for list_engines and engine_health. Defaults to false for compact CLI output."
           }
         },
         "required": [],

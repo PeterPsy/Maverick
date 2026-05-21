@@ -64,7 +64,12 @@
     ],
     "skills": [],
     "views": [],
-    "data_events": [],
+    "data_events": [
+      {
+        "resource": "configuration",
+        "description": "Emitted when workspace Speech engine settings change through official Speech backend surfaces."
+      }
+    ],
     "view_surfaces": [],
     "reference_entities": []
   },
@@ -97,6 +102,7 @@
     ]
   },
   "hook_timeouts": {
+    "backend_seconds": 300,
     "install_seconds": 60,
     "upgrade_seconds": 120,
     "migrate_seconds": 300,
@@ -111,7 +117,7 @@
     "upgrade": true,
     "uninstall": false,
     "migrate": false,
-    "export": false,
+    "export": true,
     "import": false,
     "validate_after_import": false,
     "repair_after_import": false,

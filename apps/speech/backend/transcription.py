@@ -12,21 +12,30 @@ import uuid
 import wave
 
 from engines import transcribe_audio_file
-from errors import SpeechValidationError
+from errors import SpeechProviderUnavailableError, SpeechValidationError
 from models import (
+    DEFAULT_INLINE_TRANSCRIPTION_PROFILE,
+    MAX_INLINE_TRANSCRIPTION_AUDIO_BYTES,
     MAX_TRANSCRIPTION_AUDIO_BYTES,
+    MAX_TRANSCRIPTION_FILE_AUDIO_BYTES,
     MAX_TRANSCRIPTION_SECONDS,
     MIN_TRANSCRIPTION_AUDIO_BYTES,
     SUPPORTED_TRANSCRIPTION_CONTENT_TYPES,
+    TRANSCRIPTION_PROFILE_MODELS,
 )
 from store import append_job, read_settings
 
 HALLUCINATION_TRANSCRIPTS = {
-    "thank you.",
-    "thanks for watching.",
-    "subscribe.",
-    "you",
+    "bye",
+    "goodbye",
+    "like and subscribe",
+    "please subscribe",
+    "subscribe",
+    "thanks for listening",
+    "thanks for watching",
+    "thank you",
 }
+COMPRESSED_AUDIO_CONTENT_TYPES = set(SUPPORTED_TRANSCRIPTION_CONTENT_TYPES) - {"audio/wav"}
 CONTENT_TYPE_EXTENSIONS = {
     "audio/flac": ".flac",
     "audio/m4a": ".m4a",
@@ -42,16 +51,63 @@ CONTENT_TYPE_EXTENSIONS = {
 
 
 def transcribe_audio_payload(*, data_root: Path, body: dict) -> dict:
-    content_type = normalized_transcription_content_type(body.get("content_type"))
-    audio = decoded_audio(body.get("audio_base64"))
+    content_type = normalized_transcription_content_type(body.get("content_type"), operation="transcribe_audio")
     language = normalized_language(body.get("language"))
+    profile = normalized_transcription_profile(body.get("profile"), operation="transcribe_audio")
+    body_file_path = str(body.get("_body_file_path") or "")
+    if body_file_path:
+        return transcribe_inline_body_file(
+            data_root=data_root,
+            audio_path=validated_inline_body_file_path(data_root, body_file_path),
+            content_type=content_type,
+            size_bytes=int(body.get("_body_file_size_bytes") or 0),
+            language=language,
+            profile=profile,
+        )
+    audio = decoded_audio(body.get("audio_base64"))
     return transcribe_bytes(
         data_root=data_root,
         audio=audio,
         content_type=content_type,
         language=language,
+        profile=profile,
         source={"kind": "inline"},
     )
+
+
+def transcribe_inline_body_file(
+    *,
+    data_root: Path,
+    audio_path: Path,
+    content_type: str,
+    size_bytes: int,
+    language: str,
+    profile: str,
+) -> dict:
+    if not audio_path.exists() or not audio_path.is_file():
+        raise SpeechValidationError("inline audio upload is unavailable.", operation="transcribe_audio")
+    actual_size = audio_path.stat().st_size
+    if size_bytes and size_bytes != actual_size:
+        raise SpeechValidationError("inline audio upload size changed before transcription.", operation="transcribe_audio")
+    validate_audio_size(actual_size, operation="transcribe_audio", max_audio_bytes=MAX_INLINE_TRANSCRIPTION_AUDIO_BYTES)
+    return transcribe_path(
+        data_root=data_root,
+        audio_path=audio_path,
+        content_type=content_type,
+        size_bytes=actual_size,
+        language=language,
+        profile=profile,
+        operation="transcribe_audio",
+        source={"kind": "inline", "transport": "binary"},
+    )
+
+
+def validated_inline_body_file_path(data_root: Path, value: str) -> Path:
+    audio_path = Path(value).resolve()
+    allowed_root = (data_root / "run" / "http-body").resolve()
+    if audio_path == allowed_root or allowed_root not in audio_path.parents:
+        raise SpeechValidationError("inline audio upload path is outside the Speech request body area.", operation="transcribe_audio")
+    return audio_path
 
 
 def transcribe_file_payload(
@@ -66,11 +122,11 @@ def transcribe_file_payload(
         uploaded_storage_root=uploaded_storage_root,
         body=body,
     )
-    content_type = normalized_transcription_content_type(body.get("content_type") or content_type_from_path(audio_path))
+    content_type = normalized_transcription_content_type(body.get("content_type") or content_type_from_path(audio_path), operation="transcribe_file")
     if not audio_path.exists() or not audio_path.is_file():
         raise SpeechValidationError("workspace_relative_path does not resolve to an audio file.", operation="transcribe_file")
     size_bytes = audio_path.stat().st_size
-    validate_audio_size(size_bytes, operation="transcribe_file")
+    validate_audio_size(size_bytes, operation="transcribe_file", max_audio_bytes=MAX_TRANSCRIPTION_FILE_AUDIO_BYTES)
     language = normalized_language(body.get("language"))
     return transcribe_path(
         data_root=data_root,
@@ -83,7 +139,7 @@ def transcribe_file_payload(
     )
 
 
-def transcribe_bytes(*, data_root: Path, audio: bytes, content_type: str, language: str, source: dict) -> dict:
+def transcribe_bytes(*, data_root: Path, audio: bytes, content_type: str, language: str, profile: str, source: dict) -> dict:
     extension = CONTENT_TYPE_EXTENSIONS[content_type]
     with tempfile.TemporaryDirectory(prefix="maverick-speech-stt-") as temp_dir:
         audio_path = Path(temp_dir) / f"input{extension}"
@@ -94,6 +150,7 @@ def transcribe_bytes(*, data_root: Path, audio: bytes, content_type: str, langua
             content_type=content_type,
             size_bytes=len(audio),
             language=language,
+            profile=profile,
             operation="transcribe_audio",
             source=source,
         )
@@ -108,10 +165,14 @@ def transcribe_path(
     language: str,
     operation: str,
     source: dict,
+    profile: str = "",
 ) -> dict:
-    preflight_duration_seconds = probe_audio_duration_seconds(audio_path)
+    preflight_duration_seconds = probe_audio_duration_seconds(audio_path, content_type=content_type)
     validate_audio_duration(preflight_duration_seconds, operation=operation)
     settings = read_settings(data_root)
+    if profile:
+        settings = {**settings, "transcription_profile": profile}
+    settings["_data_root"] = str(data_root)
     result = transcribe_audio_file(audio_path, settings=settings, language=language)
     cleaned_text = cleaned_transcript(str(result.get("text") or ""))
     duration_seconds = float(result.get("duration_seconds") or preflight_duration_seconds or 0.0)
@@ -132,6 +193,9 @@ def transcribe_path(
             "size_bytes": size_bytes,
             "duration_seconds": duration_seconds,
             "transcript_chars": len(cleaned_text),
+            "profile": str(result.get("profile") or ""),
+            "beam_size": int(result.get("beam_size") or 0),
+            "worker": result.get("worker") if isinstance(result.get("worker"), dict) else {},
             "source": source,
             "retention": "metadata_only",
         },
@@ -146,6 +210,9 @@ def transcribe_path(
         "duration_seconds": duration_seconds,
         "engine": str(result.get("engine") or ""),
         "model": str(result.get("model") or ""),
+        "profile": str(result.get("profile") or ""),
+        "beam_size": int(result.get("beam_size") or 0),
+        "worker": result.get("worker") if isinstance(result.get("worker"), dict) else {},
         "content_type": content_type,
         "size_bytes": size_bytes,
         "retention": "metadata_only",
@@ -163,22 +230,22 @@ def decoded_audio(value: object) -> bytes:
         audio = base64.b64decode(value, validate=True)
     except ValueError as error:
         raise SpeechValidationError("audio_base64 must be valid base64.", operation="transcribe_audio") from error
-    validate_audio_size(len(audio), operation="transcribe_audio")
+    validate_audio_size(len(audio), operation="transcribe_audio", max_audio_bytes=MAX_INLINE_TRANSCRIPTION_AUDIO_BYTES)
     return audio
 
 
-def validate_audio_size(size_bytes: int, *, operation: str) -> None:
+def validate_audio_size(size_bytes: int, *, operation: str, max_audio_bytes: int = MAX_TRANSCRIPTION_AUDIO_BYTES) -> None:
     if size_bytes < MIN_TRANSCRIPTION_AUDIO_BYTES:
         raise SpeechValidationError(
             "audio is too small to transcribe.",
             operation=operation,
             allowed_values={"min_audio_bytes": [str(MIN_TRANSCRIPTION_AUDIO_BYTES)]},
         )
-    if size_bytes > MAX_TRANSCRIPTION_AUDIO_BYTES:
+    if size_bytes > max_audio_bytes:
         raise SpeechValidationError(
-            f"audio must be at most {MAX_TRANSCRIPTION_AUDIO_BYTES} bytes.",
+            f"audio must be at most {max_audio_bytes} bytes.",
             operation=operation,
-            allowed_values={"max_audio_bytes": [str(MAX_TRANSCRIPTION_AUDIO_BYTES)]},
+            allowed_values={"max_audio_bytes": [str(max_audio_bytes)]},
         )
 
 
@@ -193,12 +260,14 @@ def validate_audio_duration(duration_seconds: float | None, *, operation: str) -
         )
 
 
-def probe_audio_duration_seconds(audio_path: Path) -> float | None:
+def probe_audio_duration_seconds(audio_path: Path, *, content_type: str = "") -> float | None:
     wav_duration = probe_wav_duration_seconds(audio_path)
     if wav_duration is not None:
         return wav_duration
     ffprobe = shutil.which("ffprobe")
     if not ffprobe:
+        if content_type in COMPRESSED_AUDIO_CONTENT_TYPES:
+            raise SpeechProviderUnavailableError("ffprobe is required to validate compressed audio duration before transcription.")
         return None
     try:
         result = subprocess.run(
@@ -239,29 +308,46 @@ def probe_wav_duration_seconds(audio_path: Path) -> float | None:
         return None
 
 
-def normalized_transcription_content_type(value: object) -> str:
+def normalized_transcription_content_type(value: object, *, operation: str) -> str:
     content_type = str(value or "").split(";", 1)[0].strip().lower()
     if content_type not in SUPPORTED_TRANSCRIPTION_CONTENT_TYPES:
         raise SpeechValidationError(
             "Unsupported audio content_type.",
-            operation="transcribe_audio",
+            operation=operation,
             allowed_values={"content_type": SUPPORTED_TRANSCRIPTION_CONTENT_TYPES},
         )
     return content_type
 
 
 def normalized_language(value: object) -> str:
-    language = str(value or "").strip().lower()
+    language = str(value or "").strip().lower().replace("_", "-")
     if not language:
         return ""
-    if len(language) > 12 or any(part in language for part in ("/", "\\", "\0", " ")):
+    if len(language) > 35 or any(part in language for part in ("/", "\\", "\0", " ")):
         raise SpeechValidationError("language must be a short language code.", operation="transcribe_audio")
-    return language
+    primary_subtag = language.split("-", 1)[0]
+    if not primary_subtag.isalpha() or len(primary_subtag) < 2 or len(primary_subtag) > 3:
+        raise SpeechValidationError("language must start with an ISO language code.", operation="transcribe_audio")
+    return primary_subtag
+
+
+def normalized_transcription_profile(value: object, *, operation: str) -> str:
+    profile = str(value or "").strip().lower()
+    if not profile:
+        return DEFAULT_INLINE_TRANSCRIPTION_PROFILE
+    if profile not in TRANSCRIPTION_PROFILE_MODELS:
+        raise SpeechValidationError(
+            "Unsupported transcription profile.",
+            operation=operation,
+            allowed_values={"profile": sorted(TRANSCRIPTION_PROFILE_MODELS)},
+        )
+    return profile
 
 
 def cleaned_transcript(text: str) -> str:
     transcript = " ".join(text.replace("\r\n", "\n").replace("\r", "\n").split()).strip()
-    if transcript.lower() in HALLUCINATION_TRANSCRIPTS:
+    normalized = transcript.lower().strip(" .!?")
+    if normalized in HALLUCINATION_TRANSCRIPTS:
         return ""
     return transcript
 
@@ -281,12 +367,6 @@ def resolve_workspace_audio_path(
         if root is not None and workspace_relative_path.startswith(prefix):
             relative = workspace_relative_path.removeprefix(prefix)
             return safe_child_path(root, relative)
-    role = str(body.get("storage_role") or "").strip()
-    relative_path = str(body.get("relative_path") or "").strip()
-    if role == "generated" and relative_path:
-        return safe_child_path(generated_storage_root, relative_path)
-    if role == "uploaded" and relative_path and uploaded_storage_root is not None:
-        return safe_child_path(uploaded_storage_root, relative_path)
     raise SpeechValidationError(
         "workspace_relative_path must be under storage/uploaded/ or storage/generated/.",
         operation="transcribe_file",

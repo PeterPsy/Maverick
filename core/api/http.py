@@ -84,14 +84,7 @@ def text_response(
 
 def read_json_body(environ: dict) -> dict[str, Any]:
     """Read one JSON request body."""
-    try:
-        length = int(environ.get("CONTENT_LENGTH") or "0")
-    except ValueError as exc:
-        raise HttpRequestError("invalid_content_length", "400 Bad Request") from exc
-    max_bytes = max_json_body_bytes()
-    if length > max_bytes:
-        raise HttpRequestError("request_body_too_large", "413 Payload Too Large")
-    raw = environ["wsgi.input"].read(length) if length > 0 else b""
+    raw = read_request_body_bytes(environ)
     if not raw:
         return {}
     try:
@@ -101,6 +94,18 @@ def read_json_body(environ: dict) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise HttpRequestError("json_body_must_be_object", "400 Bad Request")
     return payload
+
+
+def read_request_body_bytes(environ: dict, *, max_bytes: int | None = None) -> bytes:
+    """Read one bounded raw request body."""
+    try:
+        length = int(environ.get("CONTENT_LENGTH") or "0")
+    except ValueError as exc:
+        raise HttpRequestError("invalid_content_length", "400 Bad Request") from exc
+    limit = max_bytes if max_bytes is not None else max_json_body_bytes()
+    if length > limit:
+        raise HttpRequestError("request_body_too_large", "413 Payload Too Large")
+    return environ["wsgi.input"].read(length) if length > 0 else b""
 
 
 def max_json_body_bytes() -> int:

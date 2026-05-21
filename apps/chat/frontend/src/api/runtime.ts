@@ -1,0 +1,159 @@
+import { ApiError, requestJson } from "./http";
+import type {
+  AppReference,
+  ChatMessageAttachment,
+  ChatThread,
+  RuntimeEvent,
+  RuntimeSession,
+  RuntimeSessionOptions,
+  RuntimeTurn,
+  RuntimeWebSocketFrame,
+  UploadedWorkspaceFile,
+} from "./types";
+
+export function isRuntimeSessionUnavailableError(error: unknown, sessionId?: string): boolean {
+  if (!(error instanceof ApiError)) {
+    return false;
+  }
+  if (error.status !== 403 && error.status !== 404) {
+    return false;
+  }
+  const runtimePathPrefix = sessionId
+    ? `/api/runtime/sessions/${encodeURIComponent(sessionId)}`
+    : "/api/runtime/sessions/";
+  return error.path.startsWith(runtimePathPrefix);
+}
+
+export function createRuntimeSession(options: RuntimeSessionOptions = {}): Promise<RuntimeSession> {
+  return requestJson<RuntimeSession>("/api/runtime/sessions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      agent_id: options.agent_id || "chat",
+      agent_role_id: options.agent_role_id || "",
+      agent_type_id: options.agent_type_id || "",
+      project_id: options.project_id || null,
+      source_app_id: options.source_app_id || "chat",
+      system_prompt: options.system_prompt || undefined,
+      skill_catalog_app_id: options.skill_catalog_app_id || undefined,
+      skill_ids: options.skill_ids || [],
+      title: options.title || "New chat",
+    }),
+  });
+}
+
+function serializableMessageAttachments(attachments: ChatMessageAttachment[]) {
+  return attachments.map(({ objectUrl: _objectUrl, ...attachment }) => attachment);
+}
+
+export function createRuntimeSessionWithTurn({
+  appReferences = [],
+  attachments = [],
+  clientMessageId,
+  inputText,
+  options = {},
+}: {
+  appReferences?: AppReference[];
+  attachments?: ChatMessageAttachment[];
+  clientMessageId?: string;
+  inputText: string;
+  options?: RuntimeSessionOptions;
+}): Promise<{
+  session: RuntimeSession;
+  thread?: ChatThread;
+  turn: RuntimeTurn;
+  events: RuntimeEvent[];
+}> {
+  const body: Record<string, unknown> = {
+    agent_id: options.agent_id || "chat",
+    agent_role_id: options.agent_role_id || "",
+    agent_type_id: options.agent_type_id || "",
+    project_id: options.project_id || null,
+    source_app_id: options.source_app_id || "chat",
+    system_prompt: options.system_prompt || undefined,
+    skill_catalog_app_id: options.skill_catalog_app_id || undefined,
+    skill_ids: options.skill_ids || [],
+    title: options.title || "New chat",
+    input_text: inputText,
+    client_message_id: clientMessageId,
+    attachments: serializableMessageAttachments(attachments),
+    async: true,
+  };
+  if (appReferences.length) {
+    body.app_references = appReferences;
+  }
+  return requestJson("/api/runtime/sessions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export function runtimeWebSocketUrl(sessionId: string, lastEventId?: string | null): string {
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const url = new URL(`${protocol}//${window.location.host}/ws/runtime/sessions/${encodeURIComponent(sessionId)}`);
+  if (lastEventId) {
+    url.searchParams.set("last_event_id", lastEventId);
+  }
+  return url.toString();
+}
+
+export function runtimeEventFromWebSocketFrame(frame: RuntimeWebSocketFrame): RuntimeEvent | null {
+  return frame.type === "runtime.event" ? frame.event : null;
+}
+
+export function runtimeThreadWebSocketUrl(): string {
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return `${protocol}//${window.location.host}/ws/runtime/threads`;
+}
+
+export function sendRuntimeTurn(
+  sessionId: string,
+  inputText: string,
+  clientMessageId?: string,
+  attachments: ChatMessageAttachment[] = [],
+  appReferences: AppReference[] = [],
+): Promise<{
+  session: RuntimeSession;
+  thread?: ChatThread;
+  turn: RuntimeTurn;
+  events: RuntimeEvent[];
+}> {
+  const body: Record<string, unknown> = {
+    input_text: inputText,
+    client_message_id: clientMessageId,
+    attachments: serializableMessageAttachments(attachments),
+    async: true,
+  };
+  if (appReferences.length) {
+    body.app_references = appReferences;
+  }
+  return requestJson(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/turns`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export function uploadWorkspaceFile(payload: {
+  filename: string;
+  content_type: string;
+  content_base64: string;
+}): Promise<{ file: UploadedWorkspaceFile }> {
+  return requestJson<{ file: UploadedWorkspaceFile }>("/api/workspace-files/uploads", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function interruptRuntimeTurn(turnId: string): Promise<{
+  turn: RuntimeTurn;
+  event?: RuntimeEvent;
+  interrupted: boolean;
+}> {
+  return requestJson(`/api/runtime/turns/${encodeURIComponent(turnId)}/interrupt`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+}

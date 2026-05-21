@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fallbackMatchesForAppReference } from "./ChatTranscript";
+import { fallbackMatchesForAppReference } from "../lib/messageReferenceMatches";
 import type { AppReference } from "../api/client";
 
 describe("chat transcript reference fallback matches", () => {

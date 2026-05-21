@@ -5,7 +5,7 @@ import { act, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, transcribeSpeech } from "../api/client";
+import { ApiError, transcribeSpeechBlob } from "../api/client";
 import type { AgentTypeSummary, AppReference, ProviderItem } from "../api/client";
 import type { MentionItem } from "../lib/mentions";
 import { ChatComposer } from "./ChatComposer";
@@ -14,7 +14,7 @@ vi.mock("../api/client", async () => {
   const actual = await vi.importActual<typeof import("../api/client")>("../api/client");
   return {
     ...actual,
-    transcribeSpeech: vi.fn(),
+    transcribeSpeechBlob: vi.fn(),
   };
 });
 
@@ -118,7 +118,7 @@ let root: Root | null = null;
 let container: HTMLDivElement | null = null;
 
 afterEach(() => {
-  vi.mocked(transcribeSpeech).mockReset();
+  vi.mocked(transcribeSpeechBlob).mockReset();
   root?.unmount();
   root = null;
   container?.remove();
@@ -142,6 +142,7 @@ afterEach(() => {
 async function renderComposer({
   agentOptions = agents,
   onAddAttachments = () => undefined,
+  mentionItems = [],
   onReferenceAdd = () => undefined,
   onSearchReferences = async () => [],
   onSelectAgent = () => undefined,
@@ -150,6 +151,7 @@ async function renderComposer({
   transcriptionProviderAvailable = false,
 }: {
   agentOptions?: AgentTypeSummary[];
+  mentionItems?: MentionItem[];
   onAddAttachments?: (files: File[]) => void;
   onReferenceAdd?: (reference: AppReference) => void;
   onSearchReferences?: (query: string, signal: AbortSignal) => Promise<MentionItem[]>;
@@ -176,7 +178,7 @@ async function renderComposer({
         error={null}
         executionMode={null}
         isSending={false}
-        mentionItems={[]}
+        mentionItems={mentionItems}
         onAddAttachments={onAddAttachments}
         onChange={(nextValue) => {
           latestValue = nextValue;
@@ -469,6 +471,27 @@ describe("ChatComposer reference search", () => {
     expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps a completed app mention from reopening the picker before submit", async () => {
+    mockMobileInput(false);
+    const onSubmit = vi.fn();
+    const onSearchReferences = vi.fn(async () => []);
+    const storageApp: MentionItem = {
+      id: "storage",
+      label: "Storage",
+      description: "Files and folders",
+      kind: "app",
+    };
+    const { element } = await renderComposer({ mentionItems: [storageApp], onSearchReferences, onSubmit });
+
+    await typeInEditor("@Storage message");
+    expect(element.querySelector('[aria-label="Search apps and references"]')).toBeNull();
+
+    await keyDownEditor({ key: "Enter" });
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(onSearchReferences).not.toHaveBeenCalled();
+  });
+
   it("normalizes pasted multiline text as plain composer text", async () => {
     const { getValue } = await renderComposer();
     await typeInEditor("first");
@@ -505,7 +528,7 @@ describe("ChatComposer reference search", () => {
       transcriptionProviderAvailable: true,
     });
     const media = mockMediaRecorder();
-    vi.mocked(transcribeSpeech).mockResolvedValue({ text: "Hello transcript", retention: "metadata_only" });
+    vi.mocked(transcribeSpeechBlob).mockResolvedValue({ text: "Hello transcript", retention: "metadata_only" });
 
     await act(async () => {
       element.querySelector<HTMLButtonElement>('[aria-label="Dictate"]')?.click();
@@ -518,7 +541,7 @@ describe("ChatComposer reference search", () => {
       await Promise.resolve();
     });
     await waitForComposerAssertion(() => {
-      expect(transcribeSpeech).toHaveBeenCalledWith("speech", expect.any(String), "audio/webm", { language: undefined, profile: "fast" });
+      expect(transcribeSpeechBlob).toHaveBeenCalledWith("speech", expect.any(Blob), { language: undefined, profile: "fast" });
       expect(getValue()).toBe("Hello transcript");
     });
 
@@ -535,7 +558,7 @@ describe("ChatComposer reference search", () => {
       transcriptionProviderAvailable: true,
     });
     mockMediaRecorder();
-    vi.mocked(transcribeSpeech)
+    vi.mocked(transcribeSpeechBlob)
       .mockResolvedValueOnce({ text: "Primo testo", language: "it", language_probability: 0.95, retention: "metadata_only" })
       .mockResolvedValueOnce({ text: "Secondo testo", language: "it", language_probability: 0.96, retention: "metadata_only" })
       .mockResolvedValueOnce({ text: "Third text", language: "en", language_probability: 0.93, retention: "metadata_only" });
@@ -550,7 +573,7 @@ describe("ChatComposer reference search", () => {
       await Promise.resolve();
     });
     await waitForComposerAssertion(() => {
-      expect(transcribeSpeech).toHaveBeenCalledTimes(1);
+      expect(transcribeSpeechBlob).toHaveBeenCalledTimes(1);
       expect(getValue()).toBe("Primo testo");
     });
 
@@ -565,8 +588,8 @@ describe("ChatComposer reference search", () => {
     });
 
     await waitForComposerAssertion(() => {
-      expect(transcribeSpeech).toHaveBeenNthCalledWith(1, "speech", expect.any(String), "audio/webm", { language: undefined, profile: "fast" });
-      expect(transcribeSpeech).toHaveBeenNthCalledWith(2, "speech", expect.any(String), "audio/webm", { language: "it", profile: "fast" });
+      expect(transcribeSpeechBlob).toHaveBeenNthCalledWith(1, "speech", expect.any(Blob), { language: undefined, profile: "fast" });
+      expect(transcribeSpeechBlob).toHaveBeenNthCalledWith(2, "speech", expect.any(Blob), { language: "it", profile: "fast" });
     });
 
     await act(async () => {
@@ -580,7 +603,7 @@ describe("ChatComposer reference search", () => {
     });
 
     await waitForComposerAssertion(() => {
-      expect(transcribeSpeech).toHaveBeenNthCalledWith(3, "speech", expect.any(String), "audio/webm", { language: undefined, profile: "fast" });
+      expect(transcribeSpeechBlob).toHaveBeenNthCalledWith(3, "speech", expect.any(Blob), { language: undefined, profile: "fast" });
     });
   });
 
@@ -609,7 +632,7 @@ describe("ChatComposer reference search", () => {
     });
     mockMicrophonePermission("denied");
     const media = mockMediaRecorder();
-    vi.mocked(transcribeSpeech).mockResolvedValue({ text: "Permission query was stale", retention: "metadata_only" });
+    vi.mocked(transcribeSpeechBlob).mockResolvedValue({ text: "Permission query was stale", retention: "metadata_only" });
 
     await act(async () => {
       element.querySelector<HTMLButtonElement>('[aria-label="Dictate"]')?.click();
@@ -651,7 +674,7 @@ describe("ChatComposer reference search", () => {
       transcriptionProviderAvailable: true,
     });
     mockMediaRecorder();
-    vi.mocked(transcribeSpeech).mockRejectedValue(new ApiError("provider_unavailable", { path: "/api/apps/speech/backend", status: 503 }));
+    vi.mocked(transcribeSpeechBlob).mockRejectedValue(new ApiError("provider_unavailable", { path: "/api/apps/speech/backend", status: 503 }));
 
     await act(async () => {
       element.querySelector<HTMLButtonElement>('[aria-label="Dictate"]')?.click();

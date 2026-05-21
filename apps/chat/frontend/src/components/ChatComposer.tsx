@@ -1,301 +1,55 @@
-import { ClipboardEvent, DragEvent, FormEvent, KeyboardEvent, PointerEvent as ReactPointerEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { Ref } from "react";
+import { FormEvent, KeyboardEvent, useRef, useState } from "react";
 import type { AgentTypeSummary, AppReference, ProviderItem } from "../api/client";
 import type { ComposerAttachment } from "../lib/attachments";
 import { hasInvalidAttachments } from "../lib/attachments";
-import { activeMentionAt, applyMention, filterMentionItems, findMentionTokens, mentionText, removeMentionToken } from "../lib/mentions";
-import { referenceKey } from "../lib/mentions";
-import type { MentionItem, MentionToken } from "../lib/mentions";
-import { mentionItemKindLabel } from "../lib/referenceKindLabels";
-import { hasStorageReferenceDragData, storageReferenceMentionItemsFromDataTransfer } from "../lib/storageDragReferences";
+import type { MentionItem } from "../lib/mentions";
+import { useComposerEditor } from "../hooks/useComposerEditor";
+import { useMentionPicker } from "../hooks/useMentionPicker";
+import { AgentSelector } from "./AgentSelector";
 import { AttachmentMenu } from "./AttachmentMenu";
 import { AttachmentPreviewStrip } from "./AttachmentPreviewStrip";
+import { ComposerActions } from "./ComposerActions";
 import { ComposerDictationButton } from "./ComposerDictationButton";
-import { ProviderSelector } from "./ProviderSelector";
+import { ComposerRuntimeBadges } from "./ComposerRuntimeBadges";
+import { MentionPanel } from "./MentionPanel";
+import { QueuedMessageNotice } from "./QueuedMessageNotice";
 
 export type ExecutionMode = "sandbox" | "full-access";
 
-type ComposerNode = ChildNode & {
-  dataset?: {
-    mentionText?: string;
-  };
+export type ChatComposerProps = {
+  activeProviderId: string;
+  agentSelectorLocked?: boolean;
+  agents: AgentTypeSummary[];
+  attachments: ComposerAttachment[];
+  canStopTurn: boolean;
+  disabled: boolean;
+  error: string | null;
+  executionMode: ExecutionMode | null;
+  isEmptyMode?: boolean;
+  isSending: boolean;
+  mentionItems: MentionItem[];
+  onAddAttachments: (files: File[]) => void;
+  onCapturePageArea?: () => void;
+  onChange: (value: string) => void;
+  onReferenceAdd?: (reference: AppReference) => void;
+  onReferenceRemove?: (reference: AppReference) => void;
+  onSearchReferences?: (query: string, signal: AbortSignal) => Promise<MentionItem[]>;
+  onSelectAgent: (agentTypeId: string) => void;
+  onSelectProvider: (providerId: string) => void;
+  onRemoveAttachment: (attachmentId: string) => void;
+  onStopTurn: () => void;
+  onSubmit: () => void;
+  providers: ProviderItem[];
+  queuedCount: number;
+  queuedPreview: string | null;
+  selectedAgentTypeId: string;
+  transcriptionProviderAppId?: string;
+  transcriptionProviderAvailable?: boolean;
+  transcriptionMaxAudioBytes?: number;
+  transcriptionMaxDurationSeconds?: number;
+  transcriptionContentTypes?: string[];
+  value: string;
 };
-
-const REFERENCE_SEARCH_ERROR_MESSAGE = "Unable to search apps or records. Try again or reload the page.";
-const APP_PICKER_REFERENCE_LIMIT = 16;
-
-function isAbortError(error: unknown): boolean {
-  return Boolean(error && typeof error === "object" && "name" in error && error.name === "AbortError");
-}
-
-function isElementNode(node: ChildNode): node is HTMLElement {
-  return node.nodeType === Node.ELEMENT_NODE;
-}
-
-function childNodes(node: Node): ComposerNode[] {
-  return Array.from(node.childNodes) as ComposerNode[];
-}
-
-function nodeMentionText(node: ChildNode): string | null {
-  return isElementNode(node) ? node.dataset.mentionText || null : null;
-}
-
-function textFromComposerNode(node: ChildNode): string {
-  const tokenText = nodeMentionText(node);
-  if (tokenText !== null) {
-    return tokenText;
-  }
-  if (node.nodeType === Node.TEXT_NODE) {
-    return node.textContent || "";
-  }
-  if (isElementNode(node) && node.tagName === "BR") {
-    return "\n";
-  }
-  return childNodes(node)
-    .map((child) => textFromComposerNode(child))
-    .join("");
-}
-
-function composerText(root: HTMLElement): string {
-  return childNodes(root)
-    .map((node) => textFromComposerNode(node))
-    .join("");
-}
-
-function caretOffsetInNode(root: HTMLElement, target: Node, targetOffset: number): number {
-  let offset = 0;
-  let found = false;
-
-  function visit(node: ChildNode): void {
-    if (found) {
-      return;
-    }
-    const tokenText = nodeMentionText(node);
-    if (tokenText !== null) {
-      if (node === target || node.contains(target)) {
-        offset += tokenText.length;
-        found = true;
-        return;
-      }
-      offset += tokenText.length;
-      return;
-    }
-    if (node.nodeType === Node.TEXT_NODE) {
-      if (node === target) {
-        offset += targetOffset;
-        found = true;
-        return;
-      }
-      offset += (node.textContent || "").length;
-      return;
-    }
-    if (isElementNode(node) && node.tagName === "BR") {
-      offset += 1;
-      return;
-    }
-    const children = childNodes(node);
-    if (node === target) {
-      for (let index = 0; index < Math.min(targetOffset, children.length); index += 1) {
-        offset += textFromComposerNode(children[index]).length;
-      }
-      found = true;
-      return;
-    }
-    children.forEach(visit);
-  }
-
-  childNodes(root).forEach(visit);
-  return offset;
-}
-
-function composerCaretOffset(root: HTMLElement): number {
-  const selection = window.getSelection();
-  if (!selection || selection.rangeCount === 0 || !selection.anchorNode || !root.contains(selection.anchorNode)) {
-    return composerText(root).length;
-  }
-  return caretOffsetInNode(root, selection.anchorNode, selection.anchorOffset);
-}
-
-function composerSelectionOffsets(root: HTMLElement): { start: number; end: number } {
-  const selection = window.getSelection();
-  if (
-    !selection ||
-    selection.rangeCount === 0 ||
-    !selection.anchorNode ||
-    !selection.focusNode ||
-    !root.contains(selection.anchorNode) ||
-    !root.contains(selection.focusNode)
-  ) {
-    const end = composerText(root).length;
-    return { start: end, end };
-  }
-  const anchor = caretOffsetInNode(root, selection.anchorNode, selection.anchorOffset);
-  const focus = caretOffsetInNode(root, selection.focusNode, selection.focusOffset);
-  return {
-    start: Math.min(anchor, focus),
-    end: Math.max(anchor, focus),
-  };
-}
-
-function setComposerCaret(root: HTMLElement, offset: number): void {
-  const range = document.createRange();
-  const selection = window.getSelection();
-  let remaining = Math.max(0, offset);
-  let placed = false;
-
-  function placeBefore(node: ChildNode) {
-    range.setStartBefore(node);
-    range.collapse(true);
-    placed = true;
-  }
-
-  function placeAfter(node: ChildNode) {
-    range.setStartAfter(node);
-    range.collapse(true);
-    placed = true;
-  }
-
-  function visit(node: ChildNode): void {
-    if (placed) {
-      return;
-    }
-    const tokenText = nodeMentionText(node);
-    if (tokenText !== null) {
-      if (remaining <= 0) {
-        placeBefore(node);
-        return;
-      }
-      if (remaining <= tokenText.length) {
-        placeAfter(node);
-        return;
-      }
-      remaining -= tokenText.length;
-      return;
-    }
-    if (node.nodeType === Node.TEXT_NODE) {
-      const textLength = (node.textContent || "").length;
-      if (remaining <= textLength) {
-        range.setStart(node, remaining);
-        range.collapse(true);
-        placed = true;
-        return;
-      }
-      remaining -= textLength;
-      return;
-    }
-    if (isElementNode(node) && node.tagName === "BR") {
-      if (remaining <= 0) {
-        placeBefore(node);
-        return;
-      }
-      remaining -= 1;
-      return;
-    }
-    childNodes(node).forEach(visit);
-  }
-
-  childNodes(root).forEach(visit);
-  if (!placed) {
-    range.selectNodeContents(root);
-    range.collapse(false);
-  }
-  selection?.removeAllRanges();
-  selection?.addRange(range);
-}
-
-function appendTextSegment(fragment: DocumentFragment, text: string): void {
-  const parts = text.split("\n");
-  parts.forEach((part, index) => {
-    if (part) {
-      fragment.append(document.createTextNode(part));
-    }
-    if (index < parts.length - 1) {
-      fragment.append(document.createElement("br"));
-    }
-  });
-}
-
-function mentionChipElement(token: MentionToken, disabled: boolean, onRemove: (token: MentionToken) => void): HTMLElement {
-  const chip = document.createElement("span");
-  chip.className = `chatapp-mention-chip is-${token.item.kind}`;
-  chip.contentEditable = "false";
-  chip.dataset.mentionText = mentionText(token.item);
-
-  const kind = document.createElement("span");
-  kind.className = "chatapp-mention-chip__kind";
-  kind.textContent = mentionItemKindLabel(token.item);
-
-  const label = document.createElement("span");
-  label.className = "chatapp-mention-chip__label";
-  label.textContent = token.item.label;
-
-  const remove = document.createElement("button");
-  remove.type = "button";
-  remove.className = "chatapp-mention-chip__remove";
-  remove.setAttribute("aria-label", `Remove ${token.item.label}`);
-  remove.disabled = disabled;
-  remove.addEventListener("click", (event) => {
-    event.preventDefault();
-    onRemove(token);
-  });
-
-  const icon = document.createElement("span");
-  icon.className = "material-symbols-rounded";
-  icon.setAttribute("aria-hidden", "true");
-  icon.textContent = "close";
-  remove.append(icon);
-
-  chip.append(kind, label, remove);
-  return chip;
-}
-
-function renderComposerContent(root: HTMLElement, text: string, tokens: MentionToken[], disabled: boolean, onRemove: (token: MentionToken) => void): void {
-  const fragment = document.createDocumentFragment();
-  let cursor = 0;
-  tokens.forEach((token) => {
-    if (token.start > cursor) {
-      appendTextSegment(fragment, text.slice(cursor, token.start));
-    }
-    fragment.append(mentionChipElement(token, disabled, onRemove));
-    cursor = token.end;
-  });
-  if (cursor < text.length || !tokens.length) {
-    appendTextSegment(fragment, text.slice(cursor));
-  }
-  root.replaceChildren(fragment);
-}
-
-function normalizePastedComposerText(text: string): string {
-  return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-}
-
-function isMobileComposerInput(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    typeof window.matchMedia === "function" &&
-    (window.matchMedia("(pointer: coarse)").matches || window.matchMedia("(max-width: 720px)").matches)
-  );
-}
-
-function mentionItemKey(item: MentionItem): string {
-  return item.reference ? referenceKey(item.reference) : `${item.kind}:${item.id}`;
-}
-
-function mergeMentionItems(...groups: MentionItem[][]): MentionItem[] {
-  const seen = new Set<string>();
-  const merged: MentionItem[] = [];
-  for (const group of groups) {
-    for (const item of group) {
-      const key = mentionItemKey(item);
-      if (seen.has(key)) {
-        continue;
-      }
-      seen.add(key);
-      merged.push(item);
-    }
-  }
-  return merged;
-}
 
 export function ChatComposer({
   activeProviderId,
@@ -330,432 +84,82 @@ export function ChatComposer({
   transcriptionMaxDurationSeconds = 0,
   transcriptionContentTypes = [],
   value,
-}: {
-  activeProviderId: string;
-  agentSelectorLocked?: boolean;
-  agents: AgentTypeSummary[];
-  attachments: ComposerAttachment[];
-  canStopTurn: boolean;
-  disabled: boolean;
-  error: string | null;
-  executionMode: ExecutionMode | null;
-  isEmptyMode?: boolean;
-  isSending: boolean;
-  mentionItems: MentionItem[];
-  onAddAttachments: (files: File[]) => void;
-  onCapturePageArea?: () => void;
-  onChange: (value: string) => void;
-  onReferenceAdd?: (reference: AppReference) => void;
-  onReferenceRemove?: (reference: AppReference) => void;
-  onSearchReferences?: (query: string, signal: AbortSignal) => Promise<MentionItem[]>;
-  onSelectAgent: (agentTypeId: string) => void;
-  onSelectProvider: (providerId: string) => void;
-  onRemoveAttachment: (attachmentId: string) => void;
-  onStopTurn: () => void;
-  onSubmit: () => void;
-  providers: ProviderItem[];
-  queuedCount: number;
-  queuedPreview: string | null;
-  selectedAgentTypeId: string;
-  transcriptionProviderAppId?: string;
-  transcriptionProviderAvailable?: boolean;
-  transcriptionMaxAudioBytes?: number;
-  transcriptionMaxDurationSeconds?: number;
-  transcriptionContentTypes?: string[];
-  value: string;
-}) {
+}: ChatComposerProps) {
   const [caretIndex, setCaretIndex] = useState(value.length);
-  const [dismissedMentionStart, setDismissedMentionStart] = useState<number | null>(null);
-  const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
-  const [showAppPicker, setShowAppPicker] = useState(false);
-  const [selectedAppIndex, setSelectedAppIndex] = useState(0);
-  const [appPickerQuery, setAppPickerQuery] = useState("");
-  const [appPickerReferenceItems, setAppPickerReferenceItems] = useState<MentionItem[]>([]);
-  const [appPickerSearchError, setAppPickerSearchError] = useState<string | null>(null);
-  const [appPickerSearchPending, setAppPickerSearchPending] = useState(false);
-  const [dictationError, setDictationError] = useState<string | null>(null);
   const editorRef = useRef<HTMLDivElement | null>(null);
-  const appPickerButtonRef = useRef<HTMLButtonElement | null>(null);
-  const appPickerPanelRef = useRef<HTMLDivElement | null>(null);
-  const appPickerSearchRef = useRef<HTMLInputElement | null>(null);
   const pendingCaretIndexRef = useRef<number | null>(null);
-  const searchableMentionItems = useMemo(
-    () => mergeMentionItems(mentionItems, appPickerReferenceItems),
-    [appPickerReferenceItems, mentionItems],
-  );
-  const mentionTokens = useMemo(() => findMentionTokens(value, searchableMentionItems), [searchableMentionItems, value]);
-  const activeMentionCandidate = useMemo(() => activeMentionAt(value, caretIndex), [caretIndex, value]);
-  const activeMentionComplete = activeMentionCandidate
-    ? mentionTokens.some((token) => token.start === activeMentionCandidate.start && caretIndex >= token.end)
-    : false;
-  const activeMention = activeMentionCandidate?.start === dismissedMentionStart || activeMentionComplete ? null : activeMentionCandidate;
-  const activeAppMention = activeMention?.kind === "app" ? activeMention : null;
-  const activeSkillMention = activeMention?.kind === "skill" ? activeMention : null;
-  const isAppMentionPickerOpen = showAppPicker || Boolean(activeAppMention);
-  const appMentionPickerQuery = activeAppMention ? activeAppMention.query : appPickerQuery;
-  const appPickerItems = useMemo(() => {
-    const matchingApps = filterMentionItems(
-      searchableMentionItems.filter((item) => item.kind === "app"),
-      appMentionPickerQuery,
-    );
-    const matchingReferences = filterMentionItems(appPickerReferenceItems, appMentionPickerQuery, APP_PICKER_REFERENCE_LIMIT);
-    return mergeMentionItems(matchingApps, matchingReferences);
-  }, [appMentionPickerQuery, appPickerReferenceItems, searchableMentionItems]);
-  const filteredMentionItems = useMemo(() => {
-    if (!activeSkillMention) {
-      return [];
-    }
-    return filterMentionItems(
-      searchableMentionItems.filter((item) => item.kind === activeSkillMention.kind),
-      activeSkillMention.query,
-    );
-  }, [activeSkillMention, searchableMentionItems]);
-  const isSkillMentionPanelOpen = Boolean(activeSkillMention);
-
-  useLayoutEffect(() => {
-    const editor = editorRef.current;
-    if (!editor) {
-      return;
-    }
-    const wasFocused = document.activeElement === editor;
-    const nextCaretIndex = pendingCaretIndexRef.current ?? Math.min(caretIndex, value.length);
-    pendingCaretIndexRef.current = null;
-    renderComposerContent(editor, value, mentionTokens, disabled, removeMention);
-    if (wasFocused) {
-      setComposerCaret(editor, nextCaretIndex);
-    }
-  }, [disabled, mentionTokens, value]);
-
-  useEffect(() => {
-    setSelectedMentionIndex(0);
-  }, [activeSkillMention?.kind, activeSkillMention?.query]);
-
-  useEffect(() => {
-    if (!isAppMentionPickerOpen || !onSearchReferences) {
-      setAppPickerSearchPending(false);
-      if (!isAppMentionPickerOpen) {
-        setAppPickerSearchError(null);
-      }
-      return;
-    }
-    const query = appMentionPickerQuery.trim();
-    setAppPickerSearchError(null);
-    setAppPickerReferenceItems([]);
-    setAppPickerSearchPending(true);
-    const controller = new AbortController();
-    let disposed = false;
-    const timer = window.setTimeout(() => {
-      onSearchReferences(query, controller.signal)
-        .then((items) => {
-          if (disposed) {
-            return;
-          }
-          setAppPickerReferenceItems(items);
-          setAppPickerSearchError(null);
-        })
-        .catch((error) => {
-          if (disposed || isAbortError(error)) {
-            return;
-          }
-          setAppPickerReferenceItems([]);
-          setAppPickerSearchError(REFERENCE_SEARCH_ERROR_MESSAGE);
-        })
-        .finally(() => {
-          if (!disposed) {
-            setAppPickerSearchPending(false);
-          }
-        });
-    }, 160);
-    return () => {
-      disposed = true;
-      window.clearTimeout(timer);
-      controller.abort();
-    };
-  }, [appMentionPickerQuery, isAppMentionPickerOpen, onSearchReferences]);
-
-  useEffect(() => {
-    setSelectedAppIndex(0);
-  }, [appPickerItems]);
-
-  useEffect(() => {
-    if (showAppPicker) {
-      appPickerSearchRef.current?.focus();
-    }
-  }, [showAppPicker]);
-
-  useEffect(() => {
-    if (!isAppMentionPickerOpen) {
-      return;
-    }
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target as Node | null;
-      if (!target || appPickerPanelRef.current?.contains(target) || appPickerButtonRef.current?.contains(target)) {
-        return;
-      }
-      if (showAppPicker) {
-        setShowAppPicker(false);
-      } else if (activeAppMention) {
-        setDismissedMentionStart(activeAppMention.start);
-      }
-    };
-    document.addEventListener("pointerdown", handlePointerDown);
-    return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, [activeAppMention, isAppMentionPickerOpen, showAppPicker]);
-
-  useEffect(() => {
-    if (dismissedMentionStart === null) {
-      return;
-    }
-    const dismissedTrigger = value[dismissedMentionStart];
-    if (dismissedTrigger !== "@" && dismissedTrigger !== "$") {
-      setDismissedMentionStart(null);
-    }
-  }, [dismissedMentionStart, value]);
+  const {
+    activeSkillMention,
+    appMentionPickerQuery,
+    appPickerButtonRef,
+    appPickerItems,
+    appPickerPanelRef,
+    appPickerSearchError,
+    appPickerSearchPending,
+    appPickerSearchRef,
+    clearDismissedMention,
+    dismissSkillMention,
+    filteredMentionItems,
+    handleAppMentionPickerKey,
+    insertAppMentions,
+    insertMention,
+    isAppMentionPickerOpen,
+    mentionTokens,
+    openAppPicker,
+    removeMention,
+    selectAppMentionPickerItem,
+    selectedAppIndex,
+    selectedMentionIndex,
+    setSelectedMentionIndex,
+    updateActiveAppMentionQuery,
+  } = useMentionPicker({
+    caretIndex,
+    editorRef,
+    mentionItems,
+    onChange,
+    onReferenceAdd,
+    onReferenceRemove,
+    onSearchReferences,
+    pendingCaretIndexRef,
+    setCaretIndex,
+    value,
+  });
+  const {
+    dictationError,
+    insertDictationTranscript,
+    onComposerKeyDown,
+    onDragOver,
+    onDrop,
+    onPaste,
+    setDictationError,
+    syncCaret,
+    updateComposerFromEditor,
+  } = useComposerEditor({
+    caretIndex,
+    clearDismissedMention,
+    disabled,
+    editorRef,
+    filteredMentionItems,
+    handleAppMentionPickerKey,
+    insertAppMentions,
+    insertMention,
+    isSkillMentionPanelOpen: Boolean(activeSkillMention),
+    mentionTokens,
+    onAddAttachments,
+    onChange,
+    onRemoveMention: removeMention,
+    onSubmit,
+    pendingCaretIndexRef,
+    selectedMentionIndex,
+    setCaretIndex,
+    setDismissedSkillMention: () => dismissSkillMention(activeSkillMention),
+    setSelectedMentionIndex,
+    value,
+  });
 
   function submit(event: FormEvent) {
     event.preventDefault();
     onSubmit();
-  }
-
-  function syncCaret(editor: HTMLDivElement) {
-    setCaretIndex(composerCaretOffset(editor));
-  }
-
-  function updateComposerFromEditor(editor: HTMLDivElement) {
-    const nextValue = composerText(editor);
-    const nextCaret = composerCaretOffset(editor);
-    pendingCaretIndexRef.current = nextCaret;
-    onChange(nextValue);
-    setCaretIndex(nextCaret);
-  }
-
-  function replaceComposerSelectionWithText(editor: HTMLDivElement, text: string) {
-    const currentValue = composerText(editor);
-    const selection = composerSelectionOffsets(editor);
-    const nextValue = `${currentValue.slice(0, selection.start)}${text}${currentValue.slice(selection.end)}`;
-    const nextCaret = selection.start + text.length;
-    pendingCaretIndexRef.current = nextCaret;
-    onChange(nextValue);
-    setCaretIndex(nextCaret);
-    setDismissedMentionStart(null);
-    requestAnimationFrame(() => {
-      const nextEditor = editorRef.current;
-      if (!nextEditor) {
-        return;
-      }
-      nextEditor.focus();
-      setComposerCaret(nextEditor, nextCaret);
-    });
-  }
-
-  function insertDictationTranscript(text: string) {
-    const transcript = text.trim();
-    if (!transcript) {
-      setDictationError("No speech detected.");
-      return;
-    }
-    const editor = editorRef.current;
-    if (!editor) {
-      const prefix = value && !/\s$/.test(value) ? " " : "";
-      onChange(`${value}${prefix}${transcript}`);
-      return;
-    }
-    const suffix = value && caretIndex < value.length && !/\s$/.test(transcript) ? " " : "";
-    replaceComposerSelectionWithText(editor, `${transcript}${suffix}`);
-  }
-
-  function insertMention(item: MentionItem) {
-    if (!activeMention) {
-      return;
-    }
-    const next = applyMention(value, activeMention, item);
-    pendingCaretIndexRef.current = next.cursor;
-    onChange(next.value);
-    if (item.reference) {
-      onReferenceAdd?.(item.reference);
-    }
-    setCaretIndex(next.cursor);
-    setDismissedMentionStart(activeMention.start);
-    requestAnimationFrame(() => {
-      const editor = editorRef.current;
-      if (!editor) {
-        return;
-      }
-      editor.focus();
-      setComposerCaret(editor, next.cursor);
-    });
-  }
-
-  function updateActiveAppMentionQuery(query: string) {
-    if (!activeAppMention) {
-      setAppPickerQuery(query);
-      return;
-    }
-    const nextValue = `${value.slice(0, activeAppMention.start + 1)}${query}${value.slice(activeAppMention.end)}`;
-    const nextCaret = activeAppMention.start + 1 + query.length;
-    pendingCaretIndexRef.current = nextCaret;
-    onChange(nextValue);
-    setCaretIndex(nextCaret);
-    setDismissedMentionStart(null);
-  }
-
-  function selectAppMentionPickerItem(item: MentionItem) {
-    if (activeAppMention && !showAppPicker) {
-      insertMention(item);
-      return;
-    }
-    insertAppMention(item);
-  }
-
-  function removeMention(token: MentionToken) {
-    const next = removeMentionToken(value, token);
-    pendingCaretIndexRef.current = next.cursor;
-    onChange(next.value);
-    if (token.item.reference) {
-      onReferenceRemove?.(token.item.reference);
-    }
-    setCaretIndex(next.cursor);
-    requestAnimationFrame(() => {
-      const editor = editorRef.current;
-      if (!editor) {
-        return;
-      }
-      editor.focus();
-      setComposerCaret(editor, next.cursor);
-    });
-  }
-
-  function insertAppMention(item: MentionItem) {
-    insertAppMentions([item]);
-  }
-
-  function insertAppMentions(items: MentionItem[]) {
-    if (!items.length) {
-      return;
-    }
-    const boundedCaret = Math.max(0, Math.min(caretIndex, value.length));
-    const before = value.slice(0, boundedCaret);
-    const after = value.slice(boundedCaret);
-    const prefix = before && !/\s$/.test(before) ? " " : "";
-    const suffix = after && /^\s/.test(after) ? "" : " ";
-    const insertion = `${prefix}${items.map((item) => mentionText(item)).join(" ")}${suffix}`;
-    const nextValue = `${before}${insertion}${after}`;
-    const nextCaret = before.length + insertion.length;
-    pendingCaretIndexRef.current = nextCaret;
-    onChange(nextValue);
-    for (const item of items) {
-      if (item.reference) {
-        onReferenceAdd?.(item.reference);
-      }
-    }
-    setCaretIndex(nextCaret);
-    setDismissedMentionStart(null);
-    setShowAppPicker(false);
-    setAppPickerQuery("");
-    setAppPickerSearchError(null);
-    requestAnimationFrame(() => {
-      const editor = editorRef.current;
-      if (!editor) {
-        return;
-      }
-      editor.focus();
-      setComposerCaret(editor, nextCaret);
-    });
-  }
-
-  function closeAppMentionPicker(focusEditor = false) {
-    if (showAppPicker) {
-      setShowAppPicker(false);
-    } else if (activeAppMention) {
-      setDismissedMentionStart(activeAppMention.start);
-    }
-    setAppPickerSearchError(null);
-    if (focusEditor) {
-      requestAnimationFrame(() => {
-        const editor = editorRef.current;
-        if (!editor) {
-          return;
-        }
-        editor.focus();
-        setComposerCaret(editor, caretIndex);
-      });
-    }
-  }
-
-  function handleAppMentionPickerKey(event: KeyboardEvent<HTMLElement>, focusEditorOnClose = false): boolean {
-    if (!isAppMentionPickerOpen) {
-      return false;
-    }
-    if (event.key === "Escape") {
-      event.preventDefault();
-      closeAppMentionPicker(focusEditorOnClose);
-      return true;
-    }
-    if (!appPickerItems.length) {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        return true;
-      }
-      return false;
-    }
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      setSelectedAppIndex((current) => (current + 1) % appPickerItems.length);
-      return true;
-    }
-    if (event.key === "ArrowUp") {
-      event.preventDefault();
-      setSelectedAppIndex((current) => (current - 1 + appPickerItems.length) % appPickerItems.length);
-      return true;
-    }
-    if (event.key === "Tab" || event.key === "Enter") {
-      event.preventDefault();
-      selectAppMentionPickerItem(appPickerItems[selectedAppIndex] || appPickerItems[0]);
-      return true;
-    }
-    return false;
-  }
-
-  function onComposerKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.nativeEvent.isComposing) {
-      return;
-    }
-    if (handleAppMentionPickerKey(event)) {
-      return;
-    }
-    if (isSkillMentionPanelOpen) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        setDismissedMentionStart(activeSkillMention?.start ?? null);
-        return;
-      }
-      if (filteredMentionItems.length) {
-        if (event.key === "ArrowDown") {
-          event.preventDefault();
-          setSelectedMentionIndex((current) => (current + 1) % filteredMentionItems.length);
-          return;
-        }
-        if (event.key === "ArrowUp") {
-          event.preventDefault();
-          setSelectedMentionIndex((current) => (current - 1 + filteredMentionItems.length) % filteredMentionItems.length);
-          return;
-        }
-        if (event.key === "Enter" || event.key === "Tab") {
-          event.preventDefault();
-          insertMention(filteredMentionItems[selectedMentionIndex] || filteredMentionItems[0]);
-          return;
-        }
-      }
-    }
-    if (event.key === "Enter" && (event.shiftKey || event.altKey || isMobileComposerInput())) {
-      event.preventDefault();
-      replaceComposerSelectionWithText(event.currentTarget, "\n");
-      return;
-    }
-    if (event.key === "Enter") {
-      event.preventDefault();
-      onSubmit();
-    }
   }
 
   function onAppPickerSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -768,50 +172,6 @@ export function ChatComposer({
     if (event.key === "Enter") {
       event.preventDefault();
     }
-  }
-
-  function onDragOver(event: DragEvent<HTMLDivElement>) {
-    if (disabled) {
-      return;
-    }
-    if (hasStorageReferenceDragData(event.dataTransfer)) {
-      event.preventDefault();
-      event.stopPropagation();
-      event.dataTransfer.dropEffect = "copy";
-      return;
-    }
-  }
-
-  function onDrop(event: DragEvent<HTMLDivElement>) {
-    if (disabled) {
-      return;
-    }
-    if (hasStorageReferenceDragData(event.dataTransfer)) {
-      event.preventDefault();
-      event.stopPropagation();
-      const droppedItems = storageReferenceMentionItemsFromDataTransfer(event.dataTransfer);
-      insertAppMentions(droppedItems);
-      return;
-    }
-  }
-
-  function onPaste(event: ClipboardEvent<HTMLDivElement>) {
-    if (disabled) {
-      return;
-    }
-    if (event.clipboardData.files.length) {
-      event.preventDefault();
-      event.stopPropagation();
-      onAddAttachments(Array.from(event.clipboardData.files));
-      return;
-    }
-    const pastedText = normalizePastedComposerText(event.clipboardData.getData("text/plain"));
-    if (!pastedText) {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    replaceComposerSelectionWithText(event.currentTarget, pastedText);
   }
 
   return (
@@ -878,15 +238,7 @@ export function ChatComposer({
                   aria-label="Apps and references"
                   className={`chatapp-composer__tool-button ${isAppMentionPickerOpen ? "is-active" : ""}`}
                   disabled={disabled}
-                  onClick={() => {
-                    if (isAppMentionPickerOpen) {
-                      closeAppMentionPicker();
-                      return;
-                    }
-                    setAppPickerQuery("");
-                    setAppPickerSearchError(null);
-                    setShowAppPicker(true);
-                  }}
+                  onClick={openAppPicker}
                   ref={appPickerButtonRef}
                   type="button"
                 >
@@ -934,334 +286,5 @@ export function ChatComposer({
         </form>
       </section>
     </>
-  );
-}
-
-function ComposerRuntimeBadges({
-  activeProviderId,
-  disabled,
-  executionMode,
-  onSelectProvider,
-  providers,
-}: {
-  activeProviderId: string;
-  disabled: boolean;
-  executionMode: ExecutionMode | null;
-  onSelectProvider: (providerId: string) => void;
-  providers: ProviderItem[];
-}) {
-  return (
-    <div className="chatapp-composer__runtime-badges">
-      <ProviderSelector activeProviderId={activeProviderId} disabled={disabled} onSelect={onSelectProvider} providers={providers} />
-      {executionMode ? (
-        <span className={`chatapp-execution-chip ${executionMode === "full-access" ? "is-full-access" : "is-sandbox"}`}>
-          <span aria-hidden="true" className="material-symbols-rounded">
-            {executionMode === "full-access" ? "admin_panel_settings" : "lock"}
-          </span>
-          {executionMode}
-        </span>
-      ) : null}
-    </div>
-  );
-}
-
-function AgentSelector({
-  agents,
-  disabled,
-  locked,
-  onSelect,
-  selectedAgentTypeId,
-}: {
-  agents: AgentTypeSummary[];
-  disabled: boolean;
-  locked: boolean;
-  onSelect: (agentTypeId: string) => void;
-  selectedAgentTypeId: string;
-}) {
-  const [isOpen, setIsOpen] = useState(false);
-  const buttonRef = useRef<HTMLButtonElement | null>(null);
-  const panelRef = useRef<HTMLDivElement | null>(null);
-  const suppressNextClickRef = useRef(false);
-  const suppressClickResetRef = useRef<number | null>(null);
-  const selectedAgent = agents.find((agent) => agent.id === selectedAgentTypeId) || null;
-  const label = selectedAgent?.name || "Default Chat";
-  const isDisabled = disabled || locked;
-
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target as Node | null;
-      if (!target || panelRef.current?.contains(target) || buttonRef.current?.contains(target)) {
-        return;
-      }
-      setIsOpen(false);
-    };
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setIsOpen(false);
-        buttonRef.current?.focus();
-      }
-    };
-    document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [isOpen]);
-
-  useEffect(() => {
-    return () => {
-      if (suppressClickResetRef.current !== null) {
-        window.clearTimeout(suppressClickResetRef.current);
-      }
-    };
-  }, []);
-
-  function selectAgent(agentTypeId: string) {
-    onSelect(agentTypeId);
-    setIsOpen(false);
-  }
-
-  function handleTriggerPointerDown(event: ReactPointerEvent<HTMLButtonElement>) {
-    if (event.pointerType === "mouse") {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    suppressNextClickRef.current = true;
-    if (suppressClickResetRef.current !== null) {
-      window.clearTimeout(suppressClickResetRef.current);
-    }
-    suppressClickResetRef.current = window.setTimeout(() => {
-      suppressNextClickRef.current = false;
-      suppressClickResetRef.current = null;
-    }, 700);
-    setIsOpen((current) => !current);
-  }
-
-  function handleTriggerClick() {
-    if (suppressNextClickRef.current) {
-      suppressNextClickRef.current = false;
-      if (suppressClickResetRef.current !== null) {
-        window.clearTimeout(suppressClickResetRef.current);
-        suppressClickResetRef.current = null;
-      }
-      return;
-    }
-    setIsOpen((current) => !current);
-  }
-
-  return (
-    <div className="chatapp-agent-selector">
-      <button
-        aria-expanded={isOpen}
-        aria-haspopup="listbox"
-        aria-label={`Agent runner: ${label}`}
-        className={`chatapp-composer__tool-button chatapp-agent-selector__trigger ${selectedAgentTypeId || isOpen ? "is-active" : ""}`}
-        disabled={isDisabled}
-        onClick={handleTriggerClick}
-        onPointerDown={handleTriggerPointerDown}
-        ref={buttonRef}
-        title={locked ? "This chat is already running with its selected agent" : `Agent runner: ${label}`}
-        type="button"
-      >
-        <span aria-hidden="true" className="material-symbols-rounded">
-          smart_toy
-        </span>
-      </button>
-      {isOpen ? (
-        <div aria-label="Choose agent runner" className="chatapp-agent-menu" ref={panelRef} role="listbox">
-          <button
-            aria-selected={!selectedAgentTypeId}
-            className={`chatapp-agent-menu__item ${!selectedAgentTypeId ? "is-active" : ""}`}
-            onClick={() => {
-              selectAgent("");
-            }}
-            role="option"
-            type="button"
-          >
-            <span className="chatapp-agent-menu__name">Default Chat</span>
-            <span className="chatapp-agent-menu__description">Use the standard Chat runtime prompt.</span>
-          </button>
-          {agents.map((agent) => (
-            <button
-              aria-selected={agent.id === selectedAgentTypeId}
-              className={`chatapp-agent-menu__item ${agent.id === selectedAgentTypeId ? "is-active" : ""}`}
-              key={agent.id}
-              onClick={() => {
-                selectAgent(agent.id);
-              }}
-              role="option"
-              type="button"
-            >
-              <span className="chatapp-agent-menu__name">{agent.name}</span>
-              {agent.description ? <span className="chatapp-agent-menu__description">{agent.description}</span> : null}
-            </button>
-          ))}
-          {!agents.length ? <div className="chatapp-agent-menu__empty">No agent catalog available</div> : null}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function MentionPanel({
-  activeIndex,
-  className = "",
-  items,
-  kind,
-  onSelect,
-  onSearchKeyDown,
-  onSearchQueryChange,
-  query,
-  ref,
-  searchInputRef,
-  isLoading = false,
-  searchPlaceholder,
-  searchQuery,
-  statusMessage,
-}: {
-  activeIndex: number;
-  className?: string;
-  items: MentionItem[];
-  kind: "app" | "skill";
-  onSelect: (item: MentionItem) => void;
-  onSearchKeyDown?: (event: KeyboardEvent<HTMLInputElement>) => void;
-  onSearchQueryChange?: (query: string) => void;
-  query: string;
-  ref?: Ref<HTMLDivElement>;
-  searchInputRef?: Ref<HTMLInputElement>;
-  isLoading?: boolean;
-  searchPlaceholder?: string;
-  searchQuery?: string;
-  statusMessage?: string | null;
-}) {
-  const activeItemRef = useRef<HTMLButtonElement | null>(null);
-
-  useEffect(() => {
-    activeItemRef.current?.scrollIntoView({ block: "nearest" });
-  }, [activeIndex]);
-
-  const panelLabel = kind === "app" ? "App and reference suggestions" : "Skill suggestions";
-  const panelTitle = kind === "app" ? "Apps and references" : "Skills";
-
-  return (
-    <div className={`chatapp-mention-panel ${className}`} ref={ref} role="listbox" aria-label={panelLabel}>
-      <div className="chatapp-mention-panel__header">{panelTitle}</div>
-      {onSearchQueryChange ? (
-        <label className="chatapp-mention-panel__search">
-          <span className="chatapp-mention-panel__search-label">Search</span>
-          <input
-            aria-label="Search apps and references"
-            className="chatapp-mention-panel__search-input"
-            onChange={(event) => onSearchQueryChange(event.currentTarget.value)}
-            onKeyDown={onSearchKeyDown}
-            placeholder={searchPlaceholder || "Search"}
-            ref={searchInputRef}
-            type="search"
-            value={searchQuery || ""}
-          />
-        </label>
-      ) : null}
-      {statusMessage ? (
-        <div className="chatapp-mention-panel__error" role="status">
-          {statusMessage}
-        </div>
-      ) : null}
-      {items.length ? (
-        items.map((item, index) => (
-          <button
-            aria-selected={index === activeIndex}
-            className={`chatapp-mention-panel__item ${index === activeIndex ? "is-active" : ""}`}
-            key={`${item.kind}:${item.id}`}
-            onPointerDown={(event) => {
-              event.preventDefault();
-              onSelect(item);
-            }}
-            ref={index === activeIndex ? activeItemRef : null}
-            role="option"
-            type="button"
-          >
-            <span className="chatapp-mention-panel__name">
-              {item.kind === "skill" ? "$" : "@"}
-              {item.label}
-            </span>
-            {item.description ? <span className="chatapp-mention-panel__description">{item.description}</span> : null}
-          </button>
-        ))
-      ) : statusMessage || isLoading ? null : (
-        <div className="chatapp-mention-panel__empty">No results for {query.trim() || "this reference"}</div>
-      )}
-      {isLoading ? <MentionPanelSkeleton /> : null}
-    </div>
-  );
-}
-
-function MentionPanelSkeleton() {
-  return (
-    <div aria-label="Searching references" className="chatapp-mention-panel__skeleton" role="status">
-      <div className="chatapp-mention-panel__skeleton-row">
-        <span className="chatapp-mention-panel__skeleton-line chatapp-mention-panel__skeleton-line--title" />
-        <span className="chatapp-mention-panel__skeleton-line chatapp-mention-panel__skeleton-line--detail" />
-      </div>
-    </div>
-  );
-}
-
-function ComposerActions({
-  canSend,
-  canStopTurn,
-  isSending,
-  onStopTurn,
-  onSubmit,
-}: {
-  canSend: boolean;
-  canStopTurn: boolean;
-  isSending: boolean;
-  onStopTurn: () => void;
-  onSubmit: () => void;
-}) {
-  return (
-    <div className="chatapp-composer__actions">
-      {canStopTurn ? (
-        <button aria-label="Stop chat" className="chatapp-composer__icon-action is-stop" onClick={onStopTurn} title="Stop chat" type="button">
-          <span aria-hidden="true" className="material-symbols-rounded">
-            stop_circle
-          </span>
-          <span className="chatapp-composer__stop-label">Stop chat</span>
-        </button>
-      ) : null}
-      <button
-        aria-label={isSending ? "Queue message" : "Send message"}
-        className="chatapp-composer__icon-action is-send"
-        disabled={!canSend}
-        onClick={onSubmit}
-        title={isSending ? "Queue" : "Send"}
-        type="button"
-      >
-        <span aria-hidden="true" className="material-symbols-rounded">
-          send
-        </span>
-        <span className="chatapp-composer__send-label">Send</span>
-      </button>
-    </div>
-  );
-}
-
-function QueuedMessageNotice({ queuedCount, queuedPreview }: { queuedCount: number; queuedPreview: string | null }) {
-  if (queuedCount === 0) {
-    return null;
-  }
-  return (
-    <div className="chatapp-composer-queue" aria-live="polite">
-      <div className="chatapp-composer-queue__eyebrow">
-        <strong>{queuedCount} {queuedCount === 1 ? "message" : "messages"} queued</strong>
-        <span>Sends automatically after the active turn</span>
-      </div>
-      {queuedPreview ? <div className="chatapp-composer-queue__preview">{queuedPreview}</div> : null}
-    </div>
   );
 }

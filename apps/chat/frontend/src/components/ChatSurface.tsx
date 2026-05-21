@@ -1,135 +1,28 @@
 import type { CSSProperties, RefObject } from "react";
-import type { AgentTypeSummary, AppReference, ChatMessage, ProviderItem } from "../api/client";
-import type { ComposerAttachment } from "../lib/attachments";
-import type { MentionItem } from "../lib/mentions";
 import { ChatComposer } from "./ChatComposer";
-import type { ExecutionMode } from "./ChatComposer";
+import type { ChatComposerProps } from "./ChatComposer";
 import { ChatTranscript } from "./ChatTranscript";
+import type { ChatTranscriptProps } from "./ChatTranscript";
 
-type ChatSurfaceProps = {
-  activeProviderId: string;
-  agentSelectorLocked: boolean;
-  agents: AgentTypeSummary[];
-  attachments: ComposerAttachment[];
-  canStopTurn: boolean;
+type ChatSurfaceState = {
   chatMainStyle?: CSSProperties;
-  composerError: string | null;
-  composerMentionItems: MentionItem[];
-  dockedComposerRef: RefObject<HTMLDivElement | null>;
-  enablePageCapture: boolean;
-  error: string | null;
-  executionMode: ExecutionMode | null;
   isEmptyChatView: boolean;
-  isSending: boolean;
-  isThreadLoading: boolean;
-  loadingLabel: string;
-  mentionItems: MentionItem[];
-  messages: ChatMessage[];
-  onAddAttachments: (files: File[]) => void;
-  onCapturePageArea: () => void;
-  onChangeComposer: (value: string) => void;
-  onReferenceAdd: (reference: AppReference) => void;
-  onReferenceRemove: (reference: AppReference) => void;
-  onRemoveAttachment: (id: string) => void;
-  onSearchReferences: (query: string, signal: AbortSignal) => Promise<MentionItem[]>;
-  onSelectAgent: (agentTypeId: string) => void;
-  onSelectProvider: (providerId: string) => void;
-  onStopTurn: () => void;
-  onSubmit: () => void;
-  providers: ProviderItem[];
-  queuedCount: number;
-  queuedPreview: string | null;
-  selectedAgentTypeId: string;
-  speechMaxTextChars: number;
-  speechProviderAppId: string;
-  speechProviderAvailable: boolean;
-  speechProviderQualityProfile: string;
-  transcriptionContentTypes: string[];
-  transcriptionMaxAudioBytes: number;
-  transcriptionMaxDurationSeconds: number;
-  transcriptionProviderAppId: string;
-  transcriptionProviderAvailable: boolean;
-  value: string;
 };
 
-export function ChatSurface({
-  activeProviderId,
-  agentSelectorLocked,
-  agents,
-  attachments,
-  canStopTurn,
-  chatMainStyle,
-  composerError,
-  composerMentionItems,
-  dockedComposerRef,
-  enablePageCapture,
-  error,
-  executionMode,
-  isEmptyChatView,
-  isSending,
-  isThreadLoading,
-  loadingLabel,
-  mentionItems,
-  messages,
-  onAddAttachments,
-  onCapturePageArea,
-  onChangeComposer,
-  onReferenceAdd,
-  onReferenceRemove,
-  onRemoveAttachment,
-  onSearchReferences,
-  onSelectAgent,
-  onSelectProvider,
-  onStopTurn,
-  onSubmit,
-  providers,
-  queuedCount,
-  queuedPreview,
-  selectedAgentTypeId,
-  speechMaxTextChars,
-  speechProviderAppId,
-  speechProviderAvailable,
-  speechProviderQualityProfile,
-  transcriptionContentTypes,
-  transcriptionMaxAudioBytes,
-  transcriptionMaxDurationSeconds,
-  transcriptionProviderAppId,
-  transcriptionProviderAvailable,
-  value,
-}: ChatSurfaceProps) {
-  const composerProps = {
-    activeProviderId,
-    agentSelectorLocked,
-    agents,
-    attachments,
-    canStopTurn,
-    disabled: isThreadLoading,
-    error: composerError,
-    executionMode,
-    isSending,
-    mentionItems: composerMentionItems,
-    onAddAttachments,
-    onCapturePageArea: enablePageCapture ? onCapturePageArea : undefined,
-    onChange: onChangeComposer,
-    onReferenceAdd,
-    onReferenceRemove,
-    onSearchReferences,
-    onSelectAgent,
-    onSelectProvider,
-    onRemoveAttachment,
-    onStopTurn,
-    onSubmit,
-    providers,
-    queuedCount,
-    queuedPreview,
-    selectedAgentTypeId,
-    transcriptionProviderAppId,
-    transcriptionProviderAvailable,
-    transcriptionMaxAudioBytes,
-    transcriptionMaxDurationSeconds,
-    transcriptionContentTypes,
-    value,
-  };
+type ChatSurfaceActions = {
+  dockedComposerRef: RefObject<HTMLDivElement | null>;
+};
+
+export type ChatSurfaceProps = {
+  composerProps: ChatComposerProps;
+  surfaceActions: ChatSurfaceActions;
+  surfaceState: ChatSurfaceState;
+  transcriptProps: ChatTranscriptProps;
+};
+
+export function ChatSurface({ composerProps, surfaceActions, surfaceState, transcriptProps }: ChatSurfaceProps) {
+  const { chatMainStyle, isEmptyChatView } = surfaceState;
+  const { dockedComposerRef } = surfaceActions;
 
   return (
     <section className="chatapp-chat-panel">
@@ -145,17 +38,7 @@ export function ChatSurface({
               <ChatComposer {...composerProps} isEmptyMode />
             </div>
           ) : (
-            <ChatTranscript
-              error={error}
-              isLoading={canStopTurn || isThreadLoading}
-              loadingLabel={loadingLabel}
-              mentionItems={mentionItems}
-              messages={messages}
-              speechMaxTextChars={speechMaxTextChars}
-              speechProviderAvailable={speechProviderAvailable}
-              speechProviderAppId={speechProviderAppId}
-              speechProviderQualityProfile={speechProviderQualityProfile}
-            />
+            <ChatTranscript {...transcriptProps} />
           )}
           {!isEmptyChatView ? (
             <div className="chatapp-composer-dock" ref={dockedComposerRef}>

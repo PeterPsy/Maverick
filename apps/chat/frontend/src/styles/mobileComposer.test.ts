@@ -6,7 +6,16 @@ import { describe, expect, it } from "vitest";
 const currentDir = dirname(fileURLToPath(import.meta.url));
 
 function readStyle(filename: string) {
-  return readFileSync(resolve(currentDir, filename), "utf8");
+  return readStyleFile(resolve(currentDir, filename));
+}
+
+function readStyleFile(filePath: string, seen = new Set<string>()): string {
+  if (seen.has(filePath)) {
+    return "";
+  }
+  seen.add(filePath);
+  const styles = readFileSync(filePath, "utf8");
+  return styles.replace(/@import\s+"([^"]+)";/g, (_, importPath: string) => readStyleFile(resolve(dirname(filePath), importPath), seen));
 }
 
 function cssBlock(styles: string, selector: string): string {
@@ -31,7 +40,7 @@ describe("mobile chat composer layout", () => {
   });
 
   it("keeps the send button as an explicit click action", () => {
-    const composerSource = readFileSync(resolve(currentDir, "../components/ChatComposer.tsx"), "utf8");
+    const composerSource = readFileSync(resolve(currentDir, "../components/ComposerActions.tsx"), "utf8");
     const sendButton = composerSource.match(/className="chatapp-composer__icon-action is-send"[\s\S]*?<\/button>/)?.[0] || "";
 
     expect(sendButton).toContain("onClick={onSubmit}");

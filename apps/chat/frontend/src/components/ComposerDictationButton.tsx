@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ApiError, transcribeSpeech } from "../api/client";
+import { ApiError, transcribeSpeechBlob } from "../api/client";
 
 const DEFAULT_MAX_DICTATION_MS = 120000;
 const DEFAULT_MAX_DICTATION_AUDIO_BYTES = 700_000;
@@ -132,9 +132,8 @@ export function ComposerDictationButton({
         onError(`Microphone audio is too large to transcribe. Keep recordings under ${formatBytes(effectiveMaxAudioBytes)}.`);
         return;
       }
-      const audioBase64 = await blobToBase64(audioBlob);
       const languageHint = adaptiveLanguageForRequest(adaptiveLanguageRef.current);
-      const result = await transcribeSpeech(providerAppId, audioBase64, contentType, {
+      const result = await transcribeSpeechBlob(providerAppId, audioBlob, {
         language: languageHint || undefined,
         profile: DICTATION_TRANSCRIPTION_PROFILE,
       });
@@ -346,16 +345,4 @@ function formatBytes(bytes: number): string {
     return `${(bytes / 1_000_000).toFixed(bytes % 1_000_000 === 0 ? 0 : 1)} MB`;
   }
   return `${Math.max(1, Math.floor(bytes / 1000))} KB`;
-}
-
-function blobToBase64(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("Unable to read audio blob."));
-    reader.onload = () => {
-      const result = String(reader.result || "");
-      resolve(result.includes(",") ? result.split(",", 2)[1] : result);
-    };
-    reader.readAsDataURL(blob);
-  });
 }

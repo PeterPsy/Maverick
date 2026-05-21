@@ -1,0 +1,167 @@
+@media (max-width: 980px) {
+  .chatapp-settings-console__workspace-actions,
+  .chatapp-settings-console__security-actions,
+  .chatapp-settings-console__dialog-actions,
+  .chatapp-settings-console__danger-actions {
+    justify-content: stretch;
+  }
+
+  .chatapp-settings-console__workspace-actions .chat-ui-button,
+  .chatapp-settings-console__security-actions .chat-ui-button,
+  .chatapp-settings-console__dialog-actions .chat-ui-button,
+  .chatapp-settings-console__danger-actions .chat-ui-button {
+    width: 100%;
+  }
+
+  .chatapp-settings-console__toolbar {
+    gap: 0.7rem;
+    padding: 0.85rem;
+  }
+
+  .chatapp-settings-console__toolbar-footer {
+    display: none;
+  }
+
+  .chatapp-settings-console__mobile-toolbar {
+    display: grid;
+    gap: 0.6rem;
+  }
+
+  .chatapp-settings-console__mobile-toolbar-actions .chat-ui-button {
+    flex: 1 1 0;
+  }
+
+  .chatapp-settings-console__mobile-nav {
+    display: grid;
+    gap: 0.7rem;
+    padding: 0.8rem 0.85rem;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background:
+      radial-gradient(circle at top right, rgba(82, 164, 255, 0.06), transparent 24%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
+  }
+
+  .chatapp-settings-console__mobile-nav-group {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .chatapp-settings-console__mobile-nav-toggle {
+    min-height: 40px;
+    justify-content: center;
+  }
+
+  .chatapp-settings-console__mobile-selected {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.75rem 0.8rem;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: var(--chatapp-cell-radius);
+    background: var(--chatapp-soft-surface);
+  }
+
+  .chatapp-settings-console__hero {
+    gap: 0.9rem;
+    padding: 0.9rem;
+  }
+
+  .chatapp-settings-console__hero-actions,
+  .chatapp-settings-console__hero-buttons {
+    justify-items: stretch;
+  }
+
+  .chatapp-settings-console__hero-buttons .chat-ui-button {
+    width: 100%;
+  }
+
+  .chatapp-settings-console__shell {
+    gap: 0.75rem;
+  }
+
+  .chatapp-settings-console__list-panel,
+  .chatapp-settings-console__detail-panel {
+    gap: 0.8rem;
+    padding: 0.85rem;
+    border-radius: var(--chatapp-cell-radius);
+  }
+
+  .chatapp-settings-console__panel-head,
+  .chatapp-settings-console__detail-head,
+  .chatapp-settings-console__section-head {
+    gap: 0.65rem;
+  }
+
+  .chatapp-settings-console__detail-head h3 {
+    font-size: 1.08rem;
+  }
+
+  .chatapp-settings-console__detail-subtitle {
+    font-size: 0.82rem;
+    line-height: 1.45;
+  }
+
+  .chatapp-settings-console__user-row {
+    gap: 0.65rem;
+    padding: 0.78rem;
+    border-radius: 16px;
+  }
+
+  .chatapp-settings-console__user-row-top {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.4rem;
+  }
+
+  .chatapp-settings-console__user-row-top strong {
+    font-size: 0.88rem;
+  }
+
+  .chatapp-settings-console__user-row-top span,
+  .chatapp-settings-console__user-row-meta span,
+  .chatapp-settings-console__user-row-subtitle {
+    font-size: 0.72rem;
+  }
+
+  .chatapp-settings-console__user-row-meta {
+    justify-content: flex-start;
+    gap: 0.35rem;
+  }
+
+  .chatapp-settings-console__profile-hero {
+    gap: 0.8rem;
+    padding: 0.85rem;
+    border-radius: var(--chatapp-cell-radius);
+  }
+
+  .chatapp-settings-console__profile-hero-copy strong {
+    font-size: 0.98rem;
+  }
+
+  .chatapp-settings-console__profile-hero-copy p {
+    font-size: 0.76rem;
+    line-height: 1.45;
+  }
+
+  .chatapp-settings-console__section {
+    gap: 0.75rem;
+    padding: 0.85rem;
+    border-radius: var(--chatapp-cell-radius);
+  }
+
+  .chatapp-settings-console__workspace-row {
+    gap: 0.55rem;
+    padding: 0.75rem 0.8rem;
+  }
+
+  .chatapp-editorial-board__month-grid,
+  .chatapp-editorial-board__weekday-row {
+    grid-template-columns: 1fr;
+  }
+
+  .chatapp-sidebar__footer {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,118 @@
+.chatapp-message-action {
+  margin-top: 0.55rem;
+  margin-right: 0.45rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.76);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.76rem;
+  padding: 0.35rem 0.7rem;
+}
+
+.chatapp-message-action:hover {
+  background: transparent;
+  color: #fff;
+}
+
+.chatapp-message-action--icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  height: auto;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  line-height: 1;
+}
+
+.chatapp-message-action--icon:hover {
+  border-color: transparent;
+  background: transparent;
+}
+
+.chatapp-message-action--icon .material-symbols-rounded {
+  display: block;
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.chatapp-message-action--copy {
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 160ms ease,
+    color 160ms ease;
+}
+
+.chatapp-message-action--speech {
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 160ms ease,
+    color 160ms ease;
+}
+
+.chatapp-message-action--speech.is-speaking {
+  color: #fff;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.chatapp-message-action--speech.is-loading {
+  color: #facc15;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.chatapp-message-action--speech.is-error {
+  color: #fb7185;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.chatapp-message-action--speech.is-disabled {
+  color: var(--maverick-text-muted);
+  cursor: not-allowed;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.chatapp-message-action--copy-meta {
+  display: none;
+}
+
+.chatapp-message-mobile-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.24rem;
+  min-height: 1.05rem;
+}
+
+.chatapp-bubble.has-mobile-message-footer>.chatapp-bubble__meta,
+.chatapp-message-copy-row>.chatapp-message-action--copy {
+  display: none;
+}
+
+.chatapp-bubble:hover .chatapp-message-action--copy,
+.chatapp-bubble:focus-within .chatapp-message-action--copy,
+.chatapp-bubble:hover .chatapp-message-action--speech,
+.chatapp-bubble:focus-within .chatapp-message-action--speech {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.chatapp-human-message .chatapp-message-action--copy {
+  margin: 0;
+}
+
+.chatapp-human-message .chatapp-message-mobile-footer .chatapp-bubble__time {
+  color: rgba(10, 10, 11, 0.48);
+}

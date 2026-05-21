@@ -1,0 +1,98 @@
+.chatapp-periodic-task-panel__intro {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.chatapp-periodic-task-panel__eyebrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  color: var(--maverick-text);
+  font-size: 0.78rem;
+  line-height: 1.3;
+}
+
+.chatapp-periodic-task-panel__eyebrow-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.chatapp-periodic-task-panel__summary {
+  margin: 0;
+  color: var(--maverick-text-soft);
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+.chatapp-periodic-task-panel__field {
+  min-width: 0;
+}
+
+.chatapp-periodic-task-panel__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  align-items: start;
+}
+
+.chatapp-periodic-task-panel__grid-span {
+  grid-column: 1 / -1;
+}
+
+.chatapp-periodic-task-panel__error {
+  margin: 0;
+}
+
+.chatapp-periodic-task-panel__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
+.chatapp-periodic-task-panel__icon-button {
+  width: 30px;
+  min-width: 30px;
+  min-height: 30px;
+  padding: 0;
+  border-radius: 999px;
+}
+
+.chatapp-periodic-task-panel__icon-button .material-symbols-rounded {
+  font-size: 1.05rem;
+}
+
+.chatapp-periodic-view-switch {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 0.22rem;
+  margin: 0 auto 0.55rem;
+  padding: 0.18rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.chatapp-periodic-view-switch__button {
+  padding: 0.42rem 0.72rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--maverick-text-soft);
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    color 140ms ease;
+}
+
+.chatapp-periodic-view-switch__button.is-active {
+  background: rgba(255, 184, 77, 0.16);
+  color: var(--maverick-text);
+}

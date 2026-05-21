@@ -1,0 +1,12 @@
+@media (max-width: 640px) {
+  .chatapp-operating__hero,
+  .chatapp-operating__maintenance,
+  .chatapp-operating__toolbar,
+  .chatapp-operating__section {
+    padding: 0.82rem 0.86rem;
+  }
+
+  .chatapp-operating__cards {
+    grid-template-columns: 1fr;
+  }
+}

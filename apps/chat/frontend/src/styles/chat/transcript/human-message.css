@@ -1,0 +1,142 @@
+.chatapp-human-message {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 100%;
+  padding: 0.75rem 0.95rem;
+  border-radius: var(--chatapp-cell-radius);
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: var(--chatapp-inner-edge);
+  color: #0a0a0b;
+}
+
+.chatapp-message-copy-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.chatapp-human-message__text {
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.chatapp-message-reference-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.34rem;
+  max-width: min(100%, 16rem);
+  min-height: 1.55rem;
+  margin: 0 0.12rem;
+  padding: 0.14rem 0.48rem 0.14rem 0.42rem;
+  border: 1px solid rgba(125, 211, 252, 0.3);
+  border-radius: 9px;
+  background: rgba(14, 116, 144, 0.24);
+  color: #d8f3ff;
+  font-size: 0.76rem;
+  line-height: 1.2;
+  font-family: inherit;
+  vertical-align: baseline;
+}
+
+button.chatapp-message-reference-chip {
+  appearance: none;
+  cursor: pointer;
+}
+
+.chatapp-message-reference-chip.is-skill {
+  border-color: rgba(244, 114, 182, 0.32);
+  background: rgba(190, 24, 93, 0.22);
+  color: #ffe1ef;
+}
+
+.chatapp-message-reference-chip.is-entity {
+  border-color: rgba(52, 211, 153, 0.34);
+  background: rgba(6, 95, 70, 0.24);
+  color: #d7ffee;
+}
+
+.chatapp-message-reference-chip.is-missing {
+  opacity: 0.72;
+}
+
+.chatapp-message-reference-chip__kind {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.64rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.chatapp-message-reference-chip__label {
+  overflow: hidden;
+  min-width: 0;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chatapp-human-message__editorial-selections {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.chatapp-human-message__editorial-summary {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.72rem;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.chatapp-human-message__editorial-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.chatapp-human-message__editorial-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  max-width: 100%;
+  padding: 0.42rem 0.6rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  font-size: 0.84rem;
+}
+
+.chatapp-human-message__editorial-chip strong {
+  color: #ffe0ea;
+}
+
+.chatapp-human-message__editorial-chip span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.chatapp-human-message__attachments {
+  display: grid;
+  gap: 0.55rem;
+  max-width: min(24rem, 100%);
+}
+
+.chatapp-human-message__attachments .chatapp-attachment-card.is-readonly {
+  border-color: color-mix(in srgb, currentColor 14%, transparent);
+  background: color-mix(in srgb, currentColor 5%, transparent);
+  color: inherit;
+}
+
+.chatapp-human-message__attachments .chatapp-attachment-card__icon {
+  border-color: color-mix(in srgb, currentColor 16%, transparent);
+  background: color-mix(in srgb, currentColor 6%, transparent);
+  color: currentColor;
+}
+
+.chatapp-human-message__attachments .chatapp-attachment-card__detail {
+  color: color-mix(in srgb, currentColor 68%, transparent);
+}

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { synthesizeSpeech } from "../api/client";
 
 const DEFAULT_TTS_CHUNK_CHARS = 450;
+const INITIAL_TTS_CHUNK_CHARS = 180;
 const MIN_RETRY_TTS_CHUNK_CHARS = 180;
 const AUDIO_PLAY_START_TIMEOUT_MS = 8000;
 const AUDIO_CHUNK_END_TIMEOUT_MS = 180000;
@@ -328,13 +329,22 @@ function clearActiveMessage(onActiveMessageChange: Dispatch<SetStateAction<strin
 
 export function speechChunks(text: string, maxTextChars = 0): string[] {
   const limit = maxTextChars > 0 ? Math.min(maxTextChars, DEFAULT_TTS_CHUNK_CHARS) : DEFAULT_TTS_CHUNK_CHARS;
+  const initialLimit = Math.min(limit, INITIAL_TTS_CHUNK_CHARS);
   const normalized = text.trim();
   if (!normalized || normalized.length <= limit) {
     return normalized ? [normalized] : [];
   }
+  const chunks = speechChunksWithLimit(normalized, limit);
+  if (chunks.length > 1 && chunks[0].length > initialLimit) {
+    return [...splitInitialSpeechChunk(chunks[0], initialLimit), ...chunks.slice(1)];
+  }
+  return chunks;
+}
+
+function speechChunksWithLimit(text: string, limit: number): string[] {
   const chunks: string[] = [];
   let current = "";
-  for (const piece of speechPieces(normalized)) {
+  for (const piece of speechPieces(text)) {
     const next = current ? `${current} ${piece}` : piece;
     if (next.length <= limit) {
       current = next;
@@ -350,6 +360,14 @@ export function speechChunks(text: string, maxTextChars = 0): string[] {
     chunks.push(current);
   }
   return chunks;
+}
+
+function splitInitialSpeechChunk(text: string, limit: number): string[] {
+  if (text.length <= limit) {
+    return [text];
+  }
+  const splitAt = Math.max(text.lastIndexOf(" ", limit), Math.min(limit, text.length));
+  return [text.slice(0, splitAt).trim(), text.slice(splitAt).trim()].filter(Boolean);
 }
 
 function speechPieces(text: string): string[] {

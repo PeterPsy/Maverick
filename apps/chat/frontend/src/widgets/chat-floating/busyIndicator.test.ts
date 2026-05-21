@@ -18,18 +18,20 @@ describe("floating chat busy indicator", () => {
   });
 
   it("marks the collapsed launcher busy when its active thread is running", () => {
-    const source = readWidgetFile("main.tsx");
+    const hookSource = readWidgetFile("useFloatingWindows.ts");
+    const windowSource = readWidgetFile("FloatingWindow.tsx");
+    const launcherSource = readWidgetFile("FloatingLauncher.tsx");
 
-    expect(source).toContain("useRuntimeThreads");
-    expect(source).toContain("const isActiveThreadBusy");
-    expect(source).toContain("aria-busy={isActiveThreadBusy || undefined}");
-    expect(source).toContain('isActiveThreadBusy ? "is-busy" : ""');
-    expect(source).toContain("isActiveThreadBusy ? <BusyChatGlow /> : null");
-    expect(source).not.toContain('payload.type === "maverick.chat.thread-availability-changed"');
+    expect(hookSource).toContain("useRuntimeThreads");
+    expect(windowSource).toContain("const isActiveThreadBusy");
+    expect(launcherSource).toContain("aria-busy={isActiveThreadBusy || undefined}");
+    expect(launcherSource).toContain('isActiveThreadBusy ? "is-busy" : ""');
+    expect(launcherSource).toContain("isActiveThreadBusy ? <BusyChatGlow /> : null");
+    expect(hookSource).not.toContain('payload.type === "maverick.chat.thread-availability-changed"');
   });
 
   it("keeps the last floating window available when close is pressed", () => {
-    const source = readWidgetFile("main.tsx");
+    const source = readWidgetFile("useFloatingWindows.ts");
 
     expect(source).toContain("if (current.length <= 1)");
     expect(source).toContain("? { ...windowItem, isCollapsed: true } : windowItem");

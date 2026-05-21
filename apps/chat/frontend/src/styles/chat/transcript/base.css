@@ -1,0 +1,94 @@
+.chatapp-bubble {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0.4rem 0;
+  border-radius: 0;
+  line-height: 1.58;
+}
+
+.chatapp-chat-scroll__inner>* {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.chatapp-message-list {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.chatapp-agent-trace,
+.chatapp-agent-block,
+.chatapp-agent-block__body {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.chatapp-bubble__meta {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.35rem;
+}
+
+.chatapp-bubble__time {
+  font-size: 0.72rem;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.48);
+  white-space: nowrap;
+}
+
+.chatapp-bubble+.chatapp-bubble {
+  margin-top: 1rem;
+}
+
+.chatapp-bubble.is-agent,
+.chatapp-bubble.is-system {
+  margin-right: auto;
+}
+
+.chatapp-bubble.is-human {
+  width: fit-content;
+  margin-left: auto;
+  max-width: min(80%, 44rem);
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  white-space: pre-wrap;
+}
+
+.chatapp-bubble.is-inter-agent {
+  width: fit-content;
+  margin-left: auto;
+  max-width: min(84%, 46rem);
+  padding: 0.8rem 0.95rem;
+  border-radius: var(--chatapp-cell-radius);
+  background: color-mix(in srgb, var(--maverick-accent) 8%, #1f2430 92%);
+  border: 1px solid color-mix(in srgb, var(--maverick-accent) 22%, transparent);
+  color: #eef3ff;
+}
+
+.chatapp-bubble.is-agent {
+  border: 0;
+  background: transparent;
+}
+
+.chatapp-bubble.is-system {
+  border: 1px solid rgba(255, 77, 141, 0.16);
+  background: rgba(255, 77, 141, 0.1);
+  color: #ffd4e6;
+}
+
+.chatapp-bubble.is-system.is-error {
+  padding: 0.1rem 0;
+  border: 0;
+  background: transparent;
+}
+
+.chatapp-bubble.is-system.is-system-update {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+}

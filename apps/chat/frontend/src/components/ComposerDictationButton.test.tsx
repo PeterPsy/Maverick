@@ -5,14 +5,14 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { transcribeSpeech } from "../api/client";
+import { transcribeSpeechBlob } from "../api/client";
 import { ComposerDictationButton } from "./ComposerDictationButton";
 
 vi.mock("../api/client", () => ({
   ApiError: class ApiError extends Error {
     status = 500;
   },
-  transcribeSpeech: vi.fn(),
+  transcribeSpeechBlob: vi.fn(),
 }));
 
 class MockMediaRecorder {
@@ -66,7 +66,7 @@ describe("ComposerDictationButton", () => {
         }),
       },
     });
-    vi.mocked(transcribeSpeech).mockResolvedValue({ language: "en", language_probability: 0.9, text: "hello" });
+    vi.mocked(transcribeSpeechBlob).mockResolvedValue({ language: "en", language_probability: 0.9, text: "hello" });
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
@@ -120,5 +120,6 @@ describe("ComposerDictationButton", () => {
     });
 
     expect(MockMediaRecorder.stopCalls).toBe(1);
+    expect(transcribeSpeechBlob).toHaveBeenCalledWith("speech", expect.any(Blob), { language: undefined, profile: "fast" });
   });
 });

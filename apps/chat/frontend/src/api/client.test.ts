@@ -7,6 +7,7 @@ import {
   selectedSharedDependencyProviderAppId,
   synthesizeSpeech,
   transcribeSpeech,
+  transcribeSpeechBlob,
   type AppDependenciesPayload,
 } from "./client";
 
@@ -186,5 +187,22 @@ describe("speech provider client calls", () => {
       message: "language en-us is unsupported",
       status: 502,
     } satisfies Partial<ApiError>);
+  });
+
+  it("sends dictation audio as a binary backend request", async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ text: "Hello transcript", retention: "metadata_only" }));
+    vi.stubGlobal("fetch", fetchMock);
+    const audio = new Blob(["audio"], { type: "audio/webm" });
+
+    await expect(transcribeSpeechBlob("speech", audio, { language: "it", profile: "fast" })).resolves.toMatchObject({
+      text: "Hello transcript",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [path, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(path).toBe("/api/apps/speech/backend?action=transcribe_audio&language=it&profile=fast");
+    expect(init.method).toBe("POST");
+    expect(init.headers).toMatchObject({ Accept: "application/json", "Content-Type": "audio/webm" });
+    expect(init.body).toBe(audio);
   });
 });

@@ -1,0 +1,153 @@
+@media (max-width: 640px) {
+  .chatapp-settings__hero-title {
+    white-space: normal;
+  }
+
+  .chatapp-settings__workspace-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .chatapp-settings__user-shell,
+  .chatapp-settings__user-top {
+    align-items: flex-start;
+  }
+
+  .chatapp-settings__user-top {
+    flex-direction: column;
+  }
+
+  .chatapp-settings .chatapp-dialog__actions {
+    align-items: stretch;
+  }
+
+  .chatapp-settings .chatapp-dialog__actions .chat-ui-button {
+    width: 100%;
+  }
+
+  .chatapp-settings-console__list-panel {
+    max-height: calc(100vh - 12rem);
+  }
+
+  .chatapp-gallery__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .chatapp-gallery {
+    padding: 0;
+  }
+
+  .chatapp-knowledge__hero,
+  .chatapp-knowledge__filters,
+  .chatapp-knowledge__shell,
+  .chatapp-knowledge-detail__header,
+  .chatapp-knowledge-detail__section-head {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+
+  .chatapp-knowledge__hero-meta {
+    justify-content: flex-start;
+  }
+
+  .chatapp-knowledge__shell {
+    display: grid;
+    height: auto;
+    min-height: 0;
+  }
+
+  .chatapp-knowledge__detail {
+    position: static;
+    width: auto;
+    inset: auto;
+  }
+
+  .chatapp-knowledge-detail {
+    max-height: none;
+    height: auto;
+  }
+
+  .chatapp-operating__shell,
+  .chatapp-operating__toolbar,
+  .chatapp-operating__section-header,
+  .chatapp-operating-detail__footer {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+
+  .chatapp-operating__shell {
+    display: grid;
+    height: auto;
+  }
+
+  .chatapp-operating__detail {
+    width: auto;
+  }
+
+  .chatapp-operating__toolbar-main,
+  .chatapp-operating__hero-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .chatapp-operating__toolbar-actions,
+  .chatapp-operating-detail__footer-actions {
+    justify-content: flex-start;
+  }
+
+  .chatapp-operating-detail {
+    height: auto;
+  }
+
+  .chatapp-knowledge__filters-main,
+  .chatapp-knowledge-detail__form-grid,
+  .chatapp-knowledge-detail__meta {
+    grid-template-columns: 1fr;
+  }
+
+  .chatapp-editorial-board__strategy-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .chatapp-editorial-board__backlog {
+    grid-template-columns: 1fr;
+  }
+
+  .chatapp-editorial-board__editor-header {
+    flex-direction: column;
+  }
+
+  .chatapp-editorial-board__month-cell {
+    min-height: 0;
+  }
+
+  .chatapp-swarm__canvas {
+    min-height: 28rem;
+  }
+
+  .chatapp-sidebar {
+    left: 0.7rem;
+    bottom: 0.7rem;
+    width: min(18rem, calc(100vw - 1.4rem));
+  }
+
+  .chatapp-spawn-drawer {
+    right: 0.7rem;
+    bottom: 0.7rem;
+    width: min(17rem, calc(100vw - 1.4rem));
+  }
+
+  .chat-ui-dropdown__menu {
+    min-width: 180px;
+  }
+
+  .chatapp-attachment-picker__menu {
+    min-width: 220px;
+  }
+
+  .chatapp-attachment-card {
+    max-width: 100%;
+  }
+
+  .chatapp-settings-provider-grid {
+    grid-template-columns: 1fr;
+  }
+}

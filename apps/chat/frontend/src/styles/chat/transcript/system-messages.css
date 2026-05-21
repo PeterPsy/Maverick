@@ -1,0 +1,116 @@
+.chatapp-inter-agent-message {
+  display: grid;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.chatapp-inter-agent-message__meta {
+  display: grid;
+  gap: 0.42rem;
+  min-width: 0;
+}
+
+.chatapp-inter-agent-message__meta-top {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.chatapp-inter-agent-message__eyebrow {
+  font-size: 0.7rem;
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(238, 243, 255, 0.72);
+}
+
+.chatapp-inter-agent-message__source {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 0.94rem;
+  font-weight: 400;
+  color: #ffffff;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.chatapp-inter-agent-message__status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.8rem;
+  font-size: 0.78rem;
+  color: rgba(238, 243, 255, 0.78);
+}
+
+.chatapp-inter-agent-message__relation {
+  max-width: 100%;
+  font-size: 0.77rem;
+  font-weight: 600;
+  color: rgba(238, 243, 255, 0.86);
+  padding: 0.18rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow-wrap: anywhere;
+}
+
+.chatapp-inter-agent-message__text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.chatapp-system-update {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.1rem 0;
+  color: #79d39a;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.chatapp-system-update__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 0.95rem;
+  height: 0.95rem;
+  flex: 0 0 auto;
+}
+
+.chatapp-system-update--error {
+  color: #ff6b7a;
+}
+
+.chatapp-error {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.1rem 0;
+  color: #ff6b7a;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.chatapp-error__icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.chatapp-error__label {
+  line-height: 1.1;
+}
+
+.chatapp-system-update__icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.chatapp-system-update__label {
+  line-height: 1.1;
+}

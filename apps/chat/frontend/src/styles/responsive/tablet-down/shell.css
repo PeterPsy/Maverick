@@ -1,0 +1,159 @@
+@media (max-width: 980px) {
+  .chatapp-chat-panel {
+    padding: 0.75rem;
+  }
+
+  .chatapp-chat-panel__top,
+  .chatapp-chat-panel__meta,
+  .chatapp-editorial-board__hero,
+  .chatapp-editorial-board__controls,
+  .chatapp-gallery__hero,
+  .chatapp-settings-page__hero,
+  .chatapp-sidebar__header,
+  .chatapp-role-picker__header,
+  .chatapp-dialog__actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .chatapp-bubble {
+    max-width: 100%;
+  }
+
+  .chatapp-composer {
+    width: 100%;
+  }
+  .chatapp-attachment-card {
+    min-width: 200px;
+  }
+
+  .chatapp-gallery__hero-meta {
+    justify-content: flex-start;
+  }
+
+  .chatapp-settings-page__hero-meta {
+    justify-content: flex-start;
+  }
+
+  .chatapp-settings-console__hero-actions,
+  .chatapp-settings-console__hero-buttons,
+  .chatapp-settings-console__toolbar-footer,
+  .chatapp-settings-console__detail-head,
+  .chatapp-settings-console__panel-head,
+  .chatapp-settings-console__section-head,
+  .chatapp-settings-console__profile-hero,
+  .chatapp-settings-console__profile-hero-main {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .chatapp-gallery__toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .chatapp-gallery__search {
+    width: 100%;
+  }
+
+  .chatapp-editorial-board__hero-meta {
+    justify-content: flex-start;
+  }
+
+  .chatapp-editorial-board__shell {
+    display: grid;
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 0;
+  }
+
+  .chatapp-editorial-board__detail {
+    position: static;
+    width: auto;
+    inset: auto;
+  }
+
+  .chatapp-editorial-board__detail-card {
+    max-height: none;
+  }
+
+  .chatapp-tutorial {
+    gap: 0;
+  }
+
+  .chatapp-tutorial__hero {
+    min-height: 320px;
+    padding: 1.5rem 1rem;
+  }
+
+  .chatapp-tutorial__hero-card {
+    grid-template-columns: 1fr;
+    width: min(360px, 100%);
+  }
+
+  .chatapp-tutorial__panel {
+    padding: 1.35rem 1rem 1.2rem;
+  }
+
+  .chatapp-tutorial__actions {
+    grid-template-columns: 1fr;
+  }
+
+  .chatapp-tutorial__actions .chat-ui-button--primary {
+    width: 100%;
+  }
+
+  .chatapp-editorial-board__controls-grid,
+  .chatapp-editorial-board__editor-grid,
+  .chatapp-editorial-board__detail-meta,
+  .chatapp-settings__content,
+  .chatapp-settings__create-grid,
+  .chatapp-settings__editor-grid,
+  .chatapp-settings-console__shell,
+  .chatapp-settings-console__toolbar-grid,
+  .chatapp-settings-console__form-grid,
+  .chatapp-settings-console__security-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .chatapp-settings-console__toolbar-grid.is-mobile-collapsed {
+    grid-template-columns: 1fr;
+  }
+
+  .chatapp-settings__hero,
+  .chatapp-settings__hero-main {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .chatapp-settings__hero-badges {
+    justify-content: flex-start;
+  }
+
+  .chatapp-settings-page {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);
+  }
+
+  .chatapp-settings__list-scroll {
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .chatapp-settings-console__list-panel {
+    position: static;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .chatapp-settings-console__user-list {
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .chatapp-settings-console__workspace-row {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+}

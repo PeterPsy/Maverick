@@ -1,0 +1,146 @@
+@media (max-width: 640px) {
+  .chatapp-human-message__text,
+  .chatapp-agent-block__body,
+  .chatapp-system-update__label,
+  .chatapp-error__label {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .chatapp-bubble {
+    padding-block: 0.34rem;
+  }
+
+  .chatapp-bubble + .chatapp-bubble {
+    margin-top: 0.72rem;
+  }
+
+  .chatapp-bubble.is-human,
+  .chatapp-bubble.is-inter-agent {
+    width: fit-content;
+    max-width: calc(100vw - 1.4rem);
+    border-radius: 16px;
+  }
+
+  .chatapp-bubble.is-human {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .chatapp-bubble.is-inter-agent {
+    padding: 0.68rem 0.78rem;
+  }
+
+  .chatapp-human-message {
+    padding: 0.68rem 0.78rem;
+    border-radius: 16px;
+  }
+
+  .chatapp-message-copy-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .chatapp-bubble__meta {
+    align-items: center;
+    gap: 0.24rem;
+    margin-top: 0.25rem;
+  }
+
+  .chatapp-bubble.has-mobile-message-footer > .chatapp-bubble__meta {
+    display: none;
+  }
+
+  .chatapp-message-mobile-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.24rem;
+    min-height: 1.05rem;
+  }
+
+  .chatapp-human-message .chatapp-message-mobile-footer .chatapp-bubble__time {
+    color: rgba(10, 10, 11, 0.48);
+  }
+
+  .chatapp-message-action--copy,
+  .chatapp-message-action--speech {
+    align-self: flex-end;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .chatapp-message-copy-row > .chatapp-message-action--copy {
+    display: none;
+  }
+
+  .chatapp-message-action--copy-meta {
+    display: inline-flex;
+  }
+
+  .chatapp-agent-block__body ul,
+  .chatapp-agent-block__body ol {
+    padding-left: 1rem;
+  }
+
+  .chatapp-agent-block__body pre {
+    border-radius: 12px;
+    padding: 0.72rem;
+  }
+
+  .chatapp-structured-card {
+    gap: 0.55rem;
+    padding: 0.7rem;
+    border-radius: 14px;
+  }
+
+  .chatapp-structured-widget {
+    width: 100%;
+    min-height: min(160px, 40dvh);
+    border-radius: 14px;
+  }
+
+  .chatapp-tool-inline,
+  .chatapp-delegation-status {
+    max-width: 100%;
+  }
+
+  .chatapp-tool-inline__row,
+  .chatapp-delegation-status__toggle,
+  .chatapp-system-update.chatapp-system-update--delegation {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .chatapp-tool-call-panel {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    max-height: min(70dvh, 34rem);
+    border-radius: var(--chatapp-cell-radius);
+  }
+
+  .chatapp-tool-call-panel__header {
+    gap: 0.7rem;
+    padding: 0.78rem 0.82rem 0.68rem;
+  }
+
+  .chatapp-tool-call-panel__content {
+    padding: 0.72rem;
+  }
+
+  .chatapp-tool-call-panel__pre {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  .chatapp-chat-scroll-jump {
+    right: 0.85rem;
+    bottom: calc(var(--chatapp-composer-overlay-height, 0px) + 0.85rem);
+    width: 2.35rem;
+    height: 2.35rem;
+  }
+
+}

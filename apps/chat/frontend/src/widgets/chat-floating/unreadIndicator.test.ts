@@ -11,13 +11,16 @@ function readWidgetFile(filename: string) {
 
 describe("floating chat unread indicator", () => {
   it("renders unread response borders in collapsed and menu surfaces", () => {
-    const source = readWidgetFile("main.tsx");
+    const hookSource = readWidgetFile("useFloatingWindows.ts");
+    const launcherSource = readWidgetFile("FloatingLauncher.tsx");
+    const menuSource = readWidgetFile("FloatingThreadMenu.tsx");
+    const windowSource = readWidgetFile("FloatingWindow.tsx");
     const styles = readWidgetFile("styles.css");
 
-    expect(source).toContain("isThreadUnread");
-    expect(source).toContain("const isActiveThreadUnread");
-    expect(source).toContain('isActiveThreadUnread ? "is-unread" : ""');
-    expect(source).toContain('isUnread ? "is-unread" : ""');
+    expect(hookSource).toContain("isThreadUnread");
+    expect(windowSource).toContain("const isActiveThreadUnread");
+    expect(launcherSource).toContain('isActiveThreadUnread ? "is-unread" : ""');
+    expect(menuSource).toContain('isUnread ? "is-unread" : ""');
     expect(styles).toContain(".chat-floating-thread-menu__trigger.is-unread:not(.is-busy)");
     expect(styles).toContain(".chat-floating-thread-menu__item.is-unread:not(.is-busy)");
     expect(styles).toContain(".chat-floating-widget-launcher.is-unread:not(.is-busy)");
@@ -28,11 +31,13 @@ describe("floating chat unread indicator", () => {
   });
 
   it("marks floating chats read only from explicit floating selections", () => {
-    const source = readWidgetFile("main.tsx");
+    const hookSource = readWidgetFile("useFloatingWindows.ts");
+    const menuSource = readWidgetFile("FloatingThreadMenu.tsx");
+    const windowSource = readWidgetFile("FloatingWindow.tsx");
 
-    expect(source).toContain("markThreadReadIfNeeded");
-    expect(source).toContain("void onMarkThreadRead(thread);");
-    expect(source).toContain("void onMarkThreadRead(activeThread);");
-    expect(source).toMatch(/markThreadRead\s*\(thread\.thread_id\)/);
+    expect(hookSource).toContain("markThreadReadIfNeeded");
+    expect(menuSource).toContain("void onMarkThreadRead(thread);");
+    expect(windowSource).toContain("void onMarkThreadRead(activeThread);");
+    expect(hookSource).toMatch(/markThreadRead\s*\(thread\.thread_id\)/);
   });
 });

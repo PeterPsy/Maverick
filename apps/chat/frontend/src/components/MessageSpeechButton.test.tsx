@@ -328,7 +328,9 @@ describe("MessageSpeechButton", () => {
   it("keeps synthesized speech chunks within the provider text limit", () => {
     expect(speechChunks("One short sentence. Another short sentence.", 24)).toEqual(["One short sentence.", "Another short sentence."]);
     expect(speechChunks("supercalifragilistic", 8)).toEqual(["supercal", "ifragili", "stic"]);
-    expect(speechChunks(`${"word ".repeat(180)}done`, 1500).every((chunk) => chunk.length <= 450)).toBe(true);
+    const chunks = speechChunks(`${"word ".repeat(180)}done`, 1500);
+    expect(chunks[0].length).toBeLessThanOrEqual(180);
+    expect(chunks.every((chunk) => chunk.length <= 450)).toBe(true);
   });
 });
 

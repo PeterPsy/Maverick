@@ -1,0 +1,25 @@
+@media (min-width: 480px) and (max-width: 979px) {
+  .chatapp-app-topbar__badge,
+  .chatapp-app-topbar__user {
+    display: inline-flex;
+  }
+
+  .chatapp-app-topbar__user {
+    color: var(--maverick-text-soft);
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+
+  .chatapp-operating__overview {
+    grid-template-columns: 1fr;
+  }
+
+  .chatapp-operating__hero {
+    flex-direction: column;
+  }
+
+  .chatapp-operating__hero-actions {
+    max-width: none;
+    justify-content: flex-start;
+  }
+}

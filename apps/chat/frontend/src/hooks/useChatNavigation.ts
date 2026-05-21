@@ -1,4 +1,4 @@
-import { Dispatch, SetStateAction, useEffect, useRef, useState } from "react";
+import { Dispatch, SetStateAction, useEffect, useRef } from "react";
 import {
   AppReference,
   ChatThread,
@@ -7,17 +7,10 @@ import {
   RuntimeTurn,
   createThread,
   isRuntimeSessionUnavailableError,
-  orderChatThreads,
 } from "../api/client";
 import { ActiveAppContext, loadDefaultSystemPrompt } from "../lib/activeAppContext";
 import type { PendingMessage, QueuedMessage } from "../lib/messageState";
 import { queueStorageKey, readPersistedQueuedMessages } from "../lib/queuedMessages";
-import {
-  deleteStoredRuntimeTranscript,
-  readStoredRuntimeTranscript,
-  type RuntimeTranscriptCacheEntry,
-  writeStoredRuntimeTranscript,
-} from "../lib/runtimeTranscriptCache";
 import {
   chatNavigationRequestKey,
   consumeNewChatRequest,
@@ -29,8 +22,9 @@ import {
   scalarString,
 } from "../lib/shellNavigation";
 import { debugThreadSync, findThreadByRuntimeSession } from "../lib/threadNavigation";
-import { useRuntimeThreads } from "./useRuntimeThreads";
 import type { DraftChat } from "./useMessageSubmission";
+import { useRuntimeThreadCatalog } from "./useRuntimeThreadCatalog";
+import { useRuntimeTranscriptCache } from "./useRuntimeTranscriptCache";
 
 const THREAD_NOT_FOUND_MESSAGE = "This chat is no longer available.";
 
@@ -76,10 +70,6 @@ type UseChatNavigationParams = {
   threads: ChatThread[];
 };
 
-function isThreadAvailabilityBusy(availability: string) {
-  return availability === "busy" || availability === "queued" || availability === "active";
-}
-
 export function useChatNavigation({
   activeAppContext,
   activeSession,
@@ -115,71 +105,41 @@ export function useChatNavigation({
   threadId,
   threads,
 }: UseChatNavigationParams) {
-  const [threadsLoaded, setThreadsLoaded] = useState(false);
   const consumedNewChatRequests = useRef<Set<string>>(new Set());
   const consumedLegacyNewChatRequest = useRef(false);
   const initialSelectionHandledRef = useRef(false);
   const navigationRequestRef = useRef<string | null>(null);
   const suppressedExternalThreadIdRef = useRef<string | null>(null);
-  const activeRuntimeSessionIdRef = useRef<string | null>(null);
-  const externalRuntimeThreadsErrorRef = useRef<string | null>(null);
-  const runtimeTranscriptCacheRef = useRef<Map<string, RuntimeTranscriptCacheEntry>>(new Map());
 
-  useRuntimeThreads({
-    enabled: !hasExternalRuntimeThreads,
-    onSnapshot: () => setThreadsLoaded(true),
+  const { threadsLoaded } = useRuntimeThreadCatalog({
+    hasExternalRuntimeThreads,
+    runtimeThreads,
+    runtimeThreadsError,
+    runtimeThreadsLoaded,
+    setActiveThread,
     setError,
     setThreads,
+    threads,
   });
 
-  useEffect(() => {
-    if (!hasExternalRuntimeThreads) {
-      return;
-    }
-    if (runtimeThreadsError) {
-      externalRuntimeThreadsErrorRef.current = runtimeThreadsError;
-      setError(runtimeThreadsError);
-      return;
-    }
-    if (externalRuntimeThreadsErrorRef.current) {
-      const previousRuntimeThreadsError = externalRuntimeThreadsErrorRef.current;
-      externalRuntimeThreadsErrorRef.current = null;
-      setError((current) => (current === previousRuntimeThreadsError ? null : current));
-    }
-    setThreads(orderChatThreads(runtimeThreads || []));
-    if (runtimeThreadsLoaded) {
-      setThreadsLoaded(true);
-    }
-  }, [hasExternalRuntimeThreads, runtimeThreads, runtimeThreadsError, runtimeThreadsLoaded, setError, setThreads]);
-
-  useEffect(() => {
-    setActiveThread((current) => {
-      if (!current) {
-        return current;
-      }
-      return threads.find((thread) => thread.thread_id === current.thread_id) || current;
-    });
-  }, [setActiveThread, threads]);
-
-  useEffect(() => {
-    const runtimeSessionId = activeThread?.runtime_session_id;
-    activeRuntimeSessionIdRef.current = runtimeSessionId || null;
-  }, [activeThread?.runtime_session_id]);
-
-  useEffect(() => {
-    const runtimeSessionId = activeThread?.runtime_session_id;
-    if (!runtimeSessionId) {
-      return;
-    }
-    const cacheEntry = {
+  const { cachedActiveTurnForThread, cachedTranscriptForThread, handleUnavailableRuntimeSession, setActiveRuntimeSessionId } =
+    useRuntimeTranscriptCache({
       activeSession,
+      activeThread,
       activeTurn,
       events,
-      hasLoadedHistory: hasLoadedHistory || events.length > 0,
-    };
-    runtimeTranscriptCacheRef.current.set(runtimeSessionId, cacheEntry);
-    writeStoredRuntimeTranscript(runtimeSessionId, cacheEntry);
-  }, [activeSession, activeThread?.runtime_session_id, activeTurn, events, hasLoadedHistory]);
+      hasLoadedHistory,
+      setActiveSession,
+      setActiveThread,
+      setActiveTurn,
+      setError,
+      setEvents,
+      setFailedUserMessages,
+      setHasLoadedHistory,
+      setPendingUserMessages,
+      setQueuedMessages,
+      setThreads,
+    });
 
   useEffect(() => {
     if (!threadsLoaded || initialSelectionHandledRef.current) {
@@ -251,31 +211,6 @@ export function useChatNavigation({
     }
   }
 
-  async function handleUnavailableRuntimeSession(runtimeSessionId: string) {
-    if (!runtimeSessionId) {
-      return;
-    }
-    runtimeTranscriptCacheRef.current.delete(runtimeSessionId);
-    deleteStoredRuntimeTranscript(runtimeSessionId);
-    if (activeRuntimeSessionIdRef.current === runtimeSessionId) {
-      activeRuntimeSessionIdRef.current = null;
-      setActiveSession(null);
-      setEvents([]);
-      setHasLoadedHistory(false);
-      setPendingUserMessages([]);
-      setFailedUserMessages([]);
-      setQueuedMessages([]);
-      setActiveTurn(null);
-    }
-    setThreads((current) =>
-      current.map((thread) => (thread.runtime_session_id === runtimeSessionId ? { ...thread, runtime_session_id: "", availability: "free" } : thread)),
-    );
-    setActiveThread((current) =>
-      current?.runtime_session_id === runtimeSessionId ? { ...current, runtime_session_id: "", availability: "free" } : current,
-    );
-    setError("This runtime session was cleaned and is no longer available.");
-  }
-
   function resetActiveConversation() {
     setActiveThread(null);
     setDraftChat(null);
@@ -320,35 +255,13 @@ export function useChatNavigation({
     openChatRootRouteInShell({ navigationScope });
   }
 
-  function cachedTranscriptForThread(thread: ChatThread | null) {
-    if (!thread?.runtime_session_id) {
-      return null;
-    }
-    const cachedTranscript = runtimeTranscriptCacheRef.current.get(thread.runtime_session_id);
-    if (cachedTranscript) {
-      return cachedTranscript;
-    }
-    const storedTranscript = readStoredRuntimeTranscript(thread.runtime_session_id);
-    if (storedTranscript) {
-      runtimeTranscriptCacheRef.current.set(thread.runtime_session_id, storedTranscript);
-    }
-    return storedTranscript;
-  }
-
-  function cachedActiveTurnForThread(thread: ChatThread | null, cachedTranscript: RuntimeTranscriptCacheEntry | null) {
-    if (!thread || !cachedTranscript?.activeTurn || !isThreadAvailabilityBusy(thread.availability)) {
-      return null;
-    }
-    return cachedTranscript.activeTurn;
-  }
-
   async function selectThreadWithoutHttp(thread: ChatThread | null) {
     const cachedTranscript = cachedTranscriptForThread(thread);
     const cachedHistoryLoaded = Boolean(cachedTranscript && (cachedTranscript.hasLoadedHistory || cachedTranscript.events.length > 0));
     setIsHistoryLoading(Boolean(thread?.runtime_session_id && !cachedHistoryLoaded));
     setActiveThread(thread);
     setDraftChat(null);
-    activeRuntimeSessionIdRef.current = thread?.runtime_session_id || null;
+    setActiveRuntimeSessionId(thread?.runtime_session_id || null);
     setActiveSession(cachedTranscript?.activeSession ?? null);
     setEvents(cachedTranscript?.events ?? []);
     setHasLoadedHistory(cachedHistoryLoaded);
@@ -455,7 +368,7 @@ export function useChatNavigation({
       const payload = await createThread(runtimeSessionId, null, metadata);
       setThreads(payload.threads);
       setActiveThread(payload.thread);
-      activeRuntimeSessionIdRef.current = runtimeSessionId;
+      setActiveRuntimeSessionId(runtimeSessionId);
       setActiveSession(null);
       setEvents([]);
       setHasLoadedHistory(false);

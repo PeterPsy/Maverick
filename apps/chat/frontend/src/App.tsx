@@ -1,11 +1,8 @@
-import { type CSSProperties, type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, type DragEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   ChatThread,
   getAgentDefinition,
-  AppReference,
   interruptRuntimeTurn,
-  listApps,
-  listSkills,
   markThreadRead,
   previewAgentPrompt,
   RuntimeEvent,
@@ -14,6 +11,7 @@ import {
   selectProvider,
 } from "./api/client";
 import { ChatSurface } from "./components/ChatSurface";
+import { useChatComposerContext } from "./hooks/useChatComposerContext";
 import { useChatDependencies } from "./hooks/useChatDependencies";
 import { useChatNavigation } from "./hooks/useChatNavigation";
 import { useChatShellMessages } from "./hooks/useChatShellMessages";
@@ -23,16 +21,12 @@ import { useRuntimeEvents } from "./hooks/useRuntimeEvents";
 import {
   ActiveAppContext,
   loadWidgetActiveAppContext,
-  mergeSelectedReferenceMentionItems,
   promptWithActiveAppContext,
-  referenceMentionItem,
 } from "./lib/activeAppContext";
 import { filesFromDataTransfer, hasFileDropData } from "./lib/fileDropAttachments";
-import { mentionText, referenceKey } from "./lib/mentions";
 import type { MentionItem } from "./lib/mentions";
 import { persistQueuedMessages, queueStorageKey } from "./lib/queuedMessages";
 import { mergeRuntimeEvents } from "./lib/runtimeEvents";
-import { searchComposerReferences } from "./lib/referenceSearch";
 import { latestRuntimeStepLabel } from "./lib/runtimeStepLabels";
 import { debugThreadSync } from "./lib/threadNavigation";
 import { eventsToMessages } from "./lib/transcript";
@@ -108,11 +102,7 @@ export function App({
   const [hasLoadedHistory, setHasLoadedHistory] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [composerError, setComposerError] = useState<string | null>(null);
-  const [mentionItems, setMentionItems] = useState<MentionItem[]>([]);
-  const [selectedReferences, setSelectedReferences] = useState<AppReference[]>([]);
   const [activeAppContext, setActiveAppContext] = useState<ActiveAppContext | null>(null);
-  const consumedExternalFileDrops = useRef<Set<string>>(new Set());
-  const consumedExternalMentionDrops = useRef<Set<string>>(new Set());
   const hasHydratedQueuedMessagesRef = useRef(false);
   const readReceiptInFlightRef = useRef<Set<string>>(new Set());
   const dockedComposerRef = useRef<HTMLDivElement | null>(null);
@@ -120,10 +110,24 @@ export function App({
   const hasExternalRuntimeThreads = Array.isArray(runtimeThreads);
   const canStopTurn = activeTurn?.status === "queued" || activeTurn?.status === "active";
   const isRuntimeBusy = canStopTurn;
-  const composerMentionItems = useMemo(
-    () => mergeSelectedReferenceMentionItems(mentionItems, selectedReferences),
-    [mentionItems, selectedReferences],
-  );
+  const {
+    composerMentionItems,
+    handleAddAttachments,
+    handleCapturePageArea,
+    handleReferenceAdd,
+    handleReferenceRemove,
+    handleSearchReferences,
+    mentionItems,
+    setSelectedReferences,
+  } = useChatComposerContext({
+    activeAppContext,
+    addAttachments,
+    externalFileDrop,
+    externalMentionDrop,
+    navigationScope,
+    setComposer,
+    setComposerError,
+  });
   const {
     failedUserMessages,
     handleSend,
@@ -297,47 +301,7 @@ export function App({
 
   useEffect(() => {
     loadInitialState();
-    void loadMentionItems();
   }, []);
-
-  useEffect(() => {
-    if (!externalMentionDrop || consumedExternalMentionDrops.current.has(externalMentionDrop.requestId)) {
-      return;
-    }
-    consumedExternalMentionDrops.current.add(externalMentionDrop.requestId);
-    appendMentionItemsToComposer(externalMentionDrop.items);
-  }, [externalMentionDrop]);
-
-  useEffect(() => {
-    if (!externalFileDrop || consumedExternalFileDrops.current.has(externalFileDrop.requestId)) {
-      return;
-    }
-    consumedExternalFileDrops.current.add(externalFileDrop.requestId);
-    handleAddAttachments(externalFileDrop.files);
-  }, [externalFileDrop]);
-
-  async function loadMentionItems() {
-    const [appsResult, skillsResult] = await Promise.allSettled([listApps(), listSkills()]);
-    const appMentions =
-      appsResult.status === "fulfilled"
-        ? appsResult.value.map((app) => ({
-            id: app.app_id,
-            label: app.name,
-            description: app.description,
-            kind: "app" as const,
-          }))
-        : [];
-    const skillMentions =
-      skillsResult.status === "fulfilled"
-        ? skillsResult.value.map((skill) => ({
-            id: skill.id,
-            label: skill.name,
-            description: skill.description,
-            kind: "skill" as const,
-          }))
-        : [];
-    setMentionItems([...appMentions, ...skillMentions]);
-  }
 
   useChatShellMessages({
     addAttachments,
@@ -473,61 +437,6 @@ export function App({
     }
     persistQueuedMessages(queueStorageKey(navigationScope, activeThread?.thread_id || null), queuedMessages);
   }, [activeThread?.thread_id, isBootstrapping, navigationScope, queuedMessages]);
-
-  function handleAddAttachments(files: File[]) {
-    addAttachments(files);
-    setComposerError(null);
-  }
-
-  function appendMentionItemsToComposer(items: MentionItem[]) {
-    const validItems = items.filter((item) => item.reference);
-    if (!validItems.length) {
-      return;
-    }
-    const mentionBlock = validItems.map((item) => mentionText(item)).join(" ");
-    setComposer((current) => {
-      const prefix = current && !/\s$/.test(current) ? " " : "";
-      return `${current}${prefix}${mentionBlock} `;
-    });
-    validItems.forEach((item) => {
-      if (item.reference) {
-        handleReferenceAdd(item.reference);
-      }
-    });
-    setComposerError(null);
-  }
-
-  const handleSearchReferences = useCallback(
-    async (query: string, signal: AbortSignal): Promise<MentionItem[]> => {
-      const references = await searchComposerReferences(query, signal, activeAppContext?.app_id || "");
-      return references.map(referenceMentionItem);
-    },
-    [activeAppContext?.app_id],
-  );
-
-  function handleReferenceAdd(reference: AppReference) {
-    setSelectedReferences((current) => {
-      const key = referenceKey(reference);
-      return current.some((item) => referenceKey(item) === key) ? current : [...current, reference];
-    });
-  }
-
-  function handleReferenceRemove(reference: AppReference) {
-    const key = referenceKey(reference);
-    setSelectedReferences((current) => current.filter((item) => referenceKey(item) !== key));
-  }
-
-  function handleCapturePageArea() {
-    window.parent?.postMessage(
-      {
-        type: "maverick.shell.capture-area.start",
-        owner_app_id: "chat",
-        widget_id: "chat-floating",
-        navigation_scope: navigationScope,
-      },
-      window.location.origin,
-    );
-  }
 
   async function handleStopTurn() {
     if (!activeTurn || !canStopTurn) {

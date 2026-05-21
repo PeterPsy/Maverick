@@ -1,45 +1,27 @@
 import { type CSSProperties, type DragEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   ChatThread,
-  getAgentDefinition,
-  interruptRuntimeTurn,
-  markThreadRead,
-  previewAgentPrompt,
   RuntimeEvent,
   RuntimeSession,
   RuntimeTurn,
-  selectProvider,
 } from "./api/client";
 import { ChatSurface } from "./components/ChatSurface";
 import { useChatComposerContext } from "./hooks/useChatComposerContext";
 import { useChatDependencies } from "./hooks/useChatDependencies";
 import { useChatNavigation } from "./hooks/useChatNavigation";
+import { useChatReadReceipts } from "./hooks/useChatReadReceipts";
+import { useChatRuntimeControls } from "./hooks/useChatRuntimeControls";
 import { useChatShellMessages } from "./hooks/useChatShellMessages";
 import { useComposerAttachments } from "./hooks/useComposerAttachments";
-import { AgentRuntimeConfig, DraftChat, useMessageSubmission } from "./hooks/useMessageSubmission";
+import { DraftChat, useMessageSubmission } from "./hooks/useMessageSubmission";
 import { useRuntimeEvents } from "./hooks/useRuntimeEvents";
-import {
-  ActiveAppContext,
-  loadWidgetActiveAppContext,
-  promptWithActiveAppContext,
-} from "./lib/activeAppContext";
+import { ActiveAppContext, loadWidgetActiveAppContext } from "./lib/activeAppContext";
 import { filesFromDataTransfer, hasFileDropData } from "./lib/fileDropAttachments";
-import type { MentionItem } from "./lib/mentions";
+import type { ExternalFileDrop, ExternalMentionDrop } from "./lib/externalInputs";
 import { persistQueuedMessages, queueStorageKey } from "./lib/queuedMessages";
-import { mergeRuntimeEvents } from "./lib/runtimeEvents";
 import { latestRuntimeStepLabel } from "./lib/runtimeStepLabels";
 import { debugThreadSync } from "./lib/threadNavigation";
 import { eventsToMessages } from "./lib/transcript";
-
-export type ExternalMentionDrop = {
-  items: MentionItem[];
-  requestId: string;
-};
-
-export type ExternalFileDrop = {
-  files: File[];
-  requestId: string;
-};
 
 const MESSAGE_HISTORY_LIMIT = 50;
 
@@ -104,12 +86,16 @@ export function App({
   const [composerError, setComposerError] = useState<string | null>(null);
   const [activeAppContext, setActiveAppContext] = useState<ActiveAppContext | null>(null);
   const hasHydratedQueuedMessagesRef = useRef(false);
-  const readReceiptInFlightRef = useRef<Set<string>>(new Set());
   const dockedComposerRef = useRef<HTMLDivElement | null>(null);
   const [dockedComposerHeight, setDockedComposerHeight] = useState(144);
   const hasExternalRuntimeThreads = Array.isArray(runtimeThreads);
   const canStopTurn = activeTurn?.status === "queued" || activeTurn?.status === "active";
   const isRuntimeBusy = canStopTurn;
+  const { handleChatRootPointerDown } = useChatReadReceipts({
+    activeThread,
+    setActiveThread,
+    setThreads,
+  });
   const {
     composerMentionItems,
     handleAddAttachments,
@@ -127,6 +113,19 @@ export function App({
     navigationScope,
     setComposer,
     setComposerError,
+  });
+  const { handleSelectAgent, handleSelectProvider, handleStopTurn, selectedAgentRuntimeConfig } = useChatRuntimeControls({
+    activeThread,
+    activeTurn,
+    agentCatalogAppId,
+    canStopTurn,
+    selectedAgentTypeId,
+    setActiveProviderId,
+    setActiveTurn,
+    setComposerError,
+    setError,
+    setEvents,
+    setSelectedAgentTypeId,
   });
   const {
     failedUserMessages,
@@ -318,52 +317,6 @@ export function App({
     transcriptionProviderAppId,
   });
 
-  async function handleSelectProvider(providerId: string) {
-    setActiveProviderId(providerId);
-    try {
-      const payload = await selectProvider(providerId);
-      setActiveProviderId(payload.active_provider?.provider_id || providerId);
-      setError(null);
-    } catch (selectError) {
-      setError(selectError instanceof Error ? selectError.message : "Unable to select provider.");
-    }
-  }
-
-  function handleSelectAgent(agentTypeId: string) {
-    if (activeThread) {
-      return;
-    }
-    setSelectedAgentTypeId(agentTypeId);
-    setComposerError(null);
-  }
-
-  async function selectedAgentRuntimeConfig(activeApp: ActiveAppContext | null): Promise<AgentRuntimeConfig | null> {
-    if (!selectedAgentTypeId || !agentCatalogAppId) {
-      return null;
-    }
-    const [definitionPayload, promptPayload] = await Promise.all([
-      getAgentDefinition(agentCatalogAppId, selectedAgentTypeId),
-      previewAgentPrompt(agentCatalogAppId, selectedAgentTypeId),
-    ]);
-    const definition = definitionPayload.agent_definition;
-    if (!definitionPayload.exists || !definition) {
-      throw new Error("Selected agent is no longer available.");
-    }
-    return {
-      agent_id: definition.name,
-      agent_role_id: definition.role_id,
-      agent_type_id: definition.id,
-      skill_ids: definition.skill_ids || [],
-      source_app_id: agentCatalogAppId,
-      system_prompt: promptWithActiveAppContext(promptPayload.rendered || "", activeApp),
-      title: definition.name,
-    };
-  }
-
-  function handleChatRootPointerDown() {
-    void markActiveThreadReadIfNeeded(activeThread);
-  }
-
   function handleChatRootDragOver(event: DragEvent<HTMLElement>) {
     if (isThreadLoading || !hasFileDropData(event.dataTransfer)) {
       return;
@@ -384,26 +337,6 @@ export function App({
     event.preventDefault();
     event.stopPropagation();
     handleAddAttachments(files);
-  }
-
-  async function markActiveThreadReadIfNeeded(thread: ChatThread | null) {
-    if (!thread?.has_unread_completed_response || readReceiptInFlightRef.current.has(thread.thread_id)) {
-      return;
-    }
-    readReceiptInFlightRef.current.add(thread.thread_id);
-    setActiveThread((current) => (current?.thread_id === thread.thread_id ? { ...current, has_unread_completed_response: false } : current));
-    setThreads((current) =>
-      current.map((item) => (item.thread_id === thread.thread_id ? { ...item, has_unread_completed_response: false } : item)),
-    );
-    try {
-      const payload = await markThreadRead(thread.thread_id);
-      setThreads(payload.threads);
-      setActiveThread((current) => (current?.thread_id === payload.thread.thread_id ? payload.thread : current));
-    } catch {
-      // Reading an open chat should not be blocked by a best-effort receipt.
-    } finally {
-      readReceiptInFlightRef.current.delete(thread.thread_id);
-    }
   }
 
   function notifyActiveThreadChanged(activeThreadId: string) {
@@ -437,22 +370,6 @@ export function App({
     }
     persistQueuedMessages(queueStorageKey(navigationScope, activeThread?.thread_id || null), queuedMessages);
   }, [activeThread?.thread_id, isBootstrapping, navigationScope, queuedMessages]);
-
-  async function handleStopTurn() {
-    if (!activeTurn || !canStopTurn) {
-      return;
-    }
-    try {
-      const response = await interruptRuntimeTurn(activeTurn.turn_id);
-      setActiveTurn(response.turn);
-      if (response.event) {
-        setEvents((current) => mergeRuntimeEvents(current, [response.event as RuntimeEvent]));
-      }
-      setError(null);
-    } catch (stopError) {
-      setError(stopError instanceof Error ? stopError.message : "Unable to stop runtime turn.");
-    }
-  }
 
   return (
     <main className="chatapp-root" onDragOver={handleChatRootDragOver} onDrop={handleChatRootDrop} onPointerDown={handleChatRootPointerDown}>

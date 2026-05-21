@@ -8,7 +8,7 @@ import {
 import { mentionText, referenceKey } from "../lib/mentions";
 import type { MentionItem } from "../lib/mentions";
 import { searchComposerReferences } from "../lib/referenceSearch";
-import type { ExternalFileDrop, ExternalMentionDrop } from "../App";
+import type { ExternalFileDrop, ExternalMentionDrop } from "../lib/externalInputs";
 
 type UseChatComposerContextParams = {
   activeAppContext: ActiveAppContext | null;

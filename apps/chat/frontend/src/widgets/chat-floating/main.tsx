@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "../../App";
-import type { ExternalFileDrop, ExternalMentionDrop } from "../../App";
+import type { ExternalFileDrop, ExternalMentionDrop } from "../../lib/externalInputs";
 import type { ChatThread } from "../../api/client";
 import { deleteThread, getWidgetContext, markThreadRead, updateThread } from "../../api/client";
 import { useRuntimeThreads } from "../../hooks/useRuntimeThreads";

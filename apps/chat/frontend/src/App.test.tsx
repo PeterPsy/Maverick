@@ -323,6 +323,62 @@ describe("App thread navigation", () => {
       });
     });
   });
+
+  it("does not attach a scoped runtime-session deep link in the unscoped app", async () => {
+    const element = await renderApp({ runtimeThreads: [] as ChatThread[], runtimeThreadsLoaded: true });
+
+    await waitForAssertion(() => {
+      expect(element.textContent).toContain("How can I help today?");
+    });
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          origin: window.location.origin,
+          data: {
+            type: "maverick.app.navigate",
+            app_id: "chat",
+            navigation_scope: "floating-window",
+            params: { app_page: "runtime-sessions/scoped-session" },
+          },
+        }),
+      );
+    });
+
+    expect(createThread).not.toHaveBeenCalled();
+  });
+
+  it("ignores a repeated runtime-session deep link after the session is attached", async () => {
+    const runtimeThread = thread("thread-runtime", "session-runtime");
+    vi.mocked(createThread).mockResolvedValue({ thread: runtimeThread, threads: [runtimeThread] });
+    await renderApp({ runtimeThreads: [] as ChatThread[], runtimeThreadsLoaded: true });
+
+    const runtimeSessionNavigate = () =>
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          origin: window.location.origin,
+          data: {
+            type: "maverick.app.navigate",
+            app_id: "chat",
+            params: { app_page: "runtime-sessions/session-runtime" },
+          },
+        }),
+      );
+
+    await act(async () => {
+      runtimeSessionNavigate();
+    });
+    await waitForAssertion(() => {
+      expect(createThread).toHaveBeenCalledTimes(1);
+    });
+
+    await act(async () => {
+      runtimeSessionNavigate();
+    });
+    await waitForAssertion(() => {
+      expect(createThread).toHaveBeenCalledTimes(1);
+    });
+  });
 });
 
 describe("App shell message scope", () => {

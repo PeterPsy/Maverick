@@ -1,7 +1,6 @@
 import { type CSSProperties, type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ChatThread,
-  createRuntimeSessionWithTurn,
   createThread,
   getAgentDefinition,
   AppReference,
@@ -16,30 +15,25 @@ import {
   RuntimeTurn,
   orderChatThreads,
   selectProvider,
-  sendRuntimeTurn,
 } from "./api/client";
-import type { AppDependenciesPayload } from "./api/client";
-import { ChatComposer } from "./components/ChatComposer";
-import { ChatTranscript } from "./components/ChatTranscript";
+import { ChatSurface } from "./components/ChatSurface";
 import { useChatDependencies } from "./hooks/useChatDependencies";
+import { useChatShellMessages } from "./hooks/useChatShellMessages";
 import { useComposerAttachments } from "./hooks/useComposerAttachments";
+import { AgentRuntimeConfig, DraftChat, useMessageSubmission } from "./hooks/useMessageSubmission";
 import { useRuntimeEvents } from "./hooks/useRuntimeEvents";
 import { useRuntimeThreads } from "./hooks/useRuntimeThreads";
 import {
   ActiveAppContext,
-  activeAppContextFromWidgetContext,
   loadDefaultSystemPrompt,
   loadWidgetActiveAppContext,
-  mergeAppReferences,
   mergeSelectedReferenceMentionItems,
   promptWithActiveAppContext,
   referenceMentionItem,
 } from "./lib/activeAppContext";
-import { hasInvalidAttachments } from "./lib/attachments";
 import { filesFromDataTransfer, hasFileDropData } from "./lib/fileDropAttachments";
-import { appReferencesFromText, mentionText, referenceKey } from "./lib/mentions";
+import { mentionText, referenceKey } from "./lib/mentions";
 import type { MentionItem } from "./lib/mentions";
-import { PendingMessage, QueuedMessage, uploadComposerAttachment } from "./lib/messageState";
 import { persistQueuedMessages, queueStorageKey, readPersistedQueuedMessages } from "./lib/queuedMessages";
 import { mergeRuntimeEvents } from "./lib/runtimeEvents";
 import { searchComposerReferences } from "./lib/referenceSearch";
@@ -59,44 +53,14 @@ import {
   runtimeSessionThreadMetadataFromParams,
   RuntimeSessionThreadMetadata,
   scalarString,
-  shellMessageMatchesNavigationScope,
 } from "./lib/shellNavigation";
-import { debugThreadSync, findThreadByRuntimeSession, upsertOrderedThread } from "./lib/threadNavigation";
+import { debugThreadSync, findThreadByRuntimeSession } from "./lib/threadNavigation";
 import { eventsToMessages } from "./lib/transcript";
-
-type ShellNavigationMessage = {
-  type?: string;
-  context?: Record<string, unknown>;
-  deleted_thread_id?: string;
-  error?: string;
-  files?: unknown[];
-  dependencies?: AppDependenciesPayload;
-  navigation_scope?: string;
-  owner_app_id?: string;
-  app_id?: string;
-  params?: Record<string, string | boolean | null>;
-  resource?: string;
-};
 
 type CreateChatOptions = {
   activeAppContext?: ActiveAppContext | null;
   projectId?: string | null;
   resetView?: boolean;
-};
-
-type DraftChat = {
-  projectId: string | null;
-  systemPrompt: string;
-};
-
-type AgentRuntimeConfig = {
-  agent_id: string;
-  agent_role_id: string;
-  agent_type_id: string;
-  skill_ids: string[];
-  source_app_id: string;
-  system_prompt: string;
-  title: string;
 };
 
 export type ExternalMentionDrop = {
@@ -169,15 +133,11 @@ export function App({
   const [events, setEvents] = useState<RuntimeEvent[]>([]);
   const [composer, setComposer] = useState("");
   const { addAttachments, attachments, clearAttachments, removeAttachment } = useComposerAttachments();
-  const [pendingUserMessages, setPendingUserMessages] = useState<PendingMessage[]>([]);
-  const [failedUserMessages, setFailedUserMessages] = useState<PendingMessage[]>([]);
-  const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>([]);
   const [activeTurn, setActiveTurn] = useState<RuntimeTurn | null>(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [threadsLoaded, setThreadsLoaded] = useState(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [hasLoadedHistory, setHasLoadedHistory] = useState(false);
-  const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [composerError, setComposerError] = useState<string | null>(null);
   const [mentionItems, setMentionItems] = useState<MentionItem[]>([]);
@@ -198,6 +158,47 @@ export function App({
   const dockedComposerRef = useRef<HTMLDivElement | null>(null);
   const [dockedComposerHeight, setDockedComposerHeight] = useState(144);
   const hasExternalRuntimeThreads = Array.isArray(runtimeThreads);
+  const canStopTurn = activeTurn?.status === "queued" || activeTurn?.status === "active";
+  const isRuntimeBusy = canStopTurn;
+  const composerMentionItems = useMemo(
+    () => mergeSelectedReferenceMentionItems(mentionItems, selectedReferences),
+    [mentionItems, selectedReferences],
+  );
+  const {
+    failedUserMessages,
+    handleSend,
+    isSending,
+    pendingUserMessages,
+    queuedMessages,
+    setFailedUserMessages,
+    setPendingUserMessages,
+    setQueuedMessages,
+  } = useMessageSubmission({
+    activeAppContext,
+    activeThread,
+    attachments,
+    clearAttachments,
+    composer,
+    composerMentionItems,
+    draftChat,
+    isBootstrapping,
+    isHistoryLoading,
+    isRuntimeBusy,
+    navigationScope,
+    notifyActiveThreadChanged,
+    selectedAgentRuntimeConfig,
+    setActiveSession,
+    setActiveThread,
+    setActiveTurn,
+    setComposer,
+    setComposerError,
+    setDraftChat,
+    setError,
+    setEvents,
+    setSelectedReferences,
+    setThreads,
+    threads,
+  });
 
   const messages = useMemo(() => {
     const currentMessages = eventsToMessages(events);
@@ -228,8 +229,6 @@ export function App({
     return visibleMessages.slice(-MESSAGE_HISTORY_LIMIT);
   }, [events, failedUserMessages, pendingUserMessages]);
   const executionMode = activeSession?.effective_mode === "sandbox" || activeSession?.effective_mode === "full-access" ? activeSession.effective_mode : null;
-  const canStopTurn = activeTurn?.status === "queued" || activeTurn?.status === "active";
-  const isRuntimeBusy = canStopTurn;
   const composerSelectedAgentTypeId = activeThread
     ? activeThread.source_app_id && activeThread.source_app_id !== "chat"
       ? activeThread.agent_type_id
@@ -256,10 +255,6 @@ export function App({
     }
     return latestRuntimeStepLabel(events, activeTurn?.turn_id) || "Thinking";
   }, [activeTurn?.turn_id, events, isBootstrapping, isHistoryLoading, isRuntimeBusy]);
-  const composerMentionItems = useMemo(
-    () => mergeSelectedReferenceMentionItems(mentionItems, selectedReferences),
-    [mentionItems, selectedReferences],
-  );
 
   useEffect(() => {
     const dock = dockedComposerRef.current;
@@ -394,12 +389,14 @@ export function App({
     try {
       const query = new URLSearchParams(window.location.search);
       if (newChatRequestId) {
+        suppressedExternalThreadIdRef.current = threadId || null;
         createDraftChat({ activeAppContext, projectId: newChatProjectId });
         setQueuedMessages(readPersistedQueuedMessages(queueStorageKey(navigationScope, null)));
         setError(null);
         return;
       }
       if (query.get("new_chat") === "1") {
+        suppressedExternalThreadIdRef.current = threadId || null;
         createDraftChat({ activeAppContext, projectId: query.get("project_id") });
         setQueuedMessages(readPersistedQueuedMessages(queueStorageKey(navigationScope, null)));
         setError(null);
@@ -444,7 +441,7 @@ export function App({
       suppressedExternalThreadIdRef.current = null;
       return;
     }
-    if (suppressedExternalThreadIdRef.current && threadId === suppressedExternalThreadIdRef.current && !threads.some((thread) => thread.thread_id === threadId)) {
+    if (suppressedExternalThreadIdRef.current && threadId === suppressedExternalThreadIdRef.current) {
       return;
     }
     void openThreadById(threadId);
@@ -473,81 +470,20 @@ export function App({
     setMentionItems([...appMentions, ...skillMentions]);
   }
 
-  useEffect(() => {
-    window.parent?.postMessage({ type: "maverick.app.ready", app_id: "chat" }, window.location.origin);
-  }, []);
-
-  useEffect(() => {
-    function handleShellMessage(event: MessageEvent) {
-      if (event.origin !== window.location.origin || !event.data || typeof event.data !== "object") {
-        return;
-      }
-      const payload = event.data as ShellNavigationMessage;
-      if (payload.type === "maverick.widget.capture-area.complete") {
-        if (!shellMessageMatchesNavigationScope(payload, navigationScope)) {
-          return;
-        }
-        const files = Array.isArray(payload.files) ? payload.files.filter((file): file is File => file instanceof File) : [];
-        if (files.length) {
-          addAttachments(files);
-          setComposerError(null);
-        }
-        return;
-      }
-      if (payload.type === "maverick.widget.capture-area.error") {
-        if (!shellMessageMatchesNavigationScope(payload, navigationScope)) {
-          return;
-        }
-        setComposerError(payload.error || "Unable to capture page area.");
-        return;
-      }
-      if (payload.type === "maverick.widget.context-changed") {
-        if (!shellMessageMatchesNavigationScope(payload, navigationScope)) {
-          return;
-        }
-        setActiveAppContext(activeAppContextFromWidgetContext(payload.context || {}));
-        return;
-      }
-      if (payload.type === "maverick.app.dependencies" && payload.app_id === "chat" && payload.dependencies) {
-        void Promise.all([
-          loadAgentOptionsFromDependencies(payload.dependencies),
-          loadSpeechProviderFromDependencies(payload.dependencies),
-          loadTranscriptionProviderFromDependencies(payload.dependencies),
-        ]);
-        return;
-      }
-      if (
-        payload.type === "maverick.app.data-changed" &&
-        payload.resource === "configuration" &&
-        (payload.owner_app_id === agentCatalogAppId || payload.owner_app_id === speechProviderAppId || payload.owner_app_id === transcriptionProviderAppId)
-      ) {
-        void loadAppDependencies();
-        return;
-      }
-      if (!shellMessageMatchesNavigationScope(payload, navigationScope)) {
-        return;
-      }
-      if (payload.type !== "maverick.app.navigate" || (payload.app_id && payload.app_id !== "chat")) {
-        return;
-      }
-      void handleNavigationParams(payload.params || {});
-    }
-
-    window.addEventListener("message", handleShellMessage);
-    return () => window.removeEventListener("message", handleShellMessage);
-  }, [
-    activeAppContext,
-    activeThread?.thread_id,
+  useChatShellMessages({
+    addAttachments,
     agentCatalogAppId,
     loadAgentOptionsFromDependencies,
     loadAppDependencies,
     loadSpeechProviderFromDependencies,
     loadTranscriptionProviderFromDependencies,
     navigationScope,
+    onNavigate: handleNavigationParams,
+    setActiveAppContext,
+    setComposerError,
     speechProviderAppId,
-    threads,
     transcriptionProviderAppId,
-  ]);
+  });
 
   async function handleUnavailableRuntimeSession(runtimeSessionId: string) {
     if (!runtimeSessionId) {
@@ -909,136 +845,6 @@ export function App({
     persistQueuedMessages(queueStorageKey(navigationScope, activeThread?.thread_id || null), queuedMessages);
   }, [activeThread?.thread_id, isBootstrapping, navigationScope, queuedMessages]);
 
-  async function handleSend() {
-    const input = composer.trim();
-    if ((!input && !attachments.length) || hasInvalidAttachments(attachments)) {
-      return;
-    }
-    const clientMessageId = crypto.randomUUID();
-    setComposerError(null);
-    let messageAttachments;
-    try {
-      messageAttachments = await Promise.all(attachments.map(uploadComposerAttachment));
-    } catch (uploadError) {
-      setComposerError(uploadError instanceof Error ? uploadError.message : "Unable to upload attachments.");
-      return;
-    }
-    setComposer("");
-    setSelectedReferences([]);
-    clearAttachments();
-    const appReferences = mergeAppReferences(appReferencesFromText(input, composerMentionItems), activeAppContext);
-    if (isRuntimeBusy || isSending) {
-      setQueuedMessages((current) => [...current, { clientMessageId, content: input, attachments: messageAttachments, appReferences }]);
-      return;
-    }
-    await submitMessage({ clientMessageId, content: input, attachments: messageAttachments, appReferences });
-  }
-
-  async function submitMessage(message: QueuedMessage) {
-    setPendingUserMessages((current) => [
-      ...current,
-      {
-        clientMessageId: message.clientMessageId,
-        content: message.content,
-        createdAt: new Date().toISOString(),
-        attachments: message.attachments,
-        appReferences: message.appReferences,
-      },
-    ]);
-    setFailedUserMessages((current) => current.filter((item) => item.clientMessageId !== message.clientMessageId));
-    setIsSending(true);
-    setError(null);
-    try {
-      let thread = activeThread;
-      let response: Awaited<ReturnType<typeof sendRuntimeTurn>>;
-      if (!thread) {
-        const agentRuntimeConfig = await selectedAgentRuntimeConfig(activeAppContext);
-        const systemPrompt = agentRuntimeConfig?.system_prompt || draftChat?.systemPrompt || (await loadDefaultSystemPrompt(activeAppContext));
-        response = await createRuntimeSessionWithTurn({
-          appReferences: message.appReferences,
-          attachments: message.attachments,
-          clientMessageId: message.clientMessageId,
-          inputText: message.content,
-          options: {
-            agent_id: agentRuntimeConfig?.agent_id,
-            agent_role_id: agentRuntimeConfig?.agent_role_id,
-            agent_type_id: agentRuntimeConfig?.agent_type_id,
-            project_id: draftChat?.projectId ?? null,
-            source_app_id: agentRuntimeConfig?.source_app_id || "chat",
-            system_prompt: systemPrompt,
-            skill_ids: agentRuntimeConfig?.skill_ids || [],
-            title: agentRuntimeConfig?.title || "New chat",
-          },
-        });
-        setDraftChat(null);
-      } else if (!threads.some((item) => item.thread_id === thread?.thread_id)) {
-        throw new Error("This chat no longer exists.");
-      } else {
-        if (!thread.runtime_session_id) {
-          throw new Error("This chat does not have a runtime session.");
-        }
-        response = await sendRuntimeTurn(
-          thread.runtime_session_id,
-          message.content,
-          message.clientMessageId,
-          message.attachments,
-          message.appReferences,
-        );
-      }
-      const responseThread = response.thread;
-      const baseThread = responseThread || thread;
-      if (!baseThread) {
-        throw new Error("Runtime thread was not created.");
-      }
-      setActiveSession(response.session);
-      setActiveTurn(response.turn);
-      setEvents((current) => mergeRuntimeEvents(current, response.events));
-      const userMessageAt = response.turn.created_at || new Date().toISOString();
-      const optimisticThread = {
-        ...baseThread,
-        ...(responseThread || {}),
-        availability: response.turn.status === "queued" || response.turn.status === "active" ? response.turn.status : "free",
-        last_user_message_at: userMessageAt,
-      };
-      setActiveThread((current) => (current?.thread_id === optimisticThread.thread_id ? { ...current, ...optimisticThread } : optimisticThread));
-      setThreads((current) => upsertOrderedThread(current, optimisticThread));
-      if (!thread) {
-        notifyActiveThreadChanged(optimisticThread.thread_id);
-        openChatThreadRouteInShell(optimisticThread.thread_id, { navigationScope });
-      }
-      if (response.turn.status !== "queued" && response.turn.status !== "active") {
-        setPendingUserMessages((current) => current.filter((item) => item.clientMessageId !== message.clientMessageId));
-      }
-    } catch (sendError) {
-      setError(sendError instanceof Error ? sendError.message : "Unable to send message.");
-      setActiveTurn(null);
-      setComposer(message.content);
-      setSelectedReferences(message.appReferences);
-      setPendingUserMessages((current) => current.filter((item) => item.clientMessageId !== message.clientMessageId));
-      setFailedUserMessages((current) => [
-        ...current,
-        {
-          clientMessageId: message.clientMessageId,
-          content: message.content,
-          createdAt: new Date().toISOString(),
-          attachments: message.attachments,
-          appReferences: message.appReferences,
-        },
-      ]);
-    } finally {
-      setIsSending(false);
-    }
-  }
-
-  useEffect(() => {
-    if (isBootstrapping || isHistoryLoading || isRuntimeBusy || isSending || queuedMessages.length === 0) {
-      return;
-    }
-    const [nextMessage, ...remainingMessages] = queuedMessages;
-    setQueuedMessages(remainingMessages);
-    void submitMessage(nextMessage);
-  }, [isBootstrapping, isHistoryLoading, isRuntimeBusy, isSending, queuedMessages]);
-
   function handleAddAttachments(files: File[]) {
     addAttachments(files);
     setComposerError(null);
@@ -1112,104 +918,51 @@ export function App({
 
   return (
     <main className="chatapp-root" onDragOver={handleChatRootDragOver} onDrop={handleChatRootDrop} onPointerDown={handleChatRootPointerDown}>
-      <section className="chatapp-chat-panel">
-        <div className={`chatapp-chat-workspace ${isEmptyChatView ? "is-empty-chat" : ""}`}>
-          <div className={`chatapp-chat-main ${isEmptyChatView ? "is-empty-chat" : ""}`} style={chatMainStyle}>
-            {isEmptyChatView ? (
-              <div className="chatapp-empty-chat-stage">
-                <div className="chatapp-empty-chat-stage__copy">
-                  <h1>How can I help today?</h1>
-                  <span aria-hidden="true" />
-                  <p>Type a command or ask Maverick a question</p>
-                </div>
-                <ChatComposer
-                  activeProviderId={activeProviderId}
-                  agentSelectorLocked={Boolean(activeThread)}
-                  agents={agentOptions}
-                  attachments={attachments}
-                  canStopTurn={canStopTurn}
-                  disabled={isThreadLoading}
-                  error={composerError}
-                  executionMode={executionMode}
-                  isEmptyMode
-                  isSending={isRuntimeBusy || isSending}
-                  mentionItems={composerMentionItems}
-                  onAddAttachments={handleAddAttachments}
-                  onCapturePageArea={enablePageCapture ? handleCapturePageArea : undefined}
-                  onChange={setComposer}
-                  onReferenceAdd={handleReferenceAdd}
-                  onReferenceRemove={handleReferenceRemove}
-                  onSearchReferences={handleSearchReferences}
-                  onSelectAgent={handleSelectAgent}
-                  onSelectProvider={handleSelectProvider}
-                  onRemoveAttachment={removeAttachment}
-                  onStopTurn={handleStopTurn}
-                  onSubmit={handleSend}
-                  providers={providers}
-                  queuedCount={queuedMessages.length}
-                  queuedPreview={queuedMessages[0]?.content || null}
-                  selectedAgentTypeId={composerSelectedAgentTypeId}
-                  transcriptionProviderAppId={transcriptionProviderAppId}
-                  transcriptionProviderAvailable={transcriptionProviderAvailable}
-                  transcriptionMaxAudioBytes={transcriptionMaxAudioBytes}
-                  transcriptionMaxDurationSeconds={transcriptionMaxDurationSeconds}
-                  transcriptionContentTypes={transcriptionContentTypes}
-                  value={composer}
-                />
-              </div>
-            ) : (
-              <ChatTranscript
-                error={error}
-                isLoading={isRuntimeBusy || isThreadLoading}
-                loadingLabel={loadingLabel}
-                mentionItems={mentionItems}
-                messages={messages}
-                speechMaxTextChars={speechMaxTextChars}
-                speechProviderAvailable={speechProviderAvailable}
-                speechProviderAppId={speechProviderAppId}
-                speechProviderQualityProfile={speechProviderQualityProfile}
-              />
-            )}
-            {!isEmptyChatView ? (
-              <div className="chatapp-composer-dock" ref={dockedComposerRef}>
-                <ChatComposer
-                  activeProviderId={activeProviderId}
-                  agentSelectorLocked={Boolean(activeThread)}
-                  agents={agentOptions}
-                  attachments={attachments}
-                  canStopTurn={canStopTurn}
-                  disabled={isThreadLoading}
-                  error={composerError}
-                  executionMode={executionMode}
-                  isSending={isRuntimeBusy || isSending}
-                  mentionItems={composerMentionItems}
-                  onAddAttachments={handleAddAttachments}
-                  onCapturePageArea={enablePageCapture ? handleCapturePageArea : undefined}
-                  onChange={setComposer}
-                  onReferenceAdd={handleReferenceAdd}
-                  onReferenceRemove={handleReferenceRemove}
-                  onSearchReferences={handleSearchReferences}
-                  onSelectAgent={handleSelectAgent}
-                  onSelectProvider={handleSelectProvider}
-                  onRemoveAttachment={removeAttachment}
-                  onStopTurn={handleStopTurn}
-                  onSubmit={handleSend}
-                  providers={providers}
-                  queuedCount={queuedMessages.length}
-                  queuedPreview={queuedMessages[0]?.content || null}
-                  selectedAgentTypeId={composerSelectedAgentTypeId}
-                  transcriptionProviderAppId={transcriptionProviderAppId}
-                  transcriptionProviderAvailable={transcriptionProviderAvailable}
-                  transcriptionMaxAudioBytes={transcriptionMaxAudioBytes}
-                  transcriptionMaxDurationSeconds={transcriptionMaxDurationSeconds}
-                  transcriptionContentTypes={transcriptionContentTypes}
-                  value={composer}
-                />
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </section>
+      <ChatSurface
+        activeProviderId={activeProviderId}
+        agentSelectorLocked={Boolean(activeThread)}
+        agents={agentOptions}
+        attachments={attachments}
+        canStopTurn={canStopTurn}
+        chatMainStyle={chatMainStyle}
+        composerError={composerError}
+        composerMentionItems={composerMentionItems}
+        dockedComposerRef={dockedComposerRef}
+        enablePageCapture={enablePageCapture}
+        error={error}
+        executionMode={executionMode}
+        isEmptyChatView={isEmptyChatView}
+        isSending={isRuntimeBusy || isSending}
+        isThreadLoading={isThreadLoading}
+        loadingLabel={loadingLabel}
+        mentionItems={mentionItems}
+        messages={messages}
+        onAddAttachments={handleAddAttachments}
+        onCapturePageArea={handleCapturePageArea}
+        onChangeComposer={setComposer}
+        onReferenceAdd={handleReferenceAdd}
+        onReferenceRemove={handleReferenceRemove}
+        onRemoveAttachment={removeAttachment}
+        onSearchReferences={handleSearchReferences}
+        onSelectAgent={handleSelectAgent}
+        onSelectProvider={handleSelectProvider}
+        onStopTurn={handleStopTurn}
+        onSubmit={handleSend}
+        providers={providers}
+        queuedCount={queuedMessages.length}
+        queuedPreview={queuedMessages[0]?.content || null}
+        selectedAgentTypeId={composerSelectedAgentTypeId}
+        speechMaxTextChars={speechMaxTextChars}
+        speechProviderAppId={speechProviderAppId}
+        speechProviderAvailable={speechProviderAvailable}
+        speechProviderQualityProfile={speechProviderQualityProfile}
+        transcriptionContentTypes={transcriptionContentTypes}
+        transcriptionMaxAudioBytes={transcriptionMaxAudioBytes}
+        transcriptionMaxDurationSeconds={transcriptionMaxDurationSeconds}
+        transcriptionProviderAppId={transcriptionProviderAppId}
+        transcriptionProviderAvailable={transcriptionProviderAvailable}
+        value={composer}
+      />
     </main>
   );
 }

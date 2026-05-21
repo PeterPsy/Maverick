@@ -6,7 +6,7 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
-import { getAppDependencies, getSpeechCapabilities, listAgentCatalog, listApps, listProviders, listSkills } from "./api/client";
+import { createThread, getAppDependencies, getSpeechCapabilities, listAgentCatalog, listApps, listProviders, listSkills } from "./api/client";
 import type { AgentTypeSummary, AppDependenciesPayload, ChatThread } from "./api/client";
 
 vi.mock("./hooks/useRuntimeEvents", () => ({
@@ -127,6 +127,26 @@ function dependencyPayload(selectedProviderAppIds: string[]): AppDependenciesPay
   };
 }
 
+function thread(threadId: string, runtimeSessionId: string, overrides: Partial<ChatThread> = {}): ChatThread {
+  return {
+    thread_id: threadId,
+    runtime_session_id: runtimeSessionId,
+    title: "New chat",
+    agent_label: "",
+    agent_type_id: "",
+    agent_role_id: "",
+    source_app_id: "chat",
+    system_prompt: "",
+    project_id: null,
+    archived: false,
+    availability: "free",
+    created_at: "2026-05-21T00:00:00Z",
+    updated_at: "2026-05-21T00:00:00Z",
+    last_user_message_at: null,
+    ...overrides,
+  };
+}
+
 beforeEach(() => {
   window.localStorage.clear();
   vi.mocked(listProviders).mockResolvedValue({
@@ -244,6 +264,63 @@ describe("App thread navigation", () => {
 
     await waitForAssertion(() => {
       expect(element.textContent).toContain("Runtime thread stream is not authorized.");
+    });
+  });
+
+  it("starts a draft from a new-chat request id before selecting an existing thread", async () => {
+    const existingThread = thread("thread-existing", "session-existing", { title: "Existing thread" });
+    const element = await renderApp({
+      navigationScope: "floating-window",
+      newChatProjectId: "project-1",
+      newChatRequestId: "request-1",
+      runtimeThreads: [existingThread],
+      runtimeThreadsLoaded: true,
+      threadId: existingThread.thread_id,
+    });
+
+    await waitForAssertion(() => {
+      expect(listApps).toHaveBeenCalled();
+      expect(element.textContent).toContain("How can I help today?");
+    });
+  });
+
+  it("attaches a runtime-session deep link to a chat thread", async () => {
+    const runtimeThread = thread("thread-runtime", "session-runtime", {
+      agent_label: "Researcher",
+      title: "Runtime notes",
+    });
+    vi.mocked(createThread).mockResolvedValueOnce({ thread: runtimeThread, threads: [runtimeThread] });
+    const element = await renderApp({ runtimeThreads: [] as ChatThread[], runtimeThreadsLoaded: true });
+
+    await waitForAssertion(() => {
+      expect(element.textContent).toContain("How can I help today?");
+    });
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          origin: window.location.origin,
+          data: {
+            type: "maverick.app.navigate",
+            app_id: "chat",
+            params: {
+              app_page: "runtime-sessions/session-runtime",
+              agent_label: "Researcher",
+              thread_title: "Runtime notes",
+            },
+          },
+        }),
+      );
+    });
+
+    await waitForAssertion(() => {
+      expect(createThread).toHaveBeenCalledWith("session-runtime", null, {
+        agent_label: "Researcher",
+        agent_type_id: "",
+        agent_role_id: "",
+        source_app_id: "chat",
+        title: "Runtime notes",
+      });
     });
   });
 });

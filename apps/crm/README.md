@@ -6,7 +6,7 @@ The implementation is native Maverick source. External CRM projects informed the
 
 ## Repository Model
 
-This is a workspace-local app source tree and should be versioned independently from the Maverick core repository. The surrounding workspace root is runtime/tenant material and is intentionally ignored by the core repo.
+This is a workspace-local app source tree versioned under the separate `loopinos-apps` repository at `apps/crm/`. It is intentionally independent from the Maverick/Loopinos core repository.
 
 Track app source, tests, contract files, and intentional frontend build artifacts here. Do not track workspace data such as `data/crm/crm.sqlite`, generated caches, `node_modules/`, or Python bytecode.
 

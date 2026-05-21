@@ -118,6 +118,7 @@ let root: Root | null = null;
 let container: HTMLDivElement | null = null;
 
 afterEach(() => {
+  vi.mocked(transcribeSpeech).mockReset();
   root?.unmount();
   root = null;
   container?.remove();
@@ -382,6 +383,16 @@ async function settleReferenceSearch() {
   });
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
+}
+
 async function waitForComposerAssertion(assertion: () => void) {
   let lastError: unknown;
   for (let attempt = 0; attempt < 20; attempt += 1) {
@@ -507,13 +518,70 @@ describe("ChatComposer reference search", () => {
       await Promise.resolve();
     });
     await waitForComposerAssertion(() => {
-      expect(transcribeSpeech).toHaveBeenCalledWith("speech", expect.any(String), "audio/webm");
+      expect(transcribeSpeech).toHaveBeenCalledWith("speech", expect.any(String), "audio/webm", { language: undefined, profile: "fast" });
       expect(getValue()).toBe("Hello transcript");
     });
 
-    expect(media.getUserMedia).toHaveBeenCalledWith({ audio: true });
+    expect(media.getUserMedia).toHaveBeenCalledWith({
+      audio: { autoGainControl: true, echoCancellation: true, noiseSuppression: true },
+    });
     expect(media.stopTrack).toHaveBeenCalled();
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("reuses a high-confidence detected dictation language on the next recording", async () => {
+    const { element, getValue } = await renderComposer({
+      transcriptionProviderAppId: "speech",
+      transcriptionProviderAvailable: true,
+    });
+    mockMediaRecorder();
+    vi.mocked(transcribeSpeech)
+      .mockResolvedValueOnce({ text: "Primo testo", language: "it", language_probability: 0.95, retention: "metadata_only" })
+      .mockResolvedValueOnce({ text: "Secondo testo", language: "it", language_probability: 0.96, retention: "metadata_only" })
+      .mockResolvedValueOnce({ text: "Third text", language: "en", language_probability: 0.93, retention: "metadata_only" });
+
+    await act(async () => {
+      element.querySelector<HTMLButtonElement>('[aria-label="Dictate"]')?.click();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      element.querySelector<HTMLButtonElement>('[aria-label="Stop dictation"]')?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await waitForComposerAssertion(() => {
+      expect(transcribeSpeech).toHaveBeenCalledTimes(1);
+      expect(getValue()).toBe("Primo testo");
+    });
+
+    await act(async () => {
+      element.querySelector<HTMLButtonElement>('[aria-label="Dictate"]')?.click();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      element.querySelector<HTMLButtonElement>('[aria-label="Stop dictation"]')?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitForComposerAssertion(() => {
+      expect(transcribeSpeech).toHaveBeenNthCalledWith(1, "speech", expect.any(String), "audio/webm", { language: undefined, profile: "fast" });
+      expect(transcribeSpeech).toHaveBeenNthCalledWith(2, "speech", expect.any(String), "audio/webm", { language: "it", profile: "fast" });
+    });
+
+    await act(async () => {
+      element.querySelector<HTMLButtonElement>('[aria-label="Dictate"]')?.click();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      element.querySelector<HTMLButtonElement>('[aria-label="Stop dictation"]')?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitForComposerAssertion(() => {
+      expect(transcribeSpeech).toHaveBeenNthCalledWith(3, "speech", expect.any(String), "audio/webm", { language: undefined, profile: "fast" });
+    });
   });
 
   it("shows a microphone permission message when the browser blocks getUserMedia", async () => {
@@ -528,7 +596,9 @@ describe("ChatComposer reference search", () => {
       await Promise.resolve();
     });
 
-    expect(media.getUserMedia).toHaveBeenCalledWith({ audio: true });
+    expect(media.getUserMedia).toHaveBeenCalledWith({
+      audio: { autoGainControl: true, echoCancellation: true, noiseSuppression: true },
+    });
     expect(element.textContent).toContain("Microphone permission was blocked");
   });
 
@@ -545,7 +615,9 @@ describe("ChatComposer reference search", () => {
       element.querySelector<HTMLButtonElement>('[aria-label="Dictate"]')?.click();
       await Promise.resolve();
     });
-    expect(media.getUserMedia).toHaveBeenCalledWith({ audio: true });
+    expect(media.getUserMedia).toHaveBeenCalledWith({
+      audio: { autoGainControl: true, echoCancellation: true, noiseSuppression: true },
+    });
 
     await act(async () => {
       element.querySelector<HTMLButtonElement>('[aria-label="Stop dictation"]')?.click();
@@ -603,7 +675,7 @@ describe("ChatComposer reference search", () => {
 
     await typeInEditor("@");
 
-    expect(element.querySelector('[aria-label="Search apps, files, or folders"]')).toBeInstanceOf(HTMLInputElement);
+    expect(element.querySelector('[aria-label="Search apps and references"]')).toBeInstanceOf(HTMLInputElement);
     expect(document.activeElement).toBe(editorElement());
   });
 
@@ -615,7 +687,7 @@ describe("ChatComposer reference search", () => {
     const { element } = await renderComposer({ onSearchReferences, onSubmit });
     await typeInEditor("@Missing");
     await settleReferenceSearch();
-    const searchInput = element.querySelector('[aria-label="Search apps, files, or folders"]');
+    const searchInput = element.querySelector('[aria-label="Search apps and references"]');
     expect(searchInput).toBeInstanceOf(HTMLInputElement);
 
     await act(async () => {
@@ -632,7 +704,7 @@ describe("ChatComposer reference search", () => {
     const { element } = await renderComposer({ onSearchReferences });
     await typeInEditor("@Missing");
     await settleReferenceSearch();
-    const searchInput = element.querySelector('[aria-label="Search apps, files, or folders"]');
+    const searchInput = element.querySelector('[aria-label="Search apps and references"]');
     expect(searchInput).toBeInstanceOf(HTMLInputElement);
     const tabEvent = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Tab" });
 
@@ -675,7 +747,7 @@ describe("ChatComposer reference search", () => {
     await act(async () => {
       (pickerButton as HTMLButtonElement).click();
     });
-    const searchInput = element.querySelector('[aria-label="Search apps, files, or folders"]');
+    const searchInput = element.querySelector('[aria-label="Search apps and references"]');
     expect(searchInput).toBeInstanceOf(HTMLInputElement);
     await act(async () => {
       changeInputValue(searchInput as HTMLInputElement, "Link");
@@ -743,7 +815,7 @@ describe("ChatComposer reference search", () => {
     const panels = element.querySelectorAll(".chatapp-mention-panel");
     expect(panels).toHaveLength(1);
     expect(panels[0].classList.contains("chatapp-mention-panel--app-picker")).toBe(true);
-    const searchInput = element.querySelector('[aria-label="Search apps, files, or folders"]');
+    const searchInput = element.querySelector('[aria-label="Search apps and references"]');
     expect(searchInput).toBeInstanceOf(HTMLInputElement);
     expect((searchInput as HTMLInputElement).value).toBe("Link");
     expect(element.textContent).toContain("@Checklist link in chat with @");
@@ -767,9 +839,44 @@ describe("ChatComposer reference search", () => {
     const panels = element.querySelectorAll(".chatapp-mention-panel");
     expect(panels).toHaveLength(1);
     expect(panels[0].classList.contains("chatapp-mention-panel--app-picker")).toBe(true);
-    expect(element.querySelector('[aria-label="Search apps, files, or folders"]')).toBeInstanceOf(HTMLInputElement);
+    expect(element.querySelector('[aria-label="Search apps and references"]')).toBeInstanceOf(HTMLInputElement);
     expect(element.textContent).toContain("@Checklist link in chat with @");
     expect(element.textContent).toContain("checklist · checklist · Operational checklist");
+  });
+
+  it("shows a skeleton while reference search is pending", async () => {
+    vi.useFakeTimers();
+    HTMLElement.prototype.scrollIntoView = vi.fn();
+    const pendingSearch = deferred<MentionItem[]>();
+    const onSearchReferences = vi.fn(() => pendingSearch.promise);
+    const { element } = await renderComposer({ onSearchReferences });
+    const pickerButton = element.querySelector('[aria-label="Apps and references"]');
+    expect(pickerButton).toBeInstanceOf(HTMLButtonElement);
+
+    await act(async () => {
+      (pickerButton as HTMLButtonElement).click();
+    });
+
+    expect(element.querySelector('[aria-label="Searching references"]')).toBeInstanceOf(HTMLElement);
+    expect(element.querySelectorAll(".chatapp-mention-panel__skeleton-row")).toHaveLength(1);
+    expect(onSearchReferences).not.toHaveBeenCalled();
+
+    await act(async () => {
+      vi.advanceTimersByTime(180);
+      await Promise.resolve();
+    });
+
+    expect(onSearchReferences).toHaveBeenCalledWith("", expect.any(AbortSignal));
+    expect(element.querySelector('[aria-label="Searching references"]')).toBeInstanceOf(HTMLElement);
+
+    await act(async () => {
+      pendingSearch.resolve([checklistMention]);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(element.querySelector('[aria-label="Searching references"]')).toBeNull();
+    expect(element.textContent).toContain("@Checklist link in chat with @");
   });
 
   it("keeps storage folders visible after the first storage file references", async () => {
@@ -801,7 +908,7 @@ describe("ChatComposer reference search", () => {
     const { element, getValue } = await renderComposer({ onReferenceAdd, onSearchReferences });
 
     await typeInEditor("@");
-    const searchInput = element.querySelector('[aria-label="Search apps, files, or folders"]');
+    const searchInput = element.querySelector('[aria-label="Search apps and references"]');
     expect(searchInput).toBeInstanceOf(HTMLInputElement);
     expect(searchInput?.closest(".chatapp-mention-panel")?.classList.contains("chatapp-mention-panel--app-picker")).toBe(true);
 
@@ -838,7 +945,7 @@ describe("ChatComposer reference search", () => {
     await act(async () => {
       (pickerButton as HTMLButtonElement).click();
     });
-    const searchInput = element.querySelector('[aria-label="Search apps, files, or folders"]');
+    const searchInput = element.querySelector('[aria-label="Search apps and references"]');
     expect(searchInput).toBeInstanceOf(HTMLInputElement);
 
     await act(async () => {

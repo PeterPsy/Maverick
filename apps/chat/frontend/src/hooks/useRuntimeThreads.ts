@@ -3,18 +3,25 @@ import type { Dispatch, SetStateAction } from "react";
 import { ChatThread, orderChatThreads, RuntimeThreadWebSocketFrame, runtimeThreadWebSocketUrl } from "../api/client";
 
 type RuntimeThreadsArgs = {
+  enabled?: boolean;
   onSnapshot?: (() => void) | null;
   setError: Dispatch<SetStateAction<string | null>>;
   setThreads: Dispatch<SetStateAction<ChatThread[]>>;
 };
 
-export function useRuntimeThreads({ onSnapshot, setError, setThreads }: RuntimeThreadsArgs) {
+const INITIAL_RECONNECT_DELAY_MS = 500;
+const MAX_RECONNECT_DELAY_MS = 10000;
+
+export function useRuntimeThreads({ enabled = true, onSnapshot, setError, setThreads }: RuntimeThreadsArgs) {
   const onSnapshotRef = useRef<typeof onSnapshot>(onSnapshot);
   useEffect(() => {
     onSnapshotRef.current = onSnapshot;
   }, [onSnapshot]);
 
   useEffect(() => {
+    if (!enabled) {
+      return;
+    }
     if (typeof WebSocket === "undefined") {
       setError("Runtime thread WebSocket is unavailable.");
       return;
@@ -24,15 +31,19 @@ export function useRuntimeThreads({ onSnapshot, setError, setThreads }: RuntimeT
     let reconnectTimer: number | null = null;
     let heartbeatTimer: number | null = null;
     let lastFrameAt = Date.now();
+    let reconnectDelayMs = INITIAL_RECONNECT_DELAY_MS;
 
     function applyThreads(threads: ChatThread[]) {
       setThreads(orderChatThreads(threads || []));
     }
 
     function connect() {
+      let socketOpened = false;
       socket = new WebSocket(runtimeThreadWebSocketUrl());
       socket.onopen = () => {
+        socketOpened = true;
         lastFrameAt = Date.now();
+        reconnectDelayMs = INITIAL_RECONNECT_DELAY_MS;
         startHeartbeatWatchdog();
         setError(null);
       };
@@ -53,13 +64,21 @@ export function useRuntimeThreads({ onSnapshot, setError, setThreads }: RuntimeT
         }
       };
       socket.onerror = () => {
-        setError("Runtime thread WebSocket is unavailable.");
-      };
-      socket.onclose = () => {
-        stopHeartbeatWatchdog();
-        if (!cancelled) {
-          reconnectTimer = window.setTimeout(connect, 500);
+        if (!socketOpened) {
+          setError("Runtime thread WebSocket is unavailable.");
         }
+      };
+      socket.onclose = (event) => {
+        stopHeartbeatWatchdog();
+        if (cancelled) {
+          return;
+        }
+        if (event.code === 4401 || event.code === 4404) {
+          setError(event.code === 4401 ? "Runtime thread stream is not authorized." : "Runtime thread stream is unavailable.");
+          return;
+        }
+        reconnectTimer = window.setTimeout(connect, reconnectDelayMs);
+        reconnectDelayMs = Math.min(reconnectDelayMs * 2, MAX_RECONNECT_DELAY_MS);
       };
     }
 
@@ -88,5 +107,5 @@ export function useRuntimeThreads({ onSnapshot, setError, setThreads }: RuntimeT
       stopHeartbeatWatchdog();
       socket?.close();
     };
-  }, [setError, setThreads]);
+  }, [enabled, setError, setThreads]);
 }

@@ -6,7 +6,7 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { synthesizeSpeech } from "../api/client";
-import { MessageSpeechButton, speechTextFromMarkdown } from "./MessageSpeechButton";
+import { MessageSpeechButton, speechChunks, speechTextFromMarkdown } from "./MessageSpeechButton";
 
 vi.mock("../api/client", () => ({
   synthesizeSpeech: vi.fn(),
@@ -16,6 +16,7 @@ let container: HTMLDivElement | null = null;
 let root: Root | null = null;
 
 afterEach(() => {
+  vi.mocked(synthesizeSpeech).mockReset();
   root?.unmount();
   root = null;
   container?.remove();
@@ -81,6 +82,28 @@ describe("MessageSpeechButton", () => {
     expect(button?.textContent?.trim()).toBe("volume_up");
   });
 
+  it("surfaces audio playback failures instead of staying in loading state", async () => {
+    installObjectUrlMock();
+    installAudioMock({ playError: new Error("decode failed") });
+    vi.mocked(synthesizeSpeech).mockResolvedValue({ audio_base64: "UklGRg==", content_type: "audio/wav" });
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<SpeechButtonHost />);
+    });
+
+    const button = container.querySelector("button");
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+
+    expect(button?.getAttribute("aria-label")).toBe("Read response aloud");
+    expect(button?.title).toBe("Speech playback failed: decode failed");
+    expect(button?.textContent?.trim()).toBe("volume_up");
+  });
+
   it("stops the first message when a second message starts playback", async () => {
     const audioMock = installAudioMock();
     vi.mocked(synthesizeSpeech).mockResolvedValue({ audio_data_url: "data:audio/wav;base64,UklGRg==", content_type: "audio/wav" });
@@ -107,8 +130,9 @@ describe("MessageSpeechButton", () => {
     expect(buttons[1]?.getAttribute("aria-label")).toBe("Stop reading response");
   });
 
-  it("disables synthesis before calling the provider when normalized text exceeds the provider limit", async () => {
-    vi.mocked(synthesizeSpeech).mockClear();
+  it("splits long response speech into provider-sized synthesis requests", async () => {
+    const audioMock = installAudioMock();
+    vi.mocked(synthesizeSpeech).mockResolvedValue({ audio_data_url: "data:audio/wav;base64,UklGRg==", content_type: "audio/wav" });
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -117,8 +141,8 @@ describe("MessageSpeechButton", () => {
       root?.render(
         <MessageSpeechButton
           activeMessageId={null}
-          content={"x".repeat(1501)}
-          maxTextChars={1500}
+          content="First sentence. Second sentence."
+          maxTextChars={16}
           messageId="agent-1"
           onActiveMessageChange={() => null}
           providerAppId="speech"
@@ -127,14 +151,94 @@ describe("MessageSpeechButton", () => {
     });
 
     const button = container.querySelector("button") as HTMLButtonElement | null;
-    expect(button?.getAttribute("aria-label")).toBe("Read response aloud unavailable: response is too long");
-    expect(button?.disabled).toBe(true);
+    expect(button?.getAttribute("aria-label")).toBe("Read response aloud");
 
     await act(async () => {
       button?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
 
-    expect(synthesizeSpeech).not.toHaveBeenCalled();
+    expect(synthesizeSpeech).toHaveBeenCalledWith("speech", "First sentence.");
+    for (let attempt = 0; attempt < 5 && !audioMock.instances[0]?.onended; attempt += 1) {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+    }
+    expect(synthesizeSpeech).toHaveBeenCalledWith("speech", "Second sentence.");
+    expect(audioMock.instances[0]?.onended).toBeTruthy();
+    await act(async () => {
+      audioMock.instances[0]?.onended?.();
+      await Promise.resolve();
+      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  });
+
+  it("keeps chunk playback moving when a short audio clip ends immediately after play starts", async () => {
+    installAudioMock({ endDuringPlay: true });
+    vi.mocked(synthesizeSpeech).mockResolvedValue({ audio_data_url: "data:audio/wav;base64,UklGRg==", content_type: "audio/wav" });
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <MessageSpeechButton
+          activeMessageId={null}
+          content="First sentence. Second sentence."
+          maxTextChars={16}
+          messageId="agent-1"
+          onActiveMessageChange={() => null}
+          providerAppId="speech"
+        />,
+      );
+    });
+
+    const button = container.querySelector("button") as HTMLButtonElement | null;
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(synthesizeSpeech).toHaveBeenCalledWith("speech", "First sentence.");
+    expect(synthesizeSpeech).toHaveBeenCalledWith("speech", "Second sentence.");
+  });
+
+  it("splits and retries a chunk when synthesized audio exceeds the backend response limit", async () => {
+    installAudioMock({ endDuringPlay: true });
+    const longChunk = "Alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima. ".repeat(4).trim();
+    vi.mocked(synthesizeSpeech)
+      .mockRejectedValueOnce(new Error("Synthesized audio exceeds the response size limit."))
+      .mockResolvedValue({ audio_data_url: "data:audio/wav;base64,UklGRg==", content_type: "audio/wav" });
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <MessageSpeechButton
+          activeMessageId={null}
+          content={longChunk}
+          messageId="agent-1"
+          onActiveMessageChange={() => null}
+          providerAppId="speech"
+        />,
+      );
+    });
+
+    const button = container.querySelector("button") as HTMLButtonElement | null;
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      for (let index = 0; index < 4; index += 1) {
+        await Promise.resolve();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+    });
+
+    expect(synthesizeSpeech).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(synthesizeSpeech).mock.calls[0]?.[1]).toBe(longChunk);
+    expect(String(vi.mocked(synthesizeSpeech).mock.calls[1]?.[1] || "").length).toBeLessThan(longChunk.length);
+    expect(String(vi.mocked(synthesizeSpeech).mock.calls[2]?.[1] || "").length).toBeLessThan(longChunk.length);
   });
 
   it("renders a disabled control instead of disappearing when the provider is linked but unavailable", async () => {
@@ -160,6 +264,32 @@ describe("MessageSpeechButton", () => {
     expect(button?.getAttribute("aria-label")).toBe("Speech provider unavailable");
     expect(button?.disabled).toBe(true);
     expect(button?.textContent?.trim()).toBe("volume_off");
+    expect(synthesizeSpeech).not.toHaveBeenCalled();
+  });
+
+  it("disables response speech when only a diagnostic TTS engine is configured", async () => {
+    vi.mocked(synthesizeSpeech).mockClear();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <MessageSpeechButton
+          activeMessageId={null}
+          content="Agent response"
+          messageId="agent-1"
+          onActiveMessageChange={() => null}
+          providerAvailable={false}
+          providerAppId="speech"
+          providerQualityProfile="diagnostic"
+        />,
+      );
+    });
+
+    const button = container.querySelector("button") as HTMLButtonElement | null;
+    expect(button?.getAttribute("aria-label")).toBe("Natural speech voice unavailable");
+    expect(button?.title).toBe("Only a diagnostic speech engine is configured");
     expect(synthesizeSpeech).not.toHaveBeenCalled();
   });
 
@@ -193,6 +323,12 @@ describe("MessageSpeechButton", () => {
     expect(speechTextFromMarkdown("Read **bold**, *italic*, ~~removed~~, __two words__, __bold__, and _italic_.")).toBe(
       "Read bold, italic, removed, two words, bold, and italic.",
     );
+  });
+
+  it("keeps synthesized speech chunks within the provider text limit", () => {
+    expect(speechChunks("One short sentence. Another short sentence.", 24)).toEqual(["One short sentence.", "Another short sentence."]);
+    expect(speechChunks("supercalifragilistic", 8)).toEqual(["supercal", "ifragili", "stic"]);
+    expect(speechChunks(`${"word ".repeat(180)}done`, 1500).every((chunk) => chunk.length <= 450)).toBe(true);
   });
 });
 
@@ -233,13 +369,23 @@ function TwoSpeechButtonsHost() {
   );
 }
 
-function installAudioMock() {
+function installAudioMock(options: { endDuringPlay?: boolean; playError?: Error } = {}) {
   const instances: Array<{ src: string; play: ReturnType<typeof vi.fn>; pause: ReturnType<typeof vi.fn>; onended: (() => void) | null; onerror: (() => void) | null }> = [];
   class MockAudio {
     onended: (() => void) | null = null;
     onerror: (() => void) | null = null;
     pause = vi.fn();
-    play = vi.fn(async () => undefined);
+    play = vi.fn(async () => {
+      if (options.playError) {
+        throw options.playError;
+      }
+      if (options.endDuringPlay) {
+        this.onended?.();
+      }
+    });
+    preload = "";
+    load = vi.fn();
+    setAttribute = vi.fn();
     src: string;
 
     constructor(src: string) {

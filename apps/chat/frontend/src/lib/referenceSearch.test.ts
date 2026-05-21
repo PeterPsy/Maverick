@@ -56,18 +56,43 @@ describe("searchComposerReferences", () => {
     expect(references).toEqual([storageFolderReference, storageFileReference, checklistReference]);
   });
 
-  it("keeps the active app results first before file and folder references", async () => {
+  it("returns active app results without waiting for the global fallback", async () => {
+    const signal = new AbortController().signal;
+    mockedSearchAppReferences.mockResolvedValueOnce([checklistReference]);
+
+    const references = await searchComposerReferences("speech", signal, "checklist");
+
+    expect(mockedSearchAppReferences).toHaveBeenNthCalledWith(1, "speech", signal, { appIds: ["checklist"], limit: 16 });
+    expect(mockedSearchAppReferences).toHaveBeenCalledTimes(1);
+    expect(references).toEqual([checklistReference]);
+  });
+
+  it("uses a checklist entity search for checklist category queries", async () => {
+    const signal = new AbortController().signal;
+    mockedSearchAppReferences.mockResolvedValueOnce([checklistReference]);
+
+    const references = await searchComposerReferences("checklists", signal, "");
+
+    expect(mockedSearchAppReferences).toHaveBeenNthCalledWith(1, "checklists", signal, {
+      entityTypes: ["checklist"],
+      limit: 16,
+    });
+    expect(mockedSearchAppReferences).toHaveBeenCalledTimes(1);
+    expect(references).toEqual([checklistReference]);
+  });
+
+  it("falls back to global search when targeted searches do not find references", async () => {
     const signal = new AbortController().signal;
     mockedSearchAppReferences
-      .mockResolvedValueOnce([checklistReference])
+      .mockResolvedValueOnce([])
       .mockResolvedValueOnce([storageFolderReference])
-      .mockResolvedValueOnce([storageFileReference]);
+      .mockResolvedValueOnce([checklistReference, storageFolderReference]);
 
-    const references = await searchComposerReferences("folder", signal, "checklist");
+    const references = await searchComposerReferences("folders", signal, "");
 
-    expect(mockedSearchAppReferences).toHaveBeenNthCalledWith(1, "folder", signal, { appIds: ["checklist"], limit: 16 });
-    expect(mockedSearchAppReferences).toHaveBeenNthCalledWith(2, "folder", signal, { entityTypes: ["file", "folder"], limit: 16 });
-    expect(mockedSearchAppReferences).toHaveBeenNthCalledWith(3, "folder", signal, { limit: 16 });
-    expect(references).toEqual([checklistReference, storageFolderReference, storageFileReference]);
+    expect(mockedSearchAppReferences).toHaveBeenNthCalledWith(1, "folders", signal, { entityTypes: ["file", "folder"], limit: 16 });
+    expect(mockedSearchAppReferences).toHaveBeenNthCalledWith(2, "folders", signal, { entityTypes: ["file", "folder"], limit: 16 });
+    expect(mockedSearchAppReferences).toHaveBeenNthCalledWith(3, "folders", signal, { limit: 16 });
+    expect(references).toEqual([storageFolderReference, checklistReference]);
   });
 });

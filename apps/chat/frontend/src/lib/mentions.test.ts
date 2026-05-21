@@ -62,6 +62,11 @@ describe("mention autocomplete helpers", () => {
     expect(filterMentionItems(items, "code").map((item) => item.label)).toEqual(["Maverick Code Skill"]);
   });
 
+  it("filters entity references by reference identity, plural forms, and query tokens", () => {
+    expect(filterMentionItems(items, "checklists").map((item) => item.label)).toEqual(["Agency launch"]);
+    expect(filterMentionItems(items, "agency check_123").map((item) => item.label)).toEqual(["Agency launch"]);
+  });
+
   it("inserts the readable name without slugifying it", () => {
     const mention = activeMentionAt("open @Tes", "open @Tes".length);
     expect(mention).not.toBeNull();

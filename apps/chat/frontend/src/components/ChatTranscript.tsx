@@ -34,6 +34,7 @@ export function ChatTranscript({
   speechMaxTextChars = 0,
   speechProviderAvailable = true,
   speechProviderAppId = "",
+  speechProviderQualityProfile = "",
 }: {
   error: string | null;
   isLoading: boolean;
@@ -43,6 +44,7 @@ export function ChatTranscript({
   speechMaxTextChars?: number;
   speechProviderAvailable?: boolean;
   speechProviderAppId?: string;
+  speechProviderQualityProfile?: string;
 }) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const [isNearBottom, setIsNearBottom] = useState(true);
@@ -240,6 +242,7 @@ export function ChatTranscript({
                           onActiveMessageChange={setSpeakingMessageId}
                           providerAvailable={speechProviderAvailable}
                           providerAppId={speechProviderAppId}
+                          providerQualityProfile={speechProviderQualityProfile}
                         />
                       }
                     />

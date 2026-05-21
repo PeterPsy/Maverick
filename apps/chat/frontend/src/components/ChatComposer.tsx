@@ -326,6 +326,9 @@ export function ChatComposer({
   selectedAgentTypeId,
   transcriptionProviderAppId = "",
   transcriptionProviderAvailable = false,
+  transcriptionMaxAudioBytes = 0,
+  transcriptionMaxDurationSeconds = 0,
+  transcriptionContentTypes = [],
   value,
 }: {
   activeProviderId: string;
@@ -356,6 +359,9 @@ export function ChatComposer({
   selectedAgentTypeId: string;
   transcriptionProviderAppId?: string;
   transcriptionProviderAvailable?: boolean;
+  transcriptionMaxAudioBytes?: number;
+  transcriptionMaxDurationSeconds?: number;
+  transcriptionContentTypes?: string[];
   value: string;
 }) {
   const [caretIndex, setCaretIndex] = useState(value.length);
@@ -366,6 +372,7 @@ export function ChatComposer({
   const [appPickerQuery, setAppPickerQuery] = useState("");
   const [appPickerReferenceItems, setAppPickerReferenceItems] = useState<MentionItem[]>([]);
   const [appPickerSearchError, setAppPickerSearchError] = useState<string | null>(null);
+  const [appPickerSearchPending, setAppPickerSearchPending] = useState(false);
   const [dictationError, setDictationError] = useState<string | null>(null);
   const editorRef = useRef<HTMLDivElement | null>(null);
   const appPickerButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -425,6 +432,7 @@ export function ChatComposer({
 
   useEffect(() => {
     if (!isAppMentionPickerOpen || !onSearchReferences) {
+      setAppPickerSearchPending(false);
       if (!isAppMentionPickerOpen) {
         setAppPickerSearchError(null);
       }
@@ -432,21 +440,34 @@ export function ChatComposer({
     }
     const query = appMentionPickerQuery.trim();
     setAppPickerSearchError(null);
+    setAppPickerReferenceItems([]);
+    setAppPickerSearchPending(true);
     const controller = new AbortController();
+    let disposed = false;
     const timer = window.setTimeout(() => {
       onSearchReferences(query, controller.signal)
         .then((items) => {
+          if (disposed) {
+            return;
+          }
           setAppPickerReferenceItems(items);
           setAppPickerSearchError(null);
         })
         .catch((error) => {
-          if (!isAbortError(error)) {
-            setAppPickerReferenceItems([]);
-            setAppPickerSearchError(REFERENCE_SEARCH_ERROR_MESSAGE);
+          if (disposed || isAbortError(error)) {
+            return;
+          }
+          setAppPickerReferenceItems([]);
+          setAppPickerSearchError(REFERENCE_SEARCH_ERROR_MESSAGE);
+        })
+        .finally(() => {
+          if (!disposed) {
+            setAppPickerSearchPending(false);
           }
         });
     }, 160);
     return () => {
+      disposed = true;
       window.clearTimeout(timer);
       controller.abort();
     };
@@ -811,8 +832,9 @@ export function ChatComposer({
                 onSearchQueryChange={updateActiveAppMentionQuery}
                 query={appMentionPickerQuery}
                 searchInputRef={appPickerSearchRef}
-                searchPlaceholder="Search apps, files, or folders"
+                searchPlaceholder="Search apps and references"
                 searchQuery={appMentionPickerQuery}
+                isLoading={appPickerSearchPending}
                 statusMessage={appPickerSearchError}
                 ref={appPickerPanelRef}
               />
@@ -874,10 +896,13 @@ export function ChatComposer({
                 </button>
                 <ComposerDictationButton
                   disabled={disabled || isSending}
+                  maxAudioBytes={transcriptionMaxAudioBytes}
+                  maxDurationSeconds={transcriptionMaxDurationSeconds}
                   onError={setDictationError}
                   onTranscript={insertDictationTranscript}
                   providerAppId={transcriptionProviderAppId}
                   providerAvailable={transcriptionProviderAvailable}
+                  supportedContentTypes={transcriptionContentTypes}
                 />
                 <AgentSelector
                   agents={agents}
@@ -1094,6 +1119,7 @@ function MentionPanel({
   query,
   ref,
   searchInputRef,
+  isLoading = false,
   searchPlaceholder,
   searchQuery,
   statusMessage,
@@ -1108,6 +1134,7 @@ function MentionPanel({
   query: string;
   ref?: Ref<HTMLDivElement>;
   searchInputRef?: Ref<HTMLInputElement>;
+  isLoading?: boolean;
   searchPlaceholder?: string;
   searchQuery?: string;
   statusMessage?: string | null;
@@ -1118,8 +1145,8 @@ function MentionPanel({
     activeItemRef.current?.scrollIntoView({ block: "nearest" });
   }, [activeIndex]);
 
-  const panelLabel = kind === "app" ? "App, file, and folder suggestions" : "Skill suggestions";
-  const panelTitle = kind === "app" ? "Apps, files, and folders" : "Skills";
+  const panelLabel = kind === "app" ? "App and reference suggestions" : "Skill suggestions";
+  const panelTitle = kind === "app" ? "Apps and references" : "Skills";
 
   return (
     <div className={`chatapp-mention-panel ${className}`} ref={ref} role="listbox" aria-label={panelLabel}>
@@ -1128,7 +1155,7 @@ function MentionPanel({
         <label className="chatapp-mention-panel__search">
           <span className="chatapp-mention-panel__search-label">Search</span>
           <input
-            aria-label="Search apps, files, or folders"
+            aria-label="Search apps and references"
             className="chatapp-mention-panel__search-input"
             onChange={(event) => onSearchQueryChange(event.currentTarget.value)}
             onKeyDown={onSearchKeyDown}
@@ -1165,9 +1192,21 @@ function MentionPanel({
             {item.description ? <span className="chatapp-mention-panel__description">{item.description}</span> : null}
           </button>
         ))
-      ) : statusMessage ? null : (
+      ) : statusMessage || isLoading ? null : (
         <div className="chatapp-mention-panel__empty">No results for {query.trim() || "this reference"}</div>
       )}
+      {isLoading ? <MentionPanelSkeleton /> : null}
+    </div>
+  );
+}
+
+function MentionPanelSkeleton() {
+  return (
+    <div aria-label="Searching references" className="chatapp-mention-panel__skeleton" role="status">
+      <div className="chatapp-mention-panel__skeleton-row">
+        <span className="chatapp-mention-panel__skeleton-line chatapp-mention-panel__skeleton-line--title" />
+        <span className="chatapp-mention-panel__skeleton-line chatapp-mention-panel__skeleton-line--detail" />
+      </div>
     </div>
   );
 }

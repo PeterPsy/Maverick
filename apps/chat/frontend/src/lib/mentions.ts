@@ -84,9 +84,34 @@ export function activeMentionAt(text: string, cursor: number): ActiveMention | n
 export function filterMentionItems(items: MentionItem[], query: string, limit = 8): MentionItem[] {
   const normalizedQuery = query.trim().toLowerCase();
   const filtered = normalizedQuery
-    ? items.filter((item) => `${item.label} ${item.id} ${item.description}`.toLowerCase().includes(normalizedQuery))
+    ? items.filter((item) => mentionItemMatchesQuery(item, normalizedQuery))
     : items;
   return filtered.slice(0, limit);
+}
+
+function mentionItemMatchesQuery(item: MentionItem, normalizedQuery: string): boolean {
+  const haystack = `${item.label} ${item.id} ${item.description} ${referenceSearchText(item.reference)}`.toLowerCase();
+  if (haystack.includes(normalizedQuery)) {
+    return true;
+  }
+  return normalizedQuery
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((token) => tokenVariants(token).some((variant) => haystack.includes(variant)));
+}
+
+function tokenVariants(token: string): string[] {
+  if (token.length > 4 && token.endsWith("s")) {
+    return [token, token.slice(0, -1)];
+  }
+  return [token];
+}
+
+function referenceSearchText(reference: AppReference | undefined): string {
+  if (!reference || reference.type !== "entity") {
+    return "";
+  }
+  return [reference.app_id, reference.entity_type, reference.entity_id, reference.summary, reference.deep_link].filter(Boolean).join(" ");
 }
 
 export function applyMention(text: string, mention: ActiveMention, item: MentionItem): { value: string; cursor: number } {

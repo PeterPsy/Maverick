@@ -1,29 +1,51 @@
 import { useEffect, useRef, useState } from "react";
 import { ApiError, transcribeSpeech } from "../api/client";
 
-const MAX_DICTATION_MS = 120000;
+const DEFAULT_MAX_DICTATION_MS = 120000;
+const DEFAULT_MAX_DICTATION_AUDIO_BYTES = 700_000;
+const DICTATION_TRANSCRIPTION_PROFILE = "fast";
+const ADAPTIVE_LANGUAGE_PROBABILITY = 0.8;
+const ADAPTIVE_LANGUAGE_HINT_USES = 1;
+const MICROPHONE_AUDIO_CONSTRAINTS: MediaTrackConstraints = {
+  autoGainControl: true,
+  echoCancellation: true,
+  noiseSuppression: true,
+};
 
 type DictationStatus = "idle" | "recording" | "transcribing";
+type AdaptiveLanguageHint = {
+  language: string;
+  usesRemaining: number;
+};
 
 export function ComposerDictationButton({
   disabled,
+  maxAudioBytes = DEFAULT_MAX_DICTATION_AUDIO_BYTES,
+  maxDurationSeconds = DEFAULT_MAX_DICTATION_MS / 1000,
   onError,
   onTranscript,
   providerAppId,
   providerAvailable,
+  supportedContentTypes = [],
 }: {
   disabled: boolean;
+  maxAudioBytes?: number;
+  maxDurationSeconds?: number;
   onError: (message: string | null) => void;
   onTranscript: (text: string) => void;
   providerAppId: string;
   providerAvailable: boolean;
+  supportedContentTypes?: string[];
 }) {
   const [status, setStatus] = useState<DictationStatus>("idle");
   const recorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const recordingChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<number | null>(null);
+  const adaptiveLanguageRef = useRef<AdaptiveLanguageHint>({ language: "", usesRemaining: 0 });
   const providerDisabled = !providerAppId || providerAvailable === false;
+  const effectiveMaxAudioBytes = Number.isFinite(maxAudioBytes) && maxAudioBytes > 0 ? maxAudioBytes : DEFAULT_MAX_DICTATION_AUDIO_BYTES;
+  const effectiveMaxDurationSeconds = Number.isFinite(maxDurationSeconds) && maxDurationSeconds > 0 ? maxDurationSeconds : DEFAULT_MAX_DICTATION_MS / 1000;
   const isRecording = status === "recording";
   const isTranscribing = status === "transcribing";
   const title = isRecording ? "Stop dictation" : isTranscribing ? "Transcribing" : "Dictate";
@@ -39,7 +61,7 @@ export function ComposerDictationButton({
 
   async function toggleDictation() {
     if (status === "recording") {
-      recorderRef.current?.stop();
+      stopRecorderSafely(recorderRef.current);
       return;
     }
     if (status === "transcribing") {
@@ -60,8 +82,8 @@ export function ComposerDictationButton({
     }
     const permissionState = await microphonePermissionState();
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mimeType = supportedRecordingMimeType();
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: MICROPHONE_AUDIO_CONSTRAINTS });
+      const mimeType = supportedRecordingMimeType(supportedContentTypes);
       const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
       mediaStreamRef.current = stream;
       recorderRef.current = recorder;
@@ -82,7 +104,7 @@ export function ComposerDictationButton({
       };
       recorder.start();
       setStatus("recording");
-      recordingTimerRef.current = window.setTimeout(() => recorder.stop(), MAX_DICTATION_MS);
+      recordingTimerRef.current = window.setTimeout(() => stopRecorderSafely(recorder), maxDurationMs(effectiveMaxDurationSeconds));
     } catch (error) {
       stopRecordingTimer();
       stopMediaStream();
@@ -105,8 +127,24 @@ export function ComposerDictationButton({
     setStatus("transcribing");
     try {
       const audioBlob = new Blob(chunks, { type: contentType });
+      if (audioBlob.size > effectiveMaxAudioBytes) {
+        setStatus("idle");
+        onError(`Microphone audio is too large to transcribe. Keep recordings under ${formatBytes(effectiveMaxAudioBytes)}.`);
+        return;
+      }
       const audioBase64 = await blobToBase64(audioBlob);
-      const result = await transcribeSpeech(providerAppId, audioBase64, contentType);
+      const languageHint = adaptiveLanguageForRequest(adaptiveLanguageRef.current);
+      const result = await transcribeSpeech(providerAppId, audioBase64, contentType, {
+        language: languageHint || undefined,
+        profile: DICTATION_TRANSCRIPTION_PROFILE,
+      });
+      adaptiveLanguageRef.current = nextAdaptiveLanguageHint({
+        current: adaptiveLanguageRef.current,
+        detectedLanguage: result.language,
+        languageHint,
+        probability: result.language_probability,
+        transcript: result.text,
+      });
       onTranscript(result.text || "");
       setStatus("idle");
     } catch (error) {
@@ -144,6 +182,50 @@ export function ComposerDictationButton({
       </span>
     </button>
   );
+}
+
+function adaptiveLanguageForRequest(current: AdaptiveLanguageHint): string {
+  return current.usesRemaining > 0 ? current.language : "";
+}
+
+function nextAdaptiveLanguageHint({
+  current,
+  detectedLanguage,
+  languageHint,
+  probability,
+  transcript,
+}: {
+  current: AdaptiveLanguageHint;
+  detectedLanguage: string | undefined;
+  languageHint: string;
+  probability: number | undefined;
+  transcript: string | undefined;
+}): AdaptiveLanguageHint {
+  if (!String(transcript || "").trim()) {
+    return { language: "", usesRemaining: 0 };
+  }
+  const highConfidenceLanguage = highConfidenceAdaptiveLanguage(detectedLanguage, probability);
+  if (!languageHint) {
+    return highConfidenceLanguage ? { language: highConfidenceLanguage, usesRemaining: ADAPTIVE_LANGUAGE_HINT_USES } : { language: "", usesRemaining: 0 };
+  }
+  if (highConfidenceLanguage && highConfidenceLanguage !== current.language) {
+    return { language: highConfidenceLanguage, usesRemaining: ADAPTIVE_LANGUAGE_HINT_USES };
+  }
+  const usesRemaining = Math.max(0, current.usesRemaining - 1);
+  return usesRemaining > 0 ? { language: current.language, usesRemaining } : { language: "", usesRemaining: 0 };
+}
+
+function highConfidenceAdaptiveLanguage(language: string | undefined, probability: number | undefined): string {
+  const normalizedLanguage = String(language || "").trim().toLowerCase();
+  const confidence = typeof probability === "number" ? probability : 0;
+  if (isSupportedAdaptiveLanguage(normalizedLanguage) && confidence >= ADAPTIVE_LANGUAGE_PROBABILITY) {
+    return normalizedLanguage;
+  }
+  return "";
+}
+
+function isSupportedAdaptiveLanguage(language: string): boolean {
+  return /^[a-z]{2,3}$/.test(language);
 }
 
 async function microphonePermissionState(): Promise<PermissionState | "unknown"> {
@@ -229,16 +311,41 @@ function microphoneBlockedByFramePolicy(): boolean {
   return false;
 }
 
-function supportedRecordingMimeType(): string {
+function supportedRecordingMimeType(supportedContentTypes: string[]): string {
   if (typeof MediaRecorder === "undefined" || typeof MediaRecorder.isTypeSupported !== "function") {
     return "";
   }
+  const supported = new Set(supportedContentTypes.map((item) => item.split(";", 1)[0].trim().toLowerCase()).filter(Boolean));
   for (const mimeType of ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"]) {
-    if (MediaRecorder.isTypeSupported(mimeType)) {
+    const baseType = mimeType.split(";", 1)[0];
+    if ((!supported.size || supported.has(baseType)) && MediaRecorder.isTypeSupported(mimeType)) {
       return mimeType;
     }
   }
   return "";
+}
+
+function maxDurationMs(maxDurationSeconds: number): number {
+  const seconds = Number.isFinite(maxDurationSeconds) && maxDurationSeconds > 0 ? maxDurationSeconds : DEFAULT_MAX_DICTATION_MS / 1000;
+  return Math.max(1, Math.floor(seconds * 1000));
+}
+
+function stopRecorderSafely(recorder: MediaRecorder | null) {
+  if (!recorder || recorder.state === "inactive") {
+    return;
+  }
+  try {
+    recorder.stop();
+  } catch {
+    // The browser may mark a recorder inactive between the state check and stop().
+  }
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes >= 1_000_000) {
+    return `${(bytes / 1_000_000).toFixed(bytes % 1_000_000 === 0 ? 0 : 1)} MB`;
+  }
+  return `${Math.max(1, Math.floor(bytes / 1000))} KB`;
 }
 
 function blobToBase64(blob: Blob): Promise<string> {

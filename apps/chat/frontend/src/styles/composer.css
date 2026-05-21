@@ -408,6 +408,55 @@
   line-height: 1.35;
 }
 
+.chatapp-mention-panel__skeleton {
+  display: grid;
+  gap: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.chatapp-mention-panel__skeleton-row {
+  display: grid;
+  gap: 0.34rem;
+  padding: 0.62rem 0.72rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.045);
+}
+
+.chatapp-mention-panel__skeleton-row:first-child {
+  border-top: 0;
+}
+
+.chatapp-mention-panel__skeleton-line {
+  position: relative;
+  overflow: hidden;
+  height: 0.72rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.chatapp-mention-panel__skeleton-line::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.18), transparent);
+  animation: chatapp-mention-skeleton-shimmer 1.35s ease-in-out infinite;
+}
+
+.chatapp-mention-panel__skeleton-line--title {
+  width: min(14rem, 58%);
+}
+
+.chatapp-mention-panel__skeleton-line--detail {
+  width: min(21rem, 78%);
+  opacity: 0.78;
+}
+
+@keyframes chatapp-mention-skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
 .chatapp-periodic-task-panel__intro {
   display: grid;
   gap: 0.25rem;

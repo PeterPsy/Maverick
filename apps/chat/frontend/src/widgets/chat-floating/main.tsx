@@ -95,8 +95,9 @@ function shouldIgnoreFloatingStackDrag(target: EventTarget | null): boolean {
 function ChatFloatingMount() {
   const [storageKey, setStorageKey] = useState<string | null>(null);
   const [isWindowStateReady, setIsWindowStateReady] = useState(false);
+  const [runtimeThreadsLoaded, setRuntimeThreadsLoaded] = useState(false);
   const [threads, setThreads] = useState<ChatThread[]>([]);
-  const [, setRuntimeThreadError] = useState<string | null>(null);
+  const [runtimeThreadsError, setRuntimeThreadsError] = useState<string | null>(null);
   const [windows, setWindows] = useState<FloatingChatWindow[]>([]);
   const readReceiptInFlightRef = useRef<Set<string>>(new Set());
   const stackDragRef = useRef<FloatingStackDragState | null>(null);
@@ -104,7 +105,7 @@ function ChatFloatingMount() {
   const threadsRef = useRef(threads);
   const windowsRef = useRef(windows);
 
-  useRuntimeThreads({ setError: setRuntimeThreadError, setThreads });
+  useRuntimeThreads({ onSnapshot: () => setRuntimeThreadsLoaded(true), setError: setRuntimeThreadsError, setThreads });
 
   useEffect(() => {
     threadsRef.current = threads;
@@ -346,6 +347,8 @@ function ChatFloatingMount() {
           onRemoveThread={removeThread}
           onRenameThread={renameThread}
           onSelectThread={selectThread}
+          runtimeThreadsError={runtimeThreadsError}
+          runtimeThreadsLoaded={runtimeThreadsLoaded}
           threads={threads}
           windowItem={windowItem}
         />
@@ -362,6 +365,8 @@ function ChatFloatingWindow({
   onRemoveThread,
   onRenameThread,
   onSelectThread,
+  runtimeThreadsError,
+  runtimeThreadsLoaded,
   threads,
   windowItem,
 }: {
@@ -372,6 +377,8 @@ function ChatFloatingWindow({
   onRemoveThread: (windowId: string, thread: ChatThread) => void;
   onRenameThread: (threadId: string, title: string) => Promise<void>;
   onSelectThread: (windowId: string, threadId: string) => void;
+  runtimeThreadsError: string | null;
+  runtimeThreadsLoaded: boolean;
   threads: ChatThread[];
   windowItem: FloatingChatWindow;
 }) {
@@ -633,6 +640,9 @@ function ChatFloatingWindow({
             navigationScope={windowItem.id}
             newChatProjectId={windowItem.draftProjectId}
             newChatRequestId={windowItem.isDraft ? windowItem.id : null}
+            runtimeThreads={threads}
+            runtimeThreadsError={runtimeThreadsError}
+            runtimeThreadsLoaded={runtimeThreadsLoaded}
             threadId={windowItem.threadId}
           />
         </div>

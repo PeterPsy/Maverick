@@ -85,14 +85,23 @@ export type SpeechCapabilitiesPayload = {
       provider_available?: boolean;
       content_types?: string[];
       max_text_chars?: number;
+      quality_profile?: string;
+      latency_profile?: string;
     };
     "speech.transcription"?: {
       available?: boolean;
       provider_available?: boolean;
       content_types?: string[];
       max_audio_bytes?: number;
+      max_inline_audio_bytes?: number;
+      max_file_audio_bytes?: number;
       max_duration_seconds?: number;
+      max_inline_duration_seconds?: number;
       streaming_supported?: boolean;
+      language_detection?: string;
+      language_hint_supported?: boolean;
+      profiles?: string[];
+      inline_default_profile?: string;
     };
   };
 };
@@ -115,8 +124,16 @@ export type SpeechTranscribePayload = {
   duration_seconds?: number;
   engine?: string;
   model?: string;
+  profile?: string;
+  beam_size?: number;
+  worker?: Record<string, unknown>;
   retention?: string;
   size_bytes?: number;
+};
+
+export type SpeechTranscribeOptions = {
+  language?: string;
+  profile?: string;
 };
 
 export type ChatThread = {
@@ -395,8 +412,8 @@ async function requestJson<T>(path: string, init: RequestInit = {}): Promise<T> 
   if (!response.ok) {
     let detail = `Request failed ${response.status}: ${path}`;
     try {
-      const payload = (await response.json()) as { error?: string };
-      detail = payload.error || detail;
+      const payload = (await response.json()) as { detail?: string; error?: string };
+      detail = payload.detail || payload.error || detail;
     } catch {
       // Keep the HTTP fallback detail.
     }
@@ -617,11 +634,24 @@ export function synthesizeSpeech(providerAppId: string, text: string): Promise<S
   });
 }
 
-export function transcribeSpeech(providerAppId: string, audioBase64: string, contentType: string): Promise<SpeechTranscribePayload> {
+export function transcribeSpeech(
+  providerAppId: string,
+  audioBase64: string,
+  contentType: string,
+  optionsOrLanguage?: SpeechTranscribeOptions | string,
+): Promise<SpeechTranscribePayload> {
+  const body: Record<string, string> = { action: "transcribe_audio", audio_base64: audioBase64, content_type: contentType };
+  const options = typeof optionsOrLanguage === "string" ? { language: optionsOrLanguage } : optionsOrLanguage || {};
+  if (options.language) {
+    body.language = options.language;
+  }
+  if (options.profile) {
+    body.profile = options.profile;
+  }
   return requestJson<SpeechTranscribePayload>(`/api/apps/${encodeURIComponent(providerAppId)}/backend`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "transcribe_audio", audio_base64: audioBase64, content_type: contentType }),
+    body: JSON.stringify(body),
   });
 }
 

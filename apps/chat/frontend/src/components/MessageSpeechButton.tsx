@@ -2,6 +2,11 @@ import type { Dispatch, SetStateAction } from "react";
 import { useEffect, useRef, useState } from "react";
 import { synthesizeSpeech } from "../api/client";
 
+const DEFAULT_TTS_CHUNK_CHARS = 450;
+const MIN_RETRY_TTS_CHUNK_CHARS = 180;
+const AUDIO_PLAY_START_TIMEOUT_MS = 8000;
+const AUDIO_CHUNK_END_TIMEOUT_MS = 180000;
+
 type MessageSpeechButtonProps = {
   activeMessageId: string | null;
   content: string;
@@ -10,9 +15,11 @@ type MessageSpeechButtonProps = {
   onActiveMessageChange: Dispatch<SetStateAction<string | null>>;
   providerAvailable?: boolean;
   providerAppId: string;
+  providerQualityProfile?: string;
 };
 
 type SpeechPlaybackStatus = "idle" | "loading" | "playing" | "error";
+type SpeechAudioResult = { audio_data_url?: string; audio_base64?: string; content_type?: string };
 
 export function MessageSpeechButton(props: MessageSpeechButtonProps) {
   const speechText = speechTextFromMarkdown(props.content);
@@ -21,18 +28,14 @@ export function MessageSpeechButton(props: MessageSpeechButtonProps) {
     return null;
   }
   if (props.providerAvailable === false) {
-    return <DisabledSpeechButton ariaLabel="Speech provider unavailable" title="Speech provider unavailable" />;
-  }
-  const maxTextChars = props.maxTextChars || 0;
-  if (maxTextChars > 0 && speechText.length > maxTextChars) {
+    const diagnosticOnly = props.providerQualityProfile === "diagnostic";
     return (
       <DisabledSpeechButton
-        ariaLabel="Read response aloud unavailable: response is too long"
-        title={`Speech supports up to ${maxTextChars} characters`}
+        ariaLabel={diagnosticOnly ? "Natural speech voice unavailable" : "Speech provider unavailable"}
+        title={diagnosticOnly ? "Only a diagnostic speech engine is configured" : "Speech provider unavailable"}
       />
     );
   }
-
   return <SupportedMessageSpeechButton {...props} speechText={speechText} />;
 }
 
@@ -58,16 +61,23 @@ function SupportedMessageSpeechButton({
   onActiveMessageChange,
   providerAppId,
   speechText,
+  maxTextChars = 0,
 }: MessageSpeechButtonProps & { speechText: string }) {
   const [status, setStatus] = useState<SpeechPlaybackStatus>("idle");
+  const [errorMessage, setErrorMessage] = useState("");
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const objectUrlRef = useRef<string | null>(null);
   const requestIdRef = useRef(0);
+  const selfActivationRef = useRef(false);
   const isActive = activeMessageId === messageId;
   const isReading = isActive && (status === "loading" || status === "playing");
 
   useEffect(() => {
-    if (!isActive && status !== "idle") {
+    if (isActive) {
+      selfActivationRef.current = false;
+      return;
+    }
+    if (!selfActivationRef.current && (status === "loading" || status === "playing")) {
       stopPlayback();
     }
   }, [isActive, status]);
@@ -81,49 +91,79 @@ function SupportedMessageSpeechButton({
       return;
     }
 
+    selfActivationRef.current = true;
     onActiveMessageChange(messageId);
     setStatus("loading");
+    setErrorMessage("");
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
+    const chunks = speechChunks(speechText, maxTextChars);
+    let chunkIndex = 0;
+
+    function synthesizeNextChunk(): Promise<SpeechAudioResult[]> | null {
+      const chunk = chunks[chunkIndex];
+      chunkIndex += 1;
+      return chunk ? synthesizeChunkWithFallback(chunk, requestId) : null;
+    }
+
     try {
-      const result = await synthesizeSpeech(providerAppId, speechText);
-      if (requestIdRef.current !== requestId) {
-        return;
-      }
-      const audioUrl = audioUrlFromResult(result);
-      const audio = new Audio(audioUrl);
-      audioRef.current = audio;
-      audio.onended = () => {
-        if (requestIdRef.current === requestId) {
-          stopPlayback();
-          clearActiveMessage(onActiveMessageChange, messageId);
+      let prefetched = synthesizeNextChunk();
+      while (prefetched) {
+        if (requestIdRef.current !== requestId) {
+          return;
         }
-      };
-      audio.onerror = () => {
-        if (requestIdRef.current === requestId) {
-          setStatus("error");
-          clearActiveMessage(onActiveMessageChange, messageId);
-          releaseAudioUrl();
+        setStatus(audioRef.current ? "playing" : "loading");
+        const results = await prefetched;
+        prefetched = synthesizeNextChunk();
+        for (const result of results) {
+          if (requestIdRef.current !== requestId) {
+            return;
+          }
+          await playSynthesizedChunk(result, requestId);
         }
-      };
-      await audio.play();
-      if (requestIdRef.current === requestId) {
-        setStatus("playing");
       }
-    } catch {
+      completePlayback(requestId);
+    } catch (error) {
       if (requestIdRef.current === requestId) {
-        setStatus("error");
-        clearActiveMessage(onActiveMessageChange, messageId);
-        releaseAudioUrl();
+        failPlayback(requestId, speechPlaybackErrorMessage(error));
       }
     }
   }
 
-  function stopPlayback() {
-    requestIdRef.current += 1;
-    audioRef.current?.pause();
+  function failPlayback(requestId: number, message: string) {
+    if (requestIdRef.current !== requestId) {
+      return;
+    }
+    selfActivationRef.current = false;
+    setErrorMessage(message);
+    setStatus("error");
+    clearActiveMessage(onActiveMessageChange, messageId);
+    releaseAudioUrl();
+  }
+
+  function completePlayback(requestId: number) {
+    if (requestIdRef.current !== requestId) {
+      return;
+    }
+    selfActivationRef.current = false;
     audioRef.current = null;
     releaseAudioUrl();
+    setErrorMessage("");
+    setStatus("idle");
+    clearActiveMessage(onActiveMessageChange, messageId);
+  }
+
+  function stopPlayback() {
+    requestIdRef.current += 1;
+    selfActivationRef.current = false;
+    const audio = audioRef.current;
+    audio?.pause();
+    if (audio?.onended) {
+      audio.onended.call(audio, new Event("ended"));
+    }
+    audioRef.current = null;
+    releaseAudioUrl();
+    setErrorMessage("");
     setStatus("idle");
   }
 
@@ -134,7 +174,7 @@ function SupportedMessageSpeechButton({
     }
   }
 
-  function audioUrlFromResult(result: { audio_data_url?: string; audio_base64?: string; content_type?: string }) {
+  function audioUrlFromResult(result: SpeechAudioResult) {
     if (result.audio_data_url) {
       return result.audio_data_url;
     }
@@ -148,6 +188,51 @@ function SupportedMessageSpeechButton({
     return objectUrl;
   }
 
+  async function synthesizeChunkWithFallback(chunk: string, requestId: number): Promise<SpeechAudioResult[]> {
+    try {
+      return [await synthesizeSpeech(providerAppId, chunk)];
+    } catch (error) {
+      const retryChunks = retrySpeechChunks(chunk);
+      if (isSplittableSynthesisError(error) && retryChunks.length > 1) {
+        const results: SpeechAudioResult[] = [];
+        for (const retryChunk of retryChunks) {
+          if (requestIdRef.current !== requestId) {
+            return results;
+          }
+          results.push(...(await synthesizeChunkWithFallback(retryChunk, requestId)));
+        }
+        return results;
+      }
+      throw error;
+    }
+  }
+
+  async function playSynthesizedChunk(result: SpeechAudioResult, requestId: number) {
+    const audioUrl = audioUrlFromResult(result);
+    const audio = new Audio(audioUrl);
+    audioRef.current = audio;
+    audio.preload = "auto";
+    audio.setAttribute("playsinline", "true");
+    audio.load();
+    const completion = audioCompletion(audio);
+    try {
+      await playAudioWithTimeout(audio);
+      if (requestIdRef.current !== requestId) {
+        completion.cancel();
+        return;
+      }
+      setStatus("playing");
+      await completion.promise;
+    } catch (error) {
+      completion.cancel();
+      throw error;
+    }
+    if (requestIdRef.current === requestId) {
+      audioRef.current = null;
+      releaseAudioUrl();
+    }
+  }
+
   return (
     <button
       aria-label={isReading ? "Stop reading response" : "Read response aloud"}
@@ -156,7 +241,7 @@ function SupportedMessageSpeechButton({
         isReading ? "is-speaking" : ""
       } ${status === "loading" ? "is-loading" : ""} ${status === "error" ? "is-error" : ""}`}
       onClick={toggleSpeech}
-      title={status === "error" ? "Speech unavailable" : isReading ? "Stop reading" : "Read aloud"}
+      title={status === "error" ? errorMessage || "Speech unavailable" : isReading ? "Stop reading" : "Read aloud"}
       type="button"
     >
       <span aria-hidden="true" className="material-symbols-rounded">
@@ -166,8 +251,150 @@ function SupportedMessageSpeechButton({
   );
 }
 
+function audioCompletion(audio: HTMLAudioElement): { cancel: () => void; promise: Promise<void> } {
+  let timeout: number | null = null;
+  let settled = false;
+  const clearCompletion = () => {
+    if (timeout !== null) {
+      window.clearTimeout(timeout);
+      timeout = null;
+    }
+  };
+  const promise = new Promise<void>((resolve, reject) => {
+    const finish = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearCompletion();
+      resolve();
+    };
+    const fail = (message: string) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearCompletion();
+      reject(new Error(message));
+    };
+    audio.onended = finish;
+    audio.onerror = () => fail("Browser audio playback failed.");
+    timeout = window.setTimeout(() => fail("Audio playback did not finish."), AUDIO_CHUNK_END_TIMEOUT_MS);
+    if (audio.ended) {
+      finish();
+    }
+  });
+  return {
+    cancel: () => {
+      settled = true;
+      clearCompletion();
+    },
+    promise,
+  };
+}
+
+function playAudioWithTimeout(audio: HTMLAudioElement): Promise<void> {
+  const playback = audio.play();
+  return new Promise((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      reject(new Error("Audio playback did not start."));
+    }, AUDIO_PLAY_START_TIMEOUT_MS);
+    playback.then(
+      () => {
+        window.clearTimeout(timeout);
+        resolve();
+      },
+      (error) => {
+        window.clearTimeout(timeout);
+        reject(error);
+      },
+    );
+  });
+}
+
+function speechPlaybackErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    if (error.name === "NotAllowedError") {
+      return "Browser blocked speech playback. Click read aloud again.";
+    }
+    return `Speech playback failed: ${error.message}`;
+  }
+  return "Speech playback failed.";
+}
+
 function clearActiveMessage(onActiveMessageChange: Dispatch<SetStateAction<string | null>>, messageId: string) {
   onActiveMessageChange((currentMessageId) => (currentMessageId === messageId ? null : currentMessageId));
+}
+
+export function speechChunks(text: string, maxTextChars = 0): string[] {
+  const limit = maxTextChars > 0 ? Math.min(maxTextChars, DEFAULT_TTS_CHUNK_CHARS) : DEFAULT_TTS_CHUNK_CHARS;
+  const normalized = text.trim();
+  if (!normalized || normalized.length <= limit) {
+    return normalized ? [normalized] : [];
+  }
+  const chunks: string[] = [];
+  let current = "";
+  for (const piece of speechPieces(normalized)) {
+    const next = current ? `${current} ${piece}` : piece;
+    if (next.length <= limit) {
+      current = next;
+      continue;
+    }
+    if (current) {
+      chunks.push(current);
+      current = "";
+    }
+    chunks.push(...hardSplitSpeechPiece(piece, limit));
+  }
+  if (current) {
+    chunks.push(current);
+  }
+  return chunks;
+}
+
+function speechPieces(text: string): string[] {
+  return text
+    .replace(/\n{2,}/g, ". ")
+    .split(/(?<=[.!?])\s+/)
+    .map((piece) => piece.trim())
+    .filter(Boolean);
+}
+
+function hardSplitSpeechPiece(piece: string, limit: number): string[] {
+  const chunks: string[] = [];
+  let remaining = piece.trim();
+  while (remaining.length > limit) {
+    const splitAt = Math.max(remaining.lastIndexOf(" ", limit), Math.min(limit, remaining.length));
+    chunks.push(remaining.slice(0, splitAt).trim());
+    remaining = remaining.slice(splitAt).trim();
+  }
+  if (remaining) {
+    chunks.push(remaining);
+  }
+  return chunks;
+}
+
+function retrySpeechChunks(text: string): string[] {
+  if (text.length <= MIN_RETRY_TTS_CHUNK_CHARS) {
+    return [text];
+  }
+  const midpoint = Math.floor(text.length / 2);
+  const before = text.lastIndexOf(" ", midpoint);
+  const after = text.indexOf(" ", midpoint);
+  const splitAt = before >= MIN_RETRY_TTS_CHUNK_CHARS ? before : after > 0 ? after : midpoint;
+  const left = text.slice(0, splitAt).trim();
+  const right = text.slice(splitAt).trim();
+  return [left, right].filter(Boolean);
+}
+
+function isSplittableSynthesisError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+  return (
+    message.includes("synthesized audio exceeds") ||
+    message.includes("response size limit") ||
+    message.includes("text must contain at most") ||
+    message.includes("max_text_chars")
+  );
 }
 
 export function speechTextFromMarkdown(content: string) {

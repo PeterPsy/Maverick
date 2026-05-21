@@ -7,7 +7,7 @@ import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { getAppDependencies, getSpeechCapabilities, listAgentCatalog, listApps, listProviders, listSkills } from "./api/client";
-import type { AgentTypeSummary, AppDependenciesPayload } from "./api/client";
+import type { AgentTypeSummary, AppDependenciesPayload, ChatThread } from "./api/client";
 
 vi.mock("./hooks/useRuntimeEvents", () => ({
   useRuntimeEvents: vi.fn(),
@@ -161,12 +161,12 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-async function renderApp() {
+async function renderApp(props: Parameters<typeof App>[0] = {}) {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
   await act(async () => {
-    root?.render(<App />);
+    root?.render(<App {...props} />);
   });
   return container;
 }
@@ -221,6 +221,67 @@ describe("App agent catalog dependency refresh", () => {
     await waitForAssertion(() => {
       expect(element.textContent).not.toContain("Social Video Content Strategist");
       expect(element.textContent).toContain("No agent catalog available");
+    });
+  });
+});
+
+describe("App thread navigation", () => {
+  it("shows a draft with an error when a requested thread is missing", async () => {
+    const element = await renderApp({ runtimeThreads: [] as ChatThread[], runtimeThreadsLoaded: true, threadId: "missing-thread" });
+
+    await waitForAssertion(() => {
+      expect(element.textContent).toContain("This chat is no longer available.");
+      expect(element.querySelector('[role="textbox"]')).not.toBeNull();
+    });
+  });
+
+  it("shows external runtime thread stream errors when the catalog is owned by a parent widget", async () => {
+    const element = await renderApp({
+      runtimeThreads: [] as ChatThread[],
+      runtimeThreadsError: "Runtime thread stream is not authorized.",
+      runtimeThreadsLoaded: false,
+    });
+
+    await waitForAssertion(() => {
+      expect(element.textContent).toContain("Runtime thread stream is not authorized.");
+    });
+  });
+});
+
+describe("App shell message scope", () => {
+  it("ignores scoped capture-area messages in the unscoped main app", async () => {
+    const element = await renderApp({ runtimeThreads: [] as ChatThread[], runtimeThreadsLoaded: true });
+    const file = new File(["capture"], "capture.txt", { type: "text/plain" });
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          origin: window.location.origin,
+          data: {
+            type: "maverick.widget.capture-area.complete",
+            navigation_scope: "floating-window",
+            files: [file],
+          },
+        }),
+      );
+    });
+
+    expect(element.textContent).not.toContain("capture.txt");
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          origin: window.location.origin,
+          data: {
+            type: "maverick.widget.capture-area.complete",
+            files: [file],
+          },
+        }),
+      );
+    });
+
+    await waitForAssertion(() => {
+      expect(element.textContent).toContain("capture.txt");
     });
   });
 });

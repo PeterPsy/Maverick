@@ -164,7 +164,7 @@ describe("speech provider client calls", () => {
     await expect(synthesizeSpeech("speech", "Hello")).resolves.toMatchObject({
       audio_base64: "UklGRg==",
     });
-    await expect(transcribeSpeech("speech", "UklGRg==", "audio/wav")).resolves.toMatchObject({
+    await expect(transcribeSpeech("speech", "UklGRg==", "audio/wav", { profile: "fast" })).resolves.toMatchObject({
       text: "Hello transcript",
     });
 
@@ -174,6 +174,17 @@ describe("speech provider client calls", () => {
       action: "transcribe_audio",
       audio_base64: "UklGRg==",
       content_type: "audio/wav",
+      profile: "fast",
     });
+  });
+
+  it("prefers backend detail text for failed speech requests", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse({ error: "transcription_failed", detail: "language en-us is unsupported" }, 502)));
+
+    await expect(transcribeSpeech("speech", "UklGRg==", "audio/webm", "en-us")).rejects.toMatchObject({
+      name: "ApiError",
+      message: "language en-us is unsupported",
+      status: 502,
+    } satisfies Partial<ApiError>);
   });
 });

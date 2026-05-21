@@ -1,0 +1,237 @@
+{
+  "commands": {
+    "crm": {
+      "description": "Run CRM operations. Omit action for the operations manifest.",
+      "argument_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "default": "operations.manifest",
+            "enum": [
+              "operations.manifest",
+              "crm.manifest",
+              "health",
+              "crm.health",
+              "bootstrap",
+              "crm.bootstrap",
+              "search",
+              "crm.search",
+              "get_record",
+              "crm.get_record",
+              "create_account",
+              "crm.create_account",
+              "update_account",
+              "crm.update_account",
+              "create_contact",
+              "crm.create_contact",
+              "update_contact",
+              "crm.update_contact",
+              "create_deal",
+              "crm.create_deal",
+              "update_deal",
+              "crm.update_deal",
+              "move_deal",
+              "crm.move_deal",
+              "log_activity",
+              "crm.log_activity",
+              "create_task",
+              "crm.create_task",
+              "update_task",
+              "crm.update_task",
+              "create_note",
+              "crm.create_note",
+              "update_note",
+              "crm.update_note",
+              "list_next_actions",
+              "crm.list_next_actions",
+              "summarize_account",
+              "crm.summarize_account",
+              "import_preview",
+              "crm.import_preview",
+              "import_commit",
+              "crm.import_commit",
+              "export",
+              "crm.export",
+              "references.manifest",
+              "references.search",
+              "references.resolve",
+              "references.summarize",
+              "view_filter",
+              "crm.view_filter",
+              "set_view_filter",
+              "crm.set_view_filter",
+              "set_custom_view",
+              "crm.set_custom_view",
+              "clear_custom_view",
+              "crm.clear_custom_view"
+            ]
+          },
+          "query": {
+            "type": "string"
+          },
+          "entity_type": {
+            "type": "string",
+            "enum": ["all", "account", "contact", "deal", "activity", "task", "note"]
+          },
+          "id": {
+            "type": "string"
+          },
+          "entity_id": {
+            "type": "string"
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "stage_id": {
+            "type": "string"
+          },
+          "contact_id": {
+            "type": "string"
+          },
+          "deal_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "industry": {
+            "type": "string"
+          },
+          "first_name": {
+            "type": "string"
+          },
+          "last_name": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "string"
+          },
+          "due_at": {
+            "type": "string"
+          },
+          "activity_type": {
+            "type": "string"
+          },
+          "owner_id": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "probability": {
+            "type": "number"
+          },
+          "close_date": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "refs": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "export": {
+            "type": "object"
+          },
+          "payload": {
+            "type": "object"
+          },
+          "schema_version": {
+            "type": "string"
+          },
+          "exported_at": {
+            "type": "string"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "accounts": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "contacts": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "deals": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "activities": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "csv": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

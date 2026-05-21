@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 import tempfile
 import unittest
@@ -16,6 +16,7 @@ from core.providers.provider_registry import ProviderRegistry
 from core.recovery.health_checks import run_provider_health_check
 from core.recovery.service import plan_session_restart, record_app_health, record_failed_start, record_runtime_health, recovery_status
 from core.recovery.store import RecoveryDocumentStore, RecoveryCollections
+from core.observability.store import ObservabilityCollections, ObservabilityDocumentStore
 from core.runtime.service import create_runtime_session
 from core.runtime.store import RuntimeDocumentStore, RuntimeCollections
 from core.secrets.errors import SecretBindingError, SecretPolicyError
@@ -27,12 +28,16 @@ from core.secrets.service import (
     bind_workspace_secret,
     build_secret_ref,
     create_platform_secret,
+    disable_platform_secret,
+    grant_app_secret_use,
+    resolve_app_secret_grant,
     resolve_app_secret,
     resolve_provider_secret,
     resolve_workspace_secret,
     revoke_platform_secret,
 )
 from core.secrets.store import SecretDocumentStore, SecretCollections
+from core.secrets.target_policy import normalize_target_patterns, normalize_target_patterns_or_wildcard
 from tests.support.collections import FakeCollection
 
 
@@ -84,6 +89,7 @@ class SecretsRecoveryTestCase(unittest.TestCase):
                 secrets=FakeCollection(),
                 values=FakeCollection(),
                 bindings=FakeCollection(),
+                grants=FakeCollection(),
             )
         )
 
@@ -93,6 +99,15 @@ class SecretsRecoveryTestCase(unittest.TestCase):
                 failures=FakeCollection(),
                 intents=FakeCollection(),
                 health_results=FakeCollection(),
+            )
+        )
+
+    def make_observability_store(self) -> ObservabilityDocumentStore:
+        return ObservabilityDocumentStore(
+            ObservabilityCollections(
+                events=FakeCollection(),
+                audit=FakeCollection(),
+                metrics=FakeCollection(),
             )
         )
 
@@ -149,7 +164,24 @@ class SecretsRecoveryTestCase(unittest.TestCase):
         assert stored_value is not None
         self.assertNotIn("raw_value", stored_value)
         self.assertNotEqual(stored_value["value_ciphertext"], "sk-test-secret")
-        self.assertEqual(stored_value["value_format"], "mvr3secret1")
+        self.assertEqual(stored_value["value_format"], "mvr3secret2-aesgcm")
+        self.assertIn("value_key_id", stored_value)
+
+    def test_create_secret_rejects_id_and_alias_collisions(self) -> None:
+        store = self.make_secret_store()
+        create_platform_secret(store, label="Same Name", raw_value="first-secret", alias="shared-alias")
+
+        with self.assertRaisesRegex(SecretBindingError, "Secret id `same-name` already exists"):
+            create_platform_secret(store, label="Same Name", raw_value="second-secret")
+        with self.assertRaisesRegex(SecretBindingError, "Secret alias `shared-alias` is already assigned"):
+            create_platform_secret(store, label="Different Name", raw_value="second-secret", alias="shared-alias")
+        with self.assertRaisesRegex(SecretBindingError, "collides with alias"):
+            create_platform_secret(store, label="Shared Alias", raw_value="second-secret")
+        with self.assertRaisesRegex(SecretBindingError, "collides with existing secret id"):
+            create_platform_secret(store, label="Different Name", raw_value="second-secret", alias="same-name")
+
+        self.assertEqual(len(store.list_secrets()), 1)
+        self.assertEqual(store.get_secret_value(secret_id="same-name"), "first-secret")
 
     def test_secret_store_key_can_be_loaded_from_protected_file(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -320,3 +352,152 @@ class SecretsRecoveryTestCase(unittest.TestCase):
                 logical_name="openai",
                 secret_ref="not-a-secret-ref",
             )
+
+    def test_app_secret_grants_allow_action_scoped_use_only(self) -> None:
+        store = self.make_secret_store()
+        secret = create_platform_secret(store, label="Example Login", raw_value="browser-password", alias="example-login", kind="password")
+        grant = grant_app_secret_use(
+            store,
+            workspace_id="acme",
+            app_id="browser",
+            logical_name="login",
+            secret_ref=build_secret_ref(alias=secret.alias),
+            actions=["browser.autofill"],
+            target_patterns=["https://example.com/*"],
+            created_by_user_id="admin",
+            reason="Allow Browser autofill on example.com.",
+        )
+
+        lease = resolve_app_secret_grant(
+            store,
+            workspace_id="acme",
+            app_id="browser",
+            grant_id=grant.grant_id,
+            action="browser.autofill",
+            target="https://example.com/login?token=not-audit-safe",
+        )
+
+        self.assertEqual(lease.value, "browser-password")
+        self.assertEqual(lease.source_grant_id, grant.grant_id)
+        with self.assertRaises(SecretPolicyError):
+            resolve_app_secret_grant(
+                store,
+                workspace_id="acme",
+                app_id="browser",
+                grant_id=grant.grant_id,
+                action="browser.autofill",
+                target="https://evil.example/login?token=not-audit-safe",
+            )
+        with self.assertRaises(SecretPolicyError):
+            resolve_app_secret_grant(
+                store,
+                workspace_id="acme",
+                app_id="crm",
+                grant_id=grant.grant_id,
+                action="browser.autofill",
+                target="https://example.com/login",
+            )
+
+    def test_disable_secret_revokes_linked_grants_in_service_layer(self) -> None:
+        store = self.make_secret_store()
+        secret = create_platform_secret(store, label="Example Login", raw_value="browser-password", alias="example-login")
+        grant = grant_app_secret_use(
+            store,
+            workspace_id="acme",
+            app_id="browser",
+            logical_name="login",
+            secret_ref=build_secret_ref(alias=secret.alias),
+            actions=["browser.autofill"],
+            target_patterns=["https://example.com/*"],
+        )
+
+        disabled = disable_platform_secret(store, secret_id=secret.secret_id)
+
+        self.assertEqual(disabled.status, "disabled")
+        self.assertEqual(store.get_secret_grant(grant.grant_id).status, "revoked")
+
+    def test_mixed_action_grants_reject_wildcard_targets(self) -> None:
+        store = self.make_secret_store()
+        secret = create_platform_secret(store, label="Mixed", raw_value="mixed-secret", alias="mixed")
+
+        with self.assertRaises(SecretBindingError):
+            grant_app_secret_use(
+                store,
+                workspace_id="acme",
+                app_id="browser",
+                logical_name="login",
+                secret_ref=build_secret_ref(alias=secret.alias),
+                actions=["app.backend", "browser.autofill"],
+                target_patterns=["*"],
+            )
+
+    def test_non_internal_grants_require_explicit_targets(self) -> None:
+        store = self.make_secret_store()
+        secret = create_platform_secret(store, label="Autofill", raw_value="autofill-secret", alias="autofill")
+
+        with self.assertRaises(SecretBindingError):
+            grant_app_secret_use(
+                store,
+                workspace_id="acme",
+                app_id="browser",
+                logical_name="login",
+                secret_ref=build_secret_ref(alias=secret.alias),
+                actions=["browser.autofill"],
+                target_patterns=[],
+            )
+
+    def test_target_normalization_requires_deliberate_wildcard_default(self) -> None:
+        self.assertEqual(normalize_target_patterns(None), [])
+        self.assertEqual(normalize_target_patterns([]), [])
+        self.assertEqual(normalize_target_patterns_or_wildcard([]), ["*"])
+
+    def test_secret_resolution_audits_success_and_denial_without_raw_value(self) -> None:
+        store = self.make_secret_store()
+        observability_store = self.make_observability_store()
+        secret = create_platform_secret(store, label="Audited", raw_value="audit-secret", alias="audited")
+        grant = grant_app_secret_use(
+            store,
+            workspace_id="acme",
+            app_id="browser",
+            logical_name="login",
+            secret_ref=build_secret_ref(alias=secret.alias),
+            actions=["browser.autofill"],
+            target_patterns=["https://example.com/*"],
+            expires_at=datetime.now(tz=UTC) + timedelta(minutes=5),
+        )
+
+        resolve_app_secret_grant(
+            store,
+            workspace_id="acme",
+            app_id="browser",
+            grant_id=grant.grant_id,
+            action="browser.autofill",
+            target="https://example.com/login",
+            observability_store=observability_store,
+        )
+        with self.assertRaises(SecretPolicyError):
+            resolve_app_secret_grant(
+                store,
+                workspace_id="acme",
+                app_id="browser",
+                grant_id=grant.grant_id,
+                action="browser.autofill",
+                target="https://other.example/login?token=not-audit-safe",
+                request_context={
+                    "surface": "backend",
+                    "route_path": "/api/" + ("x" * 220),
+                    "raw_payload": "should-not-persist",
+                },
+                observability_store=observability_store,
+            )
+
+        audit_records = observability_store.list_audit(workspace_id="acme", source_domain="secrets")
+        self.assertEqual([item.status for item in audit_records], ["succeeded", "failed"])
+        encoded = str([item.payload for item in audit_records])
+        self.assertNotIn("audit-secret", encoded)
+        self.assertNotIn("?", encoded)
+        self.assertNotIn("not-audit-safe", encoded)
+        self.assertNotIn("should-not-persist", encoded)
+        self.assertNotIn("raw_payload", encoded)
+        self.assertEqual(audit_records[-1].payload["request_context"]["surface"], "backend")
+        self.assertLessEqual(len(audit_records[-1].payload["request_context"]["route_path"]), 163)

@@ -6,7 +6,13 @@ from typing import Any
 
 from core.mcp.core_tool_helpers import OPERATOR_ONLY, core_mcp_tool, record_mcp_audit
 from core.mcp.models import McpInvocationContext, McpToolDefinition
-from core.secrets.service import create_platform_secret, disable_platform_secret, revoke_platform_secret, rotate_platform_secret
+from core.secrets.audit import record_cascaded_grant_revocation_audit
+from core.secrets.service import (
+    create_platform_secret,
+    disable_platform_secret_with_revocations,
+    revoke_platform_secret_with_revocations,
+    rotate_platform_secret,
+)
 from core.secrets.store import SecretStore
 
 
@@ -49,16 +55,54 @@ def secret_tool_specs(
     def _secret_disable_handler(arguments: dict[str, Any], context: McpInvocationContext) -> dict[str, Any]:
         if secret_store is None:
             return {"disabled": False}
-        secret = disable_platform_secret(secret_store, secret_id=str(arguments["secret_id"]))
-        record_mcp_audit(observability_store, event_type="core.secrets.disable", payload={"secret_id": secret.secret_id})
-        return {"disabled": True, "secret_id": secret.secret_id, "status": secret.status}
+        result = disable_platform_secret_with_revocations(secret_store, secret_id=str(arguments["secret_id"]))
+        secret = result.secret
+        record_mcp_audit(
+            observability_store,
+            event_type="core.secrets.disable",
+            payload={"secret_id": secret.secret_id, "revoked_grant_count": len(result.revoked_grants)},
+        )
+        record_cascaded_grant_revocation_audit(
+            observability_store,
+            secret_id=secret.secret_id,
+            grants=result.revoked_grants,
+            actor_user_id=context.user_id,
+            actor_agent_id=context.agent_id,
+            runtime_session_id=context.runtime_session_id,
+            source_workspace_id=context.workspace_id,
+        )
+        return {
+            "disabled": True,
+            "secret_id": secret.secret_id,
+            "status": secret.status,
+            "revoked_grant_count": len(result.revoked_grants),
+        }
 
     def _secret_revoke_handler(arguments: dict[str, Any], context: McpInvocationContext) -> dict[str, Any]:
         if secret_store is None:
             return {"revoked": False}
-        secret = revoke_platform_secret(secret_store, secret_id=str(arguments["secret_id"]))
-        record_mcp_audit(observability_store, event_type="core.secrets.revoke", payload={"secret_id": secret.secret_id})
-        return {"revoked": True, "secret_id": secret.secret_id, "status": secret.status}
+        result = revoke_platform_secret_with_revocations(secret_store, secret_id=str(arguments["secret_id"]))
+        secret = result.secret
+        record_mcp_audit(
+            observability_store,
+            event_type="core.secrets.revoke",
+            payload={"secret_id": secret.secret_id, "revoked_grant_count": len(result.revoked_grants)},
+        )
+        record_cascaded_grant_revocation_audit(
+            observability_store,
+            secret_id=secret.secret_id,
+            grants=result.revoked_grants,
+            actor_user_id=context.user_id,
+            actor_agent_id=context.agent_id,
+            runtime_session_id=context.runtime_session_id,
+            source_workspace_id=context.workspace_id,
+        )
+        return {
+            "revoked": True,
+            "secret_id": secret.secret_id,
+            "status": secret.status,
+            "revoked_grant_count": len(result.revoked_grants),
+        }
 
     tool_specs = [
         ("core.secrets.list", "Inspect platform secret metadata without raw values.", _secrets_list_handler, {}),

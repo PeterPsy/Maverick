@@ -10,10 +10,10 @@ from core.api.app_event_publication import declared_data_event_resources, publis
 from core.apps.runtime_requests import apply_app_runtime_requests
 from core.apps.surfaces import enabled_workspace_app_bindings, resolve_workspace_app_surface
 from core.apps.store import AppStore
-from core.apps.surface_descriptors import app_mcp_tool_metadata
+from core.apps.surface_descriptors import app_mcp_tool_metadata, app_mcp_tool_required_secrets
 from core.authorization.service import can_mount_app_visibility
 from core.mcp.models import McpInvocationContext, McpInvocationPolicy, McpToolDefinition
-from core.secrets.service import resolve_app_secret
+from core.secrets.app_delivery import resolve_app_secret_payload
 from core.secrets.store import SecretStore
 from core.shared.entrypoints import run_json_entrypoint
 from core.workspaces.paths import workspace_paths
@@ -63,6 +63,11 @@ def _workspace_app_tool_definitions(
                 tool_name,
                 default_description=default_description,
             )
+            required_secret_names = app_mcp_tool_required_secrets(
+                source_root,
+                tool_name,
+                declared_secret_names=parsed.contract.permissions.secrets.read,
+            )
             def _handler(
                 arguments: dict[str, Any],
                 context: McpInvocationContext,
@@ -77,7 +82,7 @@ def _workspace_app_tool_definitions(
                 _workspace_root: str = str(paths.root),
                 _uploaded_storage_root: str = str(paths.uploaded_storage),
                 _generated_storage_root: str = str(paths.generated_storage),
-                _allowed_secret_names: list[str] = parsed.contract.permissions.secrets.read,
+                _allowed_secret_names: list[str] = required_secret_names,
                 _declared_event_resources: list[str] = declared_data_event_resources(
                     parsed.contract.capabilities.data_events
                 ),
@@ -90,6 +95,17 @@ def _workspace_app_tool_definitions(
                 _app_event_bus=app_event_bus,
                 _start_path: Path | None = start_path,
             ) -> dict[str, Any]:
+                app_secret_result = resolve_app_secret_payload(
+                    _secret_store,
+                    workspace_id=str(context.workspace_id),
+                    app_id=_app_id,
+                    allowed_logical_names=_allowed_secret_names,
+                    surface=f"mcp/{_tool_name}",
+                    runtime_session_id=context.runtime_session_id,
+                    actor_user_id=context.user_id,
+                    observability_store=_observability_store,
+                    request_context={"surface": "mcp", "tool_name": _tool_name},
+                )
                 result = run_json_entrypoint(
                     _entrypoint_path,
                     payload={
@@ -105,12 +121,8 @@ def _workspace_app_tool_definitions(
                         "data_root": _data_root,
                         "uploaded_storage_root": _uploaded_storage_root,
                         "generated_storage_root": _generated_storage_root,
-                        "app_secrets": _resolve_app_secret_payload(
-                            _secret_store,
-                            workspace_id=str(context.workspace_id),
-                            app_id=_app_id,
-                            allowed_logical_names=_allowed_secret_names,
-                        ),
+                        "app_secrets": app_secret_result.secrets,
+                        "app_secret_errors": app_secret_result.errors,
                         "arguments": arguments,
                     },
                     cwd=_source_root,
@@ -169,24 +181,3 @@ def _workspace_app_tool_definitions(
                 )
             )
     return definitions
-
-
-def _resolve_app_secret_payload(
-    secret_store: SecretStore | None,
-    *,
-    workspace_id: str,
-    app_id: str,
-    allowed_logical_names: list[str] | None = None,
-) -> dict[str, str]:
-    if secret_store is None:
-        return {}
-    secrets: dict[str, str] = {}
-    allowed = set(allowed_logical_names or [])
-    for binding in secret_store.list_secret_bindings(workspace_id=workspace_id, app_id=app_id, scope="app"):
-        if binding.status != "active":
-            continue
-        if binding.logical_name not in allowed:
-            continue
-        lease = resolve_app_secret(secret_store, workspace_id=workspace_id, app_id=app_id, logical_name=binding.logical_name)
-        secrets[binding.logical_name] = lease.value
-    return secrets

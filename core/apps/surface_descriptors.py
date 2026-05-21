@@ -19,7 +19,7 @@ def app_cli_command_metadata(
             source_root / "cli" / "command_schemas.json",
             root_field="commands",
             item_name=command_name,
-            allowed_fields={"description", "argument_schema"},
+            allowed_fields={"description", "argument_schema", "required_secrets"},
         )
         if item is None:
             return default_description, _object_schema()
@@ -43,7 +43,7 @@ def app_mcp_tool_metadata(
             source_root / "mcp" / "tool_schemas.json",
             root_field="tools",
             item_name=tool_name,
-            allowed_fields={"description", "input_schema", "output_schema"},
+            allowed_fields={"description", "input_schema", "output_schema", "required_secrets"},
         )
         if item is None:
             return default_description, _object_schema(), _object_schema()
@@ -54,6 +54,55 @@ def app_mcp_tool_metadata(
         )
     except ValueError:
         return default_description, _object_schema(), _object_schema()
+
+
+def app_cli_command_required_secrets(
+    source_root: Path,
+    command_name: str,
+    *,
+    declared_secret_names: list[str],
+) -> list[str]:
+    """Return descriptor-declared secret logical names required by one CLI command."""
+    return _app_surface_required_secrets(
+        source_root / "cli" / "command_schemas.json",
+        root_field="commands",
+        item_name=command_name,
+        allowed_fields={"description", "argument_schema", "required_secrets"},
+        declared_secret_names=declared_secret_names,
+    )
+
+
+def app_mcp_tool_required_secrets(
+    source_root: Path,
+    tool_name: str,
+    *,
+    declared_secret_names: list[str],
+) -> list[str]:
+    """Return descriptor-declared secret logical names required by one MCP tool."""
+    return _app_surface_required_secrets(
+        source_root / "mcp" / "tool_schemas.json",
+        root_field="tools",
+        item_name=tool_name,
+        allowed_fields={"description", "input_schema", "output_schema", "required_secrets"},
+        declared_secret_names=declared_secret_names,
+    )
+
+
+def _app_surface_required_secrets(
+    path: Path,
+    *,
+    root_field: str,
+    item_name: str,
+    allowed_fields: set[str],
+    declared_secret_names: list[str],
+) -> list[str]:
+    try:
+        item = _descriptor_item(path, root_field=root_field, item_name=item_name, allowed_fields=allowed_fields)
+        if item is None:
+            return []
+        return _required_secret_names(item, declared_secret_names=declared_secret_names)
+    except ValueError:
+        return []
 
 
 def _descriptor_item(
@@ -122,3 +171,18 @@ def _optional_nullable_schema(payload: dict[str, Any], key: str) -> dict[str, An
 
 def _object_schema() -> dict[str, Any]:
     return {"type": "object"}
+
+
+def _required_secret_names(payload: dict[str, Any], *, declared_secret_names: list[str]) -> list[str]:
+    values = payload.get("required_secrets", [])
+    if not isinstance(values, list):
+        raise ValueError("App surface descriptor field `required_secrets` must be a list.")
+    declared = {str(value).strip().lower() for value in declared_secret_names}
+    required: list[str] = []
+    for value in values:
+        if not isinstance(value, str):
+            raise ValueError("App surface descriptor field `required_secrets` must contain strings.")
+        logical_name = value.strip().lower()
+        if logical_name and logical_name in declared and logical_name not in required:
+            required.append(logical_name)
+    return required

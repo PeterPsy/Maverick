@@ -9,6 +9,7 @@ from core.observability.service import record_platform_audit, record_platform_ev
 
 
 GLOBAL_AGENT_SAFE = CliInvocationPolicy(False, None, True, False, False)
+FULL_ACCESS_ADMIN = CliInvocationPolicy(False, "admin", False, True, True)
 FULL_ACCESS_WORKSPACE = CliInvocationPolicy(False, None, False, True, True)
 OPERATOR_ONLY = CliInvocationPolicy(True, None, False, False, False)
 WORKSPACE_SAFE = CliInvocationPolicy(False, None, True, True, False)

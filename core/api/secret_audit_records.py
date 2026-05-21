@@ -5,6 +5,7 @@ from __future__ import annotations
 from core.api.platform_state import PlatformState
 from core.api.session_api import RequestSession
 from core.observability.service import record_platform_audit, record_platform_event
+from core.secrets.audit import record_cascaded_grant_revocation_audit
 from core.secrets.models import SecretGrantRecord
 
 
@@ -45,30 +46,10 @@ def record_cascaded_grant_revocations(
     grants: list[SecretGrantRecord],
 ) -> None:
     """Record one cascade revoke audit/event in each impacted grant workspace."""
-    for grant in grants:
-        payload = {
-            "actor_user_id": context.user.user_id,
-            "secret_id": secret_id,
-            "grant_id": grant.grant_id,
-            "app_id": grant.app_id,
-            "source_workspace_id": context.workspace_id,
-        }
-        record_platform_audit(
-            state.observability_store,
-            action="core.secrets.grant.revoke.cascade",
-            status="succeeded",
-            source_domain="secrets",
-            detail=f"Revoked secret grant `{grant.grant_id}` because linked secret `{secret_id}` changed state.",
-            workspace_id=grant.workspace_id,
-            app_id=grant.app_id,
-            payload=payload,
-        )
-        record_platform_event(
-            state.observability_store,
-            event_type="core.secrets.grant.revoke.cascade",
-            event_plane="platform",
-            source_domain="secrets",
-            workspace_id=grant.workspace_id,
-            app_id=grant.app_id,
-            payload=payload,
-        )
+    record_cascaded_grant_revocation_audit(
+        state.observability_store,
+        secret_id=secret_id,
+        grants=grants,
+        actor_user_id=context.user.user_id,
+        source_workspace_id=context.workspace_id,
+    )

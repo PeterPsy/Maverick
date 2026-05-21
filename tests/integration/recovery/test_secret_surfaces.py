@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from core.cli.errors import CliInvocationNotAllowedError
 from core.mcp.errors import McpInvocationNotAllowedError
+from core.secrets.service import grant_app_secret_use
 from core.workspaces.service import ensure_workspace_membership
 from tests.support.observability import *
 
@@ -54,14 +55,31 @@ class TestSecretRecoverySurfaces(ObservabilityTestBase):
         self.assertEqual(mcp_result["items"][0]["secret_id"], secret.secret_id)
         self.assertNotIn("raw_value", mcp_result["items"][0])
 
-    def test_agent_cli_can_manage_secret_metadata_without_raw_value_leaks(self) -> None:
+    def test_agent_cli_can_list_but_not_mutate_secret_metadata(self) -> None:
         repo_root = self.make_repo_root()
         secret_store = self.make_secret_store()
-        context = CliInvocationContext(caller_kind="sandbox_agent", workspace_id="default", agent_id="agent-1", effective_mode="sandbox")
+        sandbox_context = CliInvocationContext(caller_kind="sandbox_agent", workspace_id="default", agent_id="agent-1", effective_mode="sandbox")
+        full_access_member_context = CliInvocationContext(
+            caller_kind="full_access_agent",
+            workspace_id="default",
+            agent_id="agent-2",
+            effective_mode="full-access",
+            platform_role="member",
+            workspace_role="member",
+        )
+        full_access_admin_context = CliInvocationContext(
+            caller_kind="full_access_agent",
+            workspace_id="default",
+            agent_id="agent-3",
+            effective_mode="full-access",
+            platform_role="admin",
+            workspace_role="admin",
+        )
+        operator_context = CliInvocationContext(caller_kind="operator", workspace_id="default", agent_id=None, effective_mode="full-access")
 
         create_result = run_core_cli_command(
             command_id="core.secrets.create",
-            context=context,
+            context=operator_context,
             arguments={"label": "Recovery Key", "raw_value": "recovery-secret", "alias": "recovery-key"},
             secret_store=secret_store,
             workspace_id="default",
@@ -71,50 +89,50 @@ class TestSecretRecoverySurfaces(ObservabilityTestBase):
         bind_workspace_secret(secret_store, workspace_id="default", logical_name="recovery", secret_ref=build_secret_ref(alias="recovery-key"))
         list_result = run_core_cli_command(
             command_id="core.secrets.list",
-            context=context,
+            context=sandbox_context,
             secret_store=secret_store,
             workspace_id="default",
             start_path=repo_root,
         )
         bindings_result = run_core_cli_command(
             command_id="core.secrets.bindings.list",
-            context=context,
+            context=sandbox_context,
             secret_store=secret_store,
             workspace_id="default",
             start_path=repo_root,
         )
-        rotate_result = run_core_cli_command(
+        with self.assertRaises(CliInvocationNotAllowedError):
+            run_core_cli_command(
+                command_id="core.secrets.rotate",
+                context=sandbox_context,
+                arguments={"secret_id": secret_id, "raw_value": "rotated-secret"},
+                secret_store=secret_store,
+                workspace_id="default",
+                start_path=repo_root,
+            )
+        with self.assertRaises(CliInvocationNotAllowedError):
+            run_core_cli_command(
+                command_id="core.secrets.rotate",
+                context=full_access_member_context,
+                arguments={"secret_id": secret_id, "raw_value": "member-rotated-secret"},
+                secret_store=secret_store,
+                workspace_id="default",
+                start_path=repo_root,
+            )
+        admin_rotate_result = run_core_cli_command(
             command_id="core.secrets.rotate",
-            context=context,
-            arguments={"secret_id": secret_id, "raw_value": "rotated-secret"},
-            secret_store=secret_store,
-            workspace_id="default",
-            start_path=repo_root,
-        )
-        disable_result = run_core_cli_command(
-            command_id="core.secrets.disable",
-            context=context,
-            arguments={"secret_id": secret_id},
-            secret_store=secret_store,
-            workspace_id="default",
-            start_path=repo_root,
-        )
-        revoke_result = run_core_cli_command(
-            command_id="core.secrets.revoke",
-            context=context,
-            arguments={"secret_id": secret_id},
+            context=full_access_admin_context,
+            arguments={"secret_id": secret_id, "raw_value": "admin-rotated-secret"},
             secret_store=secret_store,
             workspace_id="default",
             start_path=repo_root,
         )
 
         self.assertTrue(create_result["created"])
-        self.assertTrue(rotate_result["rotated"])
+        self.assertTrue(admin_rotate_result["rotated"])
         self.assertEqual(bindings_result["bindings"][0]["secret_ref"], "platform:secret-alias/recovery-key")
-        self.assertEqual(disable_result["status"], "disabled")
-        self.assertEqual(revoke_result["status"], "revoked")
-        for payload in (create_result, list_result, bindings_result, rotate_result, disable_result, revoke_result):
-            self.assert_payload_has_no_secret_material(payload, "recovery-secret", "rotated-secret")
+        for payload in (create_result, admin_rotate_result, list_result, bindings_result):
+            self.assert_payload_has_no_secret_material(payload, "recovery-secret", "rotated-secret", "admin-rotated-secret")
 
     def test_cli_and_mcp_expose_secret_create_and_recovery_health_surfaces(self) -> None:
         repo_root = self.make_repo_root()
@@ -132,7 +150,15 @@ class TestSecretRecoverySurfaces(ObservabilityTestBase):
             start_path=repo_root,
         )
 
-        cli_context = CliInvocationContext(caller_kind="operator", workspace_id="default", agent_id=None, effective_mode="full-access")
+        cli_context = CliInvocationContext(
+            caller_kind="full_access_agent",
+            workspace_id="default",
+            agent_id="agent-cli",
+            effective_mode="full-access",
+            platform_role="admin",
+            user_id="admin-user",
+            runtime_session_id="sess-cli",
+        )
         create_result = run_core_cli_command(
             command_id="core.secrets.create",
             context=cli_context,
@@ -156,6 +182,86 @@ class TestSecretRecoverySurfaces(ObservabilityTestBase):
             start_path=repo_root,
         )
         self.assertEqual(health_result["health"]["target_kind"], "runtime")
+
+    def test_cli_and_mcp_secret_disable_and_revoke_cascade_grants(self) -> None:
+        repo_root = self.make_repo_root()
+        secret_store = self.make_secret_store()
+        observability_store = self.make_observability_store()
+        cli_context = CliInvocationContext(
+            caller_kind="full_access_agent",
+            workspace_id="default",
+            agent_id="agent-cli",
+            effective_mode="full-access",
+            platform_role="admin",
+            user_id="admin-user",
+            runtime_session_id="sess-cli",
+        )
+        mcp_context = McpInvocationContext(caller_kind="operator", workspace_id="default", agent_id=None, effective_mode="full-access")
+        cli_secret = create_platform_secret(secret_store, label="CLI Secret", raw_value="cli-secret", alias="cli-secret")
+        cli_grants = [
+            grant_app_secret_use(
+                secret_store,
+                workspace_id=workspace_id,
+                app_id="browser",
+                logical_name="login",
+                secret_ref=build_secret_ref(alias=cli_secret.alias),
+                actions=["browser.autofill"],
+                target_patterns=["https://example.com/*"],
+            )
+            for workspace_id in ("default", "acme")
+        ]
+        mcp_secret = create_platform_secret(secret_store, label="MCP Secret", raw_value="mcp-secret", alias="mcp-secret")
+        mcp_grants = [
+            grant_app_secret_use(
+                secret_store,
+                workspace_id=workspace_id,
+                app_id="browser",
+                logical_name="backup",
+                secret_ref=build_secret_ref(secret_id=mcp_secret.secret_id),
+                actions=["browser.autofill"],
+                target_patterns=["https://example.com/*"],
+            )
+            for workspace_id in ("default", "acme")
+        ]
+
+        cli_result = run_core_cli_command(
+            command_id="core.secrets.disable",
+            context=cli_context,
+            arguments={"secret_id": cli_secret.secret_id},
+            secret_store=secret_store,
+            observability_store=observability_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+        mcp_result = call_mcp_tool(
+            tool_name="core.secrets.revoke",
+            context=mcp_context,
+            arguments={"secret_id": mcp_secret.secret_id},
+            secret_store=secret_store,
+            observability_store=observability_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+        cascade_audit = [
+            item
+            for item in observability_store.list_audit(source_domain="secrets")
+            if item.action == "core.secrets.grant.revoke.cascade"
+        ]
+        cli_audit = [item for item in cascade_audit if item.payload["secret_id"] == cli_secret.secret_id]
+        mcp_audit = [item for item in cascade_audit if item.payload["secret_id"] == mcp_secret.secret_id]
+
+        self.assertEqual(cli_result["revoked_grant_count"], 2)
+        self.assertEqual(mcp_result["revoked_grant_count"], 2)
+        self.assertEqual({secret_store.get_secret_grant(grant.grant_id).status for grant in cli_grants + mcp_grants}, {"revoked"})
+        self.assertEqual({item.workspace_id for item in cli_audit}, {"default", "acme"})
+        self.assertEqual({item.workspace_id for item in mcp_audit}, {"default", "acme"})
+        self.assertEqual({item.payload["grant_id"] for item in cli_audit}, {grant.grant_id for grant in cli_grants})
+        self.assertEqual({item.payload["grant_id"] for item in mcp_audit}, {grant.grant_id for grant in mcp_grants})
+        self.assertEqual({item.payload["app_id"] for item in cascade_audit}, {"browser"})
+        self.assertEqual({item.payload["source_workspace_id"] for item in cascade_audit}, {"default"})
+        self.assertEqual({item.runtime_session_id for item in cli_audit}, {"sess-cli"})
+        self.assertEqual({item.payload["actor_agent_id"] for item in cli_audit}, {"agent-cli"})
+        self.assertEqual({item.payload["actor_user_id"] for item in cli_audit}, {"admin-user"})
 
     def test_cli_and_mcp_recovery_hooks_plan_and_inspect_without_main_backend_dependency(self) -> None:
         repo_root = self.make_repo_root()

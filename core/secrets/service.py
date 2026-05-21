@@ -2,15 +2,24 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 
-from core.secrets.errors import SecretBindingError
+from core.secrets.errors import SecretBindingError, SecretError
 from core.secrets.grants import create_secret_grant, revoke_secret_grant
 from core.secrets.models import ResolvedSecretLease, SecretBindingRecord, SecretGrantRecord, SecretKind, SecretRecord, SecretResolutionContext
 from core.secrets.secret_bindings import bind_secret, resolve_active_binding
-from core.secrets.secret_resolution import resolve_secret_for_app_use, resolve_secret_for_runtime
+from core.secrets.secret_resolution import parse_secret_ref, resolve_secret_for_app_use, resolve_secret_for_runtime
 from core.secrets.secret_store import build_secret_ref, create_secret, disable_secret, revoke_secret, rotate_secret_value
 from core.secrets.store import SecretStore
+
+
+@dataclass(frozen=True)
+class SecretLifecycleResult:
+    """Secret metadata plus grants revoked as part of the lifecycle change."""
+
+    secret: SecretRecord
+    revoked_grants: list[SecretGrantRecord]
 
 
 def create_platform_secret(
@@ -50,12 +59,59 @@ def rotate_platform_secret(
 
 def disable_platform_secret(store: SecretStore, *, secret_id: str, now: datetime | None = None) -> SecretRecord:
     """Disable one platform-owned secret."""
-    return disable_secret(store, secret_id=secret_id, now=now)
+    return disable_platform_secret_with_revocations(store, secret_id=secret_id, now=now).secret
 
 
 def revoke_platform_secret(store: SecretStore, *, secret_id: str, now: datetime | None = None) -> SecretRecord:
     """Revoke one platform-owned secret and remove its raw value."""
-    return revoke_secret(store, secret_id=secret_id, now=now)
+    return revoke_platform_secret_with_revocations(store, secret_id=secret_id, now=now).secret
+
+
+def disable_platform_secret_with_revocations(
+    store: SecretStore,
+    *,
+    secret_id: str,
+    now: datetime | None = None,
+) -> SecretLifecycleResult:
+    """Disable one platform-owned secret and revoke linked active grants."""
+    secret = disable_secret(store, secret_id=secret_id, now=now)
+    return SecretLifecycleResult(secret=secret, revoked_grants=revoke_grants_for_secret(store, secret=secret, now=now))
+
+
+def revoke_platform_secret_with_revocations(
+    store: SecretStore,
+    *,
+    secret_id: str,
+    now: datetime | None = None,
+) -> SecretLifecycleResult:
+    """Revoke one platform-owned secret, delete its value, and revoke linked active grants."""
+    secret = revoke_secret(store, secret_id=secret_id, now=now)
+    return SecretLifecycleResult(secret=secret, revoked_grants=revoke_grants_for_secret(store, secret=secret, now=now))
+
+
+def revoke_grants_for_secret(
+    store: SecretStore,
+    *,
+    secret: SecretRecord,
+    now: datetime | None = None,
+) -> list[SecretGrantRecord]:
+    """Revoke active grants linked to one secret id or alias."""
+    revoked: list[SecretGrantRecord] = []
+    for grant in store.list_secret_grants(status="active"):
+        try:
+            linked_secret = _secret_for_ref(store, grant.secret_ref)
+        except SecretError:
+            continue
+        if linked_secret.secret_id == secret.secret_id:
+            revoked.append(revoke_secret_grant(store, grant_id=grant.grant_id, now=now))
+    return revoked
+
+
+def _secret_for_ref(store: SecretStore, secret_ref: str) -> SecretRecord:
+    parsed_ref = parse_secret_ref(secret_ref)
+    if parsed_ref.kind == "secret_id":
+        return store.get_secret(parsed_ref.value)
+    return store.get_secret_by_alias(parsed_ref.value)
 
 
 def bind_workspace_secret(

@@ -4,9 +4,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.cli.core_command_helpers import WORKSPACE_SAFE, core_cli_command, record_cli_audit
+from core.cli.core_command_helpers import FULL_ACCESS_ADMIN, WORKSPACE_SAFE, core_cli_command, record_cli_audit
 from core.cli.models import CliCommandDefinition, CliInvocationContext
-from core.secrets.service import create_platform_secret, disable_platform_secret, revoke_platform_secret, rotate_platform_secret
+from core.secrets.audit import record_cascaded_grant_revocation_audit
+from core.secrets.service import (
+    create_platform_secret,
+    disable_platform_secret_with_revocations,
+    revoke_platform_secret_with_revocations,
+    rotate_platform_secret,
+)
 from core.secrets.store import SecretStore
 
 
@@ -93,34 +99,102 @@ def secret_command_specs(
     def _secret_disable_handler(arguments: dict[str, Any], context: CliInvocationContext) -> dict[str, Any]:
         if secret_store is None:
             return {"disabled": False}
-        secret = disable_platform_secret(secret_store, secret_id=str(arguments["secret_id"]))
+        result = disable_platform_secret_with_revocations(secret_store, secret_id=str(arguments["secret_id"]))
+        secret = result.secret
         record_cli_audit(
             observability_store,
             action="core.secrets.disable",
             detail=f"Disabled platform secret `{secret.secret_id}`.",
-            payload={"secret_id": secret.secret_id},
+            payload={"secret_id": secret.secret_id, "revoked_grant_count": len(result.revoked_grants)},
         )
-        return {"command_id": "core.secrets.disable", "disabled": True, "secret_id": secret.secret_id, "status": secret.status}
+        record_cascaded_grant_revocation_audit(
+            observability_store,
+            secret_id=secret.secret_id,
+            grants=result.revoked_grants,
+            actor_user_id=context.user_id,
+            actor_agent_id=context.agent_id,
+            runtime_session_id=context.runtime_session_id,
+            source_workspace_id=context.workspace_id,
+        )
+        return {
+            "command_id": "core.secrets.disable",
+            "disabled": True,
+            "secret_id": secret.secret_id,
+            "status": secret.status,
+            "revoked_grant_count": len(result.revoked_grants),
+        }
 
     def _secret_revoke_handler(arguments: dict[str, Any], context: CliInvocationContext) -> dict[str, Any]:
         if secret_store is None:
             return {"revoked": False}
-        secret = revoke_platform_secret(secret_store, secret_id=str(arguments["secret_id"]))
+        result = revoke_platform_secret_with_revocations(secret_store, secret_id=str(arguments["secret_id"]))
+        secret = result.secret
         record_cli_audit(
             observability_store,
             action="core.secrets.revoke",
             detail=f"Revoked platform secret `{secret.secret_id}`.",
-            payload={"secret_id": secret.secret_id},
+            payload={"secret_id": secret.secret_id, "revoked_grant_count": len(result.revoked_grants)},
         )
-        return {"command_id": "core.secrets.revoke", "revoked": True, "secret_id": secret.secret_id, "status": secret.status}
+        record_cascaded_grant_revocation_audit(
+            observability_store,
+            secret_id=secret.secret_id,
+            grants=result.revoked_grants,
+            actor_user_id=context.user_id,
+            actor_agent_id=context.agent_id,
+            runtime_session_id=context.runtime_session_id,
+            source_workspace_id=context.workspace_id,
+        )
+        return {
+            "command_id": "core.secrets.revoke",
+            "revoked": True,
+            "secret_id": secret.secret_id,
+            "status": secret.status,
+            "revoked_grant_count": len(result.revoked_grants),
+        }
 
     command_specs = [
-        ("core.secrets.list", ["core", "secrets", "list"], "Inspect platform secret metadata without raw values.", _secrets_list_handler),
-        ("core.secrets.bindings.list", ["core", "secrets", "bindings", "list"], "Inspect secret binding metadata without raw values.", _secret_bindings_list_handler),
-        ("core.secrets.create", ["core", "secrets", "create"], "Create one platform secret without exposing its raw value in the result.", _secret_create_handler),
-        ("core.secrets.rotate", ["core", "secrets", "rotate"], "Rotate one platform secret without exposing the raw value.", _secret_rotate_handler),
-        ("core.secrets.disable", ["core", "secrets", "disable"], "Disable one platform secret.", _secret_disable_handler),
-        ("core.secrets.revoke", ["core", "secrets", "revoke"], "Revoke one platform secret and remove its raw value.", _secret_revoke_handler),
+        (
+            "core.secrets.list",
+            ["core", "secrets", "list"],
+            "Inspect platform secret metadata without raw values.",
+            WORKSPACE_SAFE,
+            _secrets_list_handler,
+        ),
+        (
+            "core.secrets.bindings.list",
+            ["core", "secrets", "bindings", "list"],
+            "Inspect secret binding metadata without raw values.",
+            WORKSPACE_SAFE,
+            _secret_bindings_list_handler,
+        ),
+        (
+            "core.secrets.create",
+            ["core", "secrets", "create"],
+            "Create one platform secret without exposing its raw value in the result.",
+            FULL_ACCESS_ADMIN,
+            _secret_create_handler,
+        ),
+        (
+            "core.secrets.rotate",
+            ["core", "secrets", "rotate"],
+            "Rotate one platform secret without exposing the raw value.",
+            FULL_ACCESS_ADMIN,
+            _secret_rotate_handler,
+        ),
+        (
+            "core.secrets.disable",
+            ["core", "secrets", "disable"],
+            "Disable one platform secret.",
+            FULL_ACCESS_ADMIN,
+            _secret_disable_handler,
+        ),
+        (
+            "core.secrets.revoke",
+            ["core", "secrets", "revoke"],
+            "Revoke one platform secret and remove its raw value.",
+            FULL_ACCESS_ADMIN,
+            _secret_revoke_handler,
+        ),
     ]
     return [
         (
@@ -129,9 +203,9 @@ def secret_command_specs(
                 path_segments=path_segments,
                 description=description,
                 owner_id="secrets",
-                invocation_policy=WORKSPACE_SAFE,
+                invocation_policy=invocation_policy,
             ),
             handler,
         )
-        for command_id, path_segments, description, handler in command_specs
+        for command_id, path_segments, description, invocation_policy, handler in command_specs
     ]

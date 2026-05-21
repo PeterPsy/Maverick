@@ -8,9 +8,8 @@ from core.api.platform_state import PlatformState
 from core.api.secret_api_payloads import get_secret_for_ref
 from core.apps.errors import AppHostingError, WorkspaceAppBindingNotFoundError
 from core.apps.surfaces import resolve_workspace_app_surface
-from core.secrets.errors import SecretError, SecretPolicyError
-from core.secrets.models import SecretGrantRecord, SecretRecord
-from core.secrets.service import revoke_app_secret_grant
+from core.secrets.errors import SecretPolicyError
+from core.secrets.models import SecretRecord
 
 
 APP_BACKEND_ACTION = "app.backend"
@@ -89,16 +88,3 @@ def parse_expires_at(raw_value: object) -> datetime | None:
     if parsed <= datetime.now(tz=UTC):
         raise SecretPolicyError("Secret grant expiry must be in the future.")
     return parsed
-
-
-def revoke_grants_for_secret(state: PlatformState, *, secret: SecretRecord) -> list[SecretGrantRecord]:
-    """Revoke active grants linked to one secret."""
-    revoked: list[SecretGrantRecord] = []
-    for grant in state.secret_store.list_secret_grants(status="active"):
-        try:
-            linked_secret = get_secret_for_ref(state, secret_ref=grant.secret_ref)
-        except SecretError:
-            continue
-        if linked_secret.secret_id == secret.secret_id:
-            revoked.append(revoke_app_secret_grant(state.secret_store, grant_id=grant.grant_id))
-    return revoked

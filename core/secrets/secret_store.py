@@ -8,7 +8,7 @@ import re
 from typing import cast
 import unicodedata
 
-from core.secrets.errors import SecretBindingError
+from core.secrets.errors import SecretBindingError, SecretNotFoundError
 from core.secrets.models import SecretKind, SecretRecord
 from core.secrets.store import SecretStore
 
@@ -98,9 +98,42 @@ def create_secret(
     )
     if not raw_value:
         raise SecretBindingError("Secret raw values must not be empty.")
+    _assert_secret_identity_available(store, record)
     store.save_secret(record)
     store.save_secret_value(secret_id=record.secret_id, raw_value=raw_value)
     return record
+
+
+def _assert_secret_identity_available(store: SecretStore, record: SecretRecord) -> None:
+    try:
+        existing = store.get_secret(record.secret_id)
+    except SecretNotFoundError:
+        existing = None
+    if existing is not None:
+        raise SecretBindingError(f"Secret id `{record.secret_id}` already exists; use rotate to change its value.")
+    try:
+        existing_id_alias = store.get_secret_by_alias(record.secret_id)
+    except SecretNotFoundError:
+        existing_id_alias = None
+    if existing_id_alias is not None:
+        raise SecretBindingError(
+            f"Secret id `{record.secret_id}` collides with alias on secret `{existing_id_alias.secret_id}`."
+        )
+    if record.alias is None:
+        return
+    try:
+        existing_alias = store.get_secret_by_alias(record.alias)
+    except SecretNotFoundError:
+        existing_alias = None
+    if existing_alias is not None:
+        raise SecretBindingError(
+            f"Secret alias `{record.alias}` is already assigned to secret `{existing_alias.secret_id}`; use a unique alias."
+        )
+    try:
+        existing_alias_id = store.get_secret(record.alias)
+    except SecretNotFoundError:
+        return
+    raise SecretBindingError(f"Secret alias `{record.alias}` collides with existing secret id `{existing_alias_id.secret_id}`.")
 
 
 def rotate_secret_value(store: SecretStore, *, secret_id: str, raw_value: str, now: datetime | None = None) -> SecretRecord:

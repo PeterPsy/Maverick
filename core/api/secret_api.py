@@ -17,7 +17,6 @@ from core.api.secret_grant_validation import (
     assert_logical_name_available,
     get_active_secret_for_ref,
     parse_expires_at,
-    revoke_grants_for_secret,
 )
 from core.api.session_api import RequestSession, require_session
 from core.secrets.app_delivery import assert_app_backend_targets_deliverable
@@ -26,11 +25,11 @@ from core.secrets.models import SecretGrantRecord
 from core.secrets.service import (
     build_secret_ref,
     create_platform_secret,
-    disable_platform_secret,
+    disable_platform_secret_with_revocations,
     grant_app_secret_use,
     resolve_app_secret_grant,
     revoke_app_secret_grant,
-    revoke_platform_secret,
+    revoke_platform_secret_with_revocations,
     rotate_platform_secret,
 )
 
@@ -171,11 +170,13 @@ def _handle_secret_record(
         secret = rotate_platform_secret(state.secret_store, secret_id=secret_id, raw_value=str(body.get("raw_value") or ""))
         revoked_grants = []
     elif action == "disable":
-        secret = disable_platform_secret(state.secret_store, secret_id=secret_id)
-        revoked_grants = revoke_grants_for_secret(state, secret=secret)
+        result = disable_platform_secret_with_revocations(state.secret_store, secret_id=secret_id)
+        secret = result.secret
+        revoked_grants = result.revoked_grants
     elif action == "revoke":
-        secret = revoke_platform_secret(state.secret_store, secret_id=secret_id)
-        revoked_grants = revoke_grants_for_secret(state, secret=secret)
+        result = revoke_platform_secret_with_revocations(state.secret_store, secret_id=secret_id)
+        secret = result.secret
+        revoked_grants = result.revoked_grants
     else:
         return json_response(start_response, {"error": "not_found"}, status="404 Not Found")
     record_secret_change(

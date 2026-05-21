@@ -57,16 +57,20 @@ describe("Sidebar desktop rail reorder", () => {
   let root: Root;
   let openApp: ReturnType<typeof vi.fn<(appId: string, params?: Record<string, string | boolean | null>) => void>>;
   let reorderPinnedApps: ReturnType<typeof vi.fn<(appIds: string[]) => void>>;
+  let resizeSidebar: ReturnType<typeof vi.fn<(widthPx: number) => void>>;
 
   beforeEach(() => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     vi.useFakeTimers();
     HTMLElement.prototype.setPointerCapture = vi.fn();
+    HTMLElement.prototype.hasPointerCapture = vi.fn(() => true);
+    HTMLElement.prototype.releasePointerCapture = vi.fn();
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
     openApp = vi.fn<(appId: string, params?: Record<string, string | boolean | null>) => void>();
     reorderPinnedApps = vi.fn<(appIds: string[]) => void>();
+    resizeSidebar = vi.fn<(widthPx: number) => void>();
   });
 
   afterEach(() => {
@@ -169,6 +173,30 @@ describe("Sidebar desktop rail reorder", () => {
     expect(reorderPinnedApps).toHaveBeenCalledWith(["agents", "chat", "skills"]);
   });
 
+  it("renders a desktop resize icon and drags the sidebar width", async () => {
+    await renderSidebar();
+
+    const handle = resizeHandle();
+    expect(handle.textContent).toContain("arrow_right_alt");
+    expect(handle.parentElement?.className).toContain("bs-sidebar");
+    handle.getBoundingClientRect = () => ({ bottom: 500, height: 400, left: 0, right: 40, toJSON: () => ({}), top: 100, width: 40, x: 0, y: 100 });
+
+    await act(async () => {
+      dispatchPointer(handle, "pointerdown", { clientX: 320, clientY: 200 });
+      dispatchPointer(handle, "pointermove", { clientX: 392, clientY: 200 });
+      dispatchPointer(handle, "pointerup", { clientX: 392, clientY: 200 });
+    });
+
+    expect(resizeSidebar).toHaveBeenCalledWith(392);
+    expect(handle.style.getPropertyValue("--bs-sidebar-resize-icon-y")).toBe("100px");
+  });
+
+  it("does not render the resize icon on mobile", async () => {
+    await renderSidebar({ isMobileLayout: true });
+
+    expect(container.querySelector(".bs-sidebar__resize-handle")).toBeNull();
+  });
+
   it("drops reliably into the penultimate and final slots", async () => {
     await renderSidebar({ pinnedAppIds: ["chat", "agents", "skills", "docs"] });
     stubRailRects([
@@ -235,9 +263,12 @@ describe("Sidebar desktop rail reorder", () => {
           onOpenSidebar={vi.fn()}
           onPrimaryActionStateChange={vi.fn()}
           onReorderPinnedApps={(appIds) => reorderPinnedApps(appIds)}
+          onSidebarDetailsWidthChange={(widthPx) => resizeSidebar(widthPx)}
+          onSidebarResizeActiveChange={vi.fn()}
           onWorkspaceChanged={vi.fn()}
           pinnedAppIds={overrides.pinnedAppIds ?? ["chat", "agents", "skills"]}
           railMetrics={{}}
+          sidebarDetailsWidthPx={320}
           user={user}
           workspaces={workspaces}
         />,
@@ -251,6 +282,14 @@ describe("Sidebar desktop rail reorder", () => {
     );
     if (!(button instanceof HTMLButtonElement)) {
       throw new Error(`Rail button ${labelPrefix} was not mounted.`);
+    }
+    return button;
+  }
+
+  function resizeHandle(): HTMLButtonElement {
+    const button = container.querySelector(".bs-sidebar__resize-handle");
+    if (!(button instanceof HTMLButtonElement)) {
+      throw new Error("Resize handle was not mounted.");
     }
     return button;
   }
@@ -270,12 +309,12 @@ describe("Sidebar desktop rail reorder", () => {
     }
   }
 
-  function dispatchPointer(target: Element, type: string, options: { clientY: number }) {
+  function dispatchPointer(target: Element, type: string, options: { clientX?: number; clientY: number }) {
     const event = new MouseEvent(type, {
       bubbles: true,
       button: 0,
       cancelable: true,
-      clientX: 20,
+      clientX: options.clientX ?? 20,
       clientY: options.clientY,
     }) as MouseEvent & { pointerId: number; pointerType: string };
     Object.defineProperty(event, "pointerId", { value: 1 });

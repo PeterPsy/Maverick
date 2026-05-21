@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import {
   AppRegistryItem,
   configureActiveProvider,
@@ -29,7 +30,7 @@ import {
   shellAppRailApps,
   shellVisibleApps,
 } from "./navigation";
-import { readShellSession, resolveInitialSidebarOpen, writeShellSession } from "./session";
+import { clampSidebarDetailsWidth, readShellSession, resolveInitialSidebarOpen, writeShellSession } from "./session";
 import type { SidebarMode } from "./session";
 import { getInitialMobileLayout, useMobileLayout } from "./hooks/useMobileLayout";
 import { useSidebarRailMetrics } from "./hooks/useSidebarRailMetrics";
@@ -59,6 +60,7 @@ export function AppShell() {
   const [activeAppId, setActiveAppId] = useState<string | null>(initialActiveAppId);
   const [activeAppParams, setActiveAppParams] = useState<Record<string, string | boolean | null>>(initialLaunchRoute.params);
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>(isInitialChatLaunch ? "rail" : initialSession.sidebarMode);
+  const [sidebarDetailsWidthPx, setSidebarDetailsWidthPx] = useState(() => clampSidebarDetailsWidth(initialSession.sidebarDetailsWidthPx));
   const [isSidebarOpen, setIsSidebarOpen] = useState(() =>
     resolveInitialSidebarOpen(initialSession, {
       isInitialChatLaunch,
@@ -66,6 +68,7 @@ export function AppShell() {
     }),
   );
   const [isSidebarClosing, setIsSidebarClosing] = useState(false);
+  const [isSidebarResizing, setIsSidebarResizing] = useState(false);
   const [dismissedProviderSetupWorkspaceId, setDismissedProviderSetupWorkspaceId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -86,6 +89,13 @@ export function AppShell() {
   const hasSettingsShortcut = shellVisibleApps(apps).some((app) => app.app_id === SETTINGS_APP_ID);
   const shellRailItemCount = isLoading && railApps.length === 0 ? 4 : railApps.length + (hasSettingsShortcut ? 1 : 0);
   const shellSidebarMetrics = useSidebarRailMetrics(shellRailItemCount, isMobileLayout);
+  const shellStyle = useMemo(() => {
+    const style: CSSProperties & { "--maverick-sidebar-details-width"?: string } = { ...shellSidebarMetrics };
+    if (!isMobileLayout) {
+      style["--maverick-sidebar-details-width"] = `${sidebarDetailsWidthPx}px`;
+    }
+    return style;
+  }, [isMobileLayout, shellSidebarMetrics, sidebarDetailsWidthPx]);
 
   function clearSidebarClosing() {
     if (sidebarCloseTimerRef.current !== null) {
@@ -249,9 +259,26 @@ export function AppShell() {
     writeShellSession({
       activeAppId: activeApp?.app_id ?? activeAppId,
       isSidebarOpen: isSidebarPinned ? true : isSidebarOpen,
+      sidebarDetailsWidthPx,
       sidebarMode,
     });
-  }, [activeApp?.app_id, activeAppId, isSidebarOpen, isSidebarPinned, sidebarMode]);
+  }, [activeApp?.app_id, activeAppId, isSidebarOpen, isSidebarPinned, sidebarDetailsWidthPx, sidebarMode]);
+
+  useEffect(() => {
+    if (isMobileLayout) {
+      return undefined;
+    }
+    function handleResize() {
+      setSidebarDetailsWidthPx((current) => clampSidebarDetailsWidth(current));
+    }
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    window.visualViewport?.addEventListener("resize", handleResize);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      window.visualViewport?.removeEventListener("resize", handleResize);
+    };
+  }, [isMobileLayout]);
 
   useEffect(() => {
     if (isSidebarPinned) {
@@ -400,8 +427,8 @@ export function AppShell() {
 
   return (
     <main
-      className={`bs-shell is-sidebar-mode-${sidebarMode} ${isSidebarOpen ? "is-sidebar-open" : ""} ${isSidebarClosing ? "is-sidebar-closing" : ""} ${isMobileLayout ? "is-mobile-layout" : ""}`}
-      style={shellSidebarMetrics}
+      className={`bs-shell is-sidebar-mode-${sidebarMode} ${isSidebarOpen ? "is-sidebar-open" : ""} ${isSidebarClosing ? "is-sidebar-closing" : ""} ${isSidebarResizing ? "is-sidebar-resizing" : ""} ${isMobileLayout ? "is-mobile-layout" : ""}`}
+      style={shellStyle}
     >
       {isMobileLayout ? (
         <MobileShellHeader
@@ -447,6 +474,9 @@ export function AppShell() {
         onWorkspaceChanged={loadShellState}
         pinnedAppIds={pinnedAppIds}
         railMetrics={shellSidebarMetrics}
+        sidebarDetailsWidthPx={sidebarDetailsWidthPx}
+        onSidebarDetailsWidthChange={setSidebarDetailsWidthPx}
+        onSidebarResizeActiveChange={setIsSidebarResizing}
         user={session.user}
         workspaces={workspaces}
       />

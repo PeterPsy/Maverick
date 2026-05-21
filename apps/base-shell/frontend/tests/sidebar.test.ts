@@ -99,6 +99,21 @@ describe("Sidebar desktop layout contract", () => {
     expect(responsiveStyles).toContain("display: none;");
   });
 
+  it("keeps the resize icon out of the fixed sidebar grid", () => {
+    const sidebarStyles = readStyle("sidebar.css");
+    const resizeRule = sidebarStyles.match(/\.bs-sidebar__resize-handle \{[\s\S]*?\n\}/)?.[0] ?? "";
+    const resizeIconRule = sidebarStyles.match(/\.bs-sidebar__resize-handle \.material-symbols-rounded \{[\s\S]*?\n\}/)?.[0] ?? "";
+    const fixedResizeRule = sidebarStyles.match(/\.bs-shell\.is-sidebar-mode-fixed:not\(\.is-mobile-layout\) \.bs-sidebar__resize-handle \{[\s\S]*?\n\}/)?.[0] ?? "";
+
+    expect(sidebarStyles).toContain(".bs-sidebar__resize-handle");
+    expect(resizeRule).toContain("top: 0;");
+    expect(resizeRule).toContain("bottom: 0;");
+    expect(resizeRule).toContain("cursor: none;");
+    expect(resizeIconRule).toContain("top: var(--bs-sidebar-resize-icon-y, 50%);");
+    expect(fixedResizeRule).toContain("position: absolute;");
+    expect(fixedResizeRule).toContain("z-index: 12;");
+  });
+
   it("uses a mobile shell header for sidebar open and app-owned primary actions", () => {
     const appShellSource = readSource("AppShell.tsx");
     const headerSource = readSource("components/MobileShellHeader.tsx");

@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { readShellSession, resolveInitialSidebarOpen, writeShellSession } from "../src/session";
+import {
+  DEFAULT_SIDEBAR_DETAILS_WIDTH_PX,
+  MAX_SIDEBAR_DETAILS_WIDTH_PX,
+  MIN_SIDEBAR_DETAILS_WIDTH_PX,
+  clampSidebarDetailsWidth,
+  readShellSession,
+  resolveInitialSidebarOpen,
+  writeShellSession,
+} from "../src/session";
 
 describe("base-shell session", () => {
   afterEach(() => {
@@ -12,6 +20,7 @@ describe("base-shell session", () => {
     expect(readShellSession()).toEqual({
       activeAppId: "chat",
       isSidebarOpen: false,
+      sidebarDetailsWidthPx: DEFAULT_SIDEBAR_DETAILS_WIDTH_PX,
       sidebarMode: "rail",
     });
   });
@@ -23,6 +32,7 @@ describe("base-shell session", () => {
           JSON.stringify({
             activeAppId: " docs ",
             isSidebarOpen: false,
+            sidebarDetailsWidthPx: 420.4,
             sidebarMode: "fixed",
           }),
         ),
@@ -33,8 +43,15 @@ describe("base-shell session", () => {
     expect(readShellSession()).toEqual({
       activeAppId: "docs",
       isSidebarOpen: false,
+      sidebarDetailsWidthPx: 420,
       sidebarMode: "fixed",
     });
+  });
+
+  it("clamps persisted sidebar width to the desktop contract", () => {
+    expect(clampSidebarDetailsWidth(120, 1200)).toBe(MIN_SIDEBAR_DETAILS_WIDTH_PX);
+    expect(clampSidebarDetailsWidth(800, 1200)).toBe(MAX_SIDEBAR_DETAILS_WIDTH_PX);
+    expect(clampSidebarDetailsWidth(560, 980)).toBe(440);
   });
 
   it("writes local shell state without backend coupling", () => {
@@ -46,24 +63,44 @@ describe("base-shell session", () => {
       },
     });
 
-    writeShellSession({ activeAppId: "chat", isSidebarOpen: false, sidebarMode: "rail" });
+    writeShellSession({
+      activeAppId: "chat",
+      isSidebarOpen: false,
+      sidebarDetailsWidthPx: DEFAULT_SIDEBAR_DETAILS_WIDTH_PX,
+      sidebarMode: "rail",
+    });
 
     expect(setItem).toHaveBeenCalledWith(
       "maverick:base-shell:session",
-      JSON.stringify({ activeAppId: "chat", isSidebarOpen: false, sidebarMode: "rail" }),
+      JSON.stringify({
+        activeAppId: "chat",
+        isSidebarOpen: false,
+        sidebarDetailsWidthPx: DEFAULT_SIDEBAR_DETAILS_WIDTH_PX,
+        sidebarMode: "rail",
+      }),
     );
   });
 
   it("starts with the sidebar closed on mobile even when the local session was open or fixed", () => {
     expect(
       resolveInitialSidebarOpen(
-        { activeAppId: "memory", isSidebarOpen: true, sidebarMode: "rail" },
+        {
+          activeAppId: "memory",
+          isSidebarOpen: true,
+          sidebarDetailsWidthPx: DEFAULT_SIDEBAR_DETAILS_WIDTH_PX,
+          sidebarMode: "rail",
+        },
         { isInitialChatLaunch: false, isMobileLayout: true },
       ),
     ).toBe(false);
     expect(
       resolveInitialSidebarOpen(
-        { activeAppId: "memory", isSidebarOpen: false, sidebarMode: "fixed" },
+        {
+          activeAppId: "memory",
+          isSidebarOpen: false,
+          sidebarDetailsWidthPx: DEFAULT_SIDEBAR_DETAILS_WIDTH_PX,
+          sidebarMode: "fixed",
+        },
         { isInitialChatLaunch: false, isMobileLayout: true },
       ),
     ).toBe(false);
@@ -72,7 +109,12 @@ describe("base-shell session", () => {
   it("keeps desktop fixed sidebars open at startup", () => {
     expect(
       resolveInitialSidebarOpen(
-        { activeAppId: "memory", isSidebarOpen: false, sidebarMode: "fixed" },
+        {
+          activeAppId: "memory",
+          isSidebarOpen: false,
+          sidebarDetailsWidthPx: DEFAULT_SIDEBAR_DETAILS_WIDTH_PX,
+          sidebarMode: "fixed",
+        },
         { isInitialChatLaunch: false, isMobileLayout: false },
       ),
     ).toBe(true);

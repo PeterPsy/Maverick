@@ -368,9 +368,20 @@
   user-select: none;
 }
 
+.bs-sidebar.is-resizing {
+  cursor: ew-resize;
+  user-select: none;
+}
+
 .bs-sidebar.is-rail-reordering .bs-sidebar__rail-tooltip {
   opacity: 0;
   transform: translate(0.25rem, -50%);
+}
+
+.bs-sidebar.is-resizing,
+.bs-sidebar.is-resizing .bs-sidebar__details,
+.bs-shell.is-sidebar-resizing .bs-workspace-view-shell {
+  transition: none;
 }
 
 .bs-sidebar__rail-status {
@@ -436,6 +447,56 @@
   opacity: 0;
   pointer-events: none;
   visibility: hidden;
+}
+
+.bs-sidebar__resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -1.2rem;
+  z-index: 12;
+  display: block;
+  width: 2.4rem;
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--maverick-text);
+  cursor: none;
+  opacity: 0;
+  transform: none;
+  transition: opacity 130ms ease;
+  touch-action: none;
+}
+
+.bs-shell.is-sidebar-mode-fixed:not(.is-mobile-layout) .bs-sidebar__resize-handle {
+  position: absolute;
+  right: -0.42rem;
+  z-index: 12;
+}
+
+.bs-sidebar__resize-handle:hover,
+.bs-sidebar__resize-handle:focus-visible,
+.bs-sidebar.is-resizing .bs-sidebar__resize-handle {
+  opacity: 1;
+}
+
+.bs-sidebar__resize-handle:focus-visible {
+  outline: none;
+}
+
+.bs-sidebar__resize-handle .material-symbols-rounded {
+  position: absolute;
+  top: var(--bs-sidebar-resize-icon-y, 50%);
+  left: 50%;
+  font-size: 1.28rem;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  font-variation-settings:
+    "FILL" 0,
+    "wght" 560,
+    "GRAD" 0,
+    "opsz" 24;
 }
 
 .bs-sidebar__header,

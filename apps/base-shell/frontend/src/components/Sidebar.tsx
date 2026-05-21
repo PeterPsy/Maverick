@@ -2,12 +2,15 @@ import { useRef, useState } from "react";
 import type {
   CSSProperties,
   FocusEvent as ReactFocusEvent,
+  KeyboardEvent as ReactKeyboardEvent,
   MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
   TouchEvent as ReactTouchEvent,
 } from "react";
 import { AppRegistryItem, SessionUser, WorkspaceItem } from "../api";
 import { isHorizontalIntent, isSidebarCloseSwipe, type SidebarSwipePoint } from "../lib/sidebarSwipe";
 import { SETTINGS_APP_ID, shellAppRailApps, shellVisibleApps } from "../navigation";
+import { clampSidebarDetailsWidth, DEFAULT_SIDEBAR_DETAILS_WIDTH_PX } from "../session";
 import type { SidebarMode } from "../session";
 import { AppLogo } from "./AppLogo";
 import { BrandMark } from "./BrandMark";
@@ -40,9 +43,12 @@ export function Sidebar({
   onPrimaryActionStateChange,
   onOpenSettings,
   onReorderPinnedApps,
+  onSidebarDetailsWidthChange,
+  onSidebarResizeActiveChange,
   onWorkspaceChanged,
   pinnedAppIds,
   railMetrics,
+  sidebarDetailsWidthPx,
   user,
   workspaces,
 }: {
@@ -63,14 +69,20 @@ export function Sidebar({
   onPrimaryActionStateChange: (state: WidgetPrimaryActionState) => void;
   onOpenSettings: () => void;
   onReorderPinnedApps: (appIds: string[]) => void;
+  onSidebarDetailsWidthChange: (widthPx: number) => void;
+  onSidebarResizeActiveChange?: (active: boolean) => void;
   onWorkspaceChanged: () => void;
   pinnedAppIds: string[];
   railMetrics: CSSProperties;
+  sidebarDetailsWidthPx: number;
   user: SessionUser | null;
   workspaces: WorkspaceItem[];
 }) {
   const closeSwipeStartRef = useRef<TrackedSwipe | null>(null);
+  const resizeDragRef = useRef<{ pointerId: number; startWidthPx: number; startX: number } | null>(null);
   const [isRailReordering, setIsRailReordering] = useState(false);
+  const [isResizeActive, setIsResizeActive] = useState(false);
+  const [resizeHandleY, setResizeHandleY] = useState("50%");
   const visibleAppsById = new Map(shellVisibleApps(apps).map((app) => [app.app_id, app]));
   const railApps = shellAppRailApps(apps, pinnedAppIds);
   const activeApp = activeAppId ? visibleAppsById.get(activeAppId) || null : null;
@@ -85,7 +97,7 @@ export function Sidebar({
   }
 
   function handlePointerLeave(event: ReactMouseEvent<HTMLElement>) {
-    if (isRailReordering) {
+    if (isRailReordering || isResizeActive || resizeDragRef.current) {
       return;
     }
     if (!isPinned && !event.currentTarget.contains(document.activeElement)) {
@@ -100,7 +112,7 @@ export function Sidebar({
   }
 
   function handleBlur(event: ReactFocusEvent<HTMLElement>) {
-    if (isRailReordering) {
+    if (isRailReordering || isResizeActive || resizeDragRef.current) {
       return;
     }
     if (!isPinned && !event.currentTarget.contains(event.relatedTarget)) {
@@ -143,9 +155,79 @@ export function Sidebar({
     }
   }
 
+  function handleResizePointerDown(event: ReactPointerEvent<HTMLButtonElement>) {
+    if (isMobileLayout || !isDetailLayerOpen || event.button !== 0) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    updateResizeHandleY(event);
+    event.currentTarget.setPointerCapture(event.pointerId);
+    resizeDragRef.current = {
+      pointerId: event.pointerId,
+      startWidthPx: sidebarDetailsWidthPx,
+      startX: event.clientX,
+    };
+    setIsResizeActive(true);
+    onSidebarResizeActiveChange?.(true);
+  }
+
+  function handleResizePointerMove(event: ReactPointerEvent<HTMLButtonElement>) {
+    updateResizeHandleY(event);
+    const drag = resizeDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    onSidebarDetailsWidthChange(clampSidebarDetailsWidth(drag.startWidthPx + event.clientX - drag.startX));
+  }
+
+  function updateResizeHandleY(event: ReactPointerEvent<HTMLButtonElement>) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    if (!Number.isFinite(rect.height) || rect.height <= 0) {
+      return;
+    }
+    const edgePaddingPx = 20;
+    const boundedY = Math.min(Math.max(event.clientY - rect.top, edgePaddingPx), Math.max(edgePaddingPx, rect.height - edgePaddingPx));
+    setResizeHandleY(`${Math.round(boundedY)}px`);
+  }
+
+  function handleResizePointerEnd(event: ReactPointerEvent<HTMLButtonElement>) {
+    const drag = resizeDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    if (typeof event.currentTarget.hasPointerCapture === "function" && event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    resizeDragRef.current = null;
+    setIsResizeActive(false);
+    onSidebarResizeActiveChange?.(false);
+  }
+
+  function handleResizeKeyDown(event: ReactKeyboardEvent<HTMLButtonElement>) {
+    if (isMobileLayout) {
+      return;
+    }
+    if (event.key !== "ArrowRight" && event.key !== "ArrowLeft" && event.key !== "Home") {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.key === "Home") {
+      onSidebarDetailsWidthChange(DEFAULT_SIDEBAR_DETAILS_WIDTH_PX);
+      return;
+    }
+    const direction = event.key === "ArrowRight" ? 1 : -1;
+    onSidebarDetailsWidthChange(clampSidebarDetailsWidth(sidebarDetailsWidthPx + direction * 24));
+  }
+
   return (
     <aside
-      className={`bs-sidebar bs-sidebar--${mode} ${isDetailLayerOpen ? "is-open" : "is-closed"} ${isRailReordering ? "is-rail-reordering" : ""}`}
+      className={`bs-sidebar bs-sidebar--${mode} ${isDetailLayerOpen ? "is-open" : "is-closed"} ${isRailReordering ? "is-rail-reordering" : ""} ${isResizeActive ? "is-resizing" : ""}`}
       aria-label="Workspace navigation"
       onBlur={handleBlur}
       onFocus={handleFocus}
@@ -269,6 +351,22 @@ export function Sidebar({
           </div>
         </div>
       </div>
+      {!isMobileLayout && isDetailLayerOpen ? (
+        <button
+          aria-label="Ridimensiona sidebar"
+          className="bs-sidebar__resize-handle"
+          onKeyDown={handleResizeKeyDown}
+          onPointerCancel={handleResizePointerEnd}
+          onPointerDown={handleResizePointerDown}
+          onPointerEnter={updateResizeHandleY}
+          onPointerMove={handleResizePointerMove}
+          onPointerUp={handleResizePointerEnd}
+          style={{ "--bs-sidebar-resize-icon-y": resizeHandleY } as CSSProperties}
+          type="button"
+        >
+          <span aria-hidden="true" className="material-symbols-rounded">arrow_right_alt</span>
+        </button>
+      ) : null}
     </aside>
   );
 }

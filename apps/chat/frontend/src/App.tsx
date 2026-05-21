@@ -1,44 +1,46 @@
-import { type CSSProperties, type DragEvent, type MutableRefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, type DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  AppDependenciesPayload,
-  AgentTypeSummary,
-  ChatMessageAttachment,
   ChatThread,
   createRuntimeSessionWithTurn,
   createThread,
   getAgentDefinition,
-  getAppDependencies,
-  getSpeechCapabilities,
   AppReference,
   isRuntimeSessionUnavailableError,
-  getWidgetContext,
   interruptRuntimeTurn,
-  listAgentCatalog,
   listApps,
-  listProviders,
   listSkills,
   markThreadRead,
   previewAgentPrompt,
-  ProviderItem,
   RuntimeEvent,
   RuntimeSession,
   RuntimeTurn,
   orderChatThreads,
   selectProvider,
-  selectedDependencyProviderAppId,
-  selectedSharedDependencyProviderAppId,
   sendRuntimeTurn,
 } from "./api/client";
+import type { AppDependenciesPayload } from "./api/client";
 import { ChatComposer } from "./components/ChatComposer";
 import { ChatTranscript } from "./components/ChatTranscript";
+import { useChatDependencies } from "./hooks/useChatDependencies";
 import { useComposerAttachments } from "./hooks/useComposerAttachments";
 import { useRuntimeEvents } from "./hooks/useRuntimeEvents";
 import { useRuntimeThreads } from "./hooks/useRuntimeThreads";
+import {
+  ActiveAppContext,
+  activeAppContextFromWidgetContext,
+  loadDefaultSystemPrompt,
+  loadWidgetActiveAppContext,
+  mergeAppReferences,
+  mergeSelectedReferenceMentionItems,
+  promptWithActiveAppContext,
+  referenceMentionItem,
+} from "./lib/activeAppContext";
 import { hasInvalidAttachments } from "./lib/attachments";
 import { filesFromDataTransfer, hasFileDropData } from "./lib/fileDropAttachments";
 import { appReferencesFromText, mentionText, referenceKey } from "./lib/mentions";
 import type { MentionItem } from "./lib/mentions";
 import { PendingMessage, QueuedMessage, uploadComposerAttachment } from "./lib/messageState";
+import { persistQueuedMessages, queueStorageKey, readPersistedQueuedMessages } from "./lib/queuedMessages";
 import { mergeRuntimeEvents } from "./lib/runtimeEvents";
 import { searchComposerReferences } from "./lib/referenceSearch";
 import {
@@ -48,8 +50,18 @@ import {
   writeStoredRuntimeTranscript,
 } from "./lib/runtimeTranscriptCache";
 import { latestRuntimeStepLabel } from "./lib/runtimeStepLabels";
-import { openChatRootRouteInShell, openChatThreadRouteInShell } from "./lib/shellNavigation";
-import { findThreadByRuntimeSession } from "./lib/threadNavigation";
+import {
+  chatNavigationRequestKey,
+  consumeNewChatRequest,
+  normalizeChatRouteParams,
+  openChatRootRouteInShell,
+  openChatThreadRouteInShell,
+  runtimeSessionThreadMetadataFromParams,
+  RuntimeSessionThreadMetadata,
+  scalarString,
+  shellMessageMatchesNavigationScope,
+} from "./lib/shellNavigation";
+import { debugThreadSync, findThreadByRuntimeSession, upsertOrderedThread } from "./lib/threadNavigation";
 import { eventsToMessages } from "./lib/transcript";
 
 type ShellNavigationMessage = {
@@ -64,14 +76,6 @@ type ShellNavigationMessage = {
   app_id?: string;
   params?: Record<string, string | boolean | null>;
   resource?: string;
-};
-
-type RuntimeSessionThreadMetadata = {
-  agent_label?: string;
-  agent_type_id?: string;
-  agent_role_id?: string;
-  source_app_id?: string;
-  title?: string;
 };
 
 type CreateChatOptions = {
@@ -95,13 +99,6 @@ type AgentRuntimeConfig = {
   title: string;
 };
 
-type ActiveAppContext = {
-  app_id: string;
-  description: string;
-  name: string;
-  views: string[];
-};
-
 export type ExternalMentionDrop = {
   items: MentionItem[];
   requestId: string;
@@ -113,12 +110,7 @@ export type ExternalFileDrop = {
 };
 
 const MESSAGE_HISTORY_LIMIT = 50;
-const AGENT_CATALOG_DEPENDENCY_ALIAS = "agent-catalog";
-const AGENT_PROMPT_MATERIALIZER_DEPENDENCY_ALIAS = "agent-prompt-materializer";
-const TEXT_TO_SPEECH_DEPENDENCY_ALIAS = "text-to-speech";
-const SPEECH_TO_TEXT_DEPENDENCY_ALIAS = "speech-to-text";
-const QUEUED_MESSAGES_STORAGE_PREFIX = "maverick.chat.queued-messages.v1";
-const THREAD_SYNC_DEBUG_STORAGE_KEY = "maverick.chat.debug.thread-sync";
+const THREAD_NOT_FOUND_MESSAGE = "This chat is no longer available.";
 
 function isThreadAvailabilityBusy(availability: string) {
   return availability === "busy" || availability === "queued" || availability === "active";
@@ -131,6 +123,9 @@ export function App({
   navigationScope = "",
   newChatProjectId = null,
   newChatRequestId = null,
+  runtimeThreads = null,
+  runtimeThreadsError = null,
+  runtimeThreadsLoaded = false,
   threadId = null,
 }: {
   enablePageCapture?: boolean;
@@ -139,18 +134,34 @@ export function App({
   navigationScope?: string;
   newChatProjectId?: string | null;
   newChatRequestId?: string | null;
+  runtimeThreads?: ChatThread[] | null;
+  runtimeThreadsError?: string | null;
+  runtimeThreadsLoaded?: boolean;
   threadId?: string | null;
 } = {}) {
-  const [providers, setProviders] = useState<ProviderItem[]>([]);
-  const [activeProviderId, setActiveProviderId] = useState("");
-  const [agentCatalogAppId, setAgentCatalogAppId] = useState("");
-  const [speechProviderAppId, setSpeechProviderAppId] = useState("");
-  const [speechProviderAvailable, setSpeechProviderAvailable] = useState(false);
-  const [speechMaxTextChars, setSpeechMaxTextChars] = useState(0);
-  const [transcriptionProviderAppId, setTranscriptionProviderAppId] = useState("");
-  const [transcriptionProviderAvailable, setTranscriptionProviderAvailable] = useState(false);
-  const [agentOptions, setAgentOptions] = useState<AgentTypeSummary[]>([]);
-  const [selectedAgentTypeId, setSelectedAgentTypeId] = useState("");
+  const {
+    activeProviderId,
+    agentCatalogAppId,
+    agentOptions,
+    loadAgentOptionsFromDependencies,
+    loadAppDependencies,
+    loadInitialChatDependencies,
+    loadSpeechProviderFromDependencies,
+    loadTranscriptionProviderFromDependencies,
+    providers,
+    selectedAgentTypeId,
+    setActiveProviderId,
+    setSelectedAgentTypeId,
+    speechMaxTextChars,
+    speechProviderAppId,
+    speechProviderAvailable,
+    speechProviderQualityProfile,
+    transcriptionContentTypes,
+    transcriptionMaxAudioBytes,
+    transcriptionMaxDurationSeconds,
+    transcriptionProviderAppId,
+    transcriptionProviderAvailable,
+  } = useChatDependencies();
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [activeThread, setActiveThread] = useState<ChatThread | null>(null);
   const [draftChat, setDraftChat] = useState<DraftChat | null>(null);
@@ -182,17 +193,19 @@ export function App({
   const suppressedExternalThreadIdRef = useRef<string | null>(null);
   const readReceiptInFlightRef = useRef<Set<string>>(new Set());
   const activeRuntimeSessionIdRef = useRef<string | null>(null);
+  const externalRuntimeThreadsErrorRef = useRef<string | null>(null);
   const runtimeTranscriptCacheRef = useRef<Map<string, RuntimeTranscriptCacheEntry>>(new Map());
   const dockedComposerRef = useRef<HTMLDivElement | null>(null);
   const [dockedComposerHeight, setDockedComposerHeight] = useState(144);
+  const hasExternalRuntimeThreads = Array.isArray(runtimeThreads);
 
   const messages = useMemo(() => {
     const currentMessages = eventsToMessages(events);
-    const confirmedHumanMessages = new Set(currentMessages.filter((message) => message.role === "human").map((message) => message.content.trim()));
+    const confirmedHumanMessageIds = new Set(currentMessages.filter((message) => message.role === "human").map((message) => message.id));
     const visibleMessages = [
       ...currentMessages,
       ...pendingUserMessages
-        .filter((message) => !confirmedHumanMessages.has(message.content.trim()))
+        .filter((message) => !confirmedHumanMessageIds.has(message.clientMessageId))
         .map((message) => ({
           id: message.clientMessageId,
           role: "human" as const,
@@ -282,10 +295,31 @@ export function App({
   });
 
   useRuntimeThreads({
+    enabled: !hasExternalRuntimeThreads,
     onSnapshot: () => setThreadsLoaded(true),
     setError,
     setThreads,
   });
+
+  useEffect(() => {
+    if (!hasExternalRuntimeThreads) {
+      return;
+    }
+    if (runtimeThreadsError) {
+      externalRuntimeThreadsErrorRef.current = runtimeThreadsError;
+      setError(runtimeThreadsError);
+      return;
+    }
+    if (externalRuntimeThreadsErrorRef.current) {
+      const previousRuntimeThreadsError = externalRuntimeThreadsErrorRef.current;
+      externalRuntimeThreadsErrorRef.current = null;
+      setError((current) => (current === previousRuntimeThreadsError ? null : current));
+    }
+    setThreads(orderChatThreads(runtimeThreads || []));
+    if (runtimeThreadsLoaded) {
+      setThreadsLoaded(true);
+    }
+  }, [hasExternalRuntimeThreads, runtimeThreads, runtimeThreadsError, runtimeThreadsLoaded]);
 
   useEffect(() => {
     setActiveThread((current) => {
@@ -321,10 +355,7 @@ export function App({
     try {
       const widgetActiveAppContext = await loadWidgetActiveAppContext();
       setActiveAppContext(widgetActiveAppContext);
-      const [providerPayload] = await Promise.all([listProviders(), loadAppDependencies()]);
-      setProviders(providerPayload.items || providerPayload.available_providers || (providerPayload.active_provider ? [providerPayload.active_provider] : []));
-      setActiveProviderId(providerPayload.active_provider?.provider_id || "");
-      setError(null);
+      await loadInitialChatDependencies();
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to load chat.");
     }
@@ -334,104 +365,6 @@ export function App({
     loadInitialState();
     void loadMentionItems();
   }, []);
-
-  async function loadAppDependencies() {
-    try {
-      const dependencies = await getAppDependencies("chat");
-      await Promise.all([
-        loadAgentOptionsFromDependencies(dependencies),
-        loadSpeechProviderFromDependencies(dependencies),
-        loadTranscriptionProviderFromDependencies(dependencies),
-      ]);
-    } catch {
-      clearAgentOptions();
-      clearSpeechProvider();
-      clearTranscriptionProvider();
-    }
-  }
-
-  async function loadAgentOptionsFromDependencies(dependencies: AppDependenciesPayload) {
-    try {
-      const providerAppId = selectedSharedDependencyProviderAppId(dependencies, [
-        AGENT_CATALOG_DEPENDENCY_ALIAS,
-        AGENT_PROMPT_MATERIALIZER_DEPENDENCY_ALIAS,
-      ]);
-      await loadAgentOptionsFromProvider(providerAppId);
-    } catch {
-      clearAgentOptions();
-    }
-  }
-
-  async function loadAgentOptionsFromProvider(providerAppId: string) {
-    if (!providerAppId) {
-      clearAgentOptions();
-      return;
-    }
-    const catalog = await listAgentCatalog(providerAppId);
-    const nextAgentOptions = catalog.agent_types || [];
-    setAgentCatalogAppId(providerAppId);
-    setAgentOptions(nextAgentOptions);
-    setSelectedAgentTypeId((current) => (current && !nextAgentOptions.some((agent) => agent.id === current) ? "" : current));
-  }
-
-  function clearAgentOptions() {
-    setAgentCatalogAppId("");
-    setAgentOptions([]);
-    setSelectedAgentTypeId("");
-  }
-
-  async function loadSpeechProviderFromDependencies(dependencies: AppDependenciesPayload) {
-    try {
-      const providerAppId = selectedDependencyProviderAppId(dependencies, TEXT_TO_SPEECH_DEPENDENCY_ALIAS);
-      if (!providerAppId) {
-        clearSpeechProvider();
-        return;
-      }
-      const capabilities = await getSpeechCapabilities(providerAppId);
-      const synthesis = capabilities.interfaces?.["speech.synthesis"];
-      if (!synthesis) {
-        clearSpeechProvider();
-        return;
-      }
-      const maxTextChars = typeof synthesis.max_text_chars === "number" && synthesis.max_text_chars > 0 ? synthesis.max_text_chars : 0;
-      setSpeechProviderAppId(providerAppId);
-      setSpeechProviderAvailable(Boolean(synthesis.available && synthesis.provider_available !== false));
-      setSpeechMaxTextChars(maxTextChars);
-    } catch {
-      clearSpeechProvider();
-    }
-  }
-
-  function clearSpeechProvider() {
-    setSpeechProviderAppId("");
-    setSpeechProviderAvailable(false);
-    setSpeechMaxTextChars(0);
-  }
-
-  async function loadTranscriptionProviderFromDependencies(dependencies: AppDependenciesPayload) {
-    try {
-      const providerAppId = selectedDependencyProviderAppId(dependencies, SPEECH_TO_TEXT_DEPENDENCY_ALIAS);
-      if (!providerAppId) {
-        clearTranscriptionProvider();
-        return;
-      }
-      const capabilities = await getSpeechCapabilities(providerAppId);
-      const transcription = capabilities.interfaces?.["speech.transcription"];
-      if (!transcription) {
-        clearTranscriptionProvider();
-        return;
-      }
-      setTranscriptionProviderAppId(providerAppId);
-      setTranscriptionProviderAvailable(Boolean(transcription.available && transcription.provider_available !== false));
-    } catch {
-      clearTranscriptionProvider();
-    }
-  }
-
-  function clearTranscriptionProvider() {
-    setTranscriptionProviderAppId("");
-    setTranscriptionProviderAvailable(false);
-  }
 
   useEffect(() => {
     if (!externalMentionDrop || consumedExternalMentionDrops.current.has(externalMentionDrop.requestId)) {
@@ -475,12 +408,16 @@ export function App({
       const requestedThreadId = threadId || query.get("thread_id");
       const firstThread = requestedThreadId ? threads.find((thread) => thread.thread_id === requestedThreadId) || null : threads[0] || null;
       if (!firstThread) {
+        if (runtimeThreadsError) {
+          setError(runtimeThreadsError);
+          return;
+        }
         if (requestedThreadId) {
           suppressedExternalThreadIdRef.current = requestedThreadId;
         }
         createDraftChat({ activeAppContext, resetView: false });
         setQueuedMessages(readPersistedQueuedMessages(queueStorageKey(navigationScope, null)));
-        setError(null);
+        setError(requestedThreadId ? THREAD_NOT_FOUND_MESSAGE : null);
         return;
       }
       await selectThreadWithoutHttp(firstThread);
@@ -507,11 +444,11 @@ export function App({
       suppressedExternalThreadIdRef.current = null;
       return;
     }
-    if (suppressedExternalThreadIdRef.current && threadId === suppressedExternalThreadIdRef.current) {
+    if (suppressedExternalThreadIdRef.current && threadId === suppressedExternalThreadIdRef.current && !threads.some((thread) => thread.thread_id === threadId)) {
       return;
     }
     void openThreadById(threadId);
-  }, [threadId, isBootstrapping, activeThread?.thread_id]);
+  }, [threadId, isBootstrapping, activeThread?.thread_id, threads]);
 
   async function loadMentionItems() {
     const [appsResult, skillsResult] = await Promise.allSettled([listApps(), listSkills()]);
@@ -547,7 +484,7 @@ export function App({
       }
       const payload = event.data as ShellNavigationMessage;
       if (payload.type === "maverick.widget.capture-area.complete") {
-        if (navigationScope && payload.navigation_scope !== navigationScope) {
+        if (!shellMessageMatchesNavigationScope(payload, navigationScope)) {
           return;
         }
         const files = Array.isArray(payload.files) ? payload.files.filter((file): file is File => file instanceof File) : [];
@@ -558,13 +495,16 @@ export function App({
         return;
       }
       if (payload.type === "maverick.widget.capture-area.error") {
-        if (navigationScope && payload.navigation_scope !== navigationScope) {
+        if (!shellMessageMatchesNavigationScope(payload, navigationScope)) {
           return;
         }
         setComposerError(payload.error || "Unable to capture page area.");
         return;
       }
       if (payload.type === "maverick.widget.context-changed") {
+        if (!shellMessageMatchesNavigationScope(payload, navigationScope)) {
+          return;
+        }
         setActiveAppContext(activeAppContextFromWidgetContext(payload.context || {}));
         return;
       }
@@ -576,14 +516,15 @@ export function App({
         ]);
         return;
       }
-      if (payload.type === "maverick.app.data-changed" && payload.owner_app_id === agentCatalogAppId && payload.resource === "configuration") {
+      if (
+        payload.type === "maverick.app.data-changed" &&
+        payload.resource === "configuration" &&
+        (payload.owner_app_id === agentCatalogAppId || payload.owner_app_id === speechProviderAppId || payload.owner_app_id === transcriptionProviderAppId)
+      ) {
         void loadAppDependencies();
         return;
       }
-      if (navigationScope && payload.navigation_scope !== navigationScope) {
-        return;
-      }
-      if (!navigationScope && payload.navigation_scope) {
+      if (!shellMessageMatchesNavigationScope(payload, navigationScope)) {
         return;
       }
       if (payload.type !== "maverick.app.navigate" || (payload.app_id && payload.app_id !== "chat")) {
@@ -594,7 +535,19 @@ export function App({
 
     window.addEventListener("message", handleShellMessage);
     return () => window.removeEventListener("message", handleShellMessage);
-  }, [activeThread?.thread_id, agentCatalogAppId, threads]);
+  }, [
+    activeAppContext,
+    activeThread?.thread_id,
+    agentCatalogAppId,
+    loadAgentOptionsFromDependencies,
+    loadAppDependencies,
+    loadSpeechProviderFromDependencies,
+    loadTranscriptionProviderFromDependencies,
+    navigationScope,
+    speechProviderAppId,
+    threads,
+    transcriptionProviderAppId,
+  ]);
 
   async function handleUnavailableRuntimeSession(runtimeSessionId: string) {
     if (!runtimeSessionId) {
@@ -856,7 +809,9 @@ export function App({
         createDraftChat({ projectId: newChatProjectId });
       } else if (requestedThreadId) {
         suppressedExternalThreadIdRef.current = null;
-        await openThreadById(requestedThreadId);
+        if (!(await openThreadById(requestedThreadId))) {
+          return;
+        }
       }
       setError(null);
     } catch (navigationError) {
@@ -906,21 +861,20 @@ export function App({
     }
   }
 
-  async function openThreadById(threadId: string) {
+  async function openThreadById(threadId: string): Promise<boolean> {
     if (activeThread?.thread_id === threadId) {
-      return;
+      return true;
     }
     const existingThread = threads.find((thread) => thread.thread_id === threadId);
     if (existingThread) {
       await handleSelectThread(existingThread);
-      return;
+      return true;
     }
-    const fallbackThread = threads[0] || null;
-    if (fallbackThread) {
-      await handleSelectThread(fallbackThread);
-      return;
-    }
-    resetActiveConversation();
+    suppressedExternalThreadIdRef.current = threadId;
+    createDraftChat({ resetView: false });
+    setQueuedMessages(readPersistedQueuedMessages(queueStorageKey(navigationScope, null)));
+    setError(THREAD_NOT_FOUND_MESSAGE);
+    return false;
   }
 
   function notifyActiveThreadChanged(activeThreadId: string) {
@@ -1197,6 +1151,9 @@ export function App({
                   selectedAgentTypeId={composerSelectedAgentTypeId}
                   transcriptionProviderAppId={transcriptionProviderAppId}
                   transcriptionProviderAvailable={transcriptionProviderAvailable}
+                  transcriptionMaxAudioBytes={transcriptionMaxAudioBytes}
+                  transcriptionMaxDurationSeconds={transcriptionMaxDurationSeconds}
+                  transcriptionContentTypes={transcriptionContentTypes}
                   value={composer}
                 />
               </div>
@@ -1210,6 +1167,7 @@ export function App({
                 speechMaxTextChars={speechMaxTextChars}
                 speechProviderAvailable={speechProviderAvailable}
                 speechProviderAppId={speechProviderAppId}
+                speechProviderQualityProfile={speechProviderQualityProfile}
               />
             )}
             {!isEmptyChatView ? (
@@ -1242,6 +1200,9 @@ export function App({
                   selectedAgentTypeId={composerSelectedAgentTypeId}
                   transcriptionProviderAppId={transcriptionProviderAppId}
                   transcriptionProviderAvailable={transcriptionProviderAvailable}
+                  transcriptionMaxAudioBytes={transcriptionMaxAudioBytes}
+                  transcriptionMaxDurationSeconds={transcriptionMaxDurationSeconds}
+                  transcriptionContentTypes={transcriptionContentTypes}
                   value={composer}
                 />
               </div>
@@ -1251,297 +1212,4 @@ export function App({
       </section>
     </main>
   );
-}
-
-function upsertOrderedThread(threads: ChatThread[], thread: ChatThread) {
-  const nextThreads = threads.some((item) => item.thread_id === thread.thread_id)
-    ? threads.map((item) => (item.thread_id === thread.thread_id ? { ...item, ...thread } : item))
-    : [thread, ...threads];
-  return orderChatThreads(nextThreads);
-}
-
-function runtimeSessionThreadMetadataFromParams(params: Record<string, string | boolean | null>): RuntimeSessionThreadMetadata {
-  const agentLabel = scalarString(params.agent_label);
-  const threadTitle = scalarString(params.thread_title) || agentLabel;
-  return {
-    agent_label: agentLabel,
-    agent_type_id: scalarString(params.agent_type_id),
-    agent_role_id: scalarString(params.agent_role_id),
-    source_app_id: scalarString(params.source_app_id) || "chat",
-    title: threadTitle,
-  };
-}
-
-function normalizeChatRouteParams(params: Record<string, string | boolean | null>): Record<string, string | boolean | null> {
-  const appPage = scalarString(params.app_page);
-  if (!appPage) {
-    return params;
-  }
-  const [kind, id] = appPage.split("/").filter(Boolean);
-  if (kind === "threads" && id) {
-    return { ...params, thread_id: id };
-  }
-  if (kind === "runtime-sessions" && id) {
-    return { ...params, runtime_session_id: id };
-  }
-  return params;
-}
-
-function consumeNewChatRequest(
-  params: Record<string, string | boolean | null>,
-  consumedRequestIds: Set<string>,
-  consumedLegacyRequest: MutableRefObject<boolean>,
-): boolean {
-  const requestId = scalarString(params.new_chat_request_id);
-  if (!requestId) {
-    if (consumedLegacyRequest.current) {
-      return false;
-    }
-    consumedLegacyRequest.current = true;
-    return true;
-  }
-  if (consumedRequestIds.has(requestId)) {
-    return false;
-  }
-  consumedRequestIds.add(requestId);
-  return true;
-}
-
-async function loadWidgetActiveAppContext(): Promise<ActiveAppContext | null> {
-  const token = widgetContextToken();
-  if (!token) {
-    return null;
-  }
-  try {
-    const payload = await getWidgetContext(token);
-    return activeAppContextFromWidgetContext(payload.context);
-  } catch {
-    return null;
-  }
-}
-
-function widgetContextToken(): string {
-  const hash = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash;
-  return new URLSearchParams(hash).get("context") || new URLSearchParams(window.location.search).get("context") || "";
-}
-
-async function loadDefaultSystemPrompt(activeApp: ActiveAppContext | null): Promise<string> {
-  return promptWithActiveAppContext("", activeApp);
-}
-
-function activeAppContextFromWidgetContext(context: Record<string, unknown>): ActiveAppContext | null {
-  const content = context.content;
-  if (!content || typeof content !== "object") {
-    return null;
-  }
-  const payload = (content as { payload?: unknown }).payload;
-  if (!payload || typeof payload !== "object") {
-    return null;
-  }
-  const activeApp = (payload as { active_app?: unknown }).active_app;
-  if (!activeApp || typeof activeApp !== "object") {
-    return null;
-  }
-  const record = activeApp as Record<string, unknown>;
-  const appId = typeof record.app_id === "string" ? record.app_id.trim() : "";
-  if (!appId || appId === "chat") {
-    return null;
-  }
-  return {
-    app_id: appId,
-    description: typeof record.description === "string" ? record.description : "",
-    name: typeof record.name === "string" && record.name.trim() ? record.name.trim() : appId,
-    views: Array.isArray(record.views) ? record.views.filter((item): item is string => typeof item === "string") : [],
-  };
-}
-
-function promptWithActiveAppContext(basePrompt: string, activeApp: ActiveAppContext | null): string {
-  if (!activeApp) {
-    return basePrompt;
-  }
-  if (basePrompt.includes(`active_app_id: ${activeApp.app_id}`)) {
-    return basePrompt;
-  }
-  const lines = [
-    "Current shell context:",
-    `- active_app_id: ${activeApp.app_id}`,
-    `- active_app_name: ${activeApp.name}`,
-  ];
-  if (activeApp.description) {
-    lines.push(`- active_app_description: ${activeApp.description}`);
-  }
-  return [basePrompt.trim(), lines.join("\n")].filter(Boolean).join("\n\n");
-}
-
-function mergeAppReferences(references: AppReference[], activeApp: ActiveAppContext | null): AppReference[] {
-  if (!activeApp || references.some((reference) => reference.app_id === activeApp.app_id)) {
-    return references;
-  }
-  return [...references, { type: "app", app_id: activeApp.app_id, label: activeApp.name }];
-}
-
-function referenceMentionItem(reference: AppReference): MentionItem {
-  if (reference.type === "entity") {
-    return {
-      id: referenceKey(reference),
-      label: reference.label || reference.entity_id,
-      description: [reference.app_id, reference.entity_type, reference.summary].filter(Boolean).join(" · "),
-      kind: "entity",
-      reference,
-    };
-  }
-  return {
-    id: reference.app_id,
-    label: reference.label || reference.app_id,
-    description: "",
-    kind: "app",
-    reference,
-  };
-}
-
-function mergeSelectedReferenceMentionItems(items: MentionItem[], selectedReferences: AppReference[]): MentionItem[] {
-  const byKey = new Map<string, MentionItem>();
-  for (const item of items) {
-    byKey.set(item.reference ? referenceKey(item.reference) : `${item.kind}:${item.id}`, item);
-  }
-  for (const reference of selectedReferences) {
-    byKey.set(referenceKey(reference), referenceMentionItem(reference));
-  }
-  return [...byKey.values()];
-}
-
-function scalarString(value: string | boolean | null | undefined): string {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function queueStorageKey(navigationScope: string, threadId: string | null): string {
-  return `${QUEUED_MESSAGES_STORAGE_PREFIX}:${navigationScope || "main"}:${threadId || "new"}`;
-}
-
-function readPersistedQueuedMessages(storageKey: string): QueuedMessage[] {
-  try {
-    const rawValue = window.localStorage.getItem(storageKey);
-    if (!rawValue) {
-      return [];
-    }
-    const payload = JSON.parse(rawValue) as { items?: unknown[]; version?: unknown };
-    if (payload.version !== 1 || !Array.isArray(payload.items)) {
-      return [];
-    }
-    return payload.items
-      .map((item) => {
-        if (!item || typeof item !== "object") {
-          return null;
-        }
-        const record = item as Record<string, unknown>;
-        const clientMessageId = typeof record.clientMessageId === "string" ? record.clientMessageId : "";
-        const content = typeof record.content === "string" ? record.content : "";
-        const attachments = Array.isArray(record.attachments) ? record.attachments.filter(isPersistedMessageAttachment) : [];
-        if (!clientMessageId || (!content.trim() && !attachments.length)) {
-          return null;
-        }
-        return {
-          clientMessageId,
-          content,
-          appReferences: persistedAppReferences(record.appReferences),
-          attachments,
-        };
-      })
-      .filter((item): item is QueuedMessage => Boolean(item));
-  } catch {
-    return [];
-  }
-}
-
-function persistQueuedMessages(storageKey: string, queuedMessages: QueuedMessage[]) {
-  try {
-    if (!queuedMessages.length) {
-      window.localStorage.removeItem(storageKey);
-      return;
-    }
-    window.localStorage.setItem(
-      storageKey,
-      JSON.stringify({
-        version: 1,
-        items: queuedMessages.map((message) => ({
-          ...message,
-          attachments: message.attachments.map((attachment) => ({ ...attachment, objectUrl: null })),
-        })),
-      }),
-    );
-  } catch {
-    // Queue persistence is best-effort; in-memory sending remains the source of truth.
-  }
-}
-
-function persistedAppReferences(value: unknown): AppReference[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return value
-    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
-    .map(persistedAppReference)
-    .filter((item) => (item.type === "app" ? Boolean(item.app_id) : Boolean(item.app_id && item.entity_type && item.entity_id)));
-}
-
-function persistedAppReference(item: Record<string, unknown>): AppReference {
-  const appId = typeof item.app_id === "string" ? item.app_id : "";
-  if (item.type === "entity") {
-    return {
-      type: "entity",
-      app_id: appId,
-      entity_type: typeof item.entity_type === "string" ? item.entity_type : "",
-      entity_id: typeof item.entity_id === "string" ? item.entity_id : "",
-      label: typeof item.label === "string" ? item.label : "",
-      summary: typeof item.summary === "string" ? item.summary : undefined,
-      deep_link: typeof item.deep_link === "string" ? item.deep_link : undefined,
-      exists: typeof item.exists === "boolean" ? item.exists : undefined,
-    };
-  }
-  return {
-    type: "app",
-    app_id: appId,
-    label: typeof item.label === "string" ? item.label : undefined,
-  };
-}
-
-function isPersistedMessageAttachment(value: unknown): value is ChatMessageAttachment {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-  const record = value as Record<string, unknown>;
-  return typeof record.id === "string" && typeof record.name === "string" && typeof record.size === "number" && typeof record.type === "string";
-}
-
-function chatNavigationRequestKey({
-  newChatProjectId,
-  requestedRuntimeSessionId,
-  requestedThreadId,
-  shouldCreateChat,
-}: {
-  newChatProjectId: string | null;
-  requestedRuntimeSessionId: string | null;
-  requestedThreadId: string | null;
-  shouldCreateChat: boolean;
-}) {
-  return JSON.stringify({
-    new_chat: shouldCreateChat,
-    project_id: newChatProjectId || "",
-    runtime_session_id: requestedRuntimeSessionId || "",
-    thread_id: requestedThreadId || "",
-  });
-}
-
-function debugThreadSync(label: string, detail: Record<string, unknown> = {}) {
-  try {
-    if (window.localStorage.getItem(THREAD_SYNC_DEBUG_STORAGE_KEY) !== "1") {
-      return;
-    }
-    console.debug(`[chat thread-sync] ${label}`, {
-      at: new Date().toISOString(),
-      ...detail,
-    });
-  } catch {
-    // Debug logging must never affect chat behavior.
-  }
 }

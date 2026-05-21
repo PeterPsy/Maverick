@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  chatNavigationRequestKey,
+  consumeNewChatRequest,
+  normalizeChatRouteParams,
   openAppParamsInShell,
   openAppRouteInShell,
   openChatRootRouteInShell,
   openChatThreadRouteInShell,
   openStoragePathInShell,
+  runtimeSessionThreadMetadataFromParams,
+  shellMessageMatchesNavigationScope,
 } from "./shellNavigation";
 
 function messageTarget() {
@@ -122,5 +127,62 @@ describe("chat shell navigation", () => {
       app_id: "storage",
       params: { workspace_relative_path: "storage/generated/report.md" },
     });
+  });
+
+  it("normalizes app_page routes into chat navigation params", () => {
+    expect(normalizeChatRouteParams({ app_page: "threads/thread-123" })).toEqual({
+      app_page: "threads/thread-123",
+      thread_id: "thread-123",
+    });
+    expect(normalizeChatRouteParams({ app_page: "runtime-sessions/session-123" })).toEqual({
+      app_page: "runtime-sessions/session-123",
+      runtime_session_id: "session-123",
+    });
+  });
+
+  it("builds runtime-session thread metadata from shell params", () => {
+    expect(
+      runtimeSessionThreadMetadataFromParams({
+        agent_label: " Researcher ",
+        agent_type_id: "agent-type",
+        agent_role_id: "role",
+        source_app_id: "",
+        thread_title: " Project notes ",
+      }),
+    ).toEqual({
+      agent_label: "Researcher",
+      agent_type_id: "agent-type",
+      agent_role_id: "role",
+      source_app_id: "chat",
+      title: "Project notes",
+    });
+  });
+
+  it("deduplicates new chat navigation requests", () => {
+    const consumedRequestIds = new Set<string>();
+    const consumedLegacyRequest = { current: false };
+
+    expect(consumeNewChatRequest({ new_chat: true, new_chat_request_id: "request-1" }, consumedRequestIds, consumedLegacyRequest)).toBe(true);
+    expect(consumeNewChatRequest({ new_chat: true, new_chat_request_id: "request-1" }, consumedRequestIds, consumedLegacyRequest)).toBe(false);
+    expect(consumeNewChatRequest({ new_chat: true }, consumedRequestIds, consumedLegacyRequest)).toBe(true);
+    expect(consumeNewChatRequest({ new_chat: true }, consumedRequestIds, consumedLegacyRequest)).toBe(false);
+  });
+
+  it("matches shell messages to the active navigation scope", () => {
+    expect(shellMessageMatchesNavigationScope({}, "")).toBe(true);
+    expect(shellMessageMatchesNavigationScope({ navigation_scope: "widget-1" }, "")).toBe(false);
+    expect(shellMessageMatchesNavigationScope({ navigation_scope: "widget-1" }, "widget-1")).toBe(true);
+    expect(shellMessageMatchesNavigationScope({ navigation_scope: "widget-2" }, "widget-1")).toBe(false);
+  });
+
+  it("creates stable navigation request keys", () => {
+    expect(
+      chatNavigationRequestKey({
+        newChatProjectId: "project-1",
+        requestedRuntimeSessionId: null,
+        requestedThreadId: "thread-1",
+        shouldCreateChat: true,
+      }),
+    ).toBe('{"new_chat":true,"project_id":"project-1","runtime_session_id":"","thread_id":"thread-1"}');
   });
 });

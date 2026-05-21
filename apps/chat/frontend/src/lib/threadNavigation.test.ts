@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ChatThread, orderChatThreads } from "../api/client";
-import { findThreadByRuntimeSession } from "./threadNavigation";
+import { findThreadByRuntimeSession, upsertOrderedThread } from "./threadNavigation";
 
 function thread(threadId: string, runtimeSessionId: string, overrides: Partial<ChatThread> = {}): ChatThread {
   return {
@@ -48,5 +48,45 @@ describe("orderChatThreads", () => {
     ]);
 
     expect(ordered.map((item) => item.thread_id)).toEqual(["latest-user-message", "selected"]);
+  });
+});
+
+describe("upsertOrderedThread", () => {
+  it("inserts new threads using chat thread ordering", () => {
+    const ordered = upsertOrderedThread(
+      [
+        thread("older", "session-older", {
+          created_at: "2026-04-19T08:00:00Z",
+          last_user_message_at: "2026-04-19T08:30:00Z",
+        }),
+      ],
+      thread("newer", "session-newer", {
+        created_at: "2026-04-19T09:00:00Z",
+        last_user_message_at: "2026-04-19T09:30:00Z",
+      }),
+    );
+
+    expect(ordered.map((item) => item.thread_id)).toEqual(["newer", "older"]);
+  });
+
+  it("merges existing thread updates before ordering", () => {
+    const ordered = upsertOrderedThread(
+      [
+        thread("thread-1", "session-1", {
+          title: "Before",
+          created_at: "2026-04-19T08:00:00Z",
+          last_user_message_at: "2026-04-19T08:30:00Z",
+        }),
+      ],
+      thread("thread-1", "session-1", {
+        title: "After",
+        created_at: "2026-04-19T08:00:00Z",
+        last_user_message_at: "2026-04-19T10:30:00Z",
+      }),
+    );
+
+    expect(ordered).toHaveLength(1);
+    expect(ordered[0].title).toBe("After");
+    expect(ordered[0].last_user_message_at).toBe("2026-04-19T10:30:00Z");
   });
 });

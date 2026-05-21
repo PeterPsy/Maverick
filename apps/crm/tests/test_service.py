@@ -89,6 +89,9 @@ class CrmServiceTest(unittest.TestCase):
             with self.assertRaises(ValidationError):
                 handle_action(temporary_dir, "crm.create_account", payload)
 
+            with self.assertRaisesRegex(ValidationError, "`value` must be a number"):
+                handle_action(temporary_dir, "crm.create_deal", {"name": "Bad value", "value": "not-a-number"})
+
     def test_alias_write_actions_emit_app_events(self) -> None:
         self.assertEqual(app_events_for_action("create_task")[0]["resource"], "records")
         self.assertEqual(app_events_for_action("import_commit")[0]["resource"], "records")

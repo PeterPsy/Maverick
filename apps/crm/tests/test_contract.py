@@ -19,7 +19,7 @@ class GeneratedAppContractTest(unittest.TestCase):
         app_root = Path(__file__).resolve().parents[1]
         parsed = parse_app_contract_file(app_root)
         self.assertEqual(parsed.app_id, "crm")
-        self.assertEqual([widget.widget_id for widget in parsed.contract.widgets], ["crm-sidebar"])
+        self.assertEqual([widget.widget_id for widget in parsed.contract.widgets], ["crm-sidebar", "crm-sidebar-footer"])
 
 
 if __name__ == "__main__":

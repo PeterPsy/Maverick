@@ -273,6 +273,23 @@
         "mcp": false,
         "cli": false
       }
+    },
+    {
+      "widget_id": "crm-sidebar-footer",
+      "host": "base-shell",
+      "content_kinds": [
+        "shell.sidebar.footer"
+      ],
+      "frontend": {
+        "kind": "iframe",
+        "mount": "frontend/dist/widgets/crm-sidebar-footer",
+        "spa_fallback": true
+      },
+      "actions": {
+        "backend": false,
+        "mcp": false,
+        "cli": false
+      }
     }
   ]
 }

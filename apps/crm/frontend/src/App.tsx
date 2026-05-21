@@ -1,13 +1,40 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { Building2, CheckSquare, Contact, Handshake, StickyNote, X } from 'lucide-react';
+import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { Building2, CheckSquare, Contact, Handshake, Pencil, StickyNote, X } from 'lucide-react';
 import { BootstrapPayload, CrmRecord, CrmViewRef, callBackend } from './api';
 
 type ViewId = 'dashboard' | 'accounts' | 'contacts' | 'deals' | 'activities' | 'tasks' | 'notes' | 'import';
 type PendingSelection = { entity: string; id: string } | null;
 type ImportPreview = { row_count?: number; counts?: Record<string, number>; warnings?: string[] };
 type EntityRecord = { entity: string; record: CrmRecord };
+type CreatableEntity = 'account' | 'contact' | 'deal' | 'task' | 'note';
+type ComposerState =
+  | { mode: 'create'; entity: CreatableEntity }
+  | { mode: 'edit'; entity: CreatableEntity; record: CrmRecord }
+  | null;
 
 const viewIds: ViewId[] = ['dashboard', 'accounts', 'contacts', 'deals', 'activities', 'tasks', 'notes', 'import'];
+const creatableEntities: CreatableEntity[] = ['account', 'contact', 'deal', 'task', 'note'];
+const createActions: Record<CreatableEntity, string> = {
+  account: 'crm.create_account',
+  contact: 'crm.create_contact',
+  deal: 'crm.create_deal',
+  task: 'crm.create_task',
+  note: 'crm.create_note'
+};
+const updateActions: Record<CreatableEntity, string> = {
+  account: 'crm.update_account',
+  contact: 'crm.update_contact',
+  deal: 'crm.update_deal',
+  task: 'crm.update_task',
+  note: 'crm.update_note'
+};
+const createTargets = [
+  { label: 'Account', entity: 'account', icon: Building2 },
+  { label: 'Contact', entity: 'contact', icon: Contact },
+  { label: 'Deal', entity: 'deal', icon: Handshake },
+  { label: 'Task', entity: 'task', icon: CheckSquare },
+  { label: 'Note', entity: 'note', icon: StickyNote }
+] satisfies Array<{ label: string; entity: CreatableEntity; icon: typeof Building2 }>;
 
 const emptyPayload: BootstrapPayload = {
   ok: true,
@@ -74,10 +101,28 @@ function viewForEntity(entityType: string): ViewId {
   return mapping[entityType] || 'dashboard';
 }
 
+function isCreatableEntity(value: unknown): value is CreatableEntity {
+  return typeof value === 'string' && creatableEntities.includes(value as CreatableEntity);
+}
+
+function entityLabel(entity: string) {
+  const labels: Record<string, string> = {
+    account: 'Account',
+    contact: 'Contact',
+    deal: 'Deal',
+    activity: 'Activity',
+    task: 'Task',
+    note: 'Note'
+  };
+  return labels[entity] || entity;
+}
+
 export function App() {
   const [view, setView] = useState<ViewId>('dashboard');
   const [data, setData] = useState<BootstrapPayload>(emptyPayload);
   const [selected, setSelected] = useState<{ entity: string; record: CrmRecord } | null>(null);
+  const [composer, setComposer] = useState<ComposerState>(null);
+  const [isCreateChooserOpen, setIsCreateChooserOpen] = useState(false);
   const [pendingSelection, setPendingSelection] = useState<PendingSelection>(null);
   const [query, setQuery] = useState('');
   const [error, setError] = useState('');
@@ -108,14 +153,17 @@ export function App() {
         const params = event.data.params && typeof event.data.params === 'object' ? event.data.params : {};
         const appPage = typeof params.app_page === 'string' ? params.app_page : typeof event.data.app_page === 'string' ? event.data.app_page : '';
         const intent = typeof params.intent === 'string' ? params.intent : '';
-        if (intent === 'new-contact') {
-          setView('contacts');
-          void quickCreate('contact');
+        if (intent === 'create-menu') {
+          setSelected(null);
+          setComposer(null);
+          setIsCreateChooserOpen(true);
           return;
         }
-        if (intent === 'new-deal') {
-          setView('deals');
-          void quickCreate('deal');
+        if (intent === 'create' && isCreatableEntity(params.entity_type)) {
+          setSelected(null);
+          setIsCreateChooserOpen(false);
+          setView(viewForEntity(params.entity_type));
+          setComposer({ mode: 'create', entity: params.entity_type });
           return;
         }
         const navigation = viewFromAppPage(appPage);
@@ -145,15 +193,21 @@ export function App() {
   }, [data, pendingSelection]);
 
   useEffect(() => {
-    if (!selected) return;
+    if (!selected && !composer && !isCreateChooserOpen) return;
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
-        setSelected(null);
+        if (isCreateChooserOpen) {
+          setIsCreateChooserOpen(false);
+        } else if (composer) {
+          setComposer(null);
+        } else {
+          setSelected(null);
+        }
       }
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selected]);
+  }, [selected, composer, isCreateChooserOpen]);
 
   useEffect(() => {
     const viewFilter = data.view_state?.view_filter;
@@ -211,24 +265,18 @@ export function App() {
     return viewModel.all.filter(({ record }) => JSON.stringify(record).toLowerCase().includes(term));
   }, [query, viewModel]);
 
-  async function quickCreate(entity: 'account' | 'contact' | 'deal' | 'task' | 'note') {
+  async function saveComposer(state: Exclude<ComposerState, null>, values: Record<string, unknown>) {
     setIsSaving(true);
     setError('');
     try {
-      if (entity === 'account') {
-        await callBackend({ action: 'crm.create_account', name: 'New account', status: 'prospect' });
-      } else if (entity === 'contact') {
-        await callBackend({ action: 'crm.create_contact', display_name: 'New contact', email: '' });
-      } else if (entity === 'deal') {
-        await callBackend({ action: 'crm.create_deal', name: 'New deal', stage_id: 'lead', value: 0 });
-      } else if (entity === 'task') {
-        await callBackend({ action: 'crm.create_task', title: 'New task', status: 'open' });
-      } else {
-        await callBackend({ action: 'crm.create_note', body: 'New note' });
-      }
+      const action = state.mode === 'create' ? createActions[state.entity] : updateActions[state.entity];
+      const body = state.mode === 'edit' ? { ...values, id: state.record.id } : values;
+      await callBackend({ action, ...body });
+      setView(viewForEntity(state.entity));
+      setComposer(null);
       await refresh();
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Unable to create record.');
+      setError(saveError instanceof Error ? saveError.message : 'Unable to save record.');
     } finally {
       setIsSaving(false);
     }
@@ -296,7 +344,28 @@ export function App() {
         {view === 'import' ? <ImportPanel onSubmit={handleImport} isSaving={isSaving} preview={importPreview} /> : null}
       </section>
 
-      {selected ? <RecordDetailModal selected={selected} onClose={() => setSelected(null)} /> : null}
+      {selected ? (
+        <RecordDetailModal
+          selected={selected}
+          onClose={() => setSelected(null)}
+          onEdit={(entity, record) => {
+            if (!isCreatableEntity(entity)) return;
+            setSelected(null);
+            setComposer({ mode: 'edit', entity, record });
+          }}
+        />
+      ) : null}
+      {isCreateChooserOpen ? (
+        <CreateChooserModal
+          onClose={() => setIsCreateChooserOpen(false)}
+          onChoose={(entity) => {
+            setIsCreateChooserOpen(false);
+            setView(viewForEntity(entity));
+            setComposer({ mode: 'create', entity });
+          }}
+        />
+      ) : null}
+      {composer ? <RecordComposerModal state={composer} data={data} isSaving={isSaving} onClose={() => setComposer(null)} onSubmit={(values) => saveComposer(composer, values)} /> : null}
     </main>
   );
 }
@@ -427,7 +496,319 @@ function ImportPanel({ onSubmit, isSaving, preview }: { onSubmit: (event: FormEv
   );
 }
 
-function RecordDetailModal({ selected, onClose }: { selected: { entity: string; record: CrmRecord }; onClose: () => void }) {
+function textValue(record: Partial<CrmRecord>, key: string, fallback = '') {
+  const value = record[key];
+  return value === null || value === undefined ? fallback : String(value);
+}
+
+function numericValue(record: Partial<CrmRecord>, key: string, fallback = '') {
+  const value = record[key];
+  return typeof value === 'number' || typeof value === 'string' ? String(value) : fallback;
+}
+
+function SelectField({ label, name, defaultValue, children }: { label: string; name: string; defaultValue?: string; children: ReactNode }) {
+  return (
+    <label>
+      {label}
+      <select name={name} defaultValue={defaultValue || ''}>
+        {children}
+      </select>
+    </label>
+  );
+}
+
+function RelatedRecordOptions({ records }: { records: CrmRecord[] }) {
+  return (
+    <>
+      <option value="">None</option>
+      {records.map((record) => (
+        <option key={record.id} value={record.id}>
+          {titleFor(record)}
+        </option>
+      ))}
+    </>
+  );
+}
+
+function appendText(form: FormData, payload: Record<string, unknown>, key: string) {
+  const value = form.get(key);
+  payload[key] = typeof value === 'string' ? value.trim() : '';
+}
+
+function appendNumber(form: FormData, payload: Record<string, unknown>, key: string) {
+  const value = form.get(key);
+  const text = typeof value === 'string' ? value.trim() : '';
+  payload[key] = text ? Number(text) : 0;
+}
+
+function CreateChooserModal({ onClose, onChoose }: { onClose: () => void; onChoose: (entity: CreatableEntity) => void }) {
+  return (
+    <div className="crm-detail-overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section className="crm-detail-dialog crm-create-chooser-dialog" role="dialog" aria-modal="true" aria-labelledby="crm-create-chooser-title">
+        <header className="detail-header">
+          <div>
+            <small>create</small>
+            <h2 id="crm-create-chooser-title">Add CRM record</h2>
+          </div>
+          <button className="detail-close" type="button" onClick={onClose} aria-label="Close create menu">
+            <X size={18} aria-hidden="true" />
+          </button>
+        </header>
+        <div className="create-chooser-list">
+          {createTargets.map((target) => {
+            const Icon = target.icon;
+            return (
+              <button key={target.entity} type="button" onClick={() => onChoose(target.entity)}>
+                <Icon size={18} aria-hidden="true" />
+                <span>{target.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function RecordComposerModal({
+  state,
+  data,
+  isSaving,
+  onClose,
+  onSubmit
+}: {
+  state: Exclude<ComposerState, null>;
+  data: BootstrapPayload;
+  isSaving: boolean;
+  onClose: () => void;
+  onSubmit: (values: Record<string, unknown>) => void;
+}) {
+  const record = state.mode === 'edit' ? state.record : {};
+  const title = `${state.mode === 'create' ? 'Add' : 'Edit'} ${entityLabel(state.entity)}`;
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const values: Record<string, unknown> = {};
+    if (state.entity === 'account') {
+      ['name', 'domain', 'industry', 'status', 'owner_id', 'summary'].forEach((key) => appendText(form, values, key));
+    } else if (state.entity === 'contact') {
+      ['display_name', 'first_name', 'last_name', 'email', 'phone', 'role', 'account_id', 'owner_id', 'summary'].forEach((key) => appendText(form, values, key));
+    } else if (state.entity === 'deal') {
+      ['name', 'account_id', 'contact_id', 'stage_id', 'currency', 'close_date', 'owner_id', 'summary'].forEach((key) => appendText(form, values, key));
+      appendNumber(form, values, 'value');
+      appendNumber(form, values, 'probability');
+    } else if (state.entity === 'task') {
+      ['title', 'status', 'priority', 'due_at', 'account_id', 'contact_id', 'deal_id', 'owner_id', 'body'].forEach((key) => appendText(form, values, key));
+    } else {
+      ['body', 'account_id', 'contact_id', 'deal_id', 'owner_id'].forEach((key) => appendText(form, values, key));
+    }
+    onSubmit(values);
+  }
+
+  return (
+    <div className="crm-detail-overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section className="crm-detail-dialog crm-composer-dialog" role="dialog" aria-modal="true" aria-labelledby="crm-composer-title">
+        <header className="detail-header">
+          <div>
+            <small>{state.mode}</small>
+            <h2 id="crm-composer-title">{title}</h2>
+          </div>
+          <button className="detail-close" type="button" onClick={onClose} aria-label="Close composer">
+            <X size={18} aria-hidden="true" />
+          </button>
+        </header>
+        <form className="composer-form" onSubmit={handleSubmit}>
+          {state.entity === 'account' ? (
+            <div className="composer-grid">
+              <label>
+                Name
+                <input name="name" required defaultValue={textValue(record, 'name')} />
+              </label>
+              <label>
+                Domain
+                <input name="domain" defaultValue={textValue(record, 'domain')} />
+              </label>
+              <label>
+                Industry
+                <input name="industry" defaultValue={textValue(record, 'industry')} />
+              </label>
+              <SelectField label="Status" name="status" defaultValue={textValue(record, 'status', 'prospect')}>
+                <option value="prospect">Prospect</option>
+                <option value="customer">Customer</option>
+                <option value="partner">Partner</option>
+                <option value="inactive">Inactive</option>
+              </SelectField>
+              <label>
+                Owner
+                <input name="owner_id" defaultValue={textValue(record, 'owner_id')} />
+              </label>
+              <label className="span-2">
+                Summary
+                <textarea name="summary" rows={4} defaultValue={textValue(record, 'summary')} />
+              </label>
+            </div>
+          ) : null}
+
+          {state.entity === 'contact' ? (
+            <div className="composer-grid">
+              <label>
+                Display name
+                <input name="display_name" required defaultValue={textValue(record, 'display_name')} />
+              </label>
+              <label>
+                Email
+                <input name="email" type="email" defaultValue={textValue(record, 'email')} />
+              </label>
+              <label>
+                First name
+                <input name="first_name" defaultValue={textValue(record, 'first_name')} />
+              </label>
+              <label>
+                Last name
+                <input name="last_name" defaultValue={textValue(record, 'last_name')} />
+              </label>
+              <SelectField label="Account" name="account_id" defaultValue={textValue(record, 'account_id')}>
+                <RelatedRecordOptions records={data.accounts} />
+              </SelectField>
+              <label>
+                Phone
+                <input name="phone" defaultValue={textValue(record, 'phone')} />
+              </label>
+              <label>
+                Role
+                <input name="role" defaultValue={textValue(record, 'role')} />
+              </label>
+              <label>
+                Owner
+                <input name="owner_id" defaultValue={textValue(record, 'owner_id')} />
+              </label>
+              <label className="span-2">
+                Summary
+                <textarea name="summary" rows={4} defaultValue={textValue(record, 'summary')} />
+              </label>
+            </div>
+          ) : null}
+
+          {state.entity === 'deal' ? (
+            <div className="composer-grid">
+              <label>
+                Name
+                <input name="name" required defaultValue={textValue(record, 'name')} />
+              </label>
+              <SelectField label="Stage" name="stage_id" defaultValue={textValue(record, 'stage_id', 'lead')}>
+                {data.pipeline_stages.map((stage) => (
+                  <option key={stage.id} value={stage.id}>
+                    {stage.name}
+                  </option>
+                ))}
+              </SelectField>
+              <SelectField label="Account" name="account_id" defaultValue={textValue(record, 'account_id')}>
+                <RelatedRecordOptions records={data.accounts} />
+              </SelectField>
+              <SelectField label="Contact" name="contact_id" defaultValue={textValue(record, 'contact_id')}>
+                <RelatedRecordOptions records={data.contacts} />
+              </SelectField>
+              <label>
+                Value
+                <input name="value" type="number" min="0" step="0.01" defaultValue={numericValue(record, 'value', '0')} />
+              </label>
+              <label>
+                Currency
+                <input name="currency" defaultValue={textValue(record, 'currency', 'EUR')} />
+              </label>
+              <label>
+                Probability
+                <input name="probability" type="number" min="0" max="1" step="0.01" defaultValue={numericValue(record, 'probability', '0')} />
+              </label>
+              <label>
+                Close date
+                <input name="close_date" type="date" defaultValue={textValue(record, 'close_date')} />
+              </label>
+              <label>
+                Owner
+                <input name="owner_id" defaultValue={textValue(record, 'owner_id')} />
+              </label>
+              <label className="span-2">
+                Summary
+                <textarea name="summary" rows={4} defaultValue={textValue(record, 'summary')} />
+              </label>
+            </div>
+          ) : null}
+
+          {state.entity === 'task' ? (
+            <div className="composer-grid">
+              <label>
+                Title
+                <input name="title" required defaultValue={textValue(record, 'title')} />
+              </label>
+              <SelectField label="Status" name="status" defaultValue={textValue(record, 'status', 'open')}>
+                <option value="open">Open</option>
+                <option value="done">Done</option>
+                <option value="blocked">Blocked</option>
+              </SelectField>
+              <SelectField label="Priority" name="priority" defaultValue={textValue(record, 'priority', 'normal')}>
+                <option value="low">Low</option>
+                <option value="normal">Normal</option>
+                <option value="high">High</option>
+              </SelectField>
+              <label>
+                Due date
+                <input name="due_at" type="date" defaultValue={textValue(record, 'due_at')} />
+              </label>
+              <SelectField label="Account" name="account_id" defaultValue={textValue(record, 'account_id')}>
+                <RelatedRecordOptions records={data.accounts} />
+              </SelectField>
+              <SelectField label="Contact" name="contact_id" defaultValue={textValue(record, 'contact_id')}>
+                <RelatedRecordOptions records={data.contacts} />
+              </SelectField>
+              <SelectField label="Deal" name="deal_id" defaultValue={textValue(record, 'deal_id')}>
+                <RelatedRecordOptions records={data.deals} />
+              </SelectField>
+              <label>
+                Owner
+                <input name="owner_id" defaultValue={textValue(record, 'owner_id')} />
+              </label>
+              <label className="span-2">
+                Notes
+                <textarea name="body" rows={4} defaultValue={textValue(record, 'body')} />
+              </label>
+            </div>
+          ) : null}
+
+          {state.entity === 'note' ? (
+            <div className="composer-grid">
+              <label className="span-2">
+                Note
+                <textarea name="body" required rows={7} defaultValue={textValue(record, 'body')} />
+              </label>
+              <SelectField label="Account" name="account_id" defaultValue={textValue(record, 'account_id')}>
+                <RelatedRecordOptions records={data.accounts} />
+              </SelectField>
+              <SelectField label="Contact" name="contact_id" defaultValue={textValue(record, 'contact_id')}>
+                <RelatedRecordOptions records={data.contacts} />
+              </SelectField>
+              <SelectField label="Deal" name="deal_id" defaultValue={textValue(record, 'deal_id')}>
+                <RelatedRecordOptions records={data.deals} />
+              </SelectField>
+              <label>
+                Owner
+                <input name="owner_id" defaultValue={textValue(record, 'owner_id')} />
+              </label>
+            </div>
+          ) : null}
+
+          <div className="composer-actions">
+            <button type="button" onClick={onClose}>Cancel</button>
+            <button type="submit" disabled={isSaving}>{isSaving ? 'Saving...' : 'Save'}</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+function RecordDetailModal({ selected, onClose, onEdit }: { selected: { entity: string; record: CrmRecord }; onClose: () => void; onEdit: (entity: string, record: CrmRecord) => void }) {
   return (
     <div className="crm-detail-overlay" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <section className="crm-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="crm-detail-title">
@@ -436,9 +817,16 @@ function RecordDetailModal({ selected, onClose }: { selected: { entity: string; 
             <small>{selected.entity}</small>
             <h2 id="crm-detail-title">{titleFor(selected.record)}</h2>
           </div>
-          <button className="detail-close" type="button" onClick={onClose} aria-label="Close record details">
-            <X size={18} aria-hidden="true" />
-          </button>
+          <div className="detail-actions">
+            {isCreatableEntity(selected.entity) ? (
+              <button className="detail-icon-button" type="button" onClick={() => onEdit(selected.entity, selected.record)} aria-label="Edit record">
+                <Pencil size={17} aria-hidden="true" />
+              </button>
+            ) : null}
+            <button className="detail-close" type="button" onClick={onClose} aria-label="Close record details">
+              <X size={18} aria-hidden="true" />
+            </button>
+          </div>
         </header>
         <dl className="detail-fields">
           {Object.entries(selected.record)

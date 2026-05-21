@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 from io import StringIO
 import json
+import math
 from pathlib import Path
 import sqlite3
 from typing import Any
@@ -208,6 +209,21 @@ def view_entity_type(payload: dict[str, Any]) -> str:
     if entity_type not in VIEW_ENTITY_TYPES:
         raise ValidationError("Unsupported CRM view entity_type.", details={"entity_type": entity_type})
     return entity_type
+
+
+def _coerce_number(payload: dict[str, Any], key: str, default: float) -> float:
+    value = payload.get(key, default)
+    if value is None or value == "":
+        return float(default)
+    if isinstance(value, bool):
+        raise ValidationError(f"`{key}` must be a number.")
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as error:
+        raise ValidationError(f"`{key}` must be a number.") from error
+    if not math.isfinite(number):
+        raise ValidationError(f"`{key}` must be a finite number.")
+    return number
 
 
 def bootstrap_payload(db, data_root: str | Path) -> dict[str, Any]:
@@ -414,8 +430,8 @@ def create_deal(db, payload: dict[str, Any]) -> dict[str, Any]:
     _require_pipeline(db, pipeline_id)
     stage_id = require_text(payload, "stage_id", default=require_text(payload, "stage", default="lead")) or "lead"
     stage = _stage_name(db, stage_id, pipeline_id)
-    probability = float(payload.get("probability") or _stage_probability(db, stage_id, pipeline_id))
-    value = float(payload.get("value") or 0)
+    probability = _coerce_number(payload, "probability", _stage_probability(db, stage_id, pipeline_id))
+    value = _coerce_number(payload, "value", 0)
     db.execute(
         """
         INSERT INTO deals(id, account_id, contact_id, pipeline_id, stage_id, name, stage, value, currency, probability, close_date, owner_id, summary, metadata_json, created_at, updated_at)
@@ -481,9 +497,9 @@ def _write_deal_update(db, deal_id: str, values: dict[str, Any], event_type: str
             stage_id,
             require_text(values, "name", required=True),
             stage,
-            float(values.get("value") or 0),
+            _coerce_number(values, "value", 0),
             require_text(values, "currency", default="EUR") or "EUR",
-            float(values.get("probability") or _stage_probability(db, stage_id, pipeline_id)),
+            _coerce_number(values, "probability", _stage_probability(db, stage_id, pipeline_id)),
             require_text(values, "close_date"),
             require_text(values, "owner_id"),
             require_text(values, "summary"),

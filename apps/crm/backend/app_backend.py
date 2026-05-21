@@ -18,6 +18,14 @@ try:
     status_code, result = handle_action(payload.data_root, action, payload.body)
 except CrmError as error:
     status_code, result = error.status_code, error_payload(error)
+except Exception as error:  # pragma: no cover - final mount boundary guard
+    status_code = 500
+    result = {
+        "ok": False,
+        "error": "internal_error",
+        "message": "Unexpected CRM backend error.",
+        "details": {"type": error.__class__.__name__},
+    }
 
 response = backend_response(status_code, result)
 if status_code < 400:

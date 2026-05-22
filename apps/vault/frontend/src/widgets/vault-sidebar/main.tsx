@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Clock3, KeyRound, LockKeyhole, Plus, Search, ShieldCheck } from 'lucide-react';
+import { ClipboardCheck, Clock3, KeyRound, LockKeyhole, Plus, Search, ShieldCheck } from 'lucide-react';
 import {
   AuditRecord,
   SecretGrantTarget,
@@ -13,7 +13,8 @@ import {
   listGrants,
   listSecrets
 } from '../../api';
-import { GRANT_ACTIONS, Tab } from '../../vaultTypes';
+import { appSecretTarget, grantCoversSecretTarget, isCurrentActiveGrant, secretConsumerTargets } from '../../readiness';
+import { GRANT_ACTIONS, GRANT_TARGET_MODES, GrantTargetMode, Tab } from '../../vaultTypes';
 import {
   auditMatchesQuery,
   buildTargetPatterns,
@@ -37,6 +38,8 @@ function VaultSidebarWidget() {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [grantAppId, setGrantAppId] = useState('');
+  const [grantLogicalName, setGrantLogicalName] = useState('');
+  const [grantTargetMode, setGrantTargetMode] = useState<GrantTargetMode>('app_backend_all');
   const lastActionRequestId = useRef('');
   const secretFormRef = useRef<HTMLFormElement | null>(null);
   const grantFormRef = useRef<HTMLFormElement | null>(null);
@@ -49,14 +52,23 @@ function VaultSidebarWidget() {
     .filter((item) => item.status === 'enabled' && item.logical_names.length > 0)
     .sort((left, right) => (left.name || left.app_id).localeCompare(right.name || right.app_id)), [apps]);
   const selectedGrantApp = useMemo(() => grantableApps.find((item) => item.app_id === grantAppId), [grantAppId, grantableApps]);
-  const activeGrantedLogicalNames = useMemo(() => new Set(
-    grants
-      .filter((item) => grantBlocksLogicalNameSelection(item, grantAppId))
-      .map((item) => item.logical_name.toLowerCase())
-  ), [grantAppId, grants]);
   const selectedGrantLogicalNames = useMemo(
-    () => (selectedGrantApp?.logical_names || []).filter((logicalName) => !activeGrantedLogicalNames.has(logicalName.toLowerCase())),
-    [activeGrantedLogicalNames, selectedGrantApp]
+    () => selectedGrantApp ? selectedGrantApp.logical_names.filter((logicalName) => hasUncoveredConsumers(selectedGrantApp, logicalName, grants)) : [],
+    [grants, selectedGrantApp]
+  );
+  const selectedLogicalConsumer = selectedGrantApp?.consumers?.[grantLogicalName.toLowerCase()];
+  const selectedBackendAvailable = Boolean(selectedGrantApp && grantLogicalName && secretConsumerTargets(selectedGrantApp, grantLogicalName).backend.some((target) => !grantTargetCovered(grants, grantAppId, grantLogicalName, target)));
+  const selectedCliCommands = useMemo(
+    () => (selectedLogicalConsumer?.cli_commands || []).filter((command) => !grantTargetCovered(grants, grantAppId, grantLogicalName, appSecretTarget(`cli/${command}`))),
+    [grantAppId, grantLogicalName, grants, selectedLogicalConsumer]
+  );
+  const selectedMcpTools = useMemo(
+    () => (selectedLogicalConsumer?.mcp_tools || []).filter((tool) => !grantTargetCovered(grants, grantAppId, grantLogicalName, appSecretTarget(`mcp/${tool}`))),
+    [grantAppId, grantLogicalName, grants, selectedLogicalConsumer]
+  );
+  const activeLogicalGrantExists = useMemo(
+    () => grants.some((item) => grantBlocksLogicalNameSelection(item, grantAppId, grantLogicalName)),
+    [grantAppId, grantLogicalName, grants]
   );
 
   async function refresh() {
@@ -81,8 +93,31 @@ function VaultSidebarWidget() {
   useEffect(() => {
     if (grantAppId && !grantableApps.some((item) => item.app_id === grantAppId)) {
       setGrantAppId('');
+      setGrantLogicalName('');
     }
   }, [grantAppId, grantableApps]);
+
+  useEffect(() => {
+    if (grantLogicalName && !selectedGrantLogicalNames.includes(grantLogicalName)) {
+      setGrantLogicalName('');
+    }
+  }, [grantLogicalName, selectedGrantLogicalNames]);
+
+  useEffect(() => {
+    const targetModeUnavailable = (grantTargetMode === 'app_backend_all' && activeLogicalGrantExists)
+      || (grantTargetMode === 'app_cli' && !selectedCliCommands.length)
+      || (grantTargetMode === 'app_mcp' && !selectedMcpTools.length)
+      || (grantTargetMode === 'app_backend' && !selectedBackendAvailable);
+    if (targetModeUnavailable) {
+      setGrantTargetMode(
+        !grantLogicalName || !activeLogicalGrantExists ? 'app_backend_all'
+          : selectedBackendAvailable ? 'app_backend'
+            : selectedCliCommands.length ? 'app_cli'
+              : selectedMcpTools.length ? 'app_mcp'
+                : 'custom'
+      );
+    }
+  }, [activeLogicalGrantExists, grantLogicalName, grantTargetMode, selectedBackendAvailable, selectedCliCommands.length, selectedMcpTools.length]);
 
   useEffect(() => {
     function handleShellMessage(event: MessageEvent) {
@@ -183,6 +218,8 @@ function VaultSidebarWidget() {
       });
       event.currentTarget.reset();
       setGrantAppId('');
+      setGrantLogicalName('');
+      setGrantTargetMode('app_backend_all');
     });
   }
 
@@ -201,6 +238,10 @@ function VaultSidebarWidget() {
 
       <section className="vault-sidebar-list">
         <nav className="vault-sidebar-nav" aria-label="Vault sections">
+          <button className={tab === 'readiness' ? 'is-active' : ''} onClick={() => openTab('readiness')} type="button">
+            <span className="vault-sidebar-row__icon" aria-hidden="true"><ClipboardCheck size={17} /></span>
+            <span className="vault-sidebar-row__copy"><strong>Ready</strong><small>Checks</small></span>
+          </button>
           <button className={tab === 'secrets' ? 'is-active' : ''} onClick={() => openTab('secrets')} type="button">
             <span className="vault-sidebar-row__icon" aria-hidden="true"><KeyRound size={17} /></span>
             <span className="vault-sidebar-row__copy"><strong>Secrets</strong><small>{filteredSecrets.length} records</small></span>
@@ -241,20 +282,38 @@ function VaultSidebarWidget() {
                 <option key={secret.secret_id} value={secret.secret_id}>{secret.label}</option>
               ))}
             </select>
-            <select name="app_id" onChange={(event) => setGrantAppId(event.currentTarget.value)} required value={grantAppId}>
+            <select
+              name="app_id"
+              onChange={(event) => {
+                setGrantAppId(event.currentTarget.value);
+                setGrantLogicalName('');
+                setGrantTargetMode('app_backend_all');
+              }}
+              required
+              value={grantAppId}
+            >
               <option value="">App with declared secret</option>
               {grantableApps.map((app) => (
                 <option key={app.app_id} value={app.app_id}>{app.name || app.app_id}</option>
               ))}
             </select>
-            <select name="logical_name" required disabled={!selectedGrantLogicalNames.length}>
+            <select
+              name="logical_name"
+              onChange={(event) => {
+                setGrantLogicalName(event.currentTarget.value);
+                setGrantTargetMode('app_backend_all');
+              }}
+              required
+              disabled={!selectedGrantLogicalNames.length}
+              value={grantLogicalName}
+            >
               <option value="">Declared logical name</option>
               {selectedGrantLogicalNames.map((logicalName) => (
                 <option key={logicalName} value={logicalName}>{logicalName}</option>
               ))}
             </select>
             {!grantableApps.length ? <p className="vault-sidebar-warning">No enabled app declares secret access.</p> : null}
-            {selectedGrantApp && !selectedGrantLogicalNames.length ? <p className="vault-sidebar-warning">All declared logical names for this app already have active grants.</p> : null}
+            {selectedGrantApp && !selectedGrantLogicalNames.length ? <p className="vault-sidebar-warning">All declared secret consumers for this app already have current grants.</p> : null}
             <fieldset className="vault-sidebar-fieldset">
               <legend>Actions</legend>
               {GRANT_ACTIONS.map((action) => (
@@ -270,10 +329,49 @@ function VaultSidebarWidget() {
                 </label>
               ))}
             </fieldset>
-            <input name="target_mode" type="hidden" value="app_backend" />
+            <select name="target_mode" onChange={(event) => setGrantTargetMode(event.currentTarget.value as GrantTargetMode)} value={grantTargetMode}>
+              {GRANT_TARGET_MODES.map((mode) => (
+                <option
+                  disabled={!grantLogicalName
+                    || (mode.value === 'app_backend_all' && activeLogicalGrantExists)
+                    || (mode.value === 'app_backend' && !selectedBackendAvailable)
+                    || (mode.value === 'app_cli' && !selectedCliCommands.length)
+                    || (mode.value === 'app_mcp' && !selectedMcpTools.length)}
+                  key={mode.value}
+                  value={mode.value}
+                >
+                  {mode.label}
+                </option>
+              ))}
+            </select>
+            {grantTargetMode === 'app_cli' ? (
+              <select name="target_cli_command" required>
+                <option value="">CLI command</option>
+                {selectedCliCommands.map((command) => (
+                  <option key={command} value={command}>{command}</option>
+                ))}
+              </select>
+            ) : null}
+            {grantTargetMode === 'app_mcp' ? (
+              <select name="target_mcp_tool" required>
+                <option value="">MCP tool</option>
+                {selectedMcpTools.map((tool) => (
+                  <option key={tool} value={tool}>{tool}</option>
+                ))}
+              </select>
+            ) : null}
+            {grantTargetMode === 'custom' ? (
+              <input name="target_custom" placeholder="maverick://app.backend/backend" required />
+            ) : null}
             <input name="expires_at" type="datetime-local" />
             <textarea name="reason" placeholder="Reason" rows={3} />
           </form>
+        ) : null}
+
+        {tab === 'readiness' ? (
+          <div className="vault-sidebar-status">
+            Readiness runs in the main Vault view and flags missing app grants, blocked grants, disabled linked secrets, and provider credential state.
+          </div>
         ) : null}
 
         {error ? <p className="vault-sidebar-status">{error}</p> : null}
@@ -304,8 +402,21 @@ function isMobileLayoutViewport() {
   }
 }
 
-function grantBlocksLogicalNameSelection(grant: SecretGrant, appId: string, now = Date.now()) {
-  if (grant.app_id !== appId || grant.status !== 'active') {
+function hasUncoveredConsumers(app: SecretGrantTarget, logicalName: string, grants: SecretGrant[]) {
+  return secretConsumerTargets(app, logicalName).all.some((target) => !grantTargetCovered(grants, app.app_id, logicalName, target));
+}
+
+function grantTargetCovered(grants: SecretGrant[], appId: string, logicalName: string, target: string) {
+  return grants.some((grant) => isCurrentActiveGrant(grant) && grantCoversSecretTarget(grant, appId, logicalName, target));
+}
+
+function grantBlocksLogicalNameSelection(grant: SecretGrant, appId: string, logicalName: string, now = Date.now()) {
+  if (
+    grant.app_id !== appId
+    || grant.logical_name.toLowerCase() !== logicalName.toLowerCase()
+    || grant.status !== 'active'
+    || !grant.actions.map((action) => action.toLowerCase()).includes('app.backend')
+  ) {
     return false;
   }
   if (!grant.expires_at) {

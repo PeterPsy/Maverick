@@ -103,6 +103,7 @@ class VaultAppTest(unittest.TestCase):
         self.assertNotIn("vault-search", source)
         self.assertNotIn("vault-toolbar", source)
         self.assertNotIn("vault-tabs", source)
+        self.assertIn("ReadinessView", source)
 
     def test_removed_central_tab_selector_has_no_dead_code(self) -> None:
         shared_source = (APP_ROOT / "frontend" / "src" / "components" / "VaultShared.tsx").read_text(encoding="utf-8")
@@ -120,7 +121,10 @@ class VaultAppTest(unittest.TestCase):
         self.assertIn("logical_names", source)
         self.assertIn("App with declared secret", source)
         self.assertIn("Declared logical name", source)
-        self.assertIn("already have active grants", source)
+        self.assertIn("GRANT_TARGET_MODES", source)
+        self.assertIn("target_cli_command", source)
+        self.assertIn("target_mcp_tool", source)
+        self.assertIn("already have current grants", source)
         self.assertIn("grantBlocksLogicalNameSelection", source)
         self.assertIn("grant.status !== 'active'", source)
         self.assertNotIn("rotateSecret", source)
@@ -148,6 +152,8 @@ class VaultAppTest(unittest.TestCase):
         self.assertIn("expires_at", bundle)
         self.assertIn("raw_value", bundle)
         self.assertIn("maverick://app.backend/*", bundle)
+        self.assertIn("maverick://app.backend/backend", bundle)
+        self.assertIn("Readiness", bundle)
         self.assertNotIn("browser.autofill", bundle)
         self.assertNotIn("data/vault", bundle)
         self.assertTrue((APP_ROOT / "frontend" / "dist" / "widgets" / "vault-sidebar" / "index.html").exists())
@@ -158,9 +164,17 @@ class VaultAppTest(unittest.TestCase):
 
         self.assertIn("MAX_CSV_BYTES", source)
         self.assertIn("MAX_IMPORT_ROWS", source)
-        self.assertIn("window.confirm", source)
-        self.assertIn("Imported ${created} of ${secretRows.length}", source)
+        self.assertIn("ImportPreview", source)
+        self.assertIn("newBatchId", source)
+        self.assertIn("preflightImportRows", source)
+        self.assertIn("SECRET_ID_PATTERN", source)
+        self.assertIn("normalized secret id is invalid", source)
+        self.assertIn("will_create", source)
+        self.assertIn("Import selected", source)
+        self.assertIn("Imported ${created} of ${rowsToCreate.length}", source)
         self.assertIn("failures", source)
+        self.assertNotIn("window.confirm", source)
+        self.assertNotIn("window.alert", source)
 
 
 if __name__ == "__main__":

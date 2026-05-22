@@ -38,7 +38,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   border: 0;
   color: inherit;
   font: inherit;
@@ -136,7 +137,7 @@ button:disabled {
 
 .vault-sidebar-nav {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.36rem;
 }
 
@@ -409,6 +410,122 @@ button:disabled {
 
 .vault-sidebar-file-input {
   display: none;
+}
+
+.vault-import-popover {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 3rem;
+  z-index: 5;
+  display: grid;
+  gap: 0.42rem;
+  border: 1px solid var(--maverick-border-strong);
+  border-radius: 16px;
+  background: rgba(12, 12, 14, 0.98);
+  box-shadow: var(--maverick-inner-edge, inset 0 0 0 1px rgba(255, 255, 255, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.14));
+  padding: 0.62rem;
+}
+
+.vault-import-popover__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.vault-import-popover__header button {
+  width: 1.9rem;
+  height: 1.9rem;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--maverick-surface);
+  padding: 0;
+}
+
+.vault-import-popover span,
+.vault-import-popover p,
+.vault-import-status {
+  margin: 0;
+  color: var(--maverick-text-muted);
+  font-size: 0.72rem;
+  line-height: 1.3;
+}
+
+.vault-import-popover select {
+  width: 100%;
+  border: 1px solid var(--maverick-border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--maverick-text);
+  padding: 0.5rem 0.58rem;
+}
+
+.vault-import-rows {
+  display: grid;
+  gap: 0.32rem;
+  max-height: 10.5rem;
+  overflow-y: auto;
+}
+
+.vault-import-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 0.44rem;
+  border: 1px solid var(--maverick-border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+  padding: 0.46rem 0.5rem;
+}
+
+.vault-import-row input {
+  margin-top: 0.12rem;
+}
+
+.vault-import-row span,
+.vault-import-row strong,
+.vault-import-row small {
+  min-width: 0;
+}
+
+.vault-import-row strong,
+.vault-import-row small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vault-import-row strong {
+  color: var(--maverick-text);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.vault-import-row small {
+  color: var(--maverick-text-muted);
+  font-size: 0.68rem;
+}
+
+.vault-import-popover > button {
+  min-height: 2.2rem;
+  border-radius: 14px;
+  background: var(--maverick-accent);
+  color: var(--maverick-text-on-accent);
+}
+
+.vault-import-status {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 3rem;
+  z-index: 4;
+  border: 1px solid var(--maverick-border);
+  border-radius: 12px;
+  background: rgba(12, 12, 14, 0.96);
+  padding: 0.5rem 0.58rem;
 }
 
 ::-webkit-scrollbar {

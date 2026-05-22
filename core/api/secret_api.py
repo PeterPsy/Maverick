@@ -7,19 +7,21 @@ from pathlib import Path
 
 from core.apps.errors import AppHostingError
 from core.apps.surfaces import enabled_workspace_app_bindings, resolve_workspace_app_surface
+from core.apps.surface_descriptors import app_cli_command_required_secrets, app_mcp_tool_required_secrets
 from core.api.http import StartResponse, json_response, read_json_body
 from core.api.platform_state import PlatformState
 from core.api.secret_audit_records import record_cascaded_grant_revocations, record_secret_change
 from core.api.secret_api_payloads import audit_payload, grant_payload, secret_payload
 from core.api.secret_grant_validation import (
+    APP_BACKEND_ACTION,
     assert_app_backend_logical_name_declared,
     assert_enabled_workspace_app,
-    assert_logical_name_available,
+    assert_logical_name_target_available,
     get_active_secret_for_ref,
     parse_expires_at,
 )
 from core.api.session_api import RequestSession, require_session
-from core.secrets.app_delivery import assert_app_backend_targets_deliverable
+from core.secrets.app_delivery import app_secret_target, assert_app_backend_targets_deliverable
 from core.secrets.errors import SecretError, SecretPolicyError
 from core.secrets.models import SecretGrantRecord
 from core.secrets.service import (
@@ -32,6 +34,7 @@ from core.secrets.service import (
     revoke_platform_secret_with_revocations,
     rotate_platform_secret,
 )
+from core.secrets.target_policy import normalize_target_patterns_or_wildcard, target_allowed
 
 
 logger = logging.getLogger(__name__)
@@ -102,9 +105,27 @@ def _handle_grant_targets(
                 context.workspace_id,
             )
             continue
-        logical_names = sorted({str(item).strip().lower() for item in parsed.contract.permissions.secrets.read if str(item).strip()})
+        declared_logical_names = sorted(
+            {str(item).strip().lower() for item in parsed.contract.permissions.secrets.read if str(item).strip()}
+        )
+        consumers = _secret_consumers_by_logical_name(
+            source_root=_source_root,
+            declared_logical_names=declared_logical_names,
+            backend_declared=parsed.contract.entrypoints.backend is not None,
+            cli_commands=[str(item).strip() for item in parsed.contract.capabilities.cli_commands if str(item).strip()],
+            mcp_tools=[str(item).strip() for item in parsed.contract.capabilities.mcp_tools if str(item).strip()],
+        )
+        logical_names = sorted(
+            logical_name for logical_name, consumer in consumers.items() if _consumer_requires_secret(consumer)
+        )
         if not logical_names:
             continue
+        consumer_cli_commands = sorted(
+            {command for logical_name in logical_names for command in consumers[logical_name]["cli_commands"]}
+        )
+        consumer_mcp_tools = sorted(
+            {tool for logical_name in logical_names for tool in consumers[logical_name]["mcp_tools"]}
+        )
         items.append(
             {
                 "app_id": binding.app_id,
@@ -113,9 +134,115 @@ def _handle_grant_targets(
                 "name": parsed.name,
                 "status": binding.status,
                 "logical_names": logical_names,
+                "consumers": {logical_name: consumers[logical_name] for logical_name in logical_names},
+                "surfaces": {
+                    "backend": any(consumers[logical_name]["backend"] for logical_name in logical_names),
+                    "cli_commands": consumer_cli_commands,
+                    "mcp_tools": consumer_mcp_tools,
+                },
             }
         )
     return json_response(start_response, {"items": items})
+
+
+def _secret_consumers_by_logical_name(
+    *,
+    source_root: Path,
+    declared_logical_names: list[str],
+    backend_declared: bool,
+    cli_commands: list[str],
+    mcp_tools: list[str],
+) -> dict[str, dict[str, object]]:
+    consumers: dict[str, dict[str, object]] = {
+        logical_name: {"backend": backend_declared, "cli_commands": [], "mcp_tools": []}
+        for logical_name in declared_logical_names
+    }
+    for command in cli_commands:
+        for logical_name in app_cli_command_required_secrets(
+            source_root,
+            command,
+            declared_secret_names=declared_logical_names,
+        ):
+            consumers.setdefault(logical_name, {"backend": False, "cli_commands": [], "mcp_tools": []})
+            cli_consumers = consumers[logical_name]["cli_commands"]
+            if isinstance(cli_consumers, list) and command not in cli_consumers:
+                cli_consumers.append(command)
+    for tool in mcp_tools:
+        for logical_name in app_mcp_tool_required_secrets(
+            source_root,
+            tool,
+            declared_secret_names=declared_logical_names,
+        ):
+            consumers.setdefault(logical_name, {"backend": False, "cli_commands": [], "mcp_tools": []})
+            mcp_consumers = consumers[logical_name]["mcp_tools"]
+            if isinstance(mcp_consumers, list) and tool not in mcp_consumers:
+                mcp_consumers.append(tool)
+    return consumers
+
+
+def _consumer_requires_secret(consumer: dict[str, object]) -> bool:
+    return bool(consumer.get("backend") or consumer.get("cli_commands") or consumer.get("mcp_tools"))
+
+
+def _assert_app_backend_targets_match_consumers(
+    state: PlatformState,
+    *,
+    workspace_id: str,
+    app_id: str,
+    logical_name: str,
+    actions: list[str],
+    target_patterns: list[str] | None,
+) -> None:
+    normalized_actions = {str(action).strip().lower() for action in actions}
+    if APP_BACKEND_ACTION not in normalized_actions:
+        return
+    binding = state.app_store.get_workspace_app_binding(workspace_id=workspace_id, app_id=app_id)
+    try:
+        source_root, parsed = resolve_workspace_app_surface(state.app_store, binding=binding, start_path=state.repository_root)
+    except AppHostingError as exc:
+        raise SecretPolicyError(f"Workspace app `{app_id}` is enabled but its surface is unavailable.") from exc
+    declared_logical_names = sorted(
+        {str(item).strip().lower() for item in parsed.contract.permissions.secrets.read if str(item).strip()}
+    )
+    consumers = _secret_consumers_by_logical_name(
+        source_root=source_root,
+        declared_logical_names=declared_logical_names,
+        backend_declared=parsed.contract.entrypoints.backend is not None,
+        cli_commands=[str(item).strip() for item in parsed.contract.capabilities.cli_commands if str(item).strip()],
+        mcp_tools=[str(item).strip() for item in parsed.contract.capabilities.mcp_tools if str(item).strip()],
+    ).get(logical_name)
+    consumer_targets = _consumer_targets(consumers)
+    if not consumer_targets:
+        raise SecretPolicyError(f"App `{app_id}` has no declared consumers for secret logical name `{logical_name}`.")
+    for pattern in normalize_target_patterns_or_wildcard(target_patterns):
+        if pattern in {"*", "maverick://app.backend/*"}:
+            continue
+        if not any(_target_overlaps(pattern, consumer_target) for consumer_target in consumer_targets):
+            raise SecretPolicyError(
+                f"App `{app_id}` does not declare a secret consumer matching target `{pattern}` for `{logical_name}`."
+            )
+
+
+def _consumer_targets(consumer: dict[str, object] | None) -> list[str]:
+    if not consumer:
+        return []
+    targets: list[str] = []
+    if consumer.get("backend"):
+        targets.append(app_secret_target("backend"))
+    for command in consumer.get("cli_commands", []):
+        targets.append(app_secret_target(f"cli/{command}"))
+    for tool in consumer.get("mcp_tools", []):
+        targets.append(app_secret_target(f"mcp/{tool}"))
+    return targets
+
+
+def _target_overlaps(pattern: str, target: str) -> bool:
+    if pattern == "*" or target == "*" or pattern == target:
+        return True
+    try:
+        return target_allowed(target, [pattern]) or target_allowed(pattern, [target])
+    except SecretError:
+        return pattern == target
 
 
 def _handle_secrets_collection(
@@ -224,7 +351,6 @@ def _handle_grants_collection(
     actions = [str(item) for item in body.get("actions", [])] if isinstance(body.get("actions"), list) else []
     target_patterns = [str(item) for item in body.get("target_patterns", [])] if isinstance(body.get("target_patterns"), list) else None
     assert_enabled_workspace_app(state, workspace_id=context.workspace_id, app_id=app_id)
-    assert_logical_name_available(state, workspace_id=context.workspace_id, app_id=app_id, logical_name=logical_name)
     assert_app_backend_logical_name_declared(
         state,
         workspace_id=context.workspace_id,
@@ -233,6 +359,22 @@ def _handle_grants_collection(
         actions=actions,
     )
     assert_app_backend_targets_deliverable(actions, target_patterns)
+    _assert_app_backend_targets_match_consumers(
+        state,
+        workspace_id=context.workspace_id,
+        app_id=app_id,
+        logical_name=logical_name,
+        actions=actions,
+        target_patterns=target_patterns,
+    )
+    assert_logical_name_target_available(
+        state,
+        workspace_id=context.workspace_id,
+        app_id=app_id,
+        logical_name=logical_name,
+        actions=actions,
+        target_patterns=target_patterns,
+    )
     grant = grant_app_secret_use(
         state.secret_store,
         workspace_id=context.workspace_id,

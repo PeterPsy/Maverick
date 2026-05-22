@@ -8,8 +8,9 @@ from core.api.platform_state import PlatformState
 from core.api.secret_api_payloads import get_secret_for_ref
 from core.apps.errors import AppHostingError, WorkspaceAppBindingNotFoundError
 from core.apps.surfaces import resolve_workspace_app_surface
-from core.secrets.errors import SecretPolicyError
+from core.secrets.errors import SecretError, SecretPolicyError
 from core.secrets.models import SecretRecord
+from core.secrets.target_policy import normalize_target_patterns_or_wildcard, target_allowed
 
 
 APP_BACKEND_ACTION = "app.backend"
@@ -39,14 +40,49 @@ def assert_enabled_workspace_app(state: PlatformState, *, workspace_id: str, app
         raise SecretPolicyError(f"Workspace app `{app_id}` is enabled but its surface is unavailable.") from exc
 
 
-def assert_logical_name_available(state: PlatformState, *, workspace_id: str, app_id: str, logical_name: str) -> None:
-    """Require one active grant per app logical name."""
+def assert_logical_name_target_available(
+    state: PlatformState,
+    *,
+    workspace_id: str,
+    app_id: str,
+    logical_name: str,
+    actions: list[str],
+    target_patterns: list[str] | None,
+) -> None:
+    """Require active grants for one app logical name to have non-overlapping delivery targets."""
     now = datetime.now(tz=UTC)
+    normalized_actions = {str(action).strip().lower() for action in actions}
+    if APP_BACKEND_ACTION in normalized_actions:
+        normalized_targets = normalize_target_patterns_or_wildcard(target_patterns)
+    else:
+        normalized_targets = []
     for grant in state.secret_store.list_secret_grants(workspace_id=workspace_id, app_id=app_id, status="active"):
         if grant.expires_at is not None and grant.expires_at <= now:
             continue
-        if grant.logical_name == logical_name:
+        if grant.logical_name != logical_name:
+            continue
+        if APP_BACKEND_ACTION not in normalized_actions:
             raise SecretPolicyError(f"Active secret grant `{logical_name}` already exists for app `{app_id}`.")
+        if APP_BACKEND_ACTION in {str(action).strip().lower() for action in grant.actions} and _target_patterns_overlap(
+            grant.target_patterns,
+            normalized_targets,
+        ):
+            raise SecretPolicyError(
+                f"Active secret grant `{logical_name}` already exists for app `{app_id}` with overlapping targets."
+            )
+
+
+def _target_patterns_overlap(left: list[str], right: list[str]) -> bool:
+    for left_pattern in left:
+        for right_pattern in right:
+            if left_pattern == "*" or right_pattern == "*" or left_pattern == right_pattern:
+                return True
+            try:
+                if target_allowed(left_pattern, [right_pattern]) or target_allowed(right_pattern, [left_pattern]):
+                    return True
+            except SecretError:
+                continue
+    return False
 
 
 def assert_app_backend_logical_name_declared(

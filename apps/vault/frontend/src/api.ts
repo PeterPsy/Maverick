@@ -34,6 +34,39 @@ export type SecretGrantTarget = {
   name: string;
   status: string;
   logical_names: string[];
+  consumers?: Record<string, {
+    backend: boolean;
+    cli_commands: string[];
+    mcp_tools: string[];
+  }>;
+  surfaces?: {
+    backend: boolean;
+    cli_commands: string[];
+    mcp_tools: string[];
+  };
+};
+
+export type ProviderDefinition = {
+  provider_id: string;
+  label: string;
+  status: string;
+  requires_credentials: boolean;
+};
+
+export type ProviderSelection = {
+  workspace_id: string;
+  provider_id: string;
+  binding_id: string | null;
+};
+
+export type ProviderStatus = {
+  workspace_id: string;
+  configured: boolean;
+  active_provider: ProviderDefinition | null;
+  selection: ProviderSelection | null;
+  blocked_reason: string | null;
+  blocked_detail?: string | null;
+  available_providers: ProviderDefinition[];
 };
 
 export type AuditRecord = {
@@ -119,4 +152,8 @@ export function listAudit(): Promise<{ items: AuditRecord[] }> {
 
 export function listGrantTargets(): Promise<{ items: SecretGrantTarget[] }> {
   return request('/api/secret-grant-targets');
+}
+
+export function getProviderStatus(): Promise<ProviderStatus> {
+  return request('/api/providers/active');
 }

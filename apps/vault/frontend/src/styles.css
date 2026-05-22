@@ -211,7 +211,7 @@ td > button {
 
 .vault-stats {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -425,10 +425,69 @@ td span {
 
 .vault-status.is-attempted,
 .vault-status.is-blocked,
+.vault-status.is-missing,
+.vault-status.is-needs-credential,
 .vault-status.is-orphaned,
 .vault-status.is-expired {
   background: rgba(255, 216, 145, 0.12);
   color: var(--maverick-warning);
+}
+
+.vault-readiness {
+  min-height: 0;
+  border: 1px solid var(--maverick-border);
+  border-radius: 14px;
+  background: var(--maverick-glass-highlight), var(--maverick-glass-surface);
+  box-shadow: var(--maverick-glass-edge);
+  overflow: auto;
+}
+
+.vault-readiness > .vault-panel-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  border-bottom: 1px solid var(--maverick-border);
+  background: rgba(12, 12, 14, 0.96);
+  padding: 0.86rem 0.95rem;
+}
+
+.vault-readiness-list {
+  display: grid;
+}
+
+.vault-readiness-item {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr) auto;
+  gap: 0.82rem;
+  align-items: center;
+  padding: 0.9rem 0.95rem;
+  border-bottom: 1px solid var(--maverick-border);
+}
+
+.vault-readiness-item__icon {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 10px;
+  background: rgba(255, 216, 145, 0.12);
+  color: var(--maverick-warning);
+}
+
+.vault-readiness-item.is-blocked .vault-readiness-item__icon {
+  background: rgba(255, 179, 191, 0.12);
+  color: var(--maverick-danger);
+}
+
+.vault-readiness-item strong {
+  display: block;
+  margin-bottom: 0.2rem;
+}
+
+.vault-readiness-item p {
+  margin: 0 0 0.45rem;
+  color: var(--maverick-text-muted);
+  line-height: 1.35;
 }
 
 .vault-timeline {
@@ -443,6 +502,18 @@ td span {
   border-bottom: 1px solid var(--maverick-border);
   background: rgba(12, 12, 14, 0.96);
   padding: 0.86rem 0.95rem;
+}
+
+.vault-audit-filters {
+  position: sticky;
+  top: 64px;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) auto;
+  gap: 0.55rem;
+  border-bottom: 1px solid var(--maverick-border);
+  background: rgba(12, 12, 14, 0.96);
+  padding: 0.72rem 0.95rem;
 }
 
 .vault-timeline article {
@@ -515,6 +586,11 @@ tr:last-child td,
 
   .vault-stats,
   .vault-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .vault-audit-filters,
+  .vault-readiness-item {
     grid-template-columns: 1fr;
   }
 

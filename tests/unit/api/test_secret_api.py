@@ -269,7 +269,7 @@ class SecretApiTestCase(SecretApiTestSupport):
     def test_app_backend_grant_requires_deliverable_target_pattern(self) -> None:
         app = self.make_app()
         cookie = self.login(app)
-        self.enable_workspace_app(app, secret_read=["api-token"])
+        self.enable_workspace_app(app, secret_read=["api-token"], backend=True)
         _status, secret_payload, _ = self.invoke(
             app,
             path="/api/secrets",
@@ -313,7 +313,7 @@ class SecretApiTestCase(SecretApiTestSupport):
     def test_app_backend_grant_requires_declared_logical_name(self) -> None:
         app = self.make_app()
         cookie = self.login(app)
-        self.enable_workspace_app(app, secret_read=["declared-token"])
+        self.enable_workspace_app(app, secret_read=["declared-token"], backend=True)
         _status, secret_payload, _ = self.invoke(
             app,
             path="/api/secrets",
@@ -355,10 +355,125 @@ class SecretApiTestCase(SecretApiTestSupport):
         self.assertEqual(accepted_status, 201)
         self.assertEqual(accepted_payload["grant"]["logical_name"], "declared-token")
 
+    def test_app_backend_grants_allow_distinct_declared_targets_for_same_logical_name(self) -> None:
+        app = self.make_app()
+        cookie = self.login(app)
+        self.enable_workspace_app(app, secret_read=["api-token"], backend=True, cli_commands=["sync"])
+        app_root = app.state.repository_root / "apps" / "browser"
+        (app_root / "cli").mkdir(parents=True, exist_ok=True)
+        (app_root / "cli" / "command_schemas.json").write_text(
+            json.dumps({"commands": {"sync": {"required_secrets": ["api-token"]}}}),
+            encoding="utf-8",
+        )
+        _status, secret_payload, _ = self.invoke(
+            app,
+            path="/api/secrets",
+            method="POST",
+            cookie=cookie,
+            body={"label": "Backend Token", "raw_value": "backend-secret"},
+        )
+
+        backend_status, _backend_payload, _ = self.invoke(
+            app,
+            path="/api/secret-grants",
+            method="POST",
+            cookie=cookie,
+            body={
+                "app_id": "browser",
+                "logical_name": "api-token",
+                "secret_id": secret_payload["secret"]["secret_id"],
+                "actions": ["app.backend"],
+                "target_patterns": ["maverick://app.backend/backend"],
+            },
+        )
+        cli_status, cli_payload, _ = self.invoke(
+            app,
+            path="/api/secret-grants",
+            method="POST",
+            cookie=cookie,
+            body={
+                "app_id": "browser",
+                "logical_name": "api-token",
+                "secret_id": secret_payload["secret"]["secret_id"],
+                "actions": ["app.backend"],
+                "target_patterns": ["maverick://app.backend/cli/sync"],
+            },
+        )
+        duplicate_status, duplicate_payload, _ = self.invoke(
+            app,
+            path="/api/secret-grants",
+            method="POST",
+            cookie=cookie,
+            body={
+                "app_id": "browser",
+                "logical_name": "api-token",
+                "secret_id": secret_payload["secret"]["secret_id"],
+                "actions": ["app.backend"],
+                "target_patterns": ["maverick://app.backend/backend"],
+            },
+        )
+        wildcard_status, wildcard_payload, _ = self.invoke(
+            app,
+            path="/api/secret-grants",
+            method="POST",
+            cookie=cookie,
+            body={
+                "app_id": "browser",
+                "logical_name": "api-token",
+                "secret_id": secret_payload["secret"]["secret_id"],
+                "actions": ["app.backend"],
+                "target_patterns": ["maverick://app.backend/*"],
+            },
+        )
+
+        self.assertEqual(backend_status, 201)
+        self.assertEqual(cli_status, 201)
+        self.assertEqual(cli_payload["grant"]["target_patterns"], ["maverick://app.backend/cli/sync"])
+        self.assertEqual(duplicate_status, 400)
+        self.assertIn("overlapping targets", duplicate_payload["detail"])
+        self.assertEqual(wildcard_status, 400)
+        self.assertIn("overlapping targets", wildcard_payload["detail"])
+
+    def test_app_backend_grant_rejects_targets_without_required_secret_consumer(self) -> None:
+        app = self.make_app()
+        cookie = self.login(app)
+        self.enable_workspace_app(app, secret_read=["api-token"], cli_commands=["sync"])
+        app_root = app.state.repository_root / "apps" / "browser"
+        (app_root / "cli").mkdir(parents=True, exist_ok=True)
+        (app_root / "cli" / "command_schemas.json").write_text(
+            json.dumps({"commands": {"sync": {"required_secrets": ["api-token"]}}}),
+            encoding="utf-8",
+        )
+        _status, secret_payload, _ = self.invoke(
+            app,
+            path="/api/secrets",
+            method="POST",
+            cookie=cookie,
+            body={"label": "Backend Token", "raw_value": "backend-secret"},
+        )
+
+        rejected_status, rejected_payload, _ = self.invoke(
+            app,
+            path="/api/secret-grants",
+            method="POST",
+            cookie=cookie,
+            body={
+                "app_id": "browser",
+                "logical_name": "api-token",
+                "secret_id": secret_payload["secret"]["secret_id"],
+                "actions": ["app.backend"],
+                "target_patterns": ["maverick://app.backend/cli/noop"],
+            },
+        )
+
+        self.assertEqual(rejected_status, 400)
+        self.assertEqual(rejected_payload["error"], "secret_error")
+        self.assertIn("does not declare a secret consumer", rejected_payload["detail"])
+
     def test_expired_grants_are_reported_and_do_not_block_replacement(self) -> None:
         app = self.make_app()
         cookie = self.login(app)
-        self.enable_workspace_app(app, secret_read=["api-token"])
+        self.enable_workspace_app(app, secret_read=["api-token"], backend=True)
         secret = create_platform_secret(app.state.secret_store, label="Backend Token", raw_value="backend-secret")
         expired = grant_app_secret_use(
             app.state.secret_store,
@@ -395,7 +510,7 @@ class SecretApiTestCase(SecretApiTestSupport):
     def test_secret_grant_targets_are_admin_specific_and_not_in_app_registry(self) -> None:
         app = self.make_app()
         cookie = self.login(app)
-        self.enable_workspace_app(app, secret_read=["api-token", "webhook-token"])
+        self.enable_workspace_app(app, secret_read=["api-token", "webhook-token"], backend=True)
 
         registry_status, registry_payload, _ = self.invoke(app, path="/api/apps", cookie=cookie)
         targets_status, targets_payload, _ = self.invoke(app, path="/api/secret-grant-targets", cookie=cookie)
@@ -405,6 +520,47 @@ class SecretApiTestCase(SecretApiTestSupport):
         self.assertNotIn("permissions", json.dumps(registry_payload))
         target = next(item for item in targets_payload["items"] if item["app_id"] == "browser")
         self.assertEqual(target["logical_names"], ["api-token", "webhook-token"])
+        self.assertIn("surfaces", target)
+        self.assertIn("backend", target["surfaces"])
+        self.assertIn("cli_commands", target["surfaces"])
+        self.assertIn("mcp_tools", target["surfaces"])
+
+    def test_secret_grant_targets_report_only_cli_mcp_required_secret_consumers(self) -> None:
+        app = self.make_app()
+        cookie = self.login(app)
+        self.enable_workspace_app(
+            app,
+            secret_read=["api-token", "webhook-token", "unused-token"],
+            cli_commands=["sync", "noop"],
+            mcp_tools=["send"],
+        )
+        app_root = app.state.repository_root / "apps" / "browser"
+        (app_root / "cli").mkdir(parents=True, exist_ok=True)
+        (app_root / "mcp").mkdir(parents=True, exist_ok=True)
+        (app_root / "cli" / "command_schemas.json").write_text(
+            json.dumps({"commands": {"sync": {"required_secrets": ["api-token"]}, "noop": {}}}),
+            encoding="utf-8",
+        )
+        (app_root / "mcp" / "tool_schemas.json").write_text(
+            json.dumps({"tools": {"send": {"required_secrets": ["webhook-token"]}}}),
+            encoding="utf-8",
+        )
+
+        targets_status, targets_payload, _ = self.invoke(app, path="/api/secret-grant-targets", cookie=cookie)
+
+        self.assertEqual(targets_status, 200)
+        target = next(item for item in targets_payload["items"] if item["app_id"] == "browser")
+        self.assertEqual(target["logical_names"], ["api-token", "webhook-token"])
+        self.assertEqual(
+            target["consumers"],
+            {
+                "api-token": {"backend": False, "cli_commands": ["sync"], "mcp_tools": []},
+                "webhook-token": {"backend": False, "cli_commands": [], "mcp_tools": ["send"]},
+            },
+        )
+        self.assertFalse(target["surfaces"]["backend"])
+        self.assertEqual(target["surfaces"]["cli_commands"], ["sync"])
+        self.assertEqual(target["surfaces"]["mcp_tools"], ["send"])
 
     def test_grant_create_rejects_query_string_target_patterns(self) -> None:
         app = self.make_app()

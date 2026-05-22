@@ -1,18 +1,24 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { AlertTriangle, KeyRound, LockKeyhole, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, ClipboardCheck, KeyRound, LockKeyhole, ShieldCheck } from 'lucide-react';
 import {
   AuditRecord,
+  ProviderStatus,
   SecretGrant,
+  SecretGrantTarget,
   SecretRecord,
+  getProviderStatus,
   listAudit,
+  listGrantTargets,
   listGrants,
   listSecrets
 } from './api';
 import { AuditView } from './components/AuditView';
 import { GrantsView } from './components/GrantsView';
+import { ReadinessView } from './components/ReadinessView';
 import { SecretsView } from './components/SecretsView';
 import { Stat } from './components/VaultShared';
+import { computeReadinessIssues } from './readiness';
 import { ShellNavigatePayload, Tab } from './vaultTypes';
 import {
   grantStatus,
@@ -25,7 +31,9 @@ function App() {
   const initialViewState = readVaultViewState();
   const [secrets, setSecrets] = useState<SecretRecord[]>([]);
   const [grants, setGrants] = useState<SecretGrant[]>([]);
+  const [targets, setTargets] = useState<SecretGrantTarget[]>([]);
   const [audit, setAudit] = useState<AuditRecord[]>([]);
+  const [providerStatus, setProviderStatus] = useState<ProviderStatus | null>(null);
   const [tab, setTab] = useState<Tab>(() => tabFromValue(new URLSearchParams(window.location.search).get('tab')) || initialViewState.tab);
   const [metricFilter, setMetricFilter] = useState<VaultMetricFilter>(() => initialViewState.metricFilter);
   const [busy, setBusy] = useState(false);
@@ -35,10 +43,18 @@ function App() {
     setBusy(true);
     setError('');
     try {
-      const [secretPayload, grantPayload, auditPayload] = await Promise.all([listSecrets(), listGrants(), listAudit()]);
+      const [secretPayload, grantPayload, auditPayload, targetPayload, providerPayload] = await Promise.all([
+        listSecrets(),
+        listGrants(),
+        listAudit(),
+        listGrantTargets(),
+        getProviderStatus().catch(() => null)
+      ]);
       setSecrets(secretPayload.items);
       setGrants(grantPayload.items);
       setAudit(auditPayload.items);
+      setTargets(targetPayload.items);
+      setProviderStatus(providerPayload);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Request failed.');
     } finally {
@@ -93,6 +109,10 @@ function App() {
   const disabledSecrets = useMemo(() => secrets.filter((item) => item.status === 'disabled').length, [secrets]);
   const activeGrants = useMemo(() => grants.filter((item) => grantStatus(item) === 'active').length, [grants]);
   const riskEvents = useMemo(() => audit.filter((item) => item.status === 'failed' || item.status === 'attempted').length, [audit]);
+  const readinessIssues = useMemo(
+    () => computeReadinessIssues({ grants, providerStatus, secrets, targets }).length,
+    [grants, providerStatus, secrets, targets]
+  );
   const filteredSecrets = useMemo(
     () => secrets
       .filter((secret) => metricFilter !== 'active-secrets' || secret.status === 'active'),
@@ -125,6 +145,7 @@ function App() {
       </header>
 
       <section className="vault-stats" aria-label="Vault status">
+        <Stat active={tab === 'readiness'} icon={<ClipboardCheck size={18} />} label="Readiness issues" onClick={() => applyMetricFilter(null, 'readiness')} value={String(readinessIssues)} />
         <Stat active={metricFilter === 'all-secrets'} icon={<KeyRound size={18} />} label="Total secrets" onClick={() => applyMetricFilter('all-secrets', 'secrets')} value={String(secrets.length)} />
         <Stat active={metricFilter === 'active-secrets'} icon={<ShieldCheck size={18} />} label="Active secrets" onClick={() => applyMetricFilter('active-secrets', 'secrets')} value={String(activeSecrets)} />
         <Stat active={metricFilter === 'active-grants'} icon={<LockKeyhole size={18} />} label="Active grants" onClick={() => applyMetricFilter('active-grants', 'grants')} value={String(activeGrants)} />
@@ -134,6 +155,15 @@ function App() {
       {error ? <div className="vault-error">{error}</div> : null}
 
       <section className="vault-workspace is-single">
+        {tab === 'readiness' ? (
+          <ReadinessView
+            grants={grants}
+            onOpenGrants={() => applyMetricFilter(null, 'grants')}
+            providerStatus={providerStatus}
+            secrets={secrets}
+            targets={targets}
+          />
+        ) : null}
         {tab === 'secrets' ? (
           <SecretsView
             secrets={filteredSecrets}

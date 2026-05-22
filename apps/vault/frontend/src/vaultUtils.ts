@@ -6,7 +6,22 @@ export function grantStatus(grant: SecretGrant): string {
 }
 
 export function buildTargetPatterns(form: FormData): string[] {
-  void form;
+  const mode = String(form.get('target_mode') || 'app_backend_all');
+  if (mode === 'app_backend') {
+    return ['maverick://app.backend/backend'];
+  }
+  if (mode === 'app_cli') {
+    const command = encodeTargetSegment(String(form.get('target_cli_command') || ''));
+    return command ? [`maverick://app.backend/cli/${command}`] : [];
+  }
+  if (mode === 'app_mcp') {
+    const tool = encodeTargetSegment(String(form.get('target_mcp_tool') || ''));
+    return tool ? [`maverick://app.backend/mcp/${tool}`] : [];
+  }
+  if (mode === 'custom') {
+    const custom = String(form.get('target_custom') || '').trim();
+    return custom ? [custom] : [];
+  }
   return ['maverick://app.backend/*'];
 }
 
@@ -43,7 +58,7 @@ export function tabFromSearchParams(): Tab {
 }
 
 export function tabFromValue(value: unknown): Tab | null {
-  return value === 'secrets' || value === 'grants' || value === 'audit' ? value : null;
+  return value === 'readiness' || value === 'secrets' || value === 'grants' || value === 'audit' ? value : null;
 }
 
 export function humanizeKind(value: string) {
@@ -119,4 +134,8 @@ export function parseCsv(text: string): Array<Record<string, string>> {
   return records.map((record) =>
     Object.fromEntries(keys.map((key, index) => [key, record[index]?.trim() || '']).filter(([key]) => key))
   );
+}
+
+function encodeTargetSegment(value: string): string {
+  return value.trim().replace(/^\/+/, '').replace(/[?#]/g, '');
 }

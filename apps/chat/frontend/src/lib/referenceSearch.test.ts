@@ -43,17 +43,15 @@ describe("searchComposerReferences", () => {
     mockedSearchAppReferences.mockReset();
   });
 
-  it("prioritizes generic file and folder references without an active app context", async () => {
+  it("uses generic file and folder references for an empty picker without an active app context", async () => {
     const signal = new AbortController().signal;
-    mockedSearchAppReferences
-      .mockResolvedValueOnce([storageFolderReference, storageFileReference])
-      .mockResolvedValueOnce([checklistReference, storageFolderReference]);
+    mockedSearchAppReferences.mockResolvedValueOnce([storageFolderReference, storageFileReference]);
 
     const references = await searchComposerReferences("", signal, "");
 
     expect(mockedSearchAppReferences).toHaveBeenNthCalledWith(1, "", signal, { entityTypes: ["file", "folder"], limit: 16 });
-    expect(mockedSearchAppReferences).toHaveBeenNthCalledWith(2, "", signal, { limit: 16 });
-    expect(references).toEqual([storageFolderReference, storageFileReference, checklistReference]);
+    expect(mockedSearchAppReferences).toHaveBeenCalledTimes(1);
+    expect(references).toEqual([storageFolderReference, storageFileReference]);
   });
 
   it("returns active app results without waiting for the global fallback", async () => {
@@ -85,14 +83,36 @@ describe("searchComposerReferences", () => {
     const signal = new AbortController().signal;
     mockedSearchAppReferences
       .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([storageFolderReference])
       .mockResolvedValueOnce([checklistReference, storageFolderReference]);
 
     const references = await searchComposerReferences("folders", signal, "");
 
     expect(mockedSearchAppReferences).toHaveBeenNthCalledWith(1, "folders", signal, { entityTypes: ["file", "folder"], limit: 16 });
-    expect(mockedSearchAppReferences).toHaveBeenNthCalledWith(2, "folders", signal, { entityTypes: ["file", "folder"], limit: 16 });
-    expect(mockedSearchAppReferences).toHaveBeenNthCalledWith(3, "folders", signal, { limit: 16 });
-    expect(references).toEqual([storageFolderReference, checklistReference]);
+    expect(mockedSearchAppReferences).toHaveBeenNthCalledWith(2, "folders", signal, { limit: 16 });
+    expect(references).toEqual([checklistReference, storageFolderReference]);
+  });
+
+  it("uses a short composer cache for repeated query and active app searches", async () => {
+    const signal = new AbortController().signal;
+    mockedSearchAppReferences.mockResolvedValueOnce([checklistReference]);
+
+    const first = await searchComposerReferences("cached query", signal, "checklist", "default");
+    const second = await searchComposerReferences("cached query", signal, "checklist", "default");
+
+    expect(mockedSearchAppReferences).toHaveBeenCalledTimes(1);
+    expect(first).toEqual([checklistReference]);
+    expect(second).toEqual([checklistReference]);
+  });
+
+  it("keeps composer cache entries scoped by workspace", async () => {
+    const signal = new AbortController().signal;
+    mockedSearchAppReferences.mockResolvedValueOnce([checklistReference]).mockResolvedValueOnce([storageFileReference]);
+
+    const first = await searchComposerReferences("workspace scoped query", signal, "checklist", "default");
+    const second = await searchComposerReferences("workspace scoped query", signal, "checklist", "other-workspace");
+
+    expect(mockedSearchAppReferences).toHaveBeenCalledTimes(2);
+    expect(first).toEqual([checklistReference]);
+    expect(second).toEqual([storageFileReference]);
   });
 });

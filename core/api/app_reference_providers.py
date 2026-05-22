@@ -12,6 +12,8 @@ from core.apps.errors import AppHostingError
 from core.apps.surfaces import enabled_workspace_app_bindings, resolve_workspace_app_surface
 from core.authorization.service import can_mount_app_visibility, resolve_workspace_authorization
 from core.mcp.models import McpInvocationContext
+from core.mcp.registry_builder import build_core_mcp_registry
+from core.mcp.runner import McpRunner
 from core.mcp.service import call_mcp_tool
 
 
@@ -109,12 +111,16 @@ def call_reference_tool(
     context: McpInvocationContext,
     arguments: dict[str, Any],
     start_path: Path,
+    runner: McpRunner | None = None,
 ) -> dict[str, Any]:
     tool = str(provider["tools"].get(action) or "")
     if not tool:
         return {}
+    tool_name = f"app.{provider['tool_owner_app_id']}.{tool}"
+    if runner is not None:
+        return runner.call_tool(tool_name=tool_name, context=context, arguments=arguments)
     return call_mcp_tool(
-        tool_name=f"app.{provider['tool_owner_app_id']}.{tool}",
+        tool_name=tool_name,
         context=context,
         app_store=state.app_store,
         workspace_store=state.workspace_store,
@@ -128,6 +134,24 @@ def call_reference_tool(
         start_path=start_path,
         arguments=arguments,
     )
+
+
+def reference_tool_runner(state, *, context: McpInvocationContext, start_path: Path) -> McpRunner:
+    """Build one MCP runner for a reference request path."""
+    registry = build_core_mcp_registry(
+        app_store=state.app_store,
+        workspace_store=state.workspace_store,
+        runtime_store=state.runtime_store,
+        provider_store=state.provider_store,
+        secret_store=state.secret_store,
+        recovery_store=state.recovery_store,
+        observability_store=state.observability_store,
+        app_event_bus=state.app_event_bus,
+        workspace_id=context.workspace_id,
+        context=context,
+        start_path=start_path,
+    )
+    return McpRunner(registry)
 
 
 def mcp_context_for_request(state, context: RequestSession) -> McpInvocationContext:

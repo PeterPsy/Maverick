@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from dataclasses import replace
 import logging
 from pathlib import Path
+import time
 from typing import Any
 
 from core.api.http import StartResponse, json_response, read_json_body
@@ -15,6 +17,7 @@ from core.api.app_reference_payloads import (
 from core.api.app_reference_providers import (
     call_reference_tool,
     mcp_context_for_request,
+    reference_tool_runner,
     reference_providers,
 )
 from core.api.session_api import RequestSession
@@ -22,6 +25,7 @@ from core.api.session_api import RequestSession
 
 logger = logging.getLogger(__name__)
 REFERENCE_SEARCH_MAX_WORKERS = 8
+REFERENCE_SEARCH_REQUEST_BUDGET_SECONDS = 2.0
 
 
 def handle_app_references_api(
@@ -65,7 +69,10 @@ def _search_references(state, *, context: RequestSession, body: dict[str, Any], 
     limit = _positive_int(body.get("limit"), default=8, maximum=25)
     selected_app_ids = set(_string_list(body.get("app_ids")))
     selected_entity_types = set(_string_list(body.get("entity_types")))
-    mcp_context = mcp_context_for_request(state, context)
+    mcp_context = replace(
+        mcp_context_for_request(state, context),
+        app_mcp_timeout_seconds=REFERENCE_SEARCH_REQUEST_BUDGET_SECONDS,
+    )
     search_specs: list[tuple[int, dict[str, Any], dict[str, Any]]] = []
     candidates: list[tuple[dict[str, Any], int, str]] = []
     errors: list[dict[str, str]] = []
@@ -81,10 +88,18 @@ def _search_references(state, *, context: RequestSession, body: dict[str, Any], 
         ]
         for entity in searchable_entities:
             search_specs.append((provider_index, provider, entity))
+    if not search_specs:
+        return {"query": query, "items": [], "errors": []}
+    try:
+        mcp_runner = reference_tool_runner(state, context=mcp_context, start_path=start_path)
+    except Exception:
+        logger.exception("Reference search MCP registry build failed; falling back to per-provider invocation.")
+        mcp_runner = None
     for provider_index, provider, entity, result, error in _run_reference_searches(
         state,
         search_specs,
         context=mcp_context,
+        runner=mcp_runner,
         query=query,
         limit=limit,
         start_path=start_path,
@@ -109,21 +124,83 @@ def _run_reference_searches(
     search_specs: list[tuple[int, dict[str, Any], dict[str, Any]]],
     *,
     context,
+    runner,
     query: str,
     limit: int,
     start_path: Path,
 ) -> list[tuple[int, dict[str, Any], dict[str, Any], dict[str, Any], BaseException | None]]:
     if not search_specs:
         return []
-    if len(search_specs) == 1:
-        return [_call_reference_search(state, search_specs[0], context=context, query=query, limit=limit, start_path=start_path)]
     max_workers = min(REFERENCE_SEARCH_MAX_WORKERS, len(search_specs))
-    with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="maverick-reference-search") as executor:
-        futures = [
-            executor.submit(_call_reference_search, state, spec, context=context, query=query, limit=limit, start_path=start_path)
-            for spec in search_specs
-        ]
-        return [future.result() for future in futures]
+    executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="maverick-reference-search")
+    pending_specs = list(search_specs)
+    future_specs: dict[Any, tuple[int, dict[str, Any], dict[str, Any]]] = {}
+
+    def submit_next_search() -> None:
+        if not pending_specs:
+            return
+        spec = pending_specs.pop(0)
+        future = executor.submit(
+            _call_reference_search,
+            state,
+            spec,
+            context=context,
+            runner=runner,
+            query=query,
+            limit=limit,
+            start_path=start_path,
+        )
+        future_specs[future] = spec
+
+    while pending_specs and len(future_specs) < max_workers:
+        submit_next_search()
+
+    results: list[tuple[int, dict[str, Any], dict[str, Any], dict[str, Any], BaseException | None]] = []
+    raw_item_count = 0
+    completed_groups: set[tuple[int, str]] = set()
+    minimum_groups_for_empty_query = min(limit, len(search_specs))
+    timed_out = False
+    stopped_early = False
+    deadline = time.monotonic() + REFERENCE_SEARCH_REQUEST_BUDGET_SECONDS
+    try:
+        while future_specs and not stopped_early:
+            remaining_seconds = deadline - time.monotonic()
+            if remaining_seconds <= 0:
+                timed_out = True
+                break
+            done, _pending = wait(future_specs, timeout=remaining_seconds, return_when=FIRST_COMPLETED)
+            if not done:
+                timed_out = True
+                break
+            for future in done:
+                future_specs.pop(future, None)
+                result = future.result()
+                results.append(result)
+                raw_item_count += len(_raw_result_items(result[3]))
+                completed_groups.add((result[0], str(result[2].get("entity_type") or "")))
+                if (
+                    not query.strip()
+                    and raw_item_count >= limit
+                    and len(completed_groups) >= minimum_groups_for_empty_query
+                ):
+                    stopped_early = True
+                    break
+                submit_next_search()
+    except TimeoutError:
+        timed_out = True
+    finally:
+        for future, spec in future_specs.items():
+            if not future.done():
+                future.cancel()
+                if timed_out:
+                    provider_index, provider, entity = spec
+                    results.append((provider_index, provider, entity, {}, TimeoutError("reference search timed out")))
+        if timed_out:
+            for provider_index, provider, entity in pending_specs:
+                results.append((provider_index, provider, entity, {}, TimeoutError("reference search timed out")))
+        executor.shutdown(wait=False, cancel_futures=True)
+    results.sort(key=lambda item: item[0])
+    return results
 
 
 def _call_reference_search(
@@ -131,6 +208,7 @@ def _call_reference_search(
     spec: tuple[int, dict[str, Any], dict[str, Any]],
     *,
     context,
+    runner,
     query: str,
     limit: int,
     start_path: Path,
@@ -144,6 +222,7 @@ def _call_reference_search(
             context=context,
             arguments={"entity_type": entity["entity_type"], "query": query, "limit": limit},
             start_path=start_path,
+            runner=runner,
         )
     except Exception as error:
         return provider_index, provider, entity, {}, error

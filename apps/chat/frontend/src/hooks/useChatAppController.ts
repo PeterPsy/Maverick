@@ -60,6 +60,7 @@ export function useChatAppController({
     transcriptionMaxDurationSeconds,
     transcriptionProviderAppId,
     transcriptionProviderAvailable,
+    workspaceId,
   } = useChatDependencies();
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [activeThread, setActiveThread] = useState<ChatThread | null>(null);
@@ -101,6 +102,7 @@ export function useChatAppController({
     navigationScope,
     setComposer,
     setComposerError,
+    workspaceId,
   });
   const { handleSelectAgent, handleSelectProvider, handleStopTurn, selectedAgentRuntimeConfig } = useChatRuntimeControls({
     activeThread,

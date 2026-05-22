@@ -22,6 +22,7 @@ function providerItemsFromPayload(payload: Awaited<ReturnType<typeof listProvide
 
 export function useChatDependencies() {
   const [providers, setProviders] = useState<ProviderItem[]>([]);
+  const [workspaceId, setWorkspaceId] = useState("");
   const [activeProviderId, setActiveProviderId] = useState("");
   const [agentCatalogAppId, setAgentCatalogAppId] = useState("");
   const [speechProviderAppId, setSpeechProviderAppId] = useState("");
@@ -155,6 +156,7 @@ export function useChatDependencies() {
   const loadAppDependencies = useCallback(async () => {
     try {
       const dependencies = await getAppDependencies("chat");
+      setWorkspaceId(dependencies.workspace_id || "");
       await Promise.all([
         loadAgentOptionsFromDependencies(dependencies),
         loadSpeechProviderFromDependencies(dependencies),
@@ -176,6 +178,7 @@ export function useChatDependencies() {
 
   const loadInitialChatDependencies = useCallback(async () => {
     const [providerPayload] = await Promise.all([listProviders(), loadAppDependencies()]);
+    setWorkspaceId(providerPayload.workspace_id || "");
     setProviders(providerItemsFromPayload(providerPayload));
     setActiveProviderId(providerPayload.active_provider?.provider_id || "");
   }, [loadAppDependencies]);
@@ -202,5 +205,6 @@ export function useChatDependencies() {
     transcriptionProviderAvailable,
     loadSpeechProviderFromDependencies,
     loadTranscriptionProviderFromDependencies,
+    workspaceId,
   };
 }

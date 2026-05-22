@@ -18,6 +18,7 @@ type UseChatComposerContextParams = {
   navigationScope: string;
   setComposer: Dispatch<SetStateAction<string>>;
   setComposerError: Dispatch<SetStateAction<string | null>>;
+  workspaceId: string;
 };
 
 export function useChatComposerContext({
@@ -28,6 +29,7 @@ export function useChatComposerContext({
   navigationScope,
   setComposer,
   setComposerError,
+  workspaceId,
 }: UseChatComposerContextParams) {
   const [mentionItems, setMentionItems] = useState<MentionItem[]>([]);
   const [selectedReferences, setSelectedReferences] = useState<AppReference[]>([]);
@@ -106,10 +108,10 @@ export function useChatComposerContext({
 
   const handleSearchReferences = useCallback(
     async (query: string, signal: AbortSignal): Promise<MentionItem[]> => {
-      const references = await searchComposerReferences(query, signal, activeAppContext?.app_id || "");
+      const references = await searchComposerReferences(query, signal, activeAppContext?.app_id || "", workspaceId);
       return references.map(referenceMentionItem);
     },
-    [activeAppContext?.app_id],
+    [activeAppContext?.app_id, workspaceId],
   );
 
   function handleReferenceAdd(reference: AppReference) {

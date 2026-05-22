@@ -18,6 +18,9 @@ from core.secrets.store import SecretStore
 from core.shared.entrypoints import run_json_entrypoint
 from core.workspaces.paths import workspace_paths
 
+APP_MCP_ENTRYPOINT_TIMEOUT_SECONDS = 30.0
+
+
 def _workspace_app_tool_definitions(
     store: AppStore,
     *,
@@ -126,6 +129,7 @@ def _workspace_app_tool_definitions(
                         "arguments": arguments,
                     },
                     cwd=_source_root,
+                    timeout_seconds=app_mcp_entrypoint_timeout_seconds(context),
                 )
                 publish_declared_app_events(
                     _app_event_bus,
@@ -181,3 +185,7 @@ def _workspace_app_tool_definitions(
                 )
             )
     return definitions
+
+
+def app_mcp_entrypoint_timeout_seconds(context: McpInvocationContext) -> float:
+    return context.app_mcp_timeout_seconds or APP_MCP_ENTRYPOINT_TIMEOUT_SECONDS

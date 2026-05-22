@@ -57,7 +57,7 @@ def run_json_entrypoint(
     *,
     payload: dict[str, Any],
     cwd: str | Path,
-    timeout_seconds: int = 30,
+    timeout_seconds: int | float = 30,
     shutdown_controller: EntrypointShutdownController | None = None,
 ) -> dict[str, Any]:
     """Invoke one Python entrypoint script with JSON stdin and JSON stdout."""
@@ -124,7 +124,7 @@ def _communicate_with_limits(
     process: subprocess.Popen[str],
     *,
     input_text: str,
-    timeout_seconds: int,
+    timeout_seconds: int | float,
     shutdown_controller: EntrypointShutdownController | None,
     entrypoint_path: str,
 ) -> tuple[str, str]:

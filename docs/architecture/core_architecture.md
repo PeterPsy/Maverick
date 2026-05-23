@@ -375,12 +375,15 @@ The core owns:
 - full-access policy
 - runtime execution mode enforcement
 - workspace execution boundary enforcement
+- network egress policy primitives for sidecars and app-owned network work
 
 The workspace domain may declare metadata and governance state, but the effective runtime mode must still be resolved by `execution_policy/`.
 
 For the `default` workspace, the effective runtime mode is `full-access` by default when both platform policy and workspace governance allow it.
 
 For non-default workspaces, the effective runtime mode remains sandbox-only regardless of runtime request.
+
+Browser-controlled network work uses the core-owned `egress/` domain before navigation and after redirects. P0 browser egress is fail-closed: only `http` and `https` URLs are eligible, private, loopback, link-local, Docker bridge, host-gateway, and metadata endpoints are denied beneath DNS names, and local Maverick development targets such as `http://hostmachine:8000` require an explicit admin-enabled dev exception.
 
 ### 8. Secret management
 

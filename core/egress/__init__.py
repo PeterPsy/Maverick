@@ -1,0 +1,20 @@
+"""Network egress policy primitives owned by the Maverick core."""
+
+from core.egress.models import (
+    BrowserEgressPolicy,
+    EgressDecision,
+    EgressHop,
+    EgressTarget,
+    DEFAULT_BROWSER_EGRESS_POLICY,
+)
+from core.egress.policy import evaluate_browser_egress_url, evaluate_browser_redirect_chain
+
+__all__ = [
+    "BrowserEgressPolicy",
+    "DEFAULT_BROWSER_EGRESS_POLICY",
+    "EgressDecision",
+    "EgressHop",
+    "EgressTarget",
+    "evaluate_browser_egress_url",
+    "evaluate_browser_redirect_chain",
+]

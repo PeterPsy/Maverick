@@ -7,6 +7,12 @@ import unittest
 
 
 APP_TSX = Path(__file__).resolve().parents[1] / "frontend" / "src" / "App.tsx"
+ROUTING_TS = Path(__file__).resolve().parents[1] / "frontend" / "src" / "domain" / "routing.ts"
+TYPES_TS = Path(__file__).resolve().parents[1] / "frontend" / "src" / "domain" / "types.ts"
+VIEW_MODEL_TS = Path(__file__).resolve().parents[1] / "frontend" / "src" / "domain" / "viewModel.ts"
+VIEWS_TSX = Path(__file__).resolve().parents[1] / "frontend" / "src" / "views" / "CrmViews.tsx"
+RECORD_SIDE_PANEL_TSX = Path(__file__).resolve().parents[1] / "frontend" / "src" / "views" / "RecordSidePanel.tsx"
+DETAIL_CSS = Path(__file__).resolve().parents[1] / "frontend" / "src" / "detail.css"
 SIDEBAR_TSX = Path(__file__).resolve().parents[1] / "frontend" / "src" / "widgets" / "crm-sidebar" / "main.tsx"
 SIDEBAR_FOOTER_TSX = Path(__file__).resolve().parents[1] / "frontend" / "src" / "widgets" / "crm-sidebar-footer" / "main.tsx"
 SIDEBAR_FOOTER_CSS = Path(__file__).resolve().parents[1] / "frontend" / "src" / "widgets" / "crm-sidebar-footer" / "styles.css"
@@ -14,18 +20,41 @@ SIDEBAR_FOOTER_CSS = Path(__file__).resolve().parents[1] / "frontend" / "src" / 
 
 class CrmFrontendSourceTest(unittest.TestCase):
     def test_search_view_filter_is_rendered(self) -> None:
-        source = APP_TSX.read_text(encoding="utf-8")
+        app_source = APP_TSX.read_text(encoding="utf-8")
+        view_model_source = VIEW_MODEL_TS.read_text(encoding="utf-8")
+        views_source = VIEWS_TSX.read_text(encoding="utf-8")
 
-        self.assertIn("viewFilter?.mode !== 'search'", source)
-        self.assertIn("lastAppliedViewFilter.current", source)
-        self.assertIn("const nextQuery = typeof viewFilter.query === 'string'", source)
-        self.assertIn("setQuery(nextQuery)", source)
-        self.assertIn("if (entityType !== 'all')", source)
-        self.assertIn("searchEntityType !== 'all'", source)
-        self.assertIn("activities: 'activity'", source)
-        self.assertIn("activity: 'activities'", source)
-        self.assertIn('entity="activity" label="Activities"', source)
-        self.assertIn("const tableTitle = label ||", source)
+        self.assertIn("viewFilter?.mode !== 'search'", app_source)
+        self.assertIn("lastAppliedViewFilter.current", app_source)
+        self.assertIn("const nextQuery = typeof viewFilter.query === 'string'", app_source)
+        self.assertIn("setQuery(nextQuery)", app_source)
+        self.assertIn("if (entityType !== 'all')", app_source)
+        self.assertIn("searchEntityType !== 'all'", view_model_source)
+        self.assertIn("setRecordEntityFilter(entityFilterForEntity(entityType))", app_source)
+        self.assertIn("crm.records_table", app_source)
+        self.assertIn("RecordsView", app_source)
+        self.assertIn("const tableTitle = label ||", views_source)
+
+    def test_primary_navigation_is_next_level_four_view_model(self) -> None:
+        app_source = APP_TSX.read_text(encoding="utf-8")
+        routing_source = ROUTING_TS.read_text(encoding="utf-8")
+        types_source = TYPES_TS.read_text(encoding="utf-8")
+        sidebar_source = SIDEBAR_TSX.read_text(encoding="utf-8")
+
+        self.assertIn("type ViewId = 'records' | 'pipeline' | 'operations' | 'reports' | 'import'", types_source)
+        self.assertIn("const recordEntityFilters", routing_source)
+        self.assertIn("view === 'records'", app_source)
+        self.assertIn("view === 'pipeline'", app_source)
+        self.assertIn("view === 'operations'", app_source)
+        self.assertIn("view === 'reports'", app_source)
+        self.assertIn("{ label: 'Records', page: 'records'", sidebar_source)
+        self.assertIn("{ label: 'Pipeline', page: 'pipeline'", sidebar_source)
+        self.assertIn("{ label: 'Operations', page: 'operations'", sidebar_source)
+        self.assertIn("{ label: 'Reports', page: 'reports'", sidebar_source)
+        self.assertNotIn("label: 'Leads'", sidebar_source)
+        self.assertNotIn("label: 'Accounts'", sidebar_source)
+        self.assertNotIn("label: 'Contacts'", sidebar_source)
+        self.assertNotIn("label: 'Import'", sidebar_source)
 
     def test_custom_view_and_create_intent_are_rendered(self) -> None:
         source = APP_TSX.read_text(encoding="utf-8")
@@ -40,6 +69,20 @@ class CrmFrontendSourceTest(unittest.TestCase):
         self.assertIn("crm-view-banner", source)
         self.assertIn("crm.clear_custom_view", source)
         self.assertIn("activity: data.activities", source)
+
+    def test_record_detail_uses_side_panel(self) -> None:
+        app_source = APP_TSX.read_text(encoding="utf-8")
+        side_panel_source = RECORD_SIDE_PANEL_TSX.read_text(encoding="utf-8")
+        styles = DETAIL_CSS.read_text(encoding="utf-8")
+
+        self.assertIn("RecordSidePanel", app_source)
+        self.assertNotIn("RecordDetailModal", app_source)
+        self.assertIn("crm-detail-drawer", side_panel_source)
+        self.assertIn("crm-detail-side-panel", side_panel_source)
+        self.assertIn('aria-modal="false"', side_panel_source)
+        self.assertIn(".crm-detail-side-panel", styles)
+        self.assertIn("grid-column: 2", styles)
+        self.assertIn("height: 90dvh", styles)
 
     def test_search_lives_in_sidebar_not_full_app_toolbar(self) -> None:
         app_source = APP_TSX.read_text(encoding="utf-8")

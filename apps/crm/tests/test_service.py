@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import sys
 import tempfile
@@ -11,7 +12,8 @@ APP_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(APP_ROOT / "backend"))
 
 from service import app_events_for_action, handle_action
-from errors import ValidationError
+from errors import NotFoundError, ValidationError
+from store import connect, delete_fts, utc_now
 
 
 class CrmServiceTest(unittest.TestCase):
@@ -29,6 +31,162 @@ class CrmServiceTest(unittest.TestCase):
             self.assertEqual(summary["account"]["name"], "Acme")
             self.assertEqual(len(summary["contacts"]), 1)
             self.assertEqual(len(summary["deals"]), 1)
+
+    def test_lead_conversion_creates_related_records(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            _, lead_payload = handle_action(
+                temporary_dir,
+                "crm.create_lead",
+                {"display_name": "Nora Lead", "email": "nora@example.com", "company": "Nora Co", "domain": "nora.example"},
+            )
+            lead_id = lead_payload["lead"]["id"]
+
+            _, converted = handle_action(temporary_dir, "crm.convert_lead", {"lead_id": lead_id, "deal_name": "Nora pilot", "value": 5000})
+
+            self.assertTrue(converted["ok"])
+            self.assertEqual(converted["lead"]["status"], "converted")
+            self.assertEqual(converted["account"]["name"], "Nora Co")
+            self.assertEqual(converted["contact"]["email"], "nora@example.com")
+            self.assertEqual(converted["deal"]["stage_id"], "qualified")
+
+    def test_pipeline_stage_configuration_and_drag_target_move(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            _, stage = handle_action(temporary_dir, "crm.create_pipeline_stage", {"name": "Negotiation", "position": 35, "probability": 0.7})
+            _, deal_payload = handle_action(temporary_dir, "crm.create_deal", {"name": "Configurable stage deal"})
+            deal_id = deal_payload["deal"]["id"]
+
+            _, moved = handle_action(temporary_dir, "crm.move_deal", {"id": deal_id, "stage_id": stage["stage"]["id"]})
+            self.assertEqual(moved["deal"]["stage"], "Negotiation")
+            self.assertEqual(moved["deal"]["probability"], 0.7)
+
+            _, renamed = handle_action(temporary_dir, "crm.update_pipeline_stage", {"id": stage["stage"]["id"], "name": "Contracting", "position": 35, "probability": 0.75})
+            self.assertEqual(renamed["stage"]["name"], "Contracting")
+            _, refreshed = handle_action(temporary_dir, "crm.get_record", {"entity_type": "deal", "id": deal_id})
+            self.assertEqual(refreshed["record"]["stage"], "Contracting")
+
+    def test_timeline_saved_view_bulk_and_duplicates(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            _, account_payload = handle_action(temporary_dir, "crm.create_account", {"name": "Acme", "domain": "dup.example"})
+            account_id = account_payload["account"]["id"]
+            handle_action(temporary_dir, "crm.create_account", {"name": "Acme EU", "domain": "dup.example"})
+            handle_action(temporary_dir, "crm.create_contact", {"display_name": "Ada A", "email": "ada@example.com", "account_id": account_id})
+            _, contact_payload = handle_action(temporary_dir, "crm.create_contact", {"display_name": "Ada B", "email": "ada@example.com", "account_id": account_id})
+            contact_id = contact_payload["contact"]["id"]
+            handle_action(temporary_dir, "crm.create_note", {"body": "Important account note", "account_id": account_id})
+            handle_action(temporary_dir, "crm.create_task", {"title": "Call Ada", "contact_id": contact_id})
+
+            _, timeline = handle_action(temporary_dir, "crm.timeline", {"entity_type": "account", "id": account_id})
+            self.assertGreaterEqual(len(timeline["items"]), 2)
+
+            _, saved = handle_action(temporary_dir, "crm.save_view", {"title": "Tagged accounts", "entity_type": "account", "query": "Acme", "filters": {"tag": "Focus"}})
+            _, listed = handle_action(temporary_dir, "crm.list_saved_views", {})
+            self.assertEqual(listed["saved_views"][0]["id"], saved["saved_view"]["id"])
+
+            _, bulk = handle_action(temporary_dir, "crm.bulk_update", {"entity_type": "account", "ids": [account_id], "operation": "tag", "tag": "Focus"})
+            self.assertEqual(bulk["updated_count"], 1)
+            _, filtered = handle_action(temporary_dir, "crm.filter_records", {"entity_type": "account", "filters": {"tag": "Focus"}})
+            self.assertEqual(filtered["records"][0]["id"], account_id)
+
+            _, duplicates = handle_action(temporary_dir, "crm.find_duplicates", {})
+            duplicate_keys = {(group["entity_type"], group["field"]) for group in duplicates["groups"]}
+            self.assertIn(("account", "domain"), duplicate_keys)
+            self.assertIn(("contact", "email"), duplicate_keys)
+
+    def test_external_refs_link_timeline_unlink_and_health(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            _, account_payload = handle_action(temporary_dir, "crm.create_account", {"name": "Linked Account"})
+            account_id = account_payload["account"]["id"]
+
+            _, linked = handle_action(
+                temporary_dir,
+                "crm.link_external_ref",
+                {
+                    "crm_entity_type": "account",
+                    "crm_entity_id": account_id,
+                    "source_app_id": "mail",
+                    "source_entity_type": "thread",
+                    "source_entity_id": "thread_1",
+                    "link_type": "email_thread",
+                    "title": "Intro thread",
+                    "summary": "Initial conversation",
+                    "occurred_at": "2026-05-20T10:00:00+00:00",
+                },
+            )
+            ref_id = linked["external_ref"]["id"]
+
+            _, listed = handle_action(temporary_dir, "crm.list_external_refs", {"crm_entity_type": "account", "crm_entity_id": account_id})
+            self.assertEqual(listed["external_refs"][0]["source_app_id"], "mail")
+
+            _, timeline = handle_action(temporary_dir, "crm.timeline", {"entity_type": "account", "id": account_id})
+            external_items = [item for item in timeline["items"] if item.get("entity_type") == "external_ref"]
+            self.assertEqual(external_items[0]["id"], ref_id)
+            self.assertEqual(external_items[0]["ref"]["entity_id"], "thread_1")
+
+            _, external_timeline = handle_action(temporary_dir, "crm.external_timeline", {"entity_type": "account", "id": account_id})
+            self.assertEqual([item["id"] for item in external_timeline["items"]], [ref_id])
+
+            _, health = handle_action(temporary_dir, "crm.health", {})
+            self.assertTrue(health["ok"])
+            self.assertEqual(health["checks"]["external_refs"]["unresolved_count"], 1)
+            self.assertEqual(health["checks"]["external_refs"]["unresolved"][0]["status"], "unresolved")
+
+            _, unlinked = handle_action(temporary_dir, "crm.unlink_external_ref", {"id": ref_id})
+            self.assertTrue(unlinked["ok"])
+            _, after_unlink = handle_action(temporary_dir, "crm.list_external_refs", {"crm_entity_type": "account", "crm_entity_id": account_id})
+            self.assertEqual(after_unlink["external_refs"], [])
+
+    def test_external_refs_export_import_and_malformed_health(self) -> None:
+        with tempfile.TemporaryDirectory() as source_dir, tempfile.TemporaryDirectory() as target_dir:
+            _, account_payload = handle_action(source_dir, "crm.create_account", {"id": "acct_linked", "name": "Linked Account"})
+            handle_action(
+                source_dir,
+                "crm.link_external_ref",
+                {
+                    "crm_entity_type": "account",
+                    "crm_entity_id": account_payload["account"]["id"],
+                    "source_app_id": "calendar",
+                    "source_entity_type": "event",
+                    "source_entity_id": "event_1",
+                    "title": "Discovery call",
+                    "occurred_at": "2026-05-21T09:00:00+00:00",
+                },
+            )
+            _, export_result = handle_action(source_dir, "crm.export", {})
+            self.assertEqual(export_result["export"]["external_refs"][0]["source_app_id"], "calendar")
+
+            _, imported = handle_action(target_dir, "crm.import_commit", export_result)
+            self.assertTrue(imported["ok"])
+            _, restored = handle_action(target_dir, "crm.list_external_refs", {"crm_entity_type": "account", "crm_entity_id": "acct_linked"})
+            self.assertEqual(restored["external_refs"][0]["source_entity_id"], "event_1")
+
+            now = utc_now()
+            with connect(target_dir) as db:
+                db.execute(
+                    """
+                    INSERT INTO external_refs(id, crm_entity_type, crm_entity_id, source_app_id, source_entity_type, source_entity_id, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    ("xref_bad", "account", "acct_missing", "", "thread", "thread_2", now, now),
+                )
+            _, health = handle_action(target_dir, "crm.health", {})
+            self.assertFalse(health["ok"])
+            self.assertEqual(health["checks"]["external_refs"]["malformed_count"], 1)
+
+    def test_import_mapping_reports_row_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            csv_payload = {
+                "entity_type": "lead",
+                "csv": "Full Name,Email,Company\nMapped Lead,mapped@example.com,Mapped Co\n, ,Broken Co\n",
+                "column_mapping": {"Full Name": "display_name", "Email": "email", "Company": "company"},
+            }
+            _, preview = handle_action(temporary_dir, "crm.import_preview", csv_payload)
+            self.assertFalse(preview["ok"])
+            self.assertEqual(preview["errors"][0]["row"], 2)
+
+            fixed_payload = {**csv_payload, "csv": "Full Name,Email,Company\nMapped Lead,mapped@example.com,Mapped Co\n"}
+            _, committed = handle_action(temporary_dir, "crm.import_commit", fixed_payload)
+            self.assertTrue(committed["ok"])
+            self.assertEqual(committed["records"][0]["display_name"], "Mapped Lead")
 
     def test_import_preview_and_commit_contacts(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:
@@ -60,6 +218,42 @@ class CrmServiceTest(unittest.TestCase):
             self.assertEqual(bootstrap["tasks"][0]["id"], task_payload["task"]["id"])
             self.assertEqual(bootstrap["notes"][0]["id"], note_payload["note"]["id"])
 
+    def test_export_import_preserves_archived_records_and_custom_values(self) -> None:
+        with tempfile.TemporaryDirectory() as source_dir, tempfile.TemporaryDirectory() as target_dir:
+            handle_action(source_dir, "crm.define_custom_field", {"entity_type": "account", "field_key": "segment", "label": "Segment"})
+            _, active_payload = handle_action(source_dir, "crm.create_account", {"id": "acct_active", "name": "Active Account"})
+            _, archived_payload = handle_action(source_dir, "crm.create_account", {"id": "acct_archived", "name": "Archived Account"})
+            _, deleted_payload = handle_action(source_dir, "crm.create_account", {"id": "acct_deleted", "name": "Deleted Account"})
+            handle_action(source_dir, "crm.set_custom_fields", {"entity_type": "account", "id": archived_payload["account"]["id"], "custom_fields": {"segment": "Dormant"}})
+            handle_action(source_dir, "crm.archive_record", {"entity_type": "account", "id": archived_payload["account"]["id"]})
+            handle_action(source_dir, "crm.delete_record", {"entity_type": "account", "id": deleted_payload["account"]["id"]})
+            _, export_result = handle_action(source_dir, "crm.export", {})
+
+            exported_accounts = {account["id"]: account for account in export_result["export"]["accounts"]}
+            self.assertIn(active_payload["account"]["id"], exported_accounts)
+            self.assertIn(archived_payload["account"]["id"], exported_accounts)
+            self.assertNotIn(deleted_payload["account"]["id"], exported_accounts)
+            self.assertTrue(exported_accounts[archived_payload["account"]["id"]]["archived_at"])
+
+            handle_action(target_dir, "crm.create_account", {"id": "acct_archived", "name": "Old Archived Name"})
+            handle_action(target_dir, "crm.archive_record", {"entity_type": "account", "id": "acct_archived"})
+            _, imported = handle_action(target_dir, "crm.import_commit", export_result)
+            self.assertTrue(imported["ok"])
+
+            _, target_export = handle_action(target_dir, "crm.export", {})
+            restored_accounts = {account["id"]: account for account in target_export["export"]["accounts"]}
+            self.assertEqual(restored_accounts["acct_archived"]["name"], "Archived Account")
+            self.assertEqual(restored_accounts["acct_archived"]["archived_at"], exported_accounts["acct_archived"]["archived_at"])
+            self.assertEqual(restored_accounts["acct_archived"]["custom_fields"]["segment"], "Dormant")
+
+    def test_export_includes_more_than_default_list_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            for index in range(250):
+                handle_action(temporary_dir, "crm.create_account", {"name": f"Account {index:03d}"})
+
+            _, export_result = handle_action(temporary_dir, "crm.export", {})
+            self.assertEqual(len(export_result["export"]["accounts"]), 250)
+
     def test_task_note_crud_search_and_references(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:
             _, task_payload = handle_action(temporary_dir, "crm.create_task", {"title": "Renewal call", "priority": "high"})
@@ -78,6 +272,125 @@ class CrmServiceTest(unittest.TestCase):
             _, reference_result = handle_action(temporary_dir, "references.search", {"entity_type": "task", "query": ""})
             self.assertEqual(reference_result["results"][0]["entity_type"], "task")
             self.assertEqual(reference_result["results"][0]["app_page"], f"tasks/{task_id}")
+
+    def test_list_next_actions_returns_only_open_tasks(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            handle_action(temporary_dir, "crm.create_task", {"title": "Open follow up", "status": "open", "due_at": "2026-05-22"})
+            handle_action(temporary_dir, "crm.create_task", {"title": "Completed follow up", "status": "done", "due_at": "2026-05-21"})
+            handle_action(temporary_dir, "crm.create_task", {"title": "Blocked follow up", "status": "blocked", "due_at": "2026-05-20"})
+
+            _, result = handle_action(temporary_dir, "crm.list_next_actions", {})
+            self.assertEqual([task["title"] for task in result["tasks"]], ["Open follow up"])
+
+    def test_archive_delete_and_tag_record_actions(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            _, account_payload = handle_action(temporary_dir, "crm.create_account", {"name": "Tagged Account"})
+            account_id = account_payload["account"]["id"]
+
+            _, tagged = handle_action(temporary_dir, "crm.tag_record", {"entity_type": "account", "id": account_id, "tag": "Important", "color": "#2457a6"})
+            self.assertEqual(tagged["record"]["tags"][0]["name"], "Important")
+
+            _, untagged = handle_action(temporary_dir, "crm.untag_record", {"entity_type": "account", "id": account_id, "tag": "Important"})
+            self.assertEqual(untagged["record"]["tags"], [])
+
+            handle_action(temporary_dir, "crm.archive_record", {"entity_type": "account", "id": account_id})
+            _, bootstrap = handle_action(temporary_dir, "bootstrap", {})
+            self.assertEqual(bootstrap["accounts"], [])
+
+            handle_action(temporary_dir, "crm.unarchive_record", {"entity_type": "account", "id": account_id})
+            _, restored = handle_action(temporary_dir, "bootstrap", {})
+            self.assertEqual(restored["accounts"][0]["id"], account_id)
+
+            _, deleted = handle_action(temporary_dir, "crm.delete_record", {"entity_type": "account", "id": account_id})
+            self.assertTrue(deleted["ok"])
+            _, after_delete = handle_action(temporary_dir, "bootstrap", {})
+            self.assertEqual(after_delete["accounts"], [])
+
+    def test_delete_record_rejects_active_dependents(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            _, account_payload = handle_action(temporary_dir, "crm.create_account", {"name": "Parent Account"})
+            account_id = account_payload["account"]["id"]
+            handle_action(temporary_dir, "crm.create_contact", {"display_name": "Linked Contact", "account_id": account_id})
+
+            with self.assertRaisesRegex(ValidationError, "active linked records"):
+                handle_action(temporary_dir, "crm.delete_record", {"entity_type": "account", "id": account_id})
+
+    def test_active_records_cannot_link_archived_parents_and_health_reports_violations(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            _, account_payload = handle_action(temporary_dir, "crm.create_account", {"name": "Archived Parent"})
+            account_id = account_payload["account"]["id"]
+            handle_action(temporary_dir, "crm.archive_record", {"entity_type": "account", "id": account_id})
+
+            with self.assertRaisesRegex(ValidationError, "archived"):
+                handle_action(temporary_dir, "crm.create_contact", {"display_name": "Bad Link", "account_id": account_id})
+
+            now = utc_now()
+            with connect(temporary_dir) as db:
+                db.execute(
+                    """
+                    INSERT INTO contacts(id, account_id, display_name, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    ("cont_bad_archived_parent", account_id, "Bad Link", now, now),
+                )
+
+            _, health = handle_action(temporary_dir, "crm.health", {})
+            self.assertFalse(health["ok"])
+            self.assertEqual(health["checks"]["references"]["archived_parent_counts"]["contacts.account_id"], 1)
+
+    def test_health_checks_schema_fts_references_view_state_and_export(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            _, account_payload = handle_action(temporary_dir, "crm.create_account", {"name": "Healthy Account"})
+            account_id = account_payload["account"]["id"]
+            _, healthy = handle_action(temporary_dir, "crm.health", {})
+            self.assertTrue(healthy["ok"])
+            self.assertTrue(healthy["checks"]["fts"]["ok"])
+
+            with connect(temporary_dir) as db:
+                delete_fts(db, "account", account_id)
+
+            _, degraded = handle_action(temporary_dir, "crm.health", {})
+            self.assertFalse(degraded["ok"])
+            self.assertEqual(degraded["status"], "degraded")
+            self.assertEqual(degraded["checks"]["fts"]["missing"]["account"], 1)
+
+    def test_health_reports_custom_field_orphans_and_invalid_workflow_actions(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            _, account_payload = handle_action(temporary_dir, "crm.create_account", {"name": "Workflow Health"})
+            account_id = account_payload["account"]["id"]
+            now = utc_now()
+
+            with connect(temporary_dir) as db:
+                db.execute(
+                    """
+                    INSERT INTO custom_field_values(entity_type, entity_id, field_id, value_json, updated_at)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    ("account", account_id, "missing_field", '"orphan"', now),
+                )
+                db.execute(
+                    """
+                    INSERT INTO workflow_proposals(id, proposal_type, status, entity_type, entity_id, title, proposal_json, source, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "wf_invalid_action",
+                        "enrichment",
+                        "approved",
+                        "account",
+                        account_id,
+                        "Invalid action",
+                        '{"action":{"type":"update_record","entity_type":"account","id":"acct_missing","changes":{}}}',
+                        "test",
+                        now,
+                        now,
+                    ),
+                )
+
+            _, health = handle_action(temporary_dir, "crm.health", {})
+            self.assertFalse(health["ok"])
+            self.assertEqual(health["checks"]["custom_field_values"]["missing_field_definition"], 1)
+            self.assertEqual(health["checks"]["workflow_proposals"]["invalid_count"], 1)
 
     def test_validation_errors_are_predictable(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:
@@ -101,9 +414,87 @@ class CrmServiceTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_dir:
             _, manifest = handle_action(temporary_dir, "operations.manifest", {})
             self.assertIn("crm.export", manifest["actions"])
+            self.assertIn("crm.records_table", manifest["actions"])
             self.assertIn("crm.view_filter", manifest["actions"])
             self.assertIn("crm.set_custom_view", manifest["actions"])
             self.assertIn("crm.clear_custom_view", manifest["actions"])
+
+    def test_records_table_paginates_sorts_filters_and_computes_columns(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            _, account_payload = handle_action(temporary_dir, "crm.create_account", {"name": "Acme", "domain": "acme.example", "owner_id": "owner_1"})
+            account_id = account_payload["account"]["id"]
+            handle_action(temporary_dir, "crm.create_contact", {"display_name": "Ada Contact", "account_id": account_id})
+            handle_action(temporary_dir, "crm.create_task", {"title": "Call Acme", "account_id": account_id, "status": "open", "due_at": "2026-05-22"})
+            handle_action(temporary_dir, "crm.log_activity", {"subject": "Discovery", "account_id": account_id, "occurred_at": "2026-05-21T10:00:00+00:00"})
+            handle_action(temporary_dir, "crm.create_deal", {"name": "Small deal", "account_id": account_id, "value": 1000, "stage_id": "qualified"})
+            handle_action(temporary_dir, "crm.create_deal", {"name": "Large deal", "account_id": account_id, "value": 9000, "stage_id": "proposal"})
+
+            _, first_page = handle_action(
+                temporary_dir,
+                "crm.records_table",
+                {
+                    "entity_type": "deal",
+                    "sort": {"field": "value", "direction": "desc"},
+                    "pagination": {"limit": 1},
+                },
+            )
+            self.assertEqual(first_page["records"][0]["title"], "Large deal")
+            self.assertTrue(first_page["has_more"])
+            cursor = json.loads(first_page["next_cursor"])
+            self.assertEqual(cursor["sort_field"], "value")
+            self.assertEqual(cursor["direction"], "desc")
+            self.assertEqual(cursor["entity_type"], "deal")
+            self.assertEqual(cursor["order_number"], 9000.0)
+            self.assertEqual(first_page["columns"][0]["key"], "name")
+
+            _, second_page = handle_action(
+                temporary_dir,
+                "crm.records_table",
+                {
+                    "entity_type": "deal",
+                    "sort": {"field": "value", "direction": "desc"},
+                    "pagination": {"limit": 1, "cursor": first_page["next_cursor"]},
+                },
+            )
+            self.assertEqual(second_page["records"][0]["title"], "Small deal")
+
+            _, accounts = handle_action(
+                temporary_dir,
+                "crm.records_table",
+                {
+                    "entity_type": "account",
+                    "filters": {"owner_id": "owner_1"},
+                    "pagination": {"limit": 10},
+                },
+            )
+            self.assertEqual(accounts["counts"]["account"], 1)
+            self.assertEqual(accounts["records"][0]["computed"]["open_task_count"], 1)
+            self.assertEqual(accounts["records"][0]["computed"]["contact_count"], 1)
+            self.assertEqual(accounts["records"][0]["computed"]["open_deal_value"], 10000.0)
+            self.assertEqual(accounts["records"][0]["computed"]["next_action"], "Call Acme")
+            self.assertEqual(accounts["records"][0]["computed"]["last_activity_at"], "2026-05-21T10:00:00+00:00")
+
+    def test_records_table_pushes_tag_query_and_custom_field_filters_to_sql(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            _, account_payload = handle_action(temporary_dir, "crm.create_account", {"name": "Tagged Acme", "domain": "acme.example"})
+            account_id = account_payload["account"]["id"]
+            handle_action(temporary_dir, "crm.create_account", {"name": "Other Account", "domain": "other.example"})
+            handle_action(temporary_dir, "crm.tag_record", {"entity_type": "account", "id": account_id, "tag": "Strategic"})
+            handle_action(temporary_dir, "crm.define_custom_field", {"entity_type": "account", "field_key": "tier", "label": "Tier", "field_type": "text"})
+            handle_action(temporary_dir, "crm.set_custom_fields", {"entity_type": "account", "id": account_id, "custom_fields": {"tier": "enterprise"}})
+
+            _, page = handle_action(
+                temporary_dir,
+                "crm.records_table",
+                {
+                    "entity_type": "account",
+                    "query": "acme",
+                    "filters": {"tag": "strategic", "custom_fields": {"tier": "enterprise"}},
+                    "pagination": {"limit": 10},
+                },
+            )
+            self.assertEqual([record["id"] for record in page["records"]], [account_id])
+            self.assertEqual(page["records"][0]["record"]["custom_fields"]["tier"], "enterprise")
 
     def test_bootstrap_includes_view_state(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:
@@ -128,6 +519,165 @@ class CrmServiceTest(unittest.TestCase):
             handle_action(temporary_dir, "set_custom_view", {"title": "Late account", "refs": [{"entity_type": "account", "entity_id": f"account:{target_id}"}]})
             _, bootstrap = handle_action(temporary_dir, "bootstrap", {})
             self.assertTrue(any(account["id"] == target_id for account in bootstrap["accounts"]))
+
+    def test_typed_custom_fields_schema_and_export_round_trip(self) -> None:
+        with tempfile.TemporaryDirectory() as source_dir, tempfile.TemporaryDirectory() as target_dir:
+            _, field = handle_action(source_dir, "crm.define_custom_field", {"entity_type": "account", "field_key": "segment", "label": "Segment", "field_type": "select", "options": ["SMB", "Enterprise"]})
+            self.assertEqual(field["custom_field"]["field_type"], "select")
+
+            _, account_payload = handle_action(source_dir, "crm.create_account", {"name": "Custom Account"})
+            account_id = account_payload["account"]["id"]
+            _, updated = handle_action(source_dir, "crm.set_custom_fields", {"entity_type": "account", "id": account_id, "custom_fields": {"segment": "SMB"}})
+            self.assertEqual(updated["record"]["custom_fields"]["segment"], "SMB")
+
+            _, schema = handle_action(source_dir, "crm.schema", {})
+            self.assertEqual(schema["custom_fields"][0]["field_key"], "segment")
+
+            _, export_result = handle_action(source_dir, "crm.export", {})
+            _, imported = handle_action(target_dir, "crm.import_commit", export_result)
+            self.assertGreaterEqual(imported["created_count"], 3)
+            _, restored = handle_action(target_dir, "crm.get_record", {"entity_type": "account", "id": account_id})
+            self.assertEqual(restored["record"]["custom_fields"]["segment"], "SMB")
+
+    def test_enrichment_intelligent_actions_and_approvable_workflow(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            _, account_payload = handle_action(temporary_dir, "crm.create_account", {"name": "Workflow Account", "domain": "workflow.example"})
+            account_id = account_payload["account"]["id"]
+            _, contact_payload = handle_action(temporary_dir, "crm.create_contact", {"display_name": "Workflow Contact", "email": "person@workflow.example"})
+            contact_id = contact_payload["contact"]["id"]
+            _, enrichment = handle_action(temporary_dir, "crm.record_enrichment", {"entity_type": "contact", "id": contact_id, "create_proposal": True})
+            self.assertTrue(any(item["field"] == "account_id" for item in enrichment["suggestions"]))
+
+            proposal_id = enrichment["workflow_proposal"]["id"]
+            handle_action(temporary_dir, "crm.approve_workflow_proposal", {"id": proposal_id})
+            _, applied = handle_action(temporary_dir, "crm.apply_workflow_proposal", {"id": proposal_id})
+            self.assertEqual(applied["record"]["account_id"], account_id)
+
+            handle_action(temporary_dir, "crm.create_deal", {"name": "Workflow Deal", "account_id": account_id, "value": 25000, "stage_id": "proposal"})
+            _, actions = handle_action(temporary_dir, "crm.intelligent_next_actions", {})
+            self.assertTrue(any(action["kind"] == "recommendation" and action["entity_type"] == "deal" for action in actions["actions"]))
+
+            _, brief = handle_action(temporary_dir, "crm.account_brief", {"account_id": account_id})
+            self.assertEqual(brief["metrics"]["open_deals"], 1)
+            self.assertIn("Workflow Account", brief["brief"])
+
+    def test_sales_reports_and_audit_log(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            _, lead_payload = handle_action(temporary_dir, "crm.create_lead", {"display_name": "Report Lead", "email": "report@example.com"})
+            handle_action(temporary_dir, "crm.convert_lead", {"lead_id": lead_payload["lead"]["id"], "deal_name": "Converted report deal", "value": 1000})
+            _, account_payload = handle_action(temporary_dir, "crm.create_account", {"name": "Report Account", "owner_id": "owner_1"})
+            account_id = account_payload["account"]["id"]
+            handle_action(temporary_dir, "crm.create_deal", {"name": "Report Deal", "account_id": account_id, "value": 20000, "stage_id": "proposal", "owner_id": "owner_1"})
+            handle_action(temporary_dir, "crm.create_task", {"title": "Overdue report task", "account_id": account_id, "owner_id": "owner_1", "due_at": "2026-01-01T00:00:00+00:00"})
+            handle_action(temporary_dir, "crm.log_activity", {"subject": "Report call", "account_id": account_id, "owner_id": "owner_1", "activity_type": "call"})
+
+            _, reports = handle_action(temporary_dir, "crm.sales_reports", {})
+            self.assertTrue(any(item["stage_id"] == "proposal" and item["total_value"] == 20000 for item in reports["pipeline_value_by_stage"]))
+            self.assertGreater(reports["weighted_forecast"]["total_weighted_value"], 0)
+            self.assertEqual(reports["lead_conversion"]["converted"], 1)
+            self.assertEqual(reports["task_overdue"]["total"], 1)
+            self.assertEqual(reports["activities_by_owner"][0]["owner_id"], "owner_1")
+
+            _, audit = handle_action(temporary_dir, "crm.audit_log", {"entity_type": "account", "entity_id": account_id, "event_type": "account.created"})
+            self.assertEqual(audit["events"][0]["event_type"], "account.created")
+
+    def test_merge_records_preserves_commercial_context(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            _, field = handle_action(temporary_dir, "crm.define_custom_field", {"entity_type": "account", "field_key": "segment", "label": "Segment"})
+            self.assertEqual(field["custom_field"]["field_key"], "segment")
+            _, target_payload = handle_action(temporary_dir, "crm.create_account", {"name": "Merge Target", "domain": "merge.example"})
+            _, source_payload = handle_action(temporary_dir, "crm.create_account", {"name": "Merge Source", "industry": "Software", "owner_id": "owner_source"})
+            target_id = target_payload["account"]["id"]
+            source_id = source_payload["account"]["id"]
+            handle_action(temporary_dir, "crm.tag_record", {"entity_type": "account", "id": source_id, "tag": "Priority"})
+            handle_action(temporary_dir, "crm.set_custom_fields", {"entity_type": "account", "id": source_id, "custom_fields": {"segment": "Enterprise"}})
+            handle_action(temporary_dir, "crm.create_task", {"title": "Source task", "account_id": source_id})
+            handle_action(temporary_dir, "crm.create_note", {"body": "Source note", "account_id": source_id})
+            handle_action(temporary_dir, "crm.log_activity", {"subject": "Source activity", "account_id": source_id})
+            handle_action(
+                temporary_dir,
+                "crm.link_external_ref",
+                {"crm_entity_type": "account", "crm_entity_id": source_id, "source_app_id": "mail", "source_entity_type": "thread", "source_entity_id": "thread_merge"},
+            )
+
+            _, merged = handle_action(temporary_dir, "crm.merge_records", {"entity_type": "account", "target_id": target_id, "source_ids": [source_id]})
+            self.assertEqual(merged["target"]["industry"], "Software")
+            self.assertEqual(merged["target"]["custom_fields"]["segment"], "Enterprise")
+            self.assertEqual(merged["target"]["tags"][0]["name"], "Priority")
+            _, tasks = handle_action(temporary_dir, "crm.filter_records", {"entity_type": "task", "filters": {"account_id": target_id}})
+            self.assertEqual(tasks["records"][0]["account_id"], target_id)
+            _, refs = handle_action(temporary_dir, "crm.list_external_refs", {"crm_entity_type": "account", "crm_entity_id": target_id})
+            self.assertEqual(refs["external_refs"][0]["source_entity_id"], "thread_merge")
+            _, audit = handle_action(temporary_dir, "crm.audit_log", {"entity_type": "account", "entity_id": target_id, "event_type": "record.merged"})
+            self.assertEqual(audit["events"][0]["payload"]["source_ids"], [source_id])
+            with self.assertRaises(NotFoundError):
+                handle_action(temporary_dir, "crm.get_record", {"entity_type": "account", "id": source_id})
+
+    def test_automation_rules_create_deduped_approval_proposals_only(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            _, account_payload = handle_action(temporary_dir, "crm.create_account", {"name": "Automation Account", "status": "prospect"})
+            account_id = account_payload["account"]["id"]
+            handle_action(
+                temporary_dir,
+                "crm.create_automation_rule",
+                {
+                    "name": "Prospect follow-up",
+                    "trigger_event": "account.created",
+                    "entity_type": "account",
+                    "conditions": {"status": "prospect"},
+                    "action": {"type": "create_task", "title": "Call prospect", "priority": "high"},
+                    "approval_required": False,
+                },
+            )
+            _, first = handle_action(temporary_dir, "crm.run_automation_rules", {"trigger_event": "account.created", "entity_type": "account", "entity_id": account_id})
+            self.assertEqual(first["created_count"], 1)
+            self.assertEqual(first["workflow_proposals"][0]["status"], "pending")
+            _, second = handle_action(temporary_dir, "crm.run_automation_rules", {"trigger_event": "account.created", "entity_type": "account", "entity_id": account_id})
+            self.assertEqual(second["created_count"], 0)
+            self.assertEqual(second["skipped_duplicate_count"], 1)
+            _, tasks_before = handle_action(temporary_dir, "crm.filter_records", {"entity_type": "task"})
+            self.assertEqual(tasks_before["records"], [])
+
+            proposal_id = first["workflow_proposals"][0]["id"]
+            handle_action(temporary_dir, "crm.approve_workflow_proposal", {"id": proposal_id})
+            _, applied = handle_action(temporary_dir, "crm.apply_workflow_proposal", {"id": proposal_id})
+            self.assertEqual(applied["record"]["account_id"], account_id)
+
+    def test_enrichment_does_not_create_noop_workflow_proposals(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            _, contact_payload = handle_action(temporary_dir, "crm.create_contact", {"display_name": "Standalone Contact", "email": "standalone@example.com"})
+            _, enrichment = handle_action(temporary_dir, "crm.record_enrichment", {"entity_type": "contact", "id": contact_payload["contact"]["id"], "create_proposal": True})
+            self.assertNotIn("workflow_proposal", enrichment)
+            self.assertFalse(any(item["field"] == "domain" for item in enrichment["suggestions"]))
+
+            handle_action(temporary_dir, "crm.define_custom_field", {"entity_type": "account", "field_key": "segment", "label": "Segment", "field_type": "text", "required": True})
+            _, account_payload = handle_action(temporary_dir, "crm.create_account", {"name": "No Default Field"})
+            _, required_field_enrichment = handle_action(temporary_dir, "crm.record_enrichment", {"entity_type": "account", "id": account_payload["account"]["id"], "create_proposal": True})
+            self.assertNotIn("workflow_proposal", required_field_enrichment)
+
+    def test_empty_update_workflow_proposal_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            _, account_payload = handle_action(temporary_dir, "crm.create_account", {"name": "Workflow Guard"})
+            account_id = account_payload["account"]["id"]
+            import_payload = {
+                "export": {
+                    "workflow_proposals": [
+                        {
+                            "id": "wf_empty_update",
+                            "proposal_type": "enrichment",
+                            "status": "approved",
+                            "entity_type": "account",
+                            "entity_id": account_id,
+                            "title": "Empty update",
+                            "proposal": {"action": {"type": "update_record", "entity_type": "account", "id": account_id, "changes": {}}},
+                        }
+                    ]
+                }
+            }
+            handle_action(temporary_dir, "crm.import_commit", import_payload)
+
+            with self.assertRaisesRegex(ValidationError, "no applicable changes"):
+                handle_action(temporary_dir, "crm.apply_workflow_proposal", {"id": "wf_empty_update"})
 
 
 if __name__ == "__main__":

@@ -14,7 +14,7 @@ from service import app_events_for_action, handle_action
 
 payload = read_entrypoint_payload()
 arguments = payload.arguments
-action = str(arguments.get("action") or arguments.get("subcommand") or "operations.manifest")
+action = str(arguments.get("subcommand") or arguments.get("action") or "operations.manifest")
 try:
     status_code, result = handle_action(payload.data_root, action, arguments)
 except CrmError as error:

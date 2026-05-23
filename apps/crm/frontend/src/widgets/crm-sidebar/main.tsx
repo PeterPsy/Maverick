@@ -1,17 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Building2, CheckSquare, Contact, Gauge, Handshake, Search, StickyNote, Upload } from 'lucide-react';
+import { BarChart3, ClipboardList, Handshake, Rows3, Search } from 'lucide-react';
 import { BootstrapPayload, callBackend } from '../../api';
 import './styles.css';
 
 const nav = [
-  { label: 'Dashboard', page: '', icon: Gauge },
-  { label: 'Accounts', page: 'accounts', icon: Building2 },
-  { label: 'Contacts', page: 'contacts', icon: Contact },
-  { label: 'Deals', page: 'deals', icon: Handshake },
-  { label: 'Tasks', page: 'tasks', icon: CheckSquare },
-  { label: 'Notes', page: 'notes', icon: StickyNote },
-  { label: 'Import', page: 'import', icon: Upload }
+  { label: 'Records', page: 'records', icon: Rows3 },
+  { label: 'Pipeline', page: 'pipeline', icon: Handshake },
+  { label: 'Operations', page: 'operations', icon: ClipboardList },
+  { label: 'Reports', page: 'reports', icon: BarChart3 }
 ];
 
 const MOBILE_LAYOUT_QUERY = '(max-width: 979px)';

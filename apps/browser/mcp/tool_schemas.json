@@ -1,0 +1,153 @@
+{
+  "tools": {
+    "browser_session_create": {
+      "description": "Create an isolated Browser Lab session. Returns broker_unavailable until Passo 4 connects Playwright.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "mode": {"type": "string", "enum": ["read_only", "maverick_dev_inspector"], "default": "read_only"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "browser_session_close": {
+      "description": "Close one Browser Lab session.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {"type": "string"}
+        },
+        "required": ["session_id"],
+        "additionalProperties": false
+      }
+    },
+    "browser_navigate": {
+      "description": "Navigate after core browser egress policy approval.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {"type": "string"},
+          "url": {"type": "string"},
+          "mode": {"type": "string", "enum": ["read_only", "maverick_dev_inspector"], "default": "read_only"},
+          "resolved_addresses": {"type": "array", "items": {"type": "string"}}
+        },
+        "required": ["session_id", "url"],
+        "additionalProperties": false
+      }
+    },
+    "browser_snapshot": {
+      "description": "Return an accessibility snapshot with refs for one session.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {"type": "string"}
+        },
+        "required": ["session_id"],
+        "additionalProperties": false
+      }
+    },
+    "browser_take_screenshot": {
+      "description": "Capture a screenshot without automatic persistence.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {"type": "string"},
+          "full_page": {"type": "boolean", "default": false}
+        },
+        "required": ["session_id"],
+        "additionalProperties": false
+      }
+    },
+    "browser_console_messages": {
+      "description": "Read bounded console messages for one Browser Lab session.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {"type": "string"},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 100}
+        },
+        "required": ["session_id"],
+        "additionalProperties": false
+      }
+    },
+    "browser_network_requests": {
+      "description": "Read redacted network request metadata for one Browser Lab session.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {"type": "string"},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 100}
+        },
+        "required": ["session_id"],
+        "additionalProperties": false
+      }
+    },
+    "browser_tabs": {
+      "description": "List tabs in one Browser Lab session.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {"type": "string"}
+        },
+        "required": ["session_id"],
+        "additionalProperties": false
+      }
+    },
+    "browser_wait_for": {
+      "description": "Wait for a bounded browser page state.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {"type": "string"},
+          "state": {"type": "string", "enum": ["load", "domcontentloaded", "networkidle", "timeout"], "default": "load"},
+          "timeout_ms": {"type": "integer", "minimum": 0, "maximum": 30000, "default": 5000}
+        },
+        "required": ["session_id"],
+        "additionalProperties": false
+      }
+    },
+    "browser_click": {
+      "description": "Click by snapshot ref only for maverick_dev_inspector targets.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {"type": "string"},
+          "ref": {"type": "string"},
+          "target_url": {"type": "string"},
+          "mode": {"type": "string", "enum": ["maverick_dev_inspector"]}
+        },
+        "required": ["session_id", "ref", "target_url", "mode"],
+        "additionalProperties": false
+      }
+    },
+    "browser_type": {
+      "description": "Type into a snapshot ref only for maverick_dev_inspector targets.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {"type": "string"},
+          "ref": {"type": "string"},
+          "text": {"type": "string"},
+          "target_url": {"type": "string"},
+          "mode": {"type": "string", "enum": ["maverick_dev_inspector"]}
+        },
+        "required": ["session_id", "ref", "text", "target_url", "mode"],
+        "additionalProperties": false
+      }
+    },
+    "browser_press_key": {
+      "description": "Press a key only for maverick_dev_inspector targets.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "session_id": {"type": "string"},
+          "key": {"type": "string"},
+          "target_url": {"type": "string"},
+          "mode": {"type": "string", "enum": ["maverick_dev_inspector"]}
+        },
+        "required": ["session_id", "key", "target_url", "mode"],
+        "additionalProperties": false
+      }
+    }
+  }
+}

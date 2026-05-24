@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Browser</title>
+    <link rel="stylesheet" href="./assets/main.css" />
+  </head>
+  <body>
+    <main class="browser-shell">
+      <section class="toolbar" aria-label="Browser controls">
+        <div class="identity">
+          <span class="app-mark" aria-hidden="true"></span>
+          <div>
+            <h1>Browser</h1>
+            <p id="broker-summary">Checking broker status</p>
+          </div>
+        </div>
+        <form id="preflight-form" class="url-form">
+          <input id="url-input" name="url" type="url" spellcheck="false" value="http://hostmachine:8000/" aria-label="URL" />
+          <select id="mode-input" name="mode" aria-label="Mode">
+            <option value="read_only">Read-only</option>
+            <option value="maverick_dev_inspector">Dev inspector</option>
+          </select>
+          <button type="submit">Check</button>
+        </form>
+      </section>
+
+      <section class="status-grid" aria-label="Browser status">
+        <article>
+          <span>Policy</span>
+          <strong id="policy-status">Not checked</strong>
+        </article>
+        <article>
+          <span>Sessions</span>
+          <strong id="session-count">0</strong>
+        </article>
+        <article>
+          <span>Audit</span>
+          <strong id="audit-count">0</strong>
+        </article>
+        <article>
+          <span>Profile</span>
+          <strong>Isolated</strong>
+        </article>
+      </section>
+
+      <section class="workspace">
+        <aside class="sessions" aria-label="Sessions and tabs">
+          <div class="section-title">
+            <h2>Sessions</h2>
+            <button id="refresh-button" type="button">Refresh</button>
+          </div>
+          <div id="sessions-list" class="empty-state">No broker sessions yet.</div>
+          <h2>Tabs</h2>
+          <div class="empty-state">Tabs appear after the Playwright broker is connected.</div>
+        </aside>
+
+        <section class="panes" aria-label="Browser panes">
+          <nav class="tabs" aria-label="Pane selector">
+            <button class="active" type="button" data-pane="snapshot">Snapshot</button>
+            <button type="button" data-pane="screenshot">Screenshot</button>
+            <button type="button" data-pane="console">Console</button>
+            <button type="button" data-pane="network">Network</button>
+          </nav>
+          <section id="snapshot" class="pane active">
+            <h2>Accessibility Snapshot</h2>
+            <pre id="snapshot-output">Snapshot refs will appear here after Passo 4 connects the broker.</pre>
+          </section>
+          <section id="screenshot" class="pane">
+            <h2>Screenshot</h2>
+            <div class="screenshot-frame">No screenshot captured.</div>
+          </section>
+          <section id="console" class="pane">
+            <h2>Console</h2>
+            <pre>Console messages will appear here after a session starts.</pre>
+          </section>
+          <section id="network" class="pane">
+            <h2>Network</h2>
+            <pre>Redacted network request metadata will appear here after a session starts.</pre>
+          </section>
+        </section>
+      </section>
+    </main>
+    <script type="module" src="./assets/main.js"></script>
+  </body>
+</html>

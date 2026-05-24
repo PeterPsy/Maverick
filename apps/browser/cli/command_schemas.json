@@ -1,0 +1,34 @@
+{
+  "commands": {
+    "browser": {
+      "description": "Inspect Browser Lab status, operation manifest, audit records, or run URL policy preflight.",
+      "argument_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "operations.manifest",
+              "status",
+              "policy.preflight",
+              "audit.list"
+            ],
+            "default": "operations.manifest"
+          },
+          "url": {"type": "string"},
+          "mode": {
+            "type": "string",
+            "enum": ["read_only", "maverick_dev_inspector"],
+            "default": "read_only"
+          },
+          "resolved_addresses": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "allow_admin_dev_targets": {"type": "boolean", "default": false}
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

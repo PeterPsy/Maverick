@@ -12,7 +12,7 @@ from core.egress.models import (
     EgressHop,
     EgressTarget,
 )
-from core.egress.networks import METADATA_HOSTS, restricted_address
+from core.egress.networks import METADATA_HOSTS, restricted_address, restricted_host
 
 
 def evaluate_browser_egress_url(
@@ -70,6 +70,19 @@ def evaluate_browser_egress_url(
             host=host,
             port=port,
             scheme=scheme,
+        )
+
+    blocked_host = restricted_host(host)
+    if blocked_host:
+        return EgressDecision(
+            allowed=False,
+            reason="blocked_restricted_host",
+            url=str(url),
+            normalized_url=normalized_url,
+            host=host,
+            port=port,
+            scheme=scheme,
+            blocked_address=blocked_host,
         )
 
     host_address = _parse_ip_address(host)

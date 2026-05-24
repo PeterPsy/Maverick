@@ -15,6 +15,7 @@ DecisionReason = Literal[
     "blocked_invalid_port",
     "blocked_invalid_ip_literal",
     "blocked_metadata_host",
+    "blocked_restricted_host",
     "blocked_dns_resolution_required",
     "blocked_no_resolved_addresses",
     "blocked_restricted_ip",

@@ -54,6 +54,35 @@ class BrowserEgressPolicyTests(unittest.TestCase):
         self.assertFalse(decision.allowed)
         self.assertEqual("blocked_metadata_host", decision.reason)
 
+    def test_blocks_restricted_hostnames_even_with_public_dns_result(self) -> None:
+        blocked_urls = (
+            "http://localhost:8000",
+            "http://localhost.",
+            "http://app.localhost",
+            "http://hostmachine:9000",
+            "http://host.docker.internal",
+            "http://gateway.docker.internal",
+        )
+        for url in blocked_urls:
+            with self.subTest(url=url):
+                decision = evaluate_browser_egress_url(url, resolved_addresses=("93.184.216.34",))
+
+                self.assertFalse(decision.allowed)
+                self.assertEqual("blocked_restricted_host", decision.reason)
+
+    def test_blocks_ipv6_addresses_with_embedded_restricted_ipv4(self) -> None:
+        blocked_urls = (
+            "http://[::ffff:127.0.0.1]/",
+            "http://[2002:7f00:1::]/",
+            "http://[64:ff9b::7f00:1]/",
+        )
+        for url in blocked_urls:
+            with self.subTest(url=url):
+                decision = evaluate_browser_egress_url(url)
+
+                self.assertFalse(decision.allowed)
+                self.assertEqual("blocked_restricted_ip", decision.reason)
+
     def test_requires_dns_resolution_for_public_hostnames(self) -> None:
         decision = evaluate_browser_egress_url("https://example.com/")
 

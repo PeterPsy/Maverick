@@ -554,6 +554,8 @@ Required platform work:
   network work
 - enforce CIDR deny rules below DNS names
 - enforce redirects against the same policy
+- bind DNS approval to the browser connection path; a preflight DNS check is not
+  sufficient if Chromium can later resolve or connect to a different address
 - expose explicit dev-mode exceptions
 - keep browser egress decisions auditable
 - make `permissions.network.outbound` meaningful, or introduce a browser-specific

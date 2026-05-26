@@ -20,6 +20,8 @@ export type SecretGrant = {
   status: 'active' | 'revoked';
   effective_status?: 'active' | 'revoked' | 'blocked' | 'orphaned' | 'expired';
   linked_secret_status?: 'active' | 'disabled' | 'revoked' | 'missing';
+  resource_type: string | null;
+  resource_id: string | null;
   created_at: string;
   updated_at: string;
   expires_at: string | null;
@@ -38,12 +40,52 @@ export type SecretGrantTarget = {
     backend: boolean;
     cli_commands: string[];
     mcp_tools: string[];
+    resource_scoped?: boolean;
+    resource_types?: string[];
   }>;
   surfaces?: {
     backend: boolean;
     cli_commands: string[];
     mcp_tools: string[];
   };
+};
+
+export type SecretGrantNeed = {
+  app_id: string;
+  app_name: string;
+  logical_name: string;
+  human_label?: string;
+  scope?: {
+    type?: string;
+    label?: string;
+    resource_type?: string | null;
+    resource_id?: string | null;
+  };
+  recommended_grant?: {
+    actions?: string[];
+    target_patterns?: string[];
+    resource_type?: string | null;
+    resource_id?: string | null;
+    reason?: string;
+  };
+  value_state: string;
+  grant_state: string;
+  user_action: string;
+  credential_match?: {
+    matched?: boolean;
+    method?: string;
+    confidence?: string;
+    ambiguous?: boolean;
+    candidate_count?: number;
+    candidates?: Array<{
+      secret_id?: string;
+      alias?: string | null;
+      label?: string;
+      status?: string;
+      kind?: string;
+    }>;
+  };
+  app_managed?: boolean;
 };
 
 export type ProviderDefinition = {
@@ -118,40 +160,20 @@ export function rotateSecret(secretId: string, rawValue: string): Promise<{ secr
   });
 }
 
-export function disableSecret(secretId: string): Promise<{ secret: SecretRecord }> {
-  return request(`/api/secrets/${encodeURIComponent(secretId)}/disable`, { method: 'POST', body: '{}' });
-}
-
-export function revokeSecret(secretId: string): Promise<{ secret: SecretRecord }> {
-  return request(`/api/secrets/${encodeURIComponent(secretId)}/revoke`, { method: 'POST', body: '{}' });
-}
-
 export function listGrants(): Promise<{ items: SecretGrant[] }> {
   return request('/api/secret-grants');
-}
-
-export function createGrant(payload: {
-  app_id: string;
-  logical_name: string;
-  secret_id: string;
-  actions: string[];
-  target_patterns: string[];
-  expires_at?: string;
-  reason?: string;
-}): Promise<{ grant: SecretGrant }> {
-  return request('/api/secret-grants', { method: 'POST', body: JSON.stringify(payload) });
-}
-
-export function revokeGrant(grantId: string): Promise<{ grant: SecretGrant }> {
-  return request(`/api/secret-grants/${encodeURIComponent(grantId)}/revoke`, { method: 'POST', body: '{}' });
 }
 
 export function listAudit(): Promise<{ items: AuditRecord[] }> {
   return request('/api/secret-audit');
 }
 
-export function listGrantTargets(): Promise<{ items: SecretGrantTarget[] }> {
+export function listGrantTargets(): Promise<{ items: SecretGrantTarget[]; needs?: SecretGrantNeed[] }> {
   return request('/api/secret-grant-targets');
+}
+
+export function listGrantNeeds(): Promise<{ items: SecretGrantNeed[] }> {
+  return request('/api/secret-grant-needs');
 }
 
 export function getProviderStatus(): Promise<ProviderStatus> {

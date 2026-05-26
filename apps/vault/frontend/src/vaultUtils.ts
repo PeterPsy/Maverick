@@ -5,24 +5,11 @@ export function grantStatus(grant: SecretGrant): string {
   return grant.effective_status || grant.status;
 }
 
-export function buildTargetPatterns(form: FormData): string[] {
-  const mode = String(form.get('target_mode') || 'app_backend_all');
-  if (mode === 'app_backend') {
-    return ['maverick://app.backend/backend'];
+export function grantResourceScopeLabel(grant: SecretGrant): string {
+  if (grant.resource_type && grant.resource_id) {
+    return `${grant.resource_type}:${grant.resource_id}`;
   }
-  if (mode === 'app_cli') {
-    const command = encodeTargetSegment(String(form.get('target_cli_command') || ''));
-    return command ? [`maverick://app.backend/cli/${command}`] : [];
-  }
-  if (mode === 'app_mcp') {
-    const tool = encodeTargetSegment(String(form.get('target_mcp_tool') || ''));
-    return tool ? [`maverick://app.backend/mcp/${tool}`] : [];
-  }
-  if (mode === 'custom') {
-    const custom = String(form.get('target_custom') || '').trim();
-    return custom ? [custom] : [];
-  }
-  return ['maverick://app.backend/*'];
+  return 'workspace';
 }
 
 export function grantUsesSecret(grant: SecretGrant, secret: SecretRecord | undefined): boolean {
@@ -30,19 +17,6 @@ export function grantUsesSecret(grant: SecretGrant, secret: SecretRecord | undef
     return false;
   }
   return grant.secret_ref === `platform:secrets/${secret.secret_id}` || (secret.alias ? grant.secret_ref === `platform:secret-alias/${secret.alias}` : false);
-}
-
-export function confirmSecretChange(secrets: SecretRecord[], grants: SecretGrant[], secretId: string, action: 'disable' | 'revoke'): boolean {
-  const secret = secrets.find((item) => item.secret_id === secretId);
-  const impacted = grants.filter((grant) => grantStatus(grant) === 'active' && grantUsesSecret(grant, secret)).length;
-  const verb = action === 'disable' ? 'Disable' : 'Revoke';
-  const effect = action === 'disable' ? 'The stored value remains encrypted, but linked active grants will be revoked.' : 'The stored value will be deleted and linked active grants will be revoked.';
-  return window.confirm(`${verb} ${secret?.label || secretId}?\n\n${effect}\nImpacted active grants: ${impacted}`);
-}
-
-export function confirmGrantRevoke(grants: SecretGrant[], grantId: string): boolean {
-  const grant = grants.find((item) => item.grant_id === grantId);
-  return window.confirm(`Revoke grant ${grant?.logical_name || grantId} for ${grant?.app_id || 'this app'}?`);
 }
 
 export function toApiExpiry(value: string): string {
@@ -54,11 +28,23 @@ export function toApiExpiry(value: string): string {
 }
 
 export function tabFromSearchParams(): Tab {
-  return tabFromValue(new URLSearchParams(window.location.search).get('tab')) || 'secrets';
+  return tabFromValue(new URLSearchParams(window.location.search).get('tab')) || 'credentials';
 }
 
 export function tabFromValue(value: unknown): Tab | null {
-  return value === 'readiness' || value === 'secrets' || value === 'grants' || value === 'audit' ? value : null;
+  if (value === 'credentials' || value === 'issues' || value === 'import' || value === 'advanced') {
+    return value;
+  }
+  if (value === 'secrets') {
+    return 'credentials';
+  }
+  if (value === 'readiness') {
+    return 'issues';
+  }
+  if (value === 'grants' || value === 'audit') {
+    return 'advanced';
+  }
+  return null;
 }
 
 export function humanizeKind(value: string) {
@@ -78,7 +64,7 @@ export function grantMatchesQuery(grant: SecretGrant, query: string) {
   if (!needle) {
     return true;
   }
-  return `${grant.app_id} ${grant.logical_name} ${grant.secret_ref} ${grant.actions.join(' ')} ${grant.target_patterns.join(' ')} ${grantStatus(grant)}`.toLowerCase().includes(needle);
+  return `${grant.app_id} ${grant.logical_name} ${grant.secret_ref} ${grant.actions.join(' ')} ${grant.target_patterns.join(' ')} ${grantResourceScopeLabel(grant)} ${grantStatus(grant)}`.toLowerCase().includes(needle);
 }
 
 export function auditMatchesQuery(item: AuditRecord, query: string) {
@@ -134,8 +120,4 @@ export function parseCsv(text: string): Array<Record<string, string>> {
   return records.map((record) =>
     Object.fromEntries(keys.map((key, index) => [key, record[index]?.trim() || '']).filter(([key]) => key))
   );
-}
-
-function encodeTargetSegment(value: string): string {
-  return value.trim().replace(/^\/+/, '').replace(/[?#]/g, '');
 }

@@ -1,8 +1,8 @@
 # Vault
 
-Vault is the admin-facing Maverick app for Core Secrets.
+Vault is the workspace-facing Credential Inbox and Connection Issues app for Core Secrets.
 
-It does not own secret values. Secret values remain platform-owned control-plane records under the `core.secrets` domain. Vault calls core HTTP APIs to inspect redaction-safe inventory, grants, and audit metadata from its main frontend. Operational creation/import/grant workflows live in the sidebar widgets and still go through admin-gated core APIs.
+It does not own secret values. Secret values remain platform-owned control-plane records under the `core.secrets` domain. Vault calls core HTTP APIs to inspect redaction-safe inventory, grants, and audit metadata from its main frontend. Normal sidebar workflows cover credential add, credential rotation, issue review, and CSV import through controlled core endpoints; grant mechanics remain an advanced/admin diagnostic surface rather than a normal user workflow.
 
 ## Surfaces
 
@@ -11,8 +11,8 @@ It does not own secret values. Secret values remain platform-owned control-plane
   - `vault-sidebar` for `base-shell` content kind `shell.sidebar.primary`
   - `vault-sidebar-footer` for `base-shell` content kind `shell.sidebar.footer`
 - Backend: none
-- CLI: `vault`, a redaction-safe operation manifest that points agents to core-owned secret surfaces
-- MCP: `maverick_vault`, the same redaction-safe manifest over MCP
+- CLI: `vault`, redaction-safe agent operations that diagnose Core Secrets connection issues, plan/explain fixes, and delegate guarded grant creation to core-owned secret surfaces
+- MCP: `maverick_vault`, the same redaction-safe agent operations over MCP
 - Skills: bundled `vault-ops` guidance for Core Secrets administration
 
 ## Storage
@@ -42,12 +42,13 @@ npm run build
 - Distribution is `sealed` with `source_access: none`.
 - Runtime compatibility is sandbox-only because Vault is a frontend surface over authenticated core APIs; it does not need full-access execution.
 - Storage is `none`; Core Secrets owns encrypted values, grants, revocation state, and audit.
-- The main frontend is a governance/review surface: it lists readiness checks, secrets, grants, and audit events, but does not create, import, rotate, disable, revoke, or grant secrets.
-- Readiness is computed from redaction-safe secret inventory, grant inventory, app grant target consumers, and runtime provider status. It flags declared backend, CLI, and MCP consumers that lack a current active grant for the matching delivery target, unhealthy or orphaned grants, linked disabled/revoked/missing secrets, and provider credential blocking state.
-- Grant creation uses Core Secrets validation for active secrets, enabled and mountable workspace apps, target app `permissions.secrets.read` declarations for `app.backend` logical names, non-overlapping active target coverage for each logical name, optional expiry, and app delivery targets that match declared backend or descriptor `required_secrets` consumers. Vault can create the broad `maverick://app.backend/*` target or narrower `maverick://app.backend/backend`, `maverick://app.backend/cli/<command>`, `maverick://app.backend/mcp/<tool>`, and custom validated target patterns.
-- Sidebar widgets keep only the guided creation/import controls: secret creation, CSV import, and grant creation. Grant creation is guided by the admin-only `/api/secret-grant-targets` surface instead of the generic `/api/apps` registry, and logical names remain selectable until every declared consumer target for that logical name has current active grant coverage. The sidebar does not duplicate the main app's inventory, grant, or audit lists below those forms. CSV import enforces a file-size limit, row-count limit, row-level dry-run preview, batch id, kind selection, normalized id collision checks against the file and existing secrets/aliases, selectable valid rows, and downloadable per-row failure reporting without native browser alert/confirm prompts.
+- The main frontend is a Credential Inbox and Connection Issues surface: normal users see saved credential metadata, app usage, health, issue count, last update time, and redaction-safe connection issues. It does not create, import, rotate, disable, revoke, or grant secrets from the main view.
+- Connection Issues consume the redaction-safe Core Secrets recommendation/need payload when available, including human labels, credential match state, recommended grant specs, and user action. The temporary frontend fallback still uses secret inventory, grant inventory, app grant target consumers, resource-scoped selector metadata, and runtime provider status, but the normal UX is issue-oriented rather than grant-console-oriented.
+- Grant creation uses Core Secrets validation for active secrets, enabled and mountable workspace apps, target app `permissions.secrets.read` declarations for `app.backend` logical names, non-overlapping active target coverage for each logical name and optional `resource_type`/`resource_id` scope, optional expiry, and app delivery targets that match declared backend or descriptor `required_secrets` consumers. Vault can review this state in Advanced/Admin diagnostics, but the normal sidebar no longer composes grant targets, logical names, CLI/MCP selectors, custom targets, or resource scopes.
+- Sidebar widgets keep only the guided credential and import controls: credential creation, credential rotation, connection issue actions, and CSV import. Add and rotate forms send raw values directly to controlled Core Secrets HTTP endpoints and reset the form after submit; raw values are never displayed after submission. CSV import enforces a file-size limit, row-count limit, row-level dry-run preview, batch id, kind selection, normalized id collision checks against the file and existing secrets/aliases, selectable valid rows, and downloadable per-row failure reporting without native browser alert/confirm prompts.
 - Audit review supports client-side filters for app, action, status, date range, failed/attempted events, and redaction-safe JSON export.
-- Browser autofill and other user-directed secret actions are not exposed in Vault until a controlled executor exists; Vault creates `app.backend` grants only.
+- Browser autofill is not exposed in Vault. User-directed credential changes go through the controlled add, rotate, and import flows; grant/audit details stay in Advanced/Admin review.
 - Sidebar widgets are iframe-mounted app-owned surfaces. They show redaction-safe summary metadata, open Vault with scalar navigation params, and mutate Core Secrets only through admin-gated core APIs, not through app-owned backend actions.
+- CLI/MCP agent operations support `manifest`, `diagnose`, `connection_issues`, `plan_fix`, `explain_issue`, and `apply_fix`. `manifest` remains the default for compatibility. Diagnosis and planning consume redaction-safe Core Secrets need payloads or, when available, read the official core recommendation surface. `apply_fix` only creates app secret grants when a matching saved credential exists, explicit confirmation is present, and the official Core Secrets grant CLI surface is discoverable; fixes that require a raw value return `needs_secure_input` and must be completed through platform-owned secure input.
 - CLI/MCP manifests distinguish redaction-safe read-only core surfaces from mutative full-access operations and platform-admin HTTP routes. Unsupported Vault actions/tools return error status payloads.
 - No app-owned backend, storage, or reference entities are declared.

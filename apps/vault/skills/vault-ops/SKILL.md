@@ -1,11 +1,11 @@
 ---
 name: vault-ops
-description: "Use Vault safely for Core Secrets administration, grant review, and redaction-safe secret metadata operations."
+description: "Use Vault safely for Credential Inbox, Connection Issues, Advanced details, and redaction-safe Core Secrets operations."
 ---
 
 # Vault Operations
 
-Vault is an admin console over `core.secrets`. It is not the owner of secret values.
+Vault is the Credential Inbox, Connection Issues, and Advanced details surface over `core.secrets`. It is not the owner of secret values.
 
 Use Vault's app-owned CLI or MCP surface first to confirm the redaction-safe operating model:
 

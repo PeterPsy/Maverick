@@ -137,7 +137,7 @@ button:disabled {
 
 .vault-sidebar-nav {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(4.4rem, 1fr));
   gap: 0.36rem;
 }
 
@@ -226,6 +226,12 @@ button:disabled {
   background: rgba(255, 255, 255, 0.045);
 }
 
+.vault-sidebar-form-stack,
+.vault-sidebar-issues {
+  display: grid;
+  gap: 0.62rem;
+}
+
 .vault-sidebar-form input,
 .vault-sidebar-form select,
 .vault-sidebar-form textarea {
@@ -261,6 +267,81 @@ button:disabled {
 
 .vault-sidebar-form select option {
   background: #171717;
+  color: var(--maverick-text);
+}
+
+.vault-secure-input {
+  display: grid;
+  gap: 0.34rem;
+  min-width: 0;
+}
+
+.vault-secure-input span {
+  color: var(--maverick-text-soft);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+}
+
+.vault-sidebar-issue {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.5rem;
+  border: 1px solid var(--maverick-border);
+  border-radius: 14px;
+  background: var(--maverick-surface);
+  padding: 0.6rem;
+}
+
+.vault-sidebar-issue__icon {
+  display: grid;
+  place-items: center;
+  width: 1.55rem;
+  height: 1.55rem;
+  border-radius: 999px;
+  background: rgba(255, 216, 145, 0.12);
+  color: var(--maverick-warning);
+}
+
+.vault-sidebar-issue strong,
+.vault-sidebar-issue small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vault-sidebar-issue strong {
+  font-size: 0.78rem;
+  font-weight: 400;
+}
+
+.vault-sidebar-issue small {
+  margin-top: 0.18rem;
+  color: var(--maverick-text-muted);
+  font-size: 0.68rem;
+}
+
+.vault-sidebar-issue__actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.34rem;
+}
+
+.vault-sidebar-issue__actions button {
+  min-height: 1.92rem;
+  border: 1px solid var(--maverick-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 0 0.58rem;
+  color: var(--maverick-text-muted);
+  font-size: 0.68rem;
+}
+
+.vault-sidebar-issue__actions button:hover {
+  border-color: var(--maverick-border-strong);
+  background: var(--maverick-surface-hover);
   color: var(--maverick-text);
 }
 

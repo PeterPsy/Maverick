@@ -59,7 +59,7 @@ function VaultSidebarFooterWidget() {
         postPrimaryActionState(appId, primaryActionFor(readVaultViewState().tab).label);
       }
       if (payload.type === 'maverick.widget.primary-action.invoke') {
-        runPrimaryAction(appId, readVaultViewState().tab);
+        runPrimaryAction(appId, readVaultViewState().tab, () => fileInputRef.current?.click());
       }
     }
 
@@ -125,10 +125,10 @@ function VaultSidebarFooterWidget() {
       }
     }
     if (created) {
-      writeVaultViewState({ ...readVaultViewState(), metricFilter: null, tab: 'secrets' });
+      writeVaultViewState({ ...readVaultViewState(), metricFilter: null, tab: 'credentials' });
       notifyVaultDataChanged();
       notifyVaultViewStateChanged();
-      window.parent?.postMessage({ type: 'maverick.widget.open-app', app_id: appId, params: { tab: 'secrets' } }, window.location.origin);
+      window.parent?.postMessage({ type: 'maverick.widget.open-app', app_id: appId, params: { tab: 'credentials' } }, window.location.origin);
     }
     setImportFailures(failures);
     setImportStatus(`Imported ${created} of ${rowsToCreate.length} selected secrets.`);
@@ -150,7 +150,7 @@ function VaultSidebarFooterWidget() {
 
   return (
     <main className="vault-sidebar-footer-widget">
-      <button className="vault-sidebar-footer-button" onClick={() => runPrimaryAction(appId, tab)} type="button">
+      <button className="vault-sidebar-footer-button" onClick={() => runPrimaryAction(appId, tab, () => fileInputRef.current?.click())} type="button">
         <Plus size={16} aria-hidden="true" />
         <span>{action.label}</span>
       </button>
@@ -264,16 +264,17 @@ function downloadFailures(failures: string[]) {
   URL.revokeObjectURL(url);
 }
 
-function runPrimaryAction(appId: string, tab: Tab) {
+function runPrimaryAction(appId: string, tab: Tab, openImporter: () => void) {
   const action = primaryActionFor(tab);
   writeVaultViewState({ ...readVaultViewState(), metricFilter: null, tab });
   notifyVaultViewStateChanged();
-  if (tab === 'secrets') {
-    writeVaultActionRequest('submit-secret');
+  if (tab === 'credentials') {
+    writeVaultActionRequest('submit-credential');
     return;
   }
-  if (tab === 'grants') {
-    writeVaultActionRequest('submit-grant');
+  if (tab === 'import') {
+    writeVaultActionRequest('import-credentials');
+    openImporter();
     return;
   }
   window.parent?.postMessage(
@@ -287,16 +288,16 @@ function runPrimaryAction(appId: string, tab: Tab) {
 }
 
 function primaryActionFor(tab: Tab): { label: string; params: Record<string, string> } {
-  if (tab === 'readiness') {
-    return { label: 'View readiness', params: { tab: 'readiness' } };
+  if (tab === 'issues') {
+    return { label: 'Review connections', params: { tab: 'issues' } };
   }
-  if (tab === 'grants') {
-    return { label: 'New grant', params: { focus: 'new-grant', tab: 'grants' } };
+  if (tab === 'import') {
+    return { label: 'Import CSV', params: { tab: 'import' } };
   }
-  if (tab === 'audit') {
-    return { label: 'View audit', params: { tab: 'audit' } };
+  if (tab === 'advanced') {
+    return { label: 'Open advanced', params: { tab: 'advanced' } };
   }
-  return { label: 'New secret', params: { focus: 'new-secret', tab: 'secrets' } };
+  return { label: 'Add credential', params: { focus: 'add-credential', tab: 'credentials' } };
 }
 
 function postPrimaryActionState(appId: string, label: string) {

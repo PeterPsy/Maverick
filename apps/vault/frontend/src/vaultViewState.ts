@@ -13,7 +13,7 @@ export type VaultViewState = {
 };
 
 export type VaultActionRequest = {
-  action: 'submit-secret' | 'submit-grant';
+  action: 'submit-credential' | 'rotate-credential' | 'import-credentials';
   id: string;
 };
 
@@ -26,7 +26,7 @@ export function readVaultViewState(): VaultViewState {
     return {
       metricFilter: metricFilterFromValue(payload.metricFilter),
       query: typeof payload.query === 'string' ? payload.query : '',
-      tab: tabFromValue(payload.tab) || 'secrets'
+      tab: tabFromValue(payload.tab) || 'credentials'
     };
   } catch {
     return defaultVaultViewState();
@@ -87,7 +87,7 @@ export function readVaultActionRequest(): VaultActionRequest | null {
   }
   try {
     const payload = JSON.parse(window.localStorage.getItem(VAULT_ACTION_REQUEST_KEY) || '{}') as Partial<VaultActionRequest>;
-    if ((payload.action === 'submit-secret' || payload.action === 'submit-grant') && typeof payload.id === 'string') {
+    if ((payload.action === 'submit-credential' || payload.action === 'rotate-credential' || payload.action === 'import-credentials') && typeof payload.id === 'string') {
       return { action: payload.action, id: payload.id };
     }
   } catch {
@@ -97,7 +97,7 @@ export function readVaultActionRequest(): VaultActionRequest | null {
 }
 
 function defaultVaultViewState(): VaultViewState {
-  return { metricFilter: null, query: '', tab: 'secrets' };
+  return { metricFilter: null, query: '', tab: 'credentials' };
 }
 
 function metricFilterFromValue(value: unknown): VaultMetricFilter {

@@ -29,13 +29,18 @@ export function PanelHeader({ caption, icon, title }: { caption: string; icon: R
   );
 }
 
-export function DataPanel({ children, count, title }: { children: React.ReactNode; count: number; title: string }) {
+export function DataPanel({ caption = 'Redacted operational inventory.', children, count, title }: {
+  caption?: string;
+  children: React.ReactNode;
+  count: number;
+  title: string;
+}) {
   return (
     <section className="vault-table-wrap">
       <div className="vault-panel-header">
         <div>
           <h2>{title}</h2>
-          <p>Redacted operational inventory.</p>
+          <p>{caption}</p>
         </div>
         <span>{count} items</span>
       </div>

@@ -1,14 +1,52 @@
 {
   "commands": {
     "vault": {
-      "description": "Return Vault's redaction-safe agent operation manifest and the core secret surfaces it delegates to.",
+      "description": "Run Vault's redaction-safe agent operations for Core Secrets diagnosis, planning, explanation, and guarded grant fixes.",
       "argument_schema": {
         "type": "object",
         "properties": {
           "action": {
             "type": "string",
-            "enum": ["manifest"],
+            "enum": ["manifest", "diagnose", "connection_issues", "plan_fix", "explain_issue", "apply_fix"],
             "default": "manifest"
+          },
+          "workspace_id": {
+            "type": "string"
+          },
+          "app_id": {
+            "type": "string"
+          },
+          "issue_id": {
+            "type": "string"
+          },
+          "needs": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "issues": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "confirmation": {
+            "oneOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "string",
+                "enum": ["confirm_apply_fix"]
+              }
+            ]
           }
         },
         "additionalProperties": false

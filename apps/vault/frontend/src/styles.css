@@ -211,7 +211,7 @@ td > button {
 
 .vault-stats {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -345,7 +345,7 @@ td > button {
 
 table {
   width: 100%;
-  min-width: 840px;
+  min-width: 1040px;
   border-collapse: collapse;
 }
 
@@ -407,7 +407,8 @@ td span {
 }
 
 .vault-status.is-active,
-.vault-status.is-succeeded {
+.vault-status.is-succeeded,
+.vault-status.is-healthy {
   background: rgba(159, 240, 202, 0.14);
   color: var(--maverick-success);
 }
@@ -425,8 +426,13 @@ td span {
 
 .vault-status.is-attempted,
 .vault-status.is-blocked,
+.vault-status.is-warning,
 .vault-status.is-missing,
+.vault-status.is-needs-access,
+.vault-status.is-needs-attention,
 .vault-status.is-needs-credential,
+.vault-status.is-needs-refresh,
+.vault-status.is-needs-value,
 .vault-status.is-orphaned,
 .vault-status.is-expired {
   background: rgba(255, 216, 145, 0.12);
@@ -488,6 +494,88 @@ td span {
   margin: 0 0 0.45rem;
   color: var(--maverick-text-muted);
   line-height: 1.35;
+}
+
+.vault-readiness-item__body {
+  min-width: 0;
+}
+
+.vault-readiness-item__body dl {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin: 0.35rem 0 0;
+}
+
+.vault-readiness-item__body dl div {
+  min-width: 0;
+}
+
+.vault-readiness-item__body dt {
+  color: var(--maverick-text-soft);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.vault-readiness-item__body dd {
+  margin: 0.16rem 0 0;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--maverick-text);
+  font-size: 0.82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vault-technical-details {
+  margin-top: 0.42rem;
+  color: var(--maverick-text-muted);
+  font-size: 0.8rem;
+}
+
+.vault-technical-details summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--maverick-text-soft);
+}
+
+.vault-technical-details p {
+  margin-top: 0.35rem;
+  overflow-wrap: anywhere;
+}
+
+.vault-readiness-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.45rem;
+}
+
+.vault-readiness-actions button {
+  min-height: 2.08rem;
+  padding: 0 0.68rem;
+  font-size: 0.78rem;
+}
+
+.vault-import-view,
+.vault-advanced-stack {
+  min-height: 0;
+}
+
+.vault-import-view {
+  border: 1px solid var(--maverick-border);
+  border-radius: 14px;
+  background: var(--maverick-glass-highlight), var(--maverick-glass-surface);
+  box-shadow: var(--maverick-glass-edge);
+  padding: 0.95rem;
+}
+
+.vault-advanced-stack {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  overflow: hidden;
 }
 
 .vault-timeline {
@@ -590,15 +678,25 @@ tr:last-child td,
   }
 
   .vault-audit-filters,
-  .vault-readiness-item {
+  .vault-readiness-item,
+  .vault-readiness-item__body dl {
     grid-template-columns: 1fr;
+  }
+
+  .vault-readiness-actions {
+    justify-content: flex-start;
   }
 
   .vault-workspace,
   .vault-panel,
   .vault-table-wrap,
-  .vault-timeline {
+  .vault-timeline,
+  .vault-advanced-stack {
     overflow: visible;
+  }
+
+  .vault-advanced-stack {
+    grid-template-rows: none;
   }
 
   .vault-timeline article {

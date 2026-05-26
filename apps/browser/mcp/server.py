@@ -20,6 +20,9 @@ status_code, result = mcp_result_for_tool(
     dict(payload.arguments),
     app_id=local_app_id,
     workspace_id=payload.workspace_id,
+    effective_mode=payload.effective_mode,
+    platform_role=payload.platform_role,
+    workspace_role=payload.workspace_role,
 )
 result.update({"app_id": local_app_id, "workspace_id": payload.workspace_id, "tool_name": tool_name, "status_code": status_code})
 emit_json(result)

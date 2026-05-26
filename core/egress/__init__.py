@@ -7,7 +7,7 @@ from core.egress.models import (
     EgressTarget,
     DEFAULT_BROWSER_EGRESS_POLICY,
 )
-from core.egress.policy import evaluate_browser_egress_url, evaluate_browser_redirect_chain
+from core.egress.policy import evaluate_browser_egress_url, evaluate_browser_redirect_chain, resolve_browser_egress_url_addresses
 
 __all__ = [
     "BrowserEgressPolicy",
@@ -17,4 +17,5 @@ __all__ = [
     "EgressTarget",
     "evaluate_browser_egress_url",
     "evaluate_browser_redirect_chain",
+    "resolve_browser_egress_url_addresses",
 ]

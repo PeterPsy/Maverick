@@ -20,4 +20,4 @@ class BrowserPolicyError(PermissionError):
 
 
 class BrowserBrokerUnavailableError(RuntimeError):
-    """Raised when a broker-backed browser action is requested before Passo 4."""
+    """Raised when the Browser broker cannot be reached."""

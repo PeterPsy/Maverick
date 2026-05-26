@@ -20,12 +20,7 @@
             "type": "string",
             "enum": ["read_only", "maverick_dev_inspector"],
             "default": "read_only"
-          },
-          "resolved_addresses": {
-            "type": "array",
-            "items": {"type": "string"}
-          },
-          "allow_admin_dev_targets": {"type": "boolean", "default": false}
+          }
         },
         "additionalProperties": false
       }

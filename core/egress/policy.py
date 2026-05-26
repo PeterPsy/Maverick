@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ipaddress
+import socket
 from urllib.parse import SplitResult, urlsplit, urlunsplit
 
 from core.egress.models import (
@@ -224,6 +225,45 @@ def evaluate_browser_redirect_chain(
         blocked_address=final.blocked_address,
         redirect_index=len(hops) - 1,
     )
+
+
+def resolve_browser_egress_url_addresses(
+    url: str,
+    *,
+    policy: BrowserEgressPolicy = DEFAULT_BROWSER_EGRESS_POLICY,
+) -> tuple[str, ...] | None:
+    """Resolve one browser URL hostname through the trusted server resolver.
+
+    IP literals and already-blocked hostname forms do not need DNS resolution.
+    Callers still must pass the returned addresses back through policy
+    evaluation before navigating.
+    """
+
+    try:
+        parsed = urlsplit(str(url).strip())
+        parsed.port
+    except ValueError:
+        return None
+    scheme = parsed.scheme.lower()
+    if scheme not in {item.lower() for item in policy.allowed_schemes}:
+        return None
+    host = _normalize_host(parsed.hostname)
+    if not host:
+        return None
+    port = parsed.port or _default_port(scheme)
+    if _is_admin_dev_target(scheme=scheme, host=host, port=port, policy=policy):
+        return None
+    if host in METADATA_HOSTS or restricted_host(host):
+        return None
+    host_address = _parse_ip_address(host)
+    if host_address is not None:
+        return None
+    try:
+        addrinfo = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    except OSError:
+        return ()
+    addresses = {str(item[4][0]) for item in addrinfo if item and len(item) >= 5 and item[4]}
+    return tuple(sorted(addresses))
 
 
 def _normalize_host(host: str | None) -> str | None:

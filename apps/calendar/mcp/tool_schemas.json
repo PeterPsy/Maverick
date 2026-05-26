@@ -1,0 +1,257 @@
+{
+  "tools": {
+    "calendar_operations_manifest": {
+      "description": "Describe Calendar CLI and MCP operations for agents.",
+      "input_schema": {"type": "object", "properties": {}, "additionalProperties": false},
+      "output_schema": {"type": "object", "properties": {"operations": {"type": "array"}, "tools": {"type": "array"}}}
+    },
+    "calendar_list_events": {
+      "description": "List workspace calendar events with token-efficient filters.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "start_after": {"type": "string", "format": "date-time"},
+          "end_before": {"type": "string", "format": "date-time"},
+          "query": {"type": "string"},
+          "tags": {"type": "array", "items": {"type": "string"}},
+          "category": {"type": "string"},
+          "attendee": {"type": "string"},
+          "offset": {"type": "integer", "minimum": 0, "default": 0},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 50},
+          "profile": {"type": "string", "enum": ["compact", "full"], "default": "compact"},
+          "include_description": {"type": "boolean", "default": false}
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"events": {"type": "array"}, "pagination": {"type": "object"}}}
+    },
+    "calendar_create_event": {
+      "description": "Create one calendar event. Calendar generates the event id.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "title": {"type": "string"},
+          "description": {"type": "string"},
+          "startTime": {"type": "string", "format": "date-time"},
+          "endTime": {"type": "string", "format": "date-time"},
+          "status": {"type": "string", "enum": ["confirmed", "tentative", "cancelled"], "default": "confirmed"},
+          "timezone": {"type": "string", "default": "UTC"},
+          "location": {"type": "string"},
+          "organizer": {"type": "string"},
+          "all_day": {"type": "boolean", "default": false},
+          "color": {"type": "string", "enum": ["blue", "green", "orange", "pink", "purple", "red"], "default": "blue"},
+          "category": {"type": "string"},
+          "attendees": {"type": "array", "items": {"type": "string"}},
+          "tags": {"type": "array", "items": {"type": "string"}},
+          "source": {"type": "string", "default": "calendar"},
+          "external_refs": {"type": "object"},
+          "recurrence": {"type": "object"},
+          "reminders": {"type": "array"},
+          "idempotency_key": {"type": "string"},
+          "conflict_policy": {"type": "string", "enum": ["allow", "reject", "warn"], "default": "allow"},
+          "event": {"type": "object"},
+          "payload": {"type": "object"}
+        },
+        "anyOf": [{"required": ["title", "startTime", "endTime"]}, {"required": ["event"]}, {"required": ["payload"]}],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"event": {"type": "object"}}}
+    },
+    "calendar_update_event": {
+      "description": "Update one calendar event by id.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "title": {"type": "string"},
+          "description": {"type": "string"},
+          "startTime": {"type": "string", "format": "date-time"},
+          "endTime": {"type": "string", "format": "date-time"},
+          "status": {"type": "string", "enum": ["confirmed", "tentative", "cancelled"]},
+          "timezone": {"type": "string"},
+          "location": {"type": "string"},
+          "organizer": {"type": "string"},
+          "all_day": {"type": "boolean"},
+          "color": {"type": "string", "enum": ["blue", "green", "orange", "pink", "purple", "red"]},
+          "category": {"type": "string"},
+          "attendees": {"type": "array", "items": {"type": "string"}},
+          "tags": {"type": "array", "items": {"type": "string"}},
+          "source": {"type": "string"},
+          "external_refs": {"type": "object"},
+          "recurrence": {"type": "object"},
+          "reminders": {"type": "array"},
+          "expected_revision": {"type": "integer", "minimum": 1},
+          "conflict_policy": {"type": "string", "enum": ["allow", "reject", "warn"], "default": "allow"},
+          "event": {"type": "object"},
+          "payload": {"type": "object"}
+        },
+        "required": ["id", "expected_revision"],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"event": {"type": "object"}}}
+    },
+    "calendar_delete_event": {
+      "description": "Delete one calendar event by id.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "expected_revision": {"type": "integer", "minimum": 1}
+        },
+        "required": ["id", "expected_revision"],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"deleted": {"type": "boolean"}, "id": {"type": "string"}}}
+    },
+    "calendar_move_event": {
+      "description": "Move one event to a new start time or to the first free slot in a bounded window.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "startTime": {"type": "string", "format": "date-time"},
+          "endTime": {"type": "string", "format": "date-time"},
+          "start_after": {"type": "string", "format": "date-time"},
+          "end_before": {"type": "string", "format": "date-time"},
+          "move_strategy": {"type": "string", "enum": ["fixed_time", "first_free"], "default": "fixed_time"},
+          "first_free": {"type": "boolean"},
+          "attendee": {"type": "string"},
+          "attendees": {"type": "array", "items": {"type": "string"}},
+          "expected_revision": {"type": "integer", "minimum": 1},
+          "conflict_policy": {"type": "string", "enum": ["allow", "reject", "warn"], "default": "allow"}
+        },
+        "required": ["id", "expected_revision"],
+        "anyOf": [
+          {"required": ["startTime"]},
+          {"properties": {"move_strategy": {"enum": ["first_free"]}}, "required": ["move_strategy", "start_after", "end_before"]},
+          {"properties": {"first_free": {"const": true}}, "required": ["first_free", "start_after", "end_before"]}
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"event": {"type": "object"}}}
+    },
+    "calendar_check_availability": {
+      "description": "Check whether a specific time window is free and return compact conflicting events.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "startTime": {"type": "string", "format": "date-time"},
+          "endTime": {"type": "string", "format": "date-time"},
+          "attendee": {"type": "string"},
+          "attendees": {"type": "array", "items": {"type": "string"}},
+          "ignore_event_id": {"type": "string"}
+        },
+        "required": ["startTime", "endTime"],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"available": {"type": "boolean"}, "conflicts": {"type": "array"}}}
+    },
+    "calendar_find_free_time": {
+      "description": "Find available slots in a bounded time window.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "start_after": {"type": "string", "format": "date-time"},
+          "end_before": {"type": "string", "format": "date-time"},
+          "duration_minutes": {"type": "integer", "minimum": 1, "maximum": 1440, "default": 30},
+          "attendee": {"type": "string"},
+          "attendees": {"type": "array", "items": {"type": "string"}},
+          "ignore_event_id": {"type": "string"},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 50}
+        },
+        "required": ["start_after", "end_before"],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"slots": {"type": "array"}, "busy_count": {"type": "integer"}}}
+    },
+    "calendar_view_filter": {
+      "description": "Read the current Calendar view state.",
+      "input_schema": {"type": "object", "properties": {}, "additionalProperties": false},
+      "output_schema": {"type": "object", "properties": {"view_state": {"type": "object"}}}
+    },
+    "calendar_set_view_filter": {
+      "description": "Set Calendar's query and time-window filter for the standard view surface.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string"},
+          "start_after": {"type": "string", "format": "date-time"},
+          "end_before": {"type": "string", "format": "date-time"},
+          "category": {"type": "string"},
+          "attendee": {"type": "string"},
+          "tags": {"type": "array", "items": {"type": "string"}},
+          "conflicts_only": {"type": "boolean", "default": false},
+          "preserve_custom": {"type": "boolean", "default": false}
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"view_state": {"type": "object"}}}
+    },
+    "calendar_set_custom_view": {
+      "description": "Curate Calendar to a supplied list of event references.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "title": {"type": "string"},
+          "query": {"type": "string"},
+          "entity_ids": {"type": "array", "items": {"type": "string"}},
+          "event_ids": {"type": "array", "items": {"type": "string"}},
+          "references": {"type": "array", "items": {"type": "object"}}
+        },
+        "anyOf": [{"required": ["entity_ids"]}, {"required": ["event_ids"]}, {"required": ["references"]}],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"view_state": {"type": "object"}}}
+    },
+    "calendar_clear_custom_view": {
+      "description": "Return Calendar to its default view state.",
+      "input_schema": {"type": "object", "properties": {}, "additionalProperties": false},
+      "output_schema": {"type": "object", "properties": {"view_state": {"type": "object"}}}
+    },
+    "calendar_reference_manifest": {
+      "description": "Describe Calendar event reference support.",
+      "input_schema": {"type": "object", "properties": {}, "additionalProperties": false},
+      "output_schema": {"type": "object", "properties": {"entity_types": {"type": "array"}}}
+    },
+    "calendar_reference_search": {
+      "description": "Search calendar event references for mentions and agent context.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string"},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 50}
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"results": {"type": "array"}}}
+    },
+    "calendar_reference_resolve": {
+      "description": "Resolve one calendar event reference.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": {"type": "string", "enum": ["event"], "default": "event"},
+          "entity_id": {"type": "string"},
+          "id": {"type": "string"}
+        },
+        "oneOf": [{"required": ["entity_id"]}, {"required": ["id"]}],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"reference": {"type": "object"}, "event": {"type": "object"}}}
+    },
+    "calendar_reference_summarize": {
+      "description": "Return a token-efficient summary for one calendar event reference.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": {"type": "string", "enum": ["event"], "default": "event"},
+          "entity_id": {"type": "string"},
+          "id": {"type": "string"}
+        },
+        "oneOf": [{"required": ["entity_id"]}, {"required": ["id"]}],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"summary": {"type": "string"}, "safe_fields": {"type": "object"}}}
+    }
+  }
+}

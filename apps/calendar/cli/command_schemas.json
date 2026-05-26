@@ -1,0 +1,158 @@
+{
+  "commands": {
+    "calendar": {
+      "description": "Manage workspace calendar events and availability. Calling without arguments returns a compact operations manifest.",
+      "argument_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "operations.manifest",
+              "describe",
+              "status",
+              "list",
+              "create",
+              "update",
+              "delete",
+              "move",
+              "check_availability",
+              "find_free_time",
+              "view_filter",
+              "set_view_filter",
+              "set_custom_view",
+              "clear_custom_view"
+            ],
+            "default": "operations.manifest"
+          },
+          "id": {"type": "string"},
+          "title": {"type": "string"},
+          "description": {"type": "string"},
+          "startTime": {"type": "string", "format": "date-time"},
+          "endTime": {"type": "string", "format": "date-time"},
+          "start_after": {"type": "string", "format": "date-time"},
+          "end_before": {"type": "string", "format": "date-time"},
+          "duration_minutes": {"type": "integer", "minimum": 1, "maximum": 1440},
+          "status": {"type": "string", "enum": ["confirmed", "tentative", "cancelled"]},
+          "timezone": {"type": "string"},
+          "location": {"type": "string"},
+          "organizer": {"type": "string"},
+          "all_day": {"type": "boolean"},
+          "color": {"type": "string", "enum": ["blue", "green", "orange", "pink", "purple", "red"]},
+          "category": {"type": "string"},
+          "attendee": {"type": "string"},
+          "attendees": {"type": "array", "items": {"type": "string"}},
+          "tags": {"type": "array", "items": {"type": "string"}},
+          "source": {"type": "string"},
+          "external_refs": {"type": "object"},
+          "recurrence": {"type": "object"},
+          "reminders": {"type": "array"},
+          "idempotency_key": {"type": "string"},
+          "expected_revision": {"type": "integer", "minimum": 1},
+          "query": {"type": "string"},
+          "conflicts_only": {"type": "boolean"},
+          "preserve_custom": {"type": "boolean"},
+          "offset": {"type": "integer", "minimum": 0},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 500},
+          "profile": {"type": "string", "enum": ["compact", "full"]},
+          "include_description": {"type": "boolean"},
+          "move_strategy": {"type": "string", "enum": ["fixed_time", "first_free"]},
+          "first_free": {"type": "boolean"},
+          "conflict_policy": {"type": "string", "enum": ["allow", "reject", "warn"]},
+          "ignore_event_id": {"type": "string"},
+          "entity_ids": {"type": "array", "items": {"type": "string"}},
+          "event_ids": {"type": "array", "items": {"type": "string"}},
+          "references": {"type": "array", "items": {"type": "object"}},
+          "event": {"type": "object"},
+          "payload": {"type": "object"}
+        },
+        "additionalProperties": false,
+        "oneOf": [
+          {"maxProperties": 0},
+          {"properties": {"action": {"enum": ["operations.manifest", "describe", "status"]}}, "required": ["action"]},
+          {"properties": {"action": {"enum": ["list"]}}, "required": ["action"]},
+          {
+            "properties": {"action": {"enum": ["create"]}},
+            "required": ["action"],
+            "anyOf": [{"required": ["title", "startTime", "endTime"]}, {"required": ["event"]}, {"required": ["payload"]}]
+          },
+          {
+            "properties": {"action": {"enum": ["update"]}},
+            "required": ["action", "id", "expected_revision"],
+            "not": {"required": ["idempotency_key"]}
+          },
+          {
+            "properties": {"action": {"enum": ["delete"]}},
+            "required": ["action", "id", "expected_revision"],
+            "not": {"required": ["idempotency_key"]}
+          },
+          {
+            "properties": {"action": {"enum": ["move"]}},
+            "required": ["action", "id", "expected_revision"],
+            "anyOf": [
+              {"required": ["startTime"]},
+              {"properties": {"move_strategy": {"enum": ["first_free"]}}, "required": ["move_strategy", "start_after", "end_before"]},
+              {"properties": {"first_free": {"const": true}}, "required": ["first_free", "start_after", "end_before"]}
+            ],
+            "not": {"required": ["idempotency_key"]}
+          },
+          {"properties": {"action": {"enum": ["check_availability"]}}, "required": ["action", "startTime", "endTime"]},
+          {
+            "properties": {"action": {"enum": ["find_free_time"]}},
+            "required": ["action", "start_after", "end_before"]
+          },
+          {"properties": {"action": {"enum": ["view_filter", "clear_custom_view"]}}, "required": ["action"]},
+          {"properties": {"action": {"enum": ["set_view_filter"]}}, "required": ["action"]},
+          {
+            "properties": {"action": {"enum": ["set_custom_view"]}},
+            "required": ["action"],
+            "anyOf": [{"required": ["entity_ids"]}, {"required": ["event_ids"]}, {"required": ["references"]}]
+          }
+        ],
+        "examples": [
+          {"action": "operations.manifest"},
+          {"action": "list", "start_after": "2026-05-22T00:00:00Z", "limit": 20, "profile": "compact"},
+          {"action": "create", "title": "Team standup", "startTime": "2026-05-22T09:00:00Z", "endTime": "2026-05-22T09:30:00Z"},
+          {"action": "move", "id": "evt_<id>", "expected_revision": 1, "startTime": "2026-05-22T10:00:00Z", "conflict_policy": "warn"},
+          {"action": "move", "id": "evt_<id>", "expected_revision": 1, "move_strategy": "first_free", "start_after": "2026-05-22T09:00:00Z", "end_before": "2026-05-22T17:00:00Z", "conflict_policy": "reject"},
+          {"action": "check_availability", "startTime": "2026-05-22T10:00:00Z", "endTime": "2026-05-22T10:30:00Z"},
+          {"action": "find_free_time", "start_after": "2026-05-22T09:00:00Z", "end_before": "2026-05-22T17:00:00Z", "duration_minutes": 30},
+          {"action": "set_custom_view", "title": "Launch week", "entity_ids": ["evt_<id>"]}
+        ]
+      }
+    },
+    "calendar-reference": {
+      "description": "Search, resolve, and summarize workspace calendar event references.",
+      "argument_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["references.manifest", "references.search", "references.resolve", "references.summarize"],
+            "default": "references.manifest"
+          },
+          "query": {"type": "string"},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+          "entity_type": {"type": "string", "enum": ["event"], "default": "event"},
+          "entity_id": {"type": "string"},
+          "id": {"type": "string"}
+        },
+        "additionalProperties": false,
+        "oneOf": [
+          {"maxProperties": 0},
+          {"properties": {"action": {"enum": ["references.manifest", "references.search"]}}, "required": ["action"]},
+          {
+            "properties": {"action": {"enum": ["references.resolve", "references.summarize"]}},
+            "required": ["action"],
+            "anyOf": [{"required": ["entity_id"]}, {"required": ["id"]}]
+          }
+        ],
+        "examples": [
+          {"action": "references.manifest"},
+          {"action": "references.search", "query": "standup"},
+          {"action": "references.resolve", "entity_id": "evt_<id>"}
+        ]
+      }
+    }
+  }
+}

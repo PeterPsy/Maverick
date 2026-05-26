@@ -47,5 +47,5 @@ tool_name = str(payload.raw.get("tool_name") or "")
 arguments.setdefault("action", TOOL_ACTIONS.get(tool_name, "mail_list_threads"))
 status_code, result = handle_action(Path(payload.data_root), arguments)
 if status_code < 400:
-    result["app_events"] = app_events_for_action(str(arguments.get("action") or "list"))
+    result["app_events"] = app_events_for_action(str(arguments.get("action") or "list"), result)
 emit_json(result)

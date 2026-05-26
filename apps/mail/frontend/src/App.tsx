@@ -28,7 +28,10 @@ type SendResult = {
   requires_confirmation?: boolean;
   sent?: boolean;
   message_id?: string;
+  provider_message_id?: string;
+  thread_id?: string;
   draft?: MailDraft;
+  thread?: MailThread;
 };
 
 type MailNavigateParams = {
@@ -76,6 +79,22 @@ function notifySelection(selection: Record<string, string | boolean | null>) {
     },
     window.location.origin
   );
+}
+
+function sendResultNotice(result: SendResult, confirm: boolean) {
+  if (result.dry_run || !confirm) {
+    return 'Dry-run ready. Confirm only when the user approves send.';
+  }
+  if (!result.sent) {
+    return 'Send request completed.';
+  }
+  if (result.provider_message_id) {
+    return `Sent with Gmail as provider message ${result.provider_message_id}.`;
+  }
+  if (result.message_id) {
+    return `Sent with the local mail provider as message ${result.message_id}.`;
+  }
+  return 'Message sent.';
 }
 
 export function App() {
@@ -222,6 +241,7 @@ export function App() {
   const totalPages = Math.max(1, Math.ceil(totalThreads / THREADS_PAGE_SIZE));
   const visibleStart = totalThreads === 0 ? 0 : (page - 1) * THREADS_PAGE_SIZE + 1;
   const visibleEnd = totalThreads === 0 ? 0 : Math.min(page * THREADS_PAGE_SIZE, totalThreads);
+  const isContextualReply = Boolean(selectedThread);
 
   useEffect(() => {
     if (page > totalPages) {
@@ -246,7 +266,7 @@ export function App() {
         action: MAIL_BACKEND_ACTIONS.draftsCreate,
         connection_id: connection?.id,
         thread_id: selectedThread?.id,
-        to: draft.to ? [{ email: draft.to }] : [],
+        to: draft.to.trim() ? [{ email: draft.to.trim() }] : [],
         subject: draft.subject,
         body_text: draft.body_text
       });
@@ -275,7 +295,7 @@ export function App() {
         ...(confirm ? gmailSecretRequest(lastDraft.connection_id) : noSecretRequest())
       });
       setLastSendResult(payload.result);
-      setNotice(confirm ? 'Draft marked sent in the local provider.' : 'Dry-run ready. Confirm only when the user approves send.');
+      setNotice(sendResultNotice(payload.result, confirm));
       await loadThreads();
     } catch (error) {
       setNotice((error as Error).message);
@@ -503,7 +523,13 @@ export function App() {
           </div>
           {canUseConnection && connection ? (
             <form className="composer" onSubmit={createDraft}>
-              <input value={draft.to} onChange={(event) => setDraft({ ...draft, to: event.target.value })} placeholder="Recipient email" required />
+              <input
+                value={draft.to}
+                onChange={(event) => setDraft({ ...draft, to: event.target.value })}
+                aria-label={isContextualReply ? 'Reply recipients' : 'Recipient email'}
+                placeholder={isContextualReply ? 'Reply recipients (optional)' : 'Recipient email'}
+                required={!isContextualReply}
+              />
               <input value={draft.subject} onChange={(event) => setDraft({ ...draft, subject: event.target.value })} placeholder="Subject" required />
               <textarea value={draft.body_text} onChange={(event) => setDraft({ ...draft, body_text: event.target.value })} placeholder="Write a draft" required />
               <div className="composer-actions">
@@ -515,7 +541,7 @@ export function App() {
           ) : null}
           {lastDraft ? <p className="draft-note">Last draft: {lastDraft.subject}</p> : null}
           {lastSendResult?.dry_run ? <p className="draft-note">Dry-run prepared for draft {lastSendResult.draft?.id}.</p> : null}
-          {lastSendResult?.sent ? <p className="draft-note">Sent locally as message {lastSendResult.message_id}.</p> : null}
+          {lastSendResult?.sent ? <p className="draft-note">{sendResultNotice(lastSendResult, true)}</p> : null}
           {notice ? <div className="notice">{notice}</div> : null}
         </section>
       ) : null}

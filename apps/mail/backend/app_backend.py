@@ -24,5 +24,5 @@ response = backend_response(status_code, result)
 if secret_writes:
     response["platform_secret_writes"] = secret_writes
 if status_code < 400:
-    response["app_events"] = app_events_for_action(action)
+    response["app_events"] = app_events_for_action(action, result)
 emit_json(response)

@@ -22,5 +22,5 @@ arguments.setdefault("action", "threads.list")
 status_code, result = handle_action(Path(payload.data_root), arguments)
 result["status_code"] = status_code
 if status_code < 400:
-    result["app_events"] = app_events_for_action(str(arguments.get("action") or "list"))
+    result["app_events"] = app_events_for_action(str(arguments.get("action") or "list"), result)
 emit_json(result)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 from collections.abc import Callable
 from datetime import UTC, datetime
 from email.message import EmailMessage
@@ -268,7 +269,20 @@ class GmailProvider:
             access_token=self._access_token(secrets),
         )
         data_base64url = str(fetched.get("data") or "")
-        fetched_size = _bounded_int(fetched.get("size") or known_size, known_size, 0, 1_000_000_000)
+        declared_size = _bounded_int(fetched.get("size") or known_size, known_size, 0, 1_000_000_000)
+        if declared_size > max_bytes:
+            return {**metadata, "status": "too_large", "size_bytes": declared_size, "max_bytes": max_bytes}
+        try:
+            decoded_size = _base64url_decoded_size(data_base64url)
+        except ValueError as error:
+            return {**metadata, "status": "invalid_payload", "detail": str(error)}
+        if decoded_size > max_bytes:
+            return {**metadata, "status": "too_large", "size_bytes": decoded_size, "max_bytes": max_bytes}
+        try:
+            attachment_bytes = _decode_base64url_bytes(data_base64url)
+        except ValueError as error:
+            return {**metadata, "status": "invalid_payload", "detail": str(error)}
+        fetched_size = len(attachment_bytes)
         if fetched_size > max_bytes:
             return {**metadata, "status": "too_large", "size_bytes": fetched_size, "max_bytes": max_bytes}
         if save_to_storage:
@@ -276,7 +290,7 @@ class GmailProvider:
                 data_root,
                 attachment_id=resolved_attachment_id,
                 filename=str(attachment["filename"]),
-                data_base64url=data_base64url,
+                attachment_bytes=attachment_bytes,
                 generated_storage_root=generated_storage_root,
             )
             return {
@@ -525,6 +539,23 @@ def _decode_base64url(value: str) -> str:
     return raw.decode("utf-8", errors="replace")
 
 
+def _base64url_decoded_size(value: str) -> int:
+    if not re.fullmatch(r"[A-Za-z0-9_-]*={0,2}", value):
+        raise ValueError("Gmail attachment payload was not valid base64url")
+    unpadded = value.rstrip("=")
+    if "=" in unpadded or len(unpadded) % 4 == 1:
+        raise ValueError("Gmail attachment payload was not valid base64url")
+    padding = -len(unpadded) % 4
+    return ((len(unpadded) + padding) // 4 * 3) - padding
+
+
+def _decode_base64url_bytes(value: str) -> bytes:
+    try:
+        return base64.b64decode(_padded_base64url(value), altchars=b"-_", validate=True)
+    except (binascii.Error, ValueError) as error:
+        raise ValueError("Gmail attachment payload was not valid base64url") from error
+
+
 def _sent_at(date_header: str | None, internal_date: object) -> str:
     if date_header:
         try:
@@ -683,12 +714,11 @@ def _save_attachment_to_storage(
     *,
     attachment_id: str,
     filename: str,
-    data_base64url: str,
+    attachment_bytes: bytes,
     generated_storage_root: Path | None,
 ) -> dict[str, object]:
     if generated_storage_root is None:
         raise ValueError("save_to_storage requires generated storage from the platform entrypoint")
-    attachment_bytes = base64.urlsafe_b64decode(_padded_base64url(data_base64url))
     safe_name = _safe_filename(filename)
     target_dir = _attachment_storage_dir(generated_storage_root)
     target, collision_renamed = _write_unique_attachment(target_dir, attachment_id, safe_name, attachment_bytes)

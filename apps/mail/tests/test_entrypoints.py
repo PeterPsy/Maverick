@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 from pathlib import Path
 import sys
@@ -16,6 +17,7 @@ from backend.service import handle_action, resolve_secret_resource
 from backend.service import app_events_for_action
 from backend.database import connect, ensure_schema, health_payload, now_timestamp
 from backend.providers.gmail import GmailProvider
+from backend.store import list_threads
 
 
 class MailServiceTest(unittest.TestCase):
@@ -185,6 +187,58 @@ class MailServiceTest(unittest.TestCase):
             self.assertEqual(second_page["offset"], 1)
             self.assertEqual(second_page["total_count"], first_page["total_count"])
 
+    def test_threads_list_counts_implicit_gmail_default_connection_filter(self) -> None:
+        class FakeGmailProvider:
+            provider_id = "gmail"
+
+            def __init__(self) -> None:
+                self.payload: dict[str, object] = {}
+
+            def list_threads(self, data_root: Path, payload: dict[str, object]) -> list[dict[str, object]]:
+                self.payload = payload
+                return list_threads(data_root, payload)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            ensure_schema(data_root)
+            with connect(data_root) as db:
+                db.executemany(
+                    """
+                    INSERT INTO connections(id, provider, email_address, display_name, status, scopes_json, created_at, updated_at)
+                    VALUES (?, 'gmail', ?, ?, 'connected', '[]', ?, ?)
+                    """,
+                    [
+                        ("mail_connection_gmail_a-example.com", "a@example.com", "a@example.com", "2026-01-02T00:00:00+00:00", "2026-01-02T00:00:00+00:00"),
+                        ("mail_connection_gmail_b-example.com", "b@example.com", "b@example.com", "2026-01-01T00:00:00+00:00", "2026-01-01T00:00:00+00:00"),
+                    ],
+                )
+                db.executemany(
+                    """
+                    INSERT INTO threads(id, connection_id, provider_thread_id, subject, participants_json, last_message_at, snippet, unread, starred, labels_json, updated_at)
+                    VALUES (?, ?, ?, ?, '[]', ?, '', 0, 0, '["inbox"]', ?)
+                    """,
+                    [
+                        ("email_thread_gmail_a_1", "mail_connection_gmail_a-example.com", "thread-a", "A", "2026-01-02T00:00:00+00:00", "2026-01-02T00:00:00+00:00"),
+                        ("email_thread_gmail_b_1", "mail_connection_gmail_b-example.com", "thread-b", "B", "2026-01-01T00:00:00+00:00", "2026-01-01T00:00:00+00:00"),
+                    ],
+                )
+
+            provider = FakeGmailProvider()
+            with patch("backend.service.provider_for_connection", return_value=provider):
+                status, payload = handle_action(
+                    data_root,
+                    {
+                        "action": "threads.list",
+                        "mailbox": "inbox",
+                        "_app_secrets": {"gmail-refresh-token": "refresh-token"},
+                    },
+                )
+
+            self.assertEqual(status, 200)
+            self.assertEqual(provider.payload["connection_id"], "mail_connection_gmail_a-example.com")
+            self.assertEqual([item["connection_id"] for item in payload["items"]], ["mail_connection_gmail_a-example.com"])
+            self.assertEqual(payload["total_count"], 1)
+
     def test_legacy_demo_connection_is_migrated_to_mock_provider(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
@@ -293,6 +347,22 @@ class MailServiceTest(unittest.TestCase):
     def test_disconnect_action_emits_connection_event(self) -> None:
         events = app_events_for_action("connections.disconnect")
         self.assertEqual(events, [{"type": "maverick.app.data-changed", "owner_app_id": "mail", "resource": "connections"}])
+
+    def test_attachment_get_emits_thread_event_only_after_storage_save(self) -> None:
+        for action in ("attachments.get", "mail_get_attachment"):
+            with self.subTest(action=action):
+                saved_events = app_events_for_action(action, {"fetch": {"status": "saved"}})
+                self.assertEqual(saved_events, [{"type": "maverick.app.data-changed", "owner_app_id": "mail", "resource": "threads"}])
+
+        for result in (
+            None,
+            {},
+            {"fetch": {"status": "metadata_only"}},
+            {"fetch": {"status": "fetched"}},
+            {"fetch": {"status": "too_large"}},
+        ):
+            with self.subTest(result=result):
+                self.assertEqual(app_events_for_action("attachments.get", result), [])
 
     def test_schema_includes_provider_and_link_tables(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -941,6 +1011,46 @@ class MailServiceTest(unittest.TestCase):
             self.assertEqual(stored_json["storage_state"], "saved")
             self.assertEqual(json.loads(stored_json["storage_ref_json"]), storage_ref)
 
+    def test_gmail_attachment_max_bytes_uses_decoded_payload_size(self) -> None:
+        attachment_id = "mail_attachment_gmail_mail_connection_gmail_person_example_com_msg_1_att_1"
+        content = b"x" * 64
+        data_base64url = base64.urlsafe_b64encode(content).decode("ascii").rstrip("=")
+
+        def fake_transport(request) -> dict[str, object]:
+            if request.full_url == "https://oauth2.googleapis.com/token":
+                return {"access_token": "access-token"}
+            if request.full_url.endswith("/messages/msg-1/attachments/att-1"):
+                return {"data": data_base64url, "size": 1}
+            raise AssertionError(f"Unexpected request {request.full_url}")
+
+        for save_to_storage in (False, True):
+            with self.subTest(save_to_storage=save_to_storage):
+                with tempfile.TemporaryDirectory() as tmp:
+                    workspace_root = Path(tmp)
+                    data_root = workspace_root / "data" / "mail"
+                    generated_storage_root = workspace_root / "storage" / "generated"
+                    self._insert_gmail_attachment(data_root, attachment_id=attachment_id, filename="report.pdf", size_bytes=1)
+
+                    result = GmailProvider(transport=fake_transport).fetch_attachment(
+                        data_root,
+                        attachment_id,
+                        app_secrets=self._gmail_secrets(),
+                        metadata_only=False,
+                        max_bytes=10,
+                        save_to_storage=save_to_storage,
+                        generated_storage_root=generated_storage_root,
+                    )
+
+                    self.assertEqual(result["status"], "too_large")
+                    self.assertEqual(result["size_bytes"], len(content))
+                    self.assertEqual(result["max_bytes"], 10)
+                    self.assertNotIn("data_base64url", result)
+                    self.assertFalse((generated_storage_root / "mail" / "attachments").exists())
+                    with connect(data_root) as db:
+                        stored_json = db.execute("SELECT storage_state, storage_ref_json FROM attachments WHERE id = ?", (attachment_id,)).fetchone()
+                    self.assertEqual(stored_json["storage_state"], "not_saved")
+                    self.assertEqual(json.loads(stored_json["storage_ref_json"]), {})
+
     def test_attachment_max_bytes_is_capped_at_runtime(self) -> None:
         class FakeProvider:
             def fetch_attachment(self, data_root: Path, attachment_id: str, **kwargs) -> dict[str, object]:
@@ -1118,6 +1228,13 @@ class MailServiceTest(unittest.TestCase):
         main_source = (APP_ROOT / "frontend" / "src" / "main.tsx").read_text(encoding="utf-8")
         self.assertIn("from './App'", main_source)
         self.assertNotIn("New record", main_source)
+
+    def test_frontend_reply_composer_allows_backend_recipient_derivation(self) -> None:
+        app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
+        self.assertIn("const isContextualReply = Boolean(selectedThread);", app_source)
+        self.assertIn("required={!isContextualReply}", app_source)
+        self.assertIn("Reply recipients (optional)", app_source)
+        self.assertIn("to: draft.to.trim() ? [{ email: draft.to.trim() }] : []", app_source)
 
 
 if __name__ == "__main__":

@@ -52,6 +52,8 @@ MUTATING_ACTIONS = {
     "clear_custom_view",
 }
 
+ATTACHMENT_GET_ACTIONS = {"attachments.get", "mail_get_attachment"}
+
 
 def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dict[str, object]]:
     action = str(payload.get("action") or "threads.list")
@@ -89,7 +91,7 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
                 "items": provider.list_threads(data_root, provider_payload),
                 "limit": _bounded_int(payload.get("max_threads") or payload.get("limit"), 50, 1, 200),
                 "offset": _bounded_int(payload.get("offset"), 0, 0, 100_000),
-                "total_count": count_threads(data_root, payload),
+                "total_count": count_threads(data_root, provider_payload),
             }
         if action in {"threads.get", "mail_get_thread", "get"}:
             thread_id = _required_string(payload.get("thread_id") or payload.get("id"), "thread_id")
@@ -245,7 +247,11 @@ def resolve_secret_resource(data_root: Path, payload: dict[str, object]) -> dict
         return {"requires_secrets": False, "error": "validation_error", "detail": str(error)}
 
 
-def app_events_for_action(action: str) -> list[dict[str, str]]:
+def app_events_for_action(action: str, result: dict[str, object] | None = None) -> list[dict[str, str]]:
+    if action in ATTACHMENT_GET_ACTIONS:
+        if _attachment_saved_to_storage(result):
+            return [_data_changed_event("threads")]
+        return []
     if action not in MUTATING_ACTIONS:
         return []
     if action in {"set_view_filter", "set_custom_view", "clear_custom_view"}:
@@ -256,7 +262,19 @@ def app_events_for_action(action: str) -> list[dict[str, str]]:
         resource = "connections"
     else:
         resource = "threads"
-    return [{"type": "maverick.app.data-changed", "owner_app_id": "mail", "resource": resource}]
+    return [_data_changed_event(resource)]
+
+
+def _data_changed_event(resource: str) -> dict[str, str]:
+    return {"type": "maverick.app.data-changed", "owner_app_id": "mail", "resource": resource}
+
+
+def _attachment_saved_to_storage(result: dict[str, object] | None) -> bool:
+    if not isinstance(result, dict):
+        return False
+    fetch = result.get("fetch")
+    return isinstance(fetch, dict) and fetch.get("status") == "saved"
+
 
 def _entity_type(payload: dict[str, object]) -> str:
     return _required_string(payload.get("entity_type"), "entity_type")

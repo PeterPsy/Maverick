@@ -1,0 +1,497 @@
+"""SQLite database helpers for the Mail app."""
+
+from __future__ import annotations
+
+from contextlib import contextmanager
+from datetime import UTC, datetime, timedelta
+from collections.abc import Iterator
+from pathlib import Path
+import re
+import sqlite3
+
+
+SCHEMA_VERSION = "3"
+REFERENCE_ENTITIES = ["mail_connection", "email_thread", "email_message", "mail_attachment", "mail_draft"]
+REQUIRED_TABLES = [
+    "schema_metadata",
+    "connections",
+    "oauth_credentials",
+    "oauth_flows",
+    "folders",
+    "labels",
+    "threads",
+    "messages",
+    "attachments",
+    "drafts",
+    "sync_state",
+    "entity_links",
+    "audit_log",
+]
+
+
+def now_timestamp() -> str:
+    return datetime.now(tz=UTC).isoformat()
+
+
+def db_path(data_root: Path) -> Path:
+    return data_root / "mail.sqlite"
+
+
+@contextmanager
+def connect(data_root: Path) -> Iterator[sqlite3.Connection]:
+    data_root.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(db_path(data_root))
+    connection.row_factory = sqlite3.Row
+    try:
+        yield connection
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
+
+
+def ensure_schema(data_root: Path) -> None:
+    with connect(data_root) as db:
+        db.executescript("""
+            CREATE TABLE IF NOT EXISTS schema_metadata (
+              key TEXT PRIMARY KEY,
+              value TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS connections (
+              id TEXT PRIMARY KEY,
+              provider TEXT NOT NULL,
+              email_address TEXT NOT NULL,
+              display_name TEXT NOT NULL,
+              status TEXT NOT NULL,
+              scopes_json TEXT NOT NULL DEFAULT '[]',
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS oauth_credentials (
+              id TEXT PRIMARY KEY,
+              connection_id TEXT NOT NULL,
+              provider TEXT NOT NULL,
+              secret_ref TEXT NOT NULL DEFAULT '',
+              encrypted_token_json TEXT NOT NULL DEFAULT '',
+              status TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS oauth_flows (
+              state TEXT PRIMARY KEY,
+              provider TEXT NOT NULL,
+              status TEXT NOT NULL,
+              scopes_json TEXT NOT NULL DEFAULT '[]',
+              redirect_uri TEXT NOT NULL DEFAULT '',
+              created_at TEXT NOT NULL,
+              expires_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS folders (
+              id TEXT PRIMARY KEY,
+              connection_id TEXT NOT NULL,
+              provider_folder_id TEXT NOT NULL,
+              name TEXT NOT NULL,
+              canonical TEXT NOT NULL,
+              folder_type TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              UNIQUE(connection_id, canonical)
+            );
+            CREATE TABLE IF NOT EXISTS labels (
+              id TEXT PRIMARY KEY,
+              connection_id TEXT NOT NULL,
+              provider_label_id TEXT NOT NULL,
+              name TEXT NOT NULL,
+              canonical TEXT NOT NULL,
+              color TEXT NOT NULL DEFAULT '',
+              UNIQUE(connection_id, canonical)
+            );
+            CREATE TABLE IF NOT EXISTS threads (
+              id TEXT PRIMARY KEY,
+              connection_id TEXT NOT NULL,
+              provider_thread_id TEXT NOT NULL,
+              subject TEXT NOT NULL,
+              participants_json TEXT NOT NULL DEFAULT '[]',
+              last_message_at TEXT NOT NULL,
+              snippet TEXT NOT NULL DEFAULT '',
+              unread INTEGER NOT NULL DEFAULT 0,
+              starred INTEGER NOT NULL DEFAULT 0,
+              labels_json TEXT NOT NULL DEFAULT '[]',
+              updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS messages (
+              id TEXT PRIMARY KEY,
+              thread_id TEXT NOT NULL,
+              provider_message_id TEXT NOT NULL,
+              sender_json TEXT NOT NULL,
+              recipients_json TEXT NOT NULL DEFAULT '[]',
+              cc_json TEXT NOT NULL DEFAULT '[]',
+              bcc_json TEXT NOT NULL DEFAULT '[]',
+              sent_at TEXT NOT NULL,
+              body_text TEXT NOT NULL DEFAULT '',
+              body_html_sanitized TEXT NOT NULL DEFAULT '',
+              headers_json TEXT NOT NULL DEFAULT '{}',
+              has_attachments INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS attachments (
+              id TEXT PRIMARY KEY,
+              message_id TEXT NOT NULL,
+              provider_attachment_id TEXT NOT NULL,
+              filename TEXT NOT NULL,
+              content_type TEXT NOT NULL DEFAULT '',
+              size_bytes INTEGER NOT NULL DEFAULT 0,
+              storage_state TEXT NOT NULL DEFAULT 'metadata_only',
+              storage_ref_json TEXT NOT NULL DEFAULT '{}',
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS drafts (
+              id TEXT PRIMARY KEY,
+              connection_id TEXT NOT NULL,
+              thread_id TEXT,
+              to_json TEXT NOT NULL DEFAULT '[]',
+              cc_json TEXT NOT NULL DEFAULT '[]',
+              bcc_json TEXT NOT NULL DEFAULT '[]',
+              subject TEXT NOT NULL,
+              body_text TEXT NOT NULL,
+              status TEXT NOT NULL,
+              dirty INTEGER NOT NULL DEFAULT 1,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              sent_at TEXT
+            );
+            CREATE TABLE IF NOT EXISTS sync_state (
+              connection_id TEXT PRIMARY KEY,
+              last_sync_at TEXT,
+              last_error TEXT,
+              cursor TEXT
+            );
+            CREATE TABLE IF NOT EXISTS entity_links (
+              id TEXT PRIMARY KEY,
+              source_entity_type TEXT NOT NULL,
+              source_entity_id TEXT NOT NULL,
+              target_app_id TEXT NOT NULL,
+              target_entity_type TEXT NOT NULL,
+              target_entity_id TEXT NOT NULL,
+              relation TEXT NOT NULL,
+              metadata_json TEXT NOT NULL DEFAULT '{}',
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS audit_log (
+              id TEXT PRIMARY KEY,
+              action TEXT NOT NULL,
+              target_type TEXT NOT NULL,
+              target_id TEXT NOT NULL,
+              detail_json TEXT NOT NULL DEFAULT '{}',
+              created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_threads_connection ON threads(connection_id);
+            CREATE INDEX IF NOT EXISTS idx_threads_updated ON threads(last_message_at);
+            CREATE INDEX IF NOT EXISTS idx_messages_thread ON messages(thread_id);
+            CREATE INDEX IF NOT EXISTS idx_attachments_message ON attachments(message_id);
+            CREATE INDEX IF NOT EXISTS idx_drafts_updated ON drafts(updated_at);
+            CREATE INDEX IF NOT EXISTS idx_entity_links_source ON entity_links(source_entity_type, source_entity_id);
+            CREATE INDEX IF NOT EXISTS idx_entity_links_target ON entity_links(target_app_id, target_entity_type, target_entity_id);
+        """)
+        _ensure_column(db, "sync_state", "last_full_sync_at", "TEXT")
+        _ensure_column(db, "sync_state", "last_incremental_sync_at", "TEXT")
+        _ensure_column(db, "sync_state", "provider_history_id", "TEXT")
+        _ensure_column(db, "oauth_credentials", "grant_id", "TEXT NOT NULL DEFAULT ''")
+        db.execute(
+            "INSERT OR REPLACE INTO schema_metadata(key, value) VALUES (?, ?)",
+            ("schema_version", SCHEMA_VERSION),
+        )
+        _migrate_legacy_mock_connections(db)
+        _migrate_legacy_gmail_cache_ids(db)
+
+
+def health_payload(data_root: Path, *, initialize: bool = True) -> dict[str, object]:
+    if initialize:
+        ensure_schema(data_root)
+    path = db_path(data_root)
+    if not path.exists():
+        return {
+            "health_status": "missing_database",
+            "database": path.name,
+            "schema_version": "",
+            "connection_count": 0,
+            "thread_count": 0,
+            "draft_count": 0,
+        }
+    try:
+        with connect(data_root) as db:
+            quick_check = db.execute("PRAGMA quick_check").fetchone()
+            quick_check_value = quick_check[0] if quick_check else "missing"
+            if quick_check_value != "ok":
+                return _unhealthy_payload(path, "corrupt_database", str(quick_check_value))
+            missing_tables = [
+                table
+                for table in REQUIRED_TABLES
+                if db.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)).fetchone() is None
+            ]
+            if missing_tables:
+                return _unhealthy_payload(path, "missing_tables", ",".join(missing_tables))
+            version = db.execute("SELECT value FROM schema_metadata WHERE key = 'schema_version'").fetchone()
+            connection_count = db.execute("SELECT COUNT(*) AS count FROM connections").fetchone()["count"]
+            thread_count = db.execute("SELECT COUNT(*) AS count FROM threads").fetchone()["count"]
+            draft_count = db.execute("SELECT COUNT(*) AS count FROM drafts WHERE status != 'sent'").fetchone()["count"]
+    except sqlite3.DatabaseError as error:
+        return _unhealthy_payload(path, "database_error", str(error))
+    return {
+        "health_status": "healthy",
+        "schema_version": version["value"] if version else SCHEMA_VERSION,
+        "database": path.name,
+        "connection_count": connection_count,
+        "thread_count": thread_count,
+        "draft_count": draft_count,
+    }
+
+
+def oauth_flow_expiry() -> str:
+    return (datetime.now(tz=UTC) + timedelta(minutes=15)).isoformat()
+
+
+def _unhealthy_payload(path: Path, status: str, detail: str) -> dict[str, object]:
+    return {
+        "health_status": status,
+        "health_detail": detail,
+        "database": path.name,
+        "schema_version": "",
+        "connection_count": 0,
+        "thread_count": 0,
+        "draft_count": 0,
+    }
+
+
+def _ensure_column(db: sqlite3.Connection, table: str, column: str, definition: str) -> None:
+    columns = {row["name"] for row in db.execute(f"PRAGMA table_info({table})").fetchall()}
+    if column not in columns:
+        db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
+def _migrate_legacy_mock_connections(db: sqlite3.Connection) -> None:
+    db.execute(
+        """
+        UPDATE connections
+        SET provider = 'mock',
+            email_address = CASE WHEN email_address = 'demo@example.com' THEN 'mock@example.com' ELSE email_address END,
+            display_name = CASE WHEN display_name = 'Demo Mailbox' THEN 'Mock Mailbox' ELSE display_name END,
+            updated_at = ?
+        WHERE id = 'mail_connection_demo' AND provider = 'gmail' AND status = 'mock_connected'
+        """,
+        (now_timestamp(),),
+    )
+    db.execute(
+        """
+        UPDATE threads
+        SET participants_json = REPLACE(REPLACE(participants_json, 'Demo User', 'Mock User'), 'demo@example.com', 'mock@example.com')
+        WHERE connection_id = 'mail_connection_demo'
+        """
+    )
+    db.execute(
+        """
+        UPDATE messages
+        SET recipients_json = REPLACE(REPLACE(recipients_json, 'Demo User', 'Mock User'), 'demo@example.com', 'mock@example.com')
+        WHERE thread_id IN (SELECT id FROM threads WHERE connection_id = 'mail_connection_demo')
+        """
+    )
+
+
+def _migrate_legacy_gmail_cache_ids(db: sqlite3.Connection) -> None:
+    rows = db.execute(
+        """
+        SELECT threads.id, threads.connection_id, threads.provider_thread_id
+        FROM threads JOIN connections ON threads.connection_id = connections.id
+        WHERE connections.provider = 'gmail'
+        """
+    ).fetchall()
+    for row in rows:
+        new_id = _local_gmail_thread_id(row["connection_id"], row["provider_thread_id"])
+        if row["id"] != new_id and _rename_entity_id(db, "email_thread", "threads", row["id"], new_id):
+            db.execute("UPDATE messages SET thread_id = ? WHERE thread_id = ?", (new_id, row["id"]))
+            db.execute("UPDATE drafts SET thread_id = ? WHERE thread_id = ?", (new_id, row["id"]))
+
+    rows = db.execute(
+        """
+        SELECT messages.id, messages.provider_message_id, threads.connection_id
+        FROM messages JOIN threads ON messages.thread_id = threads.id
+        JOIN connections ON threads.connection_id = connections.id
+        WHERE connections.provider = 'gmail'
+        """
+    ).fetchall()
+    for row in rows:
+        new_id = _local_gmail_message_id(row["connection_id"], row["provider_message_id"])
+        if row["id"] != new_id and _rename_entity_id(db, "email_message", "messages", row["id"], new_id):
+            db.execute("UPDATE attachments SET message_id = ? WHERE message_id = ?", (new_id, row["id"]))
+
+    rows = db.execute(
+        """
+        SELECT attachments.id, attachments.provider_attachment_id, messages.provider_message_id, threads.connection_id
+        FROM attachments JOIN messages ON attachments.message_id = messages.id
+        JOIN threads ON messages.thread_id = threads.id
+        JOIN connections ON threads.connection_id = connections.id
+        WHERE connections.provider = 'gmail'
+        """
+    ).fetchall()
+    for row in rows:
+        new_id = _local_gmail_attachment_id(row["connection_id"], row["provider_message_id"], row["provider_attachment_id"])
+        if row["id"] != new_id:
+            _rename_entity_id(db, "mail_attachment", "attachments", row["id"], new_id)
+
+
+def _rename_entity_id(db: sqlite3.Connection, entity_type: str, table: str, old_id: str, new_id: str) -> bool:
+    if db.execute(f"SELECT 1 FROM {table} WHERE id = ?", (new_id,)).fetchone() is not None:
+        return False
+    db.execute(f"UPDATE {table} SET id = ? WHERE id = ?", (new_id, old_id))
+    db.execute("UPDATE audit_log SET target_id = ? WHERE target_type = ? AND target_id = ?", (new_id, entity_type, old_id))
+    db.execute("UPDATE entity_links SET source_entity_id = ? WHERE source_entity_type = ? AND source_entity_id = ?", (new_id, entity_type, old_id))
+    db.execute(
+        """
+        UPDATE entity_links
+        SET target_entity_id = ?
+        WHERE target_app_id = 'mail' AND target_entity_type = ? AND target_entity_id = ?
+        """,
+        (new_id, entity_type, old_id),
+    )
+    return True
+
+
+def _local_gmail_thread_id(connection_id: object, provider_thread_id: object) -> str:
+    return f"email_thread_gmail_{_safe_id(str(connection_id))}_{_safe_id(str(provider_thread_id))}"
+
+
+def _local_gmail_message_id(connection_id: object, provider_message_id: object) -> str:
+    return f"email_message_gmail_{_safe_id(str(connection_id))}_{_safe_id(str(provider_message_id))}"
+
+
+def _local_gmail_attachment_id(connection_id: object, provider_message_id: object, provider_attachment_id: object) -> str:
+    return f"mail_attachment_gmail_{_safe_id(str(connection_id))}_{_safe_id(str(provider_message_id))}_{_safe_id(str(provider_attachment_id))}"
+
+
+def _safe_id(value: str) -> str:
+    return re.sub(r"[^a-zA-Z0-9]+", "_", value).strip("_").lower() or "unknown"
+
+
+def seed_mock_data(data_root: Path) -> dict[str, object]:
+    """Create deterministic mock mail records only when explicitly requested."""
+    ensure_schema(data_root)
+    with connect(data_root) as db:
+        return _seed_mock_data(db)
+
+
+def _seed_mock_data(db: sqlite3.Connection) -> dict[str, object]:
+    existing = db.execute("SELECT COUNT(*) AS count FROM connections").fetchone()["count"]
+    if existing:
+        return {"created": False, "connection_id": "mail_connection_demo", "reason": "connections_already_exist"}
+    now = now_timestamp()
+    connection_id = "mail_connection_demo"
+    thread_id = "email_thread_demo_welcome"
+    second_thread_id = "email_thread_demo_ops"
+    db.execute(
+        """
+        INSERT INTO connections(id, provider, email_address, display_name, status, scopes_json, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (connection_id, "mock", "mock@example.com", "Mock Mailbox", "mock_connected", '["mail.read", "mail.send"]', now, now),
+    )
+    labels = [
+        ("label_inbox", "INBOX", "Inbox", "inbox"),
+        ("label_sent", "SENT", "Sent", "sent"),
+        ("label_drafts", "DRAFT", "Drafts", "drafts"),
+        ("label_starred", "STARRED", "Starred", "starred"),
+        ("label_trash", "TRASH", "Trash", "trash"),
+    ]
+    db.executemany(
+        "INSERT INTO folders(id, connection_id, provider_folder_id, name, canonical, folder_type, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [
+            (f"folder_{canonical}", connection_id, provider_id, name, canonical, canonical, now, now)
+            for _, provider_id, name, canonical in labels
+        ],
+    )
+    db.executemany(
+        "INSERT INTO labels(id, connection_id, provider_label_id, name, canonical) VALUES (?, ?, ?, ?, ?)",
+        [(label_id, connection_id, provider_id, name, canonical) for label_id, provider_id, name, canonical in labels],
+    )
+    db.execute(
+        """
+        INSERT INTO threads(id, connection_id, provider_thread_id, subject, participants_json, last_message_at, snippet, unread, starred, labels_json, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            thread_id,
+            connection_id,
+            "provider-demo-welcome",
+            "Welcome to Maverick Mail",
+            '[{"name":"Maverick Mail","email":"mail@example.com"},{"name":"Mock User","email":"mock@example.com"}]',
+            now,
+            "A native Maverick mail workspace with CLI, MCP, references, and local storage.",
+            1,
+            1,
+            '["inbox", "starred"]',
+            now,
+        ),
+    )
+    db.execute(
+        """
+        INSERT INTO threads(id, connection_id, provider_thread_id, subject, participants_json, last_message_at, snippet, unread, starred, labels_json, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            second_thread_id,
+            connection_id,
+            "provider-demo-ops",
+            "Mail app implementation notes",
+            '[{"name":"Product","email":"product@example.com"},{"name":"Mock User","email":"mock@example.com"}]',
+            now,
+            "The MVP keeps Gmail OAuth as a documented integration point and ships with a local mock provider.",
+            0,
+            0,
+            '["inbox"]',
+            now,
+        ),
+    )
+    db.execute(
+        """
+        INSERT INTO messages(id, thread_id, provider_message_id, sender_json, recipients_json, sent_at, body_text, headers_json, has_attachments)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "email_message_demo_welcome_1",
+            thread_id,
+            "provider-message-welcome-1",
+            '{"name":"Maverick Mail","email":"mail@example.com"}',
+            '[{"name":"Mock User","email":"mock@example.com"}]',
+            now,
+            "This workspace-local app demonstrates the Mail domain without storing provider tokens. Use MCP tools to search and read bounded thread content.",
+            '{"x-maverick-demo":"true"}',
+            0,
+        ),
+    )
+    db.execute(
+        """
+        INSERT INTO messages(id, thread_id, provider_message_id, sender_json, recipients_json, sent_at, body_text, headers_json, has_attachments)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "email_message_demo_ops_1",
+            second_thread_id,
+            "provider-message-ops-1",
+            '{"name":"Product","email":"product@example.com"}',
+            '[{"name":"Mock User","email":"mock@example.com"}]',
+            now,
+            "Next production step: configure Google OAuth secrets through Vault/Core Secrets, then replace the mock provider with a Gmail adapter.",
+            '{"x-maverick-demo":"true"}',
+            0,
+        ),
+    )
+    db.execute(
+        """
+        INSERT INTO sync_state(connection_id, last_sync_at, last_error, cursor, last_full_sync_at, last_incremental_sync_at, provider_history_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (connection_id, now, "", "demo-cursor", now, now, "demo-history"),
+    )
+    return {"created": True, "connection_id": connection_id}

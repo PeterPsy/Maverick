@@ -16,7 +16,7 @@ export function MonthView(props: ViewProps & { onDrop: (date: Date) => void }) {
     return day
   })
   return (
-    <Card className="overflow-hidden">
+    <Card className="overflow-visible">
       <div className="grid grid-cols-7 border-b">
         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
           <div key={day} className="border-r p-2 text-center text-xs font-medium last:border-r-0 sm:text-sm">

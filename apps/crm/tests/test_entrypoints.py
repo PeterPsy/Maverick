@@ -34,7 +34,7 @@ class CrmEntrypointTest(unittest.TestCase):
             base_payload = {"app_id": "crm", "workspace_id": "test", "data_root": temporary_dir}
             cli_result = run_entrypoint(
                 APP_ROOT / "cli" / "app_cli.py",
-                {**base_payload, "arguments": {"action": "crm.create_account", "name": "Entrypoint Account"}},
+                {**base_payload, "arguments": {"action": "crm.create_account", "name": "Entrypoint Account", "status": "prospect"}},
             )
             account_id = cli_result["account"]["id"]
             self.assertEqual(cli_result["status_code"], 201)
@@ -76,25 +76,40 @@ class CrmEntrypointTest(unittest.TestCase):
             self.assertEqual(audit_result["events"][0]["event_type"], "record.merged")
 
             run_entrypoint(
-                APP_ROOT / "mcp" / "server.py",
+                APP_ROOT / "cli" / "app_cli.py",
                 {
                     **base_payload,
-                    "tool_name": "crm_create_automation_rule",
                     "arguments": {
+                        "subcommand": "crm.create_automation_rule",
                         "name": "Entrypoint follow-up",
                         "trigger_event": "account.created",
                         "entity_type": "account",
-                        "conditions": {"status": "prospect"},
+                        "conditions": {},
                         "action": {"type": "create_task", "title": "Entrypoint task"},
                     },
                 },
             )
             automation_result = run_entrypoint(
-                APP_ROOT / "mcp" / "server.py",
-                {**base_payload, "tool_name": "crm_run_automation_rules", "arguments": {"trigger_event": "account.created", "entity_type": "account", "entity_id": account_id}},
+                APP_ROOT / "cli" / "app_cli.py",
+                {
+                    **base_payload,
+                    "arguments": {
+                        "subcommand": "crm.run_automation_rules",
+                        "trigger_event": "account.created",
+                        "entity_type": "account",
+                        "entity_id": account_id,
+                    },
+                },
             )
             self.assertEqual(automation_result["created_count"], 1)
             self.assertEqual(automation_result["workflow_proposals"][0]["status"], "pending")
+
+            unpublished_tool = run_entrypoint(
+                APP_ROOT / "mcp" / "server.py",
+                {**base_payload, "tool_name": "crm_create_automation_rule", "arguments": {}},
+            )
+            self.assertEqual(unpublished_tool["status_code"], 404)
+            self.assertEqual(unpublished_tool["error"], "not_found")
 
 
 if __name__ == "__main__":

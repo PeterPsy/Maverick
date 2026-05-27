@@ -35,6 +35,43 @@ export type Pipeline = {
   is_default?: number;
 };
 
+export type PipelineBoardDeal = CrmRecord & {
+  account_label?: string;
+  contact_label?: string;
+  age_days?: number | null;
+  stuck_days?: number | null;
+  health?: {
+    status?: string;
+    label?: string;
+    age_days?: number | null;
+    stuck_days?: number | null;
+    is_stuck?: boolean;
+    past_due?: boolean;
+  };
+};
+
+export type PipelineBoardStage = PipelineStage & {
+  deals?: PipelineBoardDeal[];
+  deal_count?: number;
+  totals?: Record<string, number>;
+  weighted?: Record<string, number>;
+  total_value?: number;
+  weighted_value?: number;
+};
+
+export type PipelineBoardPayload = {
+  ok: boolean;
+  pipeline?: Pipeline;
+  stages?: PipelineBoardStage[];
+  totals?: {
+    deal_count?: number;
+    currency_totals?: Record<string, number>;
+    weighted_currency_totals?: Record<string, number>;
+    total_value?: number;
+    weighted_value?: number;
+  };
+};
+
 export type SavedView = {
   id: string;
   title: string;
@@ -73,6 +110,87 @@ export type IntelligentNextAction = {
   record?: CrmRecord;
 };
 
+export type WorkflowProposal = {
+  id: string;
+  proposal_type?: string;
+  status: 'pending' | 'approved' | 'applied' | 'dismissed' | 'rejected';
+  entity_type: string;
+  entity_id: string;
+  title: string;
+  proposal?: {
+    action?: Record<string, unknown>;
+    [key: string]: unknown;
+  };
+  source?: string;
+  created_at?: string;
+  updated_at?: string;
+  approved_at?: string;
+  applied_at?: string;
+};
+
+export type WorkflowProposalPreview = {
+  proposal_id: string;
+  status: string;
+  action_type: string;
+  target: {
+    entity_type?: string;
+    id?: string;
+  };
+  changes: Array<{
+    field: string;
+    current_value?: unknown;
+    proposed_value?: unknown;
+  }>;
+  proposed_task?: Record<string, unknown> | null;
+  validation_issues: string[];
+  can_approve?: boolean;
+  can_apply?: boolean;
+};
+
+export type WorkflowProposalPreviewPayload = {
+  ok: boolean;
+  workflow_proposal: WorkflowProposal;
+  preview: WorkflowProposalPreview;
+};
+
+export type OperationsFeedItem = {
+  kind: string;
+  ref?: {
+    entity_type?: string;
+    entity_id?: string;
+    proposal_id?: string;
+    event_id?: string;
+  };
+  status?: string;
+  title?: string;
+  reason?: string;
+  source?: string;
+  action_type?: string;
+  action?: Record<string, unknown>;
+  priority?: string;
+  score?: number;
+  due_at?: string;
+  created_at?: string;
+  updated_at?: string;
+  approved_at?: string;
+  applied_at?: string;
+};
+
+export type OperationsFeedSection = {
+  key: string;
+  title?: string;
+  count?: number;
+  items?: OperationsFeedItem[];
+};
+
+export type OperationsFeedPayload = {
+  ok: boolean;
+  generated_at?: string;
+  limit?: number;
+  counts?: Record<string, number>;
+  sections?: OperationsFeedSection[];
+};
+
 export type CrmViewRef = {
   entity_type?: string;
   entity_id?: string;
@@ -104,6 +222,7 @@ export type BootstrapPayload = {
   duplicates?: { ok?: boolean; groups?: DuplicateGroup[] };
   schema?: { custom_fields?: CustomFieldDefinition[] };
   next_action_suggestions?: IntelligentNextAction[];
+  workflow_proposals?: WorkflowProposal[];
   counts: Record<string, number>;
   view_state: CrmViewState;
 };
@@ -119,6 +238,7 @@ export type RecordsTableRow = {
   title: string;
   record: CrmRecord;
   computed?: Record<string, unknown>;
+  display?: Record<string, string>;
   ref?: {
     entity_type?: string;
     entity_id?: string;

@@ -1,6 +1,6 @@
-import { BootstrapPayload, CrmRecord, IntelligentNextAction } from '../api';
+import { BootstrapPayload, CrmRecord, IntelligentNextAction, PipelineStage } from '../api';
 
-export type ViewId = 'records' | 'pipeline' | 'operations' | 'reports' | 'import';
+export type ViewId = 'records' | 'pipeline' | 'reports' | 'import';
 export type RecordEntityFilter = 'all' | 'lead' | 'account' | 'contact' | 'deal';
 export type PendingSelection = { entity: string; id: string } | null;
 export type ImportPreview = { ok?: boolean; row_count?: number; counts?: Record<string, number>; warnings?: string[]; errors?: Array<{ row: number; errors: string[] }> };
@@ -19,14 +19,28 @@ export type ExternalRef = {
   occurred_at?: string;
   timestamp?: string;
 };
-export type SalesReportsPayload = {
-  pipeline_value_by_stage?: Array<{ stage?: string; stage_id?: string; count?: number; total_value?: number; weighted_value?: number; currency?: string }>;
-  weighted_forecast?: { total_value?: number; total_weighted_value?: number; by_currency?: Record<string, unknown> };
-  deal_aging?: Array<{ id?: string; name?: string; stage?: string; age_days?: number; value?: number; currency?: string }>;
-  lead_conversion?: { total?: number; converted?: number; conversion_rate?: number };
-  task_overdue?: { total?: number; by_owner?: Array<{ owner_id?: string; count?: number }> };
-  activities_by_owner?: Array<{ owner_id?: string; activity_type?: string; count?: number }>;
+export type PipelineStageReport = {
+  stage?: string;
+  stage_id?: string;
+  deal_count?: number;
+  total_value?: number;
+  weighted_value?: number;
+  currency?: string;
 };
+export type DrilldownFilters = Record<string, string>;
+export type SalesReportsPayload = {
+  pipeline_value_by_stage?: PipelineStageReport[];
+  weighted_forecast?: {
+    currency_totals?: Record<string, number>;
+    total_weighted_value?: number;
+    by_stage?: PipelineStageReport[];
+  };
+  deal_aging?: Array<{ id?: string; name?: string; stage?: string; stage_id?: string; age_days?: number; value?: number; currency?: string; owner_id?: string; created_at?: string; updated_at?: string; close_date?: string }>;
+  lead_conversion?: { total?: number; converted?: number; conversion_rate?: number; avg_days_to_convert?: number };
+  task_overdue?: { total?: number; drilldown_filters?: DrilldownFilters; by_owner?: Array<{ owner_id?: string; task_count?: number; drilldown_filters?: DrilldownFilters }> };
+  activities_by_owner?: Array<{ owner_id?: string; total?: number; by_type?: Record<string, number>; drilldown_filters?: DrilldownFilters }>;
+};
+export type OperationsFilters = Record<string, string>;
 export type AuditEvent = {
   id: string;
   event_type?: string;
@@ -38,6 +52,13 @@ export type AuditEvent = {
 export type ComposerState =
   | { mode: 'create'; entity: CreatableEntity }
   | { mode: 'edit'; entity: CreatableEntity; record: CrmRecord }
+  | null;
+
+export type ActionDialogState =
+  | { kind: 'save-view' }
+  | { kind: 'record-tag' }
+  | { kind: 'bulk-tag' }
+  | { kind: 'pipeline-stage'; stage?: PipelineStage }
   | null;
 
 export type MutatedRecordPayload = { record?: CrmRecord };
@@ -54,6 +75,7 @@ export const emptyPayload: BootstrapPayload = {
   pipeline_stages: [],
   saved_views: [],
   duplicates: { groups: [] },
+  workflow_proposals: [],
   counts: {},
   view_state: { view_filter: { mode: 'search', query: '', entity_type: 'all', refs: [], title: '' } }
 };

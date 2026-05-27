@@ -12,6 +12,7 @@ APP_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(APP_ROOT / "backend"))
 
 from service import app_events_for_action, handle_action
+from domains.records import records_table
 from errors import NotFoundError, ValidationError
 from store import connect, delete_fts, utc_now
 
@@ -64,11 +65,59 @@ class CrmServiceTest(unittest.TestCase):
             _, refreshed = handle_action(temporary_dir, "crm.get_record", {"entity_type": "deal", "id": deal_id})
             self.assertEqual(refreshed["record"]["stage"], "Contracting")
 
+    def test_pipeline_stage_delete_moves_deals_to_replacement_stage(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            _, used_stage = handle_action(temporary_dir, "crm.create_pipeline_stage", {"name": "Used", "position": 25, "probability": 0.8})
+            _, deal = handle_action(temporary_dir, "crm.create_deal", {"name": "Used stage deal", "stage_id": used_stage["stage"]["id"]})
+
+            _, deleted = handle_action(temporary_dir, "crm.delete_pipeline_stage", {"id": used_stage["stage"]["id"]})
+            self.assertTrue(deleted["ok"])
+            self.assertEqual(deleted["stage"]["name"], "Used")
+            self.assertEqual(deleted["replacement_stage"]["id"], "qualified")
+            self.assertEqual(deleted["moved_deal_count"], 1)
+            _, refreshed = handle_action(temporary_dir, "crm.get_record", {"entity_type": "deal", "id": deal["deal"]["id"]})
+            self.assertEqual(refreshed["record"]["stage_id"], "qualified")
+            self.assertEqual(refreshed["record"]["stage"], "Qualified")
+            _, board = handle_action(temporary_dir, "crm.pipeline_board", {})
+            self.assertFalse(any(stage["id"] == used_stage["stage"]["id"] for stage in board["stages"]))
+
+    def test_pipeline_board_returns_all_deals_past_bootstrap_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            _, account_payload = handle_action(temporary_dir, "crm.create_account", {"name": "Board Account"})
+            account_id = account_payload["account"]["id"]
+            _, contact_payload = handle_action(temporary_dir, "crm.create_contact", {"display_name": "Board Contact", "account_id": account_id})
+            contact_id = contact_payload["contact"]["id"]
+            for index in range(125):
+                handle_action(
+                    temporary_dir,
+                    "crm.create_deal",
+                    {
+                        "name": f"Board Deal {index:03d}",
+                        "account_id": account_id,
+                        "contact_id": contact_id,
+                        "value": 100 + index,
+                        "stage_id": "lead",
+                    },
+                )
+
+            _, bootstrap = handle_action(temporary_dir, "bootstrap", {})
+            _, board = handle_action(temporary_dir, "crm.pipeline_board", {})
+            lead_stage = next(stage for stage in board["stages"] if stage["id"] == "lead")
+
+            self.assertEqual(len(bootstrap["deals"]), 100)
+            self.assertEqual(board["totals"]["deal_count"], 125)
+            self.assertEqual(lead_stage["deal_count"], 125)
+            self.assertEqual(len(lead_stage["deals"]), 125)
+            self.assertEqual(lead_stage["deals"][0]["account_label"], "Board Account")
+            self.assertEqual(lead_stage["deals"][0]["contact_label"], "Board Contact")
+            self.assertIn(lead_stage["deals"][0]["health"]["status"], {"active", "stuck", "past_due"})
+
     def test_timeline_saved_view_bulk_and_duplicates(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:
             _, account_payload = handle_action(temporary_dir, "crm.create_account", {"name": "Acme", "domain": "dup.example"})
             account_id = account_payload["account"]["id"]
-            handle_action(temporary_dir, "crm.create_account", {"name": "Acme EU", "domain": "dup.example"})
+            _, second_account_payload = handle_action(temporary_dir, "crm.create_account", {"name": "Acme EU", "domain": "dup.example", "owner_id": "owner_eu"})
+            second_account_id = second_account_payload["account"]["id"]
             handle_action(temporary_dir, "crm.create_contact", {"display_name": "Ada A", "email": "ada@example.com", "account_id": account_id})
             _, contact_payload = handle_action(temporary_dir, "crm.create_contact", {"display_name": "Ada B", "email": "ada@example.com", "account_id": account_id})
             contact_id = contact_payload["contact"]["id"]
@@ -86,11 +135,19 @@ class CrmServiceTest(unittest.TestCase):
             self.assertEqual(bulk["updated_count"], 1)
             _, filtered = handle_action(temporary_dir, "crm.filter_records", {"entity_type": "account", "filters": {"tag": "Focus"}})
             self.assertEqual(filtered["records"][0]["id"], account_id)
+            handle_action(temporary_dir, "crm.define_custom_field", {"entity_type": "account", "field_key": "segment", "label": "Segment"})
+            handle_action(temporary_dir, "crm.set_custom_fields", {"entity_type": "account", "id": second_account_id, "custom_fields": {"segment": "EMEA"}})
 
             _, duplicates = handle_action(temporary_dir, "crm.find_duplicates", {})
             duplicate_keys = {(group["entity_type"], group["field"]) for group in duplicates["groups"]}
             self.assertIn(("account", "domain"), duplicate_keys)
             self.assertIn(("contact", "email"), duplicate_keys)
+            account_group = next(group for group in duplicates["groups"] if group["entity_type"] == "account" and group["field"] == "domain")
+            self.assertEqual({record["id"] for record in account_group["records"]}, {account_id, second_account_id})
+            account_records = {record["id"]: record for record in account_group["records"]}
+            self.assertEqual(account_records[account_id]["tags"][0]["name"], "Focus")
+            self.assertEqual(account_records[second_account_id]["owner_id"], "owner_eu")
+            self.assertEqual(account_records[second_account_id]["custom_fields"]["segment"], "EMEA")
 
     def test_external_refs_link_timeline_unlink_and_health(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:
@@ -281,6 +338,90 @@ class CrmServiceTest(unittest.TestCase):
 
             _, result = handle_action(temporary_dir, "crm.list_next_actions", {})
             self.assertEqual([task["title"] for task in result["tasks"]], ["Open follow up"])
+
+    def test_operations_feed_groups_tasks_workflows_and_audit_events(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            _, account_payload = handle_action(temporary_dir, "crm.create_account", {"name": "Ops Account", "status": "prospect"})
+            account_id = account_payload["account"]["id"]
+            handle_action(temporary_dir, "crm.create_task", {"title": "Call Ops Account", "status": "open", "account_id": account_id})
+            handle_action(temporary_dir, "crm.create_task", {"title": "Closed Ops Account", "status": "done", "account_id": account_id})
+
+            workflow_ids: dict[str, str] = {}
+            for key, title in {
+                "applied": "Apply Ops action",
+                "approved": "Approved Ops action",
+                "pending": "Pending Ops action",
+                "dismissed": "Dismissed Ops action",
+                "rejected": "Rejected Ops action",
+            }.items():
+                handle_action(
+                    temporary_dir,
+                    "crm.create_automation_rule",
+                    {
+                        "name": title,
+                        "trigger_event": f"ops.{key}",
+                        "entity_type": "account",
+                        "conditions": {},
+                        "action": {"type": "create_task", "title": title},
+                    },
+                )
+                _, generated = handle_action(temporary_dir, "crm.run_automation_rules", {"trigger_event": f"ops.{key}", "entity_type": "account", "entity_id": account_id})
+                workflow_ids[key] = generated["workflow_proposals"][0]["id"]
+
+            handle_action(temporary_dir, "crm.approve_workflow_proposal", {"id": workflow_ids["applied"]})
+            handle_action(temporary_dir, "crm.apply_workflow_proposal", {"id": workflow_ids["applied"]})
+            handle_action(temporary_dir, "crm.approve_workflow_proposal", {"id": workflow_ids["approved"]})
+            handle_action(temporary_dir, "crm.dismiss_workflow_proposal", {"id": workflow_ids["dismissed"], "reason": "Not needed"})
+            handle_action(temporary_dir, "crm.reject_workflow_proposal", {"id": workflow_ids["rejected"], "reason": "Bad fit"})
+
+            _, feed = handle_action(temporary_dir, "crm.operations_feed", {"limit": 20})
+            sections = {section["key"]: section for section in feed["sections"]}
+
+            self.assertEqual(feed["counts"]["to_do"], 2)
+            self.assertEqual({item["title"] for item in sections["to_do"]["items"]}, {"Call Ops Account", "Apply Ops action"})
+            self.assertEqual({item["status"] for item in sections["to_approve"]["items"]}, {"pending", "approved"})
+            self.assertEqual([item["ref"]["proposal_id"] for item in sections["done"]["items"]], [workflow_ids["applied"]])
+            self.assertEqual({item["status"] for item in sections["discarded"]["items"]}, {"dismissed", "rejected"})
+            self.assertIn("Bad fit", {item["reason"] for item in sections["discarded"]["items"]})
+            self.assertTrue(all(item["kind"] in {"task", "workflow_proposal", "audit_event"} for section in sections.values() for item in section["items"]))
+            self.assertTrue(any(item["title"] == "workflow_proposal.rejected" and item["reason"] == "Bad fit" for item in sections["audit"]["items"]))
+
+    def test_operations_feed_deduplicates_tasks_and_suggestions(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            _, deal_payload = handle_action(temporary_dir, "crm.create_deal", {"name": "Expansion", "value": 25000})
+            deal_id = deal_payload["deal"]["id"]
+            handle_action(temporary_dir, "crm.create_task", {"title": "Existing deal follow-up", "deal_id": deal_id})
+
+            _, feed = handle_action(temporary_dir, "crm.operations_feed", {"limit": 20})
+            to_do = next(section for section in feed["sections"] if section["key"] == "to_do")
+
+            self.assertEqual(feed["counts"]["to_do"], 1)
+            self.assertEqual([item["kind"] for item in to_do["items"]], ["task"])
+            self.assertEqual(to_do["items"][0]["title"], "Existing deal follow-up")
+
+    def test_operations_feed_filters_owner_and_overdue(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            handle_action(temporary_dir, "crm.create_task", {"title": "Owner A overdue", "owner_id": "owner_a", "due_at": "2000-01-01"})
+            handle_action(temporary_dir, "crm.create_task", {"title": "Owner A future", "owner_id": "owner_a", "due_at": "2999-01-01"})
+            handle_action(temporary_dir, "crm.create_task", {"title": "Owner B overdue", "owner_id": "owner_b", "due_at": "2000-01-01"})
+
+            _, feed = handle_action(temporary_dir, "crm.operations_feed", {"owner_id": "owner_a", "due_overdue": True, "kind": "task", "status": "open", "limit": 20})
+            to_do = next(section for section in feed["sections"] if section["key"] == "to_do")
+
+            self.assertEqual(feed["counts"]["to_do"], 1)
+            self.assertEqual([item["title"] for item in to_do["items"]], ["Owner A overdue"])
+
+    def test_operations_feed_counts_exceed_limited_items(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            for index in range(5):
+                handle_action(temporary_dir, "crm.create_task", {"title": f"Limited task {index}", "due_at": f"2999-01-0{index + 1}"})
+
+            _, feed = handle_action(temporary_dir, "crm.operations_feed", {"limit": 2, "kind": "task", "status": "open"})
+            to_do = next(section for section in feed["sections"] if section["key"] == "to_do")
+
+            self.assertEqual(feed["counts"]["to_do"], 5)
+            self.assertEqual(to_do["count"], 5)
+            self.assertEqual(len(to_do["items"]), 2)
 
     def test_archive_delete_and_tag_record_actions(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:
@@ -474,14 +615,16 @@ class CrmServiceTest(unittest.TestCase):
             self.assertEqual(accounts["records"][0]["computed"]["next_action"], "Call Acme")
             self.assertEqual(accounts["records"][0]["computed"]["last_activity_at"], "2026-05-21T10:00:00+00:00")
 
-    def test_records_table_pushes_tag_query_and_custom_field_filters_to_sql(self) -> None:
+    def test_records_table_pushes_tag_query_custom_fields_and_labels_to_sql(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:
             _, account_payload = handle_action(temporary_dir, "crm.create_account", {"name": "Tagged Acme", "domain": "acme.example"})
             account_id = account_payload["account"]["id"]
+            _, contact_payload = handle_action(temporary_dir, "crm.create_contact", {"display_name": "Ada Buyer", "account_id": account_id})
             handle_action(temporary_dir, "crm.create_account", {"name": "Other Account", "domain": "other.example"})
             handle_action(temporary_dir, "crm.tag_record", {"entity_type": "account", "id": account_id, "tag": "Strategic"})
             handle_action(temporary_dir, "crm.define_custom_field", {"entity_type": "account", "field_key": "tier", "label": "Tier", "field_type": "text"})
             handle_action(temporary_dir, "crm.set_custom_fields", {"entity_type": "account", "id": account_id, "custom_fields": {"tier": "enterprise"}})
+            handle_action(temporary_dir, "crm.create_deal", {"name": "Readable deal", "account_id": account_id, "contact_id": contact_payload["contact"]["id"]})
 
             _, page = handle_action(
                 temporary_dir,
@@ -495,6 +638,35 @@ class CrmServiceTest(unittest.TestCase):
             )
             self.assertEqual([record["id"] for record in page["records"]], [account_id])
             self.assertEqual(page["records"][0]["record"]["custom_fields"]["tier"], "enterprise")
+            self.assertIn({"key": "custom:tier", "label": "Tier"}, page["columns"])
+
+            _, deals = handle_action(temporary_dir, "crm.records_table", {"entity_type": "deal", "query": "Readable", "pagination": {"limit": 10}})
+            deal_column_keys = [column["key"] for column in deals["columns"]]
+            self.assertNotIn("account_id", deal_column_keys)
+            self.assertNotIn("contact_id", deal_column_keys)
+            self.assertEqual(deals["records"][0]["record"]["account_id"], account_id)
+            self.assertEqual(deals["records"][0]["record"]["contact_id"], contact_payload["contact"]["id"])
+            self.assertEqual(deals["records"][0]["display"]["account"], "Tagged Acme")
+            self.assertEqual(deals["records"][0]["display"]["contact"], "Ada Buyer")
+
+    def test_records_table_hydrates_page_records_in_batches(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            for index in range(8):
+                _, account_payload = handle_action(temporary_dir, "crm.create_account", {"name": f"Batch Account {index:02d}"})
+                if index == 7:
+                    handle_action(temporary_dir, "crm.tag_record", {"entity_type": "account", "id": account_payload["account"]["id"], "tag": "Batch"})
+                    handle_action(temporary_dir, "crm.define_custom_field", {"entity_type": "account", "field_key": "tier", "label": "Tier", "field_type": "text"})
+                    handle_action(temporary_dir, "crm.set_custom_fields", {"entity_type": "account", "id": account_payload["account"]["id"], "custom_fields": {"tier": "enterprise"}})
+
+            statements: list[str] = []
+            with connect(temporary_dir) as db:
+                db.set_trace_callback(lambda statement: statements.append(" ".join(statement.split()).lower()))
+                page = records_table(db, {"entity_type": "account", "query": "Batch Account 07", "pagination": {"limit": 5}})
+
+            self.assertEqual(len(page["records"]), 1)
+            self.assertTrue(any(record["record"]["custom_fields"].get("tier") == "enterprise" for record in page["records"]))
+            self.assertEqual([statement for statement in statements if "from accounts where id =" in statement], [])
+            self.assertEqual(len([statement for statement in statements if "select * from accounts where id in" in statement]), 1)
 
     def test_bootstrap_includes_view_state(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:
@@ -569,6 +741,7 @@ class CrmServiceTest(unittest.TestCase):
             account_id = account_payload["account"]["id"]
             handle_action(temporary_dir, "crm.create_deal", {"name": "Report Deal", "account_id": account_id, "value": 20000, "stage_id": "proposal", "owner_id": "owner_1"})
             handle_action(temporary_dir, "crm.create_task", {"title": "Overdue report task", "account_id": account_id, "owner_id": "owner_1", "due_at": "2026-01-01T00:00:00+00:00"})
+            handle_action(temporary_dir, "crm.create_task", {"title": "Future report task", "account_id": account_id, "owner_id": "owner_1", "due_at": "2999-01-01T00:00:00+00:00"})
             handle_action(temporary_dir, "crm.log_activity", {"subject": "Report call", "account_id": account_id, "owner_id": "owner_1", "activity_type": "call"})
 
             _, reports = handle_action(temporary_dir, "crm.sales_reports", {})
@@ -576,7 +749,10 @@ class CrmServiceTest(unittest.TestCase):
             self.assertGreater(reports["weighted_forecast"]["total_weighted_value"], 0)
             self.assertEqual(reports["lead_conversion"]["converted"], 1)
             self.assertEqual(reports["task_overdue"]["total"], 1)
+            self.assertEqual(reports["task_overdue"]["drilldown_filters"], {"kind": "task", "status": "open", "due_overdue": "true"})
+            self.assertEqual(reports["task_overdue"]["by_owner"][0]["drilldown_filters"]["owner_id"], "owner_1")
             self.assertEqual(reports["activities_by_owner"][0]["owner_id"], "owner_1")
+            self.assertEqual(reports["activities_by_owner"][0]["drilldown_filters"], {"kind": "activity", "owner_id": "owner_1"})
 
             _, audit = handle_action(temporary_dir, "crm.audit_log", {"entity_type": "account", "entity_id": account_id, "event_type": "account.created"})
             self.assertEqual(audit["events"][0]["event_type"], "account.created")
@@ -642,6 +818,159 @@ class CrmServiceTest(unittest.TestCase):
             handle_action(temporary_dir, "crm.approve_workflow_proposal", {"id": proposal_id})
             _, applied = handle_action(temporary_dir, "crm.apply_workflow_proposal", {"id": proposal_id})
             self.assertEqual(applied["record"]["account_id"], account_id)
+
+    def test_workflow_proposals_can_be_dismissed_or_rejected_before_apply(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            _, account_payload = handle_action(temporary_dir, "crm.create_account", {"name": "Lifecycle Account"})
+            account_id = account_payload["account"]["id"]
+            handle_action(
+                temporary_dir,
+                "crm.create_automation_rule",
+                {
+                    "name": "Lifecycle follow-up",
+                    "trigger_event": "account.created",
+                    "entity_type": "account",
+                    "conditions": {},
+                    "action": {"type": "create_task", "title": "Review lifecycle"},
+                },
+            )
+
+            _, first = handle_action(temporary_dir, "crm.run_automation_rules", {"trigger_event": "account.created", "entity_type": "account", "entity_id": account_id})
+            dismissed_id = first["workflow_proposals"][0]["id"]
+            _, dismissed = handle_action(temporary_dir, "crm.dismiss_workflow_proposal", {"id": dismissed_id, "reason": "Not needed"})
+            self.assertEqual(dismissed["workflow_proposal"]["status"], "dismissed")
+
+            with self.assertRaisesRegex(ValidationError, "approved before applying"):
+                handle_action(temporary_dir, "crm.apply_workflow_proposal", {"id": dismissed_id})
+            with self.assertRaisesRegex(ValidationError, "pending or approved"):
+                handle_action(temporary_dir, "crm.approve_workflow_proposal", {"id": dismissed_id})
+
+            _, second = handle_action(temporary_dir, "crm.run_automation_rules", {"trigger_event": "account.created", "entity_type": "account", "entity_id": account_id})
+            rejected_id = second["workflow_proposals"][0]["id"]
+            handle_action(temporary_dir, "crm.approve_workflow_proposal", {"id": rejected_id})
+            _, rejected = handle_action(temporary_dir, "crm.reject_workflow_proposal", {"id": rejected_id})
+            self.assertEqual(rejected["workflow_proposal"]["status"], "rejected")
+
+            _, active = handle_action(temporary_dir, "crm.list_workflow_proposals", {"status": "active"})
+            self.assertEqual(active["workflow_proposals"], [])
+            _, closed = handle_action(temporary_dir, "crm.list_workflow_proposals", {"status": "all"})
+            self.assertEqual({item["status"] for item in closed["workflow_proposals"]}, {"dismissed", "rejected"})
+
+    def test_workflow_proposal_preview_shows_update_record_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            _, account_payload = handle_action(temporary_dir, "crm.create_account", {"name": "Preview Account", "status": "prospect", "summary": "Old summary"})
+            account_id = account_payload["account"]["id"]
+            handle_action(
+                temporary_dir,
+                "crm.import_commit",
+                {
+                    "export": {
+                        "workflow_proposals": [
+                            {
+                                "id": "wf_preview_update",
+                                "proposal_type": "enrichment",
+                                "status": "approved",
+                                "entity_type": "account",
+                                "entity_id": account_id,
+                                "title": "Preview account update",
+                                "proposal": {
+                                    "reason": "Account qualified",
+                                    "action": {
+                                        "type": "update_record",
+                                        "entity_type": "account",
+                                        "id": account_id,
+                                        "changes": {"status": "customer", "summary": "New summary"},
+                                    },
+                                },
+                            }
+                        ]
+                    }
+                },
+            )
+
+            _, payload = handle_action(temporary_dir, "crm.workflow_proposal_preview", {"id": "wf_preview_update"})
+
+            preview = payload["preview"]
+            changes = {item["field"]: item for item in preview["changes"]}
+            self.assertEqual(preview["action_type"], "update_record")
+            self.assertEqual(preview["target"], {"entity_type": "account", "id": account_id})
+            self.assertEqual(changes["status"]["current_value"], "prospect")
+            self.assertEqual(changes["status"]["proposed_value"], "customer")
+            self.assertEqual(changes["summary"]["current_value"], "Old summary")
+            self.assertEqual(changes["summary"]["proposed_value"], "New summary")
+            self.assertEqual(preview["validation_issues"], [])
+            self.assertTrue(preview["can_apply"])
+
+    def test_workflow_proposal_preview_shows_create_task(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            _, account_payload = handle_action(temporary_dir, "crm.create_account", {"name": "Task Preview Account"})
+            account_id = account_payload["account"]["id"]
+            handle_action(
+                temporary_dir,
+                "crm.import_commit",
+                {
+                    "export": {
+                        "workflow_proposals": [
+                            {
+                                "id": "wf_preview_task",
+                                "proposal_type": "next_action",
+                                "status": "pending",
+                                "entity_type": "account",
+                                "entity_id": account_id,
+                                "title": "Create task preview",
+                                "proposal": {
+                                    "reason": "Needs follow up",
+                                    "action": {"type": "create_task", "title": "Call buyer", "priority": "high", "account_id": account_id, "due_at": "2026-06-01"},
+                                },
+                            }
+                        ]
+                    }
+                },
+            )
+
+            _, payload = handle_action(temporary_dir, "crm.workflow_proposal_preview", {"id": "wf_preview_task"})
+
+            preview = payload["preview"]
+            self.assertEqual(preview["action_type"], "create_task")
+            self.assertEqual(preview["target"], {"entity_type": "account", "id": account_id})
+            self.assertEqual(preview["changes"], [])
+            self.assertEqual(preview["proposed_task"]["title"], "Call buyer")
+            self.assertEqual(preview["proposed_task"]["priority"], "high")
+            self.assertEqual(preview["proposed_task"]["account_id"], account_id)
+            self.assertEqual(preview["validation_issues"], [])
+            self.assertTrue(preview["can_approve"])
+
+    def test_workflow_proposal_preview_returns_validation_issues_for_invalid_proposal(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            _, account_payload = handle_action(temporary_dir, "crm.create_account", {"name": "Invalid Preview Account"})
+            account_id = account_payload["account"]["id"]
+            handle_action(
+                temporary_dir,
+                "crm.import_commit",
+                {
+                    "export": {
+                        "workflow_proposals": [
+                            {
+                                "id": "wf_preview_invalid",
+                                "proposal_type": "enrichment",
+                                "status": "approved",
+                                "entity_type": "account",
+                                "entity_id": account_id,
+                                "title": "Invalid update preview",
+                                "proposal": {"action": {"type": "update_record", "entity_type": "account", "id": "missing_account", "changes": {}}},
+                            }
+                        ]
+                    }
+                },
+            )
+
+            _, payload = handle_action(temporary_dir, "crm.workflow_proposal_preview", {"id": "wf_preview_invalid"})
+
+            preview = payload["preview"]
+            self.assertEqual(preview["target"], {"entity_type": "account", "id": "missing_account"})
+            self.assertIn("update_record target is not active", preview["validation_issues"])
+            self.assertIn("update_record has no applicable changes", preview["validation_issues"])
+            self.assertFalse(preview["can_apply"])
 
     def test_enrichment_does_not_create_noop_workflow_proposals(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:

@@ -42,8 +42,7 @@ body {
   color: var(--maverick-text);
 }
 
-button,
-input {
+button {
   border: 0;
   color: inherit;
   font: inherit;
@@ -56,56 +55,12 @@ button {
 .crm-sidebar-widget {
   --crm-sidebar-scroll-under-bottom: 7.15rem;
   --crm-sidebar-scroll-under-top: 3.12rem;
-  --crm-sidebar-search-height: 2.65rem;
   position: relative;
   display: block;
   width: 100%;
   height: 100%;
   min-height: 0;
   overflow: hidden;
-}
-
-.crm-sidebar-search-frame {
-  position: absolute;
-  top: var(--crm-sidebar-scroll-under-top);
-  left: 0;
-  right: 0;
-  z-index: 3;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 0.48rem;
-  height: var(--crm-sidebar-search-height);
-  min-height: var(--crm-sidebar-search-height);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: var(--crm-sidebar-cell-radius);
-  background: var(--maverick-glass-surface);
-  box-shadow: var(--maverick-glass-edge);
-  backdrop-filter: blur(26px);
-  -webkit-backdrop-filter: blur(26px);
-  padding: 0 0.72rem;
-}
-
-.crm-sidebar-search-frame svg {
-  flex: none;
-  color: var(--crm-sidebar-icon-color);
-}
-
-.crm-sidebar-search {
-  width: 100%;
-  min-width: 0;
-  background: transparent;
-  color: var(--maverick-text);
-  outline: none;
-}
-
-.crm-sidebar-search::placeholder {
-  color: var(--maverick-text-soft);
-}
-
-.crm-sidebar-search-frame:focus-within {
-  border-color: var(--maverick-accent);
-  box-shadow: 0 0 0 3px var(--maverick-accent-soft);
 }
 
 .crm-sidebar-list {
@@ -119,7 +74,7 @@ button {
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
-  padding: calc(var(--crm-sidebar-scroll-under-top) + var(--crm-sidebar-search-height) + 0.72rem) 0 var(--crm-sidebar-scroll-under-bottom);
+  padding: var(--crm-sidebar-scroll-under-top) 0 var(--crm-sidebar-scroll-under-bottom);
   scrollbar-width: none;
 }
 
@@ -127,11 +82,6 @@ button {
   display: none;
   width: 0;
   height: 0;
-}
-
-.crm-sidebar-error {
-  color: var(--maverick-text-muted);
-  font-size: 0.72rem;
 }
 
 .crm-sidebar-widget nav {
@@ -190,26 +140,6 @@ button {
 
 .crm-sidebar-row:active {
   transform: scale(0.985);
-}
-
-.crm-sidebar-error {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0.35rem;
-  z-index: 4;
-  margin: 0;
-  border: 1px solid rgba(255, 179, 191, 0.24);
-  border-radius: var(--crm-sidebar-control-radius);
-  background: rgba(255, 179, 191, 0.12);
-  color: #ffb3bf;
-  padding: 0.62rem 0.7rem;
-}
-
-@media (max-width: 979px) {
-  input {
-    font-size: 16px;
-  }
 }
 
 .crm-sidebar-widget.is-shell-mobile {

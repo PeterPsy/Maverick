@@ -562,48 +562,6 @@
       },
       "output_schema": { "type": "object" }
     },
-    "crm_list_saved_views": {
-      "description": "List saved CRM views.",
-      "input_schema": { "type": "object", "properties": {}, "additionalProperties": false },
-      "output_schema": { "type": "object" }
-    },
-    "crm_save_view": {
-      "description": "Create or update a saved CRM view.",
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "id": { "type": "string" },
-          "title": { "type": "string" },
-          "entity_type": { "type": "string", "enum": ["all", "lead", "account", "contact", "deal", "activity", "task", "note"] },
-          "query": { "type": "string" },
-          "filters": { "type": "object" },
-          "refs": { "type": "array", "items": { "type": "object" } }
-        },
-        "required": ["title"],
-        "additionalProperties": false
-      },
-      "output_schema": { "type": "object" }
-    },
-    "crm_delete_saved_view": {
-      "description": "Delete a saved CRM view.",
-      "input_schema": {
-        "type": "object",
-        "properties": { "id": { "type": "string" } },
-        "required": ["id"],
-        "additionalProperties": false
-      },
-      "output_schema": { "type": "object" }
-    },
-    "crm_apply_saved_view": {
-      "description": "Apply a saved CRM view to the persisted CRM view state.",
-      "input_schema": {
-        "type": "object",
-        "properties": { "id": { "type": "string" } },
-        "required": ["id"],
-        "additionalProperties": false
-      },
-      "output_schema": { "type": "object" }
-    },
     "crm_schema": {
       "description": "Return CRM schema/config discovery including standard fields, typed custom fields, pipelines, and automation rules.",
       "input_schema": { "type": "object", "properties": {}, "additionalProperties": false },
@@ -614,40 +572,6 @@
       "input_schema": {
         "type": "object",
         "properties": { "entity_type": { "type": "string", "enum": ["all", "lead", "account", "contact", "deal", "activity", "task", "note"] } },
-        "additionalProperties": false
-      },
-      "output_schema": { "type": "object" }
-    },
-    "crm_define_custom_field": {
-      "description": "Create or update a typed CRM custom field definition.",
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "entity_type": { "type": "string", "enum": ["lead", "account", "contact", "deal", "activity", "task", "note"] },
-          "field_key": { "type": "string" },
-          "key": { "type": "string" },
-          "label": { "type": "string" },
-          "field_type": { "type": "string", "enum": ["text", "number", "date", "boolean", "select", "multi_select", "url", "email"] },
-          "required": { "type": "boolean" },
-          "options": { "type": "array", "items": { "type": "string" } },
-          "default_value": {},
-          "position": { "type": "integer" }
-        },
-        "required": ["entity_type"],
-        "additionalProperties": false
-      },
-      "output_schema": { "type": "object" }
-    },
-    "crm_archive_custom_field": {
-      "description": "Archive a CRM custom field definition without deleting historical values.",
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "entity_type": { "type": "string", "enum": ["lead", "account", "contact", "deal", "activity", "task", "note"] },
-          "field_key": { "type": "string" },
-          "key": { "type": "string" }
-        },
-        "required": ["entity_type"],
         "additionalProperties": false
       },
       "output_schema": { "type": "object" }
@@ -664,48 +588,6 @@
           "values": { "type": "object" }
         },
         "required": ["entity_type"],
-        "additionalProperties": false
-      },
-      "output_schema": { "type": "object" }
-    },
-    "crm_list_automation_rules": {
-      "description": "List CRM automation rules.",
-      "input_schema": { "type": "object", "properties": {}, "additionalProperties": false },
-      "output_schema": { "type": "object" }
-    },
-    "crm_create_automation_rule": {
-      "description": "Create an approvable CRM automation rule.",
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "name": { "type": "string" },
-          "trigger_event": { "type": "string" },
-          "entity_type": { "type": "string", "enum": ["all", "lead", "account", "contact", "deal", "activity", "task", "note"] },
-          "conditions": { "type": "object" },
-          "action": { "type": "object" },
-          "approval_required": { "type": "boolean" },
-          "status": { "type": "string" }
-        },
-        "required": ["name", "trigger_event"],
-        "additionalProperties": false
-      },
-      "output_schema": { "type": "object" }
-    },
-    "crm_update_automation_rule": {
-      "description": "Update an approvable CRM automation rule.",
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "id": { "type": "string" },
-          "name": { "type": "string" },
-          "trigger_event": { "type": "string" },
-          "entity_type": { "type": "string", "enum": ["all", "lead", "account", "contact", "deal", "activity", "task", "note"] },
-          "conditions": { "type": "object" },
-          "action": { "type": "object" },
-          "approval_required": { "type": "boolean" },
-          "status": { "type": "string" }
-        },
-        "required": ["id"],
         "additionalProperties": false
       },
       "output_schema": { "type": "object" }
@@ -746,21 +628,6 @@
       },
       "output_schema": { "type": "object" }
     },
-    "crm_run_automation_rules": {
-      "description": "Evaluate active automation rules and create approval-required workflow proposals without applying them.",
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "trigger_event": { "type": "string" },
-          "entity_type": { "type": "string", "enum": ["all", "lead", "account", "contact", "deal", "activity", "task", "note"] },
-          "entity_id": { "type": "string" },
-          "id": { "type": "string" },
-          "limit": { "type": "integer", "minimum": 1, "maximum": 200 }
-        },
-        "additionalProperties": false
-      },
-      "output_schema": { "type": "object" }
-    },
     "crm_list_workflow_proposals": {
       "description": "List CRM workflow proposals by status.",
       "input_schema": {
@@ -778,6 +645,34 @@
       "input_schema": {
         "type": "object",
         "properties": { "id": { "type": "string" } },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_dismiss_workflow_proposal": {
+      "description": "Dismiss or reject a pending or approved CRM workflow proposal without applying it.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "status": { "type": "string", "enum": ["dismissed", "rejected"] },
+          "resolution": { "type": "string", "enum": ["dismissed", "rejected"] },
+          "reason": { "type": "string" }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_reject_workflow_proposal": {
+      "description": "Reject a pending or approved CRM workflow proposal without applying it.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "reason": { "type": "string" }
+        },
         "required": ["id"],
         "additionalProperties": false
       },
@@ -1021,40 +916,6 @@
         "required": ["entity_id"],
         "additionalProperties": false
       },
-      "output_schema": { "type": "object" }
-    },
-    "crm_view_filter": {
-      "description": "Read CRM view state.",
-      "input_schema": { "type": "object", "properties": {}, "additionalProperties": false },
-      "output_schema": { "type": "object" }
-    },
-    "crm_set_view_filter": {
-      "description": "Set CRM search and entity filter state.",
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "query": { "type": "string" },
-          "entity_type": { "type": "string", "enum": ["all", "lead", "account", "contact", "deal", "activity", "task", "note"] }
-        },
-        "additionalProperties": false
-      },
-      "output_schema": { "type": "object" }
-    },
-    "crm_set_custom_view": {
-      "description": "Set CRM custom view references.",
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "title": { "type": "string" },
-          "refs": { "type": "array", "items": { "type": "object" } }
-        },
-        "additionalProperties": false
-      },
-      "output_schema": { "type": "object" }
-    },
-    "crm_clear_custom_view": {
-      "description": "Clear CRM custom view state.",
-      "input_schema": { "type": "object", "properties": {}, "additionalProperties": false },
       "output_schema": { "type": "object" }
     }
   }

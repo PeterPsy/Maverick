@@ -83,24 +83,16 @@
       "crm_sales_reports",
       "crm_filter_records",
       "crm_find_duplicates",
-      "crm_list_saved_views",
-      "crm_save_view",
-      "crm_delete_saved_view",
-      "crm_apply_saved_view",
       "crm_schema",
       "crm_list_custom_fields",
-      "crm_define_custom_field",
-      "crm_archive_custom_field",
       "crm_set_custom_fields",
-      "crm_list_automation_rules",
-      "crm_create_automation_rule",
-      "crm_update_automation_rule",
       "crm_record_enrichment",
       "crm_intelligent_next_actions",
       "crm_propose_workflows",
-      "crm_run_automation_rules",
       "crm_list_workflow_proposals",
       "crm_approve_workflow_proposal",
+      "crm_dismiss_workflow_proposal",
+      "crm_reject_workflow_proposal",
       "crm_apply_workflow_proposal",
       "crm_link_external_ref",
       "crm_unlink_external_ref",
@@ -116,11 +108,7 @@
       "crm_reference_manifest",
       "crm_reference_search",
       "crm_reference_resolve",
-      "crm_reference_summarize",
-      "crm_view_filter",
-      "crm_set_view_filter",
-      "crm_set_custom_view",
-      "crm_clear_custom_view"
+      "crm_reference_summarize"
     ],
     "cli_commands": [
       "crm"
@@ -323,23 +311,6 @@
       },
       "actions": {
         "backend": true,
-        "mcp": false,
-        "cli": false
-      }
-    },
-    {
-      "widget_id": "crm-sidebar-footer",
-      "host": "base-shell",
-      "content_kinds": [
-        "shell.sidebar.footer"
-      ],
-      "frontend": {
-        "kind": "iframe",
-        "mount": "frontend/dist/widgets/crm-sidebar-footer",
-        "spa_fallback": true
-      },
-      "actions": {
-        "backend": false,
         "mcp": false,
         "cli": false
       }

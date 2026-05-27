@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from store import attach_tags, list_rows, parse_limit, require_text, row_to_dict, table_for_entity
+from store import attach_tags, parse_limit, require_text, row_to_dict, table_for_entity
 
 
 ENTITY_TABLES = {
@@ -37,6 +37,7 @@ def list_next_actions(db, payload: dict[str, Any]) -> list[dict[str, Any]]:
         params,
     ).fetchall()
     return [attach_tags(db, "task", row_to_dict(row)) for row in rows]
+
 
 def find_duplicates(db, payload: dict[str, Any]) -> dict[str, Any]:
     limit = parse_limit(payload, 25)
@@ -79,6 +80,7 @@ def audit_log(db, payload: dict[str, Any]) -> dict[str, Any]:
         params,
     ).fetchall()
     return {"ok": True, "events": [row_to_dict(row) for row in rows]}
+
 
 def _duplicate_groups(db, entity_type: str, table: str, field: str, limit: int) -> list[dict[str, Any]]:
     rows = db.execute(

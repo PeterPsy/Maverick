@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import csv
 from io import StringIO
-from typing import Any
+import math
+from typing import Any, Callable
 
 from errors import ValidationError
 from store import require_text
 
+from .export_restore import EXPORT_CONFIG_TABLES, EXPORT_ENTITY_ORDER, restore_export_payload
 
-EXPORT_ENTITY_ORDER = ["leads", "accounts", "contacts", "deals", "activities", "tasks", "notes"]
-EXPORT_CONFIG_TABLES = ["custom_field_definitions", "custom_field_values", "automation_rules", "workflow_proposals", "external_refs"]
+
+RecordCreator = Callable[[Any, dict[str, Any]], dict[str, Any]]
 
 
 def import_preview(payload: dict[str, Any]) -> dict[str, Any]:
@@ -24,6 +26,23 @@ def import_preview(payload: dict[str, Any]) -> dict[str, Any]:
     errors = _validate_import_rows(entity_type, rows)
     return {"ok": not errors, "entity_type": entity_type, "row_count": len(rows), "sample": rows[:10], "warnings": [], "errors": errors}
 
+
+def import_commit(db, payload: dict[str, Any], creators: dict[str, RecordCreator]) -> dict[str, Any]:
+    payload = _normalize_import_payload(payload)
+    if _looks_like_export_payload(payload):
+        return restore_export_payload(db, payload)
+    entity_type = require_text(payload, "entity_type", default="contact") or "contact"
+    rows = _read_import_rows(payload)
+    errors = _validate_import_rows(entity_type, rows)
+    if errors:
+        return {"ok": False, "entity_type": entity_type, "created_count": 0, "records": [], "errors": errors}
+    creator = creators.get(entity_type)
+    if creator is None:
+        raise ValidationError("Imports support lead, account, contact, deal, activity, task, and note.", details={"entity_type": entity_type})
+    created = [creator(db, row) for row in rows]
+    return {"ok": True, "entity_type": entity_type, "created_count": len(created), "records": created, "errors": []}
+
+
 def _normalize_import_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if isinstance(payload.get("export"), dict):
         return payload["export"]
@@ -34,6 +53,7 @@ def _normalize_import_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
 def _looks_like_export_payload(payload: dict[str, Any]) -> bool:
     return any(isinstance(payload.get(table), list) for table in [*EXPORT_CONFIG_TABLES, *EXPORT_ENTITY_ORDER])
+
 
 def _read_import_rows(payload: dict[str, Any]) -> list[dict[str, Any]]:
     if isinstance(payload.get("rows"), list):

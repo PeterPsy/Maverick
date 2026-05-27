@@ -1,7 +1,7 @@
 import { CrmRecord, CrmViewRef } from '../api';
 import { CreatableEntity, PendingSelection, RecordEntityFilter, ViewId } from './types';
 
-export const viewIds: ViewId[] = ['records', 'pipeline', 'operations', 'reports', 'import'];
+export const viewIds: ViewId[] = ['records', 'pipeline', 'reports', 'import'];
 export const recordEntityFilters: RecordEntityFilter[] = ['all', 'lead', 'account', 'contact', 'deal'];
 export const creatableEntities: CreatableEntity[] = ['lead', 'account', 'contact', 'deal', 'task', 'note'];
 
@@ -42,7 +42,10 @@ export function viewFromAppPage(appPage: string): { view: ViewId; selection: Pen
   }
   if (route === 'tasks' || route === 'notes' || route === 'activities') {
     const entity = route === 'activities' ? 'activity' : route.replace(/s$/, '');
-    return { view: 'operations', entityFilter: 'all', selection: recordId ? { entity, id: recordId } : null };
+    return { view: 'pipeline', entityFilter: 'all', selection: recordId ? { entity, id: recordId } : null };
+  }
+  if (route === 'operations') {
+    return { view: 'pipeline', entityFilter: 'all', selection: null };
   }
   const view = viewIds.includes(route as ViewId) ? (route as ViewId) : 'records';
   return { view, entityFilter: 'all', selection: null };
@@ -75,7 +78,7 @@ export function entityFilterForEntity(entityType: string): RecordEntityFilter {
 
 export function viewForEntity(entityType: string): ViewId {
   if (['lead', 'account', 'contact', 'deal'].includes(entityType)) return 'records';
-  if (['task', 'note', 'activity'].includes(entityType)) return 'operations';
+  if (['task', 'note', 'activity'].includes(entityType)) return 'pipeline';
   return 'records';
 }
 

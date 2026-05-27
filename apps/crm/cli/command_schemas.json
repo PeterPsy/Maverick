@@ -122,6 +122,10 @@
               "crm.list_workflow_proposals",
               "approve_workflow_proposal",
               "crm.approve_workflow_proposal",
+              "dismiss_workflow_proposal",
+              "crm.dismiss_workflow_proposal",
+              "reject_workflow_proposal",
+              "crm.reject_workflow_proposal",
               "apply_workflow_proposal",
               "crm.apply_workflow_proposal",
               "link_external_ref",
@@ -402,6 +406,13 @@
           },
           "approve": {
             "type": "boolean"
+          },
+          "resolution": {
+            "type": "string",
+            "enum": ["dismissed", "rejected"]
+          },
+          "reason": {
+            "type": "string"
           },
           "export": {
             "type": "object"

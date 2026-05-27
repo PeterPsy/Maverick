@@ -1,0 +1,117 @@
+.crm-create-chooser-dialog {
+  width: min(100%, 28rem);
+}
+
+.crm-action-dialog {
+  width: min(100%, 31rem);
+}
+
+.crm-action-dialog .composer-actions button[type="submit"] {
+  gap: 0.42rem;
+}
+
+.create-chooser-list {
+  display: grid;
+  gap: 0.52rem;
+  padding: 1rem;
+}
+
+.create-chooser-list button {
+  display: flex;
+  align-items: center;
+  gap: 0.68rem;
+  min-height: 3.2rem;
+  border: 1px solid var(--maverick-border);
+  border-radius: var(--maverick-control-radius);
+  background: var(--maverick-surface);
+  box-shadow: var(--maverick-inner-edge);
+  padding: 0 0.82rem;
+  text-align: left;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease,
+    transform 150ms ease;
+}
+
+.create-chooser-list button:hover,
+.create-chooser-list button:focus-visible {
+  border-color: var(--maverick-border-strong);
+  background: var(--maverick-surface-hover);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.create-chooser-list svg {
+  color: var(--maverick-text-muted);
+}
+
+.composer-form {
+  display: grid;
+  gap: 0.8rem;
+  padding: 1rem;
+}
+
+.composer-form label {
+  display: grid;
+  gap: 0.4rem;
+  color: var(--maverick-text-muted);
+  font-size: 0.82rem;
+}
+
+.composer-form input,
+.composer-form select,
+.composer-form textarea {
+  width: 100%;
+  border: 1px solid var(--maverick-border);
+  border-radius: var(--maverick-control-radius);
+  background: rgba(255, 255, 255, 0.045);
+  box-shadow: var(--maverick-inner-edge);
+  padding: 0.65rem;
+  outline: none;
+}
+
+.composer-form input:focus-visible,
+.composer-form select:focus-visible,
+.composer-form textarea:focus-visible {
+  border-color: var(--maverick-accent);
+  box-shadow: 0 0 0 3px var(--maverick-accent-soft);
+}
+
+.composer-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.82rem;
+}
+
+.composer-grid .span-2 {
+  grid-column: 1 / -1;
+}
+
+.composer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  border-top: 1px solid var(--maverick-border);
+  padding-top: 0.85rem;
+}
+
+.composer-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.35rem;
+  border-radius: 999px;
+  padding: 0 0.95rem;
+  font-size: 0.82rem;
+}
+
+.composer-actions button[type="button"] {
+  border: 1px solid var(--maverick-border);
+  background: var(--maverick-surface);
+}
+
+.composer-actions button[type="submit"] {
+  background: var(--maverick-accent);
+  color: var(--maverick-text-on-accent);
+}

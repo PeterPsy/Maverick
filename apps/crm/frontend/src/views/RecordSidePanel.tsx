@@ -1,8 +1,18 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { Archive, CopyCheck, Link2, Pencil, Tag, Trash2, Unlink, X } from 'lucide-react';
+import { Archive, CopyCheck, MoreHorizontal, Pencil, Tag, Trash2, X } from 'lucide-react';
 import { CrmRecord, callBackend } from '../api';
 import { AccountBrief, AuditEvent, EnrichmentResult, ExternalRef } from '../domain/types';
-import { entityLabel, fieldLabel, isCreatableEntity, titleFor } from '../domain/routing';
+import { isCreatableEntity, titleFor } from '../domain/routing';
+import {
+  AgentSection,
+  AuditSection,
+  CustomFieldsSection,
+  DetailFields,
+  DetailTags,
+  LinkedItemsSection,
+  LinkDraft,
+  TimelineSection
+} from './RecordSidePanelSections';
 
 export function RecordSidePanel({
   selected,
@@ -29,7 +39,7 @@ export function RecordSidePanel({
   const [linkedItems, setLinkedItems] = useState<ExternalRef[]>([]);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [auditFilters, setAuditFilters] = useState({ entity_type: selected.entity, event_type: '', date_from: '', date_to: '' });
-  const [linkDraft, setLinkDraft] = useState({ source_app_id: '', source_entity_type: '', source_entity_id: '', link_type: 'related', title: '', summary: '', occurred_at: '' });
+  const [linkDraft, setLinkDraft] = useState<LinkDraft>({ source_app_id: '', source_entity_type: '', source_entity_id: '', link_type: 'related', title: '', summary: '', occurred_at: '' });
   const [brief, setBrief] = useState<AccountBrief | null>(null);
   const [enrichment, setEnrichment] = useState<EnrichmentResult | null>(null);
   const [detailError, setDetailError] = useState('');
@@ -151,172 +161,50 @@ export function RecordSidePanel({
             <h2 id="crm-detail-title">{titleFor(selected.record)}</h2>
           </div>
           <div className="detail-actions">
-            {isCreatableEntity(selected.entity) ? (
-              <button className="detail-icon-button" type="button" onClick={() => onEdit(selected.entity, selected.record)} aria-label="Edit record" disabled={isSaving}>
-                <Pencil size={17} aria-hidden="true" />
-              </button>
-            ) : null}
-            <button className="detail-icon-button" type="button" onClick={onTag} aria-label="Tag record" disabled={isSaving}>
-              <Tag size={17} aria-hidden="true" />
-            </button>
-            {selected.entity === 'lead' && !selected.record.converted_at ? (
-              <button className="detail-icon-button" type="button" onClick={onConvertLead} aria-label="Convert lead" disabled={isSaving}>
-                <CopyCheck size={17} aria-hidden="true" />
-              </button>
-            ) : null}
-            {selected.entity === 'account' ? (
-              <button className="detail-text-button" type="button" onClick={generateBrief} disabled={isSaving}>
-                Brief
-              </button>
-            ) : null}
-            <button className="detail-text-button" type="button" onClick={enrichRecord} disabled={isSaving}>
-              Enrich
-            </button>
-            <button className="detail-icon-button" type="button" onClick={onArchive} aria-label="Archive record" disabled={isSaving}>
-              <Archive size={17} aria-hidden="true" />
-            </button>
-            <button className="detail-icon-button danger" type="button" onClick={onDelete} aria-label="Delete record" disabled={isSaving}>
-              <Trash2 size={17} aria-hidden="true" />
-            </button>
+            <details className="detail-secondary-actions">
+              <summary className="detail-icon-button detail-overflow-trigger" aria-label="More record actions" title="More record actions">
+                <MoreHorizontal size={17} aria-hidden="true" />
+              </summary>
+              <div className="detail-secondary-menu" role="menu" aria-label="More record actions">
+                {isCreatableEntity(selected.entity) ? (
+                  <button type="button" role="menuitem" onClick={() => onEdit(selected.entity, selected.record)} disabled={isSaving}>
+                    <Pencil size={16} aria-hidden="true" />
+                    <span>Edit record</span>
+                  </button>
+                ) : null}
+                <button type="button" role="menuitem" onClick={onTag} disabled={isSaving}>
+                  <Tag size={16} aria-hidden="true" />
+                  <span>Tag record</span>
+                </button>
+                {selected.entity === 'lead' && !selected.record.converted_at ? (
+                  <button type="button" role="menuitem" onClick={onConvertLead} disabled={isSaving}>
+                    <CopyCheck size={16} aria-hidden="true" />
+                    <span>Convert lead</span>
+                  </button>
+                ) : null}
+                <button type="button" role="menuitem" onClick={onArchive} disabled={isSaving}>
+                  <Archive size={16} aria-hidden="true" />
+                  <span>Archive record</span>
+                </button>
+                <button className="danger" type="button" role="menuitem" onClick={onDelete} disabled={isSaving}>
+                  <Trash2 size={16} aria-hidden="true" />
+                  <span>Delete record</span>
+                </button>
+              </div>
+            </details>
             <button className="detail-close" type="button" onClick={onClose} aria-label="Close record details">
               <X size={18} aria-hidden="true" />
             </button>
           </div>
         </header>
-        {tags.length ? (
-          <div className="detail-tags">
-            {tags.map((tag) => (
-              <span key={String(tag.name)} style={typeof tag.color === 'string' && tag.color ? { borderColor: tag.color } : undefined}>
-                {String(tag.name)}
-              </span>
-            ))}
-          </div>
-        ) : null}
+        <DetailTags tags={tags} />
         {detailError ? <div className="crm-alert">{detailError}</div> : null}
-        <dl className="detail-fields">
-          {Object.entries(selected.record)
-            .filter(([, value]) => value !== '' && value !== null && value !== undefined && typeof value !== 'object')
-            .slice(0, 16)
-            .map(([key, value]) => (
-              <div key={key}>
-                <dt>{fieldLabel(key)}</dt>
-                <dd>{String(value)}</dd>
-              </div>
-            ))}
-        </dl>
-        {Object.keys(customFields).length ? (
-          <section className="detail-timeline">
-            <h3>Custom fields</h3>
-            {Object.entries(customFields).map(([key, value]) => (
-              <div key={key}>
-                <strong>{fieldLabel(key)}</strong>
-                <span>{Array.isArray(value) ? value.join(', ') : String(value ?? '')}</span>
-              </div>
-            ))}
-          </section>
-        ) : null}
-        {brief ? (
-          <section className="detail-timeline">
-            <h3>Account brief</h3>
-            <p className="muted">{brief.brief}</p>
-            {brief.risks?.map((risk) => (
-              <div key={risk}>
-                <strong>Risk</strong>
-                <span>{risk}</span>
-              </div>
-            ))}
-            {brief.opportunities?.map((opportunity) => (
-              <div key={opportunity}>
-                <strong>Opportunity</strong>
-                <span>{opportunity}</span>
-              </div>
-            ))}
-          </section>
-        ) : null}
-        {enrichment ? (
-          <section className="detail-timeline">
-            <h3>Enrichment</h3>
-            {enrichment.suggestions?.length ? enrichment.suggestions.map((suggestion) => (
-              <div key={`${suggestion.field}:${String(suggestion.value)}`}>
-                <strong>{String(suggestion.field)}</strong>
-                <span>{String(suggestion.value ?? '')} · {suggestion.reason}</span>
-              </div>
-            )) : <p className="muted">No enrichment suggestions.</p>}
-            {enrichment.workflow_proposal?.id ? <p className="muted">Proposal {enrichment.workflow_proposal.id} created for approval.</p> : null}
-          </section>
-        ) : null}
-        <section className="detail-linked-items">
-          <h3>Linked items</h3>
-          {linkedItems.length ? (
-            <div className="linked-list">
-              {linkedItems.map((item) => (
-                <article key={item.id}>
-                  <Link2 size={16} aria-hidden="true" />
-                  <div>
-                    <strong>{item.title || `${item.source_app_id}:${item.source_entity_type}`}</strong>
-                    <span>{[item.source_app_id, item.source_entity_type, item.source_entity_id].filter(Boolean).join(' / ')}</span>
-                    {item.summary ? <p>{item.summary}</p> : null}
-                  </div>
-                  <button type="button" className="detail-icon-button" onClick={() => void unlinkExternalItem(item.id)} disabled={isSaving || isLinking} aria-label="Unlink item">
-                    <Unlink size={15} aria-hidden="true" />
-                  </button>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <p className="muted">No linked items.</p>
-          )}
-          <form className="linked-form" onSubmit={linkExternalItem}>
-            <input aria-label="Source app id" placeholder="source app" value={linkDraft.source_app_id} onChange={(event) => setLinkDraft((draft) => ({ ...draft, source_app_id: event.target.value }))} required />
-            <input aria-label="Source entity type" placeholder="entity type" value={linkDraft.source_entity_type} onChange={(event) => setLinkDraft((draft) => ({ ...draft, source_entity_type: event.target.value }))} required />
-            <input aria-label="Source entity id" placeholder="entity id" value={linkDraft.source_entity_id} onChange={(event) => setLinkDraft((draft) => ({ ...draft, source_entity_id: event.target.value }))} required />
-            <input aria-label="Link type" placeholder="link type" value={linkDraft.link_type} onChange={(event) => setLinkDraft((draft) => ({ ...draft, link_type: event.target.value }))} />
-            <input aria-label="Title" placeholder="title" value={linkDraft.title} onChange={(event) => setLinkDraft((draft) => ({ ...draft, title: event.target.value }))} />
-            <input aria-label="Occurred at" placeholder="occurred at" value={linkDraft.occurred_at} onChange={(event) => setLinkDraft((draft) => ({ ...draft, occurred_at: event.target.value }))} />
-            <textarea aria-label="Summary" placeholder="summary" value={linkDraft.summary} onChange={(event) => setLinkDraft((draft) => ({ ...draft, summary: event.target.value }))} />
-            <button type="submit" disabled={isSaving || isLinking}>
-              <Link2 size={15} aria-hidden="true" />
-              Link
-            </button>
-          </form>
-        </section>
-        <section className="detail-audit">
-          <h3>Audit</h3>
-          <div className="audit-filters">
-            <select aria-label="Audit entity" value={auditFilters.entity_type} onChange={(event) => setAuditFilters((filters) => ({ ...filters, entity_type: event.target.value }))}>
-              {['all', 'lead', 'account', 'contact', 'deal', 'activity', 'task', 'note'].map((entity) => (
-                <option key={entity} value={entity}>{entityLabel(entity)}</option>
-              ))}
-            </select>
-            <input aria-label="Audit action" placeholder="action" value={auditFilters.event_type} onChange={(event) => setAuditFilters((filters) => ({ ...filters, event_type: event.target.value }))} />
-            <input aria-label="Audit date from" placeholder="from" value={auditFilters.date_from} onChange={(event) => setAuditFilters((filters) => ({ ...filters, date_from: event.target.value }))} />
-            <input aria-label="Audit date to" placeholder="to" value={auditFilters.date_to} onChange={(event) => setAuditFilters((filters) => ({ ...filters, date_to: event.target.value }))} />
-          </div>
-          {auditEvents.length ? (
-            <div className="audit-list">
-              {auditEvents.map((event) => (
-                <div key={event.id}>
-                  <strong>{event.event_type}</strong>
-                  <span>{[event.entity_type, event.entity_id].filter(Boolean).join(' / ')}</span>
-                  <span>{String(event.created_at || '').slice(0, 16)}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="muted">No audit events.</p>
-          )}
-        </section>
-        {timeline.length ? (
-          <section className="detail-timeline">
-            <h3>Timeline</h3>
-            {timeline.slice(0, 8).map((item) => (
-              <div key={`${item.entity_type || 'event'}:${item.id}`}>
-                <strong>{String(item.subject || item.title || item.event_type || titleFor(item))}</strong>
-                <span>{String(item.timestamp || item.updated_at || item.created_at || '').slice(0, 16)}</span>
-              </div>
-            ))}
-          </section>
-        ) : null}
+        <DetailFields entity={selected.entity} record={selected.record} />
+        <CustomFieldsSection customFields={customFields} />
+        <AgentSection entity={selected.entity} brief={brief} enrichment={enrichment} isSaving={isSaving} onGenerateBrief={generateBrief} onEnrich={enrichRecord} />
+        <LinkedItemsSection linkedItems={linkedItems} linkDraft={linkDraft} setLinkDraft={setLinkDraft} isSaving={isSaving} isLinking={isLinking} onLink={linkExternalItem} onUnlink={(id) => void unlinkExternalItem(id)} />
+        <TimelineSection timeline={timeline} />
+        <AuditSection auditFilters={auditFilters} setAuditFilters={setAuditFilters} auditEvents={auditEvents} />
       </aside>
     </div>
   );

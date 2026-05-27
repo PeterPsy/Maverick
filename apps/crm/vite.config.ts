@@ -11,8 +11,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         app: 'frontend/index.html',
-        'widgets/crm-sidebar/index': 'frontend/widgets/crm-sidebar/index.html',
-        'widgets/crm-sidebar-footer/index': 'frontend/widgets/crm-sidebar-footer/index.html'
+        'widgets/crm-sidebar/index': 'frontend/widgets/crm-sidebar/index.html'
       },
       output: {
         entryFileNames: 'assets/[name]-[hash].js',

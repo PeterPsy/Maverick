@@ -15,7 +15,7 @@ Track app source, tests, contract files, and intentional frontend build artifact
 - Frontend: `frontend/dist`, rebuilt from React/Vite sources under `frontend/src`.
 - Backend: `backend/app_backend.py`, invoked through `/api/apps/crm/backend`; the service router delegates larger domains to `backend/domains/`.
 - CLI: `crm`, described by `cli/command_schemas.json`.
-- MCP: `crm_search`, `crm_get_record`, lead create/update/convert tools, create/update tools for accounts, contacts, deals, tasks, and notes, configurable pipeline tools, record archive/delete/tag/bulk/merge tools, timeline/audit/report/filter/dedupe/saved-view tools, external reference link/list/unlink/timeline tools, typed custom field and schema tools, deterministic enrichment and workflow proposal tools, intelligent next actions, automation proposal generation, account brief, deal movement, activity logging, import preview/commit, references, view state, and health.
+- MCP: a stable agent-facing subset for search/read, lead/account/contact/deal CRUD, task/note/activity creation and updates, deal movement, record archive/delete/tag/bulk/merge, timeline/audit/report/filter/dedupe, external references, typed custom field value reads/writes, deterministic enrichment, next actions, workflow proposal approve/apply/dismiss/reject lifecycle, account brief, import/export, reference resolution, and health. UI view state, saved views, custom-field definition management, and automation-rule administration stay backend/CLI helpers rather than public MCP tools.
 - Widgets: `crm-sidebar` for the `base-shell` primary sidebar slot and `crm-sidebar-footer` for the compact footer action slot.
 - Lifecycle hooks: install, migrate, export, import, and health check.
 - Skill template: `skills/crm-ops/SKILL.md`.
@@ -47,15 +47,15 @@ Included:
 - Saved views, advanced local filters, bulk tag/archive actions, and duplicate detection for account/contact/lead email/domain data.
 - Native sales reports for pipeline value by stage, weighted forecast, deal aging, lead conversion, overdue tasks, and activities by owner.
 - Merge dedupe for leads, accounts, and contacts. Merge preserves tags, custom field values, tasks, notes, activities, external references, and emits `record.merged` audit events.
-- Agent-oriented workflows: deterministic record enrichment, scored/verifiable next actions, approvable workflow proposals, automation rule storage, automation-generated proposals without automatic application, and account briefs generated from CRM data.
+- Agent-oriented workflows: deterministic record enrichment, scored/verifiable next actions, workflow proposals that can be approved, applied, dismissed, or rejected, automation rule storage, automation-generated proposals without automatic application, and account briefs generated from CRM data.
 - Small JSON/CSV import preview and commit for leads, accounts, contacts, deals, activities, tasks, and notes, including column mapping and per-row validation errors.
 - JSON export through the app service and export hook, with lifecycle import round-trip support for complete CRM export payloads through service, CLI, and MCP schemas. Export includes active and archived records plus active external refs, preserves `archived_at` on import, and intentionally omits soft-deleted records and unlinked external refs. Export is not capped by the interactive list limit.
 - Active records cannot link to archived parent accounts, contacts, or deals. Archived records may preserve historical links to archived parents during CRM export imports.
-- Dense operational UI with primary Records, Pipeline, Operations, and Reports entry points, shell/widget navigation handling, SQL-backed records table pagination/sort/filter with stable opaque cursors and batched computed fields, shared record side panel, lead conversion, record tag/archive/delete actions, bulk tag/archive, saved view controls, timeline display, audit event display with entity/action/date filters, linked-item display/manual linking/unlinking, custom field display, enrichment proposal creation, account brief generation, next-action suggestions, dedupe review, persisted search filter rendering, custom view rendering with referenced-record hydration, footer widget create-menu intent handling, create chooser and create/edit composer forms, and import preview before commit.
+- Dense operational UI with primary Records, Pipeline, and Reports entry points, shell/widget navigation handling, SQL-backed records table pagination/sort/filter with stable opaque cursors and batched computed fields, shared record side panel, lead conversion, record tag/archive/delete actions, bulk tag/archive, saved view controls, timeline display, audit event display with entity/action/date filters, linked-item display/manual linking/unlinking, custom field display, enrichment proposal creation, account brief generation, next-action suggestions, dedupe review, a compact agent deck embedded above the Pipeline board, persisted search filter rendering, custom view rendering with referenced-record hydration, footer widget create-menu intent handling, create chooser and create/edit composer forms, and import preview before commit.
 - Health checks covering schema metadata, SQLite integrity, FTS coverage, orphan CRM references, active children linked to archived parents, view state validity, export/archive-import consistency, orphan custom field values, workflow proposal action validity, external reference malformation/unresolved status, and exportability.
 - Base-shell sidebar and sidebar footer widgets.
 
-The `crm.records_table` backend action is intentionally app-owned UI infrastructure for the Records view. It is covered by service tests and listed in the operations manifest, but it is not declared as a new MCP/CLI capability because it does not yet need to be an agent-facing public surface.
+The `crm.records_table` backend action is intentionally app-owned UI infrastructure for the Records view. `crm.operations_feed` follows the same pattern for the Pipeline agent deck, aggregating open tasks, workflow proposal lifecycle buckets, and recent relevant audit events into UI-ready sections without exposing a separate Operations page. These helpers are covered by service tests and listed in the operations manifest, but they are not declared as new MCP/CLI capabilities because they do not yet need to be agent-facing public surfaces. Saved views, persisted view state, custom-field definition administration, and direct automation-rule execution follow the same governance split: they remain backend/CLI actions for the frontend and operators, while MCP exposes the smaller stable agent-facing surface declared in `app_contract.json` and `mcp/tool_schemas.json`.
 
 Deferred intentionally:
 
@@ -80,3 +80,14 @@ After installation, discover executable surfaces with:
 maverick app crm cli list --json
 maverick app crm mcp list --json
 ```
+
+## Verification
+
+Frontend behavior is covered by Playwright tests with a mocked CRM backend:
+
+```bash
+npx playwright install chromium
+npm run test:e2e
+```
+
+The suite exercises cockpit routing, record-table pagination, filters, saved views, bulk actions, and desktop/mobile screenshot capture.

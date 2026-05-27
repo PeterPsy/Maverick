@@ -80,7 +80,20 @@ def sales_reports(db, payload: dict[str, Any]) -> dict[str, Any]:
     ).fetchall()
     task_overdue = {
         "total": sum(int(row["task_count"] or 0) for row in overdue_rows),
-        "by_owner": [{"owner_id": row["owner_id"], "task_count": int(row["task_count"] or 0)} for row in overdue_rows],
+        "drilldown_filters": {"kind": "task", "status": "open", "due_overdue": "true"},
+        "by_owner": [
+            {
+                "owner_id": row["owner_id"],
+                "task_count": int(row["task_count"] or 0),
+                "drilldown_filters": {
+                    "kind": "task",
+                    "status": "open",
+                    "due_overdue": "true",
+                    "owner_id": row["owner_id"] or "",
+                },
+            }
+            for row in overdue_rows
+        ],
     }
     activity_rows = db.execute(
         """
@@ -94,7 +107,15 @@ def sales_reports(db, payload: dict[str, Any]) -> dict[str, Any]:
     activities_by_owner: dict[str, dict[str, Any]] = {}
     for row in activity_rows:
         owner_id = str(row["owner_id"] or "")
-        bucket = activities_by_owner.setdefault(owner_id, {"owner_id": owner_id, "total": 0, "by_type": {}})
+        bucket = activities_by_owner.setdefault(
+            owner_id,
+            {
+                "owner_id": owner_id,
+                "total": 0,
+                "by_type": {},
+                "drilldown_filters": {"kind": "activity", "owner_id": owner_id},
+            },
+        )
         count = int(row["activity_count"] or 0)
         bucket["total"] += count
         bucket["by_type"][str(row["activity_type"] or "activity")] = count

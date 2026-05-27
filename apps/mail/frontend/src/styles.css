@@ -108,7 +108,7 @@ p {
 
 .mail-shell {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   gap: var(--mail-gap);
   width: 100%;
   height: 100dvh;
@@ -119,7 +119,28 @@ p {
   color: var(--maverick-text);
 }
 
-.thread-column,
+.mail-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--mail-gap);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.thread-column {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  isolation: isolate;
+}
+
 .reader-column {
   position: relative;
   min-width: 0;
@@ -133,7 +154,6 @@ p {
   isolation: isolate;
 }
 
-.thread-column::before,
 .reader-column::before {
   content: "";
   position: absolute;
@@ -146,8 +166,7 @@ p {
 }
 
 .reader-header button,
-.composer button,
-.connection-panel__actions button {
+.composer button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -168,20 +187,19 @@ p {
 }
 
 .reader-header button:hover,
-.composer button:hover,
-.connection-panel__actions button:hover {
+.composer button:hover {
   transform: translateY(-1px);
   border-color: var(--maverick-border-strong);
   background: var(--mail-control-hover);
 }
 
-.mail-shell.is-reading {
+.mail-shell.is-reading .mail-workspace {
   grid-template-columns: minmax(280px, 380px) minmax(0, 1fr);
 }
 
 .thread-column {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr) auto;
 }
 
 .toolbar {
@@ -189,92 +207,7 @@ p {
   grid-template-columns: minmax(220px, 640px) auto;
   gap: 12px;
   align-items: center;
-  border-bottom: 1px solid var(--maverick-border);
   padding: 12px;
-}
-
-.connection-panel {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: center;
-  border-bottom: 1px solid var(--maverick-border);
-  background: rgba(255, 255, 255, 0.025);
-  padding: 10px 12px;
-}
-
-.connection-panel__summary {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  min-width: 0;
-}
-
-.connection-panel__item {
-  display: grid;
-  min-width: 0;
-  min-height: 4.2rem;
-  border: 1px solid var(--maverick-border);
-  border-radius: 18px;
-  background: var(--mail-control);
-  box-shadow: var(--maverick-inner-edge);
-  padding: 9px 11px;
-}
-
-.connection-panel__item span,
-.connection-panel__item strong,
-.connection-panel__item small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.connection-panel__item span {
-  color: var(--maverick-text-soft);
-  font-size: 0.7rem;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-.connection-panel__item strong {
-  color: var(--maverick-text);
-  font-size: 0.9rem;
-  font-weight: 650;
-  text-transform: capitalize;
-}
-
-.connection-panel__item small {
-  color: var(--maverick-text-muted);
-  font-size: 0.75rem;
-}
-
-.connection-panel__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: flex-end;
-}
-
-.connection-panel__actions button {
-  min-height: 2.25rem;
-  padding: 0 12px;
-}
-
-.connection-panel__actions button:first-child {
-  border-color: transparent;
-  background: var(--maverick-accent);
-  color: var(--maverick-text-on-accent);
-}
-
-.connection-panel__actions button:first-child:hover {
-  border-color: transparent;
-  background: var(--maverick-accent);
-}
-
-.connection-panel__actions .connection-panel__disconnect {
-  border-color: rgba(255, 179, 191, 0.24);
-  background: rgba(255, 179, 191, 0.08);
-  color: var(--maverick-danger);
 }
 
 .mail-search {
@@ -421,7 +354,7 @@ p {
 .thread-list {
   min-height: 0;
   overflow: auto;
-  padding: 8px;
+  padding: 0 12px;
 }
 
 .thread-empty {
@@ -434,37 +367,96 @@ p {
 }
 
 .thread-row {
+  position: relative;
   display: grid;
-  gap: 6px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
   width: 100%;
-  min-height: 112px;
-  margin: 0 0 8px;
-  border: 1px solid transparent;
-  border-radius: 18px;
+  margin: 0;
+  border: 0;
+  border-radius: 14px;
   background: transparent;
   color: inherit;
-  padding: 12px;
-  text-align: left;
+  padding: 0;
   transition:
-    transform 180ms ease,
-    border-color 180ms ease,
     background 180ms ease;
 }
 
 .thread-row:hover {
-  transform: translateY(-1px);
-  border-color: var(--maverick-border);
-  background: var(--mail-control);
+  background: transparent;
+}
+
+.thread-row:hover .thread-title {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .thread-row.selected {
-  border-color: var(--maverick-border-strong);
-  background: var(--maverick-surface-active);
+  background: rgba(255, 255, 255, 0.06);
+  padding-left: 8px;
+  box-shadow: none;
+}
+
+.thread-row.selected::after {
+  position: absolute;
+  top: 12px;
+  left: 0;
+  bottom: 12px;
+  width: 2px;
+  border-radius: 999px;
+  background: var(--maverick-accent);
+  content: "";
+}
+
+.mail-shell.is-reading .thread-row {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.mail-shell.is-reading .thread-side {
+  display: none;
+}
+
+.thread-row__body {
+  display: grid;
+  grid-template-columns: 2.2rem minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 64px;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  text-align: left;
+}
+
+.thread-row__body:focus-visible {
+  box-shadow: 0 0 0 4px var(--maverick-focus);
+}
+
+.thread-avatar {
+  display: grid;
+  width: 2.2rem;
+  height: 2.2rem;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.095);
   box-shadow: var(--maverick-inner-edge);
+  color: var(--maverick-text);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.thread-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
 }
 
 .thread-title {
   overflow: hidden;
+  max-width: 42ch;
   color: var(--maverick-text);
   font-weight: 700;
   line-height: 1.25;
@@ -472,9 +464,7 @@ p {
   white-space: nowrap;
 }
 
-.thread-meta,
-.thread-snippet,
-.label-strip {
+.thread-snippet {
   overflow: hidden;
   color: var(--maverick-text-muted);
   font-size: 0.84rem;
@@ -482,11 +472,125 @@ p {
   white-space: nowrap;
 }
 
-.label-strip {
-  color: var(--maverick-text-soft);
+.thread-side {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+  max-width: 34rem;
+}
+
+.thread-route {
+  display: grid;
+  grid-template-columns: minmax(0, 9rem) 0.8rem minmax(0, 9rem);
+  align-items: center;
+  gap: 6px;
+  width: min(20rem, 100%);
+  color: var(--maverick-text-muted);
   font-size: 0.72rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+}
+
+.thread-route span:not(.thread-route-arrow) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.thread-route span:first-child {
+  text-align: right;
+}
+
+.thread-route-arrow {
+  justify-self: center;
+  width: 0.42rem;
+  height: 0.42rem;
+  border-top: 1.5px solid currentColor;
+  border-right: 1.5px solid currentColor;
+  transform: rotate(45deg);
+}
+
+.thread-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+
+.thread-read-button {
+  min-height: 2rem;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.075);
+  color: var(--maverick-text-muted);
+  padding: 0 0.72rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background 150ms ease, color 150ms ease, transform 150ms ease;
+}
+
+.thread-trash-button {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--maverick-text-muted);
+  padding: 0;
+  transition: color 150ms ease, transform 150ms ease;
+}
+
+.thread-read-button:hover:not(:disabled),
+.thread-read-button:focus-visible:not(:disabled) {
+  background: var(--mail-control-hover);
+  color: var(--maverick-text);
+}
+
+.thread-trash-button:hover:not(:disabled),
+.thread-trash-button:focus-visible:not(:disabled) {
+  color: var(--maverick-text);
+}
+
+.thread-read-button:active:not(:disabled),
+.thread-trash-button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.thread-trash-icon {
+  position: relative;
+  display: block;
+  width: 0.8rem;
+  height: 0.9rem;
+  border: 1.5px solid currentColor;
+  border-top: 0;
+  border-radius: 0 0 3px 3px;
+}
+
+.thread-trash-icon::before,
+.thread-trash-icon::after {
+  position: absolute;
+  content: "";
+  left: 50%;
+  background: currentColor;
+  transform: translateX(-50%);
+}
+
+.thread-trash-icon::before {
+  top: -0.28rem;
+  width: 1rem;
+  height: 1.5px;
+  border-radius: 999px;
+}
+
+.thread-trash-icon::after {
+  top: -0.42rem;
+  width: 0.42rem;
+  height: 1.5px;
+  border-radius: 999px;
 }
 
 .reader-column {
@@ -535,17 +639,21 @@ p {
   display: grid;
   align-content: start;
   gap: 12px;
+  min-width: 0;
   min-height: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding: 16px 20px;
 }
 
 .message {
-  border: 1px solid var(--maverick-border);
-  border-radius: 18px;
-  background: var(--mail-control);
-  box-shadow: var(--maverick-inner-edge);
-  padding: 14px;
+  min-width: 0;
+  max-width: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
 }
 
 .message-head {
@@ -576,13 +684,17 @@ p {
 }
 
 .message p {
+  max-width: 100%;
   color: rgba(236, 236, 236, 0.82);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .message small {
   display: block;
   margin-top: 10px;
   color: var(--maverick-text-soft);
+  overflow-wrap: anywhere;
 }
 
 .composer {
@@ -650,16 +762,8 @@ p {
 }
 
 @media (max-width: 1080px) {
-  .mail-shell.is-reading {
+  .mail-shell.is-reading .mail-workspace {
     grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
-  }
-
-  .connection-panel {
-    grid-template-columns: 1fr;
-  }
-
-  .connection-panel__actions {
-    justify-content: flex-start;
   }
 
   .reader-header {
@@ -677,9 +781,14 @@ p {
   }
 
   .mail-shell {
-    grid-template-columns: minmax(0, 1fr);
     height: auto;
     min-height: 100dvh;
+    overflow: visible;
+  }
+
+  .mail-workspace,
+  .mail-shell.is-reading .mail-workspace {
+    grid-template-columns: minmax(0, 1fr);
     overflow: visible;
   }
 
@@ -704,7 +813,6 @@ p {
   }
 
   .toolbar,
-  .connection-panel,
   .reader-header,
   .message-stack,
   .composer,
@@ -721,8 +829,27 @@ p {
     justify-content: space-between;
   }
 
-  .connection-panel__summary {
+  .thread-row {
     grid-template-columns: 1fr;
+  }
+
+  .thread-row__body {
+    min-height: 60px;
+  }
+
+  .thread-side {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    max-width: none;
+    padding: 0;
+  }
+
+  .thread-route {
+    width: min(20rem, 100%);
+  }
+
+  .thread-action-row {
+    justify-content: flex-start;
   }
 
   .reader-header h1 {

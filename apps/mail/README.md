@@ -2,7 +2,7 @@
 
 Mail is a workspace-local Maverick app for operating on email threads from inside a workspace. It follows the blueprint in `storage/generated/mail-maverick-app-blueprint.md`: contract-first app source, React/Vite frontend, Python JSON backend, SQLite app-owned storage, CLI/MCP surfaces, reference entities, and a bundled `mail-ops` skill.
 
-This implementation is an MVP with real app surfaces, an explicit local mock provider bootstrap, and a Gmail provider. It builds the Gmail OAuth authorization flow, exchanges OAuth codes, stores per-connection refresh tokens through Core Secrets, and uses Gmail REST APIs for bounded sync, thread fetch, label changes, mark read/unread, send, and on-demand attachment fetch.
+This implementation is an MVP with real app surfaces and a Gmail provider. It builds the Gmail OAuth authorization flow, exchanges OAuth codes, stores per-connection refresh tokens through Core Secrets, and uses Gmail REST APIs for bounded sync, thread fetch, label changes, mark read/unread, send, and on-demand attachment fetch.
 
 ## Surfaces
 
@@ -25,7 +25,7 @@ Primary data lives in:
 data/mail/mail.sqlite
 ```
 
-Schema version `3` stores connections, OAuth flow metadata, secret references, folders, labels, threads, messages, attachment metadata, drafts, sync state, app-to-app entity links, and audit log entries. The install and migrate hooks are idempotent and create or upgrade the schema. Fresh installs do not seed a fake mailbox; deterministic mock records are created only when `connections.bootstrap_mock` / `mail_bootstrap_mock` is invoked explicitly.
+Schema version `4` stores connections, OAuth flow metadata, secret references, folders, labels, threads, messages, attachment metadata, drafts, sync state, app-to-app entity links, and audit log entries. The install and migrate hooks are idempotent and create or upgrade the schema. The schema migration removes legacy local mock provider rows and leaves Gmail connections/cache intact.
 
 Provider tokens and OAuth client secrets must not be stored in this repository, frontend, logs, app events, or Storage files. The Gmail adapter resolves them through Vault/Core Secrets. The app database stores only connection metadata, `secret_ref`, `grant_id`, and non-sensitive token metadata.
 
@@ -61,7 +61,6 @@ maverick core cli run core.app-sdk.status --app-id mail --json
 maverick app mail frontend build --json
 maverick app mail cli list --json
 maverick app mail mcp list --json
-maverick app mail cli run mail --json --action connections.bootstrap_mock
 python3 -m unittest discover -s apps/mail/tests -p 'test_*.py'
 ```
 

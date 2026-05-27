@@ -4,9 +4,6 @@ import {
   callBackend,
   MAIL_BACKEND_ACTIONS,
   type MailConnection,
-  type MailProviderState,
-  type MailStatus,
-  type MailThread
 } from '../../api';
 import './styles.css';
 
@@ -17,7 +14,15 @@ const GMAIL_REFRESH_SECRET = 'gmail-refresh-token';
 
 type ConnectionPayload = {
   items: MailConnection[];
-  providers?: MailProviderState[];
+};
+
+type MailboxCount = {
+  total: number;
+  unread: number;
+};
+
+type MailboxCountPayload = {
+  counts: Record<string, Record<string, MailboxCount>>;
 };
 
 type WidgetContext = {
@@ -77,6 +82,11 @@ function mailboxFromContext(context: WidgetContext) {
   return typeof mailbox === 'string' && MAILBOXES.includes(mailbox) ? mailbox : null;
 }
 
+function connectionIdFromContext(context: WidgetContext) {
+  const connectionId = context.content?.payload?.active_app_params?.connection_id;
+  return typeof connectionId === 'string' && connectionId.trim() ? connectionId : null;
+}
+
 function isMobileFromContext(context: WidgetContext) {
   return context.content?.payload?.is_mobile_layout === true;
 }
@@ -97,37 +107,39 @@ function closeShellSidebar() {
 }
 
 function MailSidebarWidget() {
-  const [status, setStatus] = useState<MailStatus>({});
   const [connections, setConnections] = useState<MailConnection[]>([]);
-  const [providers, setProviders] = useState<MailProviderState[]>([]);
-  const [threads, setThreads] = useState<MailThread[]>([]);
+  const [mailboxCounts, setMailboxCounts] = useState<Record<string, Record<string, MailboxCount>>>({});
   const [mailbox, setMailbox] = useState('inbox');
+  const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
+  const [expandedConnectionIds, setExpandedConnectionIds] = useState<Set<string>>(() => new Set());
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [isMobileLayout, setIsMobileLayout] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
-      const [statusPayload, connectionPayload, threadPayload] = await Promise.all([
-        callBackend<MailStatus>({ action: MAIL_BACKEND_ACTIONS.status, ...noSecretRequest() }),
+      const [connectionPayload, countPayload] = await Promise.all([
         callBackend<ConnectionPayload>({ action: MAIL_BACKEND_ACTIONS.connectionsList, ...noSecretRequest() }),
-        callBackend<{ items: MailThread[] }>({ action: MAIL_BACKEND_ACTIONS.threadsList, mailbox, max_threads: 50, ...noSecretRequest() })
+        callBackend<MailboxCountPayload>({ action: MAIL_BACKEND_ACTIONS.mailboxesCounts, ...noSecretRequest() })
       ]);
-      setStatus(statusPayload);
       setConnections(connectionPayload.items);
-      setProviders(connectionPayload.providers || []);
-      setThreads(threadPayload.items);
+      setMailboxCounts(countPayload.counts || {});
       setNotice('');
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Unable to load mail.');
     }
-  }, [mailbox]);
+  }, []);
 
   useEffect(() => {
     loadWidgetContext().then((context) => {
       const nextMailbox = mailboxFromContext(context);
       if (nextMailbox) {
         setMailbox(nextMailbox);
+      }
+      const nextConnectionId = connectionIdFromContext(context);
+      setSelectedConnectionId(nextConnectionId);
+      if (nextConnectionId) {
+        expandConnection(nextConnectionId);
       }
       setIsMobileLayout(isMobileFromContext(context));
     });
@@ -154,6 +166,11 @@ function MailSidebarWidget() {
         if (nextMailbox) {
           setMailbox(nextMailbox);
         }
+        const nextConnectionId = connectionIdFromContext(payload.context);
+        setSelectedConnectionId(nextConnectionId);
+        if (nextConnectionId) {
+          expandConnection(nextConnectionId);
+        }
         setIsMobileLayout(isMobileFromContext(payload.context));
         return;
       }
@@ -161,6 +178,11 @@ function MailSidebarWidget() {
         const nextMailbox = payload.selection?.mailbox;
         if (typeof nextMailbox === 'string' && MAILBOXES.includes(nextMailbox)) {
           setMailbox(nextMailbox);
+        }
+        const nextConnectionId = payload.selection?.connection_id;
+        if (typeof nextConnectionId === 'string' && nextConnectionId.trim()) {
+          setSelectedConnectionId(nextConnectionId);
+          expandConnection(nextConnectionId);
         }
         return;
       }
@@ -177,13 +199,22 @@ function MailSidebarWidget() {
     return () => window.removeEventListener('message', handleMessage);
   }, [refresh]);
 
-  const connection = connections.find((item) => item.status !== 'disconnected') || connections[0];
-  const canUseConnection = Boolean(connection && connection.status !== 'disconnected');
-  const gmailProvider = providers.find((provider) => provider.provider === 'gmail');
-  const unreadCount = useMemo(() => threads.filter((thread) => thread.unread).length, [threads]);
+  const activeConnections = useMemo(() => connections.filter((item) => item.status !== 'disconnected'), [connections]);
+  const connection = (selectedConnectionId ? connections.find((item) => item.id === selectedConnectionId) : null) || activeConnections[0] || connections[0];
+  useEffect(() => {
+    if (!connection?.id) {
+      return;
+    }
+    setExpandedConnectionIds((current) => {
+      if (current.size > 0) {
+        return current;
+      }
+      return new Set([connection.id]);
+    });
+  }, [connection?.id]);
 
-  async function sync() {
-    if (!connection || !canUseConnection) {
+  async function sync(targetConnection: MailConnection) {
+    if (targetConnection.status === 'disconnected') {
       setNotice('No connected mail provider is available to sync.');
       return;
     }
@@ -191,8 +222,8 @@ function MailSidebarWidget() {
     try {
       await callBackend({
         action: MAIL_BACKEND_ACTIONS.threadsSync,
-        connection_id: connection.id,
-        ...gmailSecretRequest(connection.id)
+        connection_id: targetConnection.id,
+        ...gmailSecretRequest(targetConnection.id)
       });
       setNotice('Sync completed.');
       await refresh();
@@ -203,79 +234,121 @@ function MailSidebarWidget() {
     }
   }
 
-  async function startGmailOAuth() {
+  async function disconnect(targetConnection: MailConnection) {
     setBusy(true);
     try {
-      const redirectUri = `${window.location.origin}/apps/mail/oauth/callback`;
-      const payload = await callBackend<{ status: string; authorization_url?: string; detail?: string }>({
-        action: MAIL_BACKEND_ACTIONS.connectionsStartOAuth,
-        provider: 'gmail',
-        redirect_uri: redirectUri,
-        _app_secret_request: {
-          logical_names: ['gmail-oauth-client-id'],
-          required: false
-        }
+      const payload = await callBackend<{ disconnect?: { status?: string; detail?: string } }>({
+        action: MAIL_BACKEND_ACTIONS.connectionsDisconnect,
+        connection_id: targetConnection.id,
+        reason: 'Disconnected from the Mail sidebar',
+        ...noSecretRequest()
       });
-      if (payload.authorization_url) {
-        window.open(payload.authorization_url, '_blank', 'noopener,noreferrer');
-      }
-      setNotice(payload.detail || `Gmail OAuth status: ${payload.status}`);
+      setNotice(payload.disconnect?.detail || `Connection ${payload.disconnect?.status || 'disconnected'}.`);
       await refresh();
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Gmail connection failed.');
+      setNotice(error instanceof Error ? error.message : 'Disconnect failed.');
     } finally {
       setBusy(false);
     }
   }
 
-  function selectMailbox(nextMailbox: string) {
+  function toggleConnection(nextConnectionId: string) {
+    setExpandedConnectionIds((current) => {
+      const next = new Set(current);
+      if (next.has(nextConnectionId)) {
+        next.delete(nextConnectionId);
+      } else {
+        next.add(nextConnectionId);
+      }
+      return next;
+    });
+  }
+
+  function expandConnection(nextConnectionId: string) {
+    setExpandedConnectionIds((current) => new Set(current).add(nextConnectionId));
+  }
+
+  function selectMailbox(nextMailbox: string, nextConnectionId: string | null = selectedConnectionId) {
     setMailbox(nextMailbox);
-    openMail({ mailbox: nextMailbox });
+    if (nextConnectionId) {
+      setSelectedConnectionId(nextConnectionId);
+      expandConnection(nextConnectionId);
+    }
+    openMail({ mailbox: nextMailbox, connection_id: nextConnectionId });
     if (isMobileLayout) {
       closeShellSidebar();
     }
   }
 
+  function countFor(connectionId: string, folder: string) {
+    return mailboxCounts[connectionId]?.[folder] || { total: 0, unread: 0 };
+  }
+
+  function countLabel(count: number) {
+    return count === 1 ? '1 thread' : `${count} threads`;
+  }
+
   return (
     <main className={`mail-sidebar-widget ${isMobileLayout ? 'is-shell-mobile' : ''}`} aria-busy={busy}>
       <div className="mail-sidebar-widget__list">
-        <div className="mail-sidebar-widget__account mail-sidebar-widget__row">
-          <span className="mail-sidebar-widget__row-icon" aria-hidden="true">M</span>
-          <span className="mail-sidebar-widget__row-copy">
-            <strong>{connection?.display_name || 'Mail'}</strong>
-            <span>{connection?.email_address || 'No connection'}</span>
-          </span>
-          <small>{status.mode || status.status || 'checking'}</small>
-        </div>
-        <div className="mail-sidebar-widget__provider mail-sidebar-widget__row">
-          <span className="mail-sidebar-widget__row-icon" aria-hidden="true">G</span>
-          <span className="mail-sidebar-widget__row-copy">
-            <strong>Gmail</strong>
-            <span>{gmailProvider?.status || 'needs setup'}</span>
-          </span>
-          <button type="button" onClick={startGmailOAuth} disabled={busy}>
-            Connect
-          </button>
-        </div>
-        <nav className="mail-sidebar-widget__mailboxes" aria-label="Mailboxes">
-          {MAILBOXES.map((item) => (
-            <button key={item} className={item === mailbox ? 'active' : ''} onClick={() => selectMailbox(item)} type="button">
-              <span className="mail-sidebar-widget__row-icon" aria-hidden="true">{item.slice(0, 1).toUpperCase()}</span>
-              <span className="mail-sidebar-widget__row-copy">
-                <strong>{item}</strong>
-                <span>{item === 'inbox' ? `${unreadCount} unread` : 'Mailbox'}</span>
-              </span>
-              {item === 'inbox' ? <b>{unreadCount}</b> : null}
-            </button>
-          ))}
-        </nav>
-        <button className="mail-sidebar-widget__sync mail-sidebar-widget__row" onClick={sync} disabled={busy || !canUseConnection} type="button">
-          <span className="mail-sidebar-widget__row-icon" aria-hidden="true">S</span>
-          <span className="mail-sidebar-widget__row-copy">
-            <strong>Sync</strong>
-            <span>Refresh mailbox cache</span>
-          </span>
-        </button>
+        {connections.length ? connections.map((item) => {
+          const selected = item.id === connection?.id;
+          const expanded = expandedConnectionIds.has(item.id);
+          const canSyncAccount = item.status !== 'disconnected';
+          return (
+            <section className="mail-sidebar-widget__account-group" aria-label={`${item.display_name || item.email_address} mailboxes`} key={item.id}>
+              <button
+                className={`mail-sidebar-widget__account-trigger mail-sidebar-widget__row ${selected ? 'is-selected' : ''}`}
+                type="button"
+                aria-expanded={expanded}
+                onClick={() => toggleConnection(item.id)}
+              >
+                <span className={`mail-sidebar-widget__chevron ${expanded ? 'is-expanded' : ''}`} aria-hidden="true" />
+                <span className="mail-sidebar-widget__row-copy">
+                  <strong>{item.display_name || item.email_address}</strong>
+                  <span>{item.email_address || item.provider}</span>
+                </span>
+                <small>{item.status}</small>
+              </button>
+              {expanded ? (
+                <div className="mail-sidebar-widget__account-menu">
+                  <nav className="mail-sidebar-widget__mailboxes" aria-label={`${item.display_name || item.email_address} folders`}>
+                    {MAILBOXES.map((folder) => {
+                      const activeMailbox = selected && folder === mailbox;
+                      const folderCount = countFor(item.id, folder);
+                      const displayCount = folder === 'inbox' ? folderCount.unread : folderCount.total;
+                      return (
+                        <button key={folder} className={activeMailbox ? 'active' : ''} onClick={() => selectMailbox(folder, item.id)} type="button">
+                          <span className="mail-sidebar-widget__row-icon" aria-hidden="true">{folder.slice(0, 1).toUpperCase()}</span>
+                          <span className="mail-sidebar-widget__row-copy">
+                            <strong>{folder}</strong>
+                            <span>{folder === 'inbox' ? `${folderCount.unread} unread` : countLabel(folderCount.total)}</span>
+                          </span>
+                          {displayCount > 0 ? <b>{displayCount}</b> : null}
+                        </button>
+                      );
+                    })}
+                  </nav>
+                  <div className="mail-sidebar-widget__account-actions">
+                    <button type="button" onClick={() => sync(item)} disabled={busy || !canSyncAccount}>
+                      Sync
+                    </button>
+                    <button
+                      type="button"
+                      className="mail-sidebar-widget__danger-action"
+                      onClick={() => disconnect(item)}
+                      disabled={busy || !canSyncAccount}
+                    >
+                      Disconnect
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </section>
+          );
+        }) : (
+          <p className="mail-sidebar-widget__empty">No mail accounts connected.</p>
+        )}
         {notice ? <p className="mail-sidebar-widget__notice">{notice}</p> : null}
       </div>
     </main>

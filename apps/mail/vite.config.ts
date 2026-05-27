@@ -11,7 +11,8 @@ export default defineConfig({
     rollupOptions: {
       input: {
         app: 'frontend/index.html',
-        'widgets/mail-sidebar/index': 'frontend/widgets/mail-sidebar/index.html'
+        'widgets/mail-sidebar/index': 'frontend/widgets/mail-sidebar/index.html',
+        'widgets/mail-sidebar-footer/index': 'frontend/widgets/mail-sidebar-footer/index.html'
       }
     }
   }

@@ -10,7 +10,7 @@ import re
 import sqlite3
 
 
-SCHEMA_VERSION = "3"
+SCHEMA_VERSION = "4"
 REFERENCE_ENTITIES = ["mail_connection", "email_thread", "email_message", "mail_attachment", "mail_draft"]
 REQUIRED_TABLES = [
     "schema_metadata",
@@ -204,7 +204,7 @@ def ensure_schema(data_root: Path) -> None:
             "INSERT OR REPLACE INTO schema_metadata(key, value) VALUES (?, ?)",
             ("schema_version", SCHEMA_VERSION),
         )
-        _migrate_legacy_mock_connections(db)
+        _remove_mock_provider_rows(db)
         _migrate_legacy_gmail_cache_ids(db)
 
 
@@ -272,32 +272,74 @@ def _ensure_column(db: sqlite3.Connection, table: str, column: str, definition: 
         db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
-def _migrate_legacy_mock_connections(db: sqlite3.Connection) -> None:
+def _remove_mock_provider_rows(db: sqlite3.Connection) -> None:
+    connection_ids = [
+        str(row["id"])
+        for row in db.execute(
+            """
+            SELECT id
+            FROM connections
+            WHERE provider = 'mock'
+               OR status = 'mock_connected'
+               OR id = 'mail_connection_demo'
+               OR email_address IN ('mock@example.com', 'demo@example.com')
+            """
+        ).fetchall()
+    ]
+    if not connection_ids:
+        return
+    thread_ids = _ids_for(db, "SELECT id FROM threads WHERE connection_id IN ({})", connection_ids)
+    message_ids = _ids_for(db, "SELECT id FROM messages WHERE thread_id IN ({})", thread_ids)
+    attachment_ids = _ids_for(db, "SELECT id FROM attachments WHERE message_id IN ({})", message_ids)
+    draft_ids = _ids_for(db, "SELECT id FROM drafts WHERE connection_id IN ({}) OR thread_id IN ({})", connection_ids, thread_ids)
+    entity_ids = {
+        "mail_connection": connection_ids,
+        "email_thread": thread_ids,
+        "email_message": message_ids,
+        "mail_attachment": attachment_ids,
+        "mail_draft": draft_ids,
+    }
+    for entity_type, ids in entity_ids.items():
+        _delete_entity_links(db, entity_type, ids)
+        _delete_where_in(db, "audit_log", "target_id", ids)
+    _delete_where_in(db, "attachments", "id", attachment_ids)
+    _delete_where_in(db, "messages", "id", message_ids)
+    _delete_where_in(db, "drafts", "id", draft_ids)
+    _delete_where_in(db, "threads", "id", thread_ids)
+    _delete_where_in(db, "folders", "connection_id", connection_ids)
+    _delete_where_in(db, "labels", "connection_id", connection_ids)
+    _delete_where_in(db, "sync_state", "connection_id", connection_ids)
+    _delete_where_in(db, "oauth_credentials", "connection_id", connection_ids)
+    _delete_where_in(db, "connections", "id", connection_ids)
+
+
+def _ids_for(db: sqlite3.Connection, sql_template: str, *id_groups: list[str]) -> list[str]:
+    if all(not ids for ids in id_groups):
+        return []
+    placeholders = [",".join("?" for _ in ids) if ids else "NULL" for ids in id_groups]
+    params = [item for ids in id_groups for item in ids]
+    return [str(row["id"]) for row in db.execute(sql_template.format(*placeholders), params).fetchall()]
+
+
+def _delete_entity_links(db: sqlite3.Connection, entity_type: str, ids: list[str]) -> None:
+    if not ids:
+        return
+    placeholders = ",".join("?" for _ in ids)
     db.execute(
-        """
-        UPDATE connections
-        SET provider = 'mock',
-            email_address = CASE WHEN email_address = 'demo@example.com' THEN 'mock@example.com' ELSE email_address END,
-            display_name = CASE WHEN display_name = 'Demo Mailbox' THEN 'Mock Mailbox' ELSE display_name END,
-            updated_at = ?
-        WHERE id = 'mail_connection_demo' AND provider = 'gmail' AND status = 'mock_connected'
-        """,
-        (now_timestamp(),),
+        f"DELETE FROM entity_links WHERE source_entity_type = ? AND source_entity_id IN ({placeholders})",
+        [entity_type, *ids],
     )
     db.execute(
-        """
-        UPDATE threads
-        SET participants_json = REPLACE(REPLACE(participants_json, 'Demo User', 'Mock User'), 'demo@example.com', 'mock@example.com')
-        WHERE connection_id = 'mail_connection_demo'
-        """
+        f"DELETE FROM entity_links WHERE target_app_id = 'mail' AND target_entity_type = ? AND target_entity_id IN ({placeholders})",
+        [entity_type, *ids],
     )
-    db.execute(
-        """
-        UPDATE messages
-        SET recipients_json = REPLACE(REPLACE(recipients_json, 'Demo User', 'Mock User'), 'demo@example.com', 'mock@example.com')
-        WHERE thread_id IN (SELECT id FROM threads WHERE connection_id = 'mail_connection_demo')
-        """
-    )
+
+
+def _delete_where_in(db: sqlite3.Connection, table: str, column: str, ids: list[str]) -> None:
+    if not ids:
+        return
+    placeholders = ",".join("?" for _ in ids)
+    db.execute(f"DELETE FROM {table} WHERE {column} IN ({placeholders})", ids)
 
 
 def _migrate_legacy_gmail_cache_ids(db: sqlite3.Connection) -> None:
@@ -373,125 +415,3 @@ def _local_gmail_attachment_id(connection_id: object, provider_message_id: objec
 
 def _safe_id(value: str) -> str:
     return re.sub(r"[^a-zA-Z0-9]+", "_", value).strip("_").lower() or "unknown"
-
-
-def seed_mock_data(data_root: Path) -> dict[str, object]:
-    """Create deterministic mock mail records only when explicitly requested."""
-    ensure_schema(data_root)
-    with connect(data_root) as db:
-        return _seed_mock_data(db)
-
-
-def _seed_mock_data(db: sqlite3.Connection) -> dict[str, object]:
-    existing = db.execute("SELECT COUNT(*) AS count FROM connections").fetchone()["count"]
-    if existing:
-        return {"created": False, "connection_id": "mail_connection_demo", "reason": "connections_already_exist"}
-    now = now_timestamp()
-    connection_id = "mail_connection_demo"
-    thread_id = "email_thread_demo_welcome"
-    second_thread_id = "email_thread_demo_ops"
-    db.execute(
-        """
-        INSERT INTO connections(id, provider, email_address, display_name, status, scopes_json, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (connection_id, "mock", "mock@example.com", "Mock Mailbox", "mock_connected", '["mail.read", "mail.send"]', now, now),
-    )
-    labels = [
-        ("label_inbox", "INBOX", "Inbox", "inbox"),
-        ("label_sent", "SENT", "Sent", "sent"),
-        ("label_drafts", "DRAFT", "Drafts", "drafts"),
-        ("label_starred", "STARRED", "Starred", "starred"),
-        ("label_trash", "TRASH", "Trash", "trash"),
-    ]
-    db.executemany(
-        "INSERT INTO folders(id, connection_id, provider_folder_id, name, canonical, folder_type, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        [
-            (f"folder_{canonical}", connection_id, provider_id, name, canonical, canonical, now, now)
-            for _, provider_id, name, canonical in labels
-        ],
-    )
-    db.executemany(
-        "INSERT INTO labels(id, connection_id, provider_label_id, name, canonical) VALUES (?, ?, ?, ?, ?)",
-        [(label_id, connection_id, provider_id, name, canonical) for label_id, provider_id, name, canonical in labels],
-    )
-    db.execute(
-        """
-        INSERT INTO threads(id, connection_id, provider_thread_id, subject, participants_json, last_message_at, snippet, unread, starred, labels_json, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            thread_id,
-            connection_id,
-            "provider-demo-welcome",
-            "Welcome to Maverick Mail",
-            '[{"name":"Maverick Mail","email":"mail@example.com"},{"name":"Mock User","email":"mock@example.com"}]',
-            now,
-            "A native Maverick mail workspace with CLI, MCP, references, and local storage.",
-            1,
-            1,
-            '["inbox", "starred"]',
-            now,
-        ),
-    )
-    db.execute(
-        """
-        INSERT INTO threads(id, connection_id, provider_thread_id, subject, participants_json, last_message_at, snippet, unread, starred, labels_json, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            second_thread_id,
-            connection_id,
-            "provider-demo-ops",
-            "Mail app implementation notes",
-            '[{"name":"Product","email":"product@example.com"},{"name":"Mock User","email":"mock@example.com"}]',
-            now,
-            "The MVP keeps Gmail OAuth as a documented integration point and ships with a local mock provider.",
-            0,
-            0,
-            '["inbox"]',
-            now,
-        ),
-    )
-    db.execute(
-        """
-        INSERT INTO messages(id, thread_id, provider_message_id, sender_json, recipients_json, sent_at, body_text, headers_json, has_attachments)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            "email_message_demo_welcome_1",
-            thread_id,
-            "provider-message-welcome-1",
-            '{"name":"Maverick Mail","email":"mail@example.com"}',
-            '[{"name":"Mock User","email":"mock@example.com"}]',
-            now,
-            "This workspace-local app demonstrates the Mail domain without storing provider tokens. Use MCP tools to search and read bounded thread content.",
-            '{"x-maverick-demo":"true"}',
-            0,
-        ),
-    )
-    db.execute(
-        """
-        INSERT INTO messages(id, thread_id, provider_message_id, sender_json, recipients_json, sent_at, body_text, headers_json, has_attachments)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            "email_message_demo_ops_1",
-            second_thread_id,
-            "provider-message-ops-1",
-            '{"name":"Product","email":"product@example.com"}',
-            '[{"name":"Mock User","email":"mock@example.com"}]',
-            now,
-            "Next production step: configure Google OAuth secrets through Vault/Core Secrets, then replace the mock provider with a Gmail adapter.",
-            '{"x-maverick-demo":"true"}',
-            0,
-        ),
-    )
-    db.execute(
-        """
-        INSERT INTO sync_state(connection_id, last_sync_at, last_error, cursor, last_full_sync_at, last_incremental_sync_at, provider_history_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-        (connection_id, now, "", "demo-cursor", now, now, "demo-history"),
-    )
-    return {"created": True, "connection_id": connection_id}

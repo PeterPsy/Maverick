@@ -1,11 +1,10 @@
-import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   callBackend,
   MAIL_BACKEND_ACTIONS,
+  type MailAddress,
   type MailConnection,
   type MailDraft,
-  type MailProviderState,
-  type MailStatus,
   type MailThread
 } from './api';
 import SlidingPagination from './components/ui/sliding-pagination';
@@ -18,7 +17,6 @@ const THREADS_PAGE_SIZE = 50;
 
 type ConnectionPayload = {
   items: MailConnection[];
-  providers?: MailProviderState[];
   required_secrets?: string[];
   callback_path?: string;
 };
@@ -36,6 +34,7 @@ type SendResult = {
 
 type MailNavigateParams = {
   mailbox?: string;
+  connection_id?: string;
   query?: string;
   thread?: string;
 };
@@ -97,14 +96,26 @@ function sendResultNotice(result: SendResult, confirm: boolean) {
   return 'Message sent.';
 }
 
+function threadSender(thread: MailThread): MailAddress {
+  return thread.participants[0] || { email: 'mail' };
+}
+
+function avatarInitials(thread: MailThread) {
+  const sender = threadSender(thread);
+  const source = sender.name || sender.email || 'Mail';
+  const localPart = source.includes('@') ? source.split('@')[0] : source;
+  const parts = localPart.split(/[\s._-]+/).filter(Boolean);
+  const initials = parts.slice(0, 2).map((part) => part.slice(0, 1).toUpperCase()).join('');
+  return initials || 'M';
+}
+
 export function App() {
   const [connections, setConnections] = useState<MailConnection[]>([]);
-  const [providers, setProviders] = useState<MailProviderState[]>([]);
-  const [status, setStatus] = useState<MailStatus>({});
   const [threads, setThreads] = useState<MailThread[]>([]);
   const [totalThreads, setTotalThreads] = useState(0);
   const [selectedThread, setSelectedThread] = useState<MailThread | null>(null);
   const [mailbox, setMailbox] = useState('inbox');
+  const [connectionId, setConnectionId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
   const [draft, setDraft] = useState({ to: '', subject: '', body_text: '' });
@@ -124,7 +135,8 @@ export function App() {
         ...(connectionId ? gmailSecretRequest(connectionId) : noSecretRequest())
       });
       setSelectedThread(payload.thread);
-      notifySelection({ thread: payload.thread.id, mailbox });
+      setConnectionId(payload.thread.connection_id);
+      notifySelection({ thread: payload.thread.id, mailbox, connection_id: payload.thread.connection_id });
     } finally {
       setBusy(false);
     }
@@ -132,24 +144,22 @@ export function App() {
 
   const loadThreads = useCallback(async () => {
     const offset = (page - 1) * THREADS_PAGE_SIZE;
-    const [statusPayload, connectionPayload, threadPayload] = await Promise.all([
-      callBackend<MailStatus>({ action: MAIL_BACKEND_ACTIONS.status, ...noSecretRequest() }),
+    const [connectionPayload, threadPayload] = await Promise.all([
       callBackend<ConnectionPayload>({ action: MAIL_BACKEND_ACTIONS.connectionsList, ...noSecretRequest() }),
       callBackend<ThreadListPayload>({
         action: MAIL_BACKEND_ACTIONS.threadsList,
         mailbox,
+        ...(connectionId ? { connection_id: connectionId } : {}),
         query,
         max_threads: THREADS_PAGE_SIZE,
         offset,
         ...noSecretRequest()
       })
     ]);
-    setStatus(statusPayload);
     setConnections(connectionPayload.items);
-    setProviders(connectionPayload.providers || []);
     setThreads(threadPayload.items);
     setTotalThreads(threadPayload.total_count ?? threadPayload.items.length);
-  }, [mailbox, page, query]);
+  }, [connectionId, mailbox, page, query]);
 
   useEffect(() => {
     setPage(1);
@@ -205,11 +215,23 @@ export function App() {
       const data = event.data as { type?: string; owner_app_id?: string; resource?: string; params?: MailNavigateParams };
       if (data?.type === 'maverick.app.navigate') {
         const nextMailbox = data.params?.mailbox;
+        const nextConnectionIdParam = typeof data.params?.connection_id === 'string' && data.params.connection_id.trim()
+          ? data.params.connection_id.trim()
+          : null;
+        const nextConnectionId = nextConnectionIdParam || connectionId;
+        const resolvedMailbox = nextMailbox && MAILBOXES.includes(nextMailbox) ? nextMailbox : mailbox;
         if (nextMailbox && MAILBOXES.includes(nextMailbox)) {
           setPage(1);
           setMailbox(nextMailbox);
           setSelectedThread(null);
-          notifySelection({ mailbox: nextMailbox, thread: null });
+        }
+        if (nextConnectionIdParam) {
+          setPage(1);
+          setConnectionId(nextConnectionIdParam);
+          setSelectedThread(null);
+        }
+        if ((nextMailbox && MAILBOXES.includes(nextMailbox)) || nextConnectionId !== connectionId) {
+          notifySelection({ mailbox: resolvedMailbox, thread: null, connection_id: nextConnectionId });
         }
         if (typeof data.params?.query === 'string') {
           setQuery(data.params.query);
@@ -230,13 +252,10 @@ export function App() {
     };
     window.addEventListener('message', listener);
     return () => window.removeEventListener('message', listener);
-  }, [loadThreads, openThread]);
+  }, [connectionId, loadThreads, mailbox, openThread]);
 
-  const connection = connections.find((item) => item.status !== 'disconnected') || connections[0];
-  const gmailProvider = providers.find((provider) => provider.provider === 'gmail');
-  const activeConnectionCount = connections.filter((item) => item.status !== 'disconnected').length;
-  const connectionStatus = connection?.status || status.health_status || status.status || 'not connected';
-  const gmailStatus = gmailProvider?.status || (connection?.provider === 'gmail' ? connection.status : 'needs setup');
+  const connection = (connectionId ? connections.find((item) => item.id === connectionId) : null) || connections.find((item) => item.status !== 'disconnected') || connections[0];
+  const connectionById = useMemo(() => new Map(connections.map((item) => [item.id, item])), [connections]);
   const canUseConnection = Boolean(connection && connection.status !== 'disconnected');
   const totalPages = Math.max(1, Math.ceil(totalThreads / THREADS_PAGE_SIZE));
   const visibleStart = totalThreads === 0 ? 0 : (page - 1) * THREADS_PAGE_SIZE + 1;
@@ -347,23 +366,16 @@ export function App() {
     }
   }
 
-  async function startGmailOAuth() {
+  async function markThread(thread: MailThread, read: boolean) {
     setBusy(true);
     try {
-      const redirectUri = `${window.location.origin}/apps/mail/oauth/callback`;
-      const payload = await callBackend<{ status: string; authorization_url?: string; detail?: string }>({
-        action: MAIL_BACKEND_ACTIONS.connectionsStartOAuth,
-        provider: 'gmail',
-        redirect_uri: redirectUri,
-        _app_secret_request: {
-          logical_names: ['gmail-oauth-client-id'],
-          required: false
-        }
+      const payload = await callBackend<{ thread: MailThread }>({
+        action: MAIL_BACKEND_ACTIONS.messagesMarkRead,
+        thread_id: thread.id,
+        read,
+        ...gmailSecretRequest(thread.connection_id)
       });
-      if (payload.authorization_url) {
-        window.open(payload.authorization_url, '_blank', 'noopener,noreferrer');
-      }
-      setNotice(payload.detail || `Gmail OAuth status: ${payload.status}`);
+      setSelectedThread((current) => current?.id === payload.thread.id ? payload.thread : current);
       await loadThreads();
     } catch (error) {
       setNotice((error as Error).message);
@@ -372,42 +384,18 @@ export function App() {
     }
   }
 
-  async function syncConnection() {
-    if (!connection || !canUseConnection) {
-      setNotice('No connected mail provider is available to sync.');
-      return;
-    }
+  async function moveThreadToTrash(thread: MailThread) {
     setBusy(true);
     try {
-      await callBackend({
-        action: MAIL_BACKEND_ACTIONS.threadsSync,
-        connection_id: connection.id,
-        ...gmailSecretRequest(connection.id)
+      const payload = await callBackend<{ thread: MailThread }>({
+        action: MAIL_BACKEND_ACTIONS.labelsModify,
+        thread_id: thread.id,
+        add: ['trash'],
+        remove: ['inbox'],
+        ...gmailSecretRequest(thread.connection_id)
       });
-      setNotice('Mailbox sync completed.');
-      await loadThreads();
-    } catch (error) {
-      setNotice((error as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function disconnectConnection() {
-    if (!connection) {
-      return;
-    }
-    setBusy(true);
-    try {
-      const payload = await callBackend<{ disconnect?: { status?: string; detail?: string } }>({
-        action: MAIL_BACKEND_ACTIONS.connectionsDisconnect,
-        connection_id: connection.id,
-        reason: 'Disconnected from the Mail frontend',
-        ...noSecretRequest()
-      });
-      setSelectedThread(null);
-      setLastDraft(null);
-      setNotice(payload.disconnect?.detail || `Connection ${payload.disconnect?.status || 'disconnected'}.`);
+      setSelectedThread((current) => current?.id === payload.thread.id ? payload.thread : current);
+      setNotice('Moved to trash.');
       await loadThreads();
     } catch (error) {
       setNotice((error as Error).message);
@@ -418,74 +406,77 @@ export function App() {
 
   return (
     <main className={`mail-shell ${selectedThread ? 'is-reading' : 'is-list-only'}`}>
-      <section className="thread-column">
-        <div className="toolbar">
-          <label className="mail-search">
-            <span className="mail-search__icon" aria-hidden="true" />
-            <input aria-label="Search in Mail" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search in Mail" />
-          </label>
-          <div className="mail-page-controls" aria-label="Mail pagination">
-            <span className="mail-page-range">{visibleStart}-{visibleEnd}</span>
-            {totalPages > 1 ? (
-              <SlidingPagination
-                totalPages={totalPages}
-                currentPage={page}
-                onPageChange={setPage}
-                maxVisiblePages={7}
-              />
-            ) : null}
-          </div>
-        </div>
-        <section className="connection-panel" aria-label="Mail connection controls">
-          <div className="connection-panel__summary">
-            <div className="connection-panel__item">
-              <span>Connections</span>
-              <strong>{activeConnectionCount}/{connections.length || status.connection_count || 0}</strong>
-              <small>{connectionStatus}</small>
-            </div>
-            <div className="connection-panel__item">
-              <span>Gmail</span>
-              <strong>{gmailProvider?.configured === false ? 'Not configured' : gmailStatus}</strong>
-              <small>{connection?.email_address || 'No account'}</small>
-            </div>
-          </div>
-          <div className="connection-panel__actions">
-            <button type="button" onClick={startGmailOAuth} disabled={busy}>
-              {gmailProvider?.connected ? 'Reconnect Gmail' : 'Connect Gmail'}
-            </button>
-            <button type="button" onClick={syncConnection} disabled={busy || !canUseConnection}>
-              Sync
-            </button>
-            <button
-              type="button"
-              className="connection-panel__disconnect"
-              onClick={disconnectConnection}
-              disabled={busy || !connection || connection.status === 'disconnected'}
-            >
-              Disconnect
-            </button>
-          </div>
-        </section>
-        <div className="thread-list">
-          {threads.length === 0 ? (
-            <div className="thread-empty">
-              {canUseConnection ? 'No threads match this view.' : 'Connect Gmail or bootstrap a mock provider from CLI/MCP to load mail.'}
-            </div>
+      <div className="toolbar">
+        <label className="mail-search">
+          <span className="mail-search__icon" aria-hidden="true" />
+          <input aria-label="Search in Mail" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search in Mail" />
+        </label>
+        <div className="mail-page-controls" aria-label="Mail pagination">
+          <span className="mail-page-range">{visibleStart}-{visibleEnd}</span>
+          {totalPages > 1 ? (
+            <SlidingPagination
+              totalPages={totalPages}
+              currentPage={page}
+              onPageChange={setPage}
+              maxVisiblePages={7}
+            />
           ) : null}
-          {threads.map((thread) => (
-            <button key={thread.id} className={`thread-row ${selectedThread?.id === thread.id ? 'selected' : ''}`} onClick={() => openThread(thread.id, thread.connection_id)}>
-              <span className="thread-title">{thread.subject}</span>
-              <span className="thread-meta">{thread.participants.map((person) => person.name || person.email).join(', ')}</span>
-              <span className="thread-snippet">{thread.snippet}</span>
-              <span className="label-strip">{thread.labels.join(' / ')}</span>
-            </button>
-          ))}
         </div>
-        {!selectedThread && notice ? <div className="notice">{notice}</div> : null}
-      </section>
+      </div>
 
-      {selectedThread ? (
-        <section className="reader-column">
+      <div className="mail-workspace">
+        <section className="thread-column">
+          <div className="thread-list">
+            {threads.length === 0 ? (
+              <div className="thread-empty">
+                {canUseConnection ? 'No threads match this view.' : 'Connect Gmail to load mail.'}
+              </div>
+            ) : null}
+            {threads.map((thread) => {
+              const sender = threadSender(thread);
+              const canModifyThread = connectionById.get(thread.connection_id)?.status !== 'disconnected';
+              const recipient = connectionById.get(thread.connection_id);
+              const recipientLabel = recipient?.display_name || recipient?.email_address || 'Mail account';
+              return (
+                <article key={thread.id} className={`thread-row ${selectedThread?.id === thread.id ? 'selected' : ''}`}>
+                  <button className="thread-row__body" type="button" onClick={() => openThread(thread.id, thread.connection_id)}>
+                    <span className="thread-avatar" aria-hidden="true">{avatarInitials(thread)}</span>
+                    <span className="thread-copy">
+                      <span className="thread-title">{thread.subject}</span>
+                      <span className="thread-snippet">{thread.snippet}</span>
+                    </span>
+                  </button>
+                  <span className="thread-side" aria-label={`Actions for ${thread.subject}`}>
+                    <span className="thread-route" title={`${sender.name || sender.email} to ${recipientLabel}`}>
+                      <span>{sender.name || sender.email}</span>
+                      <span className="thread-route-arrow" aria-hidden="true" />
+                      <span>{recipientLabel}</span>
+                    </span>
+                    <span className="thread-action-row">
+                      <button type="button" className="thread-read-button" onClick={() => markThread(thread, thread.unread)} disabled={busy || !canModifyThread}>
+                        {thread.unread ? 'Mark read' : 'Mark unread'}
+                      </button>
+                      <button
+                        type="button"
+                        className="thread-trash-button"
+                        onClick={() => moveThreadToTrash(thread)}
+                        disabled={busy || !canModifyThread || thread.labels.includes('trash')}
+                        aria-label="Move to trash"
+                        title="Move to trash"
+                      >
+                        <span className="thread-trash-icon" aria-hidden="true" />
+                      </button>
+                    </span>
+                  </span>
+                </article>
+              );
+            })}
+          </div>
+          {!selectedThread && notice ? <div className="notice">{notice}</div> : null}
+        </section>
+
+        {selectedThread ? (
+          <section className="reader-column">
           <header className="reader-header">
             <div>
               <h1>{selectedThread.subject}</h1>
@@ -543,8 +534,9 @@ export function App() {
           {lastSendResult?.dry_run ? <p className="draft-note">Dry-run prepared for draft {lastSendResult.draft?.id}.</p> : null}
           {lastSendResult?.sent ? <p className="draft-note">{sendResultNotice(lastSendResult, true)}</p> : null}
           {notice ? <div className="notice">{notice}</div> : null}
-        </section>
-      ) : null}
+          </section>
+        ) : null}
+      </div>
     </main>
   );
 }

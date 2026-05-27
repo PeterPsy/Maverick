@@ -69,6 +69,7 @@ export const MAIL_BACKEND_ACTIONS = {
   connectionsStartOAuth: 'connections.start_oauth',
   connectionsCompleteOAuth: 'connections.complete_oauth',
   connectionsDisconnect: 'connections.disconnect',
+  mailboxesCounts: 'mailboxes.counts',
   threadsList: 'threads.list',
   threadsGet: 'threads.get',
   threadsSync: 'threads.sync',

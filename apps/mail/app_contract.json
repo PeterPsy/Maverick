@@ -201,7 +201,7 @@
   },
   "storage": {
     "storage_kind": "sqlite",
-    "data_schema_version": "3",
+    "data_schema_version": "4",
     "primary_paths": [
       "data/mail/mail.sqlite"
     ],
@@ -264,6 +264,23 @@
       "frontend": {
         "kind": "iframe",
         "mount": "frontend/dist/widgets/mail-sidebar",
+        "spa_fallback": true
+      },
+      "actions": {
+        "backend": true,
+        "mcp": false,
+        "cli": false
+      }
+    },
+    {
+      "widget_id": "mail-sidebar-footer",
+      "host": "base-shell",
+      "content_kinds": [
+        "shell.sidebar.footer"
+      ],
+      "frontend": {
+        "kind": "iframe",
+        "mount": "frontend/dist/widgets/mail-sidebar-footer",
         "spa_fallback": true
       },
       "actions": {

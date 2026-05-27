@@ -7,7 +7,7 @@
         "properties": {
           "action": {
             "type": "string",
-            "description": "Mail action such as connections.start_oauth, connections.complete_oauth, connections.bootstrap_mock, connections.disconnect, threads.list, threads.get, drafts.create, drafts.send, messages.search, labels.modify, attachments.get, folders.list, or health.check."
+            "description": "Mail action such as connections.start_oauth, connections.complete_oauth, connections.disconnect, threads.list, threads.get, drafts.create, drafts.send, messages.search, labels.modify, attachments.get, folders.list, or health.check."
           },
           "connection_id": { "type": "string" },
           "thread_id": { "type": "string" },

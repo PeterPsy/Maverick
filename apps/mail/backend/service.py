@@ -10,7 +10,6 @@ from oauth import complete_oauth, provider_status, start_oauth
 from providers.registry import provider_for_connection
 from references import reference_manifest, reference_resolve, reference_search, reference_summary
 from store import (
-    bootstrap_mock_connection,
     count_threads,
     disconnect_connection,
     get_connection,
@@ -20,6 +19,7 @@ from store import (
     list_connections,
     list_folders,
     list_labels,
+    mailbox_counts,
     search_messages,
     status,
 )
@@ -29,8 +29,6 @@ from view_state import clear_custom_view, load_view_state, set_custom_view, set_
 MUTATING_ACTIONS = {
     "connections.start_oauth",
     "connections.complete_oauth",
-    "connections.bootstrap_mock",
-    "mail_bootstrap_mock",
     "connections.disconnect",
     "threads.sync",
     "mail_sync",
@@ -63,8 +61,6 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
         if action == "connections.list":
             connections = list_connections(data_root)
             return 200, {"items": connections, **provider_status(payload.get("_app_secrets"), connections)}
-        if action in {"connections.bootstrap_mock", "mail_bootstrap_mock"}:
-            return 201, {"mock": bootstrap_mock_connection(data_root)}
         if action == "connections.start_oauth":
             result = start_oauth(data_root, payload)
             return (200 if result.get("status") != "not_configured" else 409), result
@@ -93,6 +89,8 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
                 "offset": _bounded_int(payload.get("offset"), 0, 0, 100_000),
                 "total_count": count_threads(data_root, provider_payload),
             }
+        if action in {"mailboxes.counts", "mail_mailbox_counts"}:
+            return 200, {"counts": mailbox_counts(data_root)}
         if action in {"threads.get", "mail_get_thread", "get"}:
             thread_id = _required_string(payload.get("thread_id") or payload.get("id"), "thread_id")
             thread = get_thread(data_root, thread_id)
@@ -258,7 +256,7 @@ def app_events_for_action(action: str, result: dict[str, object] | None = None) 
         resource = "view-state"
     elif action.startswith("drafts") or action.startswith("mail_") and "draft" in action:
         resource = "drafts"
-    elif "connection" in action or action == "mail_bootstrap_mock":
+    elif "connection" in action:
         resource = "connections"
     else:
         resource = "threads"

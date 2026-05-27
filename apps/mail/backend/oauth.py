@@ -26,11 +26,9 @@ GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
 def provider_status(app_secrets: object | None = None, connections: list[dict[str, object]] | None = None) -> dict[str, object]:
     secrets_map = _secret_map(app_secrets)
     connection_items = connections or []
-    has_mock = any(item.get("provider") == "mock" and item.get("status") != "disconnected" for item in connection_items)
     has_gmail = any(item.get("provider") == "gmail" and item.get("status") == "connected" for item in connection_items)
     return {
         "providers": [
-            _provider_payload("mock", connected=has_mock, configured=True, status="mock_connected" if has_mock else "available"),
             _provider_payload(
                 "gmail",
                 connected=has_gmail,

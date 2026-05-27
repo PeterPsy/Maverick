@@ -30,42 +30,55 @@ class MailServiceTest(unittest.TestCase):
             self.assertEqual(status, 200)
             self.assertEqual(payload["items"], [])
 
-    def test_bootstrap_mock_lists_threads(self) -> None:
+    def test_mock_bootstrap_action_is_not_supported(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             status, payload = handle_action(Path(tmp), {"action": "connections.bootstrap_mock"})
-            self.assertEqual(status, 201)
-            self.assertTrue(payload["mock"]["created"])
-            status, payload = handle_action(Path(tmp), {"action": "threads.list", "mailbox": "inbox"})
-            self.assertEqual(status, 200)
-            self.assertGreaterEqual(len(payload["items"]), 1)
-            self.assertIn("subject", payload["items"][0])
+            self.assertEqual(status, 400)
+            self.assertEqual(payload["error"], "unsupported_action")
 
-    def test_disconnect_mock_marks_connection_and_preserves_cache(self) -> None:
+    def test_schema_migration_removes_legacy_mock_provider_rows(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
-            handle_action(data_root, {"action": "connections.bootstrap_mock"})
+            ensure_schema(data_root)
+            now = now_timestamp()
+            with connect(data_root) as db:
+                db.execute(
+                    """
+                    INSERT INTO connections(id, provider, email_address, display_name, status, scopes_json, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    ("mail_connection_demo", "mock", "mock@example.com", "Mock Mailbox", "mock_connected", "[]", now, now),
+                )
+                db.execute(
+                    """
+                    INSERT INTO threads(id, connection_id, provider_thread_id, subject, participants_json, last_message_at, snippet, unread, starred, labels_json, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    ("email_thread_demo_welcome", "mail_connection_demo", "demo-thread", "Mock", "[]", now, "", 0, 0, "[]", now),
+                )
+                db.execute(
+                    """
+                    INSERT INTO messages(id, thread_id, provider_message_id, sender_json, recipients_json, sent_at, body_text, headers_json, has_attachments)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    ("email_message_demo_welcome", "email_thread_demo_welcome", "demo-message", "{}", "[]", now, "Mock body", "{}", 0),
+                )
+                db.execute(
+                    """
+                    INSERT INTO drafts(id, connection_id, thread_id, to_json, cc_json, bcc_json, subject, body_text, status, dirty, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    ("mail_draft_demo", "mail_connection_demo", "email_thread_demo_welcome", "[]", "[]", "[]", "Mock draft", "Body", "draft", 1, now, now),
+                )
 
-            status, payload = handle_action(data_root, {"action": "connections.disconnect", "connection_id": "mail_connection_demo"})
-
-            self.assertEqual(status, 200)
-            self.assertEqual(payload["disconnect"]["status"], "disconnected")
-            self.assertEqual(payload["disconnect"]["connection"]["status"], "disconnected")
-            self.assertGreaterEqual(payload["disconnect"]["cache"]["thread_count"], 1)
-            self.assertEqual(payload["disconnect"]["core_secret_revocation"]["status"], "not_supported_by_app_backend")
-            status, listed = handle_action(data_root, {"action": "threads.list", "connection_id": "mail_connection_demo"})
-            self.assertEqual(status, 200)
-            self.assertGreaterEqual(len(listed["items"]), 1)
             status, connections = handle_action(data_root, {"action": "connections.list"})
             self.assertEqual(status, 200)
-            mock_provider = [item for item in connections["providers"] if item["provider"] == "mock"][0]
-            self.assertFalse(mock_provider["connected"])
+            self.assertEqual(connections["items"], [])
+            self.assertNotIn("mock", {item["provider"] for item in connections["providers"]})
             with connect(data_root) as db:
-                audit_row = db.execute(
-                    "SELECT detail_json FROM audit_log WHERE action = ? AND target_id = ?",
-                    ("connections.disconnect", "mail_connection_demo"),
-                ).fetchone()
-            self.assertIsNotNone(audit_row)
-            self.assertTrue(json.loads(audit_row["detail_json"])["cache_preserved"])
+                self.assertEqual(db.execute("SELECT COUNT(*) AS count FROM threads").fetchone()["count"], 0)
+                self.assertEqual(db.execute("SELECT COUNT(*) AS count FROM messages").fetchone()["count"], 0)
+                self.assertEqual(db.execute("SELECT COUNT(*) AS count FROM drafts").fetchone()["count"], 0)
 
     def test_disconnect_gmail_marks_credential_without_deleting_history(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -174,7 +187,7 @@ class MailServiceTest(unittest.TestCase):
     def test_threads_list_returns_pagination_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
-            handle_action(data_root, {"action": "connections.bootstrap_mock"})
+            self._insert_gmail_fixture(data_root)
             status, first_page = handle_action(data_root, {"action": "threads.list", "mailbox": "inbox", "max_threads": 1, "offset": 0})
             self.assertEqual(status, 200)
             self.assertEqual(first_page["limit"], 1)
@@ -186,6 +199,20 @@ class MailServiceTest(unittest.TestCase):
             self.assertEqual(second_page["limit"], 1)
             self.assertEqual(second_page["offset"], 1)
             self.assertEqual(second_page["total_count"], first_page["total_count"])
+
+    def test_mailbox_counts_are_scoped_by_connection_and_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            connection_id = self._insert_gmail_fixture(data_root)
+
+            status, payload = handle_action(data_root, {"action": "mailboxes.counts"})
+
+            self.assertEqual(status, 200)
+            counts = payload["counts"][connection_id]
+            self.assertGreaterEqual(counts["inbox"]["total"], 1)
+            self.assertGreaterEqual(counts["inbox"]["unread"], 1)
+            self.assertGreaterEqual(counts["starred"]["total"], 1)
+            self.assertEqual(counts["sent"]["total"], 0)
 
     def test_threads_list_counts_implicit_gmail_default_connection_filter(self) -> None:
         class FakeGmailProvider:
@@ -239,7 +266,7 @@ class MailServiceTest(unittest.TestCase):
             self.assertEqual([item["connection_id"] for item in payload["items"]], ["mail_connection_gmail_a-example.com"])
             self.assertEqual(payload["total_count"], 1)
 
-    def test_legacy_demo_connection_is_migrated_to_mock_provider(self) -> None:
+    def test_legacy_demo_connection_is_removed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
             ensure_schema(data_root)
@@ -254,15 +281,15 @@ class MailServiceTest(unittest.TestCase):
                 )
             status, payload = handle_action(data_root, {"action": "connections.list"})
             self.assertEqual(status, 200)
-            self.assertEqual(payload["items"][0]["provider"], "mock")
-            self.assertEqual(payload["items"][0]["email_address"], "mock@example.com")
+            self.assertEqual(payload["items"], [])
 
     def test_get_thread_returns_messages(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            handle_action(Path(tmp), {"action": "connections.bootstrap_mock"})
-            _, listed = handle_action(Path(tmp), {"action": "threads.list"})
+            data_root = Path(tmp)
+            self._insert_gmail_fixture(data_root)
+            _, listed = handle_action(data_root, {"action": "threads.list"})
             thread_id = listed["items"][0]["id"]
-            status, payload = handle_action(Path(tmp), {"action": "threads.get", "thread_id": thread_id})
+            status, payload = handle_action(data_root, {"action": "threads.get", "thread_id": thread_id})
             self.assertEqual(status, 200)
             self.assertEqual(payload["thread"]["id"], thread_id)
             self.assertGreaterEqual(len(payload["thread"]["messages"]), 1)
@@ -270,7 +297,7 @@ class MailServiceTest(unittest.TestCase):
     def test_create_and_preview_send_draft(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
-            handle_action(data_root, {"action": "connections.bootstrap_mock"})
+            self._insert_gmail_fixture(data_root)
             status, created = handle_action(
                 data_root,
                 {
@@ -290,7 +317,7 @@ class MailServiceTest(unittest.TestCase):
     def test_mail_send_confirm_requires_recipient(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
-            handle_action(data_root, {"action": "connections.bootstrap_mock"})
+            self._insert_gmail_fixture(data_root)
             status, payload = handle_action(
                 data_root,
                 {
@@ -306,8 +333,7 @@ class MailServiceTest(unittest.TestCase):
     def test_send_draft_without_recipient_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
-            handle_action(data_root, {"action": "connections.bootstrap_mock"})
-            ensure_schema(data_root)
+            connection_id = self._insert_gmail_fixture(data_root)
             now = now_timestamp()
             with connect(data_root) as db:
                 db.execute(
@@ -315,7 +341,7 @@ class MailServiceTest(unittest.TestCase):
                     INSERT INTO drafts(id, connection_id, to_json, cc_json, bcc_json, subject, body_text, status, dirty, created_at, updated_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    ("mail_draft_missing_recipients", "mail_connection_demo", "[]", "[]", "[]", "No recipient", "Blocked.", "draft", 1, now, now),
+                    ("mail_draft_missing_recipients", connection_id, "[]", "[]", "[]", "No recipient", "Blocked.", "draft", 1, now, now),
                 )
             status, payload = handle_action(data_root, {"action": "drafts.send", "draft_id": "mail_draft_missing_recipients", "confirm": True})
             self.assertEqual(status, 400)
@@ -324,7 +350,7 @@ class MailServiceTest(unittest.TestCase):
     def test_reply_draft_derives_recipient_from_thread(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
-            handle_action(data_root, {"action": "connections.bootstrap_mock"})
+            self._insert_gmail_fixture(data_root)
             _, listed = handle_action(data_root, {"action": "threads.list"})
             thread_id = listed["items"][0]["id"]
             status, payload = handle_action(
@@ -338,7 +364,7 @@ class MailServiceTest(unittest.TestCase):
             )
             self.assertEqual(status, 201)
             self.assertTrue(payload["draft"]["to"][0]["email"])
-            self.assertNotEqual(payload["draft"]["to"][0]["email"], "mock@example.com")
+            self.assertNotEqual(payload["draft"]["to"][0]["email"], "person@example.com")
 
     def test_mcp_draft_action_emits_data_event(self) -> None:
         events = app_events_for_action("mail_create_draft")
@@ -368,7 +394,7 @@ class MailServiceTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             status, payload = handle_action(Path(tmp), {"action": "health.check"})
             self.assertEqual(status, 200)
-            self.assertEqual(payload["schema_version"], "3")
+            self.assertEqual(payload["schema_version"], "4")
             self.assertEqual(payload["health_status"], "healthy")
             self.assertEqual(payload["database"], "mail.sqlite")
 
@@ -1182,6 +1208,102 @@ class MailServiceTest(unittest.TestCase):
             "gmail-refresh-token": "refresh-token",
         }
 
+    def _insert_gmail_fixture(self, data_root: Path) -> str:
+        ensure_schema(data_root)
+        now = now_timestamp()
+        connection_id = "mail_connection_gmail_person-example.com"
+        labels = [
+            ("label_gmail_inbox", "INBOX", "Inbox", "inbox"),
+            ("label_gmail_sent", "SENT", "Sent", "sent"),
+            ("label_gmail_drafts", "DRAFT", "Drafts", "drafts"),
+            ("label_gmail_starred", "STARRED", "Starred", "starred"),
+            ("label_gmail_trash", "TRASH", "Trash", "trash"),
+        ]
+        with connect(data_root) as db:
+            db.execute(
+                """
+                INSERT INTO connections(id, provider, email_address, display_name, status, scopes_json, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (connection_id, "gmail", "person@example.com", "person@example.com", "connected", "[]", now, now),
+            )
+            db.executemany(
+                "INSERT INTO folders(id, connection_id, provider_folder_id, name, canonical, folder_type, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                [
+                    (f"folder_gmail_{canonical}", connection_id, provider_id, name, canonical, canonical, now, now)
+                    for _, provider_id, name, canonical in labels
+                ],
+            )
+            db.executemany(
+                "INSERT INTO labels(id, connection_id, provider_label_id, name, canonical) VALUES (?, ?, ?, ?, ?)",
+                [(label_id, connection_id, provider_id, name, canonical) for label_id, provider_id, name, canonical in labels],
+            )
+            db.executemany(
+                """
+                INSERT INTO threads(id, connection_id, provider_thread_id, subject, participants_json, last_message_at, snippet, unread, starred, labels_json, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        "email_thread_gmail_fixture_welcome",
+                        connection_id,
+                        "provider-fixture-welcome",
+                        "Welcome to Maverick Mail",
+                        '[{"name":"Sender","email":"sender@example.com"},{"name":"Person","email":"person@example.com"}]',
+                        now,
+                        "A native Maverick mail workspace with CLI, MCP, references, and local storage.",
+                        1,
+                        1,
+                        '["inbox", "starred"]',
+                        now,
+                    ),
+                    (
+                        "email_thread_gmail_fixture_ops",
+                        connection_id,
+                        "provider-fixture-ops",
+                        "Mail app implementation notes",
+                        '[{"name":"Product","email":"product@example.com"},{"name":"Person","email":"person@example.com"}]',
+                        now,
+                        "Gmail OAuth is the supported provider integration.",
+                        0,
+                        0,
+                        '["inbox"]',
+                        now,
+                    ),
+                ],
+            )
+            db.executemany(
+                """
+                INSERT INTO messages(id, thread_id, provider_message_id, sender_json, recipients_json, sent_at, body_text, headers_json, has_attachments)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        "email_message_gmail_fixture_welcome_1",
+                        "email_thread_gmail_fixture_welcome",
+                        "provider-message-welcome-1",
+                        '{"name":"Sender","email":"sender@example.com"}',
+                        '[{"name":"Person","email":"person@example.com"}]',
+                        now,
+                        "This workspace-local app uses Gmail provider cache records for local tests.",
+                        "{}",
+                        0,
+                    ),
+                    (
+                        "email_message_gmail_fixture_ops_1",
+                        "email_thread_gmail_fixture_ops",
+                        "provider-message-ops-1",
+                        '{"name":"Product","email":"product@example.com"}',
+                        '[{"name":"Person","email":"person@example.com"}]',
+                        now,
+                        "Configure Google OAuth secrets through Vault/Core Secrets.",
+                        "{}",
+                        0,
+                    ),
+                ],
+            )
+        return connection_id
+
     def test_mcp_gmail_secret_selectors_match_remote_fetch_semantics(self) -> None:
         schemas = json.loads((APP_ROOT / "mcp" / "tool_schemas.json").read_text(encoding="utf-8"))
 
@@ -1194,7 +1316,7 @@ class MailServiceTest(unittest.TestCase):
     def test_reference_resolve_thread(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
-            handle_action(data_root, {"action": "connections.bootstrap_mock"})
+            self._insert_gmail_fixture(data_root)
             _, listed = handle_action(data_root, {"action": "threads.list"})
             thread_id = listed["items"][0]["id"]
             status, payload = handle_action(
@@ -1208,7 +1330,7 @@ class MailServiceTest(unittest.TestCase):
     def test_reference_search_returns_drafts(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
-            handle_action(data_root, {"action": "connections.bootstrap_mock"})
+            self._insert_gmail_fixture(data_root)
             status, created = handle_action(
                 data_root,
                 {

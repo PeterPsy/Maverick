@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 from uuid import uuid4
 
-from database import connect, ensure_schema, now_timestamp, seed_mock_data
+from database import connect, ensure_schema, now_timestamp
 
 
 def status(data_root: Path) -> dict[str, object]:
@@ -42,12 +42,6 @@ def get_connection(data_root: Path, connection_id: str) -> dict[str, object]:
     if row is None:
         raise ValueError(f"Connection `{connection_id}` was not found")
     return _connection(row)
-
-
-def bootstrap_mock_connection(data_root: Path) -> dict[str, object]:
-    result = seed_mock_data(data_root)
-    audit(data_root, "mock.bootstrap", "mail_connection", str(result["connection_id"]), {"created": bool(result["created"])})
-    return result
 
 
 def disconnect_connection(data_root: Path, connection_id: str, *, reason: str = "") -> dict[str, object]:
@@ -142,6 +136,34 @@ def count_threads(data_root: Path, payload: dict[str, object]) -> int:
     return int(row["count"])
 
 
+def mailbox_counts(data_root: Path) -> dict[str, dict[str, dict[str, int]]]:
+    ensure_schema(data_root)
+    mailboxes = ("inbox", "sent", "drafts", "starred", "trash")
+    with connect(data_root) as db:
+        connection_rows = db.execute("SELECT id FROM connections").fetchall()
+        result: dict[str, dict[str, dict[str, int]]] = {}
+        for row in connection_rows:
+            connection_id = str(row["id"])
+            result[connection_id] = {}
+            for mailbox in mailboxes:
+                pattern = f'%"{mailbox}"%'
+                count_row = db.execute(
+                    """
+                    SELECT
+                      COUNT(*) AS total_count,
+                      COALESCE(SUM(CASE WHEN unread = 1 THEN 1 ELSE 0 END), 0) AS unread_count
+                    FROM threads
+                    WHERE connection_id = ? AND labels_json LIKE ?
+                    """,
+                    (connection_id, pattern),
+                ).fetchone()
+                result[connection_id][mailbox] = {
+                    "total": int(count_row["total_count"]),
+                    "unread": int(count_row["unread_count"]),
+                }
+    return result
+
+
 def _thread_filter(payload: dict[str, object]) -> tuple[list[str], list[object]]:
     clauses = ["1 = 1"]
     params: list[object] = []
@@ -204,56 +226,6 @@ def search_messages(data_root: Path, query: str, limit: int = 25) -> list[dict[s
             (needle, needle, _bounded_int(limit, default=25, minimum=1, maximum=100)),
         ).fetchall()
     return [_message(row, max_body_chars=1200) for row in rows]
-
-
-def modify_labels(data_root: Path, thread_id: str, add: object = None, remove: object = None) -> dict[str, object]:
-    thread = get_thread(data_root, thread_id)
-    resolved_thread_id = str(thread["id"])
-    labels = set(thread["labels"])
-    labels.update(_as_string_list(add))
-    labels.difference_update(_as_string_list(remove))
-    now = now_timestamp()
-    with connect(data_root) as db:
-        db.execute("UPDATE threads SET labels_json = ?, updated_at = ? WHERE id = ?", (json.dumps(sorted(labels)), now, resolved_thread_id))
-    audit(data_root, "labels.modify", "email_thread", resolved_thread_id, {"add": _as_string_list(add), "remove": _as_string_list(remove)})
-    return get_thread(data_root, resolved_thread_id)
-
-
-def mark_read(data_root: Path, thread_id: str, read: bool = True) -> dict[str, object]:
-    thread = get_thread(data_root, thread_id)
-    resolved_thread_id = str(thread["id"])
-    now = now_timestamp()
-    with connect(data_root) as db:
-        db.execute("UPDATE threads SET unread = ?, updated_at = ? WHERE id = ?", (0 if read else 1, now, resolved_thread_id))
-    audit(data_root, "thread.mark_read", "email_thread", resolved_thread_id, {"read": read})
-    return get_thread(data_root, resolved_thread_id)
-
-
-def sync_threads(data_root: Path, connection_id: str | None = None) -> dict[str, object]:
-    ensure_schema(data_root)
-    try:
-        connection_id = connection_id or _default_connection_id(data_root)
-    except ValueError:
-        return {"connection_id": "", "synced_at": "", "mode": "no_connection", "status": "skipped"}
-    now = now_timestamp()
-    with connect(data_root) as db:
-        db.execute(
-            """
-            INSERT OR REPLACE INTO sync_state(
-                connection_id,
-                last_sync_at,
-                last_error,
-                cursor,
-                last_full_sync_at,
-                last_incremental_sync_at,
-                provider_history_id
-            )
-            VALUES (?, ?, ?, ?, COALESCE((SELECT last_full_sync_at FROM sync_state WHERE connection_id = ?), ?), ?, ?)
-            """,
-            (connection_id, now, "", f"manual-{now}", connection_id, now, now, f"manual-history-{now}"),
-        )
-    audit(data_root, "threads.sync", "mail_connection", connection_id, {"mode": "manual-mock"})
-    return {"connection_id": connection_id, "synced_at": now, "mode": "manual-mock"}
 
 
 def get_attachment(data_root: Path, attachment_id: str) -> dict[str, object]:
@@ -367,14 +339,6 @@ def _loads_object(value: object) -> dict[str, object]:
     return parsed if isinstance(parsed, dict) else {}
 
 
-def _as_string_list(value: object) -> list[str]:
-    if isinstance(value, list):
-        return [str(item).strip() for item in value if str(item).strip()]
-    if value in (None, ""):
-        return []
-    return [str(value).strip()]
-
-
 def _optional_string(value: object) -> str | None:
     text = str(value or "").strip()
     return text or None
@@ -386,13 +350,6 @@ def _bounded_int(value: object, default: int, minimum: int, maximum: int) -> int
     except (TypeError, ValueError):
         parsed = default
     return max(minimum, min(maximum, parsed))
-
-
-def _default_connection_id(data_root: Path) -> str:
-    connections = list_connections(data_root)
-    if not connections:
-        raise ValueError("No mail connection is available")
-    return str(connections[0]["id"])
 
 
 def _legacy_gmail_thread_row(db, thread_id: str):

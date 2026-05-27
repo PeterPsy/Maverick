@@ -117,45 +117,6 @@ def search_drafts(data_root: Path, query: str, limit: int = 20) -> list[dict[str
     return [_draft(row) for row in rows]
 
 
-def send_draft(data_root: Path, draft_id: str, confirm: bool = False) -> dict[str, object]:
-    return local_send_draft(data_root, draft_id, confirm=confirm)
-
-
-def local_send_draft(data_root: Path, draft_id: str, confirm: bool = False) -> dict[str, object]:
-    draft = get_draft(data_root, draft_id)
-    _require_recipients(draft)
-    if not confirm:
-        return {"dry_run": True, "requires_confirmation": True, "draft": draft}
-    now = now_timestamp()
-    thread_id = draft.get("thread_id") or f"email_thread_{uuid4().hex[:16]}"
-    message_id = f"email_message_{uuid4().hex[:16]}"
-    connection = _connection_for_draft(data_root, str(draft["connection_id"]))
-    sender = {
-        "name": str(connection.get("display_name") or connection.get("email_address") or "Mail User"),
-        "email": str(connection.get("email_address") or ""),
-    }
-    with connect(data_root) as db:
-        if draft.get("thread_id") is None:
-            db.execute(
-                """
-                INSERT INTO threads(id, connection_id, provider_thread_id, subject, participants_json, last_message_at, snippet, unread, starred, labels_json, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (thread_id, draft["connection_id"], f"local-{thread_id}", draft["subject"], json.dumps([sender, *draft["to"]], ensure_ascii=True), now, draft["body_text"][:180], 0, 0, '["sent"]', now),
-            )
-        db.execute(
-            """
-            INSERT INTO messages(id, thread_id, provider_message_id, sender_json, recipients_json, cc_json, bcc_json, sent_at, body_text, headers_json, has_attachments)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (message_id, thread_id, f"local-{message_id}", json.dumps(sender, ensure_ascii=True), json.dumps(draft["to"], ensure_ascii=True), json.dumps(draft["cc"], ensure_ascii=True), json.dumps(draft["bcc"], ensure_ascii=True), now, draft["body_text"], '{"x-maverick-local-send":"true"}', 0),
-        )
-        db.execute("UPDATE drafts SET status = 'sent', dirty = 0, sent_at = ?, updated_at = ? WHERE id = ?", (now, now, draft_id))
-        db.execute("UPDATE threads SET last_message_at = ?, snippet = ?, updated_at = ? WHERE id = ?", (now, draft["body_text"][:180], now, thread_id))
-    audit(data_root, "draft.send", "mail_draft", draft_id, {"thread_id": thread_id, "message_id": message_id})
-    return {"sent": True, "thread": get_thread(data_root, thread_id), "message_id": message_id}
-
-
 def _draft(row) -> dict[str, object]:
     item = dict(row)
     item["to"] = _loads_list(item.pop("to_json"))

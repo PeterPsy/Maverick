@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import sys
 import unittest
@@ -18,6 +19,18 @@ class GeneratedAppContractTest(unittest.TestCase):
         app_root = Path(__file__).resolve().parents[1]
         parsed = parse_app_contract_file(app_root)
         self.assertEqual(parsed.app_id, "mail")
+
+    def test_sidebar_footer_widget_is_declared(self) -> None:
+        app_root = Path(__file__).resolve().parents[1]
+        contract = json.loads((app_root / "app_contract.json").read_text())
+        widgets = {item["widget_id"]: item for item in contract["widgets"]}
+
+        self.assertEqual(widgets["mail-sidebar"]["content_kinds"], ["shell.sidebar.primary"])
+        self.assertEqual(widgets["mail-sidebar-footer"]["content_kinds"], ["shell.sidebar.footer"])
+        self.assertEqual(
+            widgets["mail-sidebar-footer"]["frontend"]["mount"],
+            "frontend/dist/widgets/mail-sidebar-footer",
+        )
 
     def test_gmail_oauth_secret_contract_matches_vault_acceptance_flow(self) -> None:
         app_root = Path(__file__).resolve().parents[1]

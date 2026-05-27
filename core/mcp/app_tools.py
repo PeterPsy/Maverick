@@ -11,6 +11,7 @@ from core.apps.runtime_requests import apply_app_runtime_requests
 from core.apps.surfaces import enabled_workspace_app_bindings, resolve_workspace_app_surface
 from core.apps.store import AppStore
 from core.apps.surface_descriptors import app_mcp_tool_metadata, app_mcp_tool_required_secrets
+from core.apps.surface_policies import app_requires_full_access_runtime
 from core.authorization.service import can_mount_app_visibility
 from core.mcp.models import McpInvocationContext, McpInvocationPolicy, McpToolDefinition
 from core.secrets.app_delivery import resolve_app_secret_payload
@@ -19,6 +20,15 @@ from core.shared.entrypoints import run_json_entrypoint
 from core.workspaces.paths import workspace_paths
 
 APP_MCP_ENTRYPOINT_TIMEOUT_SECONDS = 30.0
+
+
+def _app_mcp_invocation_policy(*, app_requires_full_access: bool) -> McpInvocationPolicy:
+    return McpInvocationPolicy(
+        operator_only=False,
+        sandbox_agent_allowed=not app_requires_full_access,
+        requires_workspace_context=True,
+        requires_full_access=app_requires_full_access,
+    )
 
 
 def _workspace_app_tool_definitions(
@@ -55,6 +65,7 @@ def _workspace_app_tool_definitions(
                 f"App `{parsed.app_id}` declares MCP tools but no MCP entrypoint in its contract."
             )
         entrypoint_path = str((source_root / parsed.contract.entrypoints.mcp).resolve())
+        app_requires_full_access = app_requires_full_access_runtime(parsed.contract.compatibility)
         paths = workspace_paths(workspace_id=workspace_id, start_path=start_path)
         for tool_name in parsed.contract.capabilities.mcp_tools:
             local_app_id = binding.app_id
@@ -117,6 +128,9 @@ def _workspace_app_tool_definitions(
                         "workspace_id": context.workspace_id,
                         "agent_id": context.agent_id,
                         "effective_mode": context.effective_mode,
+                        "platform_role": context.platform_role,
+                        "user_id": context.user_id,
+                        "workspace_role": context.workspace_role,
                         "runtime_session_id": context.runtime_session_id,
                         "app_id": _app_id,
                         "public_app_id": _public_app_id,
@@ -173,11 +187,8 @@ def _workspace_app_tool_definitions(
                         owner_id=local_app_id,
                         workspace_id=workspace_id,
                         exposure_scope="workspace_enabled_app",
-                        invocation_policy=McpInvocationPolicy(
-                            operator_only=False,
-                            sandbox_agent_allowed=True,
-                            requires_workspace_context=True,
-                            requires_full_access=False,
+                        invocation_policy=_app_mcp_invocation_policy(
+                            app_requires_full_access=app_requires_full_access,
                         ),
                         entrypoint_path=entrypoint_path,
                     ),

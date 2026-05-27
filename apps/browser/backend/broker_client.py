@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 import os
+from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit, urlunsplit
@@ -18,6 +19,8 @@ DEFAULT_BROKER_URL = "http://127.0.0.1:9323"
 BROKER_TIMEOUT_SECONDS_ENV = "MAVERICK_BROWSER_BROKER_TIMEOUT_SECONDS"
 DEFAULT_BROKER_TIMEOUT_SECONDS = 25.0
 BROKER_TOKEN_ENV = "MAVERICK_BROWSER_BROKER_TOKEN"
+BROKER_TOKEN_FILE_ENV = "MAVERICK_BROWSER_BROKER_TOKEN_FILE"
+DEFAULT_BROKER_TOKEN_FILE = Path(__file__).resolve().parents[3] / "runtime" / "browser" / "playwright-broker-token"
 
 
 @dataclass(frozen=True)
@@ -46,15 +49,41 @@ def broker_timeout_seconds() -> float:
 
 def broker_token() -> str:
     token = os.environ.get(BROKER_TOKEN_ENV, "").strip()
+    if token:
+        return token
+    token = broker_token_from_file()
+    if token:
+        return token
+    raise BrowserBrokerUnavailableError(
+        f"Browser broker requires {BROKER_TOKEN_ENV} or a readable {BROKER_TOKEN_FILE_ENV}."
+    )
+
+
+def broker_token_file() -> Path:
+    configured = os.environ.get(BROKER_TOKEN_FILE_ENV, "").strip()
+    if configured:
+        return Path(configured).expanduser()
+    return DEFAULT_BROKER_TOKEN_FILE
+
+
+def broker_token_from_file() -> str:
+    path = broker_token_file()
+    try:
+        token = path.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return ""
+    except OSError as error:
+        raise BrowserBrokerUnavailableError(f"Browser broker could not read {BROKER_TOKEN_FILE_ENV}.") from error
     if not token:
-        raise BrowserBrokerUnavailableError(f"Browser broker requires {BROKER_TOKEN_ENV}.")
+        raise BrowserBrokerUnavailableError(f"Browser broker {BROKER_TOKEN_FILE_ENV} is empty.")
     return token
 
 
-def broker_health() -> dict[str, Any]:
+def broker_health(*, connect: bool = False) -> dict[str, Any]:
     url = broker_url()
+    health_url = f"{url}/health?check=connect" if connect else f"{url}/health"
     try:
-        response = _request("GET", f"{url}/health")
+        response = _request("GET", health_url)
     except BrowserBrokerUnavailableError as error:
         return {
             "status": "unreachable",
@@ -66,6 +95,7 @@ def broker_health() -> dict[str, Any]:
     payload.setdefault("status", "ready" if response.status_code < 400 else "degraded")
     payload.setdefault("provider", "playwright_lab")
     payload["url"] = redact_endpoint(url)
+    payload["http_status"] = response.status_code
     return payload
 
 

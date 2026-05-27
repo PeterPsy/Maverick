@@ -12,6 +12,7 @@ from core.apps.runtime_requests import apply_app_runtime_requests
 from core.apps.surfaces import enabled_workspace_app_bindings, resolve_workspace_app_surface
 from core.apps.store import AppStore
 from core.apps.surface_descriptors import app_cli_command_metadata, app_cli_command_required_secrets
+from core.apps.surface_policies import app_requires_full_access_runtime
 from core.authorization.service import can_mount_app_visibility
 from core.cli.models import CliCommandDefinition, CliInvocationContext, CliInvocationPolicy
 from core.secrets.app_delivery import resolve_app_secret_payload
@@ -20,7 +21,13 @@ from core.shared.entrypoints import run_json_entrypoint
 from core.workspaces.paths import workspace_paths
 
 
-def _app_command_invocation_policy(source_root: Path, command_name: str) -> CliInvocationPolicy:
+def _app_command_invocation_policy(
+    source_root: Path,
+    command_name: str,
+    *,
+    app_requires_full_access: bool,
+) -> CliInvocationPolicy:
+    default_sandbox_agent_allowed = not app_requires_full_access
     policy_path = source_root / "cli" / "command_policies.json"
     if policy_path.is_file():
         payload = _load_cli_policy_payload(policy_path)
@@ -39,23 +46,36 @@ def _app_command_invocation_policy(source_root: Path, command_name: str) -> CliI
                 raise ValueError(
                     f"App CLI command policy `{policy_path}` command `{command_name}` cannot set `operator_only`."
                 )
+            sandbox_agent_allowed = _policy_bool(
+                command_policy,
+                "sandbox_agent_allowed",
+                default=default_sandbox_agent_allowed,
+            )
+            requires_full_access = _policy_bool(
+                command_policy,
+                "requires_full_access",
+                default=app_requires_full_access,
+            )
+            if app_requires_full_access:
+                sandbox_agent_allowed = False
+                requires_full_access = True
             return CliInvocationPolicy(
                 operator_only=_policy_bool(command_policy, "operator_only", default=False),
                 required_platform_role=required_platform_role,
-                sandbox_agent_allowed=_policy_bool(command_policy, "sandbox_agent_allowed", default=True),
+                sandbox_agent_allowed=sandbox_agent_allowed,
                 requires_workspace_context=_policy_bool(
                     command_policy,
                     "requires_workspace_context",
                     default=True,
                 ),
-                requires_full_access=_policy_bool(command_policy, "requires_full_access", default=False),
+                requires_full_access=requires_full_access,
             )
     return CliInvocationPolicy(
         operator_only=False,
         required_platform_role=None,
-        sandbox_agent_allowed=True,
+        sandbox_agent_allowed=default_sandbox_agent_allowed,
         requires_workspace_context=True,
-        requires_full_access=False,
+        requires_full_access=app_requires_full_access,
     )
 
 
@@ -117,6 +137,7 @@ def _workspace_app_command_specs(
                 f"App `{parsed.app_id}` declares CLI commands but no CLI entrypoint in its contract."
             )
         entrypoint_path = str((source_root / parsed.contract.entrypoints.cli).resolve())
+        app_requires_full_access = app_requires_full_access_runtime(parsed.contract.compatibility)
         paths = workspace_paths(workspace_id=workspace_id, start_path=start_path)
         for command_name in parsed.contract.capabilities.cli_commands:
             local_app_id = binding.app_id
@@ -180,6 +201,9 @@ def _workspace_app_command_specs(
                         "workspace_id": context.workspace_id,
                         "agent_id": context.agent_id,
                         "effective_mode": context.effective_mode,
+                        "platform_role": context.platform_role,
+                        "user_id": context.user_id,
+                        "workspace_role": context.workspace_role,
                         "runtime_session_id": context.runtime_session_id,
                         "app_id": _app_id,
                         "public_app_id": _public_app_id,
@@ -235,7 +259,11 @@ def _workspace_app_command_specs(
                         owner_id=local_app_id,
                         workspace_id=workspace_id,
                         exposure_scope="workspace_enabled_app",
-                        invocation_policy=_app_command_invocation_policy(source_root, command_name),
+                        invocation_policy=_app_command_invocation_policy(
+                            source_root,
+                            command_name,
+                            app_requires_full_access=app_requires_full_access,
+                        ),
                         entrypoint_path=entrypoint_path,
                     ),
                     _handler,

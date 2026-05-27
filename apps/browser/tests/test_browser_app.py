@@ -2,11 +2,15 @@ from __future__ import annotations
 
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
+import os
 from pathlib import Path
+import select
+import stat
 import subprocess
 import sys
 from tempfile import TemporaryDirectory
 import threading
+import time
 import unittest
 from unittest.mock import patch
 
@@ -17,7 +21,7 @@ APP_ROOT = Path(__file__).resolve().parents[1]
 BACKEND_ROOT = APP_ROOT / "backend"
 sys.path.insert(0, str(BACKEND_ROOT))
 
-from service import handle_action, mcp_result_for_tool
+from service import acceptance_smoke_payload, handle_action, mcp_result_for_tool
 from store import load_state
 
 
@@ -64,6 +68,7 @@ class BrowserAppTests(unittest.TestCase):
     def test_mcp_descriptor_matches_p0_tool_scope(self) -> None:
         parsed = parse_app_contract_file(APP_ROOT)
         descriptor = json.loads((APP_ROOT / "mcp" / "tool_schemas.json").read_text(encoding="utf-8"))
+        cli_descriptor = json.loads((APP_ROOT / "cli" / "command_schemas.json").read_text(encoding="utf-8"))
 
         expected_tools = {
             "browser_session_create",
@@ -86,6 +91,7 @@ class BrowserAppTests(unittest.TestCase):
         self.assertNotIn("browser_run_code", descriptor["tools"])
         for tool in descriptor["tools"].values():
             self.assertIs(tool["input_schema"].get("additionalProperties"), False)
+        self.assertIn("acceptance.smoke", cli_descriptor["commands"]["browser"]["argument_schema"]["properties"]["action"]["enum"])
 
     def test_mcp_rejects_prohibited_or_unknown_tool_names(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -296,6 +302,61 @@ class BrowserAppTests(unittest.TestCase):
         self.assertEqual(result["broker"]["provider"], "playwright_lab")
         self.assertEqual(result["broker"]["status"], "unreachable")
 
+    def test_acceptance_smoke_runs_p0_broker_sequence_without_persisting_artifacts(self) -> None:
+        action_responses = {
+            "session.create": {"session_id": "stub-session", "isolated": True, "persistent_profile": False},
+            "navigate": {"session_id": "stub-session", "url": "https://93.184.216.34/", "title": "Example"},
+            "snapshot": {"session_id": "stub-session", "snapshot": "body text"},
+            "screenshot": {
+                "session_id": "stub-session",
+                "mime_type": "image/png",
+                "encoding": "base64",
+                "data": "aW1hZ2U=",
+                "persisted": False,
+            },
+            "console.messages": {"session_id": "stub-session", "messages": []},
+            "network.requests": {"session_id": "stub-session", "requests": [{"event": "request", "url": "https://93.184.216.34/"}]},
+            "tabs": {"sessions": [{"session_id": "stub-session", "tabs": [{"url": "https://93.184.216.34/", "active": True}]}]},
+            "session.close": {"session_id": "stub-session", "closed": True},
+        }
+        with broker_stub(action_responses) as broker:
+            with TemporaryDirectory() as temp_dir:
+                data_root = Path(temp_dir)
+                with patch.dict(
+                    "os.environ",
+                    {"MAVERICK_BROWSER_BROKER_URL": broker.url, "MAVERICK_BROWSER_BROKER_TOKEN": "test-token"},
+                ):
+                    status_code, result = acceptance_smoke_payload(
+                        data_root,
+                        {"action": "acceptance.smoke", "url": "https://93.184.216.34/"},
+                    )
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(result["status"], "ok")
+        self.assertTrue(result["checks"]["session_create"])
+        self.assertTrue(result["checks"]["navigate"])
+        self.assertTrue(result["checks"]["snapshot"])
+        self.assertTrue(result["checks"]["screenshot"])
+        self.assertTrue(result["checks"]["console_messages"])
+        self.assertTrue(result["checks"]["network_requests"])
+        self.assertTrue(result["checks"]["session_close"])
+        self.assertEqual(
+            [item["action"] for item in broker.actions],
+            [
+                "session.create",
+                "navigate",
+                "snapshot",
+                "screenshot",
+                "console.messages",
+                "network.requests",
+                "tabs",
+                "session.close",
+            ],
+        )
+        screenshot_step = next(step for step in result["steps"] if step["action"] == "screenshot")
+        self.assertEqual(screenshot_step["screenshot_bytes"], len("aW1hZ2U="))
+        self.assertNotIn("data", screenshot_step)
+
     def test_session_create_rejects_persistent_profile_options(self) -> None:
         with TemporaryDirectory() as temp_dir:
             data_root = Path(temp_dir)
@@ -342,6 +403,25 @@ class BrowserAppTests(unittest.TestCase):
         self.assertEqual(status_payload["sessions"][0]["session_id"], "stub-session")
         self.assertEqual(state["audit"][-1]["action"], "session.create")
         self.assertEqual(state["audit"][-1]["status"], "ok")
+
+    def test_session_create_reads_runtime_token_file_when_env_token_is_not_available(self) -> None:
+        with broker_stub({"session_id": "stub-session", "isolated": True, "persistent_profile": False}) as broker:
+            with TemporaryDirectory() as temp_dir:
+                data_root = Path(temp_dir) / "data"
+                token_file = Path(temp_dir) / "browser-token"
+                token_file.write_text("file-token\n", encoding="utf-8")
+                token_file.chmod(0o600)
+                env = {
+                    "MAVERICK_BROWSER_BROKER_URL": broker.url,
+                    "MAVERICK_BROWSER_BROKER_TOKEN": "",
+                    "MAVERICK_BROWSER_BROKER_TOKEN_FILE": str(token_file),
+                }
+                with patch.dict("os.environ", env, clear=False):
+                    status_code, result = handle_action(data_root, {"action": "session.create", "mode": "read_only"})
+
+        self.assertEqual(status_code, 201)
+        self.assertEqual(result["session_id"], "stub-session")
+        self.assertEqual(broker.authorizations[-1], "Bearer file-token")
 
     def test_session_close_removes_local_session_record(self) -> None:
         action_responses = {
@@ -585,7 +665,11 @@ class BrowserAppTests(unittest.TestCase):
                 data_root = Path(temp_dir)
                 with patch.dict(
                     "os.environ",
-                    {"MAVERICK_BROWSER_BROKER_URL": broker.url, "MAVERICK_BROWSER_BROKER_TOKEN": ""},
+                    {
+                        "MAVERICK_BROWSER_BROKER_URL": broker.url,
+                        "MAVERICK_BROWSER_BROKER_TOKEN": "",
+                        "MAVERICK_BROWSER_BROKER_TOKEN_FILE": str(Path(temp_dir) / "missing-token"),
+                    },
                     clear=False,
                 ):
                     status_code, result = handle_action(data_root, {"action": "session.create", "mode": "read_only"})
@@ -632,17 +716,26 @@ class BrowserAppTests(unittest.TestCase):
                         {"action": "session.create", "mode": "maverick_dev_inspector"},
                         workspace_role="admin",
                     )
-            status_code, result = mcp_result_for_tool(
-                data_root,
-                "browser_click",
+            with patch.dict(
+                "os.environ",
                 {
-                    "session_id": "session-1",
-                    "ref": "button-1",
-                    "target_url": "http://hostmachine:8000/app/chat",
-                    "mode": "maverick_dev_inspector",
+                    "MAVERICK_BROWSER_BROKER_URL": "http://127.0.0.1:1",
+                    "MAVERICK_BROWSER_BROKER_TOKEN": "",
+                    "MAVERICK_BROWSER_BROKER_TOKEN_FILE": str(Path(temp_dir) / "missing-token"),
                 },
-                workspace_role="admin",
-            )
+                clear=False,
+            ):
+                status_code, result = mcp_result_for_tool(
+                    data_root,
+                    "browser_click",
+                    {
+                        "session_id": "session-1",
+                        "ref": "button-1",
+                        "target_url": "http://hostmachine:8000/app/chat",
+                        "mode": "maverick_dev_inspector",
+                    },
+                    workspace_role="admin",
+                )
             state = load_state(str(data_root))
 
         self.assertEqual(status_code, 503)
@@ -666,6 +759,98 @@ class BrowserAppTests(unittest.TestCase):
             self.assertEqual(output["status"], "ok")
             self.assertTrue((data_root / "state.json").is_file())
 
+    def test_health_hook_fails_when_active_broker_is_unavailable(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir)
+            env = dict(os.environ)
+            env.pop("MAVERICK_BROWSER_BROKER_TOKEN", None)
+            env["MAVERICK_BROWSER_BROKER_URL"] = "http://127.0.0.1:1"
+            completed = subprocess.run(
+                [sys.executable, str(APP_ROOT / "hooks" / "health_check.py")],
+                input=json.dumps({"data_root": str(data_root)}),
+                text=True,
+                capture_output=True,
+                check=False,
+                cwd=str(APP_ROOT),
+                env=env,
+            )
+            output = json.loads(completed.stdout)
+
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertEqual(output["status"], "degraded")
+        self.assertEqual(output["broker"]["status"], "unreachable")
+
+    def test_health_hook_fails_when_broker_token_is_rejected(self) -> None:
+        with broker_stub({"session_id": "stub-session"}) as broker:
+            with TemporaryDirectory() as temp_dir:
+                data_root = Path(temp_dir)
+                env = dict(os.environ)
+                env["MAVERICK_BROWSER_BROKER_URL"] = broker.url
+                env["MAVERICK_BROWSER_BROKER_TOKEN"] = "wrong-token"
+                completed = subprocess.run(
+                    [sys.executable, str(APP_ROOT / "hooks" / "health_check.py")],
+                    input=json.dumps({"data_root": str(data_root)}),
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                    cwd=str(APP_ROOT),
+                    env=env,
+                )
+                output = json.loads(completed.stdout)
+
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertEqual(output["status"], "degraded")
+        self.assertEqual(output["broker"]["http_status"], 401)
+        self.assertEqual(output["broker"]["error"], "unauthorized")
+        self.assertEqual(broker.health_authorizations[-1], "Bearer wrong-token")
+
+    def test_health_hook_fails_when_playwright_connect_check_is_degraded(self) -> None:
+        with broker_stub({"session_id": "stub-session"}, active_connected=False) as broker:
+            with TemporaryDirectory() as temp_dir:
+                data_root = Path(temp_dir)
+                env = dict(os.environ)
+                env["MAVERICK_BROWSER_BROKER_URL"] = broker.url
+                env["MAVERICK_BROWSER_BROKER_TOKEN"] = "test-token"
+                completed = subprocess.run(
+                    [sys.executable, str(APP_ROOT / "hooks" / "health_check.py")],
+                    input=json.dumps({"data_root": str(data_root)}),
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                    cwd=str(APP_ROOT),
+                    env=env,
+                )
+                output = json.loads(completed.stdout)
+
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertEqual(output["status"], "degraded")
+        self.assertEqual(output["broker"]["status"], "degraded")
+        self.assertEqual(output["broker"]["http_status"], 503)
+        self.assertFalse(output["broker"]["connected"])
+
+    def test_health_hook_passes_only_after_active_broker_connect_check(self) -> None:
+        with broker_stub({"session_id": "stub-session"}) as broker:
+            with TemporaryDirectory() as temp_dir:
+                data_root = Path(temp_dir)
+                env = dict(os.environ)
+                env["MAVERICK_BROWSER_BROKER_URL"] = broker.url
+                env["MAVERICK_BROWSER_BROKER_TOKEN"] = "test-token"
+                completed = subprocess.run(
+                    [sys.executable, str(APP_ROOT / "hooks" / "health_check.py")],
+                    input=json.dumps({"data_root": str(data_root)}),
+                    text=True,
+                    capture_output=True,
+                    check=True,
+                    cwd=str(APP_ROOT),
+                    env=env,
+                )
+                output = json.loads(completed.stdout)
+
+        self.assertEqual(output["status"], "ok")
+        self.assertEqual(output["broker"]["status"], "ready")
+        self.assertTrue(output["broker"]["connected"])
+        self.assertEqual(broker.health_authorizations[-1], "Bearer test-token")
+
     def test_docker_helper_uses_pinned_playwright_run_server(self) -> None:
         completed = subprocess.run(
             ["node", str(APP_ROOT / "broker" / "playwright-server-docker.mjs"), "--print"],
@@ -680,6 +865,41 @@ class BrowserAppTests(unittest.TestCase):
         self.assertIn("playwright@1.60.0 run-server", command)
         self.assertIn("--add-host hostmachine:host-gateway", command)
         self.assertIn("--user pwuser", command)
+
+    def test_broker_generates_local_token_file_when_env_token_is_missing(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            token_file = Path(temp_dir) / "broker-token"
+            env = dict(os.environ)
+            env.pop("MAVERICK_BROWSER_BROKER_TOKEN", None)
+            env["MAVERICK_BROWSER_BROKER_TOKEN_FILE"] = str(token_file)
+            env["MAVERICK_BROWSER_BROKER_PORT"] = "0"
+            env["MAVERICK_BROWSER_PROXY_PORT"] = "0"
+            process = subprocess.Popen(
+                ["node", str(APP_ROOT / "broker" / "playwright-broker.mjs")],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                cwd=str(APP_ROOT),
+                env=env,
+            )
+            try:
+                line = read_process_line(process)
+                output = json.loads(line)
+                token = token_file.read_text(encoding="utf-8").strip()
+                token_mode = stat.S_IMODE(token_file.stat().st_mode)
+            finally:
+                process.terminate()
+                try:
+                    process.communicate(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.communicate(timeout=5)
+
+        self.assertEqual(output["status"], "listening")
+        self.assertEqual(output["token_source"], "file")
+        self.assertRegex(token, r"^[0-9a-f]{64}$")
+        self.assertEqual(token_mode, 0o600)
+        self.assertNotIn(token, line)
 
     def test_broker_policy_self_test_blocks_restricted_targets(self) -> None:
         completed = subprocess.run(
@@ -701,12 +921,14 @@ class BrokerStub:
         thread: threading.Thread,
         actions: list[dict],
         authorizations: list[str],
+        health_authorizations: list[str],
         url: str,
     ) -> None:
         self.server = server
         self.thread = thread
         self.actions = actions
         self.authorizations = authorizations
+        self.health_authorizations = health_authorizations
         self.url = url
 
     def __enter__(self) -> "BrokerStub":
@@ -718,17 +940,52 @@ class BrokerStub:
         self.server.server_close()
 
 
-def broker_stub(action_response: dict) -> BrokerStub:
+def broker_stub(
+    action_response: dict,
+    *,
+    expected_token: str = "test-token",
+    active_connected: bool = True,
+) -> BrokerStub:
     actions: list[dict] = []
     authorizations: list[str] = []
+    health_authorizations: list[str] = []
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
-            if self.path != "/health":
+            if not self.path.startswith("/health"):
                 self.send_response(404)
                 self.end_headers()
                 return
-            self._send_json({"status": "ready", "provider": "playwright_lab", "session_count": 0})
+            authorization = self.headers.get("Authorization", "")
+            health_authorizations.append(authorization)
+            if authorization != f"Bearer {expected_token}":
+                self._send_json(
+                    {"error": "unauthorized", "detail": "Browser broker token is missing or invalid."},
+                    status=401,
+                )
+                return
+            connect_check = "check=connect" in self.path
+            if connect_check and not active_connected:
+                self._send_json(
+                    {
+                        "status": "degraded",
+                        "provider": "playwright_lab",
+                        "connected": False,
+                        "error": "playwright_server_unavailable",
+                        "detail": "Cannot connect to Playwright run-server.",
+                        "session_count": 0,
+                    },
+                    status=503,
+                )
+                return
+            self._send_json(
+                {
+                    "status": "ready",
+                    "provider": "playwright_lab",
+                    "connected": connect_check,
+                    "session_count": 0,
+                }
+            )
 
         def do_POST(self) -> None:
             if self.path != "/actions":
@@ -762,7 +1019,20 @@ def broker_stub(action_response: dict) -> BrokerStub:
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     host, port = server.server_address
-    return BrokerStub(server, thread, actions, authorizations, f"http://{host}:{port}")
+    return BrokerStub(server, thread, actions, authorizations, health_authorizations, f"http://{host}:{port}")
+
+
+def read_process_line(process: subprocess.Popen[str], *, timeout_seconds: float = 5.0) -> str:
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        if process.stdout is not None and select.select([process.stdout], [], [], 0.1)[0]:
+            line = process.stdout.readline()
+            if line:
+                return line
+        if process.poll() is not None:
+            stderr = process.stderr.read() if process.stderr is not None else ""
+            raise AssertionError(f"Browser broker exited before writing readiness JSON: {stderr}")
+    raise AssertionError("Timed out waiting for Browser broker readiness JSON.")
 
 
 if __name__ == "__main__":

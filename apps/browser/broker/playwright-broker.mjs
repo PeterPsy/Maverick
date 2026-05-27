@@ -3,11 +3,15 @@ import http from "node:http";
 import { createRequire } from "node:module";
 import { lookup } from "node:dns/promises";
 import net from "node:net";
-import { randomUUID, timingSafeEqual } from "node:crypto";
+import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const appPackage = require("../package.json");
 const pinnedPlaywrightVersion = appPackage.dependencies?.playwright || "unknown";
+const defaultBrokerTokenFile = fileURLToPath(new URL("../../../runtime/browser/playwright-broker-token", import.meta.url));
 
 const brokerHost = process.env.MAVERICK_BROWSER_BROKER_HOST || "127.0.0.1";
 const brokerPort = Number.parseInt(process.env.MAVERICK_BROWSER_BROKER_PORT || "9323", 10);
@@ -17,7 +21,6 @@ const connectTimeoutMs = clampInt(process.env.MAVERICK_BROWSER_CONNECT_TIMEOUT_M
 const actionTimeoutMs = clampInt(process.env.MAVERICK_BROWSER_ACTION_TIMEOUT_MS, 1000, 60000, 30000);
 const dnsTimeoutMs = clampInt(process.env.MAVERICK_BROWSER_DNS_TIMEOUT_MS, 1000, 30000, 5000);
 const maxLogRecords = clampInt(process.env.MAVERICK_BROWSER_MAX_LOG_RECORDS, 20, 1000, 200);
-const brokerToken = process.env.MAVERICK_BROWSER_BROKER_TOKEN || "";
 const proxyBindHost = process.env.MAVERICK_BROWSER_PROXY_BIND_HOST || "127.0.0.1";
 const proxyPort = Number.parseInt(process.env.MAVERICK_BROWSER_PROXY_PORT || "9324", 10);
 const proxyAdvertisedServer = process.env.MAVERICK_BROWSER_PROXY_SERVER || `http://127.0.0.1:${proxyPort}`;
@@ -39,10 +42,14 @@ if (process.argv.includes("--self-test-policy")) {
   process.exit(0);
 }
 
-if (!brokerToken) {
-  process.stderr.write("MAVERICK_BROWSER_BROKER_TOKEN is required for the Browser broker.\n");
+let brokerTokenState;
+try {
+  brokerTokenState = resolveBrokerTokenState();
+} catch (error) {
+  process.stderr.write(`${error?.message || "Browser broker token setup failed."}\n`);
   process.exit(1);
 }
+const brokerToken = brokerTokenState.token;
 
 let browserPromise = null;
 let browser = null;
@@ -56,6 +63,10 @@ const server = http.createServer(async (request, response) => {
     const requestUrl = new URL(request.url || "/", `http://${request.headers.host || "localhost"}`);
     if (request.method === "GET" && requestUrl.pathname === "/health") {
       authorize(request);
+      if (requestUrl.searchParams.get("check") === "connect") {
+        const health = await activeHealthPayload();
+        return sendJson(response, health.status === "ready" && health.connected === true ? 200 : 503, health);
+      }
       return sendJson(response, 200, healthPayload());
     }
     if (request.method === "POST" && requestUrl.pathname === "/actions") {
@@ -91,6 +102,7 @@ server.listen(brokerPort, brokerHost, () => {
       proxy_server: proxyAdvertisedServer,
       ws_endpoint: redactUrl(wsEndpoint),
       playwright_version: playwrightVersion,
+      token_source: brokerTokenState.source,
     }) + "\n",
   );
 });
@@ -985,6 +997,7 @@ function healthPayload() {
     expected_playwright_version: expectedPlaywrightVersion,
     ws_endpoint: redactUrl(wsEndpoint),
     proxy_server: proxyAdvertisedServer,
+    token_source: brokerTokenState.source,
     connected: Boolean(browser?.isConnected()),
     session_count: sessions.size,
     constraints: {
@@ -995,6 +1008,65 @@ function healthPayload() {
       automatic_download_persistence: false,
     },
   };
+}
+
+async function activeHealthPayload() {
+  try {
+    await getBrowser();
+    return healthPayload();
+  } catch (error) {
+    return {
+      ...healthPayload(),
+      status: "degraded",
+      error: error.code || "broker_unavailable",
+      detail: error.message || "Browser broker active health check failed.",
+      connected: false,
+    };
+  }
+}
+
+function resolveBrokerTokenState() {
+  const token = (process.env.MAVERICK_BROWSER_BROKER_TOKEN || "").trim();
+  if (token) {
+    return { token, source: "env" };
+  }
+  const configuredTokenFile = (process.env.MAVERICK_BROWSER_BROKER_TOKEN_FILE || "").trim();
+  const tokenFile = resolve(configuredTokenFile || defaultBrokerTokenFile);
+  const existing = readBrokerTokenFile(tokenFile);
+  if (existing) {
+    return { token: existing, source: "file" };
+  }
+  return { token: writeGeneratedBrokerToken(tokenFile), source: "file" };
+}
+
+function readBrokerTokenFile(tokenFile) {
+  try {
+    const token = readFileSync(tokenFile, "utf8").trim();
+    if (!token) {
+      throw new Error("Browser broker token file is empty.");
+    }
+    return token;
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return "";
+    }
+    throw error;
+  }
+}
+
+function writeGeneratedBrokerToken(tokenFile) {
+  const token = randomBytes(32).toString("hex");
+  mkdirSync(dirname(tokenFile), { recursive: true, mode: 0o700 });
+  try {
+    writeFileSync(tokenFile, `${token}\n`, { encoding: "utf8", flag: "wx", mode: 0o600 });
+  } catch (error) {
+    if (error?.code === "EEXIST") {
+      return readBrokerTokenFile(tokenFile);
+    }
+    throw error;
+  }
+  chmodSync(tokenFile, 0o600);
+  return token;
 }
 
 function authorize(request) {

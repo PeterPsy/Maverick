@@ -17,6 +17,11 @@ class AppEntrypointPayload:
     workspace_id: str | None
     data_root: str
     workspace_root: str | None
+    effective_mode: str | None
+    platform_role: str | None
+    user_id: str | None
+    workspace_role: str | None
+    runtime_session_id: str | None
     body: dict[str, Any]
     arguments: dict[str, Any]
 
@@ -38,6 +43,11 @@ def read_entrypoint_payload() -> AppEntrypointPayload:
         workspace_id=raw_payload.get("workspace_id"),
         data_root=str(raw_payload.get("data_root") or ""),
         workspace_root=raw_payload.get("workspace_root"),
+        effective_mode=raw_payload.get("effective_mode"),
+        platform_role=raw_payload.get("platform_role"),
+        user_id=raw_payload.get("user_id"),
+        workspace_role=raw_payload.get("workspace_role"),
+        runtime_session_id=raw_payload.get("runtime_session_id"),
         body=body,
         arguments=arguments,
     )

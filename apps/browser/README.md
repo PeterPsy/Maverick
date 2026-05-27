@@ -80,12 +80,19 @@ Then start the Browser broker:
 ```bash
 cd apps/browser
 npm ci --ignore-scripts
-export MAVERICK_BROWSER_BROKER_TOKEN="$(openssl rand -hex 32)"
 MAVERICK_BROWSER_PLAYWRIGHT_WS_ENDPOINT=ws://127.0.0.1:3100/ \
 MAVERICK_BROWSER_PROXY_BIND_HOST=0.0.0.0 \
 MAVERICK_BROWSER_PROXY_SERVER=http://hostmachine:9324 \
 npm run broker
 ```
+
+If `MAVERICK_BROWSER_BROKER_TOKEN` is not set, the broker creates or reuses a
+local token file at `runtime/browser/playwright-broker-token` with owner-only
+permissions. Browser backend, CLI, MCP, and hook entrypoints read that same file
+through `MAVERICK_BROWSER_BROKER_TOKEN_FILE` or the default path, so runtime
+agents do not need the token copied into their environment. Set
+`MAVERICK_BROWSER_BROKER_TOKEN` explicitly when an operator-managed supervisor
+delivers the shared token another way.
 
 The `playwright` package is pinned in `package.json`; the Docker helper uses
 the matching official image tag and `playwright run-server`. The broker refuses
@@ -94,9 +101,10 @@ client version.
 
 The controller calls the broker at `MAVERICK_BROWSER_BROKER_URL`, defaulting to
 `http://127.0.0.1:9323`, and every broker request must include the shared
-`MAVERICK_BROWSER_BROKER_TOKEN`. Browser sessions are created with isolated
-non-persistent contexts, `acceptDownloads: false`, no storage state, no user
-data directory, no file upload support, and no automatic artifact persistence.
+broker token from `MAVERICK_BROWSER_BROKER_TOKEN` or the local token file.
+Browser sessions are created with isolated non-persistent contexts,
+`acceptDownloads: false`, no storage state, no user data directory, no file
+upload support, and no automatic artifact persistence.
 The controller records session metadata only after successful broker actions,
 requires a known session before tab/snapshot/screenshot/log/wait/interactive
 actions, derives trusted policy context from the platform caller, and audits
@@ -110,6 +118,24 @@ Dockerized browsers must opt into a wider proxy bind and advertise
 `http://hostmachine:9324` explicitly.
 Screenshots are returned inline to the caller; a later controller step must hand
 them to Storage only on explicit save.
+
+The app health hook is an active P0 readiness check. It calls the broker with
+`/health?check=connect`, which requires the shared token and a reachable
+Playwright `run-server`; a passive broker status response is not enough for the
+app to report healthy.
+
+After both sidecars are running, verify the real P0 path through the official
+Browser CLI:
+
+```bash
+maverick app browser cli run browser --json --action acceptance.smoke
+```
+
+This creates an isolated session, navigates to
+`MAVERICK_BROWSER_ACCEPTANCE_URL` or `https://example.com/`, collects a
+snapshot, screenshot, console messages, network requests, and tabs, then closes
+the session. The smoke output summarizes the screenshot size instead of
+persisting or printing the base64 artifact.
 
 Intentional P0 omissions:
 

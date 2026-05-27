@@ -9,7 +9,7 @@ This matrix tracks the repository-wide completeness baseline for first-party Mav
 | `agents` | yes | repo-wide baseline | Bundled `agents-ops` skill and the `runtime-skills` dependency on `skill.catalog` are declared in the contract. |
 | `app-store` | yes | repo-wide baseline | Bundled `app-store-ops` skill now declared in the contract. |
 | `base-shell` | yes | repo-wide baseline | No app-owned backend, hooks, references, or view surface state by design; shell hosting remains a core/platform concern. |
-| `browser` | yes | app-local contract tests plus repo-wide baseline | Sealed full-access Browser Lab P0 scaffold with launchable frontend, thin backend/controller, CLI/MCP descriptors, lifecycle hooks, app-owned `data/browser/state.json`, core egress preflight, and fail-closed broker handoff until Playwright is connected. |
+| `browser` | yes | app-local contract tests plus repo-wide baseline | Sealed full-access Browser Lab P0 with launchable frontend, thin backend/controller, CLI/MCP descriptors, lifecycle hooks, app-owned `data/browser/state.json`, core egress preflight, managed local broker token file fallback, active broker readiness, and an acceptance smoke that exercises session create, navigate, snapshot, screenshot, console, network, tabs, and close through the Playwright broker. |
 | `chat` | yes | repo-wide baseline | Bundled `chat-ops` skill, thread/project references, standard view state, and shell widgets are declared. |
 | `checklist` | yes | app-local contract tests | Repository reference app for complete workspace-stateful contract coverage. |
 | `developer-kit` | yes | repo-wide baseline | Frontend-only by design; uses the core-owned `/api/app-sdk` surface instead of app-owned backend, CLI, or MCP. |

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from datetime import UTC, datetime
+import os
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
@@ -71,6 +72,8 @@ P0_ACTION_FIELDS = {
     "type": frozenset({"action", "session_id", "ref", "text", "target_url", "mode"}),
     "press_key": frozenset({"action", "session_id", "key", "target_url", "mode"}),
 }
+ACCEPTANCE_URL_ENV = "MAVERICK_BROWSER_ACCEPTANCE_URL"
+DEFAULT_ACCEPTANCE_URL = "https://example.com/"
 
 
 def app_events_for_action(action: str) -> list[dict[str, str]]:
@@ -258,6 +261,178 @@ def operations_manifest() -> dict[str, Any]:
             "automatic_download_persistence",
         ],
     }
+
+
+def acceptance_smoke_payload(
+    data_root: Path,
+    body: dict[str, Any],
+    *,
+    workspace_id: str | None = None,
+    app_id: str = "browser",
+    effective_mode: str | None = None,
+    platform_role: str | None = None,
+    workspace_role: str | None = None,
+) -> tuple[int, dict[str, Any]]:
+    """Run the P0 broker acceptance path through the same controller surface agents use."""
+
+    target_url = str(body.get("url") or os.environ.get(ACCEPTANCE_URL_ENV) or DEFAULT_ACCEPTANCE_URL).strip()
+    if not target_url:
+        raise BrowserValidationError("url is required.", field="url")
+    mode = str(body.get("mode") or "read_only").strip()
+    if mode not in {"read_only", "maverick_dev_inspector"}:
+        raise BrowserValidationError("mode must be read_only or maverick_dev_inspector.", field="mode")
+    admin_dev_targets_enabled = is_admin_authority(platform_role=platform_role, workspace_role=workspace_role)
+    active_health = broker_health(connect=True)
+    if active_health.get("status") != "ready" or active_health.get("connected") is not True:
+        return 503, {
+            "status": "failed",
+            "error": "broker_unavailable",
+            "detail": "Browser broker active health check requires the broker token and a reachable Playwright run-server.",
+            "broker": active_health,
+        }
+
+    steps: list[dict[str, Any]] = []
+    session_id = ""
+    try:
+        create_status, create_result = _smoke_step(
+            data_root,
+            {"action": "session.create", "mode": mode},
+            steps,
+            workspace_id=workspace_id,
+            app_id=app_id,
+            effective_mode=effective_mode,
+            platform_role=platform_role,
+            workspace_role=workspace_role,
+        )
+        if create_status >= 400:
+            return create_status, _smoke_failed_payload(target_url, active_health, steps, create_result)
+        session_id = str(create_result.get("session_id") or "")
+        if not session_id:
+            return 502, _smoke_failed_payload(
+                target_url,
+                active_health,
+                steps,
+                {"error": "invalid_broker_response", "detail": "Browser broker did not return a session_id."},
+            )
+
+        for action_body in (
+            {"action": "navigate", "session_id": session_id, "url": target_url, "mode": mode},
+            {"action": "snapshot", "session_id": session_id},
+            {"action": "screenshot", "session_id": session_id, "full_page": False},
+            {"action": "console.messages", "session_id": session_id, "limit": 25},
+            {"action": "network.requests", "session_id": session_id, "limit": 25},
+            {"action": "tabs", "session_id": session_id},
+        ):
+            step_status, step_result = _smoke_step(
+                data_root,
+                action_body,
+                steps,
+                workspace_id=workspace_id,
+                app_id=app_id,
+                effective_mode=effective_mode,
+                platform_role=platform_role,
+                workspace_role=workspace_role,
+            )
+            if step_status >= 400:
+                return step_status, _smoke_failed_payload(target_url, active_health, steps, step_result)
+    finally:
+        if session_id:
+            _smoke_step(
+                data_root,
+                {"action": "session.close", "session_id": session_id},
+                steps,
+                workspace_id=workspace_id,
+                app_id=app_id,
+                effective_mode=effective_mode,
+                platform_role=platform_role,
+                workspace_role=workspace_role,
+            )
+
+    if session_id and not _step_ok(steps, "session.close"):
+        return 502, _smoke_failed_payload(
+            target_url,
+            active_health,
+            steps,
+            {"error": "session_close_failed", "detail": "Browser P0 acceptance smoke could not close the session."},
+        )
+    return 200, {
+        "status": "ok",
+        "target_url": redact_url(target_url),
+        "broker": active_health,
+        "checks": {
+            "session_create": _step_ok(steps, "session.create"),
+            "navigate": _step_ok(steps, "navigate"),
+            "snapshot": _step_ok(steps, "snapshot"),
+            "screenshot": _step_ok(steps, "screenshot"),
+            "console_messages": _step_ok(steps, "console.messages"),
+            "network_requests": _step_ok(steps, "network.requests"),
+            "tabs": _step_ok(steps, "tabs"),
+            "session_close": _step_ok(steps, "session.close"),
+        },
+        "steps": steps,
+    }
+
+
+def _smoke_step(
+    data_root: Path,
+    body: dict[str, Any],
+    steps: list[dict[str, Any]],
+    *,
+    workspace_id: str | None,
+    app_id: str,
+    effective_mode: str | None,
+    platform_role: str | None,
+    workspace_role: str | None,
+) -> tuple[int, dict[str, Any]]:
+    status_code, result = handle_action(
+        data_root,
+        body,
+        app_id=app_id,
+        workspace_id=workspace_id,
+        effective_mode=effective_mode,
+        platform_role=platform_role,
+        workspace_role=workspace_role,
+    )
+    steps.append(_smoke_step_summary(str(body.get("action") or ""), status_code, result))
+    return status_code, result
+
+
+def _smoke_step_summary(action: str, status_code: int, result: dict[str, Any]) -> dict[str, Any]:
+    summary: dict[str, Any] = {"action": action, "status_code": status_code, "ok": status_code < 400}
+    for key in ("session_id", "url", "title", "mime_type", "encoding", "error", "detail"):
+        if isinstance(result.get(key), str):
+            summary[key] = result[key]
+    if isinstance(result.get("snapshot"), str):
+        summary["snapshot_length"] = len(result["snapshot"])
+    if isinstance(result.get("data"), str):
+        summary["screenshot_bytes"] = len(result["data"])
+    if isinstance(result.get("messages"), list):
+        summary["message_count"] = len(result["messages"])
+    if isinstance(result.get("requests"), list):
+        summary["request_count"] = len(result["requests"])
+    if isinstance(result.get("sessions"), list):
+        summary["session_count"] = len(result["sessions"])
+    return summary
+
+
+def _smoke_failed_payload(
+    target_url: str,
+    broker: dict[str, Any],
+    steps: list[dict[str, Any]],
+    result: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "status": "failed",
+        "target_url": redact_url(target_url),
+        "broker": broker,
+        "error": result.get("error", "acceptance_smoke_failed"),
+        "detail": result.get("detail", "Browser P0 acceptance smoke failed."),
+        "steps": steps,
+    }
+
+
+def _step_ok(steps: list[dict[str, Any]], action: str) -> bool:
+    return any(step.get("action") == action and step.get("ok") is True for step in steps)
 
 
 def broker_action_result(

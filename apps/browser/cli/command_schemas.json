@@ -1,7 +1,7 @@
 {
   "commands": {
     "browser": {
-      "description": "Inspect Browser Lab status, operation manifest, audit records, or run URL policy preflight.",
+      "description": "Inspect Browser Lab status, operation manifest, audit records, run URL policy preflight, or execute the P0 acceptance smoke.",
       "argument_schema": {
         "type": "object",
         "properties": {
@@ -11,11 +11,15 @@
               "operations.manifest",
               "status",
               "policy.preflight",
-              "audit.list"
+              "audit.list",
+              "acceptance.smoke"
             ],
             "default": "operations.manifest"
           },
-          "url": {"type": "string"},
+          "url": {
+            "type": "string",
+            "description": "Policy preflight URL or acceptance smoke target URL. Defaults to MAVERICK_BROWSER_ACCEPTANCE_URL or https://example.com/ for acceptance.smoke."
+          },
           "mode": {
             "type": "string",
             "enum": ["read_only", "maverick_dev_inspector"],

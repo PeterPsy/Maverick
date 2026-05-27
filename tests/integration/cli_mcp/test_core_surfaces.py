@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
+from core.app_sdk.cli import run_cli_json
 from core.secrets.errors import SecretPolicyError
 from core.secrets.service import build_secret_ref, create_platform_secret, grant_app_secret_use
 from core.secrets.store import SecretCollections, SecretDocumentStore
@@ -247,6 +249,126 @@ class TestMcpCliSurfaces(SurfaceTestBase):
         self.assertTrue(result["workspace_root"].endswith("/workspaces/default"))
         self.assertTrue(result["data_root"].endswith("/workspaces/default/data/checklists"))
         self.assertEqual(result["python"], sys.executable)
+
+    def test_full_access_only_app_cli_and_mcp_discovery_uses_full_access_policy(self) -> None:
+        store = self.make_app_store()
+        repo_root = self.make_repo_root()
+        app_root = repo_root / "apps" / "checklists"
+        self.write_app_contract(app_root, workspace_modes=["full-access"])
+        source = register_app_source_from_contract(store, source_kind="platform", source_path=str(app_root))
+        install_store_app(store, source_id=source.source_id, workspace_id="default", start_path=repo_root)
+
+        commands = list_core_cli_commands(app_store=store, workspace_id="default", start_path=repo_root)
+        tools = list_mcp_tools(app_store=store, workspace_id="default", start_path=repo_root)
+        command = next(command for command in commands if command.command_id == "app.checklists.checklists")
+        tool = next(tool for tool in tools if tool.tool_name == "app.checklists.checklists.list")
+        sandbox_cli_context = CliInvocationContext(
+            caller_kind="sandbox_agent",
+            workspace_id="default",
+            agent_id="agent-1",
+            effective_mode="sandbox",
+        )
+        sandbox_mcp_context = McpInvocationContext(**sandbox_cli_context.__dict__)
+
+        self.assertFalse(command.invocation_policy.sandbox_agent_allowed)
+        self.assertTrue(command.invocation_policy.requires_full_access)
+        self.assertFalse(tool.invocation_policy.sandbox_agent_allowed)
+        self.assertTrue(tool.invocation_policy.requires_full_access)
+        with self.assertRaises(CliInvocationNotAllowedError):
+            run_core_cli_command(
+                command_id="app.checklists.checklists",
+                context=sandbox_cli_context,
+                app_store=store,
+                workspace_id="default",
+                start_path=repo_root,
+            )
+        with self.assertRaises(McpInvocationNotAllowedError):
+            call_mcp_tool(
+                tool_name="app.checklists.checklists.list",
+                context=sandbox_mcp_context,
+                app_store=store,
+                workspace_id="default",
+                start_path=repo_root,
+            )
+
+    def test_app_scoped_inspect_reports_full_access_policy_from_contract(self) -> None:
+        store = self.make_app_store()
+        repo_root = self.make_repo_root()
+        app_root = repo_root / "apps" / "checklists"
+        self.write_app_contract(app_root, workspace_modes=["full-access"])
+        source = register_app_source_from_contract(store, source_kind="platform", source_path=str(app_root))
+        install_store_app(store, source_id=source.source_id, workspace_id="default", start_path=repo_root)
+        state = SimpleNamespace(
+            repository_root=repo_root,
+            app_store=store,
+            identity_store=None,
+            workspace_store=None,
+            runtime_store=None,
+            provider_store=None,
+            secret_store=None,
+            recovery_store=None,
+            observability_store=None,
+            app_event_bus=None,
+        )
+
+        cli_result = run_cli_json(
+            ["app", "checklists", "cli", "inspect", "checklists", "--json"],
+            state=state,
+            repository_root=repo_root,
+        )
+        mcp_result = run_cli_json(
+            ["app", "checklists", "mcp", "inspect", "checklists.list", "--json"],
+            state=state,
+            repository_root=repo_root,
+        )
+
+        self.assertEqual(
+            cli_result["command"]["invocation_policy"],
+            {
+                "operator_only": False,
+                "required_platform_role": None,
+                "sandbox_agent_allowed": False,
+                "requires_workspace_context": True,
+                "requires_full_access": True,
+            },
+        )
+        self.assertEqual(
+            mcp_result["tool"]["invocation_policy"],
+            {
+                "operator_only": False,
+                "sandbox_agent_allowed": False,
+                "requires_workspace_context": True,
+                "requires_full_access": True,
+            },
+        )
+
+    def test_app_cli_policy_cannot_loosen_full_access_only_contract(self) -> None:
+        store = self.make_app_store()
+        repo_root = self.make_repo_root()
+        app_root = repo_root / "apps" / "checklists"
+        self.write_app_contract(app_root, workspace_modes=["full-access"])
+        (app_root / "cli").mkdir(parents=True, exist_ok=True)
+        (app_root / "cli" / "command_policies.json").write_text(
+            json.dumps(
+                {
+                    "commands": {
+                        "checklists": {
+                            "sandbox_agent_allowed": True,
+                            "requires_full_access": False,
+                        }
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        source = register_app_source_from_contract(store, source_kind="platform", source_path=str(app_root))
+        install_store_app(store, source_id=source.source_id, workspace_id="default", start_path=repo_root)
+
+        commands = list_core_cli_commands(app_store=store, workspace_id="default", start_path=repo_root)
+        command = next(command for command in commands if command.command_id == "app.checklists.checklists")
+
+        self.assertFalse(command.invocation_policy.sandbox_agent_allowed)
+        self.assertTrue(command.invocation_policy.requires_full_access)
 
     def test_app_cli_and_mcp_receive_app_secrets_from_grants(self) -> None:
         store = self.make_app_store()

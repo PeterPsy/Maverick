@@ -102,3 +102,5 @@ class SecretGrantRecord:
     expires_at: datetime | None = None
     created_by_user_id: str | None = None
     reason: str | None = None
+    resource_type: str | None = None
+    resource_id: str | None = None

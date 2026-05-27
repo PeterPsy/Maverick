@@ -160,6 +160,18 @@ export function rotateSecret(secretId: string, rawValue: string): Promise<{ secr
   });
 }
 
+export function updateSecret(secretId: string, payload: {
+  alias?: string;
+  description?: string;
+  kind: string;
+  label: string;
+}): Promise<{ secret: SecretRecord }> {
+  return request(`/api/secrets/${encodeURIComponent(secretId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload)
+  });
+}
+
 export function listGrants(): Promise<{ items: SecretGrant[] }> {
   return request('/api/secret-grants');
 }

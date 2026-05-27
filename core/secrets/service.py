@@ -10,7 +10,7 @@ from core.secrets.grants import create_secret_grant, revoke_secret_grant
 from core.secrets.models import ResolvedSecretLease, SecretBindingRecord, SecretGrantRecord, SecretKind, SecretRecord, SecretResolutionContext
 from core.secrets.secret_bindings import bind_secret, resolve_active_binding
 from core.secrets.secret_resolution import parse_secret_ref, resolve_secret_for_app_use, resolve_secret_for_runtime
-from core.secrets.secret_store import build_secret_ref, create_secret, disable_secret, revoke_secret, rotate_secret_value
+from core.secrets.secret_store import build_secret_ref, create_secret, disable_secret, revoke_secret, rotate_secret_value, update_secret_metadata
 from core.secrets.store import SecretStore
 
 
@@ -55,6 +55,28 @@ def rotate_platform_secret(
 ) -> SecretRecord:
     """Rotate one platform-owned secret raw value."""
     return rotate_secret_value(store, secret_id=secret_id, raw_value=raw_value, now=now)
+
+
+def update_platform_secret_metadata(
+    store: SecretStore,
+    *,
+    secret_id: str,
+    label: str,
+    alias: str | None = None,
+    description: str | None = None,
+    kind: SecretKind = "generic",
+    now: datetime | None = None,
+) -> SecretRecord:
+    """Update redaction-safe platform secret metadata without reading raw values."""
+    return update_secret_metadata(
+        store,
+        secret_id=secret_id,
+        label=label,
+        alias=alias,
+        description=description,
+        kind=kind,
+        now=now,
+    )
 
 
 def disable_platform_secret(store: SecretStore, *, secret_id: str, now: datetime | None = None) -> SecretRecord:
@@ -204,6 +226,8 @@ def grant_app_secret_use(
     expires_at: datetime | None = None,
     created_by_user_id: str | None = None,
     reason: str | None = None,
+    resource_type: str | None = None,
+    resource_id: str | None = None,
     now: datetime | None = None,
 ) -> SecretGrantRecord:
     """Grant one app controlled use of a secret for scoped actions and targets."""
@@ -219,6 +243,8 @@ def grant_app_secret_use(
         expires_at=expires_at,
         created_by_user_id=created_by_user_id,
         reason=reason,
+        resource_type=resource_type,
+        resource_id=resource_id,
         now=now,
     )
 
@@ -346,4 +372,5 @@ __all__ = [
     "revoke_platform_secret",
     "revoke_app_secret_grant",
     "rotate_platform_secret",
+    "update_platform_secret_metadata",
 ]

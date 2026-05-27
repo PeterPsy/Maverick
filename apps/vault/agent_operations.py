@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 import json
-import subprocess
 from hashlib import sha256
+from pathlib import Path
 from typing import Any
 
 
 SUPPORTED_OPERATIONS = ["manifest", "diagnose", "connection_issues", "plan_fix", "explain_issue", "apply_fix"]
 RAW_VALUE_KEYS = {"raw_value", "secret_value", "credential_value", "plaintext", "password", "token_value"}
 CORE_GRANT_CREATE = "core.secret_grants.create"
+CORE_RECOMMEND = "core.secret_grant_targets.recommend"
+
+_CORE_ADMIN_STATE: Any | None = None
+_CORE_ADMIN_STATE_LOADED = False
 
 CORE_SURFACES = {
     "read_only": [
@@ -230,31 +234,20 @@ def _input_needs(arguments: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _load_core_needs(workspace_id: str | None) -> list[dict[str, Any]]:
-    if not workspace_id or not _core_cli_surface_available("core.secret_grant_targets.recommend"):
+    if not workspace_id:
         return []
-    result = subprocess.run(
-        [
-            "maverick",
-            "core",
-            "cli",
-            "run",
-            "core.secret_grant_targets.recommend",
-            "--arguments-json",
-            json.dumps({"workspace_id": workspace_id}),
-            "--json",
-        ],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    if result.returncode != 0:
+    state = _core_admin_state()
+    if state is None:
         return []
     try:
-        payload = json.loads(result.stdout or "{}")
-    except json.JSONDecodeError:
+        from core.api.secret_grant_admin import list_secret_grant_recommendations
+    except Exception:
         return []
-    items = payload.get("items")
-    return [_dict(item) for item in items] if isinstance(items, list) else []
+    try:
+        items = list_secret_grant_recommendations(state, workspace_id=workspace_id)
+    except Exception:
+        return []
+    return [_dict(item) for item in items if isinstance(item, dict)]
 
 
 def _issue_from_need(need: dict[str, Any]) -> dict[str, Any] | None:
@@ -442,47 +435,76 @@ def _confirmation_present(arguments: dict[str, Any]) -> bool:
 
 
 def _core_cli_surface_available(command_id: str) -> bool:
-    result = subprocess.run(
-        ["maverick", "core", "cli", "list", "--json"],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    if result.returncode != 0:
+    if command_id not in {
+        CORE_RECOMMEND,
+        CORE_GRANT_CREATE,
+        "core.secrets.list",
+        "core.secrets.bindings.list",
+        "core.secrets.create",
+        "core.secrets.rotate",
+        "core.secrets.disable",
+        "core.secrets.revoke",
+    }:
         return False
-    try:
-        payload = json.loads(result.stdout or "{}")
-    except json.JSONDecodeError:
-        return False
-    commands = payload.get("commands")
-    return isinstance(commands, list) and any(_dict(item).get("command_id") == command_id for item in commands)
+    return _core_admin_state() is not None
 
 
 def _call_core_grant_create(arguments: dict[str, Any], *, workspace_id: str | None) -> dict[str, Any]:
     body = {**arguments}
     if workspace_id and not body.get("workspace_id"):
         body["workspace_id"] = workspace_id
-    result = subprocess.run(
-        [
-            "maverick",
-            "core",
-            "cli",
-            "run",
-            CORE_GRANT_CREATE,
-            "--operator",
-            "--arguments-json",
-            json.dumps(body),
-            "--json",
-        ],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    state = _core_admin_state()
+    if state is None:
+        return {"ok": False, "payload": {"error": "core_state_unavailable"}}
     try:
-        payload = json.loads(result.stdout or "{}")
-    except json.JSONDecodeError:
-        payload = {"error": "invalid_core_response"}
-    return {"ok": result.returncode == 0, "payload": payload}
+        from core.api.secret_api_payloads import grant_payload
+        from core.api.secret_grant_admin import create_secret_grant_from_payload
+    except Exception:
+        return {"ok": False, "payload": {"error": "core_grant_surface_unavailable"}}
+    try:
+        grant, _secret = create_secret_grant_from_payload(
+            state,
+            workspace_id=str(body.get("workspace_id") or ""),
+            payload=body,
+            created_by_user_id=None,
+        )
+    except Exception as error:
+        return {
+            "ok": False,
+            "payload": {
+                "error": "core_grant_create_failed",
+                "reason": error.__class__.__name__,
+            },
+        }
+    return {
+        "ok": True,
+        "payload": {
+            "command_id": CORE_GRANT_CREATE,
+            "created": True,
+            "grant": grant_payload(grant, state=state),
+        },
+    }
+
+
+def _core_admin_state() -> Any | None:
+    global _CORE_ADMIN_STATE, _CORE_ADMIN_STATE_LOADED
+    if _CORE_ADMIN_STATE_LOADED:
+        return _CORE_ADMIN_STATE
+    _CORE_ADMIN_STATE_LOADED = True
+    try:
+        from core.api.platform_state import bootstrap_platform_state
+        from core.shared.repository import installation_paths
+    except Exception:
+        return None
+    try:
+        paths = installation_paths(start_path=Path(__file__).resolve())
+        _CORE_ADMIN_STATE = bootstrap_platform_state(
+            start_path=paths.repository_root,
+            bootstrap_admin=False,
+        )
+    except Exception:
+        _CORE_ADMIN_STATE = None
+    return _CORE_ADMIN_STATE
 
 
 def _issue_id(*, app_id: str, logical_name: str, scope: dict[str, Any]) -> str:

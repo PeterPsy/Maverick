@@ -59,7 +59,7 @@ function VaultSidebarFooterWidget() {
         postPrimaryActionState(appId, primaryActionFor(readVaultViewState().tab).label);
       }
       if (payload.type === 'maverick.widget.primary-action.invoke') {
-        runPrimaryAction(appId, readVaultViewState().tab, () => fileInputRef.current?.click());
+        runPrimaryAction(appId, readVaultViewState().tab);
       }
     }
 
@@ -125,7 +125,7 @@ function VaultSidebarFooterWidget() {
       }
     }
     if (created) {
-      writeVaultViewState({ ...readVaultViewState(), metricFilter: null, tab: 'credentials' });
+      writeVaultViewState({ ...readVaultViewState(), credentialPanel: '', metricFilter: null, selectedSecretId: '', tab: 'credentials' });
       notifyVaultDataChanged();
       notifyVaultViewStateChanged();
       window.parent?.postMessage({ type: 'maverick.widget.open-app', app_id: appId, params: { tab: 'credentials' } }, window.location.origin);
@@ -150,7 +150,7 @@ function VaultSidebarFooterWidget() {
 
   return (
     <main className="vault-sidebar-footer-widget">
-      <button className="vault-sidebar-footer-button" onClick={() => runPrimaryAction(appId, tab, () => fileInputRef.current?.click())} type="button">
+      <button className="vault-sidebar-footer-button" onClick={() => runPrimaryAction(appId, tab)} type="button">
         <Plus size={16} aria-hidden="true" />
         <span>{action.label}</span>
       </button>
@@ -264,40 +264,16 @@ function downloadFailures(failures: string[]) {
   URL.revokeObjectURL(url);
 }
 
-function runPrimaryAction(appId: string, tab: Tab, openImporter: () => void) {
-  const action = primaryActionFor(tab);
-  writeVaultViewState({ ...readVaultViewState(), metricFilter: null, tab });
+function runPrimaryAction(_appId: string, _tab: Tab) {
+  const currentState = readVaultViewState();
+  writeVaultViewState({ ...currentState, credentialPanel: 'new', metricFilter: null, selectedSecretId: '' });
   notifyVaultViewStateChanged();
-  if (tab === 'credentials') {
-    writeVaultActionRequest('submit-credential');
-    return;
-  }
-  if (tab === 'import') {
-    writeVaultActionRequest('import-credentials');
-    openImporter();
-    return;
-  }
-  window.parent?.postMessage(
-    {
-      type: 'maverick.widget.open-app',
-      app_id: appId,
-      params: action.params
-    },
-    window.location.origin
-  );
+  writeVaultActionRequest('new-credential');
+  window.parent?.postMessage({ type: 'maverick.shell.sidebar.open' }, window.location.origin);
 }
 
-function primaryActionFor(tab: Tab): { label: string; params: Record<string, string> } {
-  if (tab === 'issues') {
-    return { label: 'Review connections', params: { tab: 'issues' } };
-  }
-  if (tab === 'import') {
-    return { label: 'Import CSV', params: { tab: 'import' } };
-  }
-  if (tab === 'advanced') {
-    return { label: 'Open advanced', params: { tab: 'advanced' } };
-  }
-  return { label: 'Add credential', params: { focus: 'add-credential', tab: 'credentials' } };
+function primaryActionFor(_tab: Tab): { label: string; params: Record<string, string> } {
+  return { label: 'New credential', params: { focus: 'new-credential' } };
 }
 
 function postPrimaryActionState(appId: string, label: string) {

@@ -3,14 +3,14 @@
   "contract_version": "1.0",
   "name": "Vault",
   "version": "0.1.0",
-  "description": "Credential Inbox and Connection Issues workspace app for platform-owned Core Secrets metadata, issue review, controlled credential input, and advanced diagnostics.",
+  "description": "Active Credentials and Connection Issues workspace app for platform-owned Core Secrets metadata, issue review, controlled credential input, and advanced diagnostics.",
   "publisher": "maverick",
   "minimum_core_version": "0.1.0",
   "provides": [
     {
       "interface": "platform.secrets.vault",
       "version": "1",
-      "description": "Credential inbox, connection issue review, and advanced diagnostics over Core Secrets.",
+      "description": "Active credential review, connection issue review, and advanced diagnostics over Core Secrets.",
       "surfaces": [
         "view",
         "widget",

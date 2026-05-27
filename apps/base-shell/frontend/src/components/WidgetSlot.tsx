@@ -57,6 +57,7 @@ export function WidgetSlot({
   label,
   onCloseSidebar,
   onOpenApp,
+  onOpenSidebar,
   onPrimaryActionStateChange,
   preferredOwnerAppId,
   primaryActionRequestId = 0,
@@ -70,6 +71,7 @@ export function WidgetSlot({
   label: string;
   onCloseSidebar?: () => void;
   onOpenApp: (appId: string, params?: Record<string, string | boolean | null>) => void;
+  onOpenSidebar?: () => void;
   onPrimaryActionStateChange?: (state: WidgetPrimaryActionState) => void;
   preferredOwnerAppId?: string | null;
   primaryActionRequestId?: number;
@@ -211,6 +213,9 @@ export function WidgetSlot({
       }
       if (payload.type === "maverick.shell.sidebar.close") {
         onCloseSidebar?.();
+      }
+      if (payload.type === "maverick.shell.sidebar.open") {
+        onOpenSidebar?.();
       }
       if (
         payload.type === "maverick.widget.primary-action.state" &&

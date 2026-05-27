@@ -1,17 +1,9 @@
-import { AlertTriangle, Bot, ClipboardCheck, KeyRound, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, ClipboardCheck, ShieldAlert } from 'lucide-react';
 import { ConnectionIssue } from '../readiness';
 import { EmptyState, Status } from './VaultShared';
 
-export function ConnectionIssuesView({
-  issues,
-  onAddValue,
-  onAskAgent,
-  onReviewFix
-}: {
+export function ConnectionIssuesView({ issues }: {
   issues: ConnectionIssue[];
-  onAddValue: () => void;
-  onAskAgent: (issue: ConnectionIssue) => void;
-  onReviewFix: () => void;
 }) {
   const blocked = issues.filter((issue) => issue.severity === 'blocked').length;
   const warnings = issues.length - blocked;
@@ -45,20 +37,6 @@ export function ConnectionIssuesView({
                   <summary>Technical details</summary>
                   <p>{issue.technicalDetails}</p>
                 </details>
-              </div>
-              <div className="vault-readiness-actions">
-                <button onClick={onAddValue} type="button">
-                  <KeyRound size={15} />
-                  <span>Add value</span>
-                </button>
-                <button onClick={() => onAskAgent(issue)} type="button">
-                  <Bot size={15} />
-                  <span>Ask agent to fix</span>
-                </button>
-                <button onClick={onReviewFix} type="button">
-                  <ClipboardCheck size={15} />
-                  <span>Review fix</span>
-                </button>
               </div>
             </article>
           ))}

@@ -7,9 +7,11 @@ export function SecretsView(props: {
   secrets: SecretRecord[];
   grants: SecretGrant[];
   issues?: ConnectionIssue[];
+  onSelectSecret?: (secretId: string) => void;
+  selectedSecretId?: string;
 }) {
   return (
-    <DataPanel caption="Redacted credential inventory and current app usage." title="Credential Inbox" count={props.secrets.length}>
+    <DataPanel caption="Active redacted credentials and current app usage." title="Active Credentials" count={props.secrets.length}>
       {props.secrets.length ? (
         <table>
           <thead>
@@ -21,21 +23,37 @@ export function SecretsView(props: {
             ))}
           </tbody>
         </table>
-      ) : <EmptyState title="No secrets match this view" />}
+      ) : <EmptyState title="No active credentials match this view" />}
     </DataPanel>
   );
 }
 
-function SecretRow({ secret, grants, issues = [] }: {
+function SecretRow({ secret, grants, issues = [], onSelectSecret, selectedSecretId }: {
   secret: SecretRecord;
   grants: SecretGrant[];
   issues?: ConnectionIssue[];
+  onSelectSecret?: (secretId: string) => void;
+  selectedSecretId?: string;
 }) {
   const linkedGrants = grants.filter((grant) => grantUsesSecret(grant, secret) && grantStatus(grant) === 'active');
   const usedBy = Array.from(new Set(linkedGrants.map((grant) => grant.app_id))).sort();
   const issueCount = issues.filter((issue) => issue.credentialSecretIds.includes(secret.secret_id)).length;
+  function handleSelect() {
+    onSelectSecret?.(secret.secret_id);
+  }
   return (
-    <tr>
+    <tr
+      className={`vault-secret-row ${selectedSecretId === secret.secret_id ? 'is-selected' : ''}`}
+      onClick={handleSelect}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          handleSelect();
+        }
+      }}
+      role="button"
+      tabIndex={0}
+    >
       <td><strong>{secret.label}</strong><span>{secret.alias || secret.secret_id}</span></td>
       <td>{humanizeKind(secret.kind)}</td>
       <td><Status value={secret.status} /></td>

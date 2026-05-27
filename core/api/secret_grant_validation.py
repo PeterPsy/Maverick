@@ -6,14 +6,12 @@ from datetime import UTC, datetime
 
 from core.api.platform_state import PlatformState
 from core.api.secret_api_payloads import get_secret_for_ref
+from core.api.secret_grant_targets import APP_BACKEND_ACTION
 from core.apps.errors import AppHostingError, WorkspaceAppBindingNotFoundError
 from core.apps.surfaces import resolve_workspace_app_surface
 from core.secrets.errors import SecretError, SecretPolicyError
 from core.secrets.models import SecretRecord
 from core.secrets.target_policy import normalize_target_patterns_or_wildcard, target_allowed
-
-
-APP_BACKEND_ACTION = "app.backend"
 
 
 def get_active_secret_for_ref(state: PlatformState, *, secret_ref: str) -> SecretRecord:
@@ -48,10 +46,14 @@ def assert_logical_name_target_available(
     logical_name: str,
     actions: list[str],
     target_patterns: list[str] | None,
+    resource_type: str | None = None,
+    resource_id: str | None = None,
 ) -> None:
     """Require active grants for one app logical name to have non-overlapping delivery targets."""
     now = datetime.now(tz=UTC)
     normalized_actions = {str(action).strip().lower() for action in actions}
+    normalized_resource_type = _normalize_resource_scope_value(resource_type)
+    normalized_resource_id = _normalize_resource_scope_value(resource_id)
     if APP_BACKEND_ACTION in normalized_actions:
         normalized_targets = normalize_target_patterns_or_wildcard(target_patterns)
     else:
@@ -60,6 +62,10 @@ def assert_logical_name_target_available(
         if grant.expires_at is not None and grant.expires_at <= now:
             continue
         if grant.logical_name != logical_name:
+            continue
+        grant_resource_type = _normalize_resource_scope_value(grant.resource_type)
+        grant_resource_id = _normalize_resource_scope_value(grant.resource_id)
+        if (grant_resource_type, grant_resource_id) != (normalized_resource_type, normalized_resource_id):
             continue
         if APP_BACKEND_ACTION not in normalized_actions:
             raise SecretPolicyError(f"Active secret grant `{logical_name}` already exists for app `{app_id}`.")
@@ -70,6 +76,11 @@ def assert_logical_name_target_available(
             raise SecretPolicyError(
                 f"Active secret grant `{logical_name}` already exists for app `{app_id}` with overlapping targets."
             )
+
+
+def _normalize_resource_scope_value(value: str | None) -> str | None:
+    normalized = str(value or "").strip().lower()
+    return normalized or None
 
 
 def _target_patterns_overlap(left: list[str], right: list[str]) -> bool:

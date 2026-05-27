@@ -295,6 +295,7 @@ export function Sidebar({
           label="App sidebar content"
           onCloseSidebar={onClose}
           onOpenApp={onOpenApp}
+          onOpenSidebar={onOpenSidebar}
           preferredOwnerAppId={activeAppId}
         />
 
@@ -307,6 +308,7 @@ export function Sidebar({
             label="App sidebar footer"
             onCloseSidebar={onClose}
             onOpenApp={onOpenApp}
+            onOpenSidebar={onOpenSidebar}
             onPrimaryActionStateChange={onPrimaryActionStateChange}
             preferredOwnerAppId={activeAppId}
             primaryActionRequestId={mobilePrimaryActionRequestId}

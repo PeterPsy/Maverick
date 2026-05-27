@@ -1,12 +1,12 @@
-export function SecureSecretInput({ label }: { label: string }) {
+export function SecureSecretInput({ label, placeholder = 'Value', required = true }: { label: string; placeholder?: string; required?: boolean }) {
   return (
     <label className="vault-secure-input">
       <span>{label}</span>
       <input
         name="raw_value"
-        placeholder="Value"
+        placeholder={placeholder}
         type="password"
-        required
+        required={required}
         autoComplete="new-password"
         spellCheck={false}
       />

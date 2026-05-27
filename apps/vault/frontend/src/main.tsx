@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { ClipboardCheck, KeyRound, ShieldCheck, Upload } from 'lucide-react';
+import { ClipboardCheck, Search, ShieldCheck } from 'lucide-react';
 import {
   AuditRecord,
   ProviderStatus,
@@ -25,6 +25,7 @@ import { computeReadinessIssues } from './readiness';
 import { ShellNavigatePayload, Tab } from './vaultTypes';
 import {
   grantStatus,
+  secretMatchesQuery,
   tabFromValue
 } from './vaultUtils';
 import { VaultMetricFilter, notifyVaultViewStateChanged, readVaultViewState, writeVaultViewState } from './vaultViewState';
@@ -40,6 +41,9 @@ function App() {
   const [providerStatus, setProviderStatus] = useState<ProviderStatus | null>(null);
   const [tab, setTab] = useState<Tab>(() => tabFromValue(new URLSearchParams(window.location.search).get('tab')) || initialViewState.tab);
   const [metricFilter, setMetricFilter] = useState<VaultMetricFilter>(() => initialViewState.metricFilter);
+  const [query, setQuery] = useState(() => initialViewState.query);
+  const [selectedSecretId, setSelectedSecretId] = useState(() => initialViewState.selectedSecretId);
+  const [credentialPanel, setCredentialPanel] = useState(() => initialViewState.credentialPanel);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -77,9 +81,9 @@ function App() {
   }, []);
 
   useEffect(() => {
-    writeVaultViewState({ metricFilter, query: readVaultViewState().query, tab });
+    writeVaultViewState({ credentialPanel, metricFilter, query, selectedSecretId, tab });
     notifyVaultViewStateChanged();
-  }, [metricFilter, tab]);
+  }, [credentialPanel, metricFilter, query, selectedSecretId, tab]);
 
   useEffect(() => {
     function handleShellMessage(event: MessageEvent) {
@@ -93,7 +97,10 @@ function App() {
       }
       if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === 'vault' && payload.resource === 'view-state') {
         const nextState = readVaultViewState();
+        setCredentialPanel(nextState.credentialPanel);
         setMetricFilter(nextState.metricFilter);
+        setQuery(nextState.query);
+        setSelectedSecretId(nextState.selectedSecretId);
         setTab(nextState.tab);
         return;
       }
@@ -111,17 +118,11 @@ function App() {
     return () => window.removeEventListener('message', handleShellMessage);
   }, []);
 
-  const activeSecrets = useMemo(() => secrets.filter((item) => item.status === 'active').length, [secrets]);
-  const disabledSecrets = useMemo(() => secrets.filter((item) => item.status === 'disabled').length, [secrets]);
+  const activeSecrets = useMemo(() => secrets.filter((item) => item.status === 'active'), [secrets]);
+  const filteredActiveSecrets = useMemo(() => activeSecrets.filter((item) => secretMatchesQuery(item, query)), [activeSecrets, query]);
   const connectionIssues = useMemo<ConnectionIssue[]>(
     () => computeReadinessIssues({ grants, grantNeeds, providerStatus, secrets, targets }),
     [grants, grantNeeds, providerStatus, secrets, targets]
-  );
-  const providerHealth = providerStatus?.blocked_reason ? 'Needs review' : 'Ready';
-  const filteredSecrets = useMemo(
-    () => secrets
-      .filter((secret) => metricFilter !== 'active-secrets' || secret.status === 'active'),
-    [metricFilter, secrets]
   );
   const filteredGrants = useMemo(
     () => grants
@@ -133,74 +134,74 @@ function App() {
       .filter((item) => metricFilter !== 'review-events' || item.status === 'failed' || item.status === 'attempted'),
     [audit, metricFilter]
   );
-
-  function applyMetricFilter(nextFilter: VaultMetricFilter, nextTab: Tab) {
-    setTab(nextTab);
-    setMetricFilter((current) => (current === nextFilter ? null : nextFilter));
-  }
+  const filteredConnectionIssues = useMemo(
+    () => connectionIssues.filter((issue) => issueMatchesQuery(issue, query)),
+    [connectionIssues, query]
+  );
 
   function openTab(nextTab: Tab) {
     setMetricFilter(null);
     setTab(nextTab);
   }
 
-  function askAgentToFix(issue: ConnectionIssue) {
-    window.parent?.postMessage(
-      {
-        type: 'maverick.widget.open-app',
-        app_id: 'chat',
-        params: {
-          prompt: `Help fix this Vault credential issue: ${issue.title}`
-        }
-      },
-      window.location.origin
-    );
+  function updateQuery(nextQuery: string) {
+    setQuery(nextQuery);
+    const currentState = readVaultViewState();
+    writeVaultViewState({ ...currentState, query: nextQuery });
+    notifyVaultViewStateChanged();
+  }
+
+  function selectCredential(secretId: string) {
+    setMetricFilter(null);
+    setSelectedSecretId(secretId);
+    setCredentialPanel('edit');
+    setTab('credentials');
+    const currentState = readVaultViewState();
+    writeVaultViewState({ ...currentState, credentialPanel: 'edit', metricFilter: null, selectedSecretId: secretId, tab: 'credentials' });
+    notifyVaultViewStateChanged();
+    window.parent?.postMessage({ type: 'maverick.shell.sidebar.open' }, window.location.origin);
   }
 
   return (
     <main className="vault-shell" aria-busy={busy}>
       <header className="detail-header vault-topbar">
         <div className="detail-title-block vault-heading">
-          <h2>Credential Inbox</h2>
+          <h2>Vault</h2>
           <span className="detail-title-separator" aria-hidden="true" />
-          <p>Saved credentials and connection issues for workspace app access.</p>
+          <p>Securely save credentials so agents can connect workspace apps.</p>
         </div>
       </header>
 
-      <section className="vault-stats" aria-label="Vault status">
-        <Stat active={metricFilter === 'all-secrets'} icon={<KeyRound size={18} />} label="Credential Inbox" onClick={() => applyMetricFilter('all-secrets', 'credentials')} value={String(secrets.length)} />
-        <Stat active={metricFilter === 'active-secrets'} icon={<ShieldCheck size={18} />} label="Active credentials" onClick={() => applyMetricFilter('active-secrets', 'credentials')} value={String(activeSecrets)} />
-        <Stat active={tab === 'issues'} icon={<ClipboardCheck size={18} />} label="Connection Issues" muted={disabledSecrets ? `${disabledSecrets} disabled` : undefined} onClick={() => applyMetricFilter(null, 'issues')} value={String(connectionIssues.length)} />
-        <Stat icon={<ShieldCheck size={18} />} label="Provider health" onClick={() => openTab(providerStatus?.blocked_reason ? 'issues' : 'credentials')} value={providerHealth} />
+      <section className="vault-workspace-controls" aria-label="Vault controls">
+        <div className="vault-stats" aria-label="Vault views">
+          <Stat active={tab === 'credentials'} icon={<ShieldCheck size={17} />} label="Active Credential" onClick={() => openTab('credentials')} value={String(activeSecrets.length)} />
+          <Stat active={tab === 'issues'} icon={<ClipboardCheck size={17} />} label="Connection Issues" onClick={() => openTab('issues')} value={String(connectionIssues.length)} />
+        </div>
+        <label className="vault-search">
+          <Search size={17} aria-hidden="true" />
+          <input
+            aria-label="Search Vault"
+            onChange={(event) => updateQuery(event.currentTarget.value)}
+            placeholder="Search Vault"
+            value={query}
+          />
+        </label>
       </section>
 
       {error ? <div className="vault-error">{error}</div> : null}
 
       <section className="vault-workspace is-single">
         {tab === 'issues' ? (
-          <ConnectionIssuesView
-            issues={connectionIssues}
-            onAddValue={() => openTab('credentials')}
-            onAskAgent={askAgentToFix}
-            onReviewFix={() => openTab('issues')}
-          />
+          <ConnectionIssuesView issues={filteredConnectionIssues} />
         ) : null}
         {tab === 'credentials' ? (
           <SecretsView
-            secrets={filteredSecrets}
+            secrets={filteredActiveSecrets}
             grants={grants}
-            issues={connectionIssues}
+            issues={filteredConnectionIssues}
+            onSelectSecret={selectCredential}
+            selectedSecretId={selectedSecretId}
           />
-        ) : null}
-        {tab === 'import' ? (
-          <section className="vault-import-view">
-            <div className="vault-panel-header">
-              <div>
-                <h2><Upload size={17} />Import</h2>
-                <p>Use the sidebar CSV import control to create credentials in bulk without composing app grants.</p>
-              </div>
-            </div>
-          </section>
         ) : null}
         {tab === 'advanced' ? (
           <div className="vault-advanced-stack">
@@ -211,6 +212,22 @@ function App() {
       </section>
     </main>
   );
+}
+
+function issueMatchesQuery(issue: ConnectionIssue, query: string) {
+  const needle = query.trim().toLowerCase();
+  if (!needle) {
+    return true;
+  }
+  return [
+    issue.title,
+    issue.summary,
+    issue.appDisplayName,
+    issue.credentialLabel,
+    issue.recommendedAction,
+    issue.status,
+    issue.technicalDetails
+  ].join(' ').toLowerCase().includes(needle);
 }
 
 createRoot(document.getElementById('root')!).render(<App />);

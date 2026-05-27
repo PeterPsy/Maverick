@@ -32,10 +32,10 @@ export function tabFromSearchParams(): Tab {
 }
 
 export function tabFromValue(value: unknown): Tab | null {
-  if (value === 'credentials' || value === 'issues' || value === 'import' || value === 'advanced') {
+  if (value === 'credentials' || value === 'issues' || value === 'advanced') {
     return value;
   }
-  if (value === 'secrets') {
+  if (value === 'secrets' || value === 'import') {
     return 'credentials';
   }
   if (value === 'readiness') {

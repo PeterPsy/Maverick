@@ -1,19 +1,21 @@
-import { Tab } from './vaultTypes';
+import { CredentialPanel, Tab } from './vaultTypes';
 import { tabFromValue } from './vaultUtils';
 
 export const VAULT_VIEW_STATE_KEY = 'maverick.vault.viewState';
 export const VAULT_ACTION_REQUEST_KEY = 'maverick.vault.actionRequest';
 
-export type VaultMetricFilter = 'all-secrets' | 'active-secrets' | 'active-grants' | 'review-events' | null;
+export type VaultMetricFilter = 'active-grants' | 'review-events' | null;
 
 export type VaultViewState = {
+  credentialPanel: CredentialPanel;
   metricFilter: VaultMetricFilter;
   query: string;
+  selectedSecretId: string;
   tab: Tab;
 };
 
 export type VaultActionRequest = {
-  action: 'submit-credential' | 'rotate-credential' | 'import-credentials';
+  action: 'new-credential' | 'rotate-credential';
   id: string;
 };
 
@@ -24,8 +26,10 @@ export function readVaultViewState(): VaultViewState {
   try {
     const payload = JSON.parse(window.localStorage.getItem(VAULT_VIEW_STATE_KEY) || '{}') as Partial<VaultViewState>;
     return {
+      credentialPanel: credentialPanelFromValue(payload.credentialPanel),
       metricFilter: metricFilterFromValue(payload.metricFilter),
       query: typeof payload.query === 'string' ? payload.query : '',
+      selectedSecretId: typeof payload.selectedSecretId === 'string' ? payload.selectedSecretId : '',
       tab: tabFromValue(payload.tab) || 'credentials'
     };
   } catch {
@@ -87,7 +91,7 @@ export function readVaultActionRequest(): VaultActionRequest | null {
   }
   try {
     const payload = JSON.parse(window.localStorage.getItem(VAULT_ACTION_REQUEST_KEY) || '{}') as Partial<VaultActionRequest>;
-    if ((payload.action === 'submit-credential' || payload.action === 'rotate-credential' || payload.action === 'import-credentials') && typeof payload.id === 'string') {
+    if ((payload.action === 'new-credential' || payload.action === 'rotate-credential') && typeof payload.id === 'string') {
       return { action: payload.action, id: payload.id };
     }
   } catch {
@@ -97,11 +101,18 @@ export function readVaultActionRequest(): VaultActionRequest | null {
 }
 
 function defaultVaultViewState(): VaultViewState {
-  return { metricFilter: null, query: '', tab: 'credentials' };
+  return { credentialPanel: '', metricFilter: null, query: '', selectedSecretId: '', tab: 'credentials' };
+}
+
+function credentialPanelFromValue(value: unknown): CredentialPanel {
+  if (value === 'edit' || value === 'new') {
+    return value;
+  }
+  return '';
 }
 
 function metricFilterFromValue(value: unknown): VaultMetricFilter {
-  if (value === 'all-secrets' || value === 'active-secrets' || value === 'active-grants' || value === 'review-events') {
+  if (value === 'active-grants' || value === 'review-events') {
     return value;
   }
   return null;

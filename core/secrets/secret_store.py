@@ -147,6 +147,49 @@ def rotate_secret_value(store: SecretStore, *, secret_id: str, raw_value: str, n
     return updated
 
 
+def update_secret_metadata(
+    store: SecretStore,
+    *,
+    secret_id: str,
+    label: str,
+    alias: str | None = None,
+    description: str | None = None,
+    kind: SecretKind = "generic",
+    now: datetime | None = None,
+) -> SecretRecord:
+    """Update redaction-safe secret metadata without reading or changing the raw value."""
+    record = store.get_secret(secret_id)
+    normalized_alias = None if alias is None else _validate_name(alias, label="Secret alias")
+    if normalized_alias is not None:
+        _assert_alias_available_for_update(store, secret_id=record.secret_id, alias=normalized_alias)
+    updated = replace(
+        record,
+        alias=normalized_alias,
+        label=str(label).strip(),
+        description=str(description).strip() or None if description is not None else None,
+        kind=_validate_kind(kind),
+        updated_at=now or utcnow(),
+    )
+    return store.save_secret(updated)
+
+
+def _assert_alias_available_for_update(store: SecretStore, *, secret_id: str, alias: str) -> None:
+    try:
+        existing_alias = store.get_secret_by_alias(alias)
+    except SecretNotFoundError:
+        existing_alias = None
+    if existing_alias is not None and existing_alias.secret_id != secret_id:
+        raise SecretBindingError(
+            f"Secret alias `{alias}` is already assigned to secret `{existing_alias.secret_id}`; use a unique alias."
+        )
+    try:
+        existing_alias_id = store.get_secret(alias)
+    except SecretNotFoundError:
+        return
+    if existing_alias_id.secret_id != secret_id:
+        raise SecretBindingError(f"Secret alias `{alias}` collides with existing secret id `{existing_alias_id.secret_id}`.")
+
+
 def disable_secret(store: SecretStore, *, secret_id: str, now: datetime | None = None) -> SecretRecord:
     """Disable one secret while preserving its stored raw value."""
     record = store.get_secret(secret_id)

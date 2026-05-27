@@ -19,6 +19,7 @@ from core.secrets.target_policy import (
 
 
 ACTION_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._:-]{1,126}$")
+RESOURCE_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._:-]{0,126}$")
 TARGET_OPTIONAL_ACTIONS = {"app.backend"}
 
 
@@ -52,6 +53,8 @@ def build_secret_grant(
     expires_at: datetime | None = None,
     created_by_user_id: str | None = None,
     reason: str | None = None,
+    resource_type: str | None = None,
+    resource_id: str | None = None,
     now: datetime | None = None,
 ) -> SecretGrantRecord:
     """Build one app-scoped grant for controlled secret use."""
@@ -63,6 +66,10 @@ def build_secret_grant(
         raise SecretBindingError("Secret grants must use canonical platform secret refs.")
     timestamp = now or utcnow()
     normalized_actions = _normalize_actions(actions)
+    normalized_resource_type = _normalize_resource_segment(resource_type, field="resource_type")
+    normalized_resource_id = _normalize_resource_segment(resource_id, field="resource_id")
+    if bool(normalized_resource_type) != bool(normalized_resource_id):
+        raise SecretBindingError("Secret grants must provide both resource_type and resource_id, or neither.")
     if not has_explicit_target_patterns(target_patterns) and any(action not in TARGET_OPTIONAL_ACTIONS for action in normalized_actions):
         raise SecretBindingError("Secret grants for external or user-directed actions require explicit target patterns.")
     normalized_targets = normalize_target_patterns_or_wildcard(target_patterns)
@@ -81,12 +88,25 @@ def build_secret_grant(
         expires_at=expires_at,
         created_by_user_id=created_by_user_id,
         reason=str(reason).strip() or None if reason is not None else None,
+        resource_type=normalized_resource_type,
+        resource_id=normalized_resource_id,
     )
 
 
 def create_secret_grant(store: SecretStore, **kwargs) -> SecretGrantRecord:
     """Persist one active app-scoped grant."""
     return store.save_secret_grant(build_secret_grant(**kwargs))
+
+
+def _normalize_resource_segment(value: str | None, *, field: str) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).strip().lower()
+    if not normalized:
+        return None
+    if not RESOURCE_PATTERN.fullmatch(normalized):
+        raise SecretBindingError(f"Secret grant {field} must be a stable lowercase identifier.")
+    return normalized
 
 
 def revoke_secret_grant(

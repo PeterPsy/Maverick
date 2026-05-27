@@ -29,10 +29,24 @@ class AppSecretPayloadResult:
     errors: list[dict[str, str]]
 
 
-def app_secret_target(surface: str) -> str:
+@dataclass(frozen=True)
+class AppSecretRequest:
+    """One logical secret delivery request for a specific resource scope."""
+
+    logical_names: list[str]
+    resource_type: str | None = None
+    resource_id: str | None = None
+
+
+def app_secret_target(surface: str, *, resource_type: str | None = None, resource_id: str | None = None) -> str:
     """Return the synthetic target used for app entrypoint secret delivery."""
     normalized = str(surface or "entrypoint").strip().lower().replace("_", "-") or "entrypoint"
-    return f"{APP_SECRET_TARGET_PREFIX}/{normalized}"
+    target = f"{APP_SECRET_TARGET_PREFIX}/{normalized}"
+    normalized_resource_type = str(resource_type or "").strip().lower().replace("_", "-")
+    normalized_resource_id = str(resource_id or "").strip().lower().replace("_", "-")
+    if normalized_resource_type and normalized_resource_id:
+        target = f"{target}/{normalized_resource_type}/{normalized_resource_id}"
+    return target
 
 
 def assert_app_backend_targets_deliverable(actions: list[str], target_patterns: list[str] | None) -> None:
@@ -60,6 +74,8 @@ def resolve_app_secret_payload(
     observability_store=None,
     request_context: dict[str, str] | None = None,
     fail_closed: bool = True,
+    resource_type: str | None = None,
+    resource_id: str | None = None,
 ) -> AppSecretPayloadResult:
     """Resolve grant-authorized app secrets for backend, CLI, and MCP payloads."""
     if secret_store is None:
@@ -69,11 +85,21 @@ def resolve_app_secret_payload(
         return AppSecretPayloadResult(secrets={}, errors=[])
     secrets: dict[str, str] = {}
     errors: list[dict[str, str]] = []
-    target = app_secret_target(surface)
+    target = app_secret_target(surface, resource_type=resource_type, resource_id=resource_id)
+    base_target = app_secret_target(surface)
+    requested_resource_type, requested_resource_id = _normalize_request_resource(resource_type, resource_id)
     now = datetime.now(tz=UTC)
     grants_by_logical_name: dict[str, list[SecretGrantRecord]] = {logical_name: [] for logical_name in allowed}
     for grant in secret_store.list_secret_grants(workspace_id=workspace_id, app_id=app_id, status="active"):
-        if grant.logical_name in grants_by_logical_name and _grant_deliverable(grant, target=target, now=now):
+        if (
+            grant.logical_name in grants_by_logical_name
+            and _grant_resource_matches(
+                grant,
+                requested_resource_type=requested_resource_type,
+                requested_resource_id=requested_resource_id,
+            )
+            and _grant_delivery_target(grant, target=target, base_target=base_target, now=now)
+        ):
             grants_by_logical_name[grant.logical_name].append(grant)
     for logical_name in allowed:
         candidates = sorted(grants_by_logical_name[logical_name], key=lambda item: item.created_at, reverse=True)
@@ -95,13 +121,14 @@ def resolve_app_secret_payload(
             continue
         grant = candidates[0]
         try:
+            grant_target = _grant_delivery_target(grant, target=target, base_target=base_target, now=now) or target
             lease = resolve_app_secret_grant(
                 secret_store,
                 workspace_id=workspace_id,
                 app_id=app_id,
                 grant_id=grant.grant_id,
                 action=APP_SECRET_ACTION,
-                target=target,
+                target=grant_target,
                 runtime_session_id=runtime_session_id,
                 actor_user_id=actor_user_id,
                 observability_store=observability_store,
@@ -118,6 +145,42 @@ def resolve_app_secret_payload(
     return AppSecretPayloadResult(secrets=secrets, errors=errors)
 
 
+def resolve_app_secret_payload_requests(
+    secret_store: SecretStore | None,
+    *,
+    workspace_id: str,
+    app_id: str,
+    requests: list[AppSecretRequest],
+    surface: str,
+    runtime_session_id: str | None = None,
+    actor_user_id: str | None = None,
+    observability_store=None,
+    request_context: dict[str, str] | None = None,
+    fail_closed: bool = True,
+) -> AppSecretPayloadResult:
+    """Resolve one or more app secret requests and merge the delivered payload."""
+    secrets: dict[str, str] = {}
+    errors: list[dict[str, str]] = []
+    for request in requests:
+        result = resolve_app_secret_payload(
+            secret_store,
+            workspace_id=workspace_id,
+            app_id=app_id,
+            allowed_logical_names=request.logical_names,
+            surface=surface,
+            runtime_session_id=runtime_session_id,
+            actor_user_id=actor_user_id,
+            observability_store=observability_store,
+            request_context=request_context,
+            fail_closed=fail_closed,
+            resource_type=request.resource_type,
+            resource_id=request.resource_id,
+        )
+        secrets.update(result.secrets)
+        errors.extend(result.errors)
+    return AppSecretPayloadResult(secrets=secrets, errors=errors)
+
+
 def _declared_logical_names(values: list[str] | None) -> list[str]:
     logical_names: list[str] = []
     for value in values or []:
@@ -125,6 +188,31 @@ def _declared_logical_names(values: list[str] | None) -> list[str]:
         if logical_name and logical_name not in logical_names:
             logical_names.append(logical_name)
     return logical_names
+
+
+def _normalize_request_resource(resource_type: str | None, resource_id: str | None) -> tuple[str | None, str | None]:
+    normalized_resource_type = str(resource_type or "").strip().lower() or None
+    normalized_resource_id = str(resource_id or "").strip().lower() or None
+    if not normalized_resource_type or not normalized_resource_id:
+        return None, None
+    return normalized_resource_type, normalized_resource_id
+
+
+def _grant_resource_matches(
+    grant: SecretGrantRecord,
+    *,
+    requested_resource_type: str | None,
+    requested_resource_id: str | None,
+) -> bool:
+    grant_resource_type = str(grant.resource_type or "").strip().lower() or None
+    grant_resource_id = str(grant.resource_id or "").strip().lower() or None
+    grant_is_resource_scoped = bool(grant_resource_type and grant_resource_id)
+    request_is_resource_scoped = bool(requested_resource_type and requested_resource_id)
+    if grant_is_resource_scoped != request_is_resource_scoped:
+        return False
+    if not grant_is_resource_scoped:
+        return True
+    return grant_resource_type == requested_resource_type and grant_resource_id == requested_resource_id
 
 
 def _grant_is_current(grant: SecretGrantRecord, *, now: datetime) -> bool:
@@ -140,6 +228,14 @@ def _grant_deliverable(grant: SecretGrantRecord, *, target: str, now: datetime) 
         return target_allowed(target, grant.target_patterns)
     except SecretError:
         return False
+
+
+def _grant_delivery_target(grant: SecretGrantRecord, *, target: str, base_target: str, now: datetime) -> str | None:
+    if _grant_deliverable(grant, target=target, now=now):
+        return target
+    if target != base_target and _grant_deliverable(grant, target=base_target, now=now):
+        return base_target
+    return None
 
 
 def _record_delivery_denial(

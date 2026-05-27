@@ -135,6 +135,28 @@ describe("WidgetSlot primary action protocol", () => {
       window.location.origin,
     );
   });
+
+  it("opens the shell sidebar when a mounted widget or app requests it", async () => {
+    const openSidebar = vi.fn();
+    await act(async () => {
+      root.render(
+        <WidgetSlot
+          activeWorkspaceId="default"
+          content={{ is_mobile_layout: false }}
+          contentKind="shell.sidebar.primary"
+          hostAppId="base-shell"
+          label="App sidebar content"
+          onOpenApp={vi.fn()}
+          onOpenSidebar={openSidebar}
+          preferredOwnerAppId={ownerAppId}
+        />,
+      );
+    });
+
+    await dispatchSidebarOpen();
+
+    expect(openSidebar).toHaveBeenCalledTimes(1);
+  });
 });
 
 function interceptHappyDomIframeFetch() {
@@ -200,6 +222,18 @@ async function dispatchWidgetState(source: MessageEventSource) {
         },
         origin: window.location.origin,
         source,
+      }),
+    );
+  });
+}
+
+async function dispatchSidebarOpen() {
+  await act(async () => {
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        data: { type: "maverick.shell.sidebar.open" },
+        origin: window.location.origin,
+        source: window,
       }),
     );
   });

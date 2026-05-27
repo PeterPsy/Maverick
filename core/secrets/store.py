@@ -89,6 +89,8 @@ class SecretStore(Protocol):
         workspace_id: str | None = None,
         app_id: str | None = None,
         status: str | None = None,
+        resource_type: str | None = None,
+        resource_id: str | None = None,
     ) -> list[SecretGrantRecord]:
         ...
 
@@ -217,7 +219,7 @@ class SecretDocumentStore:
         document = collection.find_one({"grant_id": grant_id})
         if document is None:
             raise SecretBindingError(f"Secret grant `{grant_id}` was not found.")
-        return SecretGrantRecord(**document)
+        return _secret_grant_record_from_document(document)
 
     def list_secret_grants(
         self,
@@ -225,6 +227,8 @@ class SecretDocumentStore:
         workspace_id: str | None = None,
         app_id: str | None = None,
         status: str | None = None,
+        resource_type: str | None = None,
+        resource_id: str | None = None,
     ) -> list[SecretGrantRecord]:
         if self.collections.grants is None:
             return []
@@ -235,7 +239,11 @@ class SecretDocumentStore:
             query["app_id"] = app_id
         if status is not None:
             query["status"] = status
-        return [SecretGrantRecord(**document) for document in self.collections.grants.find(query)]
+        if resource_type is not None:
+            query["resource_type"] = resource_type
+        if resource_id is not None:
+            query["resource_id"] = resource_id
+        return [_secret_grant_record_from_document(document) for document in self.collections.grants.find(query)]
 
     def _grant_collection(self) -> DocumentCollection:
         if self.collections.grants is None:
@@ -247,6 +255,13 @@ def _secret_record_from_document(document: dict[str, Any]) -> SecretRecord:
     payload = dict(document)
     payload.setdefault("kind", "generic")
     return SecretRecord(**payload)
+
+
+def _secret_grant_record_from_document(document: dict[str, Any]) -> SecretGrantRecord:
+    payload = dict(document)
+    payload.setdefault("resource_type", None)
+    payload.setdefault("resource_id", None)
+    return SecretGrantRecord(**payload)
 
 
 def _encrypt_secret_value(*, secret_id: str, raw_value: str, key: bytes) -> dict[str, str]:

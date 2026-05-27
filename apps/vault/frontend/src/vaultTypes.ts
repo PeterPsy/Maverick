@@ -1,4 +1,5 @@
-export type Tab = 'credentials' | 'issues' | 'import' | 'advanced';
+export type Tab = 'credentials' | 'issues' | 'advanced';
+export type CredentialPanel = 'edit' | 'new' | '';
 
 export type ShellNavigatePayload = {
   app_id?: string;

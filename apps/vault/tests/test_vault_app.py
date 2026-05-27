@@ -2,17 +2,25 @@
 
 from __future__ import annotations
 
+from io import BytesIO
 from pathlib import Path
 import json
-import subprocess
+import os
+import shutil
 import sys
+import tempfile
 import unittest
 from unittest.mock import patch
 
+from core.api.platform_host import PlatformHost
+from core.api.platform_state import bootstrap_platform_state
 from core.apps.contracts import parse_app_contract_file
+from core.runtime.service import create_runtime_session
+from core.runtime.workspace_api_token import issue_workspace_api_token, register_workspace_api_token
 
 
 APP_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = APP_ROOT.parents[1]
 sys.path.insert(0, str(APP_ROOT))
 
 from agent_operations import handle_operation
@@ -89,6 +97,57 @@ def sample_mail_app_managed_need() -> dict[str, object]:
 class VaultAppTest(unittest.TestCase):
     """Verify Vault stays a frontend over Core Secrets, not a secret owner."""
 
+    def make_repo_root(self) -> Path:
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        repo_root = Path(temp_dir.name) / "maverick"
+        for name in ("apps", "workspaces", "scripts", "docs"):
+            (repo_root / name).mkdir(parents=True, exist_ok=True)
+        (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
+        os.symlink(REPO_ROOT / "core", repo_root / "core", target_is_directory=True)
+        (repo_root / "AGENTS.md").write_text("test", encoding="utf-8")
+        shutil.copytree(
+            APP_ROOT,
+            repo_root / "apps" / "vault",
+            ignore=shutil.ignore_patterns("node_modules", "__pycache__"),
+        )
+        return repo_root
+
+    def invoke_runtime_cli(self, argv: list[str], *, expected_status: str = "200 OK") -> dict[str, object]:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        create_runtime_session(
+            state.runtime_store,
+            session_id="sess-vault",
+            workspace_id="default",
+            agent_id="agent-vault",
+            requested_mode="sandbox",
+            owner_user_id="user:admin",
+            created_by_user_id="user:admin",
+            start_path=repo_root,
+        )
+        token = issue_workspace_api_token(workspace_id="default", runtime_session_id="sess-vault")
+        register_workspace_api_token(state.runtime_store, token)
+        app = PlatformHost(state, start_path=repo_root)
+        raw = json.dumps({"argv": argv}).encode("utf-8")
+        status_holder: list[str] = []
+        body = b"".join(
+            app(
+                {
+                    "PATH_INFO": "/api/runtime/cli",
+                    "REQUEST_METHOD": "POST",
+                    "CONTENT_LENGTH": str(len(raw)),
+                    "wsgi.input": BytesIO(raw),
+                    "HTTP_AUTHORIZATION": f"Bearer {token}",
+                },
+                lambda status, _headers: status_holder.append(status),
+            )
+        ).decode("utf-8")
+        self.assertEqual(status_holder[0], expected_status)
+        payload = json.loads(body)
+        self.assertIsInstance(payload, dict)
+        return payload
+
     def test_contract_is_credential_inbox_without_app_secret_permissions(self) -> None:
         parsed = parse_app_contract_file(APP_ROOT)
         contract = parsed.contract
@@ -112,23 +171,13 @@ class VaultAppTest(unittest.TestCase):
         self.assertTrue(all(widget.host == "base-shell" for widget in contract.widgets))
         self.assertTrue((APP_ROOT / "skills" / "vault-ops" / "SKILL.md").is_file())
 
-    def test_cli_and_mcp_entrypoints_are_redaction_safe_manifests(self) -> None:
-        cli = subprocess.run(
-            [sys.executable, str(APP_ROOT / "cli" / "app_cli.py")],
-            input=json.dumps({"app_id": "vault", "workspace_id": "default", "arguments": {"action": "manifest"}}),
-            text=True,
-            capture_output=True,
-            check=True,
-        )
-        mcp = subprocess.run(
-            [sys.executable, str(APP_ROOT / "mcp" / "server.py")],
-            input=json.dumps({"app_id": "vault", "workspace_id": "default", "tool_name": "maverick_vault"}),
-            text=True,
-            capture_output=True,
-            check=True,
+    def test_maverick_cli_and_mcp_surfaces_are_redaction_safe_manifests(self) -> None:
+        cli = self.invoke_runtime_cli(["app", "vault", "cli", "run", "vault", "--json", "--action", "manifest"])
+        mcp = self.invoke_runtime_cli(
+            ["app", "vault", "mcp", "call", "maverick_vault", "--json", "--action", "manifest"]
         )
 
-        payloads = [json.loads(cli.stdout), json.loads(mcp.stdout)]
+        payloads = [cli, mcp]
         for payload in payloads:
             self.assertTrue(payload["redaction_safe"])
             self.assertFalse(payload["secret_values_available"])
@@ -149,32 +198,24 @@ class VaultAppTest(unittest.TestCase):
             )
             self.assertNotIn("raw_value", json.dumps(payload))
 
-    def test_cli_and_mcp_reject_unsupported_operations(self) -> None:
-        cli = subprocess.run(
-            [sys.executable, str(APP_ROOT / "cli" / "app_cli.py")],
-            input=json.dumps({"app_id": "vault", "workspace_id": "default", "arguments": {"action": "bad"}}),
-            text=True,
-            capture_output=True,
-            check=True,
+    def test_maverick_cli_and_mcp_surfaces_reject_unsupported_operations(self) -> None:
+        cli = self.invoke_runtime_cli(
+            ["app", "vault", "cli", "run", "vault", "--json", "--action", "bad"],
+            expected_status="400 Bad Request",
         )
-        mcp = subprocess.run(
-            [sys.executable, str(APP_ROOT / "mcp" / "server.py")],
-            input=json.dumps({"app_id": "vault", "workspace_id": "default", "tool_name": "maverick_vault", "arguments": {"action": "bad"}}),
-            text=True,
-            capture_output=True,
-            check=True,
+        mcp = self.invoke_runtime_cli(
+            ["app", "vault", "mcp", "call", "maverick_vault", "--json", "--action", "bad"],
+            expected_status="400 Bad Request",
         )
-        bad_tool = subprocess.run(
-            [sys.executable, str(APP_ROOT / "mcp" / "server.py")],
-            input=json.dumps({"app_id": "vault", "workspace_id": "default", "tool_name": "bad"}),
-            text=True,
-            capture_output=True,
-            check=True,
+        bad_tool = self.invoke_runtime_cli(
+            ["app", "vault", "mcp", "call", "bad", "--json"],
+            expected_status="400 Bad Request",
         )
 
-        self.assertGreaterEqual(json.loads(cli.stdout)["status_code"], 400)
-        self.assertGreaterEqual(json.loads(mcp.stdout)["status_code"], 400)
-        self.assertGreaterEqual(json.loads(bad_tool.stdout)["status_code"], 400)
+        self.assertGreaterEqual(cli["status_code"], 400)
+        self.assertGreaterEqual(mcp["status_code"], 400)
+        self.assertEqual(bad_tool["error"], "cli_command_failed")
+        self.assertIn("MCP tool is not available in this scope: app.vault.bad", bad_tool["detail"])
 
     def test_agent_operations_are_redaction_safe_and_payload_oriented(self) -> None:
         payload = {
@@ -182,23 +223,29 @@ class VaultAppTest(unittest.TestCase):
             "workspace_id": "default",
             "arguments": {"action": "diagnose", "needs": [sample_need()]},
         }
-        diagnosis = json.loads(
-            subprocess.run(
-                [sys.executable, str(APP_ROOT / "cli" / "app_cli.py")],
-                input=json.dumps(payload),
-                text=True,
-                capture_output=True,
-                check=True,
-            ).stdout
+        diagnosis = self.invoke_runtime_cli(
+            [
+                "app",
+                "vault",
+                "cli",
+                "run",
+                "vault",
+                "--json",
+                "--arguments-json",
+                json.dumps(payload["arguments"]),
+            ]
         )
-        issues = json.loads(
-            subprocess.run(
-                [sys.executable, str(APP_ROOT / "mcp" / "server.py")],
-                input=json.dumps({**payload, "tool_name": "maverick_vault", "arguments": {"action": "connection_issues", "needs": [sample_need()]}}),
-                text=True,
-                capture_output=True,
-                check=True,
-            ).stdout
+        issues = self.invoke_runtime_cli(
+            [
+                "app",
+                "vault",
+                "mcp",
+                "call",
+                "maverick_vault",
+                "--json",
+                "--arguments-json",
+                json.dumps({"action": "connection_issues", "needs": [sample_need()]}),
+            ]
         )
 
         self.assertEqual(diagnosis["issue_count"], 1)
@@ -215,6 +262,21 @@ class VaultAppTest(unittest.TestCase):
         rendered = json.dumps([diagnosis, issues])
         self.assertNotIn("raw_value", rendered)
         self.assertNotIn("super-secret", rendered)
+
+    def test_agent_operations_do_not_require_nested_maverick_binary(self) -> None:
+        with patch.dict(os.environ, {"PATH": ""}):
+            cli = self.invoke_runtime_cli(
+                ["app", "vault", "cli", "run", "vault", "--json", "--action", "diagnose"]
+            )
+            mcp = self.invoke_runtime_cli(
+                ["app", "vault", "mcp", "call", "maverick_vault", "--json", "--action", "diagnose"]
+            )
+
+        for result in (cli, mcp):
+            self.assertEqual(result["status_code"], 200)
+            self.assertEqual(result["action"], "diagnose")
+            self.assertIn("issue_count", result)
+            self.assertNotIn("raw_value", json.dumps(result))
 
     def test_agent_operations_reject_raw_values_in_chat_payloads(self) -> None:
         payload = handle_operation(
@@ -345,7 +407,7 @@ class VaultAppTest(unittest.TestCase):
         self.assertNotIn("raw_value", rendered)
         self.assertNotIn("rt-secret-raw", rendered)
 
-    def test_main_frontend_source_is_credential_inbox_and_connection_issues(self) -> None:
+    def test_main_frontend_source_is_active_credentials_and_connection_issues(self) -> None:
         source = (APP_ROOT / "frontend" / "src" / "main.tsx").read_text(encoding="utf-8")
 
         self.assertNotIn("createSecret", source)
@@ -354,18 +416,34 @@ class VaultAppTest(unittest.TestCase):
         self.assertNotIn("disableSecret", source)
         self.assertNotIn("revokeSecret", source)
         self.assertNotIn("raw_value", source)
-        self.assertNotIn("vault-search", source)
+        self.assertIn("vault-search", source)
+        self.assertIn("Search Vault", source)
+        self.assertIn("updateQuery", source)
         self.assertNotIn("vault-toolbar", source)
         self.assertNotIn("vault-tabs", source)
-        self.assertIn("Credential Inbox", source)
+        self.assertIn("<h2>Vault</h2>", source)
+        self.assertIn("Securely save credentials so agents can connect workspace apps.", source)
+        self.assertIn("Active Credential", source)
         self.assertIn("Connection Issues", source)
         self.assertIn("ConnectionIssuesView", source)
+        self.assertIn("filteredActiveSecrets", source)
+        self.assertIn("filteredConnectionIssues", source)
         self.assertIn("GrantsView", source)
         self.assertIn("AuditView", source)
+        self.assertIn("selectCredential", source)
+        self.assertIn("maverick.shell.sidebar.open", source)
+        self.assertIn("selectedSecretId", source)
         self.assertIn("tab === 'advanced'", source)
         self.assertNotIn("Readiness issues", source)
+        self.assertNotIn("Credential Inbox", source)
+        self.assertNotIn("Provider health", source)
+        self.assertNotIn("providerHealth", source)
+        self.assertNotIn("Ready", source)
+        self.assertNotIn("tab === 'import'", source)
         self.assertNotIn('label="Active grants"', source)
         self.assertNotIn('label="Review events"', source)
+        self.assertNotIn("applyMetricFilter('all-secrets'", source)
+        self.assertNotIn("applyMetricFilter('active-secrets'", source)
         self.assertNotIn("applyMetricFilter('active-grants'", source)
         self.assertNotIn("applyMetricFilter('review-events'", source)
 
@@ -380,6 +458,19 @@ class VaultAppTest(unittest.TestCase):
         self.assertIn("Recommended action", source)
         self.assertIn("<details", source)
         self.assertIn("Technical details", source)
+        self.assertNotIn("Add value", source)
+        self.assertNotIn("Ask agent to fix", source)
+        self.assertNotIn("Review fix", source)
+
+    def test_active_credentials_rows_drive_sidebar_selection(self) -> None:
+        source = (APP_ROOT / "frontend" / "src" / "components" / "SecretsView.tsx").read_text(encoding="utf-8")
+        state_source = (APP_ROOT / "frontend" / "src" / "vaultViewState.ts").read_text(encoding="utf-8")
+
+        self.assertIn("onSelectSecret", source)
+        self.assertIn("vault-secret-row", source)
+        self.assertIn("role=\"button\"", source)
+        self.assertIn("selectedSecretId", state_source)
+
 
     def test_removed_central_tab_selector_has_no_dead_code(self) -> None:
         shared_source = (APP_ROOT / "frontend" / "src" / "components" / "VaultShared.tsx").read_text(encoding="utf-8")
@@ -402,16 +493,31 @@ class VaultAppTest(unittest.TestCase):
 
         self.assertIn("createSecret", source)
         self.assertIn("rotateSecret", source)
+        self.assertIn("updateSecret", source)
         self.assertIn("SecureSecretInput", source)
-        self.assertIn("Add credential", source)
-        self.assertIn("Rotate credential", source)
-        self.assertIn("Credential Inbox", source)
-        self.assertIn("Connection Issues", source)
-        self.assertIn("Import", source)
-        self.assertIn("Advanced", source)
-        self.assertIn("Add value", source)
-        self.assertIn("Ask agent to fix", source)
-        self.assertIn("Review fix", source)
+        self.assertIn("New credential", source)
+        self.assertIn("Create credential", source)
+        self.assertIn('placeholder="Title"', source)
+        self.assertIn('label="Key"', source)
+        self.assertIn("Paste key or password", source)
+        self.assertIn("<details", source)
+        self.assertIn("vault-sidebar-optional-body", source)
+        self.assertIn("Optional", source)
+        self.assertIn("Edit credential", source)
+        self.assertIn("credentialPanel", source)
+        self.assertNotIn("vault-sidebar-credential-list", source)
+        self.assertNotIn("selectSecret(secret.secret_id)", source)
+        self.assertIn("readVaultViewState().selectedSecretId", source)
+        self.assertIn("Current key", source)
+        self.assertIn("New key", source)
+        self.assertIn("Save changes", source)
+        self.assertIn("Paste new key to rotate", source)
+        self.assertNotIn("Add value", source)
+        self.assertNotIn("Ask agent to fix", source)
+        self.assertNotIn("Review fix", source)
+        self.assertNotIn("Connection Issues", source)
+        self.assertNotIn("computeReadinessIssues", source)
+        self.assertNotIn("listGrants", source)
         self.assertNotIn("createGrant", source)
         self.assertNotIn("New Grant", source)
         self.assertNotIn("New grant", source)
@@ -433,6 +539,12 @@ class VaultAppTest(unittest.TestCase):
         self.assertNotIn("revokeGrant", source)
         self.assertNotIn("vault-sidebar-lifecycle", source)
         self.assertNotIn("Recent audit", source)
+        self.assertNotIn("Credential Inbox", source)
+        self.assertNotIn("Save credential", source)
+        self.assertNotIn("vault-sidebar-nav", source)
+        self.assertNotIn("vault-sidebar-search-frame", source)
+        self.assertNotIn("Search Vault", source)
+        self.assertNotIn("openTab('import')", source)
         self.assertNotIn('placeholder="logical-name"', source)
 
     def test_frontend_dist_calls_core_secret_api_without_raw_value_display_or_normal_grant_workflow(self) -> None:
@@ -451,13 +563,20 @@ class VaultAppTest(unittest.TestCase):
         self.assertIn("/api/secret-grant-targets", bundle)
         self.assertIn("/api/secret-grant-needs", bundle)
         self.assertIn("raw_value", bundle)
-        self.assertIn("Credential Inbox", bundle)
+        self.assertIn("Active Credentials", bundle)
         self.assertIn("Connection Issues", bundle)
-        self.assertIn("Import", bundle)
-        self.assertIn("Advanced", bundle)
-        self.assertIn("Add value", bundle)
-        self.assertIn("Ask agent to fix", bundle)
-        self.assertIn("Review fix", bundle)
+        self.assertIn("Search Vault", bundle)
+        self.assertIn("New credential", bundle)
+        self.assertIn("Create credential", bundle)
+        self.assertIn("Edit credential", bundle)
+        self.assertIn("Current key", bundle)
+        self.assertIn("New key", bundle)
+        self.assertNotIn("Credential Inbox", bundle)
+        self.assertNotIn("Provider health", bundle)
+        self.assertNotIn("Save credential", bundle)
+        self.assertNotIn("Add value", bundle)
+        self.assertNotIn("Ask agent to fix", bundle)
+        self.assertNotIn("Review fix", bundle)
         self.assertIn("Technical details", bundle)
         self.assertIn("Used by", bundle)
         self.assertIn("Last updated", bundle)
@@ -506,9 +625,15 @@ class VaultAppTest(unittest.TestCase):
             for path in src_root.rglob("*")
             if path.is_file() and "rotateSecret" in path.read_text(encoding="utf-8")
         )
+        update_hits = sorted(
+            str(path.relative_to(src_root))
+            for path in src_root.rglob("*")
+            if path.is_file() and "updateSecret" in path.read_text(encoding="utf-8")
+        )
 
         self.assertEqual(create_hits, ["api.ts", "widgets/vault-sidebar-footer/main.tsx", "widgets/vault-sidebar/main.tsx"])
         self.assertEqual(rotate_hits, ["api.ts", "widgets/vault-sidebar/main.tsx"])
+        self.assertEqual(update_hits, ["api.ts", "widgets/vault-sidebar/main.tsx"])
         self.assertNotIn("disableSecret", api_source)
         self.assertNotIn("revokeSecret", api_source)
         self.assertNotIn("createGrant", api_source)
@@ -517,6 +642,12 @@ class VaultAppTest(unittest.TestCase):
     def test_sidebar_csv_import_has_guardrails(self) -> None:
         source = (APP_ROOT / "frontend" / "src" / "widgets" / "vault-sidebar-footer" / "main.tsx").read_text(encoding="utf-8")
 
+        self.assertIn("New credential", source)
+        self.assertIn("new-credential", source)
+        self.assertNotIn("Save credential", source)
+        self.assertNotIn("submit-credential", source)
+        self.assertNotIn("Review connections", source)
+        self.assertNotIn("Open advanced", source)
         self.assertIn("MAX_CSV_BYTES", source)
         self.assertIn("MAX_IMPORT_ROWS", source)
         self.assertIn("ImportPreview", source)

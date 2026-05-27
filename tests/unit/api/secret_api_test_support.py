@@ -78,8 +78,17 @@ class SecretApiTestSupport(unittest.TestCase):
         app_id: str = "browser",
         workspace_id: str = "default",
         secret_read: list[str] | None = None,
+        backend: bool = False,
+        cli_commands: list[str] | None = None,
+        mcp_tools: list[str] | None = None,
     ) -> None:
-        app_root = write_synthetic_platform_app(app.state.repository_root, app_id=app_id)
+        app_root = write_synthetic_platform_app(
+            app.state.repository_root,
+            app_id=app_id,
+            backend=backend,
+            cli_commands=cli_commands,
+            mcp_tools=mcp_tools,
+        )
         if secret_read is not None:
             contract_path = app_root / "app_contract.json"
             payload = json.loads(contract_path.read_text(encoding="utf-8"))

@@ -1,7 +1,13 @@
 /*
 
 !.gitignore
+!AGENTS.md
 !README.md
 !/apps/
 !/apps/**/
 !/apps/**/*
+
+# Generated dependency and runtime artifacts inside workspace-local apps.
+apps/**/node_modules/
+apps/**/__pycache__/
+apps/**/*.pyc

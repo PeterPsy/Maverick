@@ -1,11 +1,22 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { CircleUserRound, LogOut, RefreshCw, Square, SquareCheck } from 'lucide-react';
 import {
   callBackend,
   MAIL_BACKEND_ACTIONS,
   MAIL_INTERACTIVE_SYNC_THREADS,
   type MailConnection,
 } from '../../api';
+import {
+  TreeExpander,
+  TreeIcon,
+  TreeLabel,
+  TreeNode,
+  TreeNodeContent,
+  TreeNodeTrigger,
+  TreeProvider,
+  TreeView,
+} from '../../components/ui/tree';
 import './styles.css';
 
 const MAILBOXES = ['inbox', 'sent', 'drafts', 'starred', 'trash'];
@@ -33,6 +44,18 @@ type WidgetContext = {
       is_mobile_layout?: boolean;
     };
   };
+};
+
+type MailTreeNode = {
+  account?: MailConnection;
+  children: MailTreeNode[];
+  count?: MailboxCount;
+  id: string;
+  label: string;
+  mailbox?: string;
+  status?: string;
+  title: string;
+  type: 'account' | 'mailbox';
 };
 
 function noSecretRequest() {
@@ -112,9 +135,8 @@ function MailSidebarWidget() {
   const [mailboxCounts, setMailboxCounts] = useState<Record<string, Record<string, MailboxCount>>>({});
   const [mailbox, setMailbox] = useState('inbox');
   const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
-  const [expandedConnectionIds, setExpandedConnectionIds] = useState<Set<string>>(() => new Set());
   const [notice, setNotice] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [activeOperation, setActiveOperation] = useState('');
   const [isMobileLayout, setIsMobileLayout] = useState(false);
 
   const refresh = useCallback(async (options: { preserveNotice?: boolean } = {}) => {
@@ -145,9 +167,6 @@ function MailSidebarWidget() {
       }
       const nextConnectionId = connectionIdFromContext(context);
       setSelectedConnectionId(nextConnectionId);
-      if (nextConnectionId) {
-        expandConnection(nextConnectionId);
-      }
       setIsMobileLayout(isMobileFromContext(context));
     });
   }, []);
@@ -175,9 +194,6 @@ function MailSidebarWidget() {
         }
         const nextConnectionId = connectionIdFromContext(payload.context);
         setSelectedConnectionId(nextConnectionId);
-        if (nextConnectionId) {
-          expandConnection(nextConnectionId);
-        }
         setIsMobileLayout(isMobileFromContext(payload.context));
         return;
       }
@@ -189,7 +205,6 @@ function MailSidebarWidget() {
         const nextConnectionId = payload.selection?.connection_id;
         if (typeof nextConnectionId === 'string' && nextConnectionId.trim()) {
           setSelectedConnectionId(nextConnectionId);
-          expandConnection(nextConnectionId);
         }
         return;
       }
@@ -208,24 +223,26 @@ function MailSidebarWidget() {
 
   const activeConnections = useMemo(() => connections.filter((item) => item.status !== 'disconnected'), [connections]);
   const connection = (selectedConnectionId ? connections.find((item) => item.id === selectedConnectionId) : null) || activeConnections[0] || connections[0];
-  useEffect(() => {
-    if (!connection?.id) {
-      return;
-    }
-    setExpandedConnectionIds((current) => {
-      if (current.size > 0) {
-        return current;
-      }
-      return new Set([connection.id]);
-    });
-  }, [connection?.id]);
+  const accountTreeNodes = useMemo(
+    () => buildMailTree(connections, mailboxCounts, connection?.id || '', mailbox),
+    [connections, mailboxCounts, connection?.id, mailbox],
+  );
+  const defaultExpandedIds = useMemo(
+    () => accountTreeNodes.flatMap((node) => collectDefaultExpandedIds(node)),
+    [accountTreeNodes],
+  );
+  const selectedNodeIds = useMemo(
+    () => connection?.id ? [mailboxIdentity(connection.id, mailbox)] : [],
+    [connection?.id, mailbox],
+  );
+  const treeProviderKey = `${connections.length}:${Object.keys(mailboxCounts).length}:${defaultExpandedIds.join('|')}`;
 
   async function sync(targetConnection: MailConnection) {
     if (targetConnection.status === 'disconnected') {
       setNotice('No connected mail provider is available to sync.');
       return;
     }
-    setBusy(true);
+    setActiveOperation(`sync:${targetConnection.id}`);
     try {
       await callBackend({
         action: MAIL_BACKEND_ACTIONS.threadsSync,
@@ -242,12 +259,12 @@ function MailSidebarWidget() {
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Sync failed.');
     } finally {
-      setBusy(false);
+      setActiveOperation('');
     }
   }
 
   async function disconnect(targetConnection: MailConnection) {
-    setBusy(true);
+    setActiveOperation(`disconnect:${targetConnection.id}`);
     try {
       const payload = await callBackend<{ disconnect?: { status?: string; detail?: string } }>({
         action: MAIL_BACKEND_ACTIONS.connectionsDisconnect,
@@ -260,31 +277,14 @@ function MailSidebarWidget() {
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Disconnect failed.');
     } finally {
-      setBusy(false);
+      setActiveOperation('');
     }
-  }
-
-  function toggleConnection(nextConnectionId: string) {
-    setExpandedConnectionIds((current) => {
-      const next = new Set(current);
-      if (next.has(nextConnectionId)) {
-        next.delete(nextConnectionId);
-      } else {
-        next.add(nextConnectionId);
-      }
-      return next;
-    });
-  }
-
-  function expandConnection(nextConnectionId: string) {
-    setExpandedConnectionIds((current) => new Set(current).add(nextConnectionId));
   }
 
   function selectMailbox(nextMailbox: string, nextConnectionId: string | null = selectedConnectionId) {
     setMailbox(nextMailbox);
     if (nextConnectionId) {
       setSelectedConnectionId(nextConnectionId);
-      expandConnection(nextConnectionId);
     }
     openMail({ mailbox: nextMailbox, connection_id: nextConnectionId });
     if (isMobileLayout) {
@@ -292,79 +292,197 @@ function MailSidebarWidget() {
     }
   }
 
-  function countFor(connectionId: string, folder: string) {
-    return mailboxCounts[connectionId]?.[folder] || { total: 0, unread: 0 };
-  }
-
   function countLabel(count: number) {
     return count === 1 ? '1 thread' : `${count} threads`;
   }
 
+  function selectTreeNode(node: MailTreeNode) {
+    if (node.type === 'mailbox' && node.mailbox && node.account) {
+      selectMailbox(node.mailbox, node.account.id);
+    }
+  }
+
   return (
-    <main className={`mail-sidebar-widget ${isMobileLayout ? 'is-shell-mobile' : ''}`} aria-busy={busy}>
-      <div className="mail-sidebar-widget__list">
-        {connections.length ? connections.map((item) => {
-          const selected = item.id === connection?.id;
-          const expanded = expandedConnectionIds.has(item.id);
-          const canSyncAccount = item.status !== 'disconnected';
-          return (
-            <section className="mail-sidebar-widget__account-group" aria-label={`${item.display_name || item.email_address} mailboxes`} key={item.id}>
-              <button
-                className={`mail-sidebar-widget__account-trigger mail-sidebar-widget__row ${selected ? 'is-selected' : ''}`}
-                type="button"
-                aria-expanded={expanded}
-                onClick={() => toggleConnection(item.id)}
-              >
-                <span className={`mail-sidebar-widget__chevron ${expanded ? 'is-expanded' : ''}`} aria-hidden="true" />
-                <span className="mail-sidebar-widget__row-copy">
-                  <strong>{item.display_name || item.email_address}</strong>
-                  <span>{item.email_address || item.provider}</span>
-                </span>
-                <small>{item.status}</small>
-              </button>
-              {expanded ? (
-                <div className="mail-sidebar-widget__account-menu">
-                  <nav className="mail-sidebar-widget__mailboxes" aria-label={`${item.display_name || item.email_address} folders`}>
-                    {MAILBOXES.map((folder) => {
-                      const activeMailbox = selected && folder === mailbox;
-                      const folderCount = countFor(item.id, folder);
-                      const displayCount = folder === 'inbox' ? folderCount.unread : folderCount.total;
-                      return (
-                        <button key={folder} className={activeMailbox ? 'active' : ''} onClick={() => selectMailbox(folder, item.id)} type="button">
-                          <span className="mail-sidebar-widget__row-icon" aria-hidden="true">{folder.slice(0, 1).toUpperCase()}</span>
-                          <span className="mail-sidebar-widget__row-copy">
-                            <strong>{folder}</strong>
-                            <span>{folder === 'inbox' ? `${folderCount.unread} unread` : countLabel(folderCount.total)}</span>
-                          </span>
-                          {displayCount > 0 ? <b>{displayCount}</b> : null}
-                        </button>
-                      );
-                    })}
-                  </nav>
-                  <div className="mail-sidebar-widget__account-actions">
-                    <button type="button" onClick={() => sync(item)} disabled={busy || !canSyncAccount}>
-                      Sync
-                    </button>
-                    <button
-                      type="button"
-                      className="mail-sidebar-widget__danger-action"
-                      onClick={() => disconnect(item)}
-                      disabled={busy || !canSyncAccount}
-                    >
-                      Disconnect
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-            </section>
-          );
-        }) : (
+    <main className={`mail-sidebar-widget ${isMobileLayout ? 'is-shell-mobile' : ''}`} aria-busy={Boolean(activeOperation)}>
+      <div className="mail-sidebar-widget__list mail-sidebar-widget__tree-list">
+        {connections.length ? (
+          <TreeProvider
+            animateExpand
+            className="mail-folder-tree"
+            defaultExpandedIds={defaultExpandedIds}
+            indent={18}
+            key={treeProviderKey}
+            onSelectionChange={() => undefined}
+            selectedIds={selectedNodeIds}
+          >
+            <TreeView>
+              {accountTreeNodes.map((node, index) => (
+                <MailTreeNodeView
+                  activeOperation={activeOperation}
+                  countLabel={countLabel}
+                  isLast={index === accountTreeNodes.length - 1}
+                  key={node.id}
+                  level={0}
+                  node={node}
+                  onDisconnectConnection={disconnect}
+                  onSelect={selectTreeNode}
+                  onSyncConnection={sync}
+                />
+              ))}
+            </TreeView>
+          </TreeProvider>
+        ) : (
           <p className="mail-sidebar-widget__empty">No mail accounts connected.</p>
         )}
         {notice ? <p className="mail-sidebar-widget__notice">{notice}</p> : null}
       </div>
     </main>
   );
+}
+
+function MailTreeNodeView({ node, level, isLast, onSelect, onSyncConnection, onDisconnectConnection, activeOperation, countLabel }: {
+  activeOperation: string;
+  countLabel: (count: number) => string;
+  isLast: boolean;
+  level: number;
+  node: MailTreeNode;
+  onDisconnectConnection: (connection: MailConnection) => Promise<void>;
+  onSelect: (node: MailTreeNode) => void;
+  onSyncConnection: (connection: MailConnection) => Promise<void>;
+}) {
+  const hasChildren = node.children.length > 0;
+  const isMailboxActive = node.type === 'mailbox' && node.status === 'active';
+  const isDisconnected = node.account?.status === 'disconnected';
+  const isSyncing = activeOperation === `sync:${node.account?.id}`;
+  const isDisconnecting = activeOperation === `disconnect:${node.account?.id}`;
+  const displayCount = node.mailbox === 'inbox' ? node.count?.unread || 0 : node.count?.total || 0;
+  const label = node.type === 'account' && node.status && node.status !== 'connected' ? `${node.label} (${node.status})` : node.label;
+  const icon = node.type === 'account'
+    ? <CircleUserRound className="h-4 w-4" />
+    : isMailboxActive
+      ? <SquareCheck className="mail-folder-tree-filter-icon is-active h-4 w-4" />
+      : <Square className="mail-folder-tree-filter-icon h-4 w-4" />;
+
+  return (
+    <TreeNode isLast={isLast} level={level} nodeId={node.id}>
+      <TreeNodeTrigger
+        className={isDisconnected ? 'mail-folder-tree-muted' : ''}
+        onClick={() => {
+          onSelect(node);
+        }}
+      >
+        <TreeExpander hasChildren={hasChildren} />
+        <TreeIcon hasChildren={hasChildren} icon={icon} />
+        <TreeLabel title={node.title}>{label}</TreeLabel>
+        {node.type === 'mailbox' && displayCount > 0 ? <b className="mail-folder-tree-count">{displayCount}</b> : null}
+        {node.type === 'mailbox' && displayCount === 0 ? (
+          <span className="mail-folder-tree-meta">{node.mailbox === 'inbox' ? '0 unread' : countLabel(0)}</span>
+        ) : null}
+        {node.type === 'account' && node.account ? (
+          <span className="mail-folder-tree-actions">
+            <button
+              aria-label={`Sync ${node.label}`}
+              className="mail-folder-tree-sync"
+              disabled={Boolean(activeOperation) || isDisconnected}
+              onClick={(event) => {
+                event.stopPropagation();
+                void onSyncConnection(node.account!);
+              }}
+              type="button"
+            >
+              <RefreshCw className={isSyncing ? 'is-spinning' : ''} aria-hidden="true" />
+            </button>
+            <button
+              aria-label={`Disconnect ${node.label}`}
+              className="mail-folder-tree-sync mail-folder-tree-disconnect"
+              disabled={Boolean(activeOperation) || isDisconnected}
+              onClick={(event) => {
+                event.stopPropagation();
+                void onDisconnectConnection(node.account!);
+              }}
+              type="button"
+            >
+              <LogOut className={isDisconnecting ? 'is-spinning' : ''} aria-hidden="true" />
+            </button>
+          </span>
+        ) : null}
+      </TreeNodeTrigger>
+      <TreeNodeContent hasChildren={hasChildren}>
+        {node.children.map((child, index) => (
+          <MailTreeNodeView
+            activeOperation={activeOperation}
+            countLabel={countLabel}
+            isLast={index === node.children.length - 1}
+            key={child.id}
+            level={level + 1}
+            node={child}
+            onDisconnectConnection={onDisconnectConnection}
+            onSelect={onSelect}
+            onSyncConnection={onSyncConnection}
+          />
+        ))}
+      </TreeNodeContent>
+    </TreeNode>
+  );
+}
+
+function buildMailTree(
+  connections: MailConnection[],
+  mailboxCounts: Record<string, Record<string, MailboxCount>>,
+  selectedConnectionId: string,
+  selectedMailbox: string,
+): MailTreeNode[] {
+  return connections
+    .slice()
+    .sort((left, right) => accountName(left).localeCompare(accountName(right)))
+    .map((account) => ({
+      account,
+      children: MAILBOXES.map((folder) => {
+        const count = mailboxCounts[account.id]?.[folder] || { total: 0, unread: 0 };
+        return {
+          account,
+          children: [],
+          count,
+          id: mailboxIdentity(account.id, folder),
+          label: folder,
+          mailbox: folder,
+          status: account.id === selectedConnectionId && folder === selectedMailbox ? 'active' : 'mailbox',
+          title: folder === 'inbox' ? `${count.unread} unread` : `${count.total} threads`,
+          type: 'mailbox' as const,
+        };
+      }),
+      id: accountIdentity(account.id),
+      label: accountName(account),
+      status: account.status || 'connected',
+      title: account.email_address || account.provider || account.id,
+      type: 'account' as const,
+    }));
+}
+
+function collectDefaultExpandedIds(node: MailTreeNode) {
+  const ids: string[] = [];
+
+  function visit(current: MailTreeNode) {
+    if (current.children.length) {
+      ids.push(current.id);
+    }
+    current.children.forEach(visit);
+  }
+
+  visit(node);
+  return ids;
+}
+
+function accountIdentity(connectionId: string) {
+  return `mail-account:${connectionId}`;
+}
+
+function mailboxIdentity(connectionId: string, folder: string) {
+  return `mailbox:${connectionId}:${folder}`;
+}
+
+function accountName(connection: MailConnection) {
+  return connection.display_name || connection.email_address || connection.id || 'Gmail';
 }
 
 createRoot(document.getElementById('mail-sidebar-root') as HTMLElement).render(<MailSidebarWidget />);

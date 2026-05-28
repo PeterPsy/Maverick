@@ -2,6 +2,14 @@
 
 Private workspace app monorepo for Loopinos/Maverick apps that are developed outside the platform core repository.
 
+**Important:** this repository is not the Maverick `design` repository. For
+core work, built-in apps, `base-shell`, `chat`, `storage`, app hosting, or any
+task described as work on the `design` branch, use:
+
+```text
+/home/ubuntu/projects/maverick-v3
+```
+
 This repository is intentionally separate from the platform/core repository. It tracks app source only; the platform core continues to own hosting, contracts, registration, mounting, workspace policy, runtime execution, and app lifecycle orchestration.
 
 ## Layout
@@ -9,6 +17,7 @@ This repository is intentionally separate from the platform/core repository. It 
 ```text
 apps/
   crm/
+  mail/
 ```
 
 Each app remains a normal Maverick app root with its own `app_contract.json`, README, tests, app-owned surfaces, and frontend build artifacts when they are intentionally committed.
@@ -34,10 +43,11 @@ Do not track:
 
 ## Local Development
 
-The active workspace path for CRM is:
+The active workspace paths for local app development are:
 
 ```text
 apps/crm/
+apps/mail/
 ```
 
 From the CRM app root:
@@ -55,4 +65,25 @@ maverick app crm cli list --json
 maverick app crm mcp list --json
 ```
 
+For Mail, use the same app-local test/build pattern from `apps/mail/`, and
+validate the installed workspace surface with `maverick app mail ...` commands
+when Mail is the changed app.
+
 Commit app source changes here. Commit core/platform changes only in the separate Maverick/Loopinos core repository.
+
+If `apps/chat`, `apps/base-shell`, or `apps/storage` appears to be missing, you
+are in this workspace-local repository. Switch to
+`/home/ubuntu/projects/maverick-v3` before continuing with built-in app or
+platform work.
+
+For app lookup, prefer root app source first:
+
+```bash
+test -d /home/ubuntu/projects/maverick-v3/apps/<app_id>
+```
+
+Then fall back to workspace-local source only when needed:
+
+```bash
+test -d /home/ubuntu/projects/maverick-v3/workspaces/default/apps/<app_id>
+```

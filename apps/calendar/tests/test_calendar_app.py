@@ -10,6 +10,8 @@ from apps.calendar.tests.calendar_conflict_tests import CalendarConflictTest
 from apps.calendar.tests.calendar_contract_tests import CalendarContractTest
 from apps.calendar.tests.calendar_event_model_tests import CalendarEventModelTest
 from apps.calendar.tests.calendar_free_time_tests import CalendarFreeTimeTest
+from apps.calendar.tests.calendar_google_oauth_tests import CalendarGoogleOAuthTest
+from apps.calendar.tests.calendar_google_sync_tests import CalendarGoogleSyncTest
 from apps.calendar.tests.calendar_mcp_manifest_tests import CalendarMcpManifestTest
 from apps.calendar.tests.calendar_mcp_revision_tests import CalendarMcpRevisionTest
 from apps.calendar.tests.calendar_reference_view_tests import CalendarReferenceViewTest
@@ -24,6 +26,8 @@ def load_tests(loader: unittest.TestLoader, tests: unittest.TestSuite, pattern: 
         CalendarMcpManifestTest,
         CalendarMcpRevisionTest,
         CalendarFreeTimeTest,
+        CalendarGoogleOAuthTest,
+        CalendarGoogleSyncTest,
         CalendarConflictTest,
         CalendarAgentPayloadTest,
         CalendarReferenceViewTest,

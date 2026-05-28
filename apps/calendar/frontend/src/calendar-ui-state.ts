@@ -12,6 +12,7 @@ export type CalendarUiState = {
 };
 
 export const CALENDAR_UI_STATE_RESOURCE = 'ui-state';
+export const CALENDAR_UI_STATE_CHANGED_EVENT = 'maverick.calendar.ui-state-changed';
 
 const STORAGE_PREFIX = 'maverick.calendar.uiState';
 
@@ -46,6 +47,7 @@ export function writeCalendarUiState(appId: string, patch: Partial<CalendarUiSta
 }
 
 export function notifyCalendarUiStateChanged(appId: string, detail: Record<string, unknown> = {}) {
+  window.dispatchEvent(new CustomEvent(CALENDAR_UI_STATE_CHANGED_EVENT, { detail: { appId, ...detail } }));
   window.parent?.postMessage(
     {
       type: 'maverick.app.data-changed',

@@ -8,7 +8,7 @@ import sys
 from core.app_sdk.runtime import emit_json, read_entrypoint_payload
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
-from service import AGENT_DEFAULT_LIST_LIMIT, app_events_for_action, handle_action
+from service import AGENT_DEFAULT_LIST_LIMIT, app_events_for_action, handle_action, secret_lookup_for_remote_mutation
 from surface_contract import normalize_action
 
 
@@ -23,6 +23,9 @@ default_action_by_command = {
 }
 arguments.setdefault("action", default_action_by_command.get(command_name, "operations.manifest"))
 arguments["action"] = normalize_action(arguments.get("action"))
+if payload.raw.get("surface") == "secret_selector":
+    emit_json(secret_lookup_for_remote_mutation(Path(payload.data_root), arguments))
+    raise SystemExit(0)
 if arguments["action"] == "list":
     arguments.setdefault("profile", "compact")
     arguments.setdefault("include_description", False)
@@ -32,6 +35,8 @@ status_code, result = handle_action(
     arguments,
     app_id=local_app_id,
     workspace_id=payload.workspace_id,
+    app_secrets=dict(payload.raw.get("app_secrets") or {}),
+    app_secret_errors=list(payload.raw.get("app_secret_errors") or []),
 )
 result.update(
     {

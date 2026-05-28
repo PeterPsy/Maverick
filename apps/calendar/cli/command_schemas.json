@@ -11,6 +11,12 @@
               "operations.manifest",
               "describe",
               "status",
+              "calendar_connections.list",
+              "calendar_calendars.list",
+              "calendar_calendars.select",
+              "calendar_connections.start_oauth",
+              "calendar_connections.disconnect",
+              "calendar_sync",
               "list",
               "create",
               "update",
@@ -42,6 +48,14 @@
           "category": {"type": "string"},
           "attendee": {"type": "string"},
           "attendees": {"type": "array", "items": {"type": "string"}},
+          "connection_id": {"type": "string"},
+          "redirect_uri": {"type": "string", "format": "uri"},
+          "scope": {"type": "array", "items": {"type": "string"}},
+          "calendar_id": {"type": "string"},
+          "selected": {"type": "boolean"},
+          "sync_enabled": {"type": "boolean"},
+          "sync_token": {"type": "string"},
+          "full_sync": {"type": "boolean"},
           "tags": {"type": "array", "items": {"type": "string"}},
           "source": {"type": "string"},
           "external_refs": {"type": "object"},
@@ -70,6 +84,16 @@
         "oneOf": [
           {"maxProperties": 0},
           {"properties": {"action": {"enum": ["operations.manifest", "describe", "status"]}}, "required": ["action"]},
+          {"properties": {"action": {"enum": ["calendar_connections.list", "calendar_connections.start_oauth", "calendar_calendars.list"]}}, "required": ["action"]},
+          {
+            "properties": {"action": {"enum": ["calendar_calendars.select"]}},
+            "required": ["action", "connection_id", "calendar_id"],
+            "anyOf": [{"required": ["selected"]}, {"required": ["sync_enabled"]}]
+          },
+          {
+            "properties": {"action": {"enum": ["calendar_connections.disconnect", "calendar_sync"]}},
+            "required": ["action", "connection_id"]
+          },
           {"properties": {"action": {"enum": ["list"]}}, "required": ["action"]},
           {
             "properties": {"action": {"enum": ["create"]}},
@@ -111,6 +135,9 @@
         ],
         "examples": [
           {"action": "operations.manifest"},
+          {"action": "calendar_connections.start_oauth", "redirect_uri": "https://maverick.example/app/calendar/connections/google/callback"},
+          {"action": "calendar_calendars.select", "connection_id": "cal_conn_<id>", "calendar_id": "primary", "sync_enabled": false},
+          {"action": "calendar_sync", "connection_id": "cal_conn_<id>"},
           {"action": "list", "start_after": "2026-05-22T00:00:00Z", "limit": 20, "profile": "compact"},
           {"action": "create", "title": "Team standup", "startTime": "2026-05-22T09:00:00Z", "endTime": "2026-05-22T09:30:00Z"},
           {"action": "move", "id": "evt_<id>", "expected_revision": 1, "startTime": "2026-05-22T10:00:00Z", "conflict_policy": "warn"},
@@ -119,7 +146,73 @@
           {"action": "find_free_time", "start_after": "2026-05-22T09:00:00Z", "end_before": "2026-05-22T17:00:00Z", "duration_minutes": 30},
           {"action": "set_custom_view", "title": "Launch week", "entity_ids": ["evt_<id>"]}
         ]
-      }
+      },
+      "secret_selectors": [
+        {
+          "required_secrets": ["google-oauth-client-id"],
+          "when": {"action": "calendar_connections.start_oauth"}
+        },
+        {
+          "required_secrets": ["google-oauth-client-id", "google-oauth-client-secret"],
+          "when": {"action": "calendar_sync"}
+        },
+        {
+          "required_secrets": ["google-oauth-client-id", "google-oauth-client-secret"],
+          "resource_lookup": {"kind": "calendar_remote_mutation"},
+          "when": {"action": "create"}
+        },
+        {
+          "required_secrets": ["google-calendar-refresh-token"],
+          "resource_type": "calendar_connection",
+          "resource_lookup": {"kind": "calendar_remote_mutation"},
+          "when": {"action": "create"}
+        },
+        {
+          "required_secrets": ["google-oauth-client-id", "google-oauth-client-secret"],
+          "resource_lookup": {"kind": "calendar_remote_mutation"},
+          "when": {"action": "update"}
+        },
+        {
+          "required_secrets": ["google-calendar-refresh-token"],
+          "resource_type": "calendar_connection",
+          "resource_lookup": {"kind": "calendar_remote_mutation"},
+          "when": {"action": "update"}
+        },
+        {
+          "required_secrets": ["google-oauth-client-id", "google-oauth-client-secret"],
+          "resource_lookup": {"kind": "calendar_remote_mutation"},
+          "when": {"action": "delete"}
+        },
+        {
+          "required_secrets": ["google-calendar-refresh-token"],
+          "resource_type": "calendar_connection",
+          "resource_lookup": {"kind": "calendar_remote_mutation"},
+          "when": {"action": "delete"}
+        },
+        {
+          "required_secrets": ["google-oauth-client-id", "google-oauth-client-secret"],
+          "resource_lookup": {"kind": "calendar_remote_mutation"},
+          "when": {"action": "move"}
+        },
+        {
+          "required_secrets": ["google-calendar-refresh-token"],
+          "resource_type": "calendar_connection",
+          "resource_lookup": {"kind": "calendar_remote_mutation"},
+          "when": {"action": "move"}
+        },
+        {
+          "required_secrets": ["google-calendar-refresh-token"],
+          "resource_type": "calendar_connection",
+          "resource_id_argument": "connection_id",
+          "when": {"action": "calendar_connections.disconnect"}
+        },
+        {
+          "required_secrets": ["google-calendar-refresh-token"],
+          "resource_type": "calendar_connection",
+          "resource_id_argument": "connection_id",
+          "when": {"action": "calendar_sync"}
+        }
+      ]
     },
     "calendar-reference": {
       "description": "Search, resolve, and summarize workspace calendar event references.",

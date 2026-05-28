@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest"
 
-import { eventIdFromParams, mergeReloadMode, runtimeAppIdFromPathname } from "./runtime"
+import {
+  calendarOAuthCallbackFromLocation,
+  calendarOAuthRedirectUri,
+  eventIdFromParams,
+  mergeReloadMode,
+  runtimeAppIdFromPathname,
+} from "./runtime"
 
 describe("runtime helpers", () => {
   it("derives the mounted app id from the direct app route", () => {
@@ -20,5 +26,29 @@ describe("runtime helpers", () => {
     expect(eventIdFromParams({ app_page: "/events/evt_2" })).toBe("evt_2")
     expect(eventIdFromParams({ app_page: "events/evt%203" })).toBe("evt 3")
     expect(eventIdFromParams({ app_page: "settings" })).toBe("")
+  })
+
+  it("builds the Google Calendar OAuth callback URL for the mounted app", () => {
+    expect(calendarOAuthRedirectUri("calendar", "https://maverick.example/")).toBe("https://maverick.example/apps/calendar/oauth/callback")
+    expect(calendarOAuthRedirectUri("team calendar", "https://maverick.example")).toBe(
+      "https://maverick.example/apps/team%20calendar/oauth/callback",
+    )
+  })
+
+  it("recognizes Google Calendar OAuth callback routes", () => {
+    expect(
+      calendarOAuthCallbackFromLocation(
+        "/apps/team%20calendar/oauth/callback",
+        "?code= oauth-code &state= oauth-state ",
+        "https://maverick.example",
+      ),
+    ).toEqual({
+      appId: "team calendar",
+      code: "oauth-code",
+      state: "oauth-state",
+      error: "",
+      redirectUri: "https://maverick.example/apps/team%20calendar/oauth/callback",
+    })
+    expect(calendarOAuthCallbackFromLocation("/apps/calendar/events", "?code=ignored", "https://maverick.example")).toBeNull()
   })
 })

@@ -6,7 +6,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from calendar_visibility import filter_visible_events
 from errors import CalendarConflictError
+from event_records import normalize_event
 from request_inputs import participants_from_body
 from scalars import casefold_set, optional_int, string_list
 from store import read_state
@@ -14,7 +16,12 @@ from time_values import format_time, iso_time
 
 
 def _events_for_availability(data_root: Path) -> list[dict[str, Any]]:
-    return sorted(read_state(data_root).get("events", []), key=lambda item: item["startTime"])
+    state = read_state(data_root)
+    events = filter_visible_events(
+        [normalize_event(item) for item in state.get("events", [])],
+        state.get("calendars", []),
+    )
+    return sorted(events, key=lambda item: item["startTime"])
 
 
 def check_availability(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:

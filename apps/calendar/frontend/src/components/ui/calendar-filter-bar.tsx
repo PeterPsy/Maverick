@@ -1,5 +1,5 @@
 import type { ReactNode, Dispatch, SetStateAction } from "react"
-import { Filter, Search, X } from "lucide-react"
+import { Filter, RefreshCw, Search, X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -25,6 +25,8 @@ export function FilterBar(props: {
   selectedTags: string[]
   selectedCategories: string[]
   selectedAccounts: string[]
+  onSyncConnections?: () => void | Promise<void>
+  isSyncingConnections?: boolean
   setSelectedColors: Dispatch<SetStateAction<string[]>>
   setSelectedTags: Dispatch<SetStateAction<string[]>>
   setSelectedCategories: Dispatch<SetStateAction<string[]>>
@@ -33,7 +35,9 @@ export function FilterBar(props: {
   clearFilters: () => void
   getColorClasses: (color: string) => { name?: string; bg: string; text: string }
   showSearch?: boolean
+  showAccountFilters?: boolean
 }) {
+  const showAccountFilters = props.showAccountFilters !== false
   return (
     <div className="flex flex-col gap-2">
       {props.showSearch !== false && (
@@ -90,19 +94,33 @@ export function FilterBar(props: {
               </DropdownMenuCheckboxItem>
             ))}
           </FilterMenu>
-          <FilterMenu title="Accounts" count={props.selectedAccounts.length} align="start" mobile>
-            {props.accountOptions.map((account) => (
-              <DropdownMenuCheckboxItem
-                key={account.value}
-                checked={props.selectedAccounts.includes(account.value)}
-                onCheckedChange={(checked) =>
-                  props.setSelectedAccounts((prev) => checked ? [...prev, account.value] : prev.filter((item) => item !== account.value))
-                }
-              >
-                {account.name}
-              </DropdownMenuCheckboxItem>
-            ))}
-          </FilterMenu>
+          {showAccountFilters && (
+            <FilterMenu title="Accounts" count={props.selectedAccounts.length} align="start" mobile>
+              {props.accountOptions.map((account) => (
+                <DropdownMenuCheckboxItem
+                  key={account.value}
+                  checked={props.selectedAccounts.includes(account.value)}
+                  onCheckedChange={(checked) =>
+                    props.setSelectedAccounts((prev) => checked ? [...prev, account.value] : prev.filter((item) => item !== account.value))
+                  }
+                >
+                  {account.name}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </FilterMenu>
+          )}
+          {showAccountFilters && props.onSyncConnections && props.accountOptions.some((account) => account.provider === "google" && account.status === "connected") && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={props.onSyncConnections}
+              disabled={props.isSyncingConnections}
+              className="gap-2 whitespace-nowrap flex-shrink-0"
+            >
+              <RefreshCw className={cn("h-4 w-4", props.isSyncingConnections && "animate-spin")} />
+              Sync
+            </Button>
+          )}
           {props.hasActiveFilters && (
             <Button variant="ghost" size="sm" onClick={props.clearFilters} className="gap-2 whitespace-nowrap flex-shrink-0">
               <X className="h-4 w-4" />
@@ -153,19 +171,27 @@ export function FilterBar(props: {
             </DropdownMenuCheckboxItem>
           ))}
         </FilterMenu>
-        <FilterMenu title="Accounts" count={props.selectedAccounts.length}>
-          {props.accountOptions.map((account) => (
-            <DropdownMenuCheckboxItem
-              key={account.value}
-              checked={props.selectedAccounts.includes(account.value)}
-              onCheckedChange={(checked) =>
-                props.setSelectedAccounts((prev) => checked ? [...prev, account.value] : prev.filter((item) => item !== account.value))
-              }
-            >
-              {account.name}
-            </DropdownMenuCheckboxItem>
-          ))}
-        </FilterMenu>
+        {showAccountFilters && (
+          <FilterMenu title="Accounts" count={props.selectedAccounts.length}>
+            {props.accountOptions.map((account) => (
+              <DropdownMenuCheckboxItem
+                key={account.value}
+                checked={props.selectedAccounts.includes(account.value)}
+                onCheckedChange={(checked) =>
+                  props.setSelectedAccounts((prev) => checked ? [...prev, account.value] : prev.filter((item) => item !== account.value))
+                }
+              >
+                {account.name}
+              </DropdownMenuCheckboxItem>
+            ))}
+          </FilterMenu>
+        )}
+        {showAccountFilters && props.onSyncConnections && props.accountOptions.some((account) => account.provider === "google" && account.status === "connected") && (
+          <Button variant="outline" size="sm" onClick={props.onSyncConnections} disabled={props.isSyncingConnections} className="gap-2">
+            <RefreshCw className={cn("h-4 w-4", props.isSyncingConnections && "animate-spin")} />
+            {props.isSyncingConnections ? "Syncing" : "Sync"}
+          </Button>
+        )}
         {props.hasActiveFilters && (
           <Button variant="ghost" size="sm" onClick={props.clearFilters} className="gap-2">
             <X className="h-4 w-4" />

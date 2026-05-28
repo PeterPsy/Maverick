@@ -33,11 +33,22 @@
   },
   "permissions": {
     "secrets": {
-      "read": [],
-      "write": []
+      "read": [
+        "google-oauth-client-id",
+        "google-oauth-client-secret",
+        "google-calendar-refresh-token"
+      ],
+      "write": [
+        "google-calendar-refresh-token"
+      ]
     },
     "network": {
-      "outbound": []
+      "outbound": [
+        "accounts.google.com",
+        "oauth2.googleapis.com",
+        "www.googleapis.com",
+        "calendar.googleapis.com"
+      ]
     },
     "runtime": {
       "create_sessions": false,
@@ -50,6 +61,12 @@
   "capabilities": {
     "mcp_tools": [
       "calendar_operations_manifest",
+      "calendar_connections.list",
+      "calendar_calendars.list",
+      "calendar_calendars.select",
+      "calendar_connections.start_oauth",
+      "calendar_connections.disconnect",
+      "calendar_sync",
       "calendar_list_events",
       "calendar_create_event",
       "calendar_update_event",
@@ -84,6 +101,14 @@
       {
         "resource": "view-state",
         "description": "Emitted when Calendar view filters or curated event selections change."
+      },
+      {
+        "resource": "connections",
+        "description": "Emitted when Google Calendar connection setup state changes."
+      },
+      {
+        "resource": "calendars",
+        "description": "Emitted when Google Calendar source discovery or local sync selection changes."
       }
     ],
     "view_surfaces": [
@@ -180,7 +205,7 @@
   },
   "storage": {
     "storage_kind": "json",
-    "data_schema_version": "2",
+    "data_schema_version": "3",
     "primary_paths": [
       "data/calendar/state.json"
     ],

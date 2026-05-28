@@ -7,7 +7,7 @@ import { CalendarBoardViews } from "./calendar-board-views"
 import { FilterBar } from "./calendar-filter-bar"
 import { Header } from "./calendar-header"
 import type { CalendarView, Event, EventManagerProps } from "./calendar-types"
-import { calendarAccountOptions, calendarAccountValue, defaultColors, viewportFromViewState, viewStateSignature } from "./calendar-utils"
+import { calendarAccountFilterValues, calendarAccountOptions, defaultColors, eventIsReadOnly, viewportFromViewState, viewStateSignature } from "./calendar-utils"
 
 export type { Event, EventManagerProps } from "./calendar-types"
 
@@ -24,6 +24,10 @@ export function EventManager({
   viewState,
   onEventOpen,
   runtimeAppId = "calendar",
+  calendarConnections = [],
+  calendars = [],
+  onSyncConnections,
+  isSyncingConnections = false,
 }: EventManagerProps) {
   const initialUiState = readCalendarUiState(runtimeAppId)
   const [events, setEvents] = useState<Event[]>(initialEvents)
@@ -71,7 +75,7 @@ export function EventManager({
     handledFocusVersion.current = focusVersion
     setCurrentDate(event.startTime)
     setView("day")
-    openEventInSidebar(event)
+    openEventOverlay(event)
   }, [events, focusEventId, focusVersion])
 
   useEffect(() => {
@@ -104,21 +108,31 @@ export function EventManager({
       if (selectedColors.length > 0 && !selectedColors.includes(event.color)) return false
       if (selectedTags.length > 0 && !event.tags?.some((tag) => selectedTags.includes(tag))) return false
       if (selectedCategories.length > 0 && (!event.category || !selectedCategories.includes(event.category))) return false
-      if (selectedAccounts.length > 0 && !selectedAccounts.includes(calendarAccountValue(event))) return false
+      if (selectedAccounts.length > 0 && !calendarAccountFilterValues(event).some((value) => selectedAccounts.includes(value))) return false
       return true
     })
   }, [events, searchQuery, selectedColors, selectedTags, selectedCategories, selectedAccounts])
 
-  const accountOptions = useMemo(() => calendarAccountOptions(events), [events])
+  const accountOptions = useMemo(() => calendarAccountOptions(events, calendarConnections), [events, calendarConnections])
   const hasActiveFilters =
     selectedColors.length > 0 || selectedTags.length > 0 || selectedCategories.length > 0 || selectedAccounts.length > 0
 
   const openEvent = useCallback(
     (event: Event) => {
-      openEventInSidebar(event)
+      openEventOverlay(event)
       onEventOpen?.(event)
     },
     [onEventOpen, runtimeAppId],
+  )
+  const handleDragStart = useCallback(
+    (event: Event) => {
+      if (eventIsReadOnly(event, calendars)) {
+        setDraggedEvent(null)
+        return
+      }
+      setDraggedEvent(event)
+    },
+    [calendars],
   )
 
   const handleDrop = useCallback(
@@ -216,7 +230,7 @@ export function EventManager({
     notifyCalendarUiStateChanged(runtimeAppId, { action: "clear-filters" })
   }
 
-  function openEventInSidebar(event: Event) {
+  function openEventOverlay(event: Event) {
     writeCalendarUiState(runtimeAppId, { selectedEventId: event.id, sidebarMode: "details" })
     notifyCalendarUiStateChanged(runtimeAppId, { action: "open-event", event_id: event.id })
   }
@@ -239,6 +253,8 @@ export function EventManager({
             categories={categories}
             availableTags={availableTags}
             accountOptions={accountOptions}
+            onSyncConnections={onSyncConnections}
+            isSyncingConnections={isSyncingConnections}
             selectedColors={selectedColors}
             selectedTags={selectedTags}
             selectedCategories={selectedCategories}
@@ -251,6 +267,7 @@ export function EventManager({
             clearFilters={clearFilters}
             getColorClasses={getColorClasses}
             showSearch={false}
+            showAccountFilters={false}
           />
         }
       />
@@ -260,7 +277,7 @@ export function EventManager({
         getColorClasses={getColorClasses}
         onDrop={handleDrop}
         onEventClick={openEvent}
-        onDragStart={setDraggedEvent}
+        onDragStart={handleDragStart}
         onDragEnd={() => setDraggedEvent(null)}
         view={view}
       />

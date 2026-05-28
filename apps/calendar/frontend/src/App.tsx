@@ -1,9 +1,30 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { createEvent, deleteEvent, listEvents, readViewFilter, updateEvent } from './api';
+import {
+  CalendarApiError,
+  completeGoogleOAuth,
+  createEvent,
+  deleteEvent,
+  listCalendars,
+  listConnections,
+  listEvents,
+  readViewFilter,
+  syncCalendar,
+  updateEvent,
+} from './api';
+import { CALENDAR_UI_STATE_RESOURCE } from './calendar-ui-state';
+import { CalendarEventOverlay } from './components/ui/calendar-event-overlay';
 import { EventManager, type Event } from './components/ui/event-manager';
 import { applyViewState, sortEvents } from './view-state-filtering';
-import { eventIdFromParams, mergeReloadMode, runtimeAppIdFromPathname, scalarString, type ReloadMode } from './runtime';
-import type { CalendarViewState } from './types';
+import {
+  calendarOAuthCallbackFromLocation,
+  eventIdFromParams,
+  mergeReloadMode,
+  runtimeAppIdFromPathname,
+  scalarString,
+  type CalendarOAuthCallback,
+  type ReloadMode,
+} from './runtime';
+import type { CalendarConnection, CalendarRemoteCalendar, CalendarViewState } from './types';
 
 const APP_EVENTS_WS_PATH = '/api/apps/events/ws';
 const DEFAULT_VIEW_STATE: CalendarViewState = { mode: 'default', entity_ids: [], tags: [], conflicts_only: false };
@@ -12,6 +33,8 @@ export function App() {
   const runtimeAppIdRef = useRef(runtimeAppIdFromPathname(window.location.pathname));
   const [runtimeAppId, setRuntimeAppId] = useState(runtimeAppIdRef.current);
   const [events, setEvents] = useState<Event[]>([]);
+  const [connections, setConnections] = useState<CalendarConnection[]>([]);
+  const [calendars, setCalendars] = useState<CalendarRemoteCalendar[]>([]);
   const [viewState, setViewState] = useState<CalendarViewState>(DEFAULT_VIEW_STATE);
   const [error, setError] = useState('');
   const [focusEventId, setFocusEventId] = useState('');
@@ -36,9 +59,16 @@ export function App() {
         setViewState(await readViewFilter(appId));
         return;
       }
-      const [nextEvents, nextViewState] = await Promise.all([listEvents(appId), readViewFilter(appId)]);
+      const [nextEvents, nextViewState, nextConnections, nextCalendars] = await Promise.all([
+        listEvents(appId),
+        readViewFilter(appId),
+        listConnections(appId),
+        listCalendars(appId),
+      ]);
       setEvents(nextEvents);
       setViewState(nextViewState);
+      setConnections(nextConnections);
+      setCalendars(nextCalendars);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Calendar load failed.');
     }
@@ -56,7 +86,13 @@ export function App() {
   }
 
   useEffect(() => {
-    void load();
+    const oauthCallback = calendarOAuthCallbackFromLocation(window.location.pathname, window.location.search, window.location.origin);
+    if (oauthCallback) {
+      adoptRuntimeAppId(oauthCallback.appId);
+      void handleOAuthCallback(oauthCallback);
+    } else {
+      void load();
+    }
     window.parent?.postMessage({ type: 'maverick.app.ready', app_id: runtimeAppIdRef.current }, window.location.origin);
     return () => window.clearTimeout(reloadTimer.current);
   }, []);
@@ -86,6 +122,9 @@ export function App() {
         return;
       }
       if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === runtimeAppIdRef.current) {
+        if (payload.resource === CALENDAR_UI_STATE_RESOURCE) {
+          return;
+        }
         scheduleReload(payload.resource);
       }
     };
@@ -107,7 +146,10 @@ export function App() {
         try {
           const payload = JSON.parse(message.data) as { type?: string; owner_app_id?: string };
           if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === runtimeAppIdRef.current) {
-            scheduleReload((payload as { resource?: string }).resource);
+            const resource = (payload as { resource?: string }).resource;
+            if (resource !== CALENDAR_UI_STATE_RESOURCE) {
+              scheduleReload(resource);
+            }
           }
         } catch {
           return;
@@ -155,12 +197,83 @@ export function App() {
   async function handleDelete(id: string, event?: Event) {
     setError('');
     try {
-      await deleteEvent(runtimeAppId, id, event?.revision);
+      await deleteEvent(runtimeAppId, id, event?.revision, event);
       setEvents((current) => current.filter((event) => event.id !== id));
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Calendar delete failed.';
       setError(message);
       throw err;
+    }
+  }
+
+  async function createOverlayEvent(event: Omit<Event, 'id'>) {
+    setError('');
+    try {
+      const created = await createEvent(runtimeAppIdRef.current, event);
+      setEvents((current) => sortEvents([...current.filter((item) => item.id !== created.id), created]));
+      notifyCalendarDataChanged(runtimeAppIdRef.current);
+      return created;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Calendar create failed.';
+      setError(message);
+      throw err;
+    }
+  }
+
+  async function updateOverlayEvent(id: string, event: Partial<Event>) {
+    setError('');
+    try {
+      const updated = await updateEvent(runtimeAppIdRef.current, id, event);
+      setEvents((current) => sortEvents(current.map((item) => (item.id === id ? updated : item))));
+      notifyCalendarDataChanged(runtimeAppIdRef.current);
+      return updated;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Calendar update failed.';
+      setError(message);
+      throw err;
+    }
+  }
+
+  async function deleteOverlayEvent(event: Event) {
+    setError('');
+    try {
+      await deleteEvent(runtimeAppIdRef.current, event.id, event.revision, event);
+      setEvents((current) => current.filter((item) => item.id !== event.id));
+      notifyCalendarDataChanged(runtimeAppIdRef.current);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Calendar delete failed.';
+      setError(message);
+      throw err;
+    }
+  }
+
+  async function handleOAuthCallback(callback: CalendarOAuthCallback) {
+    const appId = callback.appId || runtimeAppIdRef.current;
+    setError('');
+    if (callback.error) {
+      await load();
+      setError(`Google Calendar authorization failed: ${callback.error}.`);
+      return;
+    }
+    if (!callback.code || !callback.state) {
+      await load();
+      setError('Google Calendar authorization callback is missing code or state. Start the connection again.');
+      return;
+    }
+    try {
+      const completed = await completeGoogleOAuth(appId, {
+        code: callback.code,
+        state: callback.state,
+        redirectUri: callback.redirectUri,
+      });
+      setConnections(await listConnections(appId));
+      await syncCalendar(appId, completed.connection.id);
+      await load();
+      window.history.replaceState({}, '', `/apps/${encodeURIComponent(appId)}/`);
+    } catch (err) {
+      const message = operationalErrorMessage(err, 'Google Calendar connection failed.');
+      await load();
+      setError(message);
     }
   }
 
@@ -181,7 +294,7 @@ export function App() {
   const visibleEvents = useMemo(() => applyViewState(events, viewState, focusEventId), [events, viewState, focusEventId]);
 
   return (
-    <main className="calendar-app">
+    <main className="calendar-app relative">
       {error ? <div className="calendar-error">{error}</div> : null}
       <EventManager
         className="calendar-board"
@@ -197,7 +310,38 @@ export function App() {
         viewState={viewState}
         onEventOpen={handleEventOpen}
         runtimeAppId={runtimeAppId}
+        calendarConnections={connections}
+        calendars={calendars}
+      />
+      <CalendarEventOverlay
+        runtimeAppId={runtimeAppId}
+        events={events}
+        connections={connections}
+        calendars={calendars}
+        categories={['Meeting', 'Task', 'Reminder', 'Personal']}
+        availableTags={['Important', 'Urgent', 'Work', 'Personal', 'Team', 'Client']}
+        onCreateEvent={createOverlayEvent}
+        onUpdateEvent={updateOverlayEvent}
+        onDeleteEvent={deleteOverlayEvent}
       />
     </main>
   );
+}
+
+function notifyCalendarDataChanged(appId: string) {
+  window.parent?.postMessage({ type: 'maverick.app.data-changed', owner_app_id: appId, resource: 'events' }, window.location.origin);
+}
+
+function operationalErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof CalendarApiError && error.code === 'missing_secret_grant') {
+    const detail = error.detail.toLowerCase();
+    if (detail.includes('refresh token')) {
+      return 'Calendar cannot access the resource-scoped Google Calendar refresh token. In Vault/Core Secrets, grant Calendar access to `google-calendar-refresh-token` for this calendar_connection, then retry.';
+    }
+    return 'Calendar cannot access Google OAuth credentials. In Vault/Core Secrets, grant Calendar access to `google-oauth-client-id` and `google-oauth-client-secret`, then retry.';
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return fallback;
 }

@@ -9,9 +9,11 @@ from constants import (
     ALLOWED_EVENT_STATUSES,
     MAX_CATEGORY_LENGTH,
     MAX_DESCRIPTION_LENGTH,
+    MAX_EXTERNAL_LINK_LENGTH,
     MAX_LIST_ITEMS,
     MAX_LOCATION_LENGTH,
     MAX_ORGANIZER_LENGTH,
+    MAX_PROVIDER_ID_LENGTH,
     MAX_SOURCE_LENGTH,
     MAX_TITLE_LENGTH,
 )
@@ -76,7 +78,7 @@ def normalize_event(
         "updated_at": updated_value,
         "revision": revision if revision is not None else event_revision(payload.get("revision")),
         "source": clean_string(payload.get("source") or "calendar", "source", required=True, max_length=MAX_SOURCE_LENGTH),
-        "external_refs": json_object(payload.get("external_refs") or payload.get("externalRefs"), "external_refs"),
+        "external_refs": normalize_external_refs(payload.get("external_refs") or payload.get("externalRefs")),
         "recurrence": json_object(payload.get("recurrence"), "recurrence"),
         "reminders": json_list(payload.get("reminders"), "reminders"),
         "idempotency_key": clean_string(
@@ -158,6 +160,23 @@ def event_revision(value: Any) -> int:
     return revision or 1
 
 
+def normalize_external_refs(value: Any) -> dict[str, Any]:
+    refs = json_object(value, "external_refs")
+    scalar_fields = {
+        "calendar_account_id": ("calendarAccountId", "calendar_account", "account_id", "account"),
+        "calendar_account_label": ("calendarAccountLabel", "account_label", "accountLabel"),
+        "calendar_connection_id": ("calendarConnectionId", "connection_id", "connectionId"),
+        "provider_calendar_id": ("providerCalendarId", "google_calendar_id", "googleCalendarId"),
+        "provider_event_id": ("providerEventId", "google_event_id", "googleEventId"),
+        "etag": ("eTag",),
+        "ical_uid": ("icalUid", "iCalUID", "iCalUid", "icalUID"),
+    }
+    for canonical, aliases in scalar_fields.items():
+        _copy_scalar_ref(refs, canonical, aliases, max_length=MAX_PROVIDER_ID_LENGTH)
+    _copy_scalar_ref(refs, "html_link", ("htmlLink",), max_length=MAX_EXTERNAL_LINK_LENGTH)
+    return refs
+
+
 def _event_search_text(event: dict[str, Any]) -> str:
     return " ".join(
         [
@@ -170,6 +189,14 @@ def _event_search_text(event: dict[str, Any]) -> str:
             " ".join(string_list(event.get("tags"))),
         ]
     ).casefold()
+
+
+def _copy_scalar_ref(refs: dict[str, Any], canonical: str, aliases: tuple[str, ...], *, max_length: int) -> None:
+    for key in (canonical, *aliases):
+        value = refs.get(key)
+        if value not in (None, ""):
+            refs[canonical] = clean_string(value, canonical, max_length=max_length)
+            return
 
 
 def event_ids(value: Any) -> list[str]:

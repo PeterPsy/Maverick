@@ -1,7 +1,20 @@
 import { describe, expect, it } from "vitest"
 
 import type { Event } from "./calendar-types"
-import { calendarAccountOptions, calendarAccountValue, validateDraft, viewportFromViewState, viewStateSignature } from "./calendar-utils"
+import {
+  calendarAccountFilterValues,
+  calendarAccountOptions,
+  calendarAccountValue,
+  calendarSourceOptions,
+  calendarSourcePatch,
+  eventIsReadOnly,
+  eventSourceDetails,
+  isWritableGoogleAccessRole,
+  selectedCalendarSourceValue,
+  validateDraft,
+  viewportFromViewState,
+  viewStateSignature,
+} from "./calendar-utils"
 
 function event(overrides: Partial<Event> & Pick<Event, "id" | "startTime" | "endTime" | "title">): Event {
   return {
@@ -140,8 +153,142 @@ describe("calendar viewport helpers", () => {
 
     expect(calendarAccountValue(accountEvents[1])).toBe("calendar")
     expect(calendarAccountOptions(accountEvents)).toEqual([
-      { name: "Ana Work", value: "ana@example.com" },
+      { name: "Ana Work", value: "ana@example.com", accountId: "ana@example.com" },
       { name: "Calendar", value: "calendar" },
     ])
+  })
+
+  it("prefers backend calendar connections while keeping event fallback accounts", () => {
+    const accountEvents = [
+      event({
+        id: "evt_google",
+        title: "Google",
+        startTime: new Date("2026-01-03T09:00:00Z"),
+        endTime: new Date("2026-01-03T10:00:00Z"),
+        source: "google_calendar",
+        external_refs: {
+          calendar_account_id: "ana@example.com",
+          calendar_account_label: "Ana Work",
+          calendar_connection_id: "cal_conn_work",
+        },
+      }),
+    ]
+
+    expect(calendarAccountOptions(accountEvents, [
+      { id: "cal_conn_work", provider: "google", account_id: "ana@example.com", account_label: "Ana Work", status: "connected" },
+      { id: "cal_conn_empty", provider: "google", account_id: "empty@example.com", account_label: "Empty", status: "connected" },
+    ])).toEqual([
+      { name: "Ana Work", value: "cal_conn_work", accountId: "ana@example.com", connectionId: "cal_conn_work", provider: "google", status: "connected" },
+      { name: "Empty", value: "cal_conn_empty", accountId: "empty@example.com", connectionId: "cal_conn_empty", provider: "google", status: "connected" },
+    ])
+    expect(calendarAccountFilterValues(accountEvents[0])).toContain("cal_conn_work")
+  })
+
+  it("builds source choices and preserves non-calendar refs when changing source", () => {
+    const googleEvent = event({
+      id: "evt_google",
+      title: "Google",
+      startTime: new Date("2026-01-03T09:00:00Z"),
+      endTime: new Date("2026-01-03T10:00:00Z"),
+      source: "google_calendar",
+      external_refs: {
+        crm_deal: "deal_123",
+        calendar_account_id: "ana@example.com",
+        calendar_account_label: "Ana Work",
+        calendar_connection_id: "cal_conn_work",
+        provider_calendar_id: "primary",
+        provider_calendar_summary: "Work",
+        html_link: "https://calendar.google.com/event?eid=abc",
+      },
+    })
+    const connections = [
+      { id: "cal_conn_work", provider: "google", account_id: "ana@example.com", account_label: "Ana Work", status: "connected" },
+    ]
+    const options = calendarSourceOptions([googleEvent], connections)
+
+    expect(options.map((option) => option.value)).toEqual(["local", "connection:cal_conn_work"])
+    expect(options.find((option) => option.value === "connection:cal_conn_work")).toMatchObject({
+      source: "google_calendar",
+      providerCalendarId: "primary",
+      externalRefs: {
+        calendar_connection_id: "cal_conn_work",
+        provider_calendar_id: "primary",
+      },
+    })
+    expect(selectedCalendarSourceValue(googleEvent, options)).toBe("connection:cal_conn_work")
+    expect(eventSourceDetails(googleEvent).remoteLink).toBe("https://calendar.google.com/event?eid=abc")
+    expect(calendarSourcePatch(googleEvent, "local", options)).toEqual({
+      source: "calendar",
+      external_refs: { crm_deal: "deal_123" },
+    })
+
+    const withEmptyCalendar = calendarSourceOptions([], connections, [
+      {
+        id: "cal_conn_work:empty@example.com",
+        connection_id: "cal_conn_work",
+        provider: "google",
+        provider_calendar_id: "empty@example.com",
+        summary: "Empty",
+        sync_enabled: false,
+      },
+    ])
+    expect(withEmptyCalendar.map((option) => option.value)).toEqual([
+      "local",
+      "calendar:cal_conn_work:empty@example.com",
+    ])
+    expect(withEmptyCalendar[1]).toMatchObject({
+      name: "Ana Work / Empty",
+      providerCalendarId: "empty@example.com",
+      writable: true,
+      externalRefs: {
+        calendar_connection_id: "cal_conn_work",
+        provider_calendar_id: "empty@example.com",
+      },
+    })
+  })
+
+  it("marks Google reader calendars and events as non-writable", () => {
+    expect(isWritableGoogleAccessRole("owner")).toBe(true)
+    expect(isWritableGoogleAccessRole("writer")).toBe(true)
+    expect(isWritableGoogleAccessRole("reader")).toBe(false)
+
+    const connections = [
+      { id: "cal_conn_work", provider: "google", account_id: "ana@example.com", account_label: "Ana Work", status: "connected" },
+    ]
+    const calendars = [
+      {
+        id: "cal_conn_work:primary",
+        connection_id: "cal_conn_work",
+        provider: "google",
+        provider_calendar_id: "primary",
+        summary: "Work",
+        access_role: "reader",
+      },
+      {
+        id: "cal_conn_work:team@example.com",
+        connection_id: "cal_conn_work",
+        provider: "google",
+        provider_calendar_id: "team@example.com",
+        summary: "Team",
+        access_role: "writer",
+      },
+    ]
+    const readOnlyEvent = event({
+      id: "evt_google_readonly",
+      title: "Google",
+      startTime: new Date("2026-01-03T09:00:00Z"),
+      endTime: new Date("2026-01-03T10:00:00Z"),
+      source: "google_calendar",
+      external_refs: {
+        calendar_connection_id: "cal_conn_work",
+        provider_calendar_id: "primary",
+      },
+    })
+
+    const options = calendarSourceOptions([readOnlyEvent], connections, calendars)
+    expect(options.find((option) => option.value === "connection:cal_conn_work")).toBeUndefined()
+    expect(options.find((option) => option.value === "calendar:cal_conn_work:primary")).toMatchObject({ writable: false })
+    expect(options.find((option) => option.value === "calendar:cal_conn_work:team@example.com")).toMatchObject({ writable: true })
+    expect(eventIsReadOnly(readOnlyEvent, calendars)).toBe(true)
   })
 })

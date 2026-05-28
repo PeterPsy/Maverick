@@ -23,6 +23,41 @@ export interface Event {
   idempotency_key?: string
 }
 
+export interface CalendarConnection {
+  id: string
+  resource_type?: string
+  provider: "google" | string
+  account_id?: string
+  account_label?: string
+  status?: "connected" | "disabled" | "error" | "pending" | string
+  scopes?: string[]
+  created_at?: string
+  updated_at?: string
+  last_sync_at?: string
+  token_resource?: {
+    logical_name?: string
+    resource_type?: string
+    resource_id?: string
+  }
+  external_refs?: Record<string, unknown>
+}
+
+export interface CalendarRemoteCalendar {
+  id: string
+  connection_id: string
+  provider: string
+  provider_calendar_id: string
+  summary?: string
+  description?: string
+  timezone?: string
+  access_role?: string
+  primary?: boolean
+  selected?: boolean
+  sync_enabled?: boolean
+  color?: string
+  updated_at?: string
+}
+
 export interface EventManagerProps {
   events?: Event[]
   onEventCreate?: (event: Omit<Event, "id">) => void | Promise<void>
@@ -38,6 +73,10 @@ export interface EventManagerProps {
   viewState?: CalendarExternalViewState
   onEventOpen?: (event: Event) => void
   runtimeAppId?: string
+  calendarConnections?: CalendarConnection[]
+  onSyncConnections?: () => void | Promise<void>
+  isSyncingConnections?: boolean
+  calendars?: CalendarRemoteCalendar[]
 }
 
 export interface CalendarColor {
@@ -50,6 +89,25 @@ export interface CalendarColor {
 export interface CalendarAccount {
   name: string
   value: string
+  accountId?: string
+  connectionId?: string
+  provider?: string
+  status?: string
+}
+
+export interface CalendarSourceOption {
+  value: string
+  name: string
+  source: string
+  accountName?: string
+  accountValue?: string
+  connectionId?: string
+  provider?: string
+  providerCalendarId?: string
+  calendarName?: string
+  accessRole?: string
+  writable?: boolean
+  externalRefs?: Record<string, unknown>
 }
 
 export interface ColorClasses {

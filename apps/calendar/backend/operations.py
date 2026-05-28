@@ -7,6 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 from availability import first_free_slot, raise_if_rejected_conflicts, window_conflicts
+from calendar_visibility import filter_visible_events
 from constants import MAX_EVENTS, SCHEMA_VERSION
 from errors import CalendarConflictError, CalendarRevisionConflictError
 from event_records import (
@@ -41,8 +42,12 @@ def list_events(
     profile: str = "full",
 ) -> list[dict[str, Any]]:
     """Return events sorted by start time with optional agent-facing filters."""
+    state = read_state(data_root)
     events = sorted(
-        (normalize_event(item) for item in read_state(data_root).get("events", [])),
+        filter_visible_events(
+            [normalize_event(item) for item in state.get("events", [])],
+            state.get("calendars", []),
+        ),
         key=lambda item: item["startTime"],
     )
     filtered = filter_events(
@@ -85,7 +90,8 @@ def create_event(data_root: Path, event_payload: dict[str, Any], *, conflict_pol
             updated_at=now,
             revision=1,
         )
-        raise_if_rejected_conflicts("create", conflict_policy, event, events)
+        conflict_events = filter_visible_events(events, state.get("calendars", []))
+        raise_if_rejected_conflicts("create", conflict_policy, event, conflict_events)
         events.append(event)
         state["schema_version"] = SCHEMA_VERSION
         state["events"] = events
@@ -105,27 +111,20 @@ def update_event(
 ) -> dict[str, Any]:
     updated: dict[str, Any] | None = None
     conflict_policy = normalize_conflict_policy(conflict_policy)
-    _reject_create_only_fields(event_payload)
 
     def updater(state: dict[str, Any]) -> dict[str, Any]:
         nonlocal updated
         events = [normalize_event(item) for item in state.get("events", [])]
-        next_events = []
-        for event in events:
-            if event["id"] == event_id:
-                _check_expected_revision("update", event, expected_revision)
-                updated = normalize_event(
-                    {**event, **event_payload, "id": event_id},
-                    created_at=event.get("created_at"),
-                    updated_at=now_string(),
-                    revision=event_revision(event.get("revision")) + 1,
-                )
-                raise_if_rejected_conflicts("update", conflict_policy, updated, events, ignore_event_id=event_id)
-                next_events.append(updated)
-            else:
-                next_events.append(event)
-        if updated is None:
-            raise ValueError(f"Calendar event `{event_id}` was not found.")
+        conflict_events = filter_visible_events(events, state.get("calendars", []))
+        updated = _updated_event_from_events(
+            events,
+            event_id,
+            event_payload,
+            conflict_policy=conflict_policy,
+            expected_revision=expected_revision,
+            conflict_events=conflict_events,
+        )
+        next_events = [updated if event["id"] == event_id else event for event in events]
         state["schema_version"] = SCHEMA_VERSION
         state["events"] = next_events
         return state
@@ -134,15 +133,42 @@ def update_event(
     return updated or {}
 
 
+def preview_update_event(
+    data_root: Path,
+    event_id: str,
+    event_payload: dict[str, Any],
+    *,
+    conflict_policy: str = "allow",
+    expected_revision: int | None = None,
+) -> dict[str, Any]:
+    """Validate and shape an update without writing local Calendar state."""
+    conflict_policy = normalize_conflict_policy(conflict_policy)
+    state = read_state(data_root)
+    events = [normalize_event(item) for item in state.get("events", [])]
+    conflict_events = filter_visible_events(events, state.get("calendars", []))
+    return _updated_event_from_events(
+        events,
+        event_id,
+        event_payload,
+        conflict_policy=conflict_policy,
+        expected_revision=expected_revision,
+        conflict_events=conflict_events,
+    )
+
+
 def delete_event(data_root: Path, event_id: str, *, expected_revision: int | None = None) -> None:
     deleted = False
 
     def updater(state: dict[str, Any]) -> dict[str, Any]:
         nonlocal deleted
         events = [normalize_event(item) for item in state.get("events", [])]
+        visible_event_ids = {event["id"] for event in filter_visible_events(events, state.get("calendars", []))}
         next_events = []
         for event in events:
             if event["id"] == event_id:
+                if event_id not in visible_event_ids:
+                    next_events.append(event)
+                    continue
                 _check_expected_revision("delete", event, expected_revision)
                 deleted = True
                 continue
@@ -156,6 +182,13 @@ def delete_event(data_root: Path, event_id: str, *, expected_revision: int | Non
     update_state(data_root, updater)
 
 
+def preview_delete_event(data_root: Path, event_id: str, *, expected_revision: int | None = None) -> dict[str, Any]:
+    """Validate that an event can be deleted and return the current event."""
+    event = _read_event(data_root, event_id)
+    _check_expected_revision("delete", event, expected_revision)
+    return event
+
+
 def move_event(
     data_root: Path,
     event_id: str,
@@ -165,16 +198,25 @@ def move_event(
     expected_revision: int | None = None,
 ) -> dict[str, Any]:
     """Move one event, preserving duration unless a new end time is supplied."""
+    return update_event(
+        data_root,
+        event_id,
+        move_event_payload(data_root, event_id, body),
+        conflict_policy=conflict_policy,
+        expected_revision=expected_revision,
+    )
+
+
+def move_event_payload(data_root: Path, event_id: str, body: dict[str, Any]) -> dict[str, Any]:
+    """Return the update payload for a move without writing Calendar state."""
     event = _read_event(data_root, event_id)
     start_value = body.get("startTime") or body.get("start_time")
     if not start_value and move_strategy(body) == "first_free":
-        return _move_event_to_first_free(
+        return _first_free_move_payload(
             data_root,
             event_id,
             event,
             body,
-            conflict_policy=conflict_policy,
-            expected_revision=expected_revision,
         )
     if not start_value:
         raise ValueError("`startTime` is required unless `move_strategy` is `first_free`.")
@@ -184,26 +226,17 @@ def move_event(
     else:
         duration = iso_time(event["endTime"], "endTime") - iso_time(event["startTime"], "startTime")
         end_time = start_time + duration
-    return update_event(
-        data_root,
-        event_id,
-        {
-            "startTime": format_time(start_time),
-            "endTime": format_time(end_time),
-        },
-        conflict_policy=conflict_policy,
-        expected_revision=expected_revision,
-    )
+    return {
+        "startTime": format_time(start_time),
+        "endTime": format_time(end_time),
+    }
 
 
-def _move_event_to_first_free(
+def _first_free_move_payload(
     data_root: Path,
     event_id: str,
     event: dict[str, Any],
     body: dict[str, Any],
-    *,
-    conflict_policy: str,
-    expected_revision: int | None,
 ) -> dict[str, Any]:
     start_after = iso_time(body.get("start_after") or body.get("startAfter"), "start_after")
     end_before = iso_time(body.get("end_before") or body.get("endBefore"), "end_before")
@@ -232,16 +265,10 @@ def _move_event_to_first_free(
             "Calendar move could not find a free slot matching the event duration in the requested window.",
             conflicts,
         )
-    return update_event(
-        data_root,
-        event_id,
-        {
-            "startTime": format_time(slot[0]),
-            "endTime": format_time(slot[1]),
-        },
-        conflict_policy=conflict_policy,
-        expected_revision=expected_revision,
-    )
+    return {
+        "startTime": format_time(slot[0]),
+        "endTime": format_time(slot[1]),
+    }
 
 
 def _find_event_by_idempotency_key(events: list[dict[str, Any]], idempotency_key: str) -> dict[str, Any] | None:
@@ -265,6 +292,34 @@ def _check_expected_revision(action: str, event: dict[str, Any], expected_revisi
         actual_revision=actual_revision,
         current_event=event_profile(event, profile="compact", include_description=False),
     )
+
+
+def _updated_event_from_events(
+    events: list[dict[str, Any]],
+    event_id: str,
+    event_payload: dict[str, Any],
+    *,
+    conflict_policy: str,
+    expected_revision: int | None,
+    conflict_events: list[dict[str, Any]],
+) -> dict[str, Any]:
+    _reject_create_only_fields(event_payload)
+    visible_event_ids = {event["id"] for event in conflict_events}
+    for event in events:
+        if event["id"] != event_id:
+            continue
+        if event_id not in visible_event_ids:
+            break
+        _check_expected_revision("update", event, expected_revision)
+        updated = normalize_event(
+            {**event, **event_payload, "id": event_id},
+            created_at=event.get("created_at"),
+            updated_at=now_string(),
+            revision=event_revision(event.get("revision")) + 1,
+        )
+        raise_if_rejected_conflicts("update", conflict_policy, updated, conflict_events, ignore_event_id=event_id)
+        return updated
+    raise ValueError(f"Calendar event `{event_id}` was not found.")
 
 
 def _reject_create_only_fields(event_payload: dict[str, Any]) -> None:

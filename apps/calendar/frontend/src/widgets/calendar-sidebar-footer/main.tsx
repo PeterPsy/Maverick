@@ -1,7 +1,9 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { CalendarPlus, Plus } from 'lucide-react';
+import { startGoogleOAuth } from '../../api';
 import { notifyCalendarUiStateChanged, writeCalendarUiState } from '../../calendar-ui-state';
-import { runtimeAppIdFromPathname } from '../../runtime';
+import { calendarOAuthRedirectUri, runtimeAppIdFromPathname } from '../../runtime';
 import './styles.css';
 
 const PRIMARY_ACTION_LABEL = 'New event';
@@ -9,6 +11,8 @@ const WIDGET_ID = 'calendar-sidebar-footer';
 
 function CalendarSidebarFooterWidget() {
   const appId = runtimeAppIdFromPathname(window.location.pathname);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     postPrimaryActionState(appId);
@@ -36,8 +40,18 @@ function CalendarSidebarFooterWidget() {
   return (
     <main className="calendar-sidebar-footer-widget">
       <button className="calendar-sidebar-footer__new-event" onClick={() => openCreate(appId)} type="button">
-        <span aria-hidden="true" className="calendar-sidebar-footer__plus" />
+        <Plus aria-hidden="true" />
         <span>New event</span>
+      </button>
+      <button
+        className="calendar-sidebar-footer__connect"
+        disabled={isConnecting}
+        onClick={() => void connectAccount(appId, setIsConnecting, setError)}
+        title={error || 'Connect Google Calendar'}
+        type="button"
+      >
+        <CalendarPlus aria-hidden="true" />
+        <span>{isConnecting ? 'Connecting' : 'Connect'}</span>
       </button>
     </main>
   );
@@ -60,6 +74,65 @@ function postPrimaryActionState(appId: string) {
     },
     window.location.origin,
   );
+}
+
+async function connectAccount(appId: string, setIsConnecting: (value: boolean) => void, setError: (value: string) => void) {
+  const authorizationWindow = openBlankAuthorizationWindow();
+  setIsConnecting(true);
+  setError('');
+  try {
+    const started = await startGoogleOAuth(appId, { redirectUri: calendarOAuthRedirectUri(appId, window.location.origin) });
+    openAuthorizationUrl(started.authorization_url, authorizationWindow);
+  } catch (connectError) {
+    closeAuthorizationWindow(authorizationWindow);
+    setError(connectError instanceof Error ? connectError.message : 'Google Calendar connection failed.');
+  } finally {
+    setIsConnecting(false);
+  }
+}
+
+function openBlankAuthorizationWindow() {
+  const popup = window.open('about:blank', '_blank');
+  if (!popup) {
+    return null;
+  }
+  try {
+    popup.document.title = 'Opening Google Calendar';
+    popup.document.body.style.fontFamily = 'system-ui, sans-serif';
+    popup.document.body.style.padding = '24px';
+    popup.document.body.textContent = 'Opening Google Calendar...';
+  } catch {
+    return popup;
+  }
+  return popup;
+}
+
+function openAuthorizationUrl(authorizationUrl: string, popup: Window | null) {
+  if (popup && !popup.closed) {
+    popup.location.replace(authorizationUrl);
+    try {
+      popup.opener = null;
+      popup.focus();
+    } catch {
+      return;
+    }
+    return;
+  }
+  if (window.top && window.top !== window) {
+    window.parent.postMessage({ type: 'maverick.app.external-url', url: authorizationUrl }, window.location.origin);
+    return;
+  }
+  window.location.assign(authorizationUrl);
+}
+
+function closeAuthorizationWindow(popup: Window | null) {
+  if (popup && !popup.closed) {
+    try {
+      popup.close();
+    } catch {
+      return;
+    }
+  }
 }
 
 createRoot(document.getElementById('calendar-sidebar-footer-root') as HTMLElement).render(<CalendarSidebarFooterWidget />);

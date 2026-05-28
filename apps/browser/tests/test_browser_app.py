@@ -15,6 +15,7 @@ import unittest
 from unittest.mock import patch
 
 from core.apps.contracts import parse_app_contract_file
+from core.apps.presentation import app_frontend_is_launchable
 
 
 APP_ROOT = Path(__file__).resolve().parents[1]
@@ -22,7 +23,7 @@ BACKEND_ROOT = APP_ROOT / "backend"
 sys.path.insert(0, str(BACKEND_ROOT))
 
 from service import acceptance_smoke_payload, handle_action, mcp_result_for_tool
-from store import load_state
+from store import load_state, save_state
 
 
 class BrowserAppTests(unittest.TestCase):
@@ -32,38 +33,33 @@ class BrowserAppTests(unittest.TestCase):
         self.assertEqual(parsed.app_id, "browser")
         self.assertEqual(parsed.contract.distribution.mode, "sealed")
         self.assertEqual(parsed.contract.distribution.source_access, "none")
-        self.assertEqual(parsed.contract.presentation.frontend_role, "workspace")
+        self.assertEqual(parsed.contract.presentation.frontend_role, "none")
+        self.assertIsNone(parsed.contract.entrypoints.frontend)
+        self.assertFalse(app_frontend_is_launchable(parsed.contract))
         self.assertEqual(parsed.contract.compatibility.supported_workspace_modes, ["full-access"])
         self.assertEqual(parsed.contract.storage.primary_paths, ["data/browser/state.json"])
+        self.assertEqual(parsed.contract.capabilities.views, [])
+        self.assertEqual(parsed.contract.capabilities.skills, ["browser-ops"])
+        self.assertEqual(parsed.contract.entrypoints.skills_root, "skills")
         self.assertIn("browser_navigate", parsed.contract.capabilities.mcp_tools)
         self.assertIn("browser_click", parsed.contract.capabilities.mcp_tools)
         self.assertNotIn("browser_evaluate", parsed.contract.capabilities.mcp_tools)
         self.assertNotIn("browser_run_code", parsed.contract.capabilities.mcp_tools)
 
-    def test_frontend_declares_p0_browser_lab_panes_without_external_iframes(self) -> None:
-        html = (APP_ROOT / "frontend" / "src" / "index.html").read_text(encoding="utf-8")
-        javascript = (APP_ROOT / "frontend" / "src" / "assets" / "main.js").read_text(encoding="utf-8")
-
-        self.assertIn('id="url-input"', html)
-        self.assertIn('id="session-picker"', html)
-        self.assertIn('id="tab-list"', html)
-        self.assertIn('id="snapshot-output"', html)
-        self.assertIn('id="refs-list"', html)
-        self.assertIn('id="screenshot-frame"', html)
-        self.assertIn('id="console-list"', html)
-        self.assertIn('id="network-list"', html)
-        self.assertIn('id="policy-status"', html)
-        self.assertNotIn("<iframe", html.lower())
-        self.assertIn('"session.create"', javascript)
-        self.assertIn('"navigate"', javascript)
-        self.assertIn('"snapshot"', javascript)
-        self.assertIn('"screenshot"', javascript)
-        self.assertIn('"console.messages"', javascript)
-        self.assertIn('"network.requests"', javascript)
-        self.assertIn("refreshInspectionPanes", javascript)
-        self.assertIn("markRefreshFailure", javascript)
-        self.assertIn("maverick.app.ready", javascript)
-        self.assertNotIn("Promise.allSettled", javascript)
+        package = json.loads((APP_ROOT / "package.json").read_text(encoding="utf-8"))
+        skill = APP_ROOT / "skills" / "browser-ops" / "SKILL.md"
+        self.assertFalse((APP_ROOT / "frontend").exists())
+        self.assertTrue(skill.exists())
+        skill_text = skill.read_text(encoding="utf-8")
+        broker_text = (APP_ROOT / "broker" / "playwright-broker.mjs").read_text(encoding="utf-8")
+        self.assertIn("sandbox_agent_allowed: false", skill_text)
+        self.assertIn("browser_session_create", skill_text)
+        self.assertIn("The broker serializes actions per `session_id`", skill_text)
+        self.assertIn("const sessionActionQueues = new Map();", broker_text)
+        self.assertIn("enqueueSessionAction(payload.session_id", broker_text)
+        self.assertNotIn("build", package["scripts"])
+        self.assertEqual(package["scripts"]["broker"], "node broker/playwright-broker.mjs")
+        self.assertEqual(package["scripts"]["broker:docker"], "node broker/playwright-server-docker.mjs")
 
     def test_mcp_descriptor_matches_p0_tool_scope(self) -> None:
         parsed = parse_app_contract_file(APP_ROOT)
@@ -301,6 +297,33 @@ class BrowserAppTests(unittest.TestCase):
         self.assertEqual(status_code, 200)
         self.assertEqual(result["broker"]["provider"], "playwright_lab")
         self.assertEqual(result["broker"]["status"], "unreachable")
+
+    def test_status_drops_stale_broker_detail_when_live_health_is_ready(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir)
+            save_state(
+                str(data_root),
+                {
+                    "schema_version": "1",
+                    "broker": {
+                        "status": "unconfigured",
+                        "provider": "playwright_lab",
+                        "detail": "stale broker setup detail",
+                    },
+                    "sessions": {},
+                    "audit": [],
+                },
+            )
+            with broker_stub({"session_id": "stub-session"}) as broker:
+                with patch.dict(
+                    "os.environ",
+                    {"MAVERICK_BROWSER_BROKER_URL": broker.url, "MAVERICK_BROWSER_BROKER_TOKEN": "test-token"},
+                ):
+                    status_code, result = handle_action(data_root, {"action": "status"})
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(result["broker"]["status"], "ready")
+        self.assertNotIn("detail", result["broker"])
 
     def test_acceptance_smoke_runs_p0_broker_sequence_without_persisting_artifacts(self) -> None:
         action_responses = {

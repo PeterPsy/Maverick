@@ -186,7 +186,10 @@ def status_payload(
 ) -> dict[str, Any]:
     state = load_state(str(data_root))
     broker = dict(state["broker"])
-    broker.update(broker_health())
+    live_health = broker_health()
+    broker.update(live_health)
+    if "detail" not in live_health and broker.get("status") == "ready":
+        broker.pop("detail", None)
     sessions = visible_session_records(state, admin_dev_targets_enabled=admin_dev_targets_enabled)
     audit = visible_audit_records(state, admin_dev_targets_enabled=admin_dev_targets_enabled)
     return {

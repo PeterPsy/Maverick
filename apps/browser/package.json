@@ -4,7 +4,6 @@
   "license": "MIT",
   "private": true,
   "scripts": {
-    "build": "node scripts/build-frontend.mjs",
     "broker": "node broker/playwright-broker.mjs",
     "broker:docker": "node broker/playwright-server-docker.mjs"
   },

@@ -9,8 +9,6 @@ extension.
 
 ## Surfaces
 
-- Frontend: workspace-launchable Browser Lab console with URL preflight,
-  session status, screenshot, snapshot, console, and network panes.
 - Backend: JSON controller for policy preflight, session metadata, tabs,
   bounded console/network observations, audit, and broker handoff.
 - Broker: local development sidecar in `broker/` that connects to a Dockerized
@@ -19,8 +17,14 @@ extension.
   screenshots, console logs, network logs, tabs, waits, and Maverick dev
   inspector actions.
 - CLI: `browser` command for agent/operator status and policy preflight.
+- Skill: bundled `browser-ops` guidance for full-access agents using the
+  governed Browser CLI/MCP surfaces.
 - Hooks: install, migrate, and health check hooks create and validate the app
   data root.
+
+Browser is backend-only in P0. It does not declare a workspace frontend,
+mounted view, widgets, or user-launchable shell route; agents and operators use
+the MCP and CLI surfaces.
 
 ## Storage
 
@@ -43,7 +47,6 @@ workspace-local SDK create flow. Validate and inspect it through the generic
 Maverick app surfaces:
 
 ```bash
-maverick app browser frontend build --json
 maverick app browser mcp list --json
 maverick app browser cli list --json
 python3 -m unittest apps/browser/tests/test_browser_app.py
@@ -59,11 +62,37 @@ commands.
 Browser is declared as `sealed` with `source_access: none` because it controls a
 privileged browser capability. It is `full-access` only in P0 because the
 initial Playwright broker and Maverick development inspector are operator/dev
-surfaces.
+surfaces. The derived CLI and MCP invocation policy is therefore
+`requires_full_access: true` and `sandbox_agent_allowed: false`. Keep sandbox
+agent access closed for P0; a later read-only sandbox mode needs a separate
+policy review instead of a descriptor-only change.
 
 The app contract intentionally declares no app secret permissions and no broad
 network permission. Browser navigation is governed by the core browser egress
 policy, including DNS/redirect checks and explicit admin dev target exceptions.
+The contract also intentionally declares `presentation.frontend_role: "none"`
+and `entrypoints.frontend: null`, so Browser is discoverable as an agent-facing
+capability but is not launchable from the workspace app rail.
+
+Browser also declares `capabilities.skills: ["browser-ops"]` and
+`entrypoints.skills_root: "skills"` so the Skills app can seed workspace-owned
+runtime guidance for agents without making the Browser app user-launchable.
+
+## Agent Usage
+
+Full-access agents should use the bundled `browser-ops` skill before operating
+Browser. The short version is:
+
+```bash
+maverick app browser cli inspect browser --json
+maverick app browser mcp list --json
+maverick app browser mcp inspect browser_session_create --json
+```
+
+Use the CLI for status, audit, preflight, and smoke checks. Use MCP for browser
+sessions: create a read-only session, navigate, collect snapshot/screenshot/logs
+as needed, then close the session. Use `maverick_dev_inspector` and the
+interactive tools only for admin-approved Maverick development UI targets.
 
 ## P0 Playwright Broker
 
@@ -109,6 +138,8 @@ The controller records session metadata only after successful broker actions,
 requires a known session before tab/snapshot/screenshot/log/wait/interactive
 actions, derives trusted policy context from the platform caller, and audits
 navigate, snapshot, screenshot, click, type, key press, and wait attempts.
+The broker serializes actions per Browser session so observation requests do not
+race an in-flight navigation on the same Playwright page context.
 The broker also enforces Browser P0 egress policy on Playwright requests so
 redirects and subresources cannot bypass the backend preflight path. It starts a
 credentialed proxy for browser contexts, advertised as
@@ -140,9 +171,10 @@ persisting or printing the base64 artifact.
 Intentional P0 omissions:
 
 - no Chrome Companion provider or extension
+- no workspace-launchable frontend or mounted Browser Lab view
 - no persistent browser profiles or stored login state
 - no file upload
 - no automatic download persistence
 - no arbitrary Playwright code execution
 - no page JavaScript evaluation
-- no reference entities, widgets, skills, export, or import
+- no reference entities, widgets, export, or import

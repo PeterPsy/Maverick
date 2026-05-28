@@ -57,6 +57,7 @@ let chromiumClient = null;
 let playwrightVersion = pinnedPlaywrightVersion;
 const sessions = new Map();
 const proxyPolicies = new Map();
+const sessionActionQueues = new Map();
 
 const server = http.createServer(async (request, response) => {
   try {
@@ -113,6 +114,26 @@ process.on("SIGINT", () => void shutdown(0));
 process.on("SIGTERM", () => void shutdown(0));
 
 async function handleAction(action, payload) {
+  if (action !== "session.create" && typeof payload?.session_id === "string" && payload.session_id.trim()) {
+    return enqueueSessionAction(payload.session_id, () => handleActionDirect(action, payload));
+  }
+  return handleActionDirect(action, payload);
+}
+
+async function enqueueSessionAction(sessionId, operation) {
+  const key = String(sessionId).trim();
+  const previous = sessionActionQueues.get(key) || Promise.resolve();
+  const queued = previous.catch(() => undefined).then(operation);
+  const tracked = queued.catch(() => undefined).finally(() => {
+    if (sessionActionQueues.get(key) === tracked) {
+      sessionActionQueues.delete(key);
+    }
+  });
+  sessionActionQueues.set(key, tracked);
+  return queued;
+}
+
+async function handleActionDirect(action, payload) {
   switch (action) {
     case "session.create":
       return { statusCode: 201, payload: await createSession(payload) };
@@ -479,11 +500,12 @@ async function getBrowser() {
     browserPromise = chromium.connect(wsEndpoint, { timeout: connectTimeoutMs }).then((connected) => {
       browser = connected;
       browser.on("disconnected", () => {
-      browser = null;
-      browserPromise = null;
-      sessions.clear();
-      proxyPolicies.clear();
-    });
+        browser = null;
+        browserPromise = null;
+        sessions.clear();
+        proxyPolicies.clear();
+        sessionActionQueues.clear();
+      });
       return browser;
     });
   }
@@ -1273,6 +1295,7 @@ async function shutdown(code) {
   await Promise.all([...sessions.values()].map((session) => session.context.close().catch(() => undefined)));
   sessions.clear();
   proxyPolicies.clear();
+  sessionActionQueues.clear();
   await browser?.close().catch(() => undefined);
   process.exit(code);
 }

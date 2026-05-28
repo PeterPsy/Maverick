@@ -16,6 +16,7 @@ from urllib.request import Request, urlopen
 from uuid import uuid4
 
 from database import connect, ensure_schema, now_timestamp
+from email_rendering import render_email_body
 from drafts import get_draft
 from store import audit, get_attachment, get_thread, list_threads
 
@@ -87,12 +88,23 @@ class GmailProvider:
         data_root: Path,
         thread_id: str,
         max_body_chars: int = 8000,
+        max_body_html_chars: int | None = None,
         app_secrets: dict[str, object] | None = None,
     ) -> dict[str, object]:
         if app_secrets and app_secrets.get(GMAIL_REFRESH_TOKEN_SECRET):
-            thread = get_thread(data_root, thread_id, max_body_chars=max_body_chars)
+            thread = get_thread(
+                data_root,
+                thread_id,
+                max_body_chars=max_body_chars,
+                max_body_html_chars=max_body_html_chars,
+            )
             self._fetch_and_cache_thread(data_root, str(thread["connection_id"]), str(thread["provider_thread_id"]), app_secrets)
-        return get_thread(data_root, thread_id, max_body_chars=max_body_chars)
+        return get_thread(
+            data_root,
+            thread_id,
+            max_body_chars=max_body_chars,
+            max_body_html_chars=max_body_html_chars,
+        )
 
     def modify_labels(
         self,
@@ -410,10 +422,19 @@ def _cache_thread(data_root: Path, connection_id: str, thread: dict[str, object]
             ),
         )
         for item in parsed_messages:
+            provider_message_id = str(item["provider_message_id"])
+            local_message_id = _local_message_id(connection_id, provider_message_id)
+            _attach_inline_asset_ids(connection_id, provider_message_id, local_message_id, item["inline_assets"])
             db.execute(
                 """
-                INSERT INTO messages(id, thread_id, provider_message_id, sender_json, recipients_json, cc_json, bcc_json, sent_at, body_text, body_html_sanitized, headers_json, has_attachments)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO messages(
+                  id, thread_id, provider_message_id, sender_json, recipients_json, cc_json, bcc_json,
+                  sent_at, body_text, body_html_sanitized, body_html_original_bounded,
+                  body_html_gmail_sanitized, body_html_rendered, render_policy_json,
+                  body_render_mode, body_preview, body_truncated,
+                  parts_json, inline_assets_json, headers_json, has_attachments
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                   sender_json = excluded.sender_json,
                   recipients_json = excluded.recipients_json,
@@ -422,20 +443,38 @@ def _cache_thread(data_root: Path, connection_id: str, thread: dict[str, object]
                   sent_at = excluded.sent_at,
                   body_text = excluded.body_text,
                   body_html_sanitized = excluded.body_html_sanitized,
+                  body_html_original_bounded = excluded.body_html_original_bounded,
+                  body_html_gmail_sanitized = excluded.body_html_gmail_sanitized,
+                  body_html_rendered = excluded.body_html_rendered,
+                  render_policy_json = excluded.render_policy_json,
+                  body_render_mode = excluded.body_render_mode,
+                  body_preview = excluded.body_preview,
+                  body_truncated = excluded.body_truncated,
+                  parts_json = excluded.parts_json,
+                  inline_assets_json = excluded.inline_assets_json,
                   headers_json = excluded.headers_json,
                   has_attachments = excluded.has_attachments
                 """,
                 (
-                    _local_message_id(connection_id, str(item["provider_message_id"])),
+                    local_message_id,
                     local_thread_id,
-                    item["provider_message_id"],
+                    provider_message_id,
                     json.dumps(item["sender"], ensure_ascii=True),
                     json.dumps(item["recipients"], ensure_ascii=True),
                     json.dumps(item["cc"], ensure_ascii=True),
                     json.dumps(item["bcc"], ensure_ascii=True),
                     item["sent_at"],
                     item["body_text"],
-                    "",
+                    item["body_html_sanitized"],
+                    item["body_html_original_bounded"],
+                    item["body_html_gmail_sanitized"],
+                    item["body_html_rendered"],
+                    json.dumps(item["render_policy"], ensure_ascii=True, sort_keys=True),
+                    item["body_render_mode"],
+                    item["body_preview"],
+                    1 if item["body_truncated"] else 0,
+                    json.dumps(item["parts"], ensure_ascii=True),
+                    json.dumps(item["inline_assets"], ensure_ascii=True),
                     json.dumps(item["headers"], ensure_ascii=True),
                     1 if item["attachments"] else 0,
                 ),
@@ -467,6 +506,7 @@ def _cache_thread(data_root: Path, connection_id: str, thread: dict[str, object]
 def _parse_message(message: dict[str, object]) -> dict[str, object]:
     payload = message.get("payload") if isinstance(message.get("payload"), dict) else {}
     headers = _headers(payload)
+    body = _message_body(payload)
     return {
         "provider_message_id": str(message.get("id") or ""),
         "subject": headers.get("subject", ""),
@@ -475,7 +515,7 @@ def _parse_message(message: dict[str, object]) -> dict[str, object]:
         "cc": _addresses(headers.get("cc", "")),
         "bcc": _addresses(headers.get("bcc", "")),
         "sent_at": _sent_at(headers.get("date"), message.get("internalDate")),
-        "body_text": _message_text(payload),
+        **body,
         "headers": headers,
         "labels": [str(item) for item in message.get("labelIds", [])] if isinstance(message.get("labelIds"), list) else [],
         "attachments": _attachments(payload),
@@ -493,21 +533,74 @@ def _headers(payload: dict[str, object]) -> dict[str, str]:
     return values
 
 
-def _message_text(payload: dict[str, object]) -> str:
-    chunks: list[str] = []
-    _collect_text_parts(payload, chunks)
-    return "\n\n".join(chunk for chunk in chunks if chunk).strip()
+def _message_body(payload: dict[str, object]) -> dict[str, object]:
+    plain_chunks: list[str] = []
+    html_chunks: list[str] = []
+    parts: list[dict[str, object]] = []
+    inline_assets: list[dict[str, object]] = []
+    _collect_body_parts(payload, plain_chunks, html_chunks, parts, inline_assets)
+    rendered = render_email_body(plain_chunks, html_chunks)
+    return {
+        "body_text": rendered.body_text,
+        "body_html_sanitized": rendered.body_html_sanitized,
+        "body_html_original_bounded": rendered.body_html_original_bounded,
+        "body_html_gmail_sanitized": rendered.body_html_gmail_sanitized,
+        "body_html_rendered": rendered.body_html_rendered,
+        "render_policy": rendered.render_policy,
+        "body_render_mode": rendered.body_render_mode,
+        "body_preview": rendered.body_preview,
+        "body_truncated": rendered.body_truncated,
+        "parts": parts,
+        "inline_assets": inline_assets,
+    }
 
 
-def _collect_text_parts(part: dict[str, object], chunks: list[str]) -> None:
+def _collect_body_parts(
+    part: dict[str, object],
+    plain_chunks: list[str],
+    html_chunks: list[str],
+    parts: list[dict[str, object]],
+    inline_assets: list[dict[str, object]],
+) -> None:
     mime_type = str(part.get("mimeType") or "")
     body = part.get("body") if isinstance(part.get("body"), dict) else {}
     data = str(body.get("data") or "")
-    if mime_type == "text/plain" and data:
-        chunks.append(_decode_base64url(data))
+    filename = str(part.get("filename") or "")
+    headers = _headers(part)
+    disposition = headers.get("content-disposition", "").lower()
+    content_id = headers.get("content-id", "").strip("<>")
+    provider_attachment_id = str(body.get("attachmentId") or "")
+    is_attachment = bool(filename) or "attachment" in disposition
+    if content_id and mime_type.startswith("image/"):
+        inline_assets.append(
+            {
+                "content_id": content_id,
+                "provider_attachment_id": provider_attachment_id,
+                "filename": filename,
+                "content_type": mime_type,
+                "size_bytes": int(body.get("size") or 0),
+            }
+        )
+    if data and not is_attachment:
+        decoded = _decode_text_part(data, _part_charset(part))
+        if mime_type == "text/plain":
+            plain_chunks.append(decoded)
+        elif mime_type == "text/html":
+            html_chunks.append(decoded)
+    if mime_type.startswith("text/") or content_id:
+        parts.append(
+            {
+                "mime_type": mime_type,
+                "filename": filename,
+                "content_id": content_id,
+                "provider_attachment_id": provider_attachment_id,
+                "size_bytes": int(body.get("size") or 0),
+                "disposition": disposition,
+            }
+        )
     for child in part.get("parts", []) if isinstance(part.get("parts"), list) else []:
         if isinstance(child, dict):
-            _collect_text_parts(child, chunks)
+            _collect_body_parts(child, plain_chunks, html_chunks, parts, inline_assets)
 
 
 def _attachments(payload: dict[str, object]) -> list[dict[str, object]]:
@@ -534,9 +627,27 @@ def _collect_attachments(part: dict[str, object], found: list[dict[str, object]]
             _collect_attachments(child, found)
 
 
-def _decode_base64url(value: str) -> str:
+def _attach_inline_asset_ids(connection_id: str, provider_message_id: str, local_message_id: str, inline_assets: list[dict[str, object]]) -> None:
+    for asset in inline_assets:
+        provider_attachment_id = str(asset.get("provider_attachment_id") or "")
+        if not provider_attachment_id:
+            continue
+        asset["message_id"] = local_message_id
+        asset["attachment_id"] = _local_attachment_id(connection_id, provider_message_id, provider_attachment_id)
+
+
+def _decode_text_part(value: str, charset: str) -> str:
     raw = base64.urlsafe_b64decode((value + "=" * (-len(value) % 4)).encode("ascii"))
-    return raw.decode("utf-8", errors="replace")
+    try:
+        return raw.decode(charset or "utf-8", errors="replace")
+    except LookupError:
+        return raw.decode("utf-8", errors="replace")
+
+
+def _part_charset(part: dict[str, object]) -> str:
+    content_type = _headers(part).get("content-type") or str(part.get("mimeType") or "")
+    match = re.search(r"charset=['\"]?([^;'\"]+)", content_type, flags=re.IGNORECASE)
+    return match.group(1).strip() if match else "utf-8"
 
 
 def _base64url_decoded_size(value: str) -> int:

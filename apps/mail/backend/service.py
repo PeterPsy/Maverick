@@ -10,6 +10,8 @@ from oauth import complete_oauth, provider_status, start_oauth
 from providers.registry import provider_for_connection
 from references import reference_manifest, reference_resolve, reference_search, reference_summary
 from store import (
+    DEFAULT_BODY_HTML_CHARS,
+    DEFAULT_BODY_TEXT_CHARS,
     count_threads,
     disconnect_connection,
     get_connection,
@@ -51,6 +53,7 @@ MUTATING_ACTIONS = {
 }
 
 ATTACHMENT_GET_ACTIONS = {"attachments.get", "mail_get_attachment"}
+INTERACTIVE_SYNC_MAX_THREADS = 25
 
 
 def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dict[str, object]]:
@@ -96,11 +99,13 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
             thread = get_thread(data_root, thread_id)
             connection_id = str(thread["connection_id"])
             provider = provider_for_connection(data_root, connection_id)
+            max_body_chars, max_body_html_chars = _body_response_limits(payload)
             return 200, {
                 "thread": provider.get_thread(
                     data_root,
                     thread_id,
-                    _bounded_int(payload.get("max_body_chars"), 8000, 200, 50000),
+                    max_body_chars,
+                    max_body_html_chars=max_body_html_chars,
                     app_secrets={} if _is_disconnected(data_root, connection_id) else _app_secrets(payload),
                 )
             }
@@ -113,18 +118,20 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
                     data_root,
                     connection_id,
                     app_secrets=_app_secrets(payload),
-                    max_threads=_bounded_int(payload.get("max_threads") or payload.get("limit"), 100, 1, 2000),
+                    max_threads=_bounded_int(payload.get("max_threads") or payload.get("limit"), INTERACTIVE_SYNC_MAX_THREADS, 1, 2000),
                     query=_optional_string(payload.get("query")),
                     page_token=_optional_string(payload.get("page_token")),
                     continue_cursor=bool(payload.get("continue_cursor")),
                 )
             }
         if action in {"messages.get", "mail_get_message"}:
+            max_body_chars, max_body_html_chars = _body_response_limits(payload)
             return 200, {
                 "message": get_message(
                     data_root,
                     _required_string(payload.get("message_id") or payload.get("id"), "message_id"),
-                    _bounded_int(payload.get("max_body_chars"), 8000, 200, 50000),
+                    max_body_chars,
+                    max_body_html_chars=max_body_html_chars,
                 )
             }
         if action in {"messages.search", "mail_search_messages", "search"}:
@@ -310,6 +317,12 @@ def _optional_bounded_int(value: object, minimum: int, maximum: int) -> int | No
     if parsed < minimum:
         return None
     return min(maximum, parsed)
+
+
+def _body_response_limits(payload: dict[str, object]) -> tuple[int, int]:
+    max_body_chars = _bounded_int(payload.get("max_body_chars"), DEFAULT_BODY_TEXT_CHARS, 200, 50_000)
+    max_body_html_chars = _bounded_int(payload.get("max_body_html_chars"), max_body_chars, 200, DEFAULT_BODY_HTML_CHARS)
+    return max_body_chars, max_body_html_chars
 
 
 def _optional_path(value: object) -> Path | None:

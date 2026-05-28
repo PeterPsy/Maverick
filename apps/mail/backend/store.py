@@ -8,6 +8,11 @@ import re
 from uuid import uuid4
 
 from database import connect, ensure_schema, now_timestamp
+from email_rendering import BODY_SOURCE_LIMIT, truncate_sanitized_html
+
+
+DEFAULT_BODY_TEXT_CHARS = 8_000
+DEFAULT_BODY_HTML_CHARS = BODY_SOURCE_LIMIT
 
 
 def status(data_root: Path) -> dict[str, object]:
@@ -178,15 +183,43 @@ def _thread_filter(payload: dict[str, object]) -> tuple[list[str], list[object]]
         clauses.append("labels_json LIKE ?")
         params.append(f'%"{label}"%')
     if query:
-        clauses.append("(subject LIKE ? OR snippet LIKE ?)")
-        params.extend([f"%{query}%", f"%{query}%"])
+        clauses.append(
+            """
+            (
+              subject LIKE ?
+              OR snippet LIKE ?
+              OR EXISTS (
+                SELECT 1 FROM messages
+                WHERE messages.thread_id = threads.id
+                  AND (
+                    messages.body_text LIKE ?
+                    OR messages.body_html_sanitized LIKE ?
+                    OR messages.body_html_gmail_sanitized LIKE ?
+                    OR messages.body_html_rendered LIKE ?
+                    OR messages.sender_json LIKE ?
+                    OR messages.recipients_json LIKE ?
+                  )
+              )
+              OR EXISTS (
+                SELECT 1 FROM attachments JOIN messages ON attachments.message_id = messages.id
+                WHERE messages.thread_id = threads.id AND attachments.filename LIKE ?
+              )
+            )
+            """
+        )
+        params.extend([f"%{query}%"] * 9)
     if isinstance(unread, bool):
         clauses.append("unread = ?")
         params.append(1 if unread else 0)
     return clauses, params
 
 
-def get_thread(data_root: Path, thread_id: str, max_body_chars: int = 8000) -> dict[str, object]:
+def get_thread(
+    data_root: Path,
+    thread_id: str,
+    max_body_chars: int = DEFAULT_BODY_TEXT_CHARS,
+    max_body_html_chars: int | None = None,
+) -> dict[str, object]:
     ensure_schema(data_root)
     with connect(data_root) as db:
         thread_row = db.execute("SELECT * FROM threads WHERE id = ?", (thread_id,)).fetchone()
@@ -195,20 +228,40 @@ def get_thread(data_root: Path, thread_id: str, max_body_chars: int = 8000) -> d
         if thread_row is None:
             raise ValueError(f"Thread `{thread_id}` was not found")
         message_rows = db.execute("SELECT * FROM messages WHERE thread_id = ? ORDER BY sent_at", (thread_row["id"],)).fetchall()
+        attachments = _attachments_for_messages(db, [str(row["id"]) for row in message_rows])
     thread = _thread(thread_row)
-    thread["messages"] = [_message(row, max_body_chars=max_body_chars) for row in message_rows]
+    thread["messages"] = [
+        _message(
+            row,
+            max_body_chars=max_body_chars,
+            max_body_html_chars=max_body_html_chars,
+            attachments=attachments.get(str(row["id"]), []),
+        )
+        for row in message_rows
+    ]
     return thread
 
 
-def get_message(data_root: Path, message_id: str, max_body_chars: int = 8000) -> dict[str, object]:
+def get_message(
+    data_root: Path,
+    message_id: str,
+    max_body_chars: int = DEFAULT_BODY_TEXT_CHARS,
+    max_body_html_chars: int | None = None,
+) -> dict[str, object]:
     ensure_schema(data_root)
     with connect(data_root) as db:
         row = db.execute("SELECT * FROM messages WHERE id = ?", (message_id,)).fetchone()
         if row is None:
             row = _legacy_gmail_message_row(db, message_id)
+        attachments = _attachments_for_messages(db, [str(row["id"])]) if row is not None else {}
     if row is None:
         raise ValueError(f"Message `{message_id}` was not found")
-    return _message(row, max_body_chars=max_body_chars)
+    return _message(
+        row,
+        max_body_chars=max_body_chars,
+        max_body_html_chars=max_body_html_chars,
+        attachments=attachments.get(str(row["id"]), []),
+    )
 
 
 def search_messages(data_root: Path, query: str, limit: int = 25) -> list[dict[str, object]]:
@@ -219,13 +272,24 @@ def search_messages(data_root: Path, query: str, limit: int = 25) -> list[dict[s
             """
             SELECT messages.*, threads.subject
             FROM messages JOIN threads ON messages.thread_id = threads.id
-            WHERE messages.body_text LIKE ? OR threads.subject LIKE ?
+            WHERE messages.body_text LIKE ?
+              OR messages.body_html_sanitized LIKE ?
+              OR messages.body_html_gmail_sanitized LIKE ?
+              OR messages.body_html_rendered LIKE ?
+              OR messages.sender_json LIKE ?
+              OR messages.recipients_json LIKE ?
+              OR threads.subject LIKE ?
+              OR EXISTS (
+                SELECT 1 FROM attachments
+                WHERE attachments.message_id = messages.id AND attachments.filename LIKE ?
+              )
             ORDER BY messages.sent_at DESC
             LIMIT ?
             """,
-            (needle, needle, _bounded_int(limit, default=25, minimum=1, maximum=100)),
+            (needle, needle, needle, needle, needle, needle, needle, needle, _bounded_int(limit, default=25, minimum=1, maximum=100)),
         ).fetchall()
-    return [_message(row, max_body_chars=1200) for row in rows]
+        attachments = _attachments_for_messages(db, [str(row["id"]) for row in rows])
+    return [_message(row, max_body_chars=1200, attachments=attachments.get(str(row["id"]), [])) for row in rows]
 
 
 def get_attachment(data_root: Path, attachment_id: str) -> dict[str, object]:
@@ -306,7 +370,12 @@ def _thread(row) -> dict[str, object]:
     return item
 
 
-def _message(row, max_body_chars: int) -> dict[str, object]:
+def _message(
+    row,
+    max_body_chars: int,
+    max_body_html_chars: int | None = None,
+    attachments: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
     item = _row(row)
     item["sender"] = _loads_object(item.pop("sender_json"))
     item["recipients"] = _loads_list(item.pop("recipients_json"))
@@ -314,9 +383,55 @@ def _message(row, max_body_chars: int) -> dict[str, object]:
     item["bcc"] = _loads_list(item.pop("bcc_json", "[]"))
     item["headers"] = _loads_object(item.pop("headers_json"))
     item["has_attachments"] = bool(item["has_attachments"])
-    item["body_text"] = str(item["body_text"])[:max_body_chars]
+    body_text = str(item["body_text"])
+    original_html = str(item.pop("body_html_original_bounded", "") or "")
+    gmail_sanitized_html = str(item.get("body_html_gmail_sanitized") or "")
+    rendered_html = str(item.get("body_html_rendered") or "")
+    legacy_html = str(item.get("body_html_sanitized") or "")
+    if not gmail_sanitized_html:
+        gmail_sanitized_html = legacy_html
+    if not rendered_html:
+        rendered_html = gmail_sanitized_html or legacy_html
+    html_limit = max_body_html_chars if max_body_html_chars is not None else max_body_chars
+    source_truncated = bool(item.get("body_truncated"))
+    text_truncated = len(body_text) > max_body_chars
+    rendered_html_truncated = len(rendered_html) > html_limit
+    gmail_html_truncated = len(gmail_sanitized_html) > html_limit
+    item["body_text"] = body_text[:max_body_chars]
+    item["body_html_sanitized"] = truncate_sanitized_html(rendered_html, html_limit)
+    item["body_html_gmail_sanitized"] = truncate_sanitized_html(gmail_sanitized_html, html_limit)
+    item["body_html_rendered"] = truncate_sanitized_html(rendered_html, html_limit)
+    item["body_html_original_available"] = bool(original_html)
+    item["body_html_original_size"] = len(original_html)
+    item["render_policy"] = _loads_object(item.pop("render_policy_json", "{}"))
+    item["body_render_mode"] = str(item.get("body_render_mode") or ("html" if rendered_html else "plain"))
+    item["body_preview"] = str(item.get("body_preview") or body_text[:180])
+    item["body_source_truncated"] = source_truncated
+    item["body_text_truncated"] = text_truncated
+    item["body_html_truncated"] = rendered_html_truncated or gmail_html_truncated
+    item["body_truncated"] = source_truncated or text_truncated or bool(item["body_html_truncated"])
+    item["parts"] = _loads_list(item.pop("parts_json", "[]"))
+    item["inline_assets"] = _loads_list(item.pop("inline_assets_json", "[]"))
+    item["attachments"] = attachments or []
     item["deep_link"] = f"/app/mail?message={item['id']}"
     return item
+
+
+def _attachments_for_messages(db, message_ids: list[str]) -> dict[str, list[dict[str, object]]]:
+    if not message_ids:
+        return {}
+    placeholders = ",".join("?" for _ in message_ids)
+    rows = db.execute(
+        f"SELECT * FROM attachments WHERE message_id IN ({placeholders}) ORDER BY filename, id",
+        tuple(message_ids),
+    ).fetchall()
+    result: dict[str, list[dict[str, object]]] = {message_id: [] for message_id in message_ids}
+    for row in rows:
+        item = _row(row)
+        item["storage_ref"] = _loads_object(item.pop("storage_ref_json"))
+        item["deep_link"] = f"/app/mail?attachment={item['id']}"
+        result.setdefault(str(item["message_id"]), []).append(item)
+    return result
 
 
 def _row(row) -> dict[str, object]:

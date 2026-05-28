@@ -12,6 +12,7 @@ sys.path.insert(0, str(MAVERICK_ROOT))
 
 from core.apps.contracts import parse_app_contract_file
 from core.apps.surface_descriptors import app_cli_command_secret_selectors, app_mcp_tool_secret_selectors
+from apps.mail.backend import database
 
 
 class GeneratedAppContractTest(unittest.TestCase):
@@ -19,6 +20,12 @@ class GeneratedAppContractTest(unittest.TestCase):
         app_root = Path(__file__).resolve().parents[1]
         parsed = parse_app_contract_file(app_root)
         self.assertEqual(parsed.app_id, "mail")
+
+    def test_contract_storage_schema_version_matches_database_schema(self) -> None:
+        app_root = Path(__file__).resolve().parents[1]
+        parsed = parse_app_contract_file(app_root)
+
+        self.assertEqual(parsed.contract.storage.data_schema_version, database.SCHEMA_VERSION)
 
     def test_sidebar_footer_widget_is_declared(self) -> None:
         app_root = Path(__file__).resolve().parents[1]

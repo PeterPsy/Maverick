@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import unittest
 from unittest.mock import patch
 
 APP_ROOT = Path(__file__).resolve().parents[1]
+FIXTURE_ROOT = APP_ROOT / "tests" / "fixtures"
 sys.path.insert(0, str(APP_ROOT))
 sys.path.insert(0, str(APP_ROOT / "backend"))
 from backend.service import handle_action, resolve_secret_resource
@@ -21,6 +24,35 @@ from backend.store import list_threads
 
 
 class MailServiceTest(unittest.TestCase):
+    def test_mounted_backend_entrypoint_resolves_core_from_workspace_local_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            payload = {
+                "app_id": "mail",
+                "workspace_id": "default",
+                "data_root": tmp,
+                "body": {"action": "health.check"},
+                "app_secrets": {},
+                "generated_storage_root": "",
+            }
+            env = os.environ.copy()
+            env.pop("PYTHONPATH", None)
+
+            result = subprocess.run(
+                [sys.executable, str(APP_ROOT / "backend" / "app_backend.py")],
+                input=json.dumps(payload),
+                text=True,
+                capture_output=True,
+                cwd=str(APP_ROOT.parents[1]),
+                env=env,
+                timeout=10,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            response = json.loads(result.stdout)
+            self.assertEqual(response["status_code"], 200)
+            self.assertEqual(response["json"]["health_status"], "healthy")
+
     def test_fresh_install_has_no_demo_connection(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             status, payload = handle_action(Path(tmp), {"action": "threads.list", "mailbox": "inbox"})
@@ -29,6 +61,51 @@ class MailServiceTest(unittest.TestCase):
             status, payload = handle_action(Path(tmp), {"action": "connections.list"})
             self.assertEqual(status, 200)
             self.assertEqual(payload["items"], [])
+
+    def test_threads_sync_uses_bounded_interactive_default(self) -> None:
+        class FakeProvider:
+            provider_id = "gmail"
+
+            def __init__(self) -> None:
+                self.max_threads: int | None = None
+
+            def sync_incremental(
+                self,
+                data_root: Path,
+                connection_id: str | None = None,
+                app_secrets: dict[str, object] | None = None,
+                max_threads: int = 100,
+                query: str | None = None,
+                page_token: str | None = None,
+                continue_cursor: bool = False,
+            ) -> dict[str, object]:
+                self.max_threads = max_threads
+                return {"connection_id": connection_id, "synced_threads": 0, "has_more": False}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            ensure_schema(data_root)
+            now = now_timestamp()
+            connection_id = "mail_connection_gmail_person-example.com"
+            with connect(data_root) as db:
+                db.execute(
+                    """
+                    INSERT INTO connections(id, provider, email_address, display_name, status, scopes_json, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (connection_id, "gmail", "person@example.com", "person@example.com", "connected", "[]", now, now),
+                )
+
+            provider = FakeProvider()
+            with patch("backend.service.provider_for_connection", return_value=provider):
+                status, payload = handle_action(
+                    data_root,
+                    {"action": "threads.sync", "connection_id": connection_id, "_app_secrets": self._gmail_secrets()},
+                )
+
+            self.assertEqual(status, 200)
+            self.assertEqual(payload["sync"]["synced_threads"], 0)
+            self.assertEqual(provider.max_threads, 25)
 
     def test_mock_bootstrap_action_is_not_supported(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -294,6 +371,37 @@ class MailServiceTest(unittest.TestCase):
             self.assertEqual(payload["thread"]["id"], thread_id)
             self.assertGreaterEqual(len(payload["thread"]["messages"]), 1)
 
+    def test_message_search_returns_attachment_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            self._insert_gmail_fixture(data_root)
+            now = now_timestamp()
+            with connect(data_root) as db:
+                db.execute(
+                    """
+                    INSERT INTO attachments(id, message_id, provider_attachment_id, filename, content_type, size_bytes, storage_state, storage_ref_json, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "mail_attachment_fixture_ops_roadmap",
+                        "email_message_gmail_fixture_ops_1",
+                        "provider-attachment-roadmap",
+                        "roadmap.pdf",
+                        "application/pdf",
+                        2048,
+                        "metadata_only",
+                        "{}",
+                        now,
+                        now,
+                    ),
+                )
+
+            status, payload = handle_action(data_root, {"action": "messages.search", "query": "roadmap.pdf"})
+
+            self.assertEqual(status, 200)
+            self.assertEqual(payload["items"][0]["attachments"][0]["filename"], "roadmap.pdf")
+            self.assertEqual(payload["items"][0]["attachments"][0]["size_bytes"], 2048)
+
     def test_create_and_preview_send_draft(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
@@ -394,9 +502,15 @@ class MailServiceTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             status, payload = handle_action(Path(tmp), {"action": "health.check"})
             self.assertEqual(status, 200)
-            self.assertEqual(payload["schema_version"], "4")
+            self.assertEqual(payload["schema_version"], "5")
             self.assertEqual(payload["health_status"], "healthy")
             self.assertEqual(payload["database"], "mail.sqlite")
+            with connect(Path(tmp)) as db:
+                message_columns = {row["name"] for row in db.execute("PRAGMA table_info(messages)").fetchall()}
+            self.assertIn("body_html_original_bounded", message_columns)
+            self.assertIn("body_html_gmail_sanitized", message_columns)
+            self.assertIn("body_html_rendered", message_columns)
+            self.assertIn("render_policy_json", message_columns)
 
     def test_read_only_health_reports_missing_database(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -583,6 +697,290 @@ class MailServiceTest(unittest.TestCase):
             self.assertEqual(payload["thread"]["subject"], "Gmail thread")
             self.assertEqual(payload["thread"]["messages"][0]["body_text"], "Hello from Gmail")
             self.assertGreaterEqual(calls.count("https://oauth2.googleapis.com/token"), 1)
+
+    def test_gmail_sync_preserves_sanitized_html_and_attachment_metadata(self) -> None:
+        def encoded(value: str) -> str:
+            return base64.urlsafe_b64encode(value.encode("utf-8")).decode("ascii").rstrip("=")
+
+        html_body = (FIXTURE_ROOT / "newsletter_table_responsive.html").read_text(encoding="utf-8")
+
+        def fake_transport(request) -> dict[str, object]:
+            url = request.full_url
+            if url == "https://oauth2.googleapis.com/token":
+                return {"access_token": "access-token", "expires_in": 3600, "token_type": "Bearer"}
+            if url.startswith("https://gmail.googleapis.com/gmail/v1/users/me/threads?"):
+                return {"threads": [{"id": "thread-html"}]}
+            if url.startswith("https://gmail.googleapis.com/gmail/v1/users/me/threads/thread-html?"):
+                return {
+                    "id": "thread-html",
+                    "snippet": "Hello HTML",
+                    "messages": [
+                        {
+                            "id": "msg-html",
+                            "threadId": "thread-html",
+                            "labelIds": ["INBOX"],
+                            "internalDate": "1710000000000",
+                            "payload": {
+                                "mimeType": "multipart/mixed",
+                                "headers": [
+                                    {"name": "Subject", "value": "HTML thread"},
+                                    {"name": "From", "value": "Sender <sender@example.com>"},
+                                    {"name": "To", "value": "Person <person@example.com>"},
+                                ],
+                                "parts": [
+                                    {
+                                        "mimeType": "multipart/alternative",
+                                        "parts": [
+                                            {"mimeType": "text/plain", "body": {"data": encoded("Hello HTML")}},
+                                            {
+                                                "mimeType": "text/html",
+                                                "headers": [{"name": "Content-Type", "value": "text/html; charset=utf-8"}],
+                                                "body": {"data": encoded(html_body)},
+                                            },
+                                        ],
+                                    },
+                                    {
+                                        "filename": "report.pdf",
+                                        "mimeType": "application/pdf",
+                                        "body": {"attachmentId": "att-report", "size": 1234},
+                                    },
+                                    {
+                                        "filename": "logo.png",
+                                        "mimeType": "image/png",
+                                        "headers": [
+                                            {"name": "Content-ID", "value": "<logo123>"},
+                                            {"name": "Content-Disposition", "value": 'inline; filename="logo.png"'},
+                                        ],
+                                        "body": {"attachmentId": "att-logo", "size": 42},
+                                    },
+                                ],
+                            },
+                        }
+                    ],
+                }
+            raise AssertionError(f"unexpected request {url}")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            ensure_schema(data_root)
+            now = now_timestamp()
+            with connect(data_root) as db:
+                db.execute(
+                    """
+                    INSERT INTO connections(id, provider, email_address, display_name, status, scopes_json, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    ("mail_connection_gmail_person-example.com", "gmail", "person@example.com", "person@example.com", "connected", "[]", now, now),
+                )
+            provider = GmailProvider(transport=fake_transport)
+            provider.sync_incremental(
+                data_root,
+                "mail_connection_gmail_person-example.com",
+                app_secrets={
+                    "gmail-oauth-client-id": "client-id",
+                    "gmail-oauth-client-secret": "client-secret",
+                    "gmail-refresh-token": "refresh-token",
+                },
+            )
+
+            status, payload = handle_action(
+                data_root,
+                {"action": "threads.get", "thread_id": "email_thread_gmail_mail_connection_gmail_person_example_com_thread_html"},
+            )
+            self.assertEqual(status, 200)
+            message = payload["thread"]["messages"][0]
+            self.assertEqual(message["body_text"], "Hello HTML")
+            self.assertEqual(message["body_render_mode"], "html")
+            self.assertEqual(message["body_html_rendered"], message["body_html_sanitized"])
+            self.assertIn("<style>", message["body_html_gmail_sanitized"])
+            self.assertTrue(message["body_html_original_available"])
+            self.assertGreater(message["body_html_original_size"], 0)
+            self.assertEqual(message["render_policy"]["version"], 2)
+            self.assertEqual(message["render_policy"]["rendered_from"], "body_html_gmail_sanitized")
+            self.assertIn("<style>", message["body_html_sanitized"])
+            self.assertIn("@media only screen", message["body_html_sanitized"])
+            self.assertIn(".desktop", message["body_html_sanitized"])
+            self.assertIn('class="container"', message["body_html_sanitized"])
+            self.assertIn('id="hero-card"', message["body_html_sanitized"])
+            self.assertIn("<strong>HTML</strong>", message["body_html_sanitized"])
+            self.assertIn("display: none", message["body_html_sanitized"])
+            self.assertIn("max-height: 0", message["body_html_sanitized"])
+            self.assertIn('cellpadding="0"', message["body_html_sanitized"])
+            self.assertIn('bgcolor="#ffffff"', message["body_html_sanitized"])
+            self.assertIn('style="color: #123456"', message["body_html_sanitized"])
+            self.assertIn("background: #990000", message["body_html_sanitized"])
+            self.assertIn('href="https://example.com/news"', message["body_html_sanitized"])
+            self.assertIn("mail-blocked-image", message["body_html_sanitized"])
+            self.assertIn("data-mail-image=", message["body_html_sanitized"])
+            self.assertIn("data-mail-alt=", message["body_html_sanitized"])
+            self.assertIn('data-mail-background-image="https://tracker.example/background.png"', message["body_html_sanitized"])
+            self.assertNotIn("onclick", message["body_html_sanitized"])
+            self.assertNotIn("<script", message["body_html_sanitized"])
+            self.assertNotIn("src=", message["body_html_sanitized"])
+            self.assertNotIn("@import", message["body_html_sanitized"])
+            self.assertNotIn("url(", message["body_html_sanitized"])
+            self.assertNotIn("u\\72l", message["body_html_sanitized"])
+            self.assertNotIn("hero.png", message["body_html_sanitized"])
+            attachments = {item["filename"]: item for item in message["attachments"]}
+            self.assertEqual(attachments["report.pdf"]["size_bytes"], 1234)
+            self.assertEqual(attachments["logo.png"]["size_bytes"], 42)
+            inline_asset = message["inline_assets"][0]
+            self.assertEqual(inline_asset["content_id"], "logo123")
+            self.assertEqual(inline_asset["provider_attachment_id"], "att-logo")
+            self.assertEqual(inline_asset["attachment_id"], attachments["logo.png"]["id"])
+            with connect(data_root) as db:
+                stored = db.execute(
+                    """
+                    SELECT body_html_original_bounded, body_html_gmail_sanitized, body_html_rendered, body_html_sanitized, render_policy_json
+                    FROM messages
+                    WHERE id = ?
+                    """,
+                    (message["id"],),
+                ).fetchone()
+            self.assertIn("<script>steal()</script>", stored["body_html_original_bounded"])
+            self.assertIn('onclick="steal()"', stored["body_html_original_bounded"])
+            self.assertIn("<style>", stored["body_html_gmail_sanitized"])
+            self.assertEqual(stored["body_html_rendered"], stored["body_html_sanitized"])
+            self.assertEqual(json.loads(stored["render_policy_json"])["version"], 2)
+
+    def test_get_message_truncates_html_without_partial_tags(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            ensure_schema(data_root)
+            now = now_timestamp()
+            html_body = "<div><p>" + ("Long body " * 80) + "</p></div>"
+            with connect(data_root) as db:
+                db.execute(
+                    """
+                    INSERT INTO connections(id, provider, email_address, display_name, status, scopes_json, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    ("mail_connection_gmail_person-example.com", "gmail", "person@example.com", "person@example.com", "connected", "[]", now, now),
+                )
+                db.execute(
+                    """
+                    INSERT INTO threads(id, connection_id, provider_thread_id, subject, participants_json, last_message_at, snippet, unread, starred, labels_json, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "email_thread_gmail_mail_connection_gmail_person_example_com_thread_html",
+                        "mail_connection_gmail_person-example.com",
+                        "thread-html",
+                        "Subject",
+                        "[]",
+                        now,
+                        "",
+                        0,
+                        0,
+                        "[]",
+                        now,
+                    ),
+                )
+                db.execute(
+                    """
+                    INSERT INTO messages(id, thread_id, provider_message_id, sender_json, recipients_json, sent_at, body_text, body_html_sanitized, headers_json, has_attachments)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "email_message_gmail_mail_connection_gmail_person_example_com_msg_html",
+                        "email_thread_gmail_mail_connection_gmail_person_example_com_thread_html",
+                        "msg-html",
+                        "{}",
+                        "[]",
+                        now,
+                        "Long body",
+                        html_body,
+                        "{}",
+                        0,
+                    ),
+                )
+
+            status, payload = handle_action(
+                data_root,
+                {"action": "messages.get", "message_id": "email_message_gmail_mail_connection_gmail_person_example_com_msg_html", "max_body_chars": 220},
+            )
+
+            self.assertEqual(status, 200)
+            body_html = payload["message"]["body_html_sanitized"]
+            self.assertTrue(payload["message"]["body_truncated"])
+            self.assertEqual(payload["message"]["body_html_rendered"], body_html)
+            self.assertEqual(payload["message"]["body_html_gmail_sanitized"], body_html)
+            self.assertEqual(payload["message"]["render_policy"]["version"], 0)
+            self.assertTrue(body_html.endswith("</p></div>"))
+            self.assertNotIn("<p", body_html[-10:])
+
+    def test_threads_get_preserves_reader_html_with_separate_text_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            ensure_schema(data_root)
+            now = now_timestamp()
+            body_text = "Plain body " * 80
+            html_body = "<div><p>" + ("Reader HTML body " * 35) + "</p></div>"
+            with connect(data_root) as db:
+                db.execute(
+                    """
+                    INSERT INTO connections(id, provider, email_address, display_name, status, scopes_json, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    ("mail_connection_gmail_person-example.com", "gmail", "person@example.com", "person@example.com", "connected", "[]", now, now),
+                )
+                db.execute(
+                    """
+                    INSERT INTO threads(id, connection_id, provider_thread_id, subject, participants_json, last_message_at, snippet, unread, starred, labels_json, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "email_thread_gmail_mail_connection_gmail_person_example_com_thread_reader_html",
+                        "mail_connection_gmail_person-example.com",
+                        "thread-reader-html",
+                        "Subject",
+                        "[]",
+                        now,
+                        "",
+                        0,
+                        0,
+                        "[]",
+                        now,
+                    ),
+                )
+                db.execute(
+                    """
+                    INSERT INTO messages(id, thread_id, provider_message_id, sender_json, recipients_json, sent_at, body_text, body_html_sanitized, headers_json, has_attachments)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "email_message_gmail_mail_connection_gmail_person_example_com_msg_reader_html",
+                        "email_thread_gmail_mail_connection_gmail_person_example_com_thread_reader_html",
+                        "msg-reader-html",
+                        "{}",
+                        "[]",
+                        now,
+                        body_text,
+                        html_body,
+                        "{}",
+                        0,
+                    ),
+                )
+
+            status, payload = handle_action(
+                data_root,
+                {
+                    "action": "threads.get",
+                    "thread_id": "email_thread_gmail_mail_connection_gmail_person_example_com_thread_reader_html",
+                    "max_body_chars": 220,
+                    "max_body_html_chars": 1000,
+                },
+            )
+
+            self.assertEqual(status, 200)
+            message = payload["thread"]["messages"][0]
+            self.assertEqual(message["body_text"], body_text[:220])
+            self.assertEqual(message["body_html_sanitized"], html_body)
+            self.assertEqual(message["body_html_rendered"], html_body)
+            self.assertTrue(message["body_text_truncated"])
+            self.assertFalse(message["body_html_truncated"])
+            self.assertFalse(message["body_source_truncated"])
+            self.assertTrue(message["body_truncated"])
 
     def test_gmail_sync_scopes_local_thread_ids_by_connection(self) -> None:
         def fake_transport(request) -> dict[str, object]:
@@ -947,6 +1345,35 @@ class MailServiceTest(unittest.TestCase):
             self.assertNotIn("data_base64url", result)
             self.assertEqual(calls, [])
 
+    def test_gmail_attachment_fetch_returns_bounded_bytes_for_inline_reader(self) -> None:
+        content = b"inline-logo"
+        data_base64url = base64.urlsafe_b64encode(content).decode("ascii").rstrip("=")
+
+        def fake_transport(request) -> dict[str, object]:
+            if request.full_url == "https://oauth2.googleapis.com/token":
+                return {"access_token": "access-token"}
+            if request.full_url.endswith("/messages/msg-1/attachments/att-1"):
+                return {"data": data_base64url, "size": len(content)}
+            raise AssertionError(f"Unexpected request {request.full_url}")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            attachment_id = "mail_attachment_gmail_mail_connection_gmail_person_example_com_msg_1_att_1"
+            self._insert_gmail_attachment(data_root, attachment_id=attachment_id, filename="logo.png", size_bytes=len(content))
+
+            result = GmailProvider(transport=fake_transport).fetch_attachment(
+                data_root,
+                attachment_id,
+                app_secrets=self._gmail_secrets(),
+                metadata_only=False,
+                max_bytes=100,
+            )
+
+            self.assertEqual(result["status"], "fetched")
+            self.assertEqual(result["size_bytes"], len(content))
+            self.assertEqual(result["data_base64url"], data_base64url)
+            self.assertEqual(result["storage_state"], "not_saved")
+
     def test_gmail_attachment_save_to_storage_renames_on_collision(self) -> None:
         attachment_id = "mail_attachment_gmail_mail_connection_gmail_person_example_com_msg_1_att_1"
         content = b"fresh-pdf"
@@ -1309,9 +1736,11 @@ class MailServiceTest(unittest.TestCase):
 
         thread_selectors = schemas["tools"]["mail_get_thread"]["secret_selectors"]
         attachment_selectors = schemas["tools"]["mail_get_attachment"]["secret_selectors"]
+        thread_properties = schemas["tools"]["mail_get_thread"]["input_schema"]["properties"]
 
         self.assertTrue(all("when" not in selector for selector in thread_selectors))
         self.assertTrue(all(selector.get("when") == {"metadata_only": False} for selector in attachment_selectors))
+        self.assertEqual(thread_properties["max_body_html_chars"]["maximum"], 250000)
 
     def test_reference_resolve_thread(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1353,10 +1782,71 @@ class MailServiceTest(unittest.TestCase):
 
     def test_frontend_reply_composer_allows_backend_recipient_derivation(self) -> None:
         app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
-        self.assertIn("const isContextualReply = Boolean(selectedThread);", app_source)
+        self.assertIn("const isContextualReply = Boolean(selectedThread && composerMode === 'reply');", app_source)
         self.assertIn("required={!isContextualReply}", app_source)
         self.assertIn("Reply recipients (optional)", app_source)
         self.assertIn("to: draft.to.trim() ? [{ email: draft.to.trim() }] : []", app_source)
+        self.assertIn("thread_id: isContextualReply ? selectedThread?.id : undefined", app_source)
+
+    def test_frontend_opens_cached_thread_without_secret_refresh(self) -> None:
+        app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
+        self.assertIn("const openThread = useCallback(async (threadId: string, connectionId?: string, refresh = false)", app_source)
+        self.assertIn("...(refresh && connectionId ? gmailSecretRequest(connectionId) : noSecretRequest())", app_source)
+        self.assertIn("openThread(selectedThread.id, selectedThread.connection_id, true)", app_source)
+
+    def test_frontend_renders_html_email_in_isolated_frame(self) -> None:
+        app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
+        styles = (APP_ROOT / "frontend" / "src" / "styles.css").read_text(encoding="utf-8")
+        self.assertIn("function MailHtmlFrame", app_source)
+        self.assertIn('sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin"', app_source)
+        self.assertIn("<MailHtmlFrame htmlBody={renderedHtml} />", app_source)
+        self.assertIn("INLINE_IMAGE_MAX_BYTES", app_source)
+        self.assertIn("inlineImageDataUrl", app_source)
+        self.assertIn("MAIL_BACKEND_ACTIONS.attachmentsGet", app_source)
+        self.assertIn("metadata_only: false", app_source)
+        self.assertIn("Loading inline image", app_source)
+        self.assertIn("data:", app_source)
+        self.assertIn("ResizeObserver", app_source)
+        self.assertIn("EMAIL_FRAME_MAX_WIDTH", app_source)
+        self.assertIn("contentWidth > parentWidth + 1", app_source)
+        self.assertIn("style={{ height, width: frameWidth ? `${frameWidth}px` : undefined }}", app_source)
+        self.assertIn("showRemoteImages", app_source)
+        self.assertIn("Show images", app_source)
+        self.assertIn("Remote images blocked", app_source)
+        self.assertIn("message-image-control", app_source)
+        self.assertIn("replaceWith(image)", app_source)
+        self.assertIn("data-mail-background-image", app_source)
+        self.assertIn("backgroundImage", app_source)
+        self.assertIn("referrerPolicy = 'no-referrer'", app_source)
+        self.assertIn("background: #fff;", styles)
+        self.assertIn("overflow-x: auto;", styles)
+        self.assertIn("min-width: 100%;", styles)
+        self.assertIn("flex-wrap: wrap;", styles)
+        self.assertIn(".message-image-control", styles)
+        self.assertNotIn("color: #111827;", app_source)
+        self.assertNotIn("line-height: 1.45;", app_source)
+        self.assertNotIn("border-spacing: 0;", app_source)
+        self.assertNotIn(".message-html :where(td, th)", styles)
+
+    def test_frontend_reader_has_gmail_like_phase_eight_controls(self) -> None:
+        app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
+        styles = (APP_ROOT / "frontend" / "src" / "styles.css").read_text(encoding="utf-8")
+        self.assertIn("function foldQuotedHtml", app_source)
+        self.assertIn("mail-quote-fold", app_source)
+        self.assertIn("Show quoted text", app_source)
+        self.assertIn("function MailThreadMessage", app_source)
+        self.assertIn('className="message-head"', app_source)
+        self.assertIn("function startReply()", app_source)
+        self.assertIn("function startForward()", app_source)
+        self.assertIn("---------- Forwarded message ---------", app_source)
+        self.assertIn("Show trimmed content", app_source)
+        self.assertIn("MAIL_BACKEND_ACTIONS.messagesGet", app_source)
+        self.assertIn("READER_FULL_TEXT_BODY_CHARS", app_source)
+        self.assertIn("composerMode === 'forward'", app_source)
+        self.assertIn(".composer-mode", styles)
+        self.assertIn(".message-trimmed", styles)
+        self.assertIn(".message-meta", styles)
+        self.assertIn("grid-template-columns: minmax(260px, 340px) minmax(760px, 1fr);", styles)
 
 
 if __name__ == "__main__":

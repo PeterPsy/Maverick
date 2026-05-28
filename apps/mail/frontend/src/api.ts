@@ -37,9 +37,61 @@ export type MailMessage = {
   thread_id: string;
   sender: MailAddress;
   recipients: MailAddress[];
+  cc?: MailAddress[];
+  bcc?: MailAddress[];
   sent_at: string;
   body_text: string;
+  body_html_sanitized?: string;
+  body_html_gmail_sanitized?: string;
+  body_html_rendered?: string;
+  body_html_original_available?: boolean;
+  body_html_original_size?: number;
+  render_policy?: Record<string, unknown>;
+  body_render_mode?: 'html' | 'plain';
+  body_preview?: string;
+  body_truncated?: boolean;
+  body_source_truncated?: boolean;
+  body_text_truncated?: boolean;
+  body_html_truncated?: boolean;
   has_attachments: boolean;
+  attachments?: MailAttachment[];
+  inline_assets?: MailInlineAsset[];
+};
+
+export type MailAttachment = {
+  id: string;
+  filename: string;
+  content_type?: string;
+  size_bytes?: number;
+  storage_state?: string;
+};
+
+export type MailInlineAsset = {
+  content_id?: string;
+  provider_attachment_id?: string;
+  attachment_id?: string;
+  message_id?: string;
+  filename?: string;
+  content_type?: string;
+  size_bytes?: number;
+};
+
+export type MailAttachmentFetch = {
+  attachment_id: string;
+  status: 'metadata_only' | 'limit_required' | 'too_large' | 'invalid_payload' | 'saved' | 'fetched' | string;
+  filename?: string;
+  content_type?: string;
+  size_bytes?: number;
+  storage_state?: string;
+  storage_ref?: Record<string, unknown>;
+  data_base64url?: string;
+  max_bytes?: number;
+  detail?: string;
+};
+
+export type MailAttachmentFetchResponse = {
+  attachment: MailAttachment;
+  fetch: MailAttachmentFetch;
 };
 
 export type MailDraft = {
@@ -73,11 +125,15 @@ export const MAIL_BACKEND_ACTIONS = {
   threadsList: 'threads.list',
   threadsGet: 'threads.get',
   threadsSync: 'threads.sync',
+  messagesGet: 'messages.get',
   draftsCreate: 'drafts.create',
   draftsSend: 'drafts.send',
   messagesMarkRead: 'messages.mark_read',
-  labelsModify: 'labels.modify'
+  labelsModify: 'labels.modify',
+  attachmentsGet: 'attachments.get'
 } as const;
+
+export const MAIL_INTERACTIVE_SYNC_THREADS = 25;
 
 export async function callBackend<T>(body: Record<string, unknown>): Promise<T> {
   const response = await fetch('/api/apps/mail/backend', {

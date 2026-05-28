@@ -30,6 +30,7 @@ class MailProvider(Protocol):
         data_root: Path,
         thread_id: str,
         max_body_chars: int = 8000,
+        max_body_html_chars: int | None = None,
         app_secrets: dict[str, object] | None = None,
     ) -> dict[str, object]:
         """Return one thread with bounded message bodies."""

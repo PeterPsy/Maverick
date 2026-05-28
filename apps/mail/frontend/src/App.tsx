@@ -1,10 +1,23 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Archive,
+  ChevronDown,
+  Forward,
+  MailOpen,
+  RefreshCw,
+  Reply,
+  Trash2,
+  X
+} from 'lucide-react';
 import {
   callBackend,
   MAIL_BACKEND_ACTIONS,
+  MAIL_INTERACTIVE_SYNC_THREADS,
+  type MailAttachmentFetchResponse,
   type MailAddress,
   type MailConnection,
   type MailDraft,
+  type MailMessage,
   type MailThread
 } from './api';
 import SlidingPagination from './components/ui/sliding-pagination';
@@ -14,6 +27,13 @@ const MAIL_DATA_RESOURCES = new Set(['connections', 'drafts', 'threads', 'view-s
 const GMAIL_OAUTH_SECRETS = ['gmail-oauth-client-id', 'gmail-oauth-client-secret'];
 const GMAIL_REFRESH_SECRET = 'gmail-refresh-token';
 const THREADS_PAGE_SIZE = 50;
+const INLINE_IMAGE_MAX_BYTES = 2_000_000;
+const READER_TEXT_BODY_CHARS = 12_000;
+const READER_FULL_TEXT_BODY_CHARS = 50_000;
+const READER_HTML_BODY_CHARS = 250_000;
+const EMAIL_FRAME_MIN_HEIGHT = 180;
+const EMAIL_FRAME_MAX_HEIGHT = 12_000;
+const EMAIL_FRAME_MAX_WIDTH = 3_200;
 
 type ConnectionPayload = {
   items: MailConnection[];
@@ -45,6 +65,14 @@ type ThreadListPayload = {
   offset?: number;
   total_count?: number;
 };
+
+type InlineImageState = {
+  status: 'loading' | 'ready' | 'error' | 'too_large';
+  dataUrl?: string;
+  detail?: string;
+};
+
+type ComposerMode = 'reply' | 'forward' | 'compose';
 
 function noSecretRequest() {
   return { _app_secret_request: { logical_names: [], required: false } };
@@ -109,6 +137,587 @@ function avatarInitials(thread: MailThread) {
   return initials || 'M';
 }
 
+function formatBytes(value?: number) {
+  if (!value) {
+    return '';
+  }
+  if (value < 1024) {
+    return `${value} B`;
+  }
+  if (value < 1024 * 1024) {
+    return `${Math.round(value / 1024)} KB`;
+  }
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatAddress(address?: MailAddress) {
+  if (!address) {
+    return '';
+  }
+  return address.name ? `${address.name} <${address.email}>` : address.email;
+}
+
+function formatAddressList(addresses?: MailAddress[]) {
+  return (addresses || []).map(formatAddress).filter(Boolean).join(', ');
+}
+
+function replySubject(subject: string) {
+  return /^re:/i.test(subject.trim()) ? subject : `Re: ${subject}`;
+}
+
+function forwardSubject(subject: string) {
+  return /^fwd?:/i.test(subject.trim()) ? subject : `Fwd: ${subject}`;
+}
+
+function latestMessage(thread: MailThread | null) {
+  const messages = thread?.messages || [];
+  return messages.length ? messages[messages.length - 1] : null;
+}
+
+function forwardedBody(message: MailMessage | null, subject: string) {
+  if (!message) {
+    return '';
+  }
+  const lines = [
+    '',
+    '',
+    '---------- Forwarded message ---------',
+    `From: ${formatAddress(message.sender)}`,
+    `Date: ${new Date(message.sent_at).toLocaleString()}`,
+    `Subject: ${subject}`,
+    `To: ${formatAddressList(message.recipients)}`,
+    '',
+    message.body_text || message.body_preview || ''
+  ];
+  return lines.join('\n');
+}
+
+function cidKey(value?: string) {
+  const raw = String(value || '').trim();
+  const withoutScheme = raw.toLowerCase().startsWith('cid:') ? raw.slice(4) : raw;
+  try {
+    return decodeURIComponent(withoutScheme).replace(/^<|>$/g, '').trim().toLowerCase();
+  } catch {
+    return withoutScheme.replace(/^<|>$/g, '').trim().toLowerCase();
+  }
+}
+
+function safeImageContentType(value?: string) {
+  const contentType = String(value || '').trim().toLowerCase();
+  return /^image\/[a-z0-9.+-]+$/.test(contentType) ? contentType : 'image/png';
+}
+
+function base64UrlToBase64(value?: string) {
+  const raw = String(value || '').trim();
+  if (!/^[A-Za-z0-9_-]*={0,2}$/.test(raw)) {
+    return null;
+  }
+  const unpadded = raw.replace(/=+$/g, '');
+  if (unpadded.includes('=') || unpadded.length % 4 === 1) {
+    return null;
+  }
+  return `${unpadded.replace(/-/g, '+').replace(/_/g, '/')}${'='.repeat((4 - (unpadded.length % 4)) % 4)}`;
+}
+
+function inlineImageDataUrl(dataBase64Url?: string, contentType?: string) {
+  const dataBase64 = base64UrlToBase64(dataBase64Url);
+  if (!dataBase64) {
+    return null;
+  }
+  return `data:${safeImageContentType(contentType)};base64,${dataBase64}`;
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function hasCidImagePlaceholder(htmlBody: string, contentId?: string) {
+  const cid = String(contentId || '').trim();
+  if (!cid) {
+    return false;
+  }
+  const encodedCid = encodeURIComponent(cid);
+  return [cid, encodedCid].some((candidate) => new RegExp(`data-mail-image=["']cid:${escapeRegExp(candidate)}`, 'i').test(htmlBody));
+}
+
+function applyImageMetadata(image: HTMLImageElement, placeholder: HTMLElement, fallbackAlt: string) {
+  image.alt = placeholder.dataset.mailAlt || placeholder.textContent || fallbackAlt;
+  image.decoding = 'async';
+  if (placeholder.dataset.mailWidth) {
+    image.setAttribute('width', placeholder.dataset.mailWidth);
+  }
+  if (placeholder.dataset.mailHeight) {
+    image.setAttribute('height', placeholder.dataset.mailHeight);
+  }
+  const savedStyle = placeholder.dataset.mailStyle || '';
+  if (savedStyle) {
+    image.setAttribute('style', savedStyle);
+  }
+  image.style.border = '0';
+}
+
+function sizePlaceholder(element: HTMLElement) {
+  const width = Number.parseInt(element.dataset.mailWidth || '', 10);
+  const height = Number.parseInt(element.dataset.mailHeight || '', 10);
+  if (Number.isFinite(width) && width > 0) {
+    element.style.width = `${Math.min(width, 1200)}px`;
+  }
+  if (Number.isFinite(height) && height > 0) {
+    element.style.height = `${Math.min(height, 1200)}px`;
+  }
+}
+
+function annotateInlinePlaceholders(
+  htmlBody: string,
+  inlineAssets: MailMessage['inline_assets'],
+  inlineImages: Record<string, InlineImageState>,
+  showRemoteImages: boolean
+) {
+  if (!htmlBody || typeof DOMParser === 'undefined') {
+    return htmlBody;
+  }
+  const doc = new DOMParser().parseFromString(`<div>${htmlBody}</div>`, 'text/html');
+  const root = doc.body.firstElementChild;
+  if (!root) {
+    return htmlBody;
+  }
+  const assetsByCid = new Map((inlineAssets || []).filter((asset) => asset.content_id).map((asset) => [cidKey(asset.content_id), asset]));
+  root.querySelectorAll<HTMLElement>('.mail-blocked-image[data-mail-image]').forEach((element) => {
+    const imageSrc = element.dataset.mailImage || '';
+    const asset = assetsByCid.get(cidKey(imageSrc));
+    if (!asset) {
+      sizePlaceholder(element);
+      if (!showRemoteImages || !/^https?:\/\//i.test(imageSrc)) {
+        return;
+      }
+      const image = doc.createElement('img');
+      image.src = imageSrc;
+      image.loading = 'lazy';
+      image.referrerPolicy = 'no-referrer';
+      applyImageMetadata(image, element, 'remote image');
+      element.replaceWith(image);
+      return;
+    }
+    element.dataset.mailAttachmentId = asset.attachment_id || '';
+    sizePlaceholder(element);
+    const loaded = asset.attachment_id ? inlineImages[asset.attachment_id] : undefined;
+    if (loaded?.status === 'ready' && loaded.dataUrl) {
+      const image = doc.createElement('img');
+      image.src = loaded.dataUrl;
+      applyImageMetadata(image, element, asset.filename || 'inline image');
+      element.replaceWith(image);
+      return;
+    }
+    if (loaded?.status === 'loading') {
+      element.textContent = 'Loading inline image';
+    } else if (loaded?.status === 'too_large') {
+      element.textContent = 'Inline image too large';
+    } else if (loaded?.status === 'error') {
+      element.textContent = 'Inline image unavailable';
+    }
+    element.title = loaded?.detail || (asset.filename ? `Inline image: ${asset.filename}` : 'Inline image');
+  });
+  root.querySelectorAll<HTMLElement>('[data-mail-background-image]').forEach((element) => {
+    const imageSrc = element.dataset.mailBackgroundImage || '';
+    if (!showRemoteImages || !/^https?:\/\//i.test(imageSrc)) {
+      return;
+    }
+    element.style.backgroundImage = `url("${imageSrc.replace(/"/g, '%22')}")`;
+  });
+  return root.innerHTML;
+}
+
+function foldQuotedHtml(htmlBody: string) {
+  if (!htmlBody || typeof DOMParser === 'undefined') {
+    return htmlBody;
+  }
+  const doc = new DOMParser().parseFromString(`<div>${htmlBody}</div>`, 'text/html');
+  const root = doc.body.firstElementChild;
+  if (!root) {
+    return htmlBody;
+  }
+  root.querySelectorAll<HTMLElement>('blockquote.gmail_quote, div.gmail_quote, .gmail_quote').forEach((quote) => {
+    if (quote.closest('.mail-quote-fold')) {
+      return;
+    }
+    const details = doc.createElement('details');
+    details.className = 'mail-quote-fold';
+    details.dataset.mailReaderUi = 'quote-fold';
+    const summary = doc.createElement('summary');
+    summary.textContent = 'Show quoted text';
+    quote.replaceWith(details);
+    details.append(summary, quote);
+  });
+  return root.innerHTML;
+}
+
+function emailSrcDoc(htmlBody: string) {
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      background: #ffffff;
+    }
+
+    body {
+      overflow-wrap: normal;
+      word-break: normal;
+    }
+
+    img {
+      border: 0;
+    }
+
+    .mail-blocked-image {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 2rem;
+      min-height: 2rem;
+      border: 1px dashed #cbd5e1;
+      border-radius: 6px;
+      background: #f8fafc;
+      color: #64748b;
+      padding: 0 10px;
+      box-sizing: border-box;
+      font: 12px Arial, Helvetica, sans-serif;
+    }
+
+    .mail-quote-fold {
+      margin: 12px 0 0;
+    }
+
+    .mail-quote-fold > summary {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      border-radius: 999px;
+      background: #f1f5f9;
+      color: #475569;
+      cursor: pointer;
+      padding: 0 10px;
+      font: 12px Arial, Helvetica, sans-serif;
+    }
+
+    .mail-quote-fold[open] > summary {
+      margin-bottom: 8px;
+    }
+  </style>
+</head>
+<body>${htmlBody}</body>
+</html>`;
+}
+
+function MailHtmlFrame({ htmlBody }: { htmlBody: string }) {
+  const frameRef = useRef<HTMLIFrameElement | null>(null);
+  const [height, setHeight] = useState(320);
+  const [frameWidth, setFrameWidth] = useState<number | null>(null);
+  const srcDoc = useMemo(() => emailSrcDoc(htmlBody), [htmlBody]);
+
+  const resizeFrame = useCallback(() => {
+    const frame = frameRef.current;
+    const doc = frame?.contentDocument;
+    if (!doc) {
+      return;
+    }
+    const docElement = doc.documentElement;
+    const body = doc.body;
+    const contentHeight = Math.max(
+      docElement.scrollHeight,
+      docElement.offsetHeight,
+      body?.scrollHeight || 0,
+      body?.offsetHeight || 0
+    );
+    const contentWidth = Math.max(
+      docElement.scrollWidth,
+      docElement.offsetWidth,
+      body?.scrollWidth || 0,
+      body?.offsetWidth || 0
+    );
+    const parentWidth = frame.parentElement?.clientWidth || frame.clientWidth || 0;
+    const nextHeight = Math.max(EMAIL_FRAME_MIN_HEIGHT, Math.min(EMAIL_FRAME_MAX_HEIGHT, Math.ceil(contentHeight)));
+    const nextWidth = parentWidth && contentWidth > parentWidth + 1
+      ? Math.min(EMAIL_FRAME_MAX_WIDTH, Math.ceil(contentWidth))
+      : null;
+
+    setHeight((current) => current === nextHeight ? current : nextHeight);
+    setFrameWidth((current) => current === nextWidth ? current : nextWidth);
+  }, []);
+
+  useEffect(() => {
+    setFrameWidth(null);
+    const id = window.setTimeout(resizeFrame, 120);
+    return () => window.clearTimeout(id);
+  }, [srcDoc, resizeFrame]);
+
+  useEffect(() => {
+    if (!frameWidth) {
+      return undefined;
+    }
+    const id = window.setTimeout(resizeFrame, 50);
+    return () => window.clearTimeout(id);
+  }, [frameWidth, resizeFrame]);
+
+  useEffect(() => {
+    const frame = frameRef.current;
+    const doc = frame?.contentDocument;
+    if (!doc) {
+      return undefined;
+    }
+    let animationFrame = 0;
+    const scheduleResize = () => {
+      window.cancelAnimationFrame(animationFrame);
+      animationFrame = window.requestAnimationFrame(resizeFrame);
+    };
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(scheduleResize);
+    if (observer) {
+      observer.observe(doc.documentElement);
+      if (doc.body) {
+        observer.observe(doc.body);
+      }
+    }
+    doc.querySelectorAll('img').forEach((image) => {
+      image.addEventListener('load', scheduleResize);
+      image.addEventListener('error', scheduleResize);
+    });
+    scheduleResize();
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      observer?.disconnect();
+      doc.querySelectorAll('img').forEach((image) => {
+        image.removeEventListener('load', scheduleResize);
+        image.removeEventListener('error', scheduleResize);
+      });
+    };
+  }, [srcDoc, resizeFrame]);
+
+  return (
+    <iframe
+      ref={frameRef}
+      title="Email HTML message"
+      className="message-html-frame"
+      sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin"
+      srcDoc={srcDoc}
+      style={{ height, width: frameWidth ? `${frameWidth}px` : undefined }}
+      onLoad={resizeFrame}
+    />
+  );
+}
+
+function MailMessageBody({ message, connectionId }: { message: MailMessage; connectionId: string }) {
+  const [plain, setPlain] = useState(false);
+  const [showImages, setShowImages] = useState(false);
+  const [inlineImages, setInlineImages] = useState<Record<string, InlineImageState>>({});
+  const [expandedMessage, setExpandedMessage] = useState<MailMessage | null>(null);
+  const [loadingExpandedBody, setLoadingExpandedBody] = useState(false);
+  const [expandedBodyError, setExpandedBodyError] = useState('');
+  const visibleMessage = expandedMessage || message;
+  const htmlBody = visibleMessage.body_html_rendered || visibleMessage.body_html_sanitized || '';
+  const renderedHtml = useMemo(
+    () => foldQuotedHtml(annotateInlinePlaceholders(htmlBody, visibleMessage.inline_assets, inlineImages, showImages)),
+    [htmlBody, inlineImages, visibleMessage.inline_assets, showImages]
+  );
+  const hasHtml = Boolean(htmlBody);
+  const hasRemoteImages = /data-mail-(?:image|background-image)="https?:\/\//i.test(htmlBody);
+  const visibleBodyTruncated = Boolean(
+    visibleMessage.body_source_truncated ||
+    (plain
+      ? (visibleMessage.body_text_truncated ?? visibleMessage.body_truncated)
+      : (visibleMessage.body_html_truncated ?? visibleMessage.body_truncated))
+  );
+  const canLoadTrimmedContent = Boolean(
+    !expandedMessage &&
+    (message.body_text_truncated || message.body_html_truncated) &&
+    !message.body_source_truncated
+  );
+  const inlineAssetsToFetch = useMemo(
+    () => (visibleMessage.inline_assets || []).filter((asset) => {
+      const contentId = asset.content_id || '';
+      const attachmentId = asset.attachment_id || '';
+      const contentType = asset.content_type || '';
+      return contentId && attachmentId && contentType.toLowerCase().startsWith('image/') && hasCidImagePlaceholder(htmlBody, contentId);
+    }),
+    [htmlBody, visibleMessage.inline_assets]
+  );
+  const attachments = visibleMessage.attachments || [];
+
+  useEffect(() => {
+    setExpandedMessage(null);
+    setLoadingExpandedBody(false);
+    setExpandedBodyError('');
+    setPlain(false);
+  }, [message.id]);
+
+  const loadTrimmedContent = useCallback(async () => {
+    setLoadingExpandedBody(true);
+    setExpandedBodyError('');
+    try {
+      const payload = await callBackend<{ message: MailMessage }>({
+        action: MAIL_BACKEND_ACTIONS.messagesGet,
+        message_id: message.id,
+        max_body_chars: READER_FULL_TEXT_BODY_CHARS,
+        max_body_html_chars: READER_HTML_BODY_CHARS,
+        ...noSecretRequest()
+      });
+      setExpandedMessage(payload.message);
+    } catch (error) {
+      setExpandedBodyError((error as Error).message);
+    } finally {
+      setLoadingExpandedBody(false);
+    }
+  }, [message.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setInlineImages((current) => {
+      const next: Record<string, InlineImageState> = {};
+      inlineAssetsToFetch.forEach((asset) => {
+        if (asset.attachment_id && current[asset.attachment_id]) {
+          next[asset.attachment_id] = current[asset.attachment_id];
+        }
+      });
+      return next;
+    });
+    inlineAssetsToFetch.forEach((asset) => {
+      const attachmentId = asset.attachment_id || '';
+      if ((asset.size_bytes || 0) > INLINE_IMAGE_MAX_BYTES) {
+        setInlineImages((current) => ({
+          ...current,
+          [attachmentId]: { status: 'too_large', detail: `Inline image exceeds ${formatBytes(INLINE_IMAGE_MAX_BYTES)}.` }
+        }));
+        return;
+      }
+      setInlineImages((current) => current[attachmentId] ? current : { ...current, [attachmentId]: { status: 'loading' } });
+      callBackend<MailAttachmentFetchResponse>({
+        action: MAIL_BACKEND_ACTIONS.attachmentsGet,
+        attachment_id: attachmentId,
+        metadata_only: false,
+        max_bytes: INLINE_IMAGE_MAX_BYTES,
+        ...gmailSecretRequest(connectionId)
+      })
+        .then((payload) => {
+          if (cancelled) {
+            return;
+          }
+          const dataUrl = inlineImageDataUrl(payload.fetch.data_base64url, payload.fetch.content_type || asset.content_type);
+          const status = payload.fetch.status === 'too_large' ? 'too_large' : dataUrl ? 'ready' : 'error';
+          setInlineImages((current) => ({
+            ...current,
+            [attachmentId]: {
+              status,
+              dataUrl: dataUrl || undefined,
+              detail: payload.fetch.detail || (status === 'too_large' ? `Inline image exceeds ${formatBytes(payload.fetch.max_bytes || INLINE_IMAGE_MAX_BYTES)}.` : undefined)
+            }
+          }));
+        })
+        .catch((error: Error) => {
+          if (!cancelled) {
+            setInlineImages((current) => ({ ...current, [attachmentId]: { status: 'error', detail: error.message } }));
+          }
+        });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [connectionId, inlineAssetsToFetch]);
+
+  return (
+    <>
+      {hasHtml ? (
+        <div className="message-body-actions">
+          <button type="button" onClick={() => setPlain((value) => !value)}>
+            {plain ? 'HTML' : 'Plain text'}
+          </button>
+        </div>
+      ) : null}
+      {hasHtml && !plain && hasRemoteImages ? (
+        <div className={`message-image-control ${showImages ? 'is-enabled' : ''}`}>
+          <span>{showImages ? 'Remote images visible' : 'Remote images blocked'}</span>
+          <button type="button" onClick={() => setShowImages((value) => !value)}>
+            {showImages ? 'Hide images' : 'Show images'}
+          </button>
+        </div>
+      ) : null}
+      {hasHtml && !plain ? (
+        <div className="message-html">
+          <MailHtmlFrame htmlBody={renderedHtml} />
+        </div>
+      ) : (
+        <p className="message-plain">{visibleMessage.body_text}</p>
+      )}
+      {visibleBodyTruncated ? (
+        <div className="message-trimmed">
+          <span>{visibleMessage.body_source_truncated ? 'Original source clipped.' : 'Message content clipped.'}</span>
+          {canLoadTrimmedContent ? (
+            <button type="button" onClick={loadTrimmedContent} disabled={loadingExpandedBody}>
+              {loadingExpandedBody ? 'Loading...' : 'Show trimmed content'}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+      {expandedBodyError ? <small>{expandedBodyError}</small> : null}
+      {attachments.length ? (
+        <div className="attachment-list" aria-label="Attachments">
+          {attachments.map((attachment) => (
+            <span key={attachment.id} className="attachment-chip" title={attachment.content_type || attachment.filename}>
+              <span className="attachment-icon" aria-hidden="true" />
+              <span>{attachment.filename}</span>
+              {formatBytes(attachment.size_bytes) ? <small>{formatBytes(attachment.size_bytes)}</small> : null}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function MailThreadMessage({ message, connectionId }: { message: MailMessage; connectionId: string }) {
+  const sender = formatAddress(message.sender);
+  const recipients = formatAddressList(message.recipients);
+  const cc = formatAddressList(message.cc);
+
+  return (
+    <article className="message">
+      <details className="message-head">
+        <summary>
+          <span className="message-head__sender">{sender}</span>
+          <span className="message-head__date">{new Date(message.sent_at).toLocaleString()}</span>
+          <ChevronDown size={15} strokeWidth={1.8} aria-hidden="true" />
+        </summary>
+        <dl className="message-meta">
+          <div>
+            <dt>From</dt>
+            <dd>{sender}</dd>
+          </div>
+          {recipients ? (
+            <div>
+              <dt>To</dt>
+              <dd>{recipients}</dd>
+            </div>
+          ) : null}
+          {cc ? (
+            <div>
+              <dt>Cc</dt>
+              <dd>{cc}</dd>
+            </div>
+          ) : null}
+          <div>
+            <dt>Date</dt>
+            <dd>{new Date(message.sent_at).toLocaleString()}</dd>
+          </div>
+        </dl>
+      </details>
+      <MailMessageBody message={message} connectionId={connectionId} />
+    </article>
+  );
+}
+
 export function App() {
   const [connections, setConnections] = useState<MailConnection[]>([]);
   const [threads, setThreads] = useState<MailThread[]>([]);
@@ -119,23 +728,32 @@ export function App() {
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
   const [draft, setDraft] = useState({ to: '', subject: '', body_text: '' });
+  const [composerMode, setComposerMode] = useState<ComposerMode>('compose');
   const [lastDraft, setLastDraft] = useState<MailDraft | null>(null);
   const [lastSendResult, setLastSendResult] = useState<SendResult | null>(null);
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [oauthCompleting, setOauthCompleting] = useState(false);
+  const composerBodyRef = useRef<HTMLTextAreaElement | null>(null);
 
-  const openThread = useCallback(async (threadId: string, connectionId?: string) => {
+  const openThread = useCallback(async (threadId: string, connectionId?: string, refresh = false) => {
     setBusy(true);
     try {
       const payload = await callBackend<{ thread: MailThread }>({
         action: MAIL_BACKEND_ACTIONS.threadsGet,
         thread_id: threadId,
-        max_body_chars: 12000,
-        ...(connectionId ? gmailSecretRequest(connectionId) : noSecretRequest())
+        max_body_chars: READER_TEXT_BODY_CHARS,
+        max_body_html_chars: READER_HTML_BODY_CHARS,
+        ...(refresh && connectionId ? gmailSecretRequest(connectionId) : noSecretRequest())
       });
       setSelectedThread(payload.thread);
       setConnectionId(payload.thread.connection_id);
+      if (!refresh) {
+        setComposerMode('reply');
+        setDraft({ to: '', subject: replySubject(payload.thread.subject), body_text: '' });
+        setLastDraft(null);
+        setLastSendResult(null);
+      }
       notifySelection({ thread: payload.thread.id, mailbox, connection_id: payload.thread.connection_id });
     } finally {
       setBusy(false);
@@ -189,6 +807,7 @@ export function App() {
             return callBackend({
               action: MAIL_BACKEND_ACTIONS.threadsSync,
               connection_id: payload.connection_id,
+              max_threads: MAIL_INTERACTIVE_SYNC_THREADS,
               ...gmailSecretRequest(payload.connection_id)
             }).then(() => loadThreads());
           }
@@ -260,7 +879,7 @@ export function App() {
   const totalPages = Math.max(1, Math.ceil(totalThreads / THREADS_PAGE_SIZE));
   const visibleStart = totalThreads === 0 ? 0 : (page - 1) * THREADS_PAGE_SIZE + 1;
   const visibleEnd = totalThreads === 0 ? 0 : Math.min(page * THREADS_PAGE_SIZE, totalThreads);
-  const isContextualReply = Boolean(selectedThread);
+  const isContextualReply = Boolean(selectedThread && composerMode === 'reply');
 
   useEffect(() => {
     if (page > totalPages) {
@@ -268,8 +887,40 @@ export function App() {
     }
   }, [page, totalPages]);
 
+  function focusComposer() {
+    window.setTimeout(() => composerBodyRef.current?.focus(), 0);
+  }
+
+  function startReply() {
+    if (!selectedThread) {
+      return;
+    }
+    setComposerMode('reply');
+    setDraft((current) => ({
+      to: '',
+      subject: composerMode === 'reply' && current.subject.trim() ? current.subject : replySubject(selectedThread.subject),
+      body_text: composerMode === 'reply' ? current.body_text : ''
+    }));
+    focusComposer();
+  }
+
+  function startForward() {
+    if (!selectedThread) {
+      return;
+    }
+    const sourceMessage = latestMessage(selectedThread);
+    setComposerMode('forward');
+    setDraft({
+      to: '',
+      subject: forwardSubject(selectedThread.subject),
+      body_text: forwardedBody(sourceMessage, selectedThread.subject)
+    });
+    focusComposer();
+  }
+
   function closeThread() {
     setSelectedThread(null);
+    setComposerMode('compose');
     notifySelection({ mailbox, thread: null });
   }
 
@@ -284,7 +935,7 @@ export function App() {
       const payload = await callBackend<{ draft: MailDraft }>({
         action: MAIL_BACKEND_ACTIONS.draftsCreate,
         connection_id: connection?.id,
-        thread_id: selectedThread?.id,
+        thread_id: isContextualReply ? selectedThread?.id : undefined,
         to: draft.to.trim() ? [{ email: draft.to.trim() }] : [],
         subject: draft.subject,
         body_text: draft.body_text
@@ -292,7 +943,8 @@ export function App() {
       setLastDraft(payload.draft);
       setLastSendResult(null);
       setNotice('Draft saved. Preview before confirm.');
-      setDraft({ to: '', subject: '', body_text: '' });
+      setDraft({ to: '', subject: selectedThread ? replySubject(selectedThread.subject) : '', body_text: '' });
+      setComposerMode(selectedThread ? 'reply' : 'compose');
       await loadThreads();
     } catch (error) {
       setNotice((error as Error).message);
@@ -483,46 +1135,63 @@ export function App() {
               <p>{selectedThread.participants.map((person) => person.name || person.email).join(', ')}</p>
             </div>
             <div className="reader-actions">
+              <button type="button" onClick={startReply} disabled={busy}>
+                <Reply size={16} strokeWidth={1.8} aria-hidden="true" />
+                Reply
+              </button>
+              <button type="button" onClick={startForward} disabled={busy}>
+                <Forward size={16} strokeWidth={1.8} aria-hidden="true" />
+                Forward
+              </button>
               <button type="button" onClick={() => markSelected(selectedThread.unread)} disabled={busy}>
+                <MailOpen size={16} strokeWidth={1.8} aria-hidden="true" />
                 {selectedThread.unread ? 'Mark read' : 'Mark unread'}
               </button>
               <button type="button" onClick={() => modifySelected([], ['inbox'])} disabled={busy}>
+                <Archive size={16} strokeWidth={1.8} aria-hidden="true" />
                 Archive
               </button>
               <button type="button" onClick={() => modifySelected(['trash'], ['inbox'])} disabled={busy}>
+                <Trash2 size={16} strokeWidth={1.8} aria-hidden="true" />
                 Trash
               </button>
-              <button type="button" onClick={() => openThread(selectedThread.id, selectedThread.connection_id)} disabled={busy}>
+              <button type="button" onClick={() => openThread(selectedThread.id, selectedThread.connection_id, true)} disabled={busy}>
+                <RefreshCw size={16} strokeWidth={1.8} aria-hidden="true" />
                 Refresh
               </button>
               <button type="button" className="reader-close" onClick={closeThread} aria-label="Close mail">
-                X
+                <X size={16} strokeWidth={1.8} aria-hidden="true" />
               </button>
             </div>
           </header>
           <div className="message-stack">
             {(selectedThread.messages || []).map((message) => (
-              <article key={message.id} className="message">
-                <div className="message-head">
-                  <strong>{message.sender.name || message.sender.email}</strong>
-                  <span>{new Date(message.sent_at).toLocaleString()}</span>
-                </div>
-                <p>{message.body_text}</p>
-                {message.has_attachments ? <small>Attachments available after provider fetch is enabled.</small> : null}
-              </article>
+              <MailThreadMessage key={message.id} message={message} connectionId={selectedThread.connection_id} />
             ))}
           </div>
           {canUseConnection && connection ? (
             <form className="composer" onSubmit={createDraft}>
+              {selectedThread ? (
+                <div className="composer-mode" aria-label="Draft mode">
+                  <button type="button" className={composerMode === 'reply' ? 'is-active' : ''} onClick={startReply}>
+                    <Reply size={15} strokeWidth={1.8} aria-hidden="true" />
+                    Reply
+                  </button>
+                  <button type="button" className={composerMode === 'forward' ? 'is-active' : ''} onClick={startForward}>
+                    <Forward size={15} strokeWidth={1.8} aria-hidden="true" />
+                    Forward
+                  </button>
+                </div>
+              ) : null}
               <input
                 value={draft.to}
                 onChange={(event) => setDraft({ ...draft, to: event.target.value })}
-                aria-label={isContextualReply ? 'Reply recipients' : 'Recipient email'}
-                placeholder={isContextualReply ? 'Reply recipients (optional)' : 'Recipient email'}
+                aria-label={isContextualReply ? 'Reply recipients' : composerMode === 'forward' ? 'Forward recipient email' : 'Recipient email'}
+                placeholder={isContextualReply ? 'Reply recipients (optional)' : composerMode === 'forward' ? 'Forward to' : 'Recipient email'}
                 required={!isContextualReply}
               />
               <input value={draft.subject} onChange={(event) => setDraft({ ...draft, subject: event.target.value })} placeholder="Subject" required />
-              <textarea value={draft.body_text} onChange={(event) => setDraft({ ...draft, body_text: event.target.value })} placeholder="Write a draft" required />
+              <textarea ref={composerBodyRef} value={draft.body_text} onChange={(event) => setDraft({ ...draft, body_text: event.target.value })} placeholder={composerMode === 'forward' ? 'Add a note' : 'Write a draft'} required />
               <div className="composer-actions">
                 <button type="submit" disabled={busy}>Save draft</button>
                 <button type="button" onClick={() => sendLastDraft(false)} disabled={busy || !lastDraft}>Preview send</button>

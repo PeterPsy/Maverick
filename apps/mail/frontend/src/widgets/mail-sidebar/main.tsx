@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import {
   callBackend,
   MAIL_BACKEND_ACTIONS,
+  MAIL_INTERACTIVE_SYNC_THREADS,
   type MailConnection,
 } from '../../api';
 import './styles.css';
@@ -116,7 +117,7 @@ function MailSidebarWidget() {
   const [busy, setBusy] = useState(false);
   const [isMobileLayout, setIsMobileLayout] = useState(false);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (options: { preserveNotice?: boolean } = {}) => {
     try {
       const [connectionPayload, countPayload] = await Promise.all([
         callBackend<ConnectionPayload>({ action: MAIL_BACKEND_ACTIONS.connectionsList, ...noSecretRequest() }),
@@ -124,9 +125,15 @@ function MailSidebarWidget() {
       ]);
       setConnections(connectionPayload.items);
       setMailboxCounts(countPayload.counts || {});
-      setNotice('');
+      if (!options.preserveNotice) {
+        setNotice('');
+      }
+      return true;
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Unable to load mail.');
+      if (!options.preserveNotice) {
+        setNotice(error instanceof Error ? error.message : 'Unable to load mail.');
+      }
+      return false;
     }
   }, []);
 
@@ -223,10 +230,15 @@ function MailSidebarWidget() {
       await callBackend({
         action: MAIL_BACKEND_ACTIONS.threadsSync,
         connection_id: targetConnection.id,
+        max_threads: MAIL_INTERACTIVE_SYNC_THREADS,
         ...gmailSecretRequest(targetConnection.id)
       });
-      setNotice('Sync completed.');
-      await refresh();
+      const refreshed = await refresh({ preserveNotice: true });
+      if (refreshed) {
+        setNotice('Sync completed.');
+      } else {
+        setNotice('Sync completed. Refresh the view if the list is stale.');
+      }
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Sync failed.');
     } finally {

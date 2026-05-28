@@ -5,12 +5,13 @@ from __future__ import annotations
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from collections.abc import Iterator
+import json
 from pathlib import Path
 import re
 import sqlite3
 
 
-SCHEMA_VERSION = "4"
+SCHEMA_VERSION = "5"
 REFERENCE_ENTITIES = ["mail_connection", "email_thread", "email_message", "mail_attachment", "mail_draft"]
 REQUIRED_TABLES = [
     "schema_metadata",
@@ -132,6 +133,10 @@ def ensure_schema(data_root: Path) -> None:
               sent_at TEXT NOT NULL,
               body_text TEXT NOT NULL DEFAULT '',
               body_html_sanitized TEXT NOT NULL DEFAULT '',
+              body_html_original_bounded TEXT NOT NULL DEFAULT '',
+              body_html_gmail_sanitized TEXT NOT NULL DEFAULT '',
+              body_html_rendered TEXT NOT NULL DEFAULT '',
+              render_policy_json TEXT NOT NULL DEFAULT '{}',
               headers_json TEXT NOT NULL DEFAULT '{}',
               has_attachments INTEGER NOT NULL DEFAULT 0
             );
@@ -200,6 +205,17 @@ def ensure_schema(data_root: Path) -> None:
         _ensure_column(db, "sync_state", "last_incremental_sync_at", "TEXT")
         _ensure_column(db, "sync_state", "provider_history_id", "TEXT")
         _ensure_column(db, "oauth_credentials", "grant_id", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(db, "messages", "body_html_sanitized", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(db, "messages", "body_html_original_bounded", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(db, "messages", "body_html_gmail_sanitized", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(db, "messages", "body_html_rendered", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(db, "messages", "render_policy_json", "TEXT NOT NULL DEFAULT '{}'")
+        _ensure_column(db, "messages", "body_render_mode", "TEXT NOT NULL DEFAULT 'plain'")
+        _ensure_column(db, "messages", "body_preview", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(db, "messages", "body_truncated", "INTEGER NOT NULL DEFAULT 0")
+        _ensure_column(db, "messages", "parts_json", "TEXT NOT NULL DEFAULT '[]'")
+        _ensure_column(db, "messages", "inline_assets_json", "TEXT NOT NULL DEFAULT '[]'")
+        _backfill_message_render_columns(db)
         db.execute(
             "INSERT OR REPLACE INTO schema_metadata(key, value) VALUES (?, ?)",
             ("schema_version", SCHEMA_VERSION),
@@ -270,6 +286,54 @@ def _ensure_column(db: sqlite3.Connection, table: str, column: str, definition: 
     columns = {row["name"] for row in db.execute(f"PRAGMA table_info({table})").fetchall()}
     if column not in columns:
         db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
+def _backfill_message_render_columns(db: sqlite3.Connection) -> None:
+    legacy_policy = json.dumps(
+        {
+            "version": 0,
+            "source": "legacy_body_html_sanitized",
+            "rendered_from": "body_html_sanitized",
+        },
+        ensure_ascii=True,
+        sort_keys=True,
+    )
+    db.execute(
+        """
+        UPDATE messages
+        SET body_html_gmail_sanitized = body_html_sanitized
+        WHERE body_html_gmail_sanitized = ''
+          AND body_html_sanitized != ''
+        """
+    )
+    db.execute(
+        """
+        UPDATE messages
+        SET body_html_rendered = COALESCE(NULLIF(body_html_gmail_sanitized, ''), body_html_sanitized)
+        WHERE body_html_rendered = ''
+          AND (body_html_gmail_sanitized != '' OR body_html_sanitized != '')
+        """
+    )
+    db.execute(
+        """
+        UPDATE messages
+        SET body_html_sanitized = body_html_rendered
+        WHERE body_html_sanitized = ''
+          AND body_html_rendered != ''
+        """
+    )
+    db.execute(
+        """
+        UPDATE messages
+        SET body_render_mode = 'html'
+        WHERE body_render_mode = 'plain'
+          AND body_html_rendered != ''
+        """
+    )
+    db.execute(
+        "UPDATE messages SET render_policy_json = ? WHERE render_policy_json = '' OR render_policy_json = '{}'",
+        (legacy_policy,),
+    )
 
 
 def _remove_mock_provider_rows(db: sqlite3.Connection) -> None:

@@ -42,6 +42,7 @@ MONGO_COLLECTION_UNIQUE_INDEXES: dict[str, tuple[tuple[str, ...], ...]] = {
     "secrets": (("secret_id",), ("alias",)),
     "secret_values": (("secret_id",),),
     "secret_bindings": (("binding_id",),),
+    "secret_grants": (("grant_id",),),
 }
 
 
@@ -138,6 +139,7 @@ def control_plane_collection_specs(collections: ControlPlaneCollections) -> list
         ControlPlaneCollectionSpec("secrets", collections.secrets.secrets),
         ControlPlaneCollectionSpec("secret_values", collections.secrets.values),
         ControlPlaneCollectionSpec("secret_bindings", collections.secrets.bindings),
+        ControlPlaneCollectionSpec("secret_grants", collections.secrets.grants),
     ]
     return [spec for spec in specs if spec.collection is not None]
 
@@ -181,6 +183,7 @@ def _build_json_collections(json_root: Path) -> ControlPlaneCollections:
             secrets=JsonFileCollection(secret_state_root / "secrets.json"),
             values=JsonFileCollection(secret_state_root / "values.json"),
             bindings=JsonFileCollection(secret_state_root / "bindings.json"),
+            grants=JsonFileCollection(secret_state_root / "grants.json"),
         ),
     )
 
@@ -219,6 +222,7 @@ def _build_mongo_collections(settings: ControlStoreSettings) -> ControlPlaneColl
             secrets=collection("secrets"),
             values=collection("secret_values"),
             bindings=collection("secret_bindings"),
+            grants=collection("secret_grants"),
         ),
     )
 

@@ -84,6 +84,29 @@ class AsgiApplicationTests(unittest.TestCase):
         self.assertEqual(sent[0]["status"], 413)
         self.assertIn(b"request_body_too_large", sent[1]["body"])
 
+    def test_health_response_bypasses_wsgi_worker_pool(self) -> None:
+        host = PlatformAsgiHost(state=SimpleNamespace(repository_root=REPO_ROOT))
+        sent: list[dict[str, object]] = []
+
+        async def receive() -> dict[str, object]:
+            raise AssertionError("health should not read a request body")
+
+        async def send(message: dict[str, object]) -> None:
+            sent.append(message)
+
+        with patch("core.api.asgi_application.asyncio.to_thread", side_effect=AssertionError("worker pool used")):
+            asyncio.run(
+                host(
+                    {"type": "http", "path": "/health", "method": "GET", "headers": []},
+                    receive,
+                    send,
+                )
+            )
+
+        self.assertEqual(sent[0]["type"], "http.response.start")
+        self.assertEqual(sent[0]["status"], 200)
+        self.assertEqual(json.loads(sent[1]["body"].decode("utf-8")), {"status": "ok", "service": "maverick-core"})
+
     def test_app_events_websocket_rejects_anonymous_handshake(self) -> None:
         host = PlatformAsgiHost(state=SimpleNamespace(repository_root=REPO_ROOT))
         sent: list[dict[str, object]] = []

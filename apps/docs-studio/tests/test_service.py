@@ -36,6 +36,11 @@ class DocsStudioServiceTest(unittest.TestCase):
             workspace_id="default",
             data_root=data_root,
             workspace_root=None,
+            effective_mode=None,
+            platform_role=None,
+            user_id=None,
+            workspace_role=None,
+            runtime_session_id=None,
             body={},
             arguments={},
         )

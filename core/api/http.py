@@ -10,7 +10,9 @@ from urllib.parse import parse_qs, urlparse
 
 
 StartResponse = Callable[[str, list[tuple[str, str]]], None]
-DEFAULT_MAX_JSON_BODY_BYTES = 1024 * 1024
+# Storage currently uploads file bytes through base64 JSON app-backend calls.
+# 40 MiB covers its 25 MiB raw write limit after base64 expansion plus JSON framing.
+DEFAULT_MAX_JSON_BODY_BYTES = 40 * 1024 * 1024
 
 
 class HttpRequestError(ValueError):

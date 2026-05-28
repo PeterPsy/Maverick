@@ -212,7 +212,7 @@ class AppDocumentStore:
             capabilities=AppCapabilities(**capabilities_payload),
             lifecycle=AppLifecycleDeclaration(**_known_dataclass_values(AppLifecycleDeclaration, payload["lifecycle"])),
             entrypoints=AppEntrypoints(**payload["entrypoints"]),
-            hook_timeouts=AppHookTimeouts(**payload["hook_timeouts"]),
+            hook_timeouts=AppHookTimeouts(**{"backend_seconds": 30, **payload["hook_timeouts"]}),
             failure_semantics=AppFailureSemantics(**payload["failure_semantics"]),
             health_contract=AppHealthContract(**payload["health_contract"]),
             rollback_support=AppRollbackSupport(**payload["rollback_support"]),

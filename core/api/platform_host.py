@@ -26,6 +26,7 @@ from core.api.provider_api import handle_provider_api
 from core.api.runtime_api import handle_runtime_api
 from core.api.runtime_cli_api import handle_runtime_cli_api
 from core.api.session_api import handle_session_api, resolve_request_session
+from core.api.secret_api import handle_secret_api
 from core.api.settings_api import handle_settings_api
 from core.api.widget_api import handle_widget_api
 from core.api.workspace_files_api import handle_workspace_files_api
@@ -92,6 +93,9 @@ class PlatformHost:
             if routed is not None:
                 return routed
             routed = handle_settings_api(self.state, environ, start_response)
+            if routed is not None:
+                return routed
+            routed = handle_secret_api(self.state, environ, start_response)
             if routed is not None:
                 return routed
             routed = handle_workspace_files_api(self.state, environ, start_response, start_path=self.start_path)

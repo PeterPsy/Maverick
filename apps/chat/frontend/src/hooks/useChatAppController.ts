@@ -110,6 +110,7 @@ export function useChatAppController({
     agentCatalogAppId,
     canStopTurn,
     selectedAgentTypeId,
+    workspaceId,
     setActiveProviderId,
     setActiveTurn,
     setComposerError,

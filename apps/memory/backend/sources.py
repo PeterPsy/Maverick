@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 from hashlib import sha256
-import json
 from pathlib import Path
 import sqlite3
 from typing import Any
 
 from database import json_text, new_id, row_payload
+from storage_sources import (
+    is_remote_storage_ref,
+    ref_metadata,
+    remote_storage_snapshot,
+    storage_ref_staleness,
+    update_remote_ref_metadata,
+)
 
 
 def sync_sources(
@@ -22,7 +28,8 @@ def sync_sources(
     sources: list[dict[str, Any]] = []
     for ref in refs:
         source_id = _source_id_for_ref(db, ref)
-        snapshot = source_snapshot(ref, data_root)
+        snapshot = source_snapshot(ref, data_root, include_remote_preview=True)
+        update_remote_ref_metadata(db, ref, snapshot, timestamp=timestamp)
         source = {
             "id": source_id or new_id("src"),
             "source_kind": ref["ref_kind"],
@@ -93,7 +100,11 @@ def ensure_source_version(
         "source_id": source["id"],
         "version_hash": version_hash,
         "extracted_text": snapshot["extracted_text"],
-        "extracted_ref": source.get("workspace_relative_path") or source.get("entity_id") or source.get("uri") or "",
+        "extracted_ref": snapshot.get("extracted_ref")
+        or source.get("workspace_relative_path")
+        or source.get("entity_id")
+        or source.get("uri")
+        or "",
         "observed_at": timestamp,
         "created_at": timestamp,
         "metadata_json": json_text(
@@ -102,6 +113,7 @@ def ensure_source_version(
                 "hash_kind": snapshot["hash_kind"],
                 "extracted_text_available": bool(snapshot["extracted_text"]),
                 "reference_snapshot_hash": reference_snapshot_hash(ref),
+                **snapshot.get("metadata", {}),
             }
         ),
     }
@@ -133,7 +145,15 @@ def ensure_node_source_link(
     )
 
 
-def source_snapshot(ref: sqlite3.Row, data_root: Path | None) -> dict[str, Any]:
+def source_snapshot(
+    ref: sqlite3.Row,
+    data_root: Path | None,
+    *,
+    include_remote_preview: bool = False,
+) -> dict[str, Any]:
+    metadata = ref_metadata(ref)
+    if is_remote_storage_ref(ref, metadata):
+        return remote_storage_snapshot(ref, metadata, data_root, include_preview=include_remote_preview)
     file_path = workspace_file_path(data_root, str(ref["workspace_relative_path"] or ""))
     if file_path is not None and file_path.is_file():
         return {
@@ -149,13 +169,12 @@ def source_snapshot(ref: sqlite3.Row, data_root: Path | None) -> dict[str, Any]:
 
 
 def source_metadata(ref: sqlite3.Row, snapshot: dict[str, Any]) -> str:
-    try:
-        metadata = json.loads(ref["metadata_json"] or "{}")
-    except json.JSONDecodeError:
-        metadata = {}
-    if not isinstance(metadata, dict):
-        metadata = {}
+    metadata = ref_metadata(ref)
     metadata["content_hash_kind"] = snapshot["hash_kind"]
+    metadata.update(snapshot.get("metadata", {}))
+    staleness = storage_ref_staleness(ref)
+    if staleness:
+        metadata["storage_staleness"] = staleness
     return json_text(metadata)
 
 

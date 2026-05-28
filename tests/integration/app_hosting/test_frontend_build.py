@@ -45,6 +45,7 @@ class AppFrontendBuildTests(AppHostingTestBase):
     def write_buildable_app(self, repo_root, app_id: str = "buildable"):
         app_root = repo_root / "apps" / app_id
         (app_root / "frontend" / "dist").mkdir(parents=True)
+        (app_root / "frontend" / "node_modules").mkdir()
         (app_root / "frontend" / "package.json").write_text('{"scripts":{"build":"vite build"}}', encoding="utf-8")
         (app_root / "frontend" / "dist" / "index.html").write_text("<main>Before</main>", encoding="utf-8")
         self.write_contract(
@@ -105,6 +106,36 @@ class AppFrontendBuildTests(AppHostingTestBase):
                     "resource": "frontend",
                 },
             )
+
+    def test_frontend_build_runs_npm_ci_when_dependencies_are_missing(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repo_root = self.make_repo_root(temp_dir)
+            app_root = self.write_buildable_app(repo_root)
+            (app_root / "frontend" / "node_modules").rmdir()
+            (app_root / "frontend" / "package-lock.json").write_text(
+                '{"lockfileVersion":3,"packages":{}}',
+                encoding="utf-8",
+            )
+            store = self.make_store()
+            source = register_app_source_from_contract(store, source_kind="platform", source_path=str(app_root))
+            install_store_app(store, source_id=source.source_id, workspace_id="default", start_path=repo_root)
+
+            with patch("core.apps.frontend_build.subprocess.run") as run:
+                run.side_effect = [
+                    subprocess.CompletedProcess(["npm", "ci"], 0, stdout="installed", stderr=""),
+                    subprocess.CompletedProcess(["npm", "run", "build"], 0, stdout="built", stderr=""),
+                ]
+                result = run_core_cli_command(
+                    command_id="app.buildable.frontend.build",
+                    context=self.operator_context(),
+                    app_store=store,
+                    workspace_id="default",
+                    start_path=repo_root,
+                    arguments={},
+                )
+
+            self.assertEqual(result["status"], "built")
+            self.assertEqual([call.args[0] for call in run.call_args_list], [["npm", "ci"], ["npm", "run", "build"]])
 
     def test_frontend_build_command_allows_full_access_runtime_agent(self) -> None:
         with TemporaryDirectory() as temp_dir:

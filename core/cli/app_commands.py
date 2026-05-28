@@ -11,11 +11,16 @@ from core.api.app_event_publication import declared_data_event_resources, publis
 from core.apps.runtime_requests import apply_app_runtime_requests
 from core.apps.surfaces import enabled_workspace_app_bindings, resolve_workspace_app_surface
 from core.apps.store import AppStore
-from core.apps.surface_descriptors import app_cli_command_metadata, app_cli_command_required_secrets
+from core.apps.surface_descriptors import (
+    AppSurfaceSecretSelector,
+    app_cli_command_metadata,
+    app_cli_command_secret_selectors,
+    app_secret_requests_for_arguments,
+)
 from core.apps.surface_policies import app_requires_full_access_runtime
 from core.authorization.service import can_mount_app_visibility
 from core.cli.models import CliCommandDefinition, CliInvocationContext, CliInvocationPolicy
-from core.secrets.app_delivery import resolve_app_secret_payload
+from core.secrets.app_delivery import resolve_app_secret_payload_requests
 from core.secrets.store import SecretStore
 from core.shared.entrypoints import run_json_entrypoint
 from core.workspaces.paths import workspace_paths
@@ -149,7 +154,7 @@ def _workspace_app_command_specs(
                 command_name,
                 default_description=default_description,
             )
-            required_secret_names = app_cli_command_required_secrets(
+            secret_selectors = app_cli_command_secret_selectors(
                 source_root,
                 command_name,
                 declared_secret_names=parsed.contract.permissions.secrets.read,
@@ -169,7 +174,7 @@ def _workspace_app_command_specs(
                 _uploaded_storage_root: str = str(paths.uploaded_storage),
                 _generated_storage_root: str = str(paths.generated_storage),
                 _command_name: str = command_name,
-                _allowed_secret_names: list[str] = required_secret_names,
+                _secret_selectors: list[AppSurfaceSecretSelector] = secret_selectors,
                 _declared_event_resources: list[str] = declared_data_event_resources(
                     parsed.contract.capabilities.data_events
                 ),
@@ -182,11 +187,30 @@ def _workspace_app_command_specs(
                 _app_event_bus=app_event_bus,
                 _start_path: Path | None = start_path,
             ) -> dict[str, Any]:
-                app_secret_result = resolve_app_secret_payload(
+                def _lookup_secret_resource(selector: AppSurfaceSecretSelector) -> dict[str, Any] | None:
+                    return _app_secret_resource_lookup(
+                        _entrypoint_path,
+                        selector=selector,
+                        arguments=arguments,
+                        context=context,
+                        app_id=_app_id,
+                        public_app_id=_public_app_id,
+                        source_root=_source_root,
+                        data_root=_data_root,
+                        workspace_root=_workspace_root,
+                        uploaded_storage_root=_uploaded_storage_root,
+                        generated_storage_root=_generated_storage_root,
+                    )
+
+                app_secret_result = resolve_app_secret_payload_requests(
                     _secret_store,
                     workspace_id=str(context.workspace_id),
                     app_id=_app_id,
-                    allowed_logical_names=_allowed_secret_names,
+                    requests=app_secret_requests_for_arguments(
+                        _secret_selectors,
+                        arguments,
+                        resource_lookup=_lookup_secret_resource,
+                    ),
                     surface=f"cli/{_command_name}",
                     runtime_session_id=context.runtime_session_id,
                     actor_user_id=context.user_id,
@@ -270,3 +294,45 @@ def _workspace_app_command_specs(
                 )
             )
     return specs
+
+
+def _app_secret_resource_lookup(
+    entrypoint_path: str,
+    *,
+    selector: AppSurfaceSecretSelector,
+    arguments: dict[str, Any],
+    context: CliInvocationContext,
+    app_id: str,
+    public_app_id: str,
+    source_root: Path,
+    data_root: str,
+    workspace_root: str,
+    uploaded_storage_root: str,
+    generated_storage_root: str,
+) -> dict[str, Any] | None:
+    result = run_json_entrypoint(
+        entrypoint_path,
+        payload={
+            "surface": "secret_selector",
+            "workspace_id": context.workspace_id,
+            "agent_id": context.agent_id,
+            "effective_mode": context.effective_mode,
+            "runtime_session_id": context.runtime_session_id,
+            "app_id": app_id,
+            "public_app_id": public_app_id,
+            "workspace_root": workspace_root,
+            "data_root": data_root,
+            "uploaded_storage_root": uploaded_storage_root,
+            "generated_storage_root": generated_storage_root,
+            "app_secrets": {},
+            "app_secret_selector": {
+                "logical_names": selector.logical_names,
+                "resource_type": selector.resource_type,
+                "resource_id_argument": selector.resource_id_argument,
+                "resource_lookup": selector.resource_lookup,
+            },
+            "arguments": arguments,
+        },
+        cwd=source_root,
+    )
+    return result if isinstance(result, dict) else None

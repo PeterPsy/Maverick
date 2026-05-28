@@ -155,7 +155,7 @@ export function FloatingWindow({
             externalMentionDrop={externalMentionDrop}
             navigationScope={windowItem.id}
             newChatProjectId={windowItem.draftProjectId}
-            newChatRequestId={windowItem.isDraft ? windowItem.id : null}
+            newChatRequestId={windowItem.isDraft && !windowItem.threadId ? windowItem.id : null}
             runtimeThreads={threads}
             runtimeThreadsError={runtimeThreadsError}
             runtimeThreadsLoaded={runtimeThreadsLoaded}

@@ -16,7 +16,7 @@ from constants import (
     MAX_TIMEZONE_LENGTH,
     MAX_TITLE_LENGTH,
 )
-from scalars import clean_string, optional_bool
+from scalars import clean_string, optional_bool, optional_int
 from time_values import optional_time_string
 
 
@@ -93,12 +93,38 @@ def normalize_sync_cursor(payload: dict[str, Any]) -> dict[str, Any]:
         "provider": GOOGLE_PROVIDER,
         "provider_calendar_id": provider_calendar_id,
         "status": _sync_status(payload.get("status")),
+        "sync_mode": clean_string(payload.get("sync_mode") or payload.get("syncMode"), "sync_mode", max_length=MAX_LIST_ITEM_LENGTH),
         "sync_token": clean_string(payload.get("sync_token") or payload.get("syncToken"), "sync_token", max_length=MAX_EXTERNAL_LINK_LENGTH),
         "page_token": clean_string(payload.get("page_token") or payload.get("pageToken"), "page_token", max_length=MAX_EXTERNAL_LINK_LENGTH),
+        "time_min": optional_time_string(payload.get("time_min") or payload.get("timeMin"), "time_min"),
+        "time_max": optional_time_string(payload.get("time_max") or payload.get("timeMax"), "time_max"),
         "last_sync_at": optional_time_string(payload.get("last_sync_at") or payload.get("lastSyncAt"), "last_sync_at"),
         "last_full_sync_at": optional_time_string(payload.get("last_full_sync_at") or payload.get("lastFullSyncAt"), "last_full_sync_at"),
         "updated_at": optional_time_string(payload.get("updated_at") or payload.get("updatedAt"), "updated_at"),
+        "error_code": clean_string(payload.get("error_code") or payload.get("errorCode"), "error_code", max_length=MAX_LIST_ITEM_LENGTH),
         "error": clean_string(payload.get("error"), "error", max_length=MAX_DESCRIPTION_LENGTH),
+        "current_event_count": optional_int(
+            payload.get("current_event_count") or payload.get("currentEventCount"),
+            field="current_event_count",
+            minimum=0,
+            maximum=1_000_000,
+        )
+        or 0,
+        "remote_candidate_count": optional_int(
+            payload.get("remote_candidate_count") or payload.get("remoteCandidateCount"),
+            field="remote_candidate_count",
+            minimum=0,
+            maximum=1_000_000,
+        )
+        or 0,
+        "candidate_event_count": optional_int(
+            payload.get("candidate_event_count") or payload.get("candidateEventCount"),
+            field="candidate_event_count",
+            minimum=0,
+            maximum=1_000_000,
+        )
+        or 0,
+        "max_events": optional_int(payload.get("max_events") or payload.get("maxEvents"), field="max_events", minimum=0, maximum=1_000_000) or 0,
     }
 
 

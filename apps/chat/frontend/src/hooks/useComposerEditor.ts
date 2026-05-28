@@ -15,6 +15,7 @@ import {
   isMobileComposerInput,
   normalizePastedComposerText,
   renderComposerContent,
+  scrollComposerCaretIntoView,
   setComposerCaret,
 } from "../lib/composerDom";
 import type { MentionItem, MentionToken } from "../lib/mentions";
@@ -78,6 +79,7 @@ export function useComposerEditor({
     renderComposerContent(editor, value, mentionTokens, disabled, onRemoveMention);
     if (wasFocused) {
       setComposerCaret(editor, nextCaretIndex);
+      scrollComposerCaretIntoView(editor);
     }
   }, [disabled, mentionTokens, value]);
 
@@ -109,6 +111,7 @@ export function useComposerEditor({
       }
       nextEditor.focus();
       setComposerCaret(nextEditor, nextCaret);
+      scrollComposerCaretIntoView(nextEditor);
     });
   }
 

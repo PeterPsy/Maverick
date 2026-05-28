@@ -186,7 +186,7 @@ export function computeReadinessIssues({
 
 function issueFromCoreNeed(need: SecretGrantNeed): ConnectionIssue | null {
   const action = need.user_action || 'review';
-  if (action === 'none' && need.value_state === 'active' && need.grant_state === 'active') {
+  if (action === 'none') {
     return null;
   }
   const credentialLabel = need.human_label || humanizeNeedLabel(need.logical_name);

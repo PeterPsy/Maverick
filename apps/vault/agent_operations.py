@@ -259,6 +259,8 @@ def _issue_from_need(need: dict[str, Any]) -> dict[str, Any] | None:
     value_state = str(need.get("value_state") or "unknown")
     grant_state = str(need.get("grant_state") or "unknown")
     user_action = str(need.get("user_action") or "review")
+    if user_action == "none":
+        return None
     scope = _sanitize(_dict(need.get("scope"))) or {"type": "workspace", "label": "Workspace"}
     recommended_grant = _sanitize(_dict(need.get("recommended_grant")))
     issue = {

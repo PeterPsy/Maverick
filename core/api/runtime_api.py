@@ -709,7 +709,7 @@ def _handle_turn_interrupt(state: PlatformState, context: RequestSession, turn_i
         availability="free",
         now=event.created_at,
     )
-    release_idle_runtime_processes(state, session_id=updated.session_id, provider_id=provider_id or "unconfigured", reason="turn_interrupted")
+    release_idle_runtime_processes(state, session_id=updated.session_id, provider_id=provider_id or "unconfigured", reason="turn_interrupted", idle_ttl_seconds=0)
     dispatch_source_app_runtime_event(
         state,
         session=session,

@@ -231,6 +231,7 @@ def build_app_entrypoints(
 
 def build_app_hook_timeouts(
     *,
+    backend_seconds: int = 30,
     install_seconds: int = 60,
     upgrade_seconds: int = 120,
     migrate_seconds: int = 300,
@@ -242,6 +243,7 @@ def build_app_hook_timeouts(
 ) -> AppHookTimeouts:
     """Build lifecycle and health timeout metadata."""
     return AppHookTimeouts(
+        backend_seconds=backend_seconds,
         install_seconds=install_seconds,
         upgrade_seconds=upgrade_seconds,
         migrate_seconds=migrate_seconds,

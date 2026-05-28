@@ -167,6 +167,7 @@ def _render_bootstrap_secret_files(config: InstallerConfig, *, key_text: str) ->
         "secrets": root / "secrets.json",
         "values": root / "values.json",
         "bindings": root / "bindings.json",
+        "grants": root / "grants.json",
     }
     if all(path.is_file() for path in paths.values()) and not config.mongodb_password:
         return {path: path.read_text(encoding="utf-8") for path in paths.values()}
@@ -181,6 +182,7 @@ def _render_bootstrap_secret_files(config: InstallerConfig, *, key_text: str) ->
                 secrets=JsonFileCollection(temp_root / "secrets.json"),
                 values=JsonFileCollection(temp_root / "values.json"),
                 bindings=JsonFileCollection(temp_root / "bindings.json"),
+                grants=JsonFileCollection(temp_root / "grants.json"),
             ),
             key_loader=lambda: secret_store_key_from_text(key_text),
         )
@@ -209,10 +211,13 @@ def _render_bootstrap_secret_files(config: InstallerConfig, *, key_text: str) ->
             )
         if not (temp_root / "bindings.json").is_file():
             (temp_root / "bindings.json").write_text("[]\n", encoding="utf-8")
+        if not (temp_root / "grants.json").is_file():
+            (temp_root / "grants.json").write_text("[]\n", encoding="utf-8")
         return {
             paths["secrets"]: (temp_root / "secrets.json").read_text(encoding="utf-8"),
             paths["values"]: (temp_root / "values.json").read_text(encoding="utf-8"),
             paths["bindings"]: (temp_root / "bindings.json").read_text(encoding="utf-8"),
+            paths["grants"]: (temp_root / "grants.json").read_text(encoding="utf-8"),
         }
 
 

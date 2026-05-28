@@ -264,7 +264,9 @@ def handle_action(
     except CalendarConflictError as error:
         return 409, conflict_error(action, str(error), error.conflicts)
     except CalendarOAuthError as error:
-        return error.status_code, {"action": action, "error": error.code, "detail": error.detail}
+        result = {"action": action, "error": error.code, "detail": error.detail}
+        result.update(error.extra)
+        return error.status_code, result
     except ValueError as error:
         detail = str(error)
         if " was not found." in detail:

@@ -9,7 +9,7 @@ from typing import Any
 
 from database import ensure_schema, json_text, new_id, normalize_limit, now_timestamp, row_payload, transaction
 from errors import MemoryValidationError
-from sources import source_snapshot
+from sources import source_snapshot, storage_ref_staleness
 
 
 def lint_memory(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
@@ -197,7 +197,7 @@ def _compiled_inputs_changed(db: sqlite3.Connection, *, page: sqlite3.Row, data_
         """,
         (page["node_id"],),
     )
-    return any(source_snapshot(row, data_root)["hash"] != row["content_hash"] for row in rows)
+    return any(storage_ref_staleness(row) or source_snapshot(row, data_root)["hash"] != row["content_hash"] for row in rows)
 
 
 def _page_metadata(page: sqlite3.Row) -> dict[str, object]:
@@ -279,6 +279,8 @@ def _desired_findings(
         findings.append(_finding("stale_page", "warning", "Source references changed after the last wiki compilation."))
     elif _latest_edge_update(db, node_id) > str(wiki_page["compiled_at"] or ""):
         findings.append(_finding("stale_page", "warning", "Relationships changed after the last wiki compilation."))
+    elif any(storage_ref_staleness(ref) for ref in refs):
+        findings.append(_finding("stale_page", "warning", "Storage source staleness was reported by the file provider."))
     for claim in claims:
         citation = db.execute("SELECT id FROM citations WHERE claim_id = ? LIMIT 1", (claim["id"],)).fetchone()
         if citation is None:

@@ -200,6 +200,7 @@ function defaultIcon(app: AppRegistryItem | null, fallbackAppId: string): string
     'maverick-monitor': 'monitor_heart',
     settings: 'admin_panel_settings',
     skills: 'school',
+    speech: 'record_voice_over',
     storage: 'cloud'
   };
   if (iconByAppId[fallbackAppId]) {

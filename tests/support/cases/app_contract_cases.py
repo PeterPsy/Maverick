@@ -156,6 +156,7 @@ class AppContractTestCase(unittest.TestCase):
                         },
                     ),
                     hook_timeouts=build_app_hook_timeouts(
+                        backend_seconds=240,
                         upgrade_seconds=180,
                         validate_after_import_seconds=45,
                         repair_after_import_seconds=90,
@@ -198,6 +199,7 @@ class AppContractTestCase(unittest.TestCase):
             self.assertEqual(loaded.contract.distribution.source_access, "none")
             self.assertTrue(loaded.contract.lifecycle.validate_after_import)
             self.assertTrue(loaded.contract.lifecycle.repair_after_import)
+            self.assertEqual(loaded.contract.hook_timeouts.backend_seconds, 240)
             self.assertEqual(loaded.contract.hook_timeouts.upgrade_seconds, 180)
             self.assertEqual(loaded.contract.hook_timeouts.validate_after_import_seconds, 45)
             self.assertEqual(loaded.contract.entrypoints.skills_root, "backend/skills")

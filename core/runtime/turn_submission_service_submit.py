@@ -99,7 +99,7 @@ def submit_runtime_turn(
                 event_type="runtime.turn.failed",
                 failure_reason=str(error),
             )
-            release_idle_runtime_processes(state, session_id=session.session_id, provider_id=provider.provider_id, reason="sync_turn_failed")
+            release_idle_runtime_processes(state, session_id=session.session_id, provider_id=provider.provider_id, reason="sync_turn_failed", idle_ttl_seconds=0)
             return turn, events
 
         _debug_log_runtime_turn(

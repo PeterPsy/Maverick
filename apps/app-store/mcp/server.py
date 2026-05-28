@@ -8,7 +8,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
-from service import AppStoreValidationError, app_events_for_action, handle_action
+from service import AppStoreValidationError, app_events_for_action, handle_action, strip_internal_result_fields
 
 
 payload = json.loads(sys.stdin.read() or "{}")
@@ -31,7 +31,10 @@ except AppStoreValidationError as error:
 except Exception as error:
     status_code, result = 502, {"error": "catalog_unavailable", "detail": str(error)}
 
+action = str(body.get("action") or "catalog")
+app_events = app_events_for_action(action, result) if status_code < 400 else []
+strip_internal_result_fields(result)
 response = {"status_code": status_code, **result}
 if status_code < 400:
-    response["app_events"] = app_events_for_action(str(body.get("action") or "catalog"))
+    response["app_events"] = app_events
 print(json.dumps(response, ensure_ascii=False))

@@ -98,10 +98,20 @@ def list_events(
     calendar_id: str,
     page_token: str = "",
     sync_token: str = "",
+    time_min: str = "",
+    time_max: str = "",
+    single_events: bool = False,
+    order_by: str = "",
     max_results: int = 250,
     transport: HttpTransport | None = None,
 ) -> dict[str, Any]:
     """Call events.list for one calendar using either full or incremental sync."""
+    if sync_token and (time_min or time_max or single_events or order_by):
+        raise CalendarOAuthError(
+            "google_calendar_invalid_sync_query",
+            "Google Calendar syncToken cannot be combined with bounded event query parameters.",
+            status_code=400,
+        )
     query = {
         "maxResults": str(max_results),
         "showDeleted": "true",
@@ -110,6 +120,14 @@ def list_events(
         query["pageToken"] = page_token
     if sync_token:
         query["syncToken"] = sync_token
+    if time_min:
+        query["timeMin"] = time_min
+    if time_max:
+        query["timeMax"] = time_max
+    if single_events:
+        query["singleEvents"] = "true"
+    if order_by:
+        query["orderBy"] = order_by
     encoded_calendar_id = quote(calendar_id, safe="")
     return _google_get(
         f"{GOOGLE_CALENDAR_API_BASE}/calendars/{encoded_calendar_id}/events?{urlencode(query)}",

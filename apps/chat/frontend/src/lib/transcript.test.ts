@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import type { RuntimeEvent } from "../api/client";
-import { eventsToMessages } from "./transcript";
+import { clearTranscriptProjectionCache, eventsToMessages } from "./transcript";
 
 function event(overrides: Partial<RuntimeEvent>): RuntimeEvent {
   return {
@@ -15,6 +15,26 @@ function event(overrides: Partial<RuntimeEvent>): RuntimeEvent {
 }
 
 describe("runtime event transcript projection", () => {
+  beforeEach(() => {
+    clearTranscriptProjectionCache();
+  });
+
+  it("reuses projections for equivalent event lists with the same last event", () => {
+    const firstEvents = [
+      event({
+        event_id: "queued-cache",
+        event_type: "runtime.turn.queued",
+        payload: { input_text: "hello", client_message_id: "client-message-cache" },
+      }),
+    ];
+    const secondEvents = firstEvents.map((item) => ({ ...item }));
+
+    const firstProjection = eventsToMessages(firstEvents);
+    const secondProjection = eventsToMessages(secondEvents);
+
+    expect(secondProjection).toBe(firstProjection);
+  });
+
   it("projects one human message from a queued runtime turn", () => {
     const messages = eventsToMessages([
       event({

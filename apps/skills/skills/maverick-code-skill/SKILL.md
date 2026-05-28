@@ -74,7 +74,7 @@ maverick app checklist mcp list --json
 maverick app checklist mcp call checklist_create --json --title "<title>"
 ```
 
-When the task needs structured sections and tasks, prefer the Checklist app's MCP create flow such as `maverick_tasklist` or `checklist_create` with a structured payload.
+When the task needs structured sections and tasks, prefer the Checklist app's MCP create flow such as `checklist_tasklist` or `checklist_create` with a structured payload.
 
 If the workspace exposes the Checklist app skill `checklist-ops`, use it and link the work to that app skill instead of inventing a parallel checklist format.
 

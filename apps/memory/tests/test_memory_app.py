@@ -236,6 +236,7 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual(file_result["status_code"], 200)
             self.assertEqual(second_result["status_code"], 200)
             self.assertEqual(edge_result["status_code"], 200)
+            self.assertEqual(file_ref["external_ref"]["ref_kind"], "local_storage_file")
             self.assertEqual(file_ref["external_ref"]["workspace_relative_path"], "storage/uploaded/bando-x.pdf")
             self.assertEqual(edge["edge"]["kind"], "mentions")
             self.assertEqual(context_result["status_code"], 200)
@@ -367,6 +368,176 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual(len(versions), 2)
             self.assertEqual({version["metadata"]["hash_kind"] for version in versions}, {"file_bytes"})
             self.assertTrue(all(not version["extracted_text"] for version in versions))
+
+    def test_attach_file_accepts_remote_storage_ref_without_workspace_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            node = self.run_backend(
+                data_root,
+                {"action": "remember", "title": "Drive contract", "body": "Drive source.", "type": "fact"},
+            )["json"]["node"]
+
+            attached = self.run_backend(
+                data_root,
+                {
+                    "action": "attach_file",
+                    "node_id": node["id"],
+                    "owning_app_id": "storage",
+                    "entity_type": "file",
+                    "entity_id": "file_drive_contract",
+                    "title": "Contract",
+                    "metadata": {
+                        "provider": "google_drive",
+                        "connection_id": "drive_conn_acme",
+                        "drive_file_id": "drive_file_contract",
+                        "source_version": "rev-1",
+                        "display_path": "/Contracts/Acme.pdf",
+                    },
+                },
+            )
+            rejected = self.run_backend(
+                data_root,
+                {
+                    "action": "attach_file",
+                    "node_id": node["id"],
+                    "owning_app_id": "storage",
+                    "entity_type": "file",
+                    "entity_id": "file_drive_contract_2",
+                    "workspace_relative_path": "storage/generated/drive-shadow.pdf",
+                    "metadata": {
+                        "provider": "google_drive",
+                        "connection_id": "drive_conn_acme",
+                        "drive_file_id": "drive_file_contract_2",
+                    },
+                },
+            )
+
+            remote_ref = attached["json"]["external_ref"]
+            self.assertEqual(attached["status_code"], 200)
+            self.assertEqual(remote_ref["ref_kind"], "remote_storage_file")
+            self.assertEqual(remote_ref["owning_app_id"], "storage")
+            self.assertEqual(remote_ref["entity_type"], "file")
+            self.assertEqual(remote_ref["entity_id"], "file_drive_contract")
+            self.assertEqual(remote_ref["workspace_relative_path"], "")
+            self.assertEqual(remote_ref["metadata"]["provider"], "google_drive")
+            self.assertEqual(rejected["status_code"], 400)
+            self.assertIn("workspace_relative_path", rejected["json"]["detail"])
+
+    def test_remote_storage_ingestion_uses_storage_preview_and_cites_source_version(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            workspace_root = Path(temp)
+            data_root = workspace_root / "data" / "memory"
+            node = self.run_backend(
+                data_root,
+                {
+                    "action": "remember",
+                    "title": "Drive renewal",
+                    "body": "Remote agreement says renewal owner is Dana.",
+                    "type": "fact",
+                },
+            )["json"]["node"]
+            self.run_backend(
+                data_root,
+                {
+                    "action": "attach_file",
+                    "node_id": node["id"],
+                    "owning_app_id": "storage",
+                    "entity_type": "file",
+                    "entity_id": "file_drive_renewal",
+                    "title": "Renewal agreement",
+                    "metadata": {
+                        "provider": "google_drive",
+                        "connection_id": "drive_conn_acme",
+                        "drive_file_id": "drive_file_renewal",
+                        "source_version": "rev-1",
+                        "display_path": "/Agreements/Renewal.md",
+                    },
+                },
+            )
+
+            sources = self.import_backend_module("sources")
+            storage_sources = self.import_backend_module("storage_sources")
+            wiki = self.import_backend_module("wiki")
+            calls: list[dict] = []
+
+            def fake_storage_preview(data_root_arg: Path, request: dict) -> dict:
+                calls.append(request)
+                self.assertEqual(data_root_arg, data_root)
+                self.assertNotIn("workspace_relative_path", request)
+                self.assertNotIn("token", request)
+                self.assertNotIn("refresh_token", request)
+                return {
+                    "file": {
+                        "id": "file_drive_renewal",
+                        "etag_or_version": "rev-2",
+                        "display_path": "/Agreements/Renewal.md",
+                    },
+                    "preview_text": "Remote agreement says renewal owner is Dana.",
+                    "truncated": False,
+                }
+
+            original_surface = storage_sources._storage_preview_surface
+            original_file_hash = sources.file_hash
+            try:
+                storage_sources._storage_preview_surface = fake_storage_preview
+                sources.file_hash = lambda path: (_ for _ in ()).throw(AssertionError("Drive source used filesystem hash"))
+                compiled = wiki.compile_node(data_root, {"node_id": node["id"]})
+            finally:
+                storage_sources._storage_preview_surface = original_surface
+                sources.file_hash = original_file_hash
+
+            self.assertEqual(calls[0]["action"], "drive_preview")
+            self.assertEqual(calls[0]["provider"], "google_drive")
+            self.assertEqual(calls[0]["stable_storage_file_id"], "file_drive_renewal")
+            self.assertEqual(calls[0]["connection_id"], "drive_conn_acme")
+            self.assertEqual(calls[0]["drive_file_id"], "drive_file_renewal")
+            self.assertEqual(compiled["compiled_page"]["freshness"], "fresh")
+            self.assertTrue(compiled["citations"])
+            citation = compiled["citations"][0]
+            self.assertTrue(citation["source_version_id"].startswith("srcv_"))
+            self.assertEqual(citation["metadata"]["source_version"], "rev-2")
+            self.assertEqual(citation["locator"], "/Agreements/Renewal.md")
+
+    def test_remote_storage_staleness_marks_compiled_wiki_stale(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            node = self.run_backend(
+                data_root,
+                {"action": "remember", "title": "Stale Drive source", "body": "Drive indexed fact.", "type": "fact"},
+            )["json"]["node"]
+            self.run_backend(
+                data_root,
+                {
+                    "action": "attach_file",
+                    "node_id": node["id"],
+                    "owning_app_id": "storage",
+                    "entity_type": "file",
+                    "entity_id": "file_drive_stale",
+                    "metadata": {
+                        "provider": "google_drive",
+                        "connection_id": "drive_conn_acme",
+                        "drive_file_id": "drive_file_stale",
+                        "source_version": "rev-1",
+                        "display_path": "/Drive/Stale.md",
+                        "sync_state": {"status": "stale", "error": "google_drive_change"},
+                    },
+                },
+            )
+
+            storage_sources = self.import_backend_module("storage_sources")
+            wiki = self.import_backend_module("wiki")
+            original_surface = storage_sources._storage_preview_surface
+            try:
+                storage_sources._storage_preview_surface = lambda _data_root, _request: {
+                    "file": {"etag_or_version": "rev-1", "display_path": "/Drive/Stale.md"},
+                    "preview_text": "Drive indexed fact.",
+                }
+                compiled = wiki.compile_node(data_root, {"node_id": node["id"]})
+            finally:
+                storage_sources._storage_preview_surface = original_surface
+
+            self.assertEqual(compiled["compiled_page"]["freshness"], "stale")
+            self.assertTrue(any(finding["finding_type"] == "stale_page" for finding in compiled["lint_findings"]))
 
     def test_lint_reports_uncited_claims_and_contradictions(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

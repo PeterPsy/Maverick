@@ -10,6 +10,7 @@ import {
   selectedDependencyProviderAppId,
   selectedSharedDependencyProviderAppId,
 } from "../api/client";
+import { clearAgentRuntimeConfigCache } from "./useChatRuntimeControls";
 
 const AGENT_CATALOG_DEPENDENCY_ALIAS = "agent-catalog";
 const AGENT_PROMPT_MATERIALIZER_DEPENDENCY_ALIAS = "agent-prompt-materializer";
@@ -38,6 +39,7 @@ export function useChatDependencies() {
   const [selectedAgentTypeId, setSelectedAgentTypeId] = useState("");
 
   const clearAgentOptions = useCallback(() => {
+    clearAgentRuntimeConfigCache();
     setAgentCatalogAppId("");
     setAgentOptions([]);
     setSelectedAgentTypeId("");
@@ -49,6 +51,7 @@ export function useChatDependencies() {
         clearAgentOptions();
         return;
       }
+      clearAgentRuntimeConfigCache();
       const catalog = await listAgentCatalog(providerAppId);
       const nextAgentOptions = catalog.agent_types || [];
       setAgentCatalogAppId(providerAppId);
@@ -177,11 +180,26 @@ export function useChatDependencies() {
   ]);
 
   const loadInitialChatDependencies = useCallback(async () => {
-    const [providerPayload] = await Promise.all([listProviders(), loadAppDependencies()]);
-    setWorkspaceId(providerPayload.workspace_id || "");
+    const [providerPayload, dependencies] = await Promise.all([listProviders(), getAppDependencies("chat").catch(() => null)]);
+    setWorkspaceId(providerPayload.workspace_id || dependencies?.workspace_id || "");
     setProviders(providerItemsFromPayload(providerPayload));
     setActiveProviderId(providerPayload.active_provider?.provider_id || "");
-  }, [loadAppDependencies]);
+    if (!dependencies) {
+      clearAgentOptions();
+      clearSpeechProvider();
+      clearTranscriptionProvider();
+      return;
+    }
+    await loadAgentOptionsFromDependencies(dependencies);
+    void Promise.all([loadSpeechProviderFromDependencies(dependencies), loadTranscriptionProviderFromDependencies(dependencies)]);
+  }, [
+    clearAgentOptions,
+    clearSpeechProvider,
+    clearTranscriptionProvider,
+    loadAgentOptionsFromDependencies,
+    loadSpeechProviderFromDependencies,
+    loadTranscriptionProviderFromDependencies,
+  ]);
 
   return {
     activeProviderId,

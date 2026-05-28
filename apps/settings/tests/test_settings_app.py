@@ -79,6 +79,7 @@ class SettingsFrontendDistTests(unittest.TestCase):
 
         self.assertEqual(chat_requirements["text-to-speech"].interface, "speech.synthesis")
         self.assertIn("speech.synthesis", speech_interfaces)
+        self.assertIn("speech: 'record_voice_over'", app_links_source)
         self.assertIn("Provider app links", app_links_source)
         self.assertIn("shared capabilities", pages_source)
         self.assertNotIn("Intra-app catalogs", app_links_source)

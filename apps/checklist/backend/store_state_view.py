@@ -32,20 +32,36 @@ def _apply_view_state(items: list[dict[str, Any]], view_state: dict[str, Any]) -
         filtered = [item for item in filtered if _matches_query(item, query)]
     return filtered
 
-
-
 def _matches_query(checklist: dict[str, Any], query: str) -> bool:
     haystacks = [
         str(checklist.get("title") or ""),
         str(checklist.get("summary") or ""),
+        str(checklist.get("id") or ""),
+        "checklist checklists",
+        f"checklists/{checklist.get('id') or ''}",
+        f"/app/checklist/checklists/{checklist.get('id') or ''}",
     ]
+    haystacks.extend(str(section.get("title") or "") for section in checklist.get("sections", []))
     haystacks.extend(
         str(task.get("title") or "")
         for section in checklist.get("sections", [])
         for task in section.get("tasks", [])
     )
-    return any(query in text.lower() for text in haystacks)
+    haystack = " ".join(text.lower() for text in haystacks)
+    if query in haystack:
+        return True
+    return all(any(variant in haystack for variant in _query_token_variants(token)) for token in _query_tokens(query))
 
+
+def _query_tokens(query: str) -> list[str]:
+    return [token for token in query.split() if token]
+
+
+def _query_token_variants(token: str) -> set[str]:
+    variants = {token}
+    if len(token) > 4 and token.endswith("s"):
+        variants.add(token[:-1])
+    return variants
 
 
 def _reference_record(checklist: dict[str, Any]) -> dict[str, Any]:

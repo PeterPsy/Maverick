@@ -10,7 +10,6 @@ import {
 } from "../api/client";
 import { PendingMessage } from "../lib/messageState";
 import { inferActiveRuntimeTurn, lastRuntimeEventId, mergeRuntimeEvents } from "../lib/runtimeEvents";
-import { eventsToMessages } from "../lib/transcript";
 
 type RuntimeEventsArgs = {
   runtimeSessionId: string | null;
@@ -43,14 +42,18 @@ export function applyRuntimeEventEffects(
   setActiveTurn: Dispatch<SetStateAction<RuntimeTurn | null>>,
   setPendingUserMessages: Dispatch<SetStateAction<PendingMessage[]>>,
 ) {
-  const matchingMessages = eventsToMessages(events);
   const terminalEvent = events.find((event) => event.turn_id === activeTurn.turn_id && terminalStatus(event.event_type));
   if (!terminalEvent) {
     return;
   }
   const status = terminalStatus(terminalEvent.event_type);
+  const completedClientMessageIds = new Set(
+    events
+      .filter((event) => event.turn_id === activeTurn.turn_id && event.event_type === "runtime.turn.queued" && typeof event.payload.client_message_id === "string")
+      .map((event) => event.payload.client_message_id as string),
+  );
   setActiveTurn((current) => (current?.turn_id === activeTurn.turn_id && status ? { ...current, status } : current));
-  setPendingUserMessages((current) => current.filter((item) => !matchingMessages.some((message) => message.id === item.clientMessageId)));
+  setPendingUserMessages((current) => current.filter((item) => !completedClientMessageIds.has(item.clientMessageId)));
 }
 
 export function useRuntimeEvents({

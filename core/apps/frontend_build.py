@@ -84,6 +84,7 @@ def _run_npm_build(build_root: Path, *, app_id: str) -> None:
     scripts = package_payload.get("scripts") if isinstance(package_payload, dict) else None
     if not isinstance(scripts, dict) or not scripts.get("build"):
         raise AppLifecycleError(f"App `{app_id}` package.json does not declare a build script.")
+    _ensure_node_dependencies(build_root, app_id=app_id)
     completed = subprocess.run(
         ["npm", "run", "build"],
         cwd=build_root,
@@ -94,3 +95,30 @@ def _run_npm_build(build_root: Path, *, app_id: str) -> None:
     if completed.returncode != 0:
         detail = (completed.stderr or completed.stdout or "").strip()
         raise AppLifecycleError(f"Frontend build failed for app `{app_id}`: {detail}")
+
+
+def _ensure_node_dependencies(build_root: Path, *, app_id: str) -> None:
+    if (build_root / "node_modules").is_dir() and not _declared_dependency_dirs_missing(build_root):
+        return
+    if not (build_root / "package-lock.json").is_file():
+        raise AppLifecycleError(f"Frontend build for app `{app_id}` requires npm ci; package-lock.json is missing.")
+    completed = subprocess.run(
+        ["npm", "ci"],
+        cwd=build_root,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout or "").strip()
+        raise AppLifecycleError(f"Frontend dependency install failed for app `{app_id}`: {detail}")
+
+
+def _declared_dependency_dirs_missing(build_root: Path) -> bool:
+    package_payload = json.loads((build_root / "package.json").read_text(encoding="utf-8"))
+    dependencies: list[str] = []
+    for key in ("dependencies", "devDependencies"):
+        section = package_payload.get(key) if isinstance(package_payload, dict) else None
+        if isinstance(section, dict):
+            dependencies.extend(str(name) for name in section)
+    return any(not (build_root / "node_modules" / dependency).exists() for dependency in dependencies)

@@ -3,6 +3,8 @@
     "agents": "psychology",
     "app-store": "storefront",
     "base-shell": "dashboard",
+    "browser": "language",
+    "calendar": "calendar_month",
     "checklist": "checklist",
     "chat": "chat",
     "crm": "contacts",
@@ -12,12 +14,15 @@
     "dynamic-views": "dashboard_customize",
     "fleet": "table_chart",
     "gallery": "photo_library",
+    "mail": "mail",
     "gmail-app": "mail",
     "maverick-monitor": "monitoring",
     "memory": "neurology",
     "skills": "school",
+    "speech": "record_voice_over",
     "storage": "cloud",
     "settings": "admin_panel_settings",
+    "vault": "key",
   };
 
   function includes(list, value) {

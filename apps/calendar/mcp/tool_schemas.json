@@ -85,7 +85,10 @@
           "connection_id": {"type": "string"},
           "calendar_id": {"type": "string"},
           "sync_token": {"type": "string"},
-          "full_sync": {"type": "boolean", "default": false}
+          "full_sync": {"type": "boolean", "default": false},
+          "sync_mode": {"type": "string", "enum": ["bounded", "full_history"], "default": "bounded"},
+          "time_min": {"type": "string", "format": "date-time"},
+          "time_max": {"type": "string", "format": "date-time"}
         },
         "required": ["connection_id"],
         "additionalProperties": false

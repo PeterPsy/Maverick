@@ -33,4 +33,16 @@ describe("AppLogo", () => {
     expect(renderedLogo("docs-studio")).toBe(renderedLogo("document-generator"));
     expect(renderedLogo("docs-studio")).toContain(">description<");
   });
+
+  it("uses a speech glyph for the Speech provider app", () => {
+    expect(renderedLogo("speech")).toContain(">record_voice_over<");
+  });
+
+  it("uses the same material mail glyph for the Mail app", () => {
+    expect(renderedLogo("mail")).toContain(">mail<");
+  });
+
+  it("uses the same material language glyph for the Browser app", () => {
+    expect(renderedLogo("browser")).toContain(">language<");
+  });
 });

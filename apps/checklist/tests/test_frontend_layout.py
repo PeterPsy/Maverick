@@ -19,12 +19,17 @@ class ChecklistFrontendLayoutTest(unittest.TestCase):
     def test_main_view_scrolls_as_one_surface(self) -> None:
         styles = (APP_ROOT / "frontend" / "src" / "styles" / "main.css").read_text(encoding="utf-8")
 
+        body = css_block(styles, "body")
         app = css_block(styles, ".checklist-app")
         plans_view = css_block(styles, ".checklist-plans-view")
         plans_grid = css_block(styles, ".checklist-plans-grid")
         detail_board = css_block(styles, ".checklist-detail-board")
 
+        self.assertIn("scrollbar-width: none;", body)
+        self.assertIn("body::-webkit-scrollbar", styles)
         self.assertIn("overflow: auto;", app)
+        self.assertIn("scrollbar-width: none;", app)
+        self.assertIn(".checklist-app::-webkit-scrollbar", styles)
         self.assertNotIn("height: 100%;", plans_view)
         self.assertNotIn("grid-template-rows: auto minmax(0, 1fr);", plans_view)
         self.assertIn("overflow: visible;", plans_grid)

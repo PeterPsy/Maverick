@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+from datetime import UTC, datetime
 import json
 import logging
 import mimetypes
@@ -13,6 +15,11 @@ from typing import Any
 from core.api.app_event_publication import declared_data_event_resources, publish_declared_app_events
 from core.api.app_runtime_cleanup_requests import apply_runtime_cleanup_requests
 from core.api.app_registry import enabled_app_items, resolve_app_surface
+from core.api.secret_grant_targets import (
+    SecretConsumersByLogicalName,
+    app_secret_consumers_by_logical_name,
+    assert_consumer_resource_scope_allowed,
+)
 from core.api.http import StartResponse, json_response, max_json_body_bytes, query_params, read_json_body, read_request_body_bytes, status_line, text_response
 from core.api.platform_state import PlatformState
 from core.apps.dependencies import resolve_app_dependencies
@@ -22,10 +29,22 @@ from core.apps.runtime_requests import apply_app_runtime_requests
 from core.apps.service import build_workspace_app_frontend
 from core.authorization.errors import AuthorizationError
 from core.authorization.service import can_mount_app_visibility, require_workspace_admin, require_workspace_membership
+from core.observability.service import record_platform_audit, record_platform_event
 from core.providers.errors import ProviderError
 from core.providers.service import resolve_provider_for_workspace
+from core.secrets.app_delivery import (
+    APP_SECRET_ACTION,
+    APP_SECRET_TARGET_PREFIX,
+    AppSecretRequest,
+    AppSecretPayloadResult,
+    app_secret_target,
+    resolve_app_secret_payload,
+    resolve_app_secret_payload_requests,
+)
 from core.secrets.errors import SecretError
-from core.secrets.service import bind_app_secret, build_secret_ref, create_platform_secret, resolve_app_secret, rotate_platform_secret
+from core.secrets.secret_resolution import parse_secret_ref
+from core.secrets.service import build_secret_ref, create_platform_secret, grant_app_secret_use, rotate_platform_secret
+from core.secrets.target_policy import target_allowed
 from core.shared.entrypoints import EntrypointShutdownController, run_json_entrypoint
 from core.workspaces.paths import workspace_paths
 from core.identity.models import UserRecord
@@ -293,9 +312,10 @@ def handle_app_backend(
         return json_response(start_response, {"error": "app_unavailable"}, status="404 Not Found")
     if user is None and not trusted_platform_invocation:
         return json_response(start_response, {"error": "authentication_required"}, status="401 Unauthorized")
+    authorization = None
     if user is not None:
         try:
-            require_workspace_membership(state.workspace_store, user=user, workspace_id=workspace_id)
+            authorization = require_workspace_membership(state.workspace_store, user=user, workspace_id=workspace_id)
         except AuthorizationError:
             return json_response(start_response, {"error": "workspace_not_available"}, status="403 Forbidden")
     if binding.source_kind == "workspace_local_project" and not trusted_platform_invocation:
@@ -334,6 +354,31 @@ def handle_app_backend(
         provider_id = None
     paths = workspace_paths(workspace_id, start_path=start_path)
     try:
+        app_secret_result = _resolve_app_secret_payload_requests(
+            state,
+            workspace_id=workspace_id,
+            app_id=app_id,
+            requests=_requested_backend_secret_requests(
+                declared_logical_names=parsed.contract.permissions.secrets.read,
+                body=body,
+            ),
+            surface="backend",
+            actor_user_id=None if user is None else user.user_id,
+            request_context={
+                "surface": "backend",
+                "method": method,
+                "route_path": str(environ.get("PATH_INFO") or ""),
+            },
+            fail_closed=_requested_backend_secrets_fail_closed(body),
+        )
+    except SecretError as error:
+        if body_file and body_file.get("path"):
+            try:
+                Path(str(body_file["path"])).unlink()
+            except FileNotFoundError:
+                pass
+        return json_response(start_response, {"error": "app_secret_unavailable", "detail": str(error)}, status=status_line(500))
+    try:
         result = run_json_entrypoint(
             source_root / backend,
             payload={
@@ -351,6 +396,10 @@ def handle_app_backend(
                 "body": body,
                 "body_file": body_file or {},
                 "provider_id": provider_id,
+                "effective_mode": "full-access" if trusted_platform_invocation else "sandbox",
+                "platform_role": None if user is None else user.platform_role,
+                "user_id": None if user is None else user.user_id,
+                "workspace_role": _workspace_role_for_backend_user(user=user, authorization=authorization),
                 "app_dependencies": _app_dependencies_payload(
                     state,
                     workspace_id=workspace_id,
@@ -368,12 +417,8 @@ def handle_app_backend(
                 },
                 "runtime_session_id": "",
                 "turn_id": "",
-                "app_secrets": _resolve_app_secret_payload(
-                    state,
-                    workspace_id=workspace_id,
-                    app_id=app_id,
-                    allowed_logical_names=parsed.contract.permissions.secrets.read,
-                ),
+                "app_secrets": app_secret_result.secrets,
+                "app_secret_errors": app_secret_result.errors,
             },
             cwd=source_root,
             timeout_seconds=backend_entrypoint_timeout_seconds(parsed),
@@ -395,6 +440,26 @@ def handle_app_backend(
             app_id=app_id,
             allowed_logical_names=parsed.contract.permissions.secrets.write,
             result=result,
+            actor_user_id=None if user is None else user.user_id,
+            secret_consumers=app_secret_consumers_by_logical_name(
+                source_root=source_root,
+                declared_logical_names=[
+                    str(item).strip().lower()
+                    for item in parsed.contract.permissions.secrets.read
+                    if str(item).strip()
+                ],
+                backend_declared=parsed.contract.entrypoints.backend is not None,
+                cli_commands=[
+                    str(item).strip()
+                    for item in parsed.contract.capabilities.cli_commands
+                    if str(item).strip()
+                ],
+                mcp_tools=[
+                    str(item).strip()
+                    for item in parsed.contract.capabilities.mcp_tools
+                    if str(item).strip()
+                ],
+            ),
         )
     except SecretError as error:
         return json_response(start_response, {"error": "secret_error", "detail": str(error)}, status=status_line(500))
@@ -453,6 +518,17 @@ def handle_app_backend(
     return json_response(start_response, result, status=status_line(status_code))
 
 
+def _workspace_role_for_backend_user(*, user: UserRecord | None, authorization: Any | None) -> str | None:
+    if user is None:
+        return None
+    membership = getattr(authorization, "membership", None)
+    if membership is not None and getattr(membership, "status", None) == "active":
+        return str(getattr(membership, "role", "") or "") or None
+    if user.platform_role == "admin":
+        return "admin"
+    return None
+
+
 def backend_entrypoint_timeout_seconds(parsed: ParsedAppContract) -> int:
     return int(parsed.contract.hook_timeouts.backend_seconds)
 
@@ -503,23 +579,125 @@ def _resolve_app_secret_payload(
     workspace_id: str,
     app_id: str,
     allowed_logical_names: list[str] | None = None,
-) -> dict[str, str]:
-    """Resolve app-scoped secrets for one mounted backend invocation."""
-    secrets: dict[str, str] = {}
-    allowed = set(allowed_logical_names or [])
-    for binding in state.secret_store.list_secret_bindings(workspace_id=workspace_id, app_id=app_id, scope="app"):
-        if binding.status != "active":
-            continue
-        if binding.logical_name not in allowed:
-            continue
-        lease = resolve_app_secret(
-            state.secret_store,
-            workspace_id=workspace_id,
-            app_id=app_id,
-            logical_name=binding.logical_name,
+    surface: str = "backend",
+    runtime_session_id: str | None = None,
+    actor_user_id: str | None = None,
+    request_context: dict[str, str] | None = None,
+    fail_closed: bool = True,
+    resource_type: str | None = None,
+    resource_id: str | None = None,
+) -> AppSecretPayloadResult:
+    """Resolve grant-authorized app secrets for one mounted backend invocation."""
+    return resolve_app_secret_payload(
+        state.secret_store,
+        workspace_id=workspace_id,
+        app_id=app_id,
+        allowed_logical_names=allowed_logical_names,
+        surface=surface,
+        runtime_session_id=runtime_session_id,
+        actor_user_id=actor_user_id,
+        observability_store=state.observability_store,
+        request_context=request_context,
+        fail_closed=fail_closed,
+        resource_type=resource_type,
+        resource_id=resource_id,
+    )
+
+
+def _resolve_app_secret_payload_requests(
+    state: PlatformState,
+    *,
+    workspace_id: str,
+    app_id: str,
+    requests: list[AppSecretRequest],
+    surface: str = "backend",
+    runtime_session_id: str | None = None,
+    actor_user_id: str | None = None,
+    request_context: dict[str, str] | None = None,
+    fail_closed: bool = True,
+) -> AppSecretPayloadResult:
+    """Resolve grant-authorized app secrets for mounted backend selectors."""
+    return resolve_app_secret_payload_requests(
+        state.secret_store,
+        workspace_id=workspace_id,
+        app_id=app_id,
+        requests=requests,
+        surface=surface,
+        runtime_session_id=runtime_session_id,
+        actor_user_id=actor_user_id,
+        observability_store=state.observability_store,
+        request_context=request_context,
+        fail_closed=fail_closed,
+    )
+
+
+def _requested_backend_secret_requests(*, declared_logical_names: list[str], body: dict[str, Any]) -> list[AppSecretRequest]:
+    request = body.get("_app_secret_request")
+    declared = {str(item).strip().lower() for item in declared_logical_names if str(item).strip()}
+    if not isinstance(request, dict):
+        return [AppSecretRequest(logical_names=sorted(declared))]
+    raw_selectors = request.get("selectors")
+    if isinstance(raw_selectors, list):
+        selectors: list[AppSecretRequest] = []
+        for item in raw_selectors:
+            if not isinstance(item, dict):
+                continue
+            logical_names = _requested_secret_names_from_value(item.get("logical_names", []), declared=declared)
+            if not logical_names:
+                continue
+            resource_type, resource_id = _secret_resource_from_mapping(item)
+            selectors.append(AppSecretRequest(logical_names=logical_names, resource_type=resource_type, resource_id=resource_id))
+        return selectors
+    resource_type, resource_id = _requested_backend_secret_resource(body)
+    return [
+        AppSecretRequest(
+            logical_names=_requested_backend_secret_names(declared_logical_names=declared_logical_names, body=body),
+            resource_type=resource_type,
+            resource_id=resource_id,
         )
-        secrets[binding.logical_name] = lease.value
-    return secrets
+    ]
+
+
+def _requested_backend_secret_names(*, declared_logical_names: list[str], body: dict[str, Any]) -> list[str]:
+    request = body.get("_app_secret_request")
+    declared = {str(item).strip().lower() for item in declared_logical_names if str(item).strip()}
+    if not isinstance(request, dict):
+        return sorted(declared)
+    raw_names = request.get("logical_names", [])
+    return _requested_secret_names_from_value(raw_names, declared=declared)
+
+
+def _requested_secret_names_from_value(raw_names: object, *, declared: set[str]) -> list[str]:
+    if not isinstance(raw_names, list):
+        return []
+    requested = []
+    for item in raw_names:
+        logical_name = str(item).strip().lower()
+        if logical_name in declared and logical_name not in requested:
+            requested.append(logical_name)
+    return requested
+
+
+def _requested_backend_secrets_fail_closed(body: dict[str, Any]) -> bool:
+    request = body.get("_app_secret_request")
+    if not isinstance(request, dict):
+        return True
+    return bool(request.get("required"))
+
+
+def _requested_backend_secret_resource(body: dict[str, Any]) -> tuple[str | None, str | None]:
+    request = body.get("_app_secret_request")
+    if not isinstance(request, dict):
+        return None, None
+    return _secret_resource_from_mapping(request)
+
+
+def _secret_resource_from_mapping(request: dict[str, Any]) -> tuple[str | None, str | None]:
+    resource_type = str(request.get("resource_type") or "").strip().lower()
+    resource_id = str(request.get("resource_id") or "").strip().lower()
+    if not resource_type or not resource_id:
+        return None, None
+    return resource_type, resource_id
 
 
 def _apply_app_secret_writes(
@@ -529,8 +707,10 @@ def _apply_app_secret_writes(
     app_id: str,
     allowed_logical_names: list[str] | None,
     result: dict[str, Any],
+    actor_user_id: str | None = None,
+    secret_consumers: SecretConsumersByLogicalName | None = None,
 ) -> list[dict[str, Any]]:
-    """Persist app-requested secret writes through generic app-scoped bindings."""
+    """Persist app-requested secret writes through grant-backed app delivery."""
     writes = result.pop("platform_secret_writes", [])
     if not isinstance(writes, list):
         return []
@@ -540,26 +720,117 @@ def _apply_app_secret_writes(
         if not isinstance(write, dict):
             continue
         logical_name = str(write.get("logical_name") or "").strip().lower()
+        resource_type, resource_id = _secret_write_resource(write)
+        delivery_target = app_secret_target("backend", resource_type=resource_type, resource_id=resource_id)
+        grant_targets = [f"{APP_SECRET_TARGET_PREFIX}/*"] if resource_type and resource_id else [delivery_target]
         raw_payload = write.get("raw_value")
         raw_value = raw_payload if isinstance(raw_payload, str) else json.dumps(raw_payload or {}, ensure_ascii=False, sort_keys=True)
         if not logical_name or not raw_value:
             continue
         if logical_name not in allowed:
             raise SecretError(f"App `{app_id}` requested secret write `{logical_name}` without declaring permission.")
-        existing = [
-            item
-            for item in state.secret_store.list_secret_bindings(workspace_id=workspace_id, app_id=app_id, scope="app", logical_name=logical_name)
-            if item.status == "active"
-        ]
-        if existing:
-            binding = existing[0]
-            secret_id = binding.secret_ref.removeprefix("platform:secrets/")
-            if binding.secret_ref.startswith("platform:secret-alias/"):
-                secret_id = state.secret_store.get_secret_by_alias(binding.secret_ref.removeprefix("platform:secret-alias/")).secret_id
+        if secret_consumers is not None and logical_name in secret_consumers:
+            assert_consumer_resource_scope_allowed(
+                app_id=app_id,
+                logical_name=logical_name,
+                actions=[APP_SECRET_ACTION],
+                resource_type=resource_type,
+                resource_id=resource_id,
+                consumers=secret_consumers,
+            )
+        grant = _active_app_backend_grant(
+            state,
+            workspace_id=workspace_id,
+            app_id=app_id,
+            logical_name=logical_name,
+            target=delivery_target,
+            base_target=app_secret_target("backend"),
+            resource_type=resource_type,
+            resource_id=resource_id,
+        )
+        legacy_binding = (
+            _active_legacy_app_binding(state, workspace_id=workspace_id, app_id=app_id, logical_name=logical_name)
+            if resource_type is None and resource_id is None
+            else None
+        )
+        if grant is not None:
+            secret_id = _secret_id_for_ref(state, grant.secret_ref)
             secret = rotate_platform_secret(state.secret_store, secret_id=secret_id, raw_value=raw_value)
+            if grant.target_patterns != grant_targets:
+                grant = state.secret_store.save_secret_grant(replace(grant, target_patterns=grant_targets, updated_at=datetime.now(tz=UTC)))
+            secret_ref = grant.secret_ref
+            _record_app_secret_write(
+                state,
+                action="core.secrets.app_write.rotate",
+                workspace_id=workspace_id,
+                app_id=app_id,
+                logical_name=logical_name,
+                secret_id=secret.secret_id,
+                alias=secret.alias,
+                grant_id=grant.grant_id,
+                resource_type=grant.resource_type,
+                resource_id=grant.resource_id,
+                delivery_target=delivery_target,
+                actor_user_id=actor_user_id,
+            )
+        elif legacy_binding is not None:
+            secret_id = _secret_id_for_ref(state, legacy_binding.secret_ref)
+            secret = rotate_platform_secret(state.secret_store, secret_id=secret_id, raw_value=raw_value)
+            secret_ref = legacy_binding.secret_ref
+            _record_app_secret_write(
+                state,
+                action="core.secrets.app_write.rotate",
+                workspace_id=workspace_id,
+                app_id=app_id,
+                logical_name=logical_name,
+                secret_id=secret.secret_id,
+                alias=secret.alias,
+                grant_id=None,
+                resource_type=None,
+                resource_id=None,
+                delivery_target=f"{APP_SECRET_TARGET_PREFIX}/*",
+                actor_user_id=actor_user_id,
+            )
+            grant = grant_app_secret_use(
+                state.secret_store,
+                workspace_id=workspace_id,
+                app_id=app_id,
+                logical_name=logical_name,
+                secret_ref=secret_ref,
+                actions=[APP_SECRET_ACTION],
+                target_patterns=[f"{APP_SECRET_TARGET_PREFIX}/*"],
+                created_by_user_id=actor_user_id,
+                reason="Created automatically for app backend secret write delivery.",
+            )
+            _record_app_secret_write(
+                state,
+                action="core.secrets.grant.create.app_write",
+                workspace_id=workspace_id,
+                app_id=app_id,
+                logical_name=logical_name,
+                secret_id=secret.secret_id,
+                alias=secret.alias,
+                grant_id=grant.grant_id,
+                resource_type=None,
+                resource_id=None,
+                delivery_target=f"{APP_SECRET_TARGET_PREFIX}/*",
+                actor_user_id=actor_user_id,
+            )
         else:
-            secret_id = _scoped_app_secret_id(workspace_id=workspace_id, app_id=app_id, logical_name=logical_name)
-            alias = _scoped_app_secret_alias(workspace_id=workspace_id, app_id=app_id, logical_name=logical_name)
+            secret_id = _scoped_app_secret_id(
+                workspace_id=workspace_id,
+                app_id=app_id,
+                logical_name=logical_name,
+                resource_type=resource_type,
+                resource_id=resource_id,
+            )
+            alias = _scoped_app_secret_alias(
+                workspace_id=workspace_id,
+                app_id=app_id,
+                logical_name=logical_name,
+                resource_type=resource_type,
+                resource_id=resource_id,
+            )
             secret = create_platform_secret(
                 state.secret_store,
                 label=f"{app_id} {logical_name}",
@@ -568,32 +839,223 @@ def _apply_app_secret_writes(
                 description=f"App-scoped secret for {workspace_id}/{app_id}/{logical_name}.",
                 secret_id=secret_id,
             )
-            binding = bind_app_secret(
+            _record_app_secret_write(
+                state,
+                action="core.secrets.app_write.create",
+                workspace_id=workspace_id,
+                app_id=app_id,
+                logical_name=logical_name,
+                secret_id=secret.secret_id,
+                alias=secret.alias,
+                grant_id=None,
+                resource_type=resource_type,
+                resource_id=resource_id,
+                delivery_target=delivery_target,
+                actor_user_id=actor_user_id,
+            )
+            secret_ref = build_secret_ref(alias=secret.alias) if secret.alias else build_secret_ref(secret_id=secret.secret_id)
+            grant = grant_app_secret_use(
                 state.secret_store,
                 workspace_id=workspace_id,
                 app_id=app_id,
                 logical_name=logical_name,
-                secret_ref=build_secret_ref(alias=secret.alias) if secret.alias else build_secret_ref(secret_id=secret.secret_id),
+                secret_ref=secret_ref,
+                actions=[APP_SECRET_ACTION],
+                target_patterns=grant_targets,
+                grant_id=_scoped_app_secret_grant_id(
+                    workspace_id=workspace_id,
+                    app_id=app_id,
+                    logical_name=logical_name,
+                    resource_type=resource_type,
+                    resource_id=resource_id,
+                ),
+                created_by_user_id=actor_user_id,
+                reason="Created automatically for app backend secret write delivery.",
+                resource_type=resource_type,
+                resource_id=resource_id,
+            )
+            _record_app_secret_write(
+                state,
+                action="core.secrets.grant.create.app_write",
+                workspace_id=workspace_id,
+                app_id=app_id,
+                logical_name=logical_name,
+                secret_id=secret.secret_id,
+                alias=secret.alias,
+                grant_id=grant.grant_id,
+                resource_type=grant.resource_type,
+                resource_id=grant.resource_id,
+                delivery_target=delivery_target,
+                actor_user_id=actor_user_id,
             )
         persisted.append(
             {
                 "logical_name": logical_name,
                 "secret_id": secret.secret_id,
                 "alias": secret.alias,
-                "binding_id": binding.binding_id,
+                "grant_id": None if grant is None else grant.grant_id,
+                "resource_type": resource_type,
+                "resource_id": resource_id,
+                "delivery_target": delivery_target,
                 "status": secret.status,
             }
         )
     return persisted
 
 
+def _record_app_secret_write(
+    state: PlatformState,
+    *,
+    action: str,
+    workspace_id: str,
+    app_id: str,
+    logical_name: str,
+    secret_id: str,
+    alias: str | None,
+    grant_id: str | None,
+    resource_type: str | None,
+    resource_id: str | None,
+    delivery_target: str,
+    actor_user_id: str | None,
+) -> None:
+    if state.observability_store is None:
+        return
+    payload = {
+        "actor_user_id": actor_user_id,
+        "app_id": app_id,
+        "logical_name": logical_name,
+        "secret_id": secret_id,
+        "alias": alias,
+        "grant_id": grant_id,
+        "resource_type": resource_type,
+        "resource_id": resource_id,
+        "delivery_target": delivery_target,
+    }
+    record_platform_audit(
+        state.observability_store,
+        action=action,
+        status="succeeded",
+        source_domain="secrets",
+        detail=f"Applied app-owned secret write `{logical_name}` for app `{app_id}`.",
+        workspace_id=workspace_id,
+        app_id=app_id,
+        payload=payload,
+    )
+    record_platform_event(
+        state.observability_store,
+        event_type=action,
+        event_plane="platform",
+        source_domain="secrets",
+        workspace_id=workspace_id,
+        app_id=app_id,
+        payload=payload,
+    )
+
+
+def _active_app_backend_grant(
+    state: PlatformState,
+    *,
+    workspace_id: str,
+    app_id: str,
+    logical_name: str,
+    target: str,
+    base_target: str,
+    resource_type: str | None,
+    resource_id: str | None,
+):
+    now = datetime.now(tz=UTC)
+    candidates = [
+        grant
+        for grant in state.secret_store.list_secret_grants(workspace_id=workspace_id, app_id=app_id, status="active")
+        if grant.logical_name == logical_name
+        and APP_SECRET_ACTION in grant.actions
+        and grant.resource_type == resource_type
+        and grant.resource_id == resource_id
+        and _grant_target_matches(grant.target_patterns, target=target, base_target=base_target)
+        and (grant.expires_at is None or grant.expires_at.astimezone(UTC) > now)
+    ]
+    return sorted(candidates, key=lambda item: item.created_at, reverse=True)[0] if candidates else None
+
+
+def _grant_target_matches(target_patterns: list[str], *, target: str, base_target: str) -> bool:
+    try:
+        return target_allowed(target, target_patterns) or (target != base_target and target_allowed(base_target, target_patterns))
+    except SecretError:
+        return False
+
+
+def _active_legacy_app_binding(state: PlatformState, *, workspace_id: str, app_id: str, logical_name: str):
+    bindings = [
+        item
+        for item in state.secret_store.list_secret_bindings(
+            workspace_id=workspace_id,
+            app_id=app_id,
+            scope="app",
+            logical_name=logical_name,
+        )
+        if item.status == "active"
+    ]
+    return bindings[0] if bindings else None
+
+
+def _secret_id_for_ref(state: PlatformState, secret_ref: str) -> str:
+    parsed = parse_secret_ref(secret_ref)
+    if parsed.kind == "secret_id":
+        return parsed.value
+    return state.secret_store.get_secret_by_alias(parsed.value).secret_id
+
+
 def _secret_segment(value: str) -> str:
     return re.sub(r"[^a-z0-9._-]+", "-", value.strip().lower()).strip("-") or "item"
 
 
-def _scoped_app_secret_id(*, workspace_id: str, app_id: str, logical_name: str) -> str:
-    return f"app-{_secret_segment(workspace_id)}-{_secret_segment(app_id)}-{_secret_segment(logical_name)}"
+def _secret_write_resource(write: dict[str, Any]) -> tuple[str | None, str | None]:
+    resource_type = str(write.get("resource_type") or "").strip().lower()
+    resource_id = str(write.get("resource_id") or "").strip().lower()
+    if not resource_type and not resource_id:
+        return None, None
+    if not resource_type or not resource_id:
+        raise SecretError("App secret writes must include both resource_type and resource_id.")
+    return resource_type, resource_id
 
 
-def _scoped_app_secret_alias(*, workspace_id: str, app_id: str, logical_name: str) -> str:
-    return f"{_secret_segment(workspace_id)}-{_secret_segment(app_id)}-{_secret_segment(logical_name)}"
+def _scoped_app_secret_id(
+    *,
+    workspace_id: str,
+    app_id: str,
+    logical_name: str,
+    resource_type: str | None = None,
+    resource_id: str | None = None,
+) -> str:
+    segments = ["app", workspace_id, app_id, logical_name]
+    if resource_type and resource_id:
+        segments.extend([resource_type, resource_id])
+    return "-".join(_secret_segment(item) for item in segments)
+
+
+def _scoped_app_secret_alias(
+    *,
+    workspace_id: str,
+    app_id: str,
+    logical_name: str,
+    resource_type: str | None = None,
+    resource_id: str | None = None,
+) -> str:
+    segments = [workspace_id, app_id, logical_name]
+    if resource_type and resource_id:
+        segments.extend([resource_type, resource_id])
+    return "-".join(_secret_segment(item) for item in segments)
+
+
+def _scoped_app_secret_grant_id(
+    *,
+    workspace_id: str,
+    app_id: str,
+    logical_name: str,
+    resource_type: str | None = None,
+    resource_id: str | None = None,
+) -> str:
+    segments = ["grant", workspace_id, app_id, logical_name]
+    if resource_type and resource_id:
+        segments.extend([resource_type, resource_id])
+    return ":".join(_secret_segment(item) for item in segments)

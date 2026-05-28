@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
+from queue import Empty
 import hashlib
 import json
 import os
@@ -446,6 +447,9 @@ class AppStoreAppTestCase(unittest.TestCase):
 
         self.assertIn('"storage": "cloud"', icon_js)
         self.assertIn('"app-store": "storefront"', icon_js)
+        self.assertIn('"browser": "language"', icon_js)
+        self.assertIn('"mail": "mail"', icon_js)
+        self.assertIn('"speech": "record_voice_over"', icon_js)
         self.assertIn("mergeCatalogAndServerApps", frontend_js)
         self.assertIn("state.apps = mergeCatalogAndServerApps(state.catalogApps, state.serverApps)", frontend_js)
         self.assertIn('renderIcon(app, "app-row-icon", installation)', frontend_js)
@@ -571,6 +575,8 @@ const installed = presentation.frontendPresentation(
 );
 assert(installed.launchable === false, "installed binding launchability overrides catalog latest");
 assert(installed.role === "supporting", "installed binding role overrides catalog latest");
+assert(icons.glyphName({{ app_id: "browser", frontend_role: "workspace", surfaces: ["frontend"] }}) === "language", "browser app uses material language icon");
+assert(icons.glyphName({{ app_id: "mail", frontend_role: "workspace", surfaces: ["frontend"] }}) === "mail", "mail app uses material mail icon");
 const icon = icons.renderIcon(
   {{ app_id: "reporter", frontend_role: "workspace", frontend_launchable: true, surfaces: ["frontend"] }},
   "test-icon",
@@ -1450,6 +1456,43 @@ assert(icon.classList.classes.includes("is-non-launchable"), "icons use installe
         state_payload = json.loads(state_path.read_text(encoding="utf-8"))
         state_payload["pinned_apps"] = ["chat", "base-shell"]
         state_path.write_text(json.dumps(state_payload, indent=2), encoding="utf-8")
+        app_events = state.app_event_bus.subscribe()
+        self.addCleanup(lambda: state.app_event_bus.unsubscribe(app_events))
+        status_repair, repaired, _repair_headers = self.invoke(
+            app,
+            path="/api/apps/app-store/backend",
+            method="POST",
+            body={"action": "pinned_apps.list"},
+            cookie=cookie,
+        )
+        state_payload = json.loads(state_path.read_text(encoding="utf-8"))
+        self.assertEqual(status_repair, 200)
+        self.assertEqual(repaired["pinned_apps"], ["chat"])
+        self.assertEqual(state_payload["pinned_apps"], ["chat"])
+        self.assertEqual(
+            app_events.get_nowait(),
+            {
+                "type": "maverick.app.data-changed",
+                "workspace_id": "default",
+                "owner_app_id": "app-store",
+                "resource": "state",
+            },
+        )
+
+        status_noop_repair, noop_repaired, _noop_headers = self.invoke(
+            app,
+            path="/api/apps/app-store/backend",
+            method="POST",
+            body={"action": "pinned_apps.list"},
+            cookie=cookie,
+        )
+        self.assertEqual(status_noop_repair, 200)
+        self.assertEqual(noop_repaired["pinned_apps"], ["chat"])
+        with self.assertRaises(Empty):
+            app_events.get_nowait()
+
+        state_payload["pinned_apps"] = ["chat", "base-shell"]
+        state_path.write_text(json.dumps(state_payload, indent=2), encoding="utf-8")
         status_remove, removed, _remove_headers = self.invoke(
             app,
             path="/api/apps/app-store/backend",
@@ -1473,6 +1516,7 @@ assert(icon.classList.classes.includes("is-non-launchable"), "icons use installe
         self.assertEqual(status_set, 200)
         self.assertEqual(filtered["state"]["pinned_apps"], ["chat", "agents"])
         service_py = (Path(__file__).resolve().parents[1] / "backend" / "service.py").read_text(encoding="utf-8")
+        self.assertIn("repair_pinned_apps(data_root, launchable_app_ids)", service_py)
         self.assertIn("def _launchable_pinned_app_ids(app_ids: list[str], launchable_app_ids: list[str])", service_py)
         self.assertNotIn("return app_ids\n    launchable = _launchable_app_id_set(launchable_app_ids)", service_py)
 

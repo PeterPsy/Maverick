@@ -126,6 +126,10 @@ export function reconcileWindowsWithThreads(
   const firstThreadId = threads[0]?.thread_id || "";
   const threadIds = new Set(threads.map((thread) => thread.thread_id));
   return windows.map((windowItem) => {
+    const hasValidThread = Boolean(windowItem.threadId && threadIds.has(windowItem.threadId));
+    if (hasValidThread && (windowItem.isDraft || windowItem.draftProjectId)) {
+      return { ...windowItem, draftProjectId: null, isDraft: false };
+    }
     if (windowItem.isDraft && (!navigationScope || windowItem.id !== navigationScope)) {
       return windowItem;
     }

@@ -11,6 +11,7 @@ from core.api.app_mounts import _apply_app_secret_writes, _read_backend_body, _r
 from core.api.http import HttpRequestError
 from core.apps.contracts import build_app_contract, build_app_hook_timeouts, build_parsed_app_contract
 from core.observability.store import ObservabilityCollections, ObservabilityDocumentStore
+from core.secrets.app_delivery import app_secret_target
 from core.secrets.errors import SecretPolicyError
 from core.secrets.service import bind_app_secret, build_secret_ref, create_platform_secret, grant_app_secret_use
 from core.secrets.store import SecretCollections, SecretDocumentStore
@@ -300,6 +301,279 @@ class AppMountsTestCase(unittest.TestCase):
         self.assertIn("core.secrets.app_write.create", audit_actions)
         self.assertIn("core.secrets.grant.create.app_write", audit_actions)
 
+    def test_app_secret_writes_can_scope_delivery_to_resource(self) -> None:
+        secret_store = _secret_store()
+        state = _state(secret_store)
+        result_payload = {
+            "platform_secret_writes": [
+                {
+                    "logical_name": "gmail-refresh-token",
+                    "resource_type": "mail_connection",
+                    "resource_id": "conn_1",
+                    "raw_value": "refresh-token-one",
+                },
+                {
+                    "logical_name": "gmail-refresh-token",
+                    "resource_type": "mail_connection",
+                    "resource_id": "conn_2",
+                    "raw_value": "refresh-token-two",
+                },
+            ]
+        }
+
+        persisted = _apply_app_secret_writes(
+            state,  # type: ignore[arg-type]
+            workspace_id="default",
+            app_id="mail",
+            allowed_logical_names=["gmail-refresh-token"],
+            result=result_payload,
+            secret_consumers=_mail_secret_consumers(),
+        )
+        first = _resolve_app_secret_payload(
+            state,  # type: ignore[arg-type]
+            workspace_id="default",
+            app_id="mail",
+            allowed_logical_names=["gmail-refresh-token"],
+            resource_type="mail_connection",
+            resource_id="conn_1",
+        )
+        second = _resolve_app_secret_payload(
+            state,  # type: ignore[arg-type]
+            workspace_id="default",
+            app_id="mail",
+            allowed_logical_names=["gmail-refresh-token"],
+            resource_type="mail_connection",
+            resource_id="conn_2",
+        )
+
+        self.assertEqual(first.secrets, {"gmail-refresh-token": "refresh-token-one"})
+        self.assertEqual(second.secrets, {"gmail-refresh-token": "refresh-token-two"})
+        self.assertEqual(persisted[0]["resource_type"], "mail_connection")
+        self.assertEqual(persisted[0]["resource_id"], "conn_1")
+        self.assertNotEqual(persisted[0]["grant_id"], persisted[1]["grant_id"])
+
+        rotate_payload = {
+            "platform_secret_writes": [
+                {
+                    "logical_name": "gmail-refresh-token",
+                    "resource_type": "mail_connection",
+                    "resource_id": "conn_1",
+                    "raw_value": "refresh-token-one-rotated",
+                }
+            ]
+        }
+        rotated = _apply_app_secret_writes(
+            state,  # type: ignore[arg-type]
+            workspace_id="default",
+            app_id="mail",
+            allowed_logical_names=["gmail-refresh-token"],
+            result=rotate_payload,
+            secret_consumers=_mail_secret_consumers(),
+        )
+        first_after_rotate = _resolve_app_secret_payload(
+            state,  # type: ignore[arg-type]
+            workspace_id="default",
+            app_id="mail",
+            allowed_logical_names=["gmail-refresh-token"],
+            resource_type="mail_connection",
+            resource_id="conn_1",
+        )
+        second_after_rotate = _resolve_app_secret_payload(
+            state,  # type: ignore[arg-type]
+            workspace_id="default",
+            app_id="mail",
+            allowed_logical_names=["gmail-refresh-token"],
+            resource_type="mail_connection",
+            resource_id="conn_2",
+        )
+
+        self.assertEqual(rotated[0]["grant_id"], persisted[0]["grant_id"])
+        self.assertEqual(first_after_rotate.secrets, {"gmail-refresh-token": "refresh-token-one-rotated"})
+        self.assertEqual(second_after_rotate.secrets, {"gmail-refresh-token": "refresh-token-two"})
+        encoded_audit = str([item.payload for item in state.observability_store.list_audit(source_domain="secrets")])
+        self.assertNotIn("refresh-token-one", encoded_audit)
+        self.assertNotIn("refresh-token-two", encoded_audit)
+
+    def test_app_secret_writes_rotate_existing_resource_scoped_base_target_grant(self) -> None:
+        secret_store = _secret_store()
+        state = _state(secret_store)
+        secret = create_platform_secret(secret_store, label="Refresh", raw_value="old-token", alias="mail-refresh-conn-1")
+        grant = grant_app_secret_use(
+            secret_store,
+            workspace_id="default",
+            app_id="mail",
+            logical_name="gmail-refresh-token",
+            secret_ref=build_secret_ref(alias=secret.alias),
+            actions=["app.backend"],
+            target_patterns=[app_secret_target("backend")],
+            resource_type="mail_connection",
+            resource_id="conn_1",
+        )
+
+        persisted = _apply_app_secret_writes(
+            state,  # type: ignore[arg-type]
+            workspace_id="default",
+            app_id="mail",
+            allowed_logical_names=["gmail-refresh-token"],
+            result={
+                "platform_secret_writes": [
+                    {
+                        "logical_name": "gmail-refresh-token",
+                        "resource_type": "mail_connection",
+                        "resource_id": "conn_1",
+                        "raw_value": "new-token",
+                    }
+                ]
+            },
+            secret_consumers=_mail_secret_consumers(),
+        )
+        delivered = _resolve_app_secret_payload(
+            state,  # type: ignore[arg-type]
+            workspace_id="default",
+            app_id="mail",
+            allowed_logical_names=["gmail-refresh-token"],
+            resource_type="mail_connection",
+            resource_id="conn_1",
+        )
+        saved_grant = secret_store.get_secret_grant(grant.grant_id)
+
+        self.assertEqual(persisted[0]["grant_id"], grant.grant_id)
+        self.assertEqual(delivered.secrets, {"gmail-refresh-token": "new-token"})
+        self.assertEqual(saved_grant.resource_type, "mail_connection")
+        self.assertEqual(saved_grant.resource_id, "conn_1")
+        self.assertEqual(saved_grant.target_patterns, ["maverick://app.backend/*"])
+
+    def test_app_secret_writes_enforce_declared_resource_scope(self) -> None:
+        secret_store = _secret_store()
+        state = _state(secret_store)
+
+        with self.assertRaisesRegex(SecretPolicyError, "requires resource_type and resource_id"):
+            _apply_app_secret_writes(
+                state,  # type: ignore[arg-type]
+                workspace_id="default",
+                app_id="mail",
+                allowed_logical_names=["gmail-refresh-token"],
+                result={"platform_secret_writes": [{"logical_name": "gmail-refresh-token", "raw_value": "refresh-token"}]},
+                secret_consumers=_mail_secret_consumers(),
+            )
+        with self.assertRaisesRegex(SecretPolicyError, "does not allow resource_type"):
+            _apply_app_secret_writes(
+                state,  # type: ignore[arg-type]
+                workspace_id="default",
+                app_id="mail",
+                allowed_logical_names=["gmail-refresh-token"],
+                result={
+                    "platform_secret_writes": [
+                        {
+                            "logical_name": "gmail-refresh-token",
+                            "resource_type": "email_thread",
+                            "resource_id": "thread_1",
+                            "raw_value": "refresh-token",
+                        }
+                    ]
+                },
+                secret_consumers=_mail_secret_consumers(),
+            )
+        with self.assertRaisesRegex(SecretPolicyError, "workspace-scoped"):
+            _apply_app_secret_writes(
+                state,  # type: ignore[arg-type]
+                workspace_id="default",
+                app_id="mail",
+                allowed_logical_names=["gmail-oauth-client-id"],
+                result={
+                    "platform_secret_writes": [
+                        {
+                            "logical_name": "gmail-oauth-client-id",
+                            "resource_type": "mail_connection",
+                            "resource_id": "conn_1",
+                            "raw_value": "client-id",
+                        }
+                    ]
+                },
+                secret_consumers=_mail_secret_consumers(),
+            )
+
+    def test_app_secret_payload_does_not_cross_resource_scopes(self) -> None:
+        secret_store = _secret_store()
+        state = _state(secret_store)
+        workspace_secret = create_platform_secret(secret_store, label="Workspace", raw_value="workspace-secret", alias="workspace-secret")
+        first_secret = create_platform_secret(secret_store, label="First", raw_value="first-secret", alias="first-secret")
+        second_secret = create_platform_secret(secret_store, label="Second", raw_value="second-secret", alias="second-secret")
+        grant_app_secret_use(
+            secret_store,
+            workspace_id="default",
+            app_id="mail",
+            logical_name="gmail-oauth-client-id",
+            secret_ref=build_secret_ref(alias=workspace_secret.alias),
+            actions=["app.backend"],
+            target_patterns=["maverick://app.backend/*"],
+        )
+        grant_app_secret_use(
+            secret_store,
+            workspace_id="default",
+            app_id="mail",
+            logical_name="gmail-refresh-token",
+            secret_ref=build_secret_ref(alias=first_secret.alias),
+            actions=["app.backend"],
+            target_patterns=["maverick://app.backend/*"],
+            resource_type="mail_connection",
+            resource_id="conn_1",
+        )
+        grant_app_secret_use(
+            secret_store,
+            workspace_id="default",
+            app_id="mail",
+            logical_name="gmail-refresh-token",
+            secret_ref=build_secret_ref(alias=second_secret.alias),
+            actions=["app.backend"],
+            target_patterns=["maverick://app.backend/*"],
+            resource_type="mail_connection",
+            resource_id="conn_2",
+        )
+
+        first = _resolve_app_secret_payload(
+            state,  # type: ignore[arg-type]
+            workspace_id="default",
+            app_id="mail",
+            allowed_logical_names=["gmail-refresh-token"],
+            resource_type="mail_connection",
+            resource_id="conn_1",
+        )
+        workspace = _resolve_app_secret_payload(
+            state,  # type: ignore[arg-type]
+            workspace_id="default",
+            app_id="mail",
+            allowed_logical_names=["gmail-oauth-client-id"],
+        )
+
+        self.assertEqual(first.secrets, {"gmail-refresh-token": "first-secret"})
+        self.assertEqual(workspace.secrets, {"gmail-oauth-client-id": "workspace-secret"})
+        with self.assertRaises(SecretPolicyError):
+            _resolve_app_secret_payload(
+                state,  # type: ignore[arg-type]
+                workspace_id="default",
+                app_id="mail",
+                allowed_logical_names=["gmail-refresh-token"],
+            )
+        with self.assertRaises(SecretPolicyError):
+            _resolve_app_secret_payload(
+                state,  # type: ignore[arg-type]
+                workspace_id="default",
+                app_id="mail",
+                allowed_logical_names=["gmail-oauth-client-id"],
+                resource_type="mail_connection",
+                resource_id="conn_1",
+            )
+        with self.assertRaises(SecretPolicyError):
+            _resolve_app_secret_payload(
+                state,  # type: ignore[arg-type]
+                workspace_id="default",
+                app_id="mail",
+                allowed_logical_names=["gmail-refresh-token"],
+                resource_type="mail_connection",
+                resource_id="conn_3",
+            )
+
 
 def _serve(root: Path, subpath: str, *, cross_origin: bool = False) -> tuple[str, dict[str, str]]:
     captured: dict[str, object] = {}
@@ -331,6 +605,25 @@ def _state(secret_store: SecretDocumentStore) -> SimpleNamespace:
             ObservabilityCollections(events=FakeCollection(), audit=FakeCollection(), metrics=FakeCollection())
         ),
     )
+
+
+def _mail_secret_consumers() -> dict[str, dict[str, object]]:
+    return {
+        "gmail-oauth-client-id": {
+            "backend": True,
+            "cli_commands": ["mail"],
+            "mcp_tools": [],
+            "resource_scoped": False,
+            "resource_types": [],
+        },
+        "gmail-refresh-token": {
+            "backend": True,
+            "cli_commands": ["mail"],
+            "mcp_tools": [],
+            "resource_scoped": True,
+            "resource_types": ["mail_connection"],
+        },
+    }
 
 
 if __name__ == "__main__":

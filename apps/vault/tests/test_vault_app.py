@@ -94,6 +94,40 @@ def sample_mail_app_managed_need() -> dict[str, object]:
     }
 
 
+def sample_healthy_app_managed_need() -> dict[str, object]:
+    need = sample_mail_app_managed_need()
+    need["scope"] = {
+        "type": "resource",
+        "resource_type": "mail_connection",
+        "resource_id": "mail_connection_live",
+        "label": "Mail Connection mail_connection_live",
+    }
+    need["recommended_grant"] = {
+        **dict(need["recommended_grant"]),
+        "resource_id": "mail_connection_live",
+    }
+    need["value_state"] = "managed_by_app_write"
+    need["grant_state"] = "active"
+    need["user_action"] = "none"
+    need["credential_match"] = {
+        "matched": True,
+        "method": "grant_secret_ref",
+        "confidence": "exact",
+        "ambiguous": False,
+        "candidate_count": 1,
+        "candidates": [
+            {
+                "secret_id": "app-default-mail-gmail-refresh-token-mail_connection-live",
+                "alias": "default-mail-gmail-refresh-token-mail_connection-live",
+                "label": "mail gmail-refresh-token",
+                "status": "active",
+                "kind": "generic",
+            }
+        ],
+    }
+    return need
+
+
 class VaultAppTest(unittest.TestCase):
     """Verify Vault stays a frontend over Core Secrets, not a secret owner."""
 
@@ -262,6 +296,22 @@ class VaultAppTest(unittest.TestCase):
         rendered = json.dumps([diagnosis, issues])
         self.assertNotIn("raw_value", rendered)
         self.assertNotIn("super-secret", rendered)
+
+    def test_agent_operations_filter_healthy_core_needs(self) -> None:
+        payload = handle_operation(
+            {
+                "app_id": "vault",
+                "workspace_id": "default",
+                "arguments": {
+                    "action": "diagnose",
+                    "needs": [sample_need(), sample_healthy_app_managed_need()],
+                },
+            },
+            action="diagnose",
+        )
+
+        self.assertEqual(payload["issue_count"], 1)
+        self.assertEqual(payload["issues"][0]["recommended_action"], "create_grant")
 
     def test_agent_operations_do_not_require_nested_maverick_binary(self) -> None:
         with patch.dict(os.environ, {"PATH": ""}):

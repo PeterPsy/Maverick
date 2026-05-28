@@ -318,7 +318,7 @@ def _apply_one_runtime_interrupt_request(
         availability="free",
         now=event.created_at,
     )
-    release_idle_runtime_processes(state, session_id=updated.session_id, provider_id=provider_id or "unconfigured", reason="app_turn_interrupted")
+    release_idle_runtime_processes(state, session_id=updated.session_id, provider_id=provider_id or "unconfigured", reason="app_turn_interrupted", idle_ttl_seconds=0)
     dispatch_source_app_runtime_event(
         state,
         session=session,

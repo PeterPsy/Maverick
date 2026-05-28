@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextlib import suppress
-from threading import Lock, Thread
+from threading import Lock, Thread, Timer
 from typing import TYPE_CHECKING, Callable
 from uuid import uuid4
 
@@ -26,6 +26,9 @@ if TYPE_CHECKING:
 _SESSION_EXECUTION_LOCKS: dict[str, Lock] = {}
 _SESSION_EXECUTION_LOCKS_LOCK = Lock()
 _ACTIVE_TURN_STATUSES = {"queued", "active"}
+_IDLE_RUNTIME_REAP_TTL_SECONDS = 180.0
+_IDLE_REAP_TIMERS: dict[str, Timer] = {}
+_IDLE_REAP_TIMERS_LOCK = Lock()
 
 
 def submit_runtime_turn_async(
@@ -58,6 +61,7 @@ def submit_runtime_turn_async(
             raise
 
     def worker() -> None:
+        force_idle_reap = False
         with _session_execution_lock(session.session_id):
             _debug_log_runtime_turn(
                 state,
@@ -166,6 +170,7 @@ def submit_runtime_turn_async(
                     message="Runtime turn debug: async worker raised",
                     payload={"phase": "async_worker_raised", "error_type": type(error).__name__, "error": str(error)},
                 )
+                force_idle_reap = True
                 current = state.runtime_store.get_turn(turn.turn_id)
                 if current.status not in {"completed", "failed", "cancelled", "timed-out"}:
                     failed = transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="failed", failure_reason=str(error))
@@ -178,17 +183,41 @@ def submit_runtime_turn_async(
                         failure_reason=str(error),
                     )
             finally:
-                release_idle_runtime_processes(state, session_id=session.session_id, provider_id=provider.provider_id, reason="async_turn_idle")
+                release_idle_runtime_processes(
+                    state,
+                    session_id=session.session_id,
+                    provider_id=provider.provider_id,
+                    reason="async_turn_failed" if force_idle_reap else "async_turn_idle",
+                    idle_ttl_seconds=0 if force_idle_reap else None,
+                )
 
     Thread(target=worker, name=f"maverick-runtime-turn-{turn.turn_id}", daemon=True).start()
     return turn, events
 
 
 
-def release_idle_runtime_processes(state: PlatformState, *, session_id: str, provider_id: str, reason: str) -> int:
-    """Terminate live provider processes once a runtime session has no pending work."""
+def release_idle_runtime_processes(
+    state: PlatformState,
+    *,
+    session_id: str,
+    provider_id: str,
+    reason: str,
+    idle_ttl_seconds: float | None = _IDLE_RUNTIME_REAP_TTL_SECONDS,
+) -> int:
+    """Terminate live provider processes after an idle TTL when a session has no pending work."""
     if any(turn.status in _ACTIVE_TURN_STATUSES for turn in state.runtime_store.list_turns(session_id)):
         return 0
+    if idle_ttl_seconds is None:
+        idle_ttl_seconds = _IDLE_RUNTIME_REAP_TTL_SECONDS
+    if idle_ttl_seconds > 0:
+        return _schedule_idle_runtime_process_reap(
+            state,
+            session_id=session_id,
+            provider_id=provider_id,
+            reason=reason,
+            idle_ttl_seconds=idle_ttl_seconds,
+        )
+    _cancel_scheduled_idle_runtime_process_reap(session_id)
     terminated = terminate_runtime_processes(session_id)
     with suppress(Exception):
         _definition, _selection, runtime_adapter = resolve_runtime_backend_for_session(
@@ -207,6 +236,47 @@ def release_idle_runtime_processes(state: PlatformState, *, session_id: str, pro
             event_bus=state.runtime_event_bus,
         )
     return terminated
+
+
+def _schedule_idle_runtime_process_reap(
+    state: PlatformState,
+    *,
+    session_id: str,
+    provider_id: str,
+    reason: str,
+    idle_ttl_seconds: float,
+) -> int:
+    key = session_id
+
+    def run_reap() -> None:
+        with _IDLE_REAP_TIMERS_LOCK:
+            if _IDLE_REAP_TIMERS.get(key) is not timer:
+                return
+            _IDLE_REAP_TIMERS.pop(key, None)
+        release_idle_runtime_processes(
+            state,
+            session_id=session_id,
+            provider_id=provider_id,
+            reason=reason,
+            idle_ttl_seconds=0,
+        )
+
+    timer = Timer(idle_ttl_seconds, run_reap)
+    timer.daemon = True
+    with _IDLE_REAP_TIMERS_LOCK:
+        previous = _IDLE_REAP_TIMERS.get(key)
+        _IDLE_REAP_TIMERS[key] = timer
+    if previous is not None:
+        previous.cancel()
+    timer.start()
+    return 0
+
+
+def _cancel_scheduled_idle_runtime_process_reap(session_id: str) -> None:
+    with _IDLE_REAP_TIMERS_LOCK:
+        timer = _IDLE_REAP_TIMERS.pop(session_id, None)
+    if timer is not None:
+        timer.cancel()
 
 
 

@@ -132,16 +132,7 @@ def app_contract_payload(parsed: ParsedAppContract) -> dict[str, Any]:
         "compatibility": {
             "workspace_modes": parsed.contract.compatibility.supported_workspace_modes or [],
         },
-        "hook_timeouts": {
-            "install_seconds": parsed.contract.hook_timeouts.install_seconds,
-            "upgrade_seconds": parsed.contract.hook_timeouts.upgrade_seconds,
-            "migrate_seconds": parsed.contract.hook_timeouts.migrate_seconds,
-            "export_seconds": parsed.contract.hook_timeouts.export_seconds,
-            "import_seconds": parsed.contract.hook_timeouts.import_seconds,
-            "validate_after_import_seconds": parsed.contract.hook_timeouts.validate_after_import_seconds,
-            "repair_after_import_seconds": parsed.contract.hook_timeouts.repair_after_import_seconds,
-            "health_check_seconds": parsed.contract.hook_timeouts.health_check_seconds,
-        },
+        "hook_timeouts": _hook_timeouts_payload(parsed),
         "lifecycle": {
             "install": lifecycle.install,
             "upgrade": lifecycle.upgrade,
@@ -196,6 +187,24 @@ def _visibility_payload(parsed: ParsedAppContract) -> dict[str, object]:
     if parsed.contract.visibility.capabilities is not None:
         payload["capabilities"] = parsed.contract.visibility.capabilities
     return payload
+
+
+def _hook_timeouts_payload(parsed: ParsedAppContract) -> dict[str, int]:
+    timeouts = parsed.contract.hook_timeouts
+    payload = {
+        "install_seconds": timeouts.install_seconds,
+        "upgrade_seconds": timeouts.upgrade_seconds,
+        "migrate_seconds": timeouts.migrate_seconds,
+        "export_seconds": timeouts.export_seconds,
+        "import_seconds": timeouts.import_seconds,
+        "validate_after_import_seconds": timeouts.validate_after_import_seconds,
+        "repair_after_import_seconds": timeouts.repair_after_import_seconds,
+        "health_check_seconds": timeouts.health_check_seconds,
+    }
+    if timeouts.backend_seconds != 30:
+        payload = {"backend_seconds": timeouts.backend_seconds, **payload}
+    return payload
+
 
 def write_app_contract_file(source_root: Path, parsed: ParsedAppContract) -> Path:
     """Write one canonical app contract file into the given app root."""

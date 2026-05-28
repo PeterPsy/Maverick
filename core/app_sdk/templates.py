@@ -189,6 +189,7 @@ def _contract_payload(request: AppSdkCreateRequest) -> dict[str, Any]:
         },
         "compatibility": {"workspace_modes": ["sandbox", "full-access"]},
         "hook_timeouts": {
+            "backend_seconds": 30,
             "install_seconds": 60,
             "upgrade_seconds": 120,
             "migrate_seconds": 300,

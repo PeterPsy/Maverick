@@ -21,18 +21,30 @@ DATA_CHANGED_ACTIONS = {"pinned_apps.set", "pinned_apps.toggle", "remember_insta
 VIEW_STATE_ACTIONS = {"view_filter", "set_view_filter", "set_custom_view", "clear_custom_view"}
 PUBLIC_STORE_METADATA_KEY = "public_store"
 PUBLIC_APP_UUID_KEY = "public_app_uuid"
+APP_EVENTS_RESULT_KEY = "_app_events"
+STATE_CHANGED_EVENT = {"type": "maverick.app.data-changed", "resource": "state"}
 
 
 class AppStoreValidationError(ValueError):
     """Raised when an app-store request payload is invalid."""
 
 
-def app_events_for_action(action: str) -> list[dict]:
+def app_events_for_action(action: str, result: dict[str, Any] | None = None) -> list[dict]:
+    events: list[dict] = []
     if action in DATA_CHANGED_ACTIONS:
-        return [{"type": "maverick.app.data-changed", "resource": "state"}]
+        events.append(STATE_CHANGED_EVENT)
     if action in VIEW_STATE_ACTIONS:
-        return [{"type": "maverick.app.data-changed", "resource": "view-state"}]
-    return []
+        events.append({"type": "maverick.app.data-changed", "resource": "view-state"})
+    if isinstance(result, dict):
+        result_events = result.get(APP_EVENTS_RESULT_KEY)
+        if isinstance(result_events, list):
+            events.extend(event for event in result_events if isinstance(event, dict))
+    return events
+
+
+def strip_internal_result_fields(result: dict[str, Any]) -> dict[str, Any]:
+    result.pop(APP_EVENTS_RESULT_KEY, None)
+    return result
 
 
 def handle_action(
@@ -83,7 +95,13 @@ def handle_action(
     if action == "clear_custom_view":
         return 200, {"state": clear_custom_view(data_root)}
     if action == "pinned_apps.list":
-        return 200, {"pinned_apps": pinned_apps(data_root)}
+        if launchable_app_ids is None:
+            return 200, {"pinned_apps": pinned_apps(data_root)}
+        repaired, changed = repair_pinned_apps(data_root, launchable_app_ids)
+        result = {"pinned_apps": repaired}
+        if changed:
+            result[APP_EVENTS_RESULT_KEY] = [STATE_CHANGED_EVENT]
+        return 200, result
     if action == "pinned_apps.set":
         if launchable_app_ids is None:
             raise AppStoreValidationError("Pinned app mutations require workspace app registry context.")
@@ -150,6 +168,15 @@ def handle_action(
 def _launchable_pinned_app_ids(app_ids: list[str], launchable_app_ids: list[str]) -> list[str]:
     launchable = _launchable_app_id_set(launchable_app_ids)
     return [app_id for app_id in app_ids if app_id in launchable]
+
+
+def repair_pinned_apps(data_root: Path, launchable_app_ids: list[str]) -> tuple[list[str], bool]:
+    current = pinned_apps(data_root)
+    repaired = _launchable_pinned_app_ids(current, launchable_app_ids)
+    if repaired != current:
+        set_pinned_apps(data_root, repaired)
+        return repaired, True
+    return repaired, False
 
 
 def _launchable_app_id_set(app_ids: list[str]) -> set[str]:

@@ -10,6 +10,7 @@ import tempfile
 import time
 from types import SimpleNamespace
 import unittest
+from unittest.mock import Mock, patch
 
 from core.api.runtime_cleanup import RuntimeCleanupError, _delete_runtime_root, cleanup_runtime_session
 from core.runtime.service import (
@@ -42,7 +43,7 @@ from core.runtime.session_collection import RuntimeSessionJsonCollection
 from core.runtime.session_termination import terminate_runtime_session
 from core.runtime.store import MAX_RUNTIME_EVENTS_PER_SESSION, RuntimeDocumentStore, RuntimeCollections
 from core.runtime.thread_catalog_events import mark_thread_response_completed, mark_thread_user_message_queued, set_thread_availability
-from core.runtime.turn_submission import _complete_output_text, _missing_final_suffix, release_idle_runtime_processes
+from core.runtime.turn_submission import _complete_output_text, _missing_final_suffix, release_idle_runtime_processes, submit_runtime_turn_async
 from core.runtime.workspace_collection import WorkspaceRuntimeJsonCollection
 from core.shared.json_file_collection import JsonFileCollection
 from core.workspaces.service import default_workspace_governance
@@ -1189,6 +1190,7 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
                 session_id="sess-idle-process",
                 provider_id="codex",
                 reason="test_idle",
+                idle_ttl_seconds=0,
             )
 
             self.assertEqual(terminated, 1)
@@ -1201,6 +1203,91 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
             if process.poll() is None:
                 process.kill()
                 process.wait(timeout=2)
+
+    def test_idle_runtime_process_reap_waits_for_ttl(self) -> None:
+        store = self.make_store()
+        repo_root = self.make_repo_root()
+        now = datetime.now(tz=UTC)
+        create_runtime_session(
+            store,
+            session_id="sess-idle-process-ttl",
+            workspace_id="acme",
+            agent_id="agent-1",
+            now=now,
+            start_path=repo_root,
+        )
+        turn = queue_runtime_turn(store, turn_id="turn-terminal-ttl", session_id="sess-idle-process-ttl", input_text="done", now=now)
+        transition_runtime_turn(store, turn_id=turn.turn_id, target_status="active", now=now)
+        transition_runtime_turn(store, turn_id=turn.turn_id, target_status="completed", now=now)
+        process = subprocess.Popen(["sleep", "30"], start_new_session=True)
+        try:
+            register_runtime_process("sess-idle-process-ttl", process)
+            terminated = release_idle_runtime_processes(
+                SimpleNamespace(runtime_store=store, runtime_event_bus=None),
+                session_id="sess-idle-process-ttl",
+                provider_id="codex",
+                reason="test_idle_ttl",
+                idle_ttl_seconds=0.05,
+            )
+
+            self.assertEqual(terminated, 0)
+            self.assertIsNone(process.poll())
+            deadline = time.monotonic() + 2
+            while process.poll() is None and time.monotonic() < deadline:
+                time.sleep(0.05)
+            self.assertIsNotNone(process.poll())
+            deadline = time.monotonic() + 2
+            while "runtime.process.idle_reaped" not in [event.event_type for event in store.list_events("sess-idle-process-ttl")] and time.monotonic() < deadline:
+                time.sleep(0.05)
+            self.assertIn("runtime.process.idle_reaped", [event.event_type for event in store.list_events("sess-idle-process-ttl")])
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=2)
+
+    def test_async_worker_failure_reaps_idle_processes_immediately(self) -> None:
+        store = self.make_store()
+        repo_root = self.make_repo_root()
+        now = datetime.now(tz=UTC)
+        session = create_runtime_session(
+            store,
+            session_id="sess-async-failure",
+            workspace_id="acme",
+            agent_id="agent-1",
+            now=now,
+            start_path=repo_root,
+        )
+
+        class ImmediateThread:
+            def __init__(self, *, target, name, daemon) -> None:
+                self.target = target
+
+            def start(self) -> None:
+                self.target()
+
+        release_mock = Mock(return_value=0)
+        worker_globals = submit_runtime_turn_async.__globals__
+        with patch.dict(
+            worker_globals,
+            {
+                "Thread": ImmediateThread,
+                "execute_runtime_turn": Mock(side_effect=RuntimeError("provider failed")),
+                "resolve_runtime_backend_for_session": Mock(
+                    return_value=(SimpleNamespace(provider_id="fake-provider"), None, SimpleNamespace())
+                ),
+                "_build_launch_spec_for_execution": Mock(return_value=SimpleNamespace()),
+                "release_idle_runtime_processes": release_mock,
+            },
+        ):
+            turn, _events = submit_runtime_turn_async(
+                SimpleNamespace(runtime_store=store, provider_store=SimpleNamespace(), runtime_event_bus=None),
+                session=session,
+                input_text="fail",
+            )
+
+        self.assertEqual(store.get_turn(turn.turn_id).status, "failed")
+        self.assertEqual(release_mock.call_args.kwargs["reason"], "async_turn_failed")
+        self.assertEqual(release_mock.call_args.kwargs["idle_ttl_seconds"], 0)
 
     def test_idle_reaper_keeps_process_for_queued_turn(self) -> None:
         store = self.make_store()

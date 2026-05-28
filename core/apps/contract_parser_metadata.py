@@ -114,6 +114,7 @@ def parse_hook_timeouts_section(payload: dict[str, object]) -> AppHookTimeouts:
     _reject_unexpected_fields(
         payload,
         {
+            "backend_seconds",
             "install_seconds",
             "upgrade_seconds",
             "migrate_seconds",
@@ -126,6 +127,7 @@ def parse_hook_timeouts_section(payload: dict[str, object]) -> AppHookTimeouts:
         label="hook_timeouts",
     )
     return AppHookTimeouts(
+        backend_seconds=_expect_timeout(payload, "backend_seconds", default=30),
         install_seconds=_expect_timeout(payload, "install_seconds", default=60),
         upgrade_seconds=_expect_timeout(payload, "upgrade_seconds", default=120),
         migrate_seconds=_expect_timeout(payload, "migrate_seconds", default=300),

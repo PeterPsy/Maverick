@@ -105,6 +105,9 @@ class PlatformAsgiHost:
             raise RuntimeError(f"Unsupported ASGI lifespan event: {message_type}")
 
     async def _handle_http(self, scope: dict[str, Any], receive: AsgiReceive, send: AsgiSend) -> None:
+        if scope.get("path") == "/health":
+            await _send_direct_json_response(send, b'{\n  "status": "ok",\n  "service": "maverick-core"\n}')
+            return
         try:
             body = await _read_asgi_body(receive)
         except ValueError:
@@ -209,6 +212,21 @@ def _websocket_environ(scope: dict[str, Any]) -> dict[str, Any]:
     for name, value in headers.items():
         environ[f"HTTP_{name}"] = value
     return environ
+
+
+async def _send_direct_json_response(send: AsgiSend, body: bytes, *, status: int = 200) -> None:
+    """Send a small ASGI JSON response without entering the WSGI worker pool."""
+    await send(
+        {
+            "type": "http.response.start",
+            "status": status,
+            "headers": [
+                (b"content-type", b"application/json; charset=utf-8"),
+                (b"content-length", str(len(body)).encode("ascii")),
+            ],
+        }
+    )
+    await send({"type": "http.response.body", "body": body, "more_body": False})
 
 
 def _run_wsgi_http(http_host: PlatformHost, environ: dict[str, Any], start_response: Callable[[str, list[tuple[str, str]]], None]) -> bytes:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 import hashlib
 from pathlib import Path
 from typing import Any
@@ -33,6 +33,10 @@ DEFAULT_PAGE_LIMIT = 20
 MAX_PAGE_LIMIT = 100
 DEFAULT_PAGE_SIZE = 250
 MAX_PAGE_SIZE = 250
+SYNC_MODE_BOUNDED = "bounded"
+SYNC_MODE_FULL_HISTORY = "full_history"
+DEFAULT_BOUNDED_SYNC_PAST_DAYS = 365
+DEFAULT_BOUNDED_SYNC_FUTURE_DAYS = 730
 GOOGLE_COLOR_MAP = {
     "1": "blue",
     "2": "green",
@@ -84,18 +88,23 @@ def sync_google_calendar(
     total_updated = 0
     total_deleted = 0
     total_unchanged = 0
+    total_remote_candidates = 0
     next_events = [normalize_event(item) for item in state.get("events", [])]
     sync_cursors = [normalize_sync_cursor(item) for item in state.get("sync_state", [])]
 
     for calendar in target_calendars:
         cursor = _sync_cursor_for(sync_cursors, connection_id=connection_id, provider_calendar_id=calendar["provider_calendar_id"])
-        sync_token = "" if requested_full_sync else requested_sync_token or str(cursor.get("sync_token") or "")
+        sync_mode = _sync_mode(body, cursor)
+        time_min, time_max = _bounded_sync_window(body, now=current_time) if sync_mode == SYNC_MODE_BOUNDED else ("", "")
+        sync_token = "" if sync_mode == SYNC_MODE_BOUNDED or requested_full_sync else requested_sync_token or str(cursor.get("sync_token") or "")
         full_sync = not bool(sync_token)
         try:
             event_items, next_sync_token, page_count, truncated = _fetch_events(
                 access_token,
                 calendar["provider_calendar_id"],
                 sync_token=sync_token,
+                time_min=time_min,
+                time_max=time_max,
                 page_limit=page_limit,
                 page_size=page_size,
                 transport=transport,
@@ -107,10 +116,13 @@ def sync_google_calendar(
                 access_token,
                 calendar["provider_calendar_id"],
                 sync_token="",
+                time_min=time_min,
+                time_max=time_max,
                 page_limit=page_limit,
                 page_size=page_size,
                 transport=transport,
             )
+        total_remote_candidates += len(event_items)
 
         merge = _merge_remote_events(
             next_events,
@@ -118,6 +130,8 @@ def sync_google_calendar(
             calendar=calendar,
             remote_events=event_items,
             full_sync=full_sync,
+            stale_time_min=time_min,
+            stale_time_max=time_max,
             now=current_time,
         )
         next_events = merge["events"]
@@ -133,10 +147,14 @@ def sync_google_calendar(
                 "calendar_id": calendar["id"],
                 "provider_calendar_id": calendar["provider_calendar_id"],
                 "status": "error" if truncated else "ok",
-                "sync_token": "" if truncated else next_sync_token,
+                "sync_mode": sync_mode,
+                "sync_token": "" if truncated or sync_mode == SYNC_MODE_BOUNDED else next_sync_token,
+                "time_min": time_min,
+                "time_max": time_max,
                 "last_sync_at": format_time(current_time),
                 "last_full_sync_at": format_time(current_time) if full_sync else cursor.get("last_full_sync_at", ""),
                 "updated_at": format_time(current_time),
+                "error_code": "calendar_sync_page_limit" if truncated else "",
                 "error": "Google Calendar sync page limit reached before a sync token was returned." if truncated else "",
             },
         )
@@ -151,12 +169,34 @@ def sync_google_calendar(
                 "updated": merge["updated"],
                 "deleted": merge["deleted"],
                 "unchanged": merge["unchanged"],
-                "sync_token_updated": bool(next_sync_token and not truncated),
+                "sync_mode": sync_mode,
+                "time_min": time_min,
+                "time_max": time_max,
+                "sync_token_updated": bool(next_sync_token and not truncated and sync_mode == SYNC_MODE_FULL_HISTORY),
             }
         )
 
     if len(next_events) > MAX_EVENTS:
-        raise CalendarOAuthError("calendar_sync_event_limit", f"Calendar can store at most {MAX_EVENTS} events.", status_code=400)
+        capacity = {
+            "current_event_count": len([normalize_event(item) for item in state.get("events", [])]),
+            "remote_candidate_count": total_remote_candidates,
+            "candidate_event_count": len(next_events),
+            "max_events": MAX_EVENTS,
+        }
+        sync_cursors = _mark_capacity_error(
+            sync_cursors,
+            target_calendars,
+            connection_id=connection_id,
+            updated_at=format_time(current_time),
+            **capacity,
+        )
+        _persist_sync_metadata(data_root, connection_id=connection_id, calendars_payload=calendars_payload, sync_cursors=sync_cursors)
+        raise CalendarOAuthError(
+            "calendar_sync_event_limit",
+            f"Calendar sync would store {len(next_events)} events, but Calendar can store at most {MAX_EVENTS} events.",
+            status_code=400,
+            extra=capacity,
+        )
 
     def updater(next_state: dict[str, Any]) -> dict[str, Any]:
         next_state["schema_version"] = SCHEMA_VERSION
@@ -181,6 +221,91 @@ def sync_google_calendar(
         "full_resyncs": full_resyncs,
         "calendars": calendar_results,
     }
+
+
+def _sync_mode(body: dict[str, Any], cursor: dict[str, Any]) -> str:
+    requested = str(body.get("sync_mode") or body.get("syncMode") or "").strip().lower()
+    if requested in {SYNC_MODE_BOUNDED, SYNC_MODE_FULL_HISTORY}:
+        return requested
+    if requested:
+        raise ValueError("`sync_mode` must be `bounded` or `full_history`.")
+    if _optional_string(body, "sync_token"):
+        return SYNC_MODE_FULL_HISTORY
+    cursor_mode = str(cursor.get("sync_mode") or "").strip().lower()
+    if cursor_mode in {SYNC_MODE_BOUNDED, SYNC_MODE_FULL_HISTORY}:
+        return cursor_mode
+    if cursor.get("sync_token"):
+        return SYNC_MODE_FULL_HISTORY
+    return SYNC_MODE_BOUNDED
+
+
+def _bounded_sync_window(body: dict[str, Any], *, now: datetime) -> tuple[str, str]:
+    time_min = _optional_time(body, "time_min")
+    time_max = _optional_time(body, "time_max")
+    if not time_min:
+        time_min = format_time(now - timedelta(days=DEFAULT_BOUNDED_SYNC_PAST_DAYS))
+    if not time_max:
+        time_max = format_time(now + timedelta(days=DEFAULT_BOUNDED_SYNC_FUTURE_DAYS))
+    if iso_time(time_max, "time_max") <= iso_time(time_min, "time_min"):
+        raise ValueError("`time_max` must be after `time_min`.")
+    return time_min, time_max
+
+
+def _optional_time(body: dict[str, Any], field: str) -> str:
+    value = body.get(field) or body.get(_camel(field))
+    if not value:
+        return ""
+    return format_time(iso_time(value, field))
+
+
+def _persist_sync_metadata(
+    data_root: Path,
+    *,
+    connection_id: str,
+    calendars_payload: list[dict[str, Any]],
+    sync_cursors: list[dict[str, Any]],
+) -> None:
+    def updater(next_state: dict[str, Any]) -> dict[str, Any]:
+        next_state["schema_version"] = SCHEMA_VERSION
+        next_state["calendars"] = _replace_connection_calendars(next_state.get("calendars", []), connection_id, calendars_payload)
+        next_state["sync_state"] = sync_cursors
+        return next_state
+
+    update_state(data_root, updater)
+
+
+def _mark_capacity_error(
+    sync_cursors: list[dict[str, Any]],
+    target_calendars: list[dict[str, Any]],
+    *,
+    connection_id: str,
+    updated_at: str,
+    current_event_count: int,
+    remote_candidate_count: int,
+    candidate_event_count: int,
+    max_events: int,
+) -> list[dict[str, Any]]:
+    result = sync_cursors
+    for calendar in target_calendars:
+        cursor = _sync_cursor_for(result, connection_id=connection_id, provider_calendar_id=calendar["provider_calendar_id"])
+        result = _upsert_cursor(
+            result,
+            {
+                **cursor,
+                "calendar_id": calendar["id"],
+                "provider_calendar_id": calendar["provider_calendar_id"],
+                "status": "error",
+                "sync_token": "",
+                "updated_at": updated_at,
+                "error_code": "calendar_sync_event_limit",
+                "error": f"Calendar sync would store {candidate_event_count} events, but Calendar can store at most {max_events} events.",
+                "current_event_count": current_event_count,
+                "remote_candidate_count": remote_candidate_count,
+                "candidate_event_count": candidate_event_count,
+                "max_events": max_events,
+            },
+        )
+    return result
 
 
 def _fetch_calendar_list(access_token: str, body: dict[str, Any], *, transport: HttpTransport | None) -> list[dict[str, Any]]:
@@ -222,6 +347,8 @@ def _fetch_events(
     calendar_id: str,
     *,
     sync_token: str,
+    time_min: str,
+    time_max: str,
     page_limit: int,
     page_size: int,
     transport: HttpTransport | None,
@@ -235,6 +362,10 @@ def _fetch_events(
             calendar_id=calendar_id,
             page_token=page_token,
             sync_token=sync_token,
+            time_min=time_min,
+            time_max=time_max,
+            single_events=bool(time_min or time_max),
+            order_by="startTime" if time_min or time_max else "",
             max_results=page_size,
             transport=transport,
         )
@@ -289,6 +420,8 @@ def _merge_remote_events(
     calendar: dict[str, Any],
     remote_events: list[dict[str, Any]],
     full_sync: bool,
+    stale_time_min: str,
+    stale_time_max: str,
     now: datetime,
 ) -> dict[str, Any]:
     next_events = list(events)
@@ -340,6 +473,7 @@ def _merge_remote_events(
             item["id"]
             for item in next_events
             if _matches_remote_calendar(item, connection_id=connection["id"], provider_calendar_id=calendar["provider_calendar_id"])
+            and _event_in_stale_scope(item, time_min=stale_time_min, time_max=stale_time_max)
             and str((item.get("external_refs") or {}).get("provider_event_id") or "") not in active_remote_ids
         }
         if stale_ids:
@@ -484,6 +618,23 @@ def _matches_remote_calendar(event: dict[str, Any], *, connection_id: str, provi
         and str(refs.get("provider_calendar_id") or "").strip() == provider_calendar_id
         and str(refs.get("provider_event_id") or "").strip()
     )
+
+
+def _event_in_stale_scope(event: dict[str, Any], *, time_min: str, time_max: str) -> bool:
+    if not time_min and not time_max:
+        return True
+    try:
+        start_time = iso_time(event.get("startTime"), "startTime")
+        end_time = iso_time(event.get("endTime"), "endTime")
+        min_time = iso_time(time_min, "time_min") if time_min else None
+        max_time = iso_time(time_max, "time_max") if time_max else None
+    except ValueError:
+        return False
+    if min_time and end_time <= min_time:
+        return False
+    if max_time and start_time >= max_time:
+        return False
+    return True
 
 
 def _event_comparison(event: dict[str, Any]) -> dict[str, Any]:

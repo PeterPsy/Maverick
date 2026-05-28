@@ -3,6 +3,14 @@ import type { ChatMessageAttachment } from "../api/client";
 import { structuredContentFromAgentLinks } from "./linkPreviews";
 import { isNonChatFacingProviderEvent, runtimeStepLabel } from "./runtimeStepLabels";
 
+const transcriptProjectionCache = new WeakMap<RuntimeEvent[], ChatMessage[]>();
+const transcriptProjectionCacheByLastEvent = new Map<string, ChatMessage[]>();
+const TRANSCRIPT_PROJECTION_CACHE_LIMIT = 80;
+
+export function clearTranscriptProjectionCache(): void {
+  transcriptProjectionCacheByLastEvent.clear();
+}
+
 function textPayload(event: RuntimeEvent): string {
   const value = event.payload.text;
   return typeof value === "string" ? value.trim() : "";
@@ -161,6 +169,41 @@ function appReferencePayload(item: Record<string, unknown>): AppReference {
 }
 
 export function eventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
+  const cached = transcriptProjectionCache.get(events);
+  if (cached) {
+    return cached;
+  }
+  const cacheKey = transcriptProjectionCacheKey(events);
+  const cachedByLastEvent = transcriptProjectionCacheByLastEvent.get(cacheKey);
+  if (cachedByLastEvent) {
+    transcriptProjectionCache.set(events, cachedByLastEvent);
+    transcriptProjectionCacheByLastEvent.delete(cacheKey);
+    transcriptProjectionCacheByLastEvent.set(cacheKey, cachedByLastEvent);
+    return cachedByLastEvent;
+  }
+  const messages = projectEventsToMessages(events);
+  transcriptProjectionCache.set(events, messages);
+  transcriptProjectionCacheByLastEvent.set(cacheKey, messages);
+  while (transcriptProjectionCacheByLastEvent.size > TRANSCRIPT_PROJECTION_CACHE_LIMIT) {
+    const oldestKey = transcriptProjectionCacheByLastEvent.keys().next().value;
+    if (!oldestKey) {
+      break;
+    }
+    transcriptProjectionCacheByLastEvent.delete(oldestKey);
+  }
+  return messages;
+}
+
+function transcriptProjectionCacheKey(events: RuntimeEvent[]): string {
+  if (!events.length) {
+    return "empty";
+  }
+  const first = events[0];
+  const last = events[events.length - 1];
+  return [first.session_id, first.event_id, events.length, last.session_id, last.event_id, last.created_at].join(":");
+}
+
+function projectEventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
   const orderedMessages: Array<{ order: number; sequence: number; message: ChatMessage }> = [];
   let messageSequence = 0;
   const seenUserTurns = new Set<string>();

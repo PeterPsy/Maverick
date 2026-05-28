@@ -747,6 +747,60 @@ class GeneratedAppContractTest(unittest.TestCase):
         self.assertEqual(resolved["title"], "Agency launch")
         self.assertIn("1/1 checked", summarized["summary"])
 
+    def test_reference_search_matches_checklist_keywords_and_query_tokens(self) -> None:
+        app_root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir) / "data"
+            created = run_json_entrypoint(
+                app_root / "mcp" / "server.py",
+                cwd=app_root,
+                payload={
+                    "app_id": "checklist",
+                    "workspace_id": "default",
+                    "data_root": str(data_root),
+                    "tool_name": "checklist_create",
+                    "arguments": {
+                        "payload": {
+                            "title": "Agency launch",
+                            "summary": "Delivery plan",
+                            "sections": [
+                                {
+                                    "id": "main",
+                                    "title": "Main",
+                                    "tasks": [{"id": "task-1", "title": "Ship widget", "checked": False}],
+                                }
+                            ],
+                        }
+                    },
+                },
+            )
+            checklist_id = created["checklist"]["id"]
+            plural = run_json_entrypoint(
+                app_root / "mcp" / "server.py",
+                cwd=app_root,
+                payload={
+                    "app_id": "checklist",
+                    "workspace_id": "default",
+                    "data_root": str(data_root),
+                    "tool_name": "checklist_reference_search",
+                    "arguments": {"query": "checklists"},
+                },
+            )
+            tokenized = run_json_entrypoint(
+                app_root / "mcp" / "server.py",
+                cwd=app_root,
+                payload={
+                    "app_id": "checklist",
+                    "workspace_id": "default",
+                    "data_root": str(data_root),
+                    "tool_name": "checklist_reference_search",
+                    "arguments": {"query": "agency widget"},
+                },
+            )
+
+        self.assertEqual([item["entity_id"] for item in plural["results"]], [checklist_id])
+        self.assertEqual([item["entity_id"] for item in tokenized["results"]], [checklist_id])
+
     def test_checklist_view_cli_persists_and_reads_board_view_state(self) -> None:
         app_root = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as temp_dir:

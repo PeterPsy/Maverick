@@ -39,7 +39,14 @@ def _core_tool_specs(
     specs.extend(persistence_tool_specs(start_path=start_path))
     specs.extend(developer_context_tool_specs(start_path=start_path))
     specs.extend(runtime_provider_tool_specs(provider_store=provider_store, runtime_store=runtime_store))
-    specs.extend(secret_tool_specs(secret_store=secret_store, observability_store=observability_store))
+    specs.extend(
+        secret_tool_specs(
+            app_store=app_store,
+            secret_store=secret_store,
+            observability_store=observability_store,
+            start_path=start_path,
+        )
+    )
     specs.extend(
         recovery_tool_specs(
             app_store=app_store,

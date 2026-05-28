@@ -26,7 +26,7 @@ def compile_node(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
         timestamp = now_timestamp()
         input_hash = compile_input_hash(node, refs, relationships, data_root=data_root)
         run = _create_compile_run(db, node_id=node_id, input_hash=input_hash, timestamp=timestamp)
-        sync_sources(db, data_root=data_root, node_id=node_id, refs=refs, timestamp=timestamp)
+        sources = sync_sources(db, data_root=data_root, node_id=node_id, refs=refs, timestamp=timestamp)
         page = _upsert_wiki_page(
             db,
             node=node,
@@ -35,7 +35,7 @@ def compile_node(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
             compile_run_id=run["id"],
             timestamp=timestamp,
         )
-        _replace_claims(db, page_id=page["id"], node=node, timestamp=timestamp)
+        _replace_claims(db, page_id=page["id"], node=node, sources=sources, timestamp=timestamp)
         db.execute(
             "UPDATE compile_runs SET status = 'completed', completed_at = ? WHERE id = ?",
             (timestamp, run["id"]),
@@ -149,6 +149,7 @@ def _replace_claims(
     *,
     page_id: str,
     node: sqlite3.Row,
+    sources: list[dict[str, Any]],
     timestamp: str,
 ) -> None:
     old_claim_ids = [row["id"] for row in db.execute("SELECT id FROM claims WHERE wiki_page_id = ?", (page_id,))]
@@ -175,3 +176,63 @@ def _replace_claims(
             """,
             claim,
         )
+        claim_sources = citation_sources(db, sources)
+        for source, version in claim_sources:
+            quote = citation_quote(claim_text, str(version["extracted_text"] or ""))
+            metadata = dict(source.get("metadata") or {})
+            version_metadata = dict(version.get("metadata") or {})
+            metadata["source_version"] = version_metadata.get("source_version") or metadata.get("source_version") or version["version_hash"]
+            db.execute(
+                """
+                INSERT INTO citations(
+                  id, claim_id, source_id, source_version_id, external_ref_id, locator, quote, created_at, metadata_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    new_id("cite"),
+                    claim["id"],
+                    source["id"],
+                    version["id"],
+                    source.get("external_ref_id"),
+                    citation_locator(source, version),
+                    quote,
+                    timestamp,
+                    json_text(metadata),
+                ),
+            )
+
+
+def citation_sources(db: sqlite3.Connection, sources: list[dict[str, Any]]) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    claim_sources: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    for source in sources:
+        version_id = str(source.get("source_version_id") or "")
+        if not version_id:
+            continue
+        version_row = db.execute("SELECT * FROM source_versions WHERE id = ?", (version_id,)).fetchone()
+        version = row_payload(version_row) or {}
+        if not str(version.get("extracted_text") or "").strip():
+            continue
+        claim_sources.append((source, version))
+    return claim_sources
+
+
+def citation_locator(source: dict[str, Any], version: dict[str, Any]) -> str:
+    metadata = dict(source.get("metadata") or {})
+    return str(
+        metadata.get("display_path")
+        or version.get("extracted_ref")
+        or source.get("workspace_relative_path")
+        or source.get("entity_id")
+        or source.get("uri")
+        or ""
+    )
+
+
+def citation_quote(claim_text: str, extracted_text: str) -> str:
+    normalized_claim = " ".join(claim_text.split()).lower()
+    for sentence in extracted_text.replace("\n", " ").split("."):
+        candidate = " ".join(sentence.split()).strip()
+        if candidate and (candidate.lower() in normalized_claim or normalized_claim in candidate.lower()):
+            return candidate[:500]
+    return " ".join(extracted_text.split())[:500]

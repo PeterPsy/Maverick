@@ -57,7 +57,14 @@ def _core_command_specs(
         )
     )
     specs.extend(runtime_provider_command_specs(provider_store=provider_store, runtime_store=runtime_store))
-    specs.extend(secret_command_specs(secret_store=secret_store, observability_store=observability_store))
+    specs.extend(
+        secret_command_specs(
+            app_store=app_store,
+            secret_store=secret_store,
+            observability_store=observability_store,
+            start_path=start_path,
+        )
+    )
     specs.extend(
         recovery_command_specs(
             app_store=app_store,

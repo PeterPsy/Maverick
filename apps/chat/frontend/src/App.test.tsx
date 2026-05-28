@@ -6,8 +6,19 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
-import { createThread, getAppDependencies, getSpeechCapabilities, listAgentCatalog, listApps, listProviders, listSkills } from "./api/client";
+import {
+  createThread,
+  getAgentDefinition,
+  getAppDependencies,
+  getSpeechCapabilities,
+  listAgentCatalog,
+  listApps,
+  listProviders,
+  listSkills,
+  previewAgentPrompt,
+} from "./api/client";
 import type { AgentTypeSummary, AppDependenciesPayload, ChatThread } from "./api/client";
+import { clearAgentRuntimeConfigCache } from "./hooks/useChatRuntimeControls";
 
 vi.mock("./hooks/useRuntimeEvents", () => ({
   useRuntimeEvents: vi.fn(),
@@ -149,6 +160,7 @@ function thread(threadId: string, runtimeSessionId: string, overrides: Partial<C
 
 beforeEach(() => {
   window.localStorage.clear();
+  clearAgentRuntimeConfigCache();
   vi.mocked(listProviders).mockResolvedValue({
     workspace_id: "default",
     active_provider: null,
@@ -170,6 +182,8 @@ beforeEach(() => {
     },
   });
   vi.mocked(listAgentCatalog).mockResolvedValue({ agent_types: [socialVideoAgent] });
+  vi.mocked(getAgentDefinition).mockResolvedValue({ exists: true, agent_definition: socialVideoAgent });
+  vi.mocked(previewAgentPrompt).mockResolvedValue({ rendered: "Agent prompt" });
 });
 
 afterEach(() => {
@@ -178,6 +192,7 @@ afterEach(() => {
   container?.remove();
   container = null;
   vi.clearAllMocks();
+  clearAgentRuntimeConfigCache();
   window.localStorage.clear();
 });
 
@@ -207,7 +222,56 @@ async function waitForAssertion(assertion: () => void) {
   throw lastError;
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
+}
+
 describe("App agent catalog dependency refresh", () => {
+  it("preloads selected agent runtime configuration before the first send", async () => {
+    const element = await renderApp();
+
+    await waitForAssertion(() => {
+      expect(element.textContent).toContain("How can I help today?");
+    });
+
+    await act(async () => {
+      (element.querySelector('[aria-label="Agent runner: Default Chat"]') as HTMLButtonElement | null)?.click();
+    });
+    await act(async () => {
+      (Array.from(element.querySelectorAll('[role="option"]')).find((option) =>
+        option.textContent?.includes("Social Video Content Strategist"),
+      ) as HTMLButtonElement | undefined)?.click();
+    });
+
+    await waitForAssertion(() => {
+      expect(getAgentDefinition).toHaveBeenCalledWith("agents", socialVideoAgent.id);
+      expect(previewAgentPrompt).toHaveBeenCalledWith("agents", socialVideoAgent.id);
+    });
+  });
+
+  it("does not block the initial composer on speech capability loading", async () => {
+    const capabilities = deferred<Awaited<ReturnType<typeof getSpeechCapabilities>>>();
+    vi.mocked(getSpeechCapabilities).mockReturnValue(capabilities.promise);
+
+    const element = await renderApp();
+
+    await waitForAssertion(() => {
+      expect(element.textContent).toContain("How can I help today?");
+    });
+    expect(getSpeechCapabilities).toHaveBeenCalled();
+
+    capabilities.resolve({ interfaces: {} });
+    await act(async () => {
+      await capabilities.promise;
+    });
+  });
+
   it("clears stale agent options when a dependency refresh cannot load the selected catalog", async () => {
     const element = await renderApp();
 

@@ -511,6 +511,19 @@ describe("ChatComposer reference search", () => {
     expect(getValue()).toBe("hello Maverick");
   });
 
+  it("keeps the caret visible after a long paste", async () => {
+    const { getValue } = await renderComposer();
+    await typeInEditor("start ");
+    const editor = editorElement();
+    Object.defineProperty(editor, "clientHeight", { configurable: true, value: 80 });
+    Object.defineProperty(editor, "scrollHeight", { configurable: true, value: 640 });
+
+    await pasteTextInEditor("longpaste".repeat(140));
+
+    expect(getValue()).toBe(`start ${"longpaste".repeat(140)}`);
+    expect(editor.scrollTop).toBe(640);
+  });
+
   it("keeps dictation disabled when no transcription provider is available", async () => {
     const { element } = await renderComposer();
 

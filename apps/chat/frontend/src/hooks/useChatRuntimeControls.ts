@@ -1,4 +1,4 @@
-import { Dispatch, SetStateAction } from "react";
+import { Dispatch, SetStateAction, useEffect } from "react";
 import {
   ChatThread,
   RuntimeEvent,
@@ -18,6 +18,7 @@ type UseChatRuntimeControlsParams = {
   agentCatalogAppId: string;
   canStopTurn: boolean;
   selectedAgentTypeId: string;
+  workspaceId: string;
   setActiveProviderId: (providerId: string) => void;
   setActiveTurn: Dispatch<SetStateAction<RuntimeTurn | null>>;
   setError: Dispatch<SetStateAction<string | null>>;
@@ -26,12 +27,64 @@ type UseChatRuntimeControlsParams = {
   setComposerError: Dispatch<SetStateAction<string | null>>;
 };
 
+type CachedAgentRuntimeConfig = Omit<AgentRuntimeConfig, "system_prompt"> & {
+  renderedPrompt: string;
+};
+
+const agentRuntimeConfigCache = new Map<string, Promise<CachedAgentRuntimeConfig>>();
+
+export function clearAgentRuntimeConfigCache(): void {
+  agentRuntimeConfigCache.clear();
+}
+
+function agentRuntimeConfigCacheKey(workspaceId: string, agentCatalogAppId: string, agentTypeId: string): string {
+  return `${workspaceId}:${agentCatalogAppId}:${agentTypeId}`;
+}
+
+function loadAgentRuntimeConfig(workspaceId: string, agentCatalogAppId: string, agentTypeId: string): Promise<CachedAgentRuntimeConfig> {
+  const key = agentRuntimeConfigCacheKey(workspaceId, agentCatalogAppId, agentTypeId);
+  const cached = agentRuntimeConfigCache.get(key);
+  if (cached) {
+    return cached;
+  }
+  const pending = Promise.all([getAgentDefinition(agentCatalogAppId, agentTypeId), previewAgentPrompt(agentCatalogAppId, agentTypeId)])
+    .then(([definitionPayload, promptPayload]) => {
+      const definition = definitionPayload.agent_definition;
+      if (!definitionPayload.exists || !definition) {
+        throw new Error("Selected agent is no longer available.");
+      }
+      return {
+        agent_id: definition.name,
+        agent_role_id: definition.role_id,
+        agent_type_id: definition.id,
+        renderedPrompt: promptPayload.rendered || "",
+        skill_ids: definition.skill_ids || [],
+        source_app_id: agentCatalogAppId,
+        title: definition.name,
+      };
+    })
+    .catch((error) => {
+      agentRuntimeConfigCache.delete(key);
+      throw error;
+    });
+  agentRuntimeConfigCache.set(key, pending);
+  return pending;
+}
+
+function preloadAgentRuntimeConfig(workspaceId: string, agentCatalogAppId: string, agentTypeId: string): void {
+  if (!workspaceId || !agentCatalogAppId || !agentTypeId) {
+    return;
+  }
+  void loadAgentRuntimeConfig(workspaceId, agentCatalogAppId, agentTypeId).catch(() => undefined);
+}
+
 export function useChatRuntimeControls({
   activeThread,
   activeTurn,
   agentCatalogAppId,
   canStopTurn,
   selectedAgentTypeId,
+  workspaceId,
   setActiveProviderId,
   setActiveTurn,
   setError,
@@ -39,6 +92,10 @@ export function useChatRuntimeControls({
   setSelectedAgentTypeId,
   setComposerError,
 }: UseChatRuntimeControlsParams) {
+  useEffect(() => {
+    preloadAgentRuntimeConfig(workspaceId, agentCatalogAppId, selectedAgentTypeId);
+  }, [agentCatalogAppId, selectedAgentTypeId, workspaceId]);
+
   async function handleSelectProvider(providerId: string) {
     setActiveProviderId(providerId);
     try {
@@ -56,28 +113,22 @@ export function useChatRuntimeControls({
     }
     setSelectedAgentTypeId(agentTypeId);
     setComposerError(null);
+    preloadAgentRuntimeConfig(workspaceId, agentCatalogAppId, agentTypeId);
   }
 
   async function selectedAgentRuntimeConfig(activeApp: ActiveAppContext | null): Promise<AgentRuntimeConfig | null> {
-    if (!selectedAgentTypeId || !agentCatalogAppId) {
+    if (!selectedAgentTypeId || !agentCatalogAppId || !workspaceId) {
       return null;
     }
-    const [definitionPayload, promptPayload] = await Promise.all([
-      getAgentDefinition(agentCatalogAppId, selectedAgentTypeId),
-      previewAgentPrompt(agentCatalogAppId, selectedAgentTypeId),
-    ]);
-    const definition = definitionPayload.agent_definition;
-    if (!definitionPayload.exists || !definition) {
-      throw new Error("Selected agent is no longer available.");
-    }
+    const config = await loadAgentRuntimeConfig(workspaceId, agentCatalogAppId, selectedAgentTypeId);
     return {
-      agent_id: definition.name,
-      agent_role_id: definition.role_id,
-      agent_type_id: definition.id,
-      skill_ids: definition.skill_ids || [],
-      source_app_id: agentCatalogAppId,
-      system_prompt: promptWithActiveAppContext(promptPayload.rendered || "", activeApp),
-      title: definition.name,
+      agent_id: config.agent_id,
+      agent_role_id: config.agent_role_id,
+      agent_type_id: config.agent_type_id,
+      skill_ids: config.skill_ids,
+      source_app_id: config.source_app_id,
+      system_prompt: promptWithActiveAppContext(config.renderedPrompt, activeApp),
+      title: config.title,
     };
   }
 

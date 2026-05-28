@@ -20,6 +20,8 @@ function defaultIcon(app: AppRegistryItem): string {
     agents: "smart_toy",
     "app-store": "storefront",
     "base-shell": "dashboard",
+    browser: "language",
+    calendar: "calendar_month",
     chat: "forum",
     checklist: "checklist",
     crm: "contacts",
@@ -27,12 +29,15 @@ function defaultIcon(app: AppRegistryItem): string {
     "docs-studio": "description",
     "document-generator": "description",
     "dynamic-views": "dashboard_customize",
+    mail: "mail",
     storage: "cloud",
     "gmail-app": "mail",
     "maverick-monitor": "monitor_heart",
     memory: "database",
     skills: "school",
+    speech: "record_voice_over",
     "settings": "admin_panel_settings",
+    vault: "key",
   };
   if (iconByAppId[app.app_id]) {
     return iconByAppId[app.app_id];

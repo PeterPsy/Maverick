@@ -22,13 +22,14 @@ def core_cli_command(
     description: str,
     owner_id: str,
     invocation_policy: CliInvocationPolicy,
+    argument_schema: dict[str, Any] | None = None,
 ) -> CliCommandDefinition:
     """Build one core-owned CLI command definition."""
     return CliCommandDefinition(
         command_id=command_id,
         path_segments=path_segments,
         description=description,
-        argument_schema={"type": "object"},
+        argument_schema=argument_schema or {"type": "object"},
         owner_kind="core",
         owner_id=owner_id,
         workspace_id=None,

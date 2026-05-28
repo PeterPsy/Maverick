@@ -536,6 +536,94 @@ class TestMcpCliSurfaces(SurfaceTestBase):
 
         self.assertEqual(cli_result["app_secrets"], {"api-token": "grant-secret"})
 
+    def test_app_cli_and_mcp_secret_selectors_scope_resource_grants(self) -> None:
+        store = self.make_app_store()
+        workspace_store = self.make_workspace_store()
+        secret_store = SecretDocumentStore(
+            SecretCollections(
+                secrets=FakeCollection(),
+                values=FakeCollection(),
+                bindings=FakeCollection(),
+                grants=FakeCollection(),
+            ),
+            key_loader=lambda: b"test-key",
+        )
+        ensure_default_workspace_record(workspace_store)
+        repo_root = self.make_repo_root()
+        app_root = repo_root / "apps" / "checklists"
+        self.write_app_contract(app_root, secret_read=["api-token"])
+        (app_root / "cli").mkdir(parents=True, exist_ok=True)
+        (app_root / "mcp").mkdir(parents=True, exist_ok=True)
+        selector = {
+            "required_secrets": ["api-token"],
+            "resource_type": "mail_connection",
+            "resource_id_argument": "connection_id",
+        }
+        (app_root / "cli" / "command_schemas.json").write_text(
+            json.dumps({"commands": {"checklists": {"secret_selectors": [selector]}}}),
+            encoding="utf-8",
+        )
+        (app_root / "mcp" / "tool_schemas.json").write_text(
+            json.dumps({"tools": {"checklists.list": {"secret_selectors": [selector]}}}),
+            encoding="utf-8",
+        )
+        source = register_app_source_from_contract(store, source_kind="platform", source_path=str(app_root))
+        install_store_app(store, source_id=source.source_id, workspace_id="default", start_path=repo_root)
+        first = create_platform_secret(secret_store, label="First", raw_value="first-secret", alias="first-secret")
+        second = create_platform_secret(secret_store, label="Second", raw_value="second-secret", alias="second-secret")
+        grant_app_secret_use(
+            secret_store,
+            workspace_id="default",
+            app_id="checklists",
+            logical_name="api-token",
+            secret_ref=build_secret_ref(alias=first.alias),
+            actions=["app.backend"],
+            target_patterns=["maverick://app.backend/*"],
+            resource_type="mail_connection",
+            resource_id="conn_1",
+        )
+        grant_app_secret_use(
+            secret_store,
+            workspace_id="default",
+            app_id="checklists",
+            logical_name="api-token",
+            secret_ref=build_secret_ref(alias=second.alias),
+            actions=["app.backend"],
+            target_patterns=["maverick://app.backend/*"],
+            resource_type="mail_connection",
+            resource_id="conn_2",
+        )
+        context = CliInvocationContext(
+            caller_kind="sandbox_agent",
+            workspace_id="default",
+            agent_id="agent-1",
+            effective_mode="sandbox",
+        )
+
+        cli_result = run_core_cli_command(
+            command_id="app.checklists.checklists",
+            context=context,
+            app_store=store,
+            workspace_store=workspace_store,
+            secret_store=secret_store,
+            workspace_id="default",
+            start_path=repo_root,
+            arguments={"connection_id": "conn_2"},
+        )
+        mcp_result = call_mcp_tool(
+            tool_name="app.checklists.checklists.list",
+            context=McpInvocationContext(**context.__dict__),
+            app_store=store,
+            workspace_store=workspace_store,
+            secret_store=secret_store,
+            workspace_id="default",
+            start_path=repo_root,
+            arguments={"connection_id": "conn_1"},
+        )
+
+        self.assertEqual(cli_result["app_secrets"], {"api-token": "second-secret"})
+        self.assertEqual(mcp_result["app_secrets"], {"api-token": "first-secret"})
+
     def test_core_cli_commands_return_operational_data_when_stores_are_available(self) -> None:
         workspace_store = self.make_workspace_store()
         provider_store = self.make_provider_store()

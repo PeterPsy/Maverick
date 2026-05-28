@@ -200,8 +200,9 @@ class AppEntrypoints:
 
 @dataclass(frozen=True)
 class AppHookTimeouts:
-    """Timeout values for lifecycle and health operations."""
+    """Timeout values for app-owned subprocess entrypoints."""
 
+    backend_seconds: int
     install_seconds: int
     upgrade_seconds: int
     migrate_seconds: int

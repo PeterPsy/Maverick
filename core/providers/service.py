@@ -311,6 +311,7 @@ def build_runtime_backend_launch_spec(
                 allow_unbound_secret_refs=True,
             ),
             secret_ref=binding.secret_ref,
+            observability_store=observability_store,
         )
         credential_binding_id = binding.binding_id
         resolved_secret_refs.append(lease.secret_ref)

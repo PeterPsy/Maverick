@@ -159,6 +159,7 @@ class ObservabilityTestBase(unittest.TestCase):
                 secrets=FakeCollection(),
                 values=FakeCollection(),
                 bindings=FakeCollection(),
+                grants=FakeCollection(),
             )
         )
 

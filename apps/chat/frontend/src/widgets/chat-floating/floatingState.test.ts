@@ -89,6 +89,14 @@ describe("floating chat widget state", () => {
     ]);
   });
 
+  it("clears stale draft state when the selected thread exists", () => {
+    const windows = [windowItem({ id: "window-a", draftProjectId: "project-1", isDraft: true, threadId: "selected-thread" })];
+
+    expect(reconcileWindowsWithThreads(windows, [{ thread_id: "selected-thread" }])).toEqual([
+      windowItem({ id: "window-a", draftProjectId: null, isDraft: false, threadId: "selected-thread" }),
+    ]);
+  });
+
   it("updates only the scoped draft window after a chat is created", () => {
     const windows = [
       windowItem({ id: "window-a", isDraft: true, threadId: "" }),

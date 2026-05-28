@@ -183,6 +183,31 @@ export function setComposerCaret(root: HTMLElement, offset: number): void {
   selection?.addRange(range);
 }
 
+export function scrollComposerCaretIntoView(root: HTMLElement): void {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0 || !selection.anchorNode || !root.contains(selection.anchorNode)) {
+    return;
+  }
+  const range = selection.getRangeAt(0);
+  const rangeRect = range.getClientRects()[0] || range.getBoundingClientRect();
+  const hasRangeRect = rangeRect && (rangeRect.top || rangeRect.bottom || rangeRect.height);
+  if (!hasRangeRect) {
+    if (composerCaretOffset(root) >= composerText(root).length) {
+      root.scrollTop = root.scrollHeight;
+    }
+    return;
+  }
+  const rootRect = root.getBoundingClientRect();
+  const padding = 8;
+  if (rangeRect.top < rootRect.top + padding) {
+    root.scrollTop = Math.max(0, root.scrollTop - (rootRect.top + padding - rangeRect.top));
+    return;
+  }
+  if (rangeRect.bottom > rootRect.bottom - padding) {
+    root.scrollTop += rangeRect.bottom - (rootRect.bottom - padding);
+  }
+}
+
 function appendTextSegment(fragment: DocumentFragment, text: string): void {
   const parts = text.split("\n");
   parts.forEach((part, index) => {

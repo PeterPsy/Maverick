@@ -1947,6 +1947,8 @@ maverick app <app_id> mcp call <tool_name> ...
 The wrapper resolves the current workspace, checks the enabled app registry, applies CLI or MCP invocation policy, resolves the app-owned data root when applicable, and then executes the declared entrypoint through the platform host.
 Sandboxed workspace agents therefore do not need to know where an app source artifact lives outside the workspace.
 
+App-owned CLI and MCP invocation policy starts from the app contract. Apps whose `compatibility.workspace_modes` exclude `sandbox` and include only `full-access` are discovered with `sandbox_agent_allowed: false` and `requires_full_access: true` for executable app surfaces. App-owned policy sidecars may tighten that floor for individual CLI commands, but they must not make a full-access-only app surface appear sandbox-safe.
+
 When app-owned MCP tools are surfaced through the platform, the host may apply namespacing to avoid collisions with core-owned assets or assets from other apps.
 
 Apps may also provide app-owned discovery descriptor sidecars beside their executable entrypoints:

@@ -32,13 +32,14 @@ HttpTransport = Callable[[str, str, dict[str, Any]], tuple[int, dict[str, Any]]]
 
 
 class CalendarOAuthError(ValueError):
-    """OAuth error with a stable response code."""
+    """OAuth error with a stable response code and optional structured context."""
 
-    def __init__(self, code: str, detail: str, *, status_code: int = 400) -> None:
+    def __init__(self, code: str, detail: str, *, status_code: int = 400, extra: dict[str, Any] | None = None) -> None:
         super().__init__(detail)
         self.code = code
         self.detail = detail
         self.status_code = status_code
+        self.extra = extra or {}
 
 
 def provider_status(

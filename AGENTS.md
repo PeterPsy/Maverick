@@ -30,6 +30,51 @@ If code, structure, and documentation disagree, fix the disagreement immediately
 
 Do not leave the repository in a state where the implementation has moved but the documentation still describes an older model.
 
+## App Source Priority
+
+When a task mentions an app id, first resolve app source from the Maverick root
+repository:
+
+```text
+/home/ubuntu/projects/maverick-v3/apps/<app_id>
+```
+
+Built-in and general apps under root `apps/` are the primary source of truth for
+code work. This includes apps such as `base-shell`, `chat`, `storage`, `agents`,
+`skills`, `app-store`, and other platform-installed apps.
+
+Only fall back to workspace-local app source when the app does not exist under
+root `apps/`, or when the user explicitly says the task is about a
+workspace-local app/fork:
+
+```text
+/home/ubuntu/projects/maverick-v3/workspaces/<workspace_id>/apps/<app_id>
+```
+
+Do not start app code discovery inside `workspaces/default/apps` for built-in or
+general app work. Workspace-local apps are secondary. Workspace `data/<app_id>/`
+is runtime data, not source.
+
+Use bounded checks instead of broad parent-directory searches:
+
+```bash
+test -d apps/<app_id> && printf '%s\n' "apps/<app_id>"
+test -d workspaces/default/apps/<app_id> && printf '%s\n' "workspaces/default/apps/<app_id>"
+```
+
+At the start of app code work, prefer this bounded orientation sequence:
+
+```bash
+pwd
+git status -sb
+test -f AGENTS.md && sed -n '1,220p' AGENTS.md
+test -d apps/<app_id> && find apps/<app_id> -maxdepth 2 -type f | sort | sed -n '1,120p'
+```
+
+Do not run broad discovery from the repository parent, such as `find .. -name
+AGENTS.md`, because it scans unrelated projects and may fail on directories
+outside Maverick.
+
 ## Core Development Principles
 
 - treat `maverick` as a clean-slate codebase

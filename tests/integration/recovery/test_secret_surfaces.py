@@ -6,17 +6,73 @@ import json
 from unittest.mock import patch
 
 from core.cli.errors import CliInvocationNotAllowedError
+from core.cli.service import list_core_cli_commands
 from core.mcp.errors import McpInvocationNotAllowedError
+from core.mcp.service import list_mcp_tools
+from core.secrets.app_delivery import app_secret_target
+from core.secrets.errors import SecretPolicyError
 from core.secrets.service import grant_app_secret_use
 from core.workspaces.service import ensure_workspace_membership
+from tests.support.repo import write_synthetic_platform_app
 from tests.support.observability import *
 
 
 class TestSecretRecoverySurfaces(ObservabilityTestBase):
     """Focused test slice."""
 
+    def enable_secret_consumer_app(
+        self,
+        repo_root: Path,
+        app_store: AppDocumentStore,
+        *,
+        app_id: str = "browser",
+        secret_read: list[str],
+        backend: bool = True,
+        cli_commands: list[str] | None = None,
+        mcp_tools: list[str] | None = None,
+    ) -> Path:
+        app_root = write_synthetic_platform_app(
+            repo_root,
+            app_id=app_id,
+            backend=backend,
+            cli_commands=cli_commands,
+            mcp_tools=mcp_tools,
+        )
+        contract_path = app_root / "app_contract.json"
+        contract_payload = json.loads(contract_path.read_text(encoding="utf-8"))
+        contract_payload["permissions"]["secrets"]["read"] = secret_read
+        if cli_commands:
+            (app_root / "cli").mkdir(parents=True, exist_ok=True)
+            (app_root / "cli" / "app_cli.py").write_text(
+                "import json, sys\njson.dump({'ok': True}, sys.stdout)\n",
+                encoding="utf-8",
+            )
+            contract_payload["entrypoints"]["cli"] = "cli/app_cli.py"
+        if mcp_tools:
+            (app_root / "mcp").mkdir(parents=True, exist_ok=True)
+            (app_root / "mcp" / "server.py").write_text(
+                "import json, sys\njson.dump({'ok': True}, sys.stdout)\n",
+                encoding="utf-8",
+            )
+            contract_payload["entrypoints"]["mcp"] = "mcp/server.py"
+        contract_path.write_text(json.dumps(contract_payload, indent=2), encoding="utf-8")
+        source = register_app_source_from_contract(
+            app_store,
+            source_kind="platform",
+            source_path=str(app_root),
+            source_id=f"platform:{app_id}",
+        )
+        install_store_app(
+            app_store,
+            source_id=source.source_id,
+            workspace_id="default",
+            enabled=True,
+            start_path=repo_root,
+        )
+        return app_root
+
     def assert_payload_has_no_secret_material(self, payload: object, *raw_values: str) -> None:
-        encoded = json.dumps(payload, sort_keys=True)
+        encoded = json.dumps(payload, sort_keys=True, default=str)
         for raw_value in raw_values:
             self.assertNotIn(raw_value, encoded)
         if isinstance(payload, dict):
@@ -262,6 +318,371 @@ class TestSecretRecoverySurfaces(ObservabilityTestBase):
         self.assertEqual({item.runtime_session_id for item in cli_audit}, {"sess-cli"})
         self.assertEqual({item.payload["actor_agent_id"] for item in cli_audit}, {"agent-cli"})
         self.assertEqual({item.payload["actor_user_id"] for item in cli_audit}, {"admin-user"})
+
+    def test_cli_and_mcp_secret_grant_admin_surfaces_validate_audit_and_redact(self) -> None:
+        repo_root = self.make_repo_root()
+        app_store = self.make_app_store()
+        secret_store = self.make_secret_store()
+        observability_store = self.make_observability_store()
+        app_root = self.enable_secret_consumer_app(
+            repo_root,
+            app_store,
+            secret_read=["api-token", "webhook-token"],
+            backend=True,
+            mcp_tools=["send"],
+        )
+        (app_root / "mcp").mkdir(parents=True, exist_ok=True)
+        (app_root / "mcp" / "tool_schemas.json").write_text(
+            json.dumps({"tools": {"send": {"required_secrets": ["webhook-token"]}}}),
+            encoding="utf-8",
+        )
+        secret = create_platform_secret(
+            secret_store,
+            label="Backend Token",
+            raw_value="grant-secret",
+            alias="backend-token",
+        )
+        cli_context = CliInvocationContext(
+            caller_kind="full_access_agent",
+            workspace_id="default",
+            agent_id="agent-cli",
+            effective_mode="full-access",
+            platform_role="admin",
+            user_id="admin-user",
+            runtime_session_id="sess-cli",
+        )
+        sandbox_cli_context = CliInvocationContext(
+            caller_kind="sandbox_agent",
+            workspace_id="default",
+            agent_id="agent-sandbox",
+            effective_mode="sandbox",
+        )
+        mcp_context = McpInvocationContext(
+            caller_kind="operator",
+            workspace_id="default",
+            agent_id=None,
+            effective_mode="full-access",
+        )
+        sandbox_mcp_context = McpInvocationContext(
+            caller_kind="sandbox_agent",
+            workspace_id="default",
+            agent_id="agent-sandbox",
+            effective_mode="sandbox",
+        )
+
+        command_by_id = {
+            command.command_id: command
+            for command in list_core_cli_commands(
+                app_store=app_store,
+                secret_store=secret_store,
+                observability_store=observability_store,
+                workspace_id="default",
+                start_path=repo_root,
+            )
+        }
+        tool_by_name = {
+            tool.tool_name: tool
+            for tool in list_mcp_tools(
+                app_store=app_store,
+                secret_store=secret_store,
+                observability_store=observability_store,
+                workspace_id="default",
+                start_path=repo_root,
+            )
+        }
+        self.assertIn("core.secret_grants.create", command_by_id)
+        self.assertIn("core.secret_grants.create", tool_by_name)
+        self.assertEqual(
+            command_by_id["core.secret_grants.create"].argument_schema["required"],
+            ["app_id", "logical_name", "actions"],
+        )
+        self.assertEqual(
+            tool_by_name["core.secret_grants.create"].input_schema["required"],
+            ["app_id", "logical_name", "actions"],
+        )
+
+        sandbox_list = run_core_cli_command(
+            command_id="core.secret_grants.list",
+            context=sandbox_cli_context,
+            app_store=app_store,
+            secret_store=secret_store,
+            observability_store=observability_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+        with self.assertRaises(CliInvocationNotAllowedError):
+            run_core_cli_command(
+                command_id="core.secret_grants.create",
+                context=sandbox_cli_context,
+                arguments={
+                    "app_id": "browser",
+                    "logical_name": "api-token",
+                    "secret_id": secret.secret_id,
+                    "actions": ["app.backend"],
+                    "target_patterns": [app_secret_target("backend")],
+                },
+                app_store=app_store,
+                secret_store=secret_store,
+                observability_store=observability_store,
+                workspace_id="default",
+                start_path=repo_root,
+            )
+        with self.assertRaises(McpInvocationNotAllowedError):
+            call_mcp_tool(
+                tool_name="core.secret_grants.create",
+                context=sandbox_mcp_context,
+                arguments={
+                    "app_id": "browser",
+                    "logical_name": "api-token",
+                    "secret_id": secret.secret_id,
+                    "actions": ["app.backend"],
+                    "target_patterns": [app_secret_target("backend")],
+                },
+                app_store=app_store,
+                secret_store=secret_store,
+                observability_store=observability_store,
+                workspace_id="default",
+                start_path=repo_root,
+            )
+
+        cli_create = run_core_cli_command(
+            command_id="core.secret_grants.create",
+            context=cli_context,
+            arguments={
+                "app_id": "browser",
+                "logical_name": "api-token",
+                "secret_id": secret.secret_id,
+                "actions": ["app.backend"],
+                "target_patterns": [app_secret_target("backend")],
+            },
+            app_store=app_store,
+            secret_store=secret_store,
+            observability_store=observability_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+        with self.assertRaises(SecretPolicyError):
+            run_core_cli_command(
+                command_id="core.secret_grants.create",
+                context=cli_context,
+                arguments={
+                    "app_id": "browser",
+                    "logical_name": "api-token",
+                    "secret_id": secret.secret_id,
+                    "actions": ["app.backend"],
+                    "target_patterns": [app_secret_target("backend")],
+                },
+                app_store=app_store,
+                secret_store=secret_store,
+                observability_store=observability_store,
+                workspace_id="default",
+                start_path=repo_root,
+            )
+        mcp_create = call_mcp_tool(
+            tool_name="core.secret_grants.create",
+            context=mcp_context,
+            arguments={
+                "app_id": "browser",
+                "logical_name": "webhook-token",
+                "secret_id": secret.secret_id,
+                "actions": ["app.backend"],
+                "target_patterns": [app_secret_target("mcp/send")],
+            },
+            app_store=app_store,
+            secret_store=secret_store,
+            observability_store=observability_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+        mcp_list = call_mcp_tool(
+            tool_name="core.secret_grants.list",
+            context=sandbox_mcp_context,
+            app_store=app_store,
+            secret_store=secret_store,
+            observability_store=observability_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+        targets = run_core_cli_command(
+            command_id="core.secret_grant_targets.list",
+            context=sandbox_cli_context,
+            app_store=app_store,
+            secret_store=secret_store,
+            observability_store=observability_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+        recommendations = call_mcp_tool(
+            tool_name="core.secret_grant_targets.recommend",
+            context=sandbox_mcp_context,
+            app_store=app_store,
+            secret_store=secret_store,
+            observability_store=observability_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+        cli_revoke = run_core_cli_command(
+            command_id="core.secret_grants.revoke",
+            context=cli_context,
+            arguments={"grant_id": cli_create["grant"]["grant_id"]},
+            app_store=app_store,
+            secret_store=secret_store,
+            observability_store=observability_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+        mcp_revoke = call_mcp_tool(
+            tool_name="core.secret_grants.revoke",
+            context=mcp_context,
+            arguments={"grant_id": mcp_create["grant"]["grant_id"]},
+            app_store=app_store,
+            secret_store=secret_store,
+            observability_store=observability_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+        audit = run_core_cli_command(
+            command_id="core.secret_audit.list",
+            context=sandbox_cli_context,
+            app_store=app_store,
+            secret_store=secret_store,
+            observability_store=observability_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+
+        self.assertEqual(sandbox_list["items"], [])
+        self.assertTrue(cli_create["created"])
+        self.assertTrue(mcp_create["created"])
+        self.assertEqual(
+            {item["grant_id"] for item in mcp_list["items"]},
+            {cli_create["grant"]["grant_id"], mcp_create["grant"]["grant_id"]},
+        )
+        self.assertTrue(cli_revoke["revoked"])
+        self.assertTrue(mcp_revoke["revoked"])
+        self.assertTrue(any(item["app_id"] == "browser" for item in targets["items"]))
+        self.assertTrue(
+            any(item["recommended_grant"]["actions"] == ["app.backend"] for item in recommendations["items"])
+        )
+        self.assertEqual(
+            [item.action for item in observability_store.list_audit(workspace_id="default")],
+            [
+                "core.secrets.grant.create",
+                "core.secrets.grant.create",
+                "core.secrets.grant.revoke",
+                "core.secrets.grant.revoke",
+            ],
+        )
+        self.assertEqual(len(audit["items"]), 4)
+        self.assert_payload_has_no_secret_material(
+            [cli_create, mcp_create, mcp_list, targets, recommendations, cli_revoke, mcp_revoke, audit],
+            "grant-secret",
+        )
+
+    def test_cli_secret_grant_resource_scope_matches_app_consumers(self) -> None:
+        repo_root = self.make_repo_root()
+        app_store = self.make_app_store()
+        secret_store = self.make_secret_store()
+        observability_store = self.make_observability_store()
+        app_root = self.enable_secret_consumer_app(
+            repo_root,
+            app_store,
+            app_id="mail",
+            secret_read=["refresh-token"],
+            backend=False,
+            cli_commands=["sync"],
+        )
+        (app_root / "cli").mkdir(parents=True, exist_ok=True)
+        (app_root / "cli" / "command_schemas.json").write_text(
+            json.dumps(
+                {
+                    "commands": {
+                        "sync": {
+                            "secret_selectors": [
+                                {
+                                    "required_secrets": ["refresh-token"],
+                                    "resource_type": "mail_connection",
+                                    "resource_lookup": {"kind": "connection_from_arguments"},
+                                }
+                            ]
+                        }
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        secret = create_platform_secret(secret_store, label="Refresh Token", raw_value="refresh-secret")
+        cli_context = CliInvocationContext(
+            caller_kind="full_access_agent",
+            workspace_id="default",
+            agent_id="agent-cli",
+            effective_mode="full-access",
+            platform_role="admin",
+            user_id="admin-user",
+        )
+
+        with self.assertRaises(SecretPolicyError):
+            run_core_cli_command(
+                command_id="core.secret_grants.create",
+                context=cli_context,
+                arguments={
+                    "app_id": "mail",
+                    "logical_name": "refresh-token",
+                    "secret_id": secret.secret_id,
+                    "actions": ["app.backend"],
+                    "target_patterns": [app_secret_target("cli/sync")],
+                },
+                app_store=app_store,
+                secret_store=secret_store,
+                observability_store=observability_store,
+                workspace_id="default",
+                start_path=repo_root,
+            )
+        with self.assertRaises(SecretPolicyError):
+            run_core_cli_command(
+                command_id="core.secret_grants.create",
+                context=cli_context,
+                arguments={
+                    "app_id": "mail",
+                    "logical_name": "refresh-token",
+                    "secret_id": secret.secret_id,
+                    "actions": ["app.backend"],
+                    "target_patterns": [
+                        app_secret_target("cli/sync", resource_type="mail_connection", resource_id="conn-2")
+                    ],
+                    "resource_type": "mail_connection",
+                    "resource_id": "conn-1",
+                },
+                app_store=app_store,
+                secret_store=secret_store,
+                observability_store=observability_store,
+                workspace_id="default",
+                start_path=repo_root,
+            )
+        accepted = run_core_cli_command(
+            command_id="core.secret_grants.create",
+            context=cli_context,
+            arguments={
+                "app_id": "mail",
+                "logical_name": "refresh-token",
+                "secret_id": secret.secret_id,
+                "actions": ["app.backend"],
+                    "target_patterns": [
+                        app_secret_target("cli/sync", resource_type="mail_connection", resource_id="conn-1")
+                    ],
+                "resource_type": "mail_connection",
+                "resource_id": "conn-1",
+            },
+            app_store=app_store,
+            secret_store=secret_store,
+            observability_store=observability_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+
+        self.assertTrue(accepted["created"])
+        self.assertEqual(accepted["grant"]["resource_type"], "mail_connection")
+        self.assert_payload_has_no_secret_material(accepted, "refresh-secret")
 
     def test_cli_and_mcp_recovery_hooks_plan_and_inspect_without_main_backend_dependency(self) -> None:
         repo_root = self.make_repo_root()

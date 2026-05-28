@@ -58,6 +58,15 @@ For page inspection, prefer MCP tools in this order:
    when debugging page behavior.
 6. `browser_session_close` as soon as the task is complete.
 
+Minimal read-only flow:
+
+```bash
+maverick app browser mcp call browser_session_create --json --mode read_only
+maverick app browser mcp call browser_navigate --json --session-id <session_id> --url https://example.com/
+maverick app browser mcp call browser_snapshot --json --session-id <session_id>
+maverick app browser mcp call browser_session_close --json --session-id <session_id>
+```
+
 The broker serializes actions per `session_id`, so a `snapshot` or screenshot
 request waits behind an in-flight navigation instead of racing the page context.
 Still prefer issuing dependent actions in order and refresh snapshots after each
@@ -72,6 +81,11 @@ Interactive tools are restricted to Maverick development UI inspection:
 
 They require `mode: "maverick_dev_inspector"` and a policy-approved Maverick
 development target URL. Do not use these tools for arbitrary websites.
+
+For public web targets, Browser P0 is read-only: agents may navigate to explicit
+URLs and inspect snapshots, screenshots, console messages, network requests, and
+tabs, but they must not click, type, press keys, submit forms, or otherwise
+interact with arbitrary external sites through Browser.
 
 ## P0 Boundaries
 

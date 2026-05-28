@@ -22,7 +22,7 @@ APP_ROOT = Path(__file__).resolve().parents[1]
 BACKEND_ROOT = APP_ROOT / "backend"
 sys.path.insert(0, str(BACKEND_ROOT))
 
-from service import acceptance_smoke_payload, handle_action, mcp_result_for_tool
+from service import acceptance_smoke_payload, handle_action, mcp_result_for_tool, sync_state_after_broker_action
 from store import load_state, save_state
 
 
@@ -469,6 +469,58 @@ class BrowserAppTests(unittest.TestCase):
         self.assertTrue(close_result["closed"])
         self.assertEqual(state["sessions"], {})
         self.assertEqual([item["action"] for item in broker.actions], ["session.create", "session.close"])
+
+    def test_observation_result_after_close_does_not_recreate_session_record(self) -> None:
+        action_responses = {
+            "session.create": {"session_id": "stub-session"},
+            "session.close": {"session_id": "stub-session", "closed": True},
+        }
+        with broker_stub(action_responses) as broker:
+            with TemporaryDirectory() as temp_dir:
+                data_root = Path(temp_dir)
+                with patch.dict(
+                    "os.environ",
+                    {"MAVERICK_BROWSER_BROKER_URL": broker.url, "MAVERICK_BROWSER_BROKER_TOKEN": "test-token"},
+                ):
+                    handle_action(data_root, {"action": "session.create", "mode": "read_only"})
+                    handle_action(data_root, {"action": "session.close", "session_id": "stub-session"})
+                    sync_state_after_broker_action(
+                        data_root,
+                        "tabs",
+                        {"action": "tabs", "session_id": "stub-session"},
+                        {"sessions": []},
+                        status_code=200,
+                        workspace_id="default",
+                        mode="read_only",
+                    )
+                state = load_state(str(data_root))
+
+        self.assertEqual(state["sessions"], {})
+
+    def test_unknown_session_close_removes_stale_local_session_record(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir)
+            sync_state_after_broker_action(
+                data_root,
+                "session.create",
+                {"action": "session.create", "mode": "read_only"},
+                {"session_id": "stub-session"},
+                status_code=201,
+                workspace_id="default",
+                mode="read_only",
+            )
+            sync_state_after_broker_action(
+                data_root,
+                "session.close",
+                {"action": "session.close", "session_id": "stub-session"},
+                {"error": "unknown_session"},
+                status_code=404,
+                workspace_id="default",
+                mode="read_only",
+            )
+            state = load_state(str(data_root))
+
+        self.assertEqual(state["sessions"], {})
 
     def test_trusted_policy_context_cannot_be_supplied_by_caller(self) -> None:
         with broker_stub({"session_id": "stub-session"}) as broker:

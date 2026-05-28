@@ -90,6 +90,24 @@ def upsert_session_record(data_root: str, session_id: str, updates: dict[str, An
     return state["sessions"][session_id]
 
 
+def update_session_record(data_root: str, session_id: str, updates: dict[str, Any]) -> dict[str, Any] | None:
+    def updater(state: dict[str, Any]) -> dict[str, Any]:
+        sessions = state.get("sessions")
+        session_records = sessions if isinstance(sessions, dict) else {}
+        existing = session_records.get(session_id)
+        if isinstance(existing, dict):
+            record = dict(existing)
+            record.update(updates)
+            record["updated_at"] = datetime.now(tz=UTC).isoformat()
+            session_records[session_id] = normalize_session_record(record)
+        state["sessions"] = session_records
+        return state
+
+    state = update_state(data_root, updater)
+    record = state["sessions"].get(session_id)
+    return record if isinstance(record, dict) else None
+
+
 def remove_session_record(data_root: str, session_id: str) -> None:
     def updater(state: dict[str, Any]) -> dict[str, Any]:
         sessions = state.get("sessions")

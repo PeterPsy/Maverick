@@ -14,7 +14,14 @@ from core.egress import evaluate_browser_egress_url, resolve_browser_egress_url_
 from broker_client import broker_health, call_broker_action
 from errors import BrowserBrokerUnavailableError, BrowserPolicyError, BrowserValidationError
 from models import AUDITED_ACTIONS, DEV_INSPECTOR_ACTIONS, MCP_TOOL_ACTIONS, READ_ONLY_ACTIONS
-from store import append_audit_record, load_state, remove_session_record, save_state, upsert_session_record
+from store import (
+    append_audit_record,
+    load_state,
+    remove_session_record,
+    save_state,
+    update_session_record,
+    upsert_session_record,
+)
 
 
 SESSION_ACTIONS = AUDITED_ACTIONS - {"session.create"}
@@ -637,17 +644,20 @@ def sync_state_after_broker_action(
     workspace_id: str | None,
     mode: str,
 ) -> None:
-    if status_code >= 400:
-        return
     session_id = session_id_from_payload(body, payload)
     if not session_id:
         return
     if action == "session.close":
-        remove_session_record(str(data_root), session_id)
+        if status_code < 400 or payload.get("error") == "unknown_session":
+            remove_session_record(str(data_root), session_id)
+        return
+    if status_code >= 400:
         return
     updates = state_updates_for_action(action, body, payload, workspace_id=workspace_id, mode=mode)
-    if updates:
+    if action == "session.create" and updates:
         upsert_session_record(str(data_root), session_id, updates)
+    elif updates:
+        update_session_record(str(data_root), session_id, updates)
 
 
 def state_updates_for_action(

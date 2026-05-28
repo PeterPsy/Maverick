@@ -83,8 +83,6 @@ DATA_CHANGED_RESOURCES = {
     "drive_connections.start_oauth": "drive-connections",
     "drive_connections.complete_oauth": "drive-connections",
     "drive_connections.disconnect": "drive-connections",
-    "drive_list_children": "files",
-    "drive_search": "files",
     "drive_sync": ["files", "drive-connections"],
     "drive_index": "files",
     "drive_write": "files",

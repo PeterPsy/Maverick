@@ -281,7 +281,11 @@ class GoogleDriveProvider:
         """Read bounded Drive file bytes; Google-native files are exported as readable text."""
         file_record = self._active_metadata(drive_file_id=drive_file_id, operation="drive_read")
         if _is_google_native(file_record["content_type"]):
-            return self.export(drive_file_id=drive_file_id, export_mime_type="readable_text", max_bytes=max_bytes)
+            return self.export(
+                drive_file_id=drive_file_id,
+                export_mime_type="readable_text",
+                max_bytes=min(max_bytes, GOOGLE_EXPORT_LIMIT_BYTES),
+            )
         self._require_download_capability(file_record, operation="drive_read")
         payload, cache_hit = self._download_binary(file_record=file_record, max_bytes=max_bytes, operation="drive_read")
         return _content_payload(file_record=file_record, payload=payload, content_type=file_record["content_type"], cache_hit=cache_hit)

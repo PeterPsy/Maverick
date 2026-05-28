@@ -18,7 +18,7 @@ sys.path.insert(0, str(BACKEND_ROOT))
 from drive_connection_store import replace_connection  # noqa: E402
 from google_drive_provider import GoogleDriveProvider, stable_storage_file_id  # noqa: E402
 from inventory import upsert_remote_file_records  # noqa: E402
-from service import handle_action, secret_lookup_for_drive_action  # noqa: E402
+from service import app_events_for_action, handle_action, secret_lookup_for_drive_action  # noqa: E402
 
 
 SECRETS = {
@@ -36,6 +36,15 @@ CONNECTION = {
 
 
 class GoogleDriveProviderTest(unittest.TestCase):
+    def test_drive_browse_actions_do_not_emit_catalog_invalidation_events(self) -> None:
+        self.assertEqual(app_events_for_action("drive_list_roots"), [])
+        self.assertEqual(app_events_for_action("drive_list_children"), [])
+        self.assertEqual(app_events_for_action("drive_search"), [])
+        self.assertEqual(app_events_for_action("drive_sync"), [
+            {"type": "maverick.app.data-changed", "resource": "files"},
+            {"type": "maverick.app.data-changed", "resource": "drive-connections"},
+        ])
+
     def test_list_roots_normalizes_my_drive_shared_with_me_and_shared_drives(self) -> None:
         transport = FakeDriveTransport(
             {
@@ -291,6 +300,46 @@ class GoogleDriveProviderTest(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(result["content_type"], "text/plain")
         self.assertEqual(result["content_base64"], "UmVhZGFibGUgcGxhbiB0ZXh0")
+        self.assertEqual(parse_qs(urlparse(export_call[1]).query)["mimeType"], ["text/plain"])
+
+    def test_drive_read_clamps_google_native_export_limit_for_ui_downloads(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data" / "storage"
+            replace_connection(data_root, {**CONNECTION, "created_at": "2026-05-28T00:00:00+00:00"})
+            transport = FakeDriveTransport(
+                {
+                    ("GET", "/drive/v3/files/doc-1"): {
+                        "id": "doc-1",
+                        "name": "Small plan",
+                        "mimeType": "application/vnd.google-apps.document",
+                        "modifiedTime": "2026-05-28T11:00:00Z",
+                        "version": "5",
+                        "capabilities": {"canDownload": True},
+                    },
+                    ("GET", "/drive/v3/files/doc-1/export"): b"short text",
+                }
+            )
+
+            status, result = handle_action(
+                data_root,
+                root / "storage" / "uploaded",
+                root / "storage" / "generated",
+                {
+                    "action": "drive_read",
+                    "connection_id": "drive_conn_abc",
+                    "drive_file_id": "doc-1",
+                    "max_bytes": 100 * 1024 * 1024,
+                    "_app_secrets": SECRETS,
+                },
+                drive_transport=transport,
+            )
+
+        export_call = [call for call in transport.calls if call[1].startswith("https://www.googleapis.com/drive/v3/files/doc-1/export")][0]
+        self.assertEqual(status, 200)
+        self.assertEqual(result["content_type"], "text/plain")
+        self.assertEqual(result["content_base64"], "c2hvcnQgdGV4dA==")
+        self.assertEqual(transport.calls[-1][2]["max_bytes"], 10 * 1024 * 1024)
         self.assertEqual(parse_qs(urlparse(export_call[1]).query)["mimeType"], ["text/plain"])
 
     def test_drive_index_returns_memory_source_payload_without_local_path_identity(self) -> None:

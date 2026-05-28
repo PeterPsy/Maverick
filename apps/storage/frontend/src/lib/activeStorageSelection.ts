@@ -45,15 +45,23 @@ export function notifyActiveStorageFolderSelection(folder: StorageFolder, option
     return false;
   }
   const origin = options.origin ?? (typeof window === 'undefined' ? '*' : window.location.origin);
+  const selection = folder.provider === 'google_drive'
+    ? {
+      provider: 'google_drive',
+      connection_id: folder.connection_id,
+      drive_file_id: folder.drive_file_id,
+      display_path: folder.display_path || folder.name
+    }
+    : {
+      folder_relative_path: folder.relative_path,
+      role: folder.role,
+      workspace_relative_path: folder.workspace_relative_path
+    };
   parentWindow.postMessage(
     {
       type: 'maverick.app.selection-changed',
       owner_app_id: 'storage',
-      selection: {
-        folder_relative_path: folder.relative_path,
-        role: folder.role,
-        workspace_relative_path: folder.workspace_relative_path
-      }
+      selection
     },
     origin
   );
@@ -65,6 +73,23 @@ export function storageSelectionFromMessage(message: ActiveStorageSelectionMessa
     return null;
   }
   const selection = message.selection;
+  if (selection?.provider === 'google_drive') {
+    const connectionId = typeof selection.connection_id === 'string' ? selection.connection_id.trim() : '';
+    if (!connectionId) {
+      return null;
+    }
+    return {
+      connectionId,
+      displayPath: typeof selection.display_path === 'string' ? selection.display_path.trim() : '',
+      driveFileId: typeof selection.drive_file_id === 'string' ? selection.drive_file_id.trim() : '',
+      fileId: '',
+      folderRelativePath: '',
+      provider: 'google_drive',
+      role: 'all',
+      targetType: 'folder',
+      workspaceRelativePath: ''
+    };
+  }
   const role = selectionRole(selection?.role);
   const hasFolderRelativePath = Boolean(selection && Object.prototype.hasOwnProperty.call(selection, 'folder_relative_path'));
   if (role && hasFolderRelativePath) {

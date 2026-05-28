@@ -557,6 +557,8 @@ function App() {
   async function loadDriveFolder(target: DriveFolderTarget, loading: CatalogRefreshLoading = 'foreground') {
     const requestId = ++catalogRefreshRequestRef.current;
     const transitionToken = loading === 'foreground' ? beginCatalogTransitionLoading(requestId) : null;
+    const previousDriveTarget = driveTargetRef.current;
+    driveTargetRef.current = target;
     try {
       const payload = target.driveFileId
         ? await listDriveChildren(target.connectionId, target.driveFileId, { limit: CATALOG_PAGE_LIMIT })
@@ -585,9 +587,11 @@ function App() {
       setCustomTitle('');
       setCustomFileIds([]);
       setCustomWorkspacePaths([]);
+      driveTargetRef.current = target;
       setDriveTarget(target);
       setError('');
     } catch (loadError) {
+      driveTargetRef.current = previousDriveTarget;
       setError(loadError instanceof Error ? loadError.message : 'Unable to load Google Drive folder.');
     } finally {
       if (transitionToken !== null) {
@@ -1528,10 +1532,10 @@ function App() {
     const payload = isDriveItem(file)
       ? await readDriveFile(file, DOWNLOAD_BYTES)
       : await readFile(file, DOWNLOAD_BYTES);
-    const url = URL.createObjectURL(decodeBase64(payload.content_base64, payload.file.content_type));
+    const url = URL.createObjectURL(decodeBase64(payload.content_base64, payload.content_type || payload.file.content_type));
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = payload.file.name;
+    anchor.download = payload.file_name || payload.file.name;
     anchor.click();
     URL.revokeObjectURL(url);
   }

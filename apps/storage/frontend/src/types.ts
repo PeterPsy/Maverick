@@ -168,6 +168,8 @@ export type CatalogPayload = {
 export type ReadFilePayload = {
   file: StorageFile;
   content_base64: string;
+  content_type?: string;
+  file_name?: string;
 };
 
 export type DeleteFilePayload = {

@@ -19,6 +19,7 @@ from store_files_paths import (
 from store_files_records import (
     create_folder_payload,
     delete_folder_payload,
+    file_info_by_id_payload,
     file_info_payload,
     preview_table_payload,
     preview_text_payload,
@@ -45,6 +46,7 @@ __all__ = [
     "create_folder_payload",
     "delete_file_payload",
     "delete_folder_payload",
+    "file_info_by_id_payload",
     "file_info_payload",
     "file_record",
     "list_files",

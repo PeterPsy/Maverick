@@ -200,7 +200,11 @@ function AnimatedFileItem({
   selectionMode: boolean;
   view: CollectionViewMode;
 }) {
+  const canRead = file.capabilities ? Boolean(file.capabilities.can_read) : true;
+  const canDelete = file.capabilities ? Boolean(file.capabilities.can_delete) : true;
+  const canMove = file.provider === "google_drive" ? false : file.capabilities ? Boolean(file.capabilities.can_move) : true;
   const { cancelLongPress, longPressHandlers } = useLongPressSelection({
+    disabled: !canMove,
     item: file,
     onLongPress,
     shouldIgnoreTarget: isFileLongPressIgnored,
@@ -216,6 +220,10 @@ function AnimatedFileItem({
 
   function handleDragStart(event: DragEvent<HTMLDivElement>) {
     cancelLongPress();
+    if (!canMove) {
+      event.preventDefault();
+      return;
+    }
     onDragStart(event, file);
   }
 
@@ -235,7 +243,7 @@ function AnimatedFileItem({
       )}
       style={{ zIndex: 1 }}
       animate={{ rotate: 0, x: 0, y: 0 }}
-      draggable
+      draggable={canMove}
       onDragEnd={onDragEnd}
       onDragStartCapture={handleDragStart}
       {...longPressHandlers}
@@ -322,6 +330,7 @@ function AnimatedFileItem({
               <button
                 className="animated-file-action"
                 aria-label={`Download ${file.name}`}
+                disabled={!canRead}
                 onClick={() => onDownload(file)}
                 type="button"
               >
@@ -330,14 +339,15 @@ function AnimatedFileItem({
               <button
                 className="animated-file-action danger"
                 aria-label={`Delete ${file.name}`}
+                disabled={!canDelete}
                 onClick={() => onDelete(file)}
                 type="button"
               >
                 <HugeiconsIcon icon={Delete02Icon} size={16} />
               </button>
             </div>
-            <span className={cn("animated-file-role-badge", file.role)}>
-              {roleLabels[file.role]}
+            <span className={cn("animated-file-role-badge", file.role || file.provider)}>
+              {file.provider === "google_drive" ? "Drive" : roleLabels[file.role as keyof typeof roleLabels]}
             </span>
           </motion.div>
         </motion.div>

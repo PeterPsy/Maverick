@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { Home } from 'lucide-react';
 import { AnimatedFileCollection, CollectionViewToggle, type CollectionViewMode } from './components/ui/animated-collection';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from './components/ui/breadcramb';
-import { CATALOG_PAGE_LIMIT, clearCustomView, currentStorageAppId, decodeBase64, deleteFile, deleteFolder, downloadFolder, loadCatalog, loadViewFilter, moveFileReference, moveFolderReference, moveItemsReferences, readFile, renameFile, setViewFilter, updateMarkdownFile, uploadFile } from './storageApi';
+import { CATALOG_PAGE_LIMIT, clearCustomView, completeDriveOAuth, currentStorageAppId, decodeBase64, deleteFile, deleteFolder, downloadFolder, listDriveChildren, listDriveRoots, loadCatalog, loadViewFilter, moveFileReference, moveFolderReference, moveItemsReferences, readDriveFile, readFile, renameDriveFile, renameFile, setViewFilter, trashDriveFile, updateMarkdownFile, uploadFile } from './storageApi';
 import { canInlinePreview, canTextPreview, StoragePreview } from './filePreview';
 import { formatBytes, formatMegabytes, kindLabels, roleLabels } from './storageMeta';
 import { Icon } from './Icon';
@@ -16,7 +16,8 @@ import { fileFolderSelection, folderParentPath, folderStatsForSelection, normali
 import { attachStorageFolderDragImage } from './lib/storageDragImage';
 import { readStorageFileDragData, readStorageFolderDragData, readStorageSelectionDragData, storageDragPayloadFromFile, storageDragPayloadFromFolder, storageDragPayloadFromSelection, storageMoveDropStatus, writeStorageFileDragData, writeStorageFolderDragData, writeStorageSelectionDragData, type StorageFileDragPayload, type StorageMoveDropStatus, type StorageSelectionDragPayload } from './lib/storageDragDrop';
 import { canRequestFullscreen, elementIsFullscreen, exitDocumentFullscreen, requestElementFullscreen } from './lib/browserFullscreen';
-import { storageTargetFromParams, type StorageNavigationParams, type StorageNavigationTarget } from './lib/storageNavigationParams';
+import { folderTargetFromMissingFileTarget, storageTargetFromParams, type StorageNavigationParams, type StorageNavigationTarget } from './lib/storageNavigationParams';
+import { storageOAuthCallbackFromLocation, type StorageOAuthCallback } from './lib/storageOAuthRuntime';
 import { storageCustomScopedFiles, storageViewVisibleFiles, storageViewVisibleFolders } from './lib/storageSearch';
 import { storageViewFilterFromMessage } from './lib/storageViewFilterEvents';
 import { loadFullPreview } from './previewCache';
@@ -48,6 +49,11 @@ type CatalogRequestOptions = {
 };
 type CatalogRefreshOptions = CatalogRequestOptions & {
   loading?: CatalogRefreshLoading;
+};
+type DriveFolderTarget = {
+  connectionId: string;
+  displayPath: string;
+  driveFileId: string;
 };
 
 const viewKinds = new Set<PreviewKind | 'all'>(['all', 'image', 'video', 'audio', 'pdf', 'document', 'presentation', 'spreadsheet', 'markdown', 'text', 'file']);
@@ -96,6 +102,22 @@ function storageRootFolder(role: FileRole): StorageFolder {
     workspace_relative_path: `storage/${role}`,
     modified_at: ''
   };
+}
+
+function isFileRole(role: unknown): role is FileRole {
+  return role === 'uploaded' || role === 'generated';
+}
+
+function isDriveItem(item: Pick<StorageFile | StorageFolder, 'provider'>) {
+  return item.provider === 'google_drive';
+}
+
+function itemCan(item: Pick<StorageFile | StorageFolder, 'capabilities'>, capability: keyof NonNullable<StorageFile['capabilities']>, fallback = true) {
+  return item.capabilities ? Boolean(item.capabilities[capability]) : fallback;
+}
+
+function driveItemPath(item: Pick<StorageFile | StorageFolder, 'display_path' | 'name'>) {
+  return item.display_path || item.name;
 }
 
 function folderContainsPath(folder: Pick<StorageFolder, 'relative_path'>, relativePath: string) {
@@ -215,6 +237,10 @@ function mergeUniqueFiles(current: StorageFile[], incoming: StorageFile[]) {
   return Array.from(byId.values());
 }
 
+function driveLoadedItemCount(files: StorageFile[], folders: StorageFolder[]) {
+  return files.length + folders.length;
+}
+
 function hasDraggedFiles(dataTransfer: DataTransfer) {
   if (Array.from(dataTransfer.types || []).includes('Files')) return true;
   return Array.from(dataTransfer.items || []).some((item) => item.kind === 'file');
@@ -236,8 +262,9 @@ function uploadTargetLabel(role: FileRole | 'all', folderPath: string) {
   return `${roleLabels[role]}${folderPath ? ` / ${folderPath}` : ''}`;
 }
 
-function FolderCard({ canDelete, dragging, folder, onDelete, onDownload, onDragEnd, onDragStart, onDropStatus, onDropStorageItem, onLongPress, onOpen, onShowDetails, onToggleSelection, selected, selectionMode }: {
+function FolderCard({ canDelete, canDownload, dragging, folder, onDelete, onDownload, onDragEnd, onDragStart, onDropStatus, onDropStorageItem, onLongPress, onOpen, onShowDetails, onToggleSelection, selected, selectionMode }: {
   canDelete: boolean;
+  canDownload: boolean;
   dragging: boolean;
   folder: StorageFolder;
   onDelete: () => void;
@@ -346,7 +373,7 @@ function FolderCard({ canDelete, dragging, folder, onDelete, onDownload, onDragE
         <button className="animated-file-action folder-card-action" aria-label={`Show details for ${folder.name}`} onClick={onShowDetails} title="Details" type="button">
           <Icon name="info" />
         </button>
-        <button className="animated-file-action folder-card-action" aria-label={`Download ${folder.name}`} onClick={onDownload} title="Download" type="button">
+        <button className="animated-file-action folder-card-action" aria-label={`Download ${folder.name}`} disabled={!canDownload} onClick={onDownload} title={canDownload ? 'Download' : 'Download is not available'} type="button">
           <Icon name="download" />
         </button>
         <button
@@ -397,6 +424,7 @@ function App() {
   const [customTitle, setCustomTitle] = useState('');
   const [customFileIds, setCustomFileIds] = useState<string[]>([]);
   const [customWorkspacePaths, setCustomWorkspacePaths] = useState<string[]>([]);
+  const [driveTarget, setDriveTarget] = useState<DriveFolderTarget | null>(null);
   const [previewUrl, setPreviewUrl] = useState('');
   const [previewText, setPreviewText] = useState('');
   const [previewTable, setPreviewTable] = useState<PreviewTablePayload | undefined>(undefined);
@@ -435,11 +463,13 @@ function App() {
   const activeRoleRef = useRef<FileRole | 'all'>('all');
   const kindRef = useRef<PreviewKind | 'all'>('all');
   const viewModeRef = useRef<'search' | 'custom'>('search');
+  const driveTargetRef = useRef<DriveFolderTarget | null>(null);
   const catalogRefreshRequestRef = useRef(0);
   const catalogTransitionMinRequestRef = useRef<number | null>(null);
   const catalogTransitionTokenRef = useRef(0);
   const pendingNavigationTargetRef = useRef<StorageNavigationTarget | null>(storageTargetFromParams(Object.fromEntries(new URLSearchParams(window.location.search).entries())));
   const previewFullscreenActive = previewFullscreenMode !== 'none';
+  const isDriveView = Boolean(driveTarget);
 
   function setCurrentFolderPathScoped(path: string) {
     const normalizedPath = normalizeFolderPath(path);
@@ -524,6 +554,50 @@ function App() {
     refresh(filter, options).catch((err: Error) => setError(err.message));
   }
 
+  async function loadDriveFolder(target: DriveFolderTarget, loading: CatalogRefreshLoading = 'foreground') {
+    const requestId = ++catalogRefreshRequestRef.current;
+    const transitionToken = loading === 'foreground' ? beginCatalogTransitionLoading(requestId) : null;
+    try {
+      const payload = target.driveFileId
+        ? await listDriveChildren(target.connectionId, target.driveFileId, { limit: CATALOG_PAGE_LIMIT })
+        : await listDriveRoots(target.connectionId, { limit: CATALOG_PAGE_LIMIT });
+      if (requestId !== catalogRefreshRequestRef.current) return;
+      const nextFiles = payload.files || [];
+      const nextFolders = payload.folders || [];
+      filesRef.current = nextFiles;
+      catalogLoadedCountRef.current = driveLoadedItemCount(nextFiles, nextFolders);
+      setFiles(nextFiles);
+      setFolders(nextFolders);
+      setCatalogPagination(payload.pagination ? { offset: 0, ...payload.pagination } : null);
+      setSelectedFile(null);
+      setSelectedFolder(null);
+      closePreviewModal();
+      setDetailsOpen(false);
+      setFolderDetailsOpen(false);
+      clearSelectionMode();
+      setCurrentFolderPathScoped('');
+      setActiveRole('all');
+      activeRoleRef.current = 'all';
+      setKind('all');
+      kindRef.current = 'all';
+      setViewMode('search');
+      viewModeRef.current = 'search';
+      setCustomTitle('');
+      setCustomFileIds([]);
+      setCustomWorkspacePaths([]);
+      setDriveTarget(target);
+      setError('');
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Unable to load Google Drive folder.');
+    } finally {
+      if (transitionToken !== null) {
+        clearCatalogTransitionLoading(transitionToken);
+      } else {
+        settleCatalogTransitionLoading(requestId);
+      }
+    }
+  }
+
   function catalogRequest(
     filter?: Partial<Pick<StorageViewFilter, 'query' | 'role' | 'kind'>>,
     offset = 0,
@@ -554,6 +628,10 @@ function App() {
     filter?: Partial<Pick<StorageViewFilter, 'query' | 'role' | 'kind'>>,
     options: CatalogRefreshOptions = {}
   ) {
+    if (driveTargetRef.current) {
+      await loadDriveFolder(driveTargetRef.current, options.loading ?? 'background');
+      return;
+    }
     const requestId = ++catalogRefreshRequestRef.current;
     const { loading = 'background', ...requestOptions } = options;
     if (loading === 'foreground') {
@@ -596,6 +674,20 @@ function App() {
           pendingNavigationTargetRef.current = null;
           await focusResolvedNavigationFile(targetFile);
         } else {
+          const fallbackTarget = folderTargetFromMissingFileTarget(target);
+          if (fallbackTarget?.role) {
+            pendingNavigationTargetRef.current = null;
+            setSelectedFile(null);
+            setDetailsOpen(false);
+            closePreviewModal();
+            setCurrentFolderPathScoped(fallbackTarget.folderRelativePath || '');
+            setError('');
+            updateViewFilter(
+              { query: '', role: fallbackTarget.role, kind: 'all' },
+              { folderPath: fallbackTarget.folderRelativePath || '', preserveCustom: false }
+            );
+            return;
+          }
           const missingTarget = missingNavigationTargetPlan();
           if (missingTarget.clearPending) pendingNavigationTargetRef.current = null;
           setError(missingTarget.error);
@@ -621,6 +713,22 @@ function App() {
     if (!catalogPagination?.has_more || catalogLoadingMore) return;
     setCatalogLoadingMore(true);
     try {
+      const driveTarget = driveTargetRef.current;
+      if (driveTarget) {
+        const nextLimit = Math.max(CATALOG_PAGE_LIMIT, catalogLoadedCountRef.current + CATALOG_PAGE_LIMIT);
+        const payload = driveTarget.driveFileId
+          ? await listDriveChildren(driveTarget.connectionId, driveTarget.driveFileId, { limit: nextLimit })
+          : await listDriveRoots(driveTarget.connectionId, { limit: nextLimit });
+        const nextFiles = payload.files || [];
+        const nextFolders = payload.folders || [];
+        catalogLoadedCountRef.current = driveLoadedItemCount(nextFiles, nextFolders);
+        filesRef.current = nextFiles;
+        setFiles(nextFiles);
+        setFolders(nextFolders);
+        setCatalogPagination(payload.pagination ? { offset: 0, ...payload.pagination } : null);
+        setError('');
+        return;
+      }
       const payload = await loadCatalog(catalogRequest(undefined, catalogLoadedCountRef.current));
       catalogLoadedCountRef.current = catalogLoadedCountAfterPage(catalogLoadedCountRef.current, payload.files.length);
       const nextFiles = mergeUniqueFiles(filesRef.current, payload.files);
@@ -642,10 +750,52 @@ function App() {
     }
   }
 
+  async function handleDriveOAuthCallback(callback: StorageOAuthCallback) {
+    const appId = callback.appId || storageAppId;
+    setError('');
+    if (callback.error) {
+      await refresh();
+      setError(`Google Drive authorization failed: ${callback.error}.`);
+      return;
+    }
+    if (!callback.code || !callback.state) {
+      await refresh();
+      setError('Google Drive authorization callback is missing code or state. Start the connection again.');
+      return;
+    }
+    try {
+      await completeDriveOAuth(
+        { code: callback.code, redirectUri: callback.redirectUri, state: callback.state },
+        { appId },
+      );
+      await refresh();
+      window.history.replaceState({}, '', `/apps/${encodeURIComponent(appId)}/`);
+    } catch (oauthError) {
+      await refresh();
+      setError(oauthError instanceof Error ? oauthError.message : 'Google Drive connection failed.');
+    }
+  }
+
   useEffect(() => {
-    refresh()
+    const oauthCallback = storageOAuthCallbackFromLocation(window.location.pathname, window.location.search, window.location.origin);
+    const initialTarget = oauthCallback ? null : pendingNavigationTargetRef.current;
+    const initialLoad = oauthCallback
+      ? handleDriveOAuthCallback(oauthCallback)
+      : initialTarget?.provider === 'google_drive' && initialTarget.connectionId
+      ? loadDriveFolder({
+        connectionId: initialTarget.connectionId,
+        displayPath: initialTarget.displayPath || 'Google Drive',
+        driveFileId: initialTarget.driveFileId || '',
+      })
+      : refresh();
+    initialLoad
       .catch((err: Error) => setError(err.message))
-      .finally(() => setIsInitialLoading(false));
+      .finally(() => {
+        if (initialTarget?.provider === 'google_drive') {
+          pendingNavigationTargetRef.current = null;
+        }
+        setIsInitialLoading(false);
+      });
     const interval = window.setInterval(() => {
       syncViewFilter().catch((err: Error) => setError(err.message));
     }, VIEW_SYNC_MS);
@@ -690,6 +840,10 @@ function App() {
   }, [viewMode]);
 
   useEffect(() => {
+    driveTargetRef.current = driveTarget;
+  }, [driveTarget]);
+
+  useEffect(() => {
     window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'storage' }, window.location.origin);
   }, []);
 
@@ -710,7 +864,7 @@ function App() {
         return;
       }
       if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === storageAppId) {
-        if (payload.resource === 'files') {
+        if (payload.resource === 'files' || payload.resource === 'drive-connections') {
           refresh().catch((err: Error) => setError(err.message));
         }
         if (payload.resource === 'view-state') {
@@ -845,6 +999,10 @@ function App() {
   }
 
   function focusFile(file: StorageFile, options: { persistFilter?: boolean; preserveCustom?: boolean; query?: string } = {}) {
+    if (!isFileRole(file.role)) {
+      setSelectedFile(file);
+      return;
+    }
     const fileFolder = fileFolderSelection(file);
     const nextQuery = options.query ?? queryRef.current;
     setSelectedFile(file);
@@ -883,6 +1041,18 @@ function App() {
     if (!target) {
       return;
     }
+    if (target.provider === 'google_drive' && target.connectionId) {
+      const nextTarget = {
+        connectionId: target.connectionId,
+        displayPath: target.displayPath || 'Google Drive',
+        driveFileId: target.driveFileId || '',
+      };
+      pendingNavigationTargetRef.current = null;
+      loadDriveFolder(nextTarget, 'foreground').catch((err: Error) => setError(err.message));
+      return;
+    }
+    setDriveTarget(null);
+    driveTargetRef.current = null;
     if (target.targetType === 'folder') {
       const targetFolderPath = target.folderRelativePath || '';
       setCurrentFolderPathScoped(targetFolderPath);
@@ -928,6 +1098,24 @@ function App() {
   }
 
   function openFolder(folder: StorageFolder) {
+    if (isDriveItem(folder)) {
+      if (!folder.connection_id || !folder.drive_file_id) {
+        setError('Google Drive folder identity is missing.');
+        return;
+      }
+      const nextTarget = {
+        connectionId: folder.connection_id,
+        displayPath: folder.display_path || folder.name,
+        driveFileId: folder.drive_file_id,
+      };
+      loadDriveFolder(nextTarget, 'foreground').catch((err: Error) => setError(err.message));
+      notifyActiveStorageFolderSelection(folder);
+      return;
+    }
+    if (!isFileRole(folder.role)) {
+      setError('This folder is not a local Storage folder.');
+      return;
+    }
     const plan = folderOpenRefreshPlan({
       activeRole,
       folderPath: folder.relative_path,
@@ -954,6 +1142,10 @@ function App() {
   }
 
   function openFilePreview(file: StorageFile) {
+    if (isDriveItem(file)) {
+      showFileDetails(file);
+      return;
+    }
     setPreviewText('');
     setPreviewUrl('');
     setPreviewTable(undefined);
@@ -1016,17 +1208,19 @@ function App() {
   }
 
   function activateFileSelection(file: StorageFile) {
+    if (isDriveItem(file)) return;
     setSelectionMode(true);
     setSelectedFileIds((current) => new Set(current).add(file.id));
   }
 
   function activateFolderSelection(folder: StorageFolder) {
-    if (!folder.relative_path) return;
+    if (isDriveItem(folder) || !folder.relative_path) return;
     setSelectionMode(true);
     setSelectedFolderIds((current) => new Set(current).add(folder.id));
   }
 
   function toggleFileSelection(file: StorageFile) {
+    if (isDriveItem(file)) return;
     setSelectionMode(true);
     setSelectedFileIds((current) => {
       const next = new Set(current);
@@ -1040,7 +1234,7 @@ function App() {
   }
 
   function toggleFolderSelection(folder: StorageFolder) {
-    if (!folder.relative_path) return;
+    if (isDriveItem(folder) || !folder.relative_path) return;
     setSelectionMode(true);
     setSelectedFolderIds((current) => {
       const next = new Set(current);
@@ -1054,15 +1248,21 @@ function App() {
   }
 
   const customScopedFiles = useMemo(() => {
+    if (isDriveView) {
+      return files;
+    }
     return storageCustomScopedFiles({
       fileIds: customFileIds,
       files,
       viewMode,
       workspaceRelativePaths: customWorkspacePaths,
     });
-  }, [customFileIds, customWorkspacePaths, files, viewMode]);
+  }, [customFileIds, customWorkspacePaths, files, isDriveView, viewMode]);
 
   const browsableFolders = useMemo(() => {
+    if (isDriveView) {
+      return folders;
+    }
     const roots = storageRootRoles.map((role) => {
       return folders.find((folder) => folder.role === role && !folder.relative_path) || storageRootFolder(role);
     });
@@ -1070,9 +1270,13 @@ function App() {
       ...roots,
       ...folders.filter((folder) => folder.relative_path)
     ];
-  }, [folders]);
+  }, [folders, isDriveView]);
 
   const visibleFolders = useMemo(() => {
+    if (isDriveView) {
+      const needle = query.trim().toLowerCase();
+      return folders.filter((folder) => !needle || `${folder.name} ${folder.display_path || ''}`.toLowerCase().includes(needle));
+    }
     return storageViewVisibleFolders({
       activeRole,
       browsableFolders,
@@ -1081,9 +1285,17 @@ function App() {
       query,
       viewMode,
     });
-  }, [activeRole, browsableFolders, currentFolderPath, folders, query, viewMode]);
+  }, [activeRole, browsableFolders, currentFolderPath, folders, isDriveView, query, viewMode]);
 
   const filteredFiles = useMemo(() => {
+    if (isDriveView) {
+      const needle = query.trim().toLowerCase();
+      return files.filter((file) => {
+        const kindMatch = kind === 'all' || file.preview_kind === kind;
+        const textMatch = !needle || `${file.name} ${file.display_path || ''} ${file.content_type}`.toLowerCase().includes(needle);
+        return kindMatch && textMatch;
+      });
+    }
     return storageViewVisibleFiles({
       activeRole,
       currentFolderPath,
@@ -1092,7 +1304,7 @@ function App() {
       query,
       viewMode,
     });
-  }, [activeRole, currentFolderPath, customScopedFiles, kind, query, viewMode]);
+  }, [activeRole, currentFolderPath, customScopedFiles, files, isDriveView, kind, query, viewMode]);
   const selectedFiles = useMemo(() => filteredFiles.filter((file) => selectedFileIds.has(file.id)), [filteredFiles, selectedFileIds]);
   const selectedFolders = useMemo(() => visibleFolders.filter((folder) => selectedFolderIds.has(folder.id) && Boolean(folder.relative_path)), [selectedFolderIds, visibleFolders]);
   const selectedMoveItems = useMemo(() => storageSelectionMovePlan(selectedFiles, selectedFolders), [selectedFiles, selectedFolders]);
@@ -1100,11 +1312,26 @@ function App() {
   const draggingFileIds = draggingSelection?.fileIds || emptyIdSet;
   const draggingFolderIds = draggingSelection?.folderIds || emptyIdSet;
   const selectedFolderStats = useMemo(() => {
-    return selectedFolder ? folderStatsForSelection({ role: selectedFolder.role, relativePath: selectedFolder.relative_path }, files, folders) : null;
+    if (!selectedFolder) return null;
+    if (isDriveItem(selectedFolder) || !isFileRole(selectedFolder.role)) {
+      return {
+        fileCount: 0,
+        folderCount: 0,
+        sizeBytes: 0,
+      };
+    }
+    return folderStatsForSelection({ role: selectedFolder.role, relativePath: selectedFolder.relative_path }, files, folders);
   }, [files, folders, selectedFolder]);
   const currentFolderStats = useMemo(() => {
+    if (isDriveView) {
+      return {
+        fileCount: filteredFiles.length,
+        folderCount: visibleFolders.length,
+        sizeBytes: filteredFiles.reduce((total, file) => total + file.size_bytes, 0),
+      };
+    }
     return folderStatsForSelection({ role: activeRole, relativePath: activeRole === 'all' ? '' : currentFolderPath }, files, folders);
-  }, [activeRole, currentFolderPath, files, folders]);
+  }, [activeRole, currentFolderPath, files, filteredFiles, folders, isDriveView, visibleFolders]);
   const catalogDisplayState = catalogBrowserDisplayState({
     initialLoading: isInitialLoading,
     transitionLoading: isCatalogTransitionLoading,
@@ -1117,12 +1344,18 @@ function App() {
   const fileCountLabel = visibleFileTotal > filteredFiles.length
     ? `${filteredFiles.length}/${visibleFileTotal} files`
     : `${filteredFiles.length} files`;
-  const folderBreadcrumbs = folderBreadcrumbItems(currentFolderPath);
-  const storageBreadcrumbLabel = activeRole === 'all' ? '' : roleLabels[activeRole];
+  const folderBreadcrumbs = isDriveView ? [] : folderBreadcrumbItems(currentFolderPath);
+  const storageBreadcrumbLabel = isDriveView ? driveTarget?.displayPath || 'Google Drive' : activeRole === 'all' ? '' : roleLabels[activeRole];
   const pendingDeleteName = pendingDelete?.kind === 'file' ? pendingDelete.file.name : pendingDelete?.folder.name || '';
-  const pendingDeletePath = pendingDelete?.kind === 'file' ? pendingDelete.file.workspace_relative_path : pendingDelete?.folder.workspace_relative_path || '';
+  const pendingDeletePath = pendingDelete?.kind === 'file'
+    ? (isDriveItem(pendingDelete.file) ? driveItemPath(pendingDelete.file) : pendingDelete.file.workspace_relative_path)
+    : pendingDelete?.folder
+      ? (isDriveItem(pendingDelete.folder) ? driveItemPath(pendingDelete.folder) : pendingDelete.folder.workspace_relative_path)
+      : '';
   const pendingDeleteTitle = pendingDelete ? `Delete ${pendingDelete.kind}?` : '';
-  const pendingDeleteDescription = pendingDelete?.kind === 'folder'
+  const pendingDeleteDescription = pendingDelete && isDriveItem(pendingDelete.kind === 'file' ? pendingDelete.file : pendingDelete.folder)
+    ? 'This moves the item to Google Drive trash when Drive grants delete permission.'
+    : pendingDelete?.kind === 'folder'
     ? 'This removes the folder and every file inside it from workspace storage.'
     : 'This removes the file from workspace storage.';
   const pendingDeleteActionLabel = pendingDelete?.kind === 'folder' ? 'Delete folder' : 'Delete file';
@@ -1292,7 +1525,9 @@ function App() {
   const previewBackdropClassName = previewFullscreenActive ? 'preview-modal-backdrop is-fullscreen-preview' : 'preview-modal-backdrop';
 
   async function download(file: StorageFile) {
-    const payload = await readFile(file, DOWNLOAD_BYTES);
+    const payload = isDriveItem(file)
+      ? await readDriveFile(file, DOWNLOAD_BYTES)
+      : await readFile(file, DOWNLOAD_BYTES);
     const url = URL.createObjectURL(decodeBase64(payload.content_base64, payload.file.content_type));
     const anchor = document.createElement('a');
     anchor.href = url;
@@ -1313,7 +1548,20 @@ function App() {
 
   async function saveRename() {
     if (!selectedFile) return;
-    const payload = await renameFile(selectedFile, renameValue);
+    if (isDriveItem(selectedFile) && !itemCan(selectedFile, 'can_rename', false)) {
+      setError('Google Drive did not grant rename permission for this file.');
+      return;
+    }
+    const payload = isDriveItem(selectedFile)
+      ? await renameDriveFile(selectedFile, renameValue)
+      : await renameFile(selectedFile, renameValue);
+    if (isDriveItem(selectedFile)) {
+      setFiles((current) => current.map((file) => file.id === selectedFile.id ? payload.file : file));
+      filesRef.current = filesRef.current.map((file) => file.id === selectedFile.id ? payload.file : file);
+      setSelectedFile(payload.file);
+      revalidateCatalog();
+      return;
+    }
     applyLocalCatalogDelta({ type: 'upsert_file', file: payload.file, previous: selectedFile });
     setSelectedFile(payload.file);
     revalidateCatalog();
@@ -1360,6 +1608,13 @@ function App() {
       setDropMessage('');
       return;
     }
+    if (isDriveView) {
+      setError('Google Drive upload is not supported here yet.');
+      setDropFeedback('error');
+      setDropMessage('Google Drive upload is not supported here yet.');
+      clearDropFeedbackLater();
+      return;
+    }
     if (activeRole === 'all') {
       setError('Choose Generated or Uploaded before uploading a file.');
       setDropFeedback('error');
@@ -1399,8 +1654,10 @@ function App() {
     if (!hasDraggedFiles(event.dataTransfer)) return;
     event.preventDefault();
     setDragDepth((current) => current + 1);
-    setDropFeedback(activeRole === 'all' ? 'blocked' : 'ready');
-    setDropMessage(activeRole === 'all'
+    setDropFeedback(isDriveView || activeRole === 'all' ? 'blocked' : 'ready');
+    setDropMessage(isDriveView
+      ? 'Google Drive upload is not supported here yet.'
+      : activeRole === 'all'
       ? 'Choose Generated or Uploaded before dropping files.'
       : `Drop to upload to ${uploadTargetLabel(activeRole, currentFolderPath)}`);
   }
@@ -1408,7 +1665,7 @@ function App() {
   function handleAppDragOver(event: DragEvent<HTMLElement>) {
     if (!hasDraggedFiles(event.dataTransfer)) return;
     event.preventDefault();
-    event.dataTransfer.dropEffect = activeRole === 'all' ? 'none' : 'copy';
+    event.dataTransfer.dropEffect = isDriveView || activeRole === 'all' ? 'none' : 'copy';
   }
 
   function handleAppDragLeave(event: DragEvent<HTMLElement>) {
@@ -1443,6 +1700,10 @@ function App() {
   }
 
   function handleStorageFileDragStart(event: DragEvent<HTMLDivElement>, file: StorageFile) {
+    if (isDriveItem(file)) {
+      event.preventDefault();
+      return 0;
+    }
     const selectionPayload = selectedFileIds.has(file.id) && selectedItemCount > 1
       ? storageDragPayloadFromSelection(selectedMoveItems, storageAppId)
       : null;
@@ -1460,7 +1721,7 @@ function App() {
   }
 
   function handleStorageFolderDragStart(event: DragEvent<HTMLElement>, folder: StorageFolder) {
-    if (!folder.relative_path) {
+    if (isDriveItem(folder) || !folder.relative_path) {
       event.preventDefault();
       return;
     }
@@ -1489,6 +1750,9 @@ function App() {
   }
 
   function storageDropStatusForFolder(event: DragEvent<HTMLElement>, targetFolder: StorageFolder) {
+    if (isDriveItem(targetFolder) || !isFileRole(targetFolder.role)) {
+      return 'blocked';
+    }
     const status = storageMoveDropStatus(event.dataTransfer, targetFolder.role);
     if (status !== 'ready') {
       return status;
@@ -1637,6 +1901,10 @@ function App() {
   }
 
   function requestFolderDelete(folder: StorageFolder) {
+    if (isDriveItem(folder)) {
+      setError('Google Drive folder deletion is not supported here yet.');
+      return;
+    }
     if (!folder.relative_path) {
       setError('Storage root folders cannot be deleted.');
       return;
@@ -1646,13 +1914,49 @@ function App() {
   }
 
   async function removeFile(file: StorageFile) {
+    if (isDriveItem(file)) {
+      if (!itemCan(file, 'can_delete', false)) {
+        setError('Google Drive did not grant delete permission for this file.');
+        return;
+      }
+      await trashDriveFile(file);
+      setFiles((current) => current.filter((item) => item.id !== file.id));
+      filesRef.current = filesRef.current.filter((item) => item.id !== file.id);
+      if (selectedFile?.id === file.id) {
+        setSelectedFile(null);
+        setDetailsOpen(false);
+        closePreviewModal();
+      }
+      setError('');
+      refresh(undefined, { loading: 'foreground' }).catch((err: Error) => setError(err.message));
+      return;
+    }
+    if (!isFileRole(file.role)) {
+      setError('This file is not a local Storage file.');
+      return;
+    }
     await deleteFile(file);
     applyLocalCatalogDelta({ type: 'delete_file', file });
-    if (selectedFile?.id === file.id) setSelectedFile(null);
-    revalidateCatalog();
+    const parentPath = folderParentPath(file.relative_path);
+    if (selectedFile?.id === file.id) {
+      setSelectedFile(null);
+      setDetailsOpen(false);
+      closePreviewModal();
+    }
+    setCurrentFolderPathScoped(parentPath);
+    pendingNavigationTargetRef.current = null;
+    updateViewFilter({ query: '', role: file.role, kind: 'all' }, { folderPath: parentPath, preserveCustom: false });
   }
 
   async function removeFolder(folder: StorageFolder) {
+    if (isDriveItem(folder)) {
+      setError('Google Drive folder deletion is not supported here yet.');
+      return;
+    }
+    if (!isFileRole(folder.role)) {
+      setError('This folder is not a local Storage folder.');
+      return;
+    }
     const deletedPath = normalizeFolderPath(folder.relative_path);
     const parentPath = folderParentPath(deletedPath);
     await deleteFolder(folder);
@@ -1711,7 +2015,19 @@ function App() {
         <header className="storage-topbar">
           <label className="storage-search">
             <Icon name="search" />
-            <input aria-label="Search in Storage" placeholder="Search in Storage" value={query} onChange={(event) => updateViewFilter({ query: event.target.value })} />
+            <input
+              aria-label="Search in Storage"
+              placeholder="Search in Storage"
+              value={query}
+              onChange={(event) => {
+                if (isDriveView) {
+                  setQuery(event.target.value);
+                  queryRef.current = event.target.value;
+                } else {
+                  updateViewFilter({ query: event.target.value });
+                }
+              }}
+            />
           </label>
           <div className="topbar-actions">
             {selectionMode ? (
@@ -1750,6 +2066,8 @@ function App() {
                       <button
                         type="button"
                         onClick={() => {
+                          setDriveTarget(null);
+                          driveTargetRef.current = null;
                           setCurrentFolderPathScoped('');
                           updateViewFilter({ query: '', role: 'all' }, { folderPath: '', preserveCustom: false });
                         }}
@@ -1842,7 +2160,14 @@ function App() {
             )}
           </div>
 
-          {error ? <div className="storage-error">{error}</div> : null}
+          {error ? (
+            <div className="storage-error" role="status">
+              <span>{error}</span>
+              <button aria-label="Dismiss Storage error" onClick={() => setError('')} title="Dismiss" type="button">
+                <Icon name="close" />
+              </button>
+            </div>
+          ) : null}
 
           {viewMode === 'custom' ? (
             <section className="custom-view-bar" aria-label="Custom Storage view">
@@ -1861,7 +2186,8 @@ function App() {
             ) : null}
             {!isCatalogContentLoading ? visibleFolders.map((folder) => (
               <FolderCard
-                canDelete={Boolean(folder.relative_path)}
+                canDelete={!isDriveItem(folder) && Boolean(folder.relative_path)}
+                canDownload={!isDriveItem(folder)}
                 dragging={draggedFolder?.id === folder.id || draggingFolderIds.has(folder.id)}
                 key={folder.id}
                 folder={folder}
@@ -1872,7 +2198,13 @@ function App() {
                 onLongPress={() => activateFolderSelection(folder)}
                 onOpen={() => openFolder(folder)}
                 onDropStatus={storageDropStatusForFolder}
-                onDropStorageItem={(event, targetFolder) => moveDroppedStorageItem(event, targetFolder.relative_path, targetFolder.role).catch((err: Error) => setError(err.message))}
+                onDropStorageItem={(event, targetFolder) => {
+                  if (!isFileRole(targetFolder.role)) {
+                    setError('This folder is not a local Storage folder.');
+                    return;
+                  }
+                  moveDroppedStorageItem(event, targetFolder.relative_path, targetFolder.role).catch((err: Error) => setError(err.message));
+                }}
                 onShowDetails={() => showFolderDetails(folder)}
                 onToggleSelection={() => toggleFolderSelection(folder)}
                 selected={selectedFolderIds.has(folder.id)}
@@ -1916,7 +2248,7 @@ function App() {
           <section className="details-dialog" role="dialog" aria-modal="true" aria-labelledby="folder-details-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
             <header className="file-details-header details-dialog-header">
               <div>
-                <p className="storage-eyebrow">{roleLabels[selectedFolder.role]} · Folder</p>
+                <p className="storage-eyebrow">{isDriveItem(selectedFolder) ? 'Google Drive' : roleLabels[selectedFolder.role as FileRole]} · Folder</p>
                 <h2 id="folder-details-dialog-title">{selectedFolder.name}</h2>
               </div>
               <button className="icon-button" onClick={() => setFolderDetailsOpen(false)} aria-label="Close folder details" type="button">
@@ -1926,7 +2258,7 @@ function App() {
             <section className="file-details-section">
               <h3>Details</h3>
               <dl>
-                <div><dt>Path</dt><dd>{selectedFolder.workspace_relative_path}</dd></div>
+                <div><dt>Path</dt><dd>{isDriveItem(selectedFolder) ? driveItemPath(selectedFolder) : selectedFolder.workspace_relative_path}</dd></div>
                 <div><dt>Files</dt><dd>{selectedFolderStats?.fileCount ?? 0}</dd></div>
                 <div><dt>Folders</dt><dd>{selectedFolderStats?.folderCount ?? 0}</dd></div>
                 <div><dt>Size</dt><dd>{formatBytes(selectedFolderStats?.sizeBytes ?? 0)}</dd></div>
@@ -1942,7 +2274,7 @@ function App() {
           <section className="details-dialog" role="dialog" aria-modal="true" aria-labelledby="details-dialog-title" onMouseDown={(event) => event.stopPropagation()}>
             <header className="file-details-header details-dialog-header">
               <div>
-                <p className="storage-eyebrow">{roleLabels[selectedFile.role]} · {kindLabels[selectedFile.preview_kind]}</p>
+                <p className="storage-eyebrow">{isDriveItem(selectedFile) ? 'Google Drive' : roleLabels[selectedFile.role as FileRole]} · {kindLabels[selectedFile.preview_kind]}</p>
                 <h2 id="details-dialog-title">{selectedFile.name}</h2>
               </div>
               <button className="icon-button" onClick={() => setDetailsOpen(false)} aria-label="Close details" type="button">
@@ -1952,7 +2284,7 @@ function App() {
             <section className="file-details-section">
               <h3>Details</h3>
               <dl>
-                <div><dt>Path</dt><dd>{selectedFile.workspace_relative_path}</dd></div>
+                <div><dt>Path</dt><dd>{isDriveItem(selectedFile) ? driveItemPath(selectedFile) : selectedFile.workspace_relative_path}</dd></div>
                 <div><dt>Size</dt><dd>{formatBytes(selectedFile.size_bytes)}</dd></div>
                 <div><dt>Modified</dt><dd>{new Date(selectedFile.modified_at).toLocaleString()}</dd></div>
                 <div><dt>Type</dt><dd>{selectedFile.content_type}</dd></div>
@@ -1962,10 +2294,10 @@ function App() {
               <h3>Rename</h3>
               <div className="rename-group">
                 <input value={renameValue} onChange={(event) => setRenameValue(event.target.value)} aria-label="File name" />
-                <button onClick={() => saveRename().catch((err: Error) => setError(err.message))}>Rename</button>
+                <button disabled={isDriveItem(selectedFile) && !itemCan(selectedFile, 'can_rename', false)} onClick={() => saveRename().catch((err: Error) => setError(err.message))}>Rename</button>
               </div>
             </section>
-            {selectedFile.preview_kind === 'markdown' ? (
+            {selectedFile.preview_kind === 'markdown' && !isDriveItem(selectedFile) ? (
               <section className="file-details-section markdown-actions">
                 <h3>Markdown</h3>
                 <button
@@ -2043,7 +2375,7 @@ function App() {
           <section className={previewModalClassName} ref={previewModalRef} style={previewModalStyle} role="dialog" aria-modal="true" aria-labelledby="preview-modal-title" onMouseDown={(event) => event.stopPropagation()}>
             <header className="preview-modal-header" ref={previewHeaderRef}>
               <div>
-                <p className="storage-eyebrow">{roleLabels[selectedFile.role]} · {kindLabels[selectedFile.preview_kind]}</p>
+                <p className="storage-eyebrow">{isDriveItem(selectedFile) ? 'Google Drive' : roleLabels[selectedFile.role as FileRole]} · {kindLabels[selectedFile.preview_kind]}</p>
                 <h2 id="preview-modal-title">{selectedFile.name}</h2>
               </div>
               <div className="preview-modal-actions">
@@ -2053,10 +2385,10 @@ function App() {
                 <button className="icon-button" type="button" onClick={() => showFileDetails(selectedFile)} aria-label="Show file details" title="Details">
                   <Icon name="info" />
                 </button>
-                <button className="icon-button" type="button" onClick={() => download(selectedFile).catch((err: Error) => setError(err.message))} aria-label="Download file" title="Download">
+                <button className="icon-button" disabled={isDriveItem(selectedFile) && !itemCan(selectedFile, 'can_read', false)} type="button" onClick={() => download(selectedFile).catch((err: Error) => setError(err.message))} aria-label="Download file" title="Download">
                   <Icon name="download" />
                 </button>
-                <button className="icon-button danger" type="button" onClick={() => { exitPreviewFullscreenIfNeeded(); requestFileDelete(selectedFile); }} aria-label="Delete file" title="Delete">
+                <button className="icon-button danger" disabled={isDriveItem(selectedFile) && !itemCan(selectedFile, 'can_delete', false)} type="button" onClick={() => { exitPreviewFullscreenIfNeeded(); requestFileDelete(selectedFile); }} aria-label="Delete file" title="Delete">
                   <Icon name="delete" />
                 </button>
                 <button className="icon-button" type="button" onClick={closePreviewModal} aria-label="Close preview" title="Close">

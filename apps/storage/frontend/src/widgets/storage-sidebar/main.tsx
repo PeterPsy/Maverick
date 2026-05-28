@@ -11,7 +11,7 @@ import {
   TreeView,
 } from '../../components/ui/tree';
 import { FileCard } from '../../components/ui/file-card-collections';
-import { currentStorageAppId, loadCatalog, loadViewFilter, moveFileReference, moveFolderReference, moveItemsReferences, setViewFilter } from '../../storageApi';
+import { currentStorageAppId, listDriveChildren, listDriveConnections, listDriveRoots, loadCatalog, loadViewFilter, moveFileReference, moveFolderReference, moveItemsReferences, setViewFilter } from '../../storageApi';
 import { kindLabels, roleLabels } from '../../storageMeta';
 import { useShellSidebarCloseSwipe } from '../../hooks/useShellSidebarCloseSwipe';
 import { storageSelectionFromMessage, type ActiveStorageSelectionMessage } from '../../lib/activeStorageSelection';
@@ -20,7 +20,7 @@ import { attachStorageFolderDragImage } from '../../lib/storageDragImage';
 import { readStorageFileDragData, readStorageFolderDragData, readStorageSelectionDragData, storageDragPayloadFromFolder, storageMoveDropStatus, writeStorageFolderDragData, type StorageMoveDropStatus, type StorageSelectionDragPayload } from '../../lib/storageDragDrop';
 import { storageTargetFromWidgetContext, type StorageNavigationTarget } from '../../lib/storageNavigationParams';
 import { storageViewFilterChangedMessage, storageViewFilterFromMessage } from '../../lib/storageViewFilterEvents';
-import type { FileRole, StorageFolder, StorageViewFilter, PreviewKind } from '../../types';
+import type { DriveConnection, FileRole, StorageFolder, StorageViewFilter, PreviewKind } from '../../types';
 import '../../styles/sidebar-widget.css';
 
 const MOBILE_LAYOUT_QUERY = '(max-width: 979px)';
@@ -72,12 +72,27 @@ type ViewFilterPayload = {
 
 type FolderTreeNode = {
   children: FolderTreeNode[];
+  connectionId?: string;
+  displayPath?: string;
+  driveFileId?: string;
+  error?: string;
   id: string;
   label: string;
+  lazy?: boolean;
+  loading?: boolean;
+  provider: 'local' | 'google_drive';
   relativePath: string;
   role: StorageTreeRole;
+  status?: DriveConnection['status'] | 'reconnect_required';
   workspaceRelativePath: string;
 };
+
+type DriveChildrenCache = Record<string, {
+  children: FolderTreeNode[];
+  error?: string;
+  loading?: boolean;
+  loaded?: boolean;
+}>;
 
 function isMobileLayoutViewport() {
   if (typeof window === 'undefined') {
@@ -118,12 +133,24 @@ function folderIdentity(role: StorageTreeRole, relativePath: string) {
   return `folder:${role}:${relativePath || '/'}`;
 }
 
+function driveAccountIdentity(connectionId: string) {
+  return `drive:${connectionId}`;
+}
+
+function driveFolderIdentity(connectionId: string, driveFileId: string, rootKind = '') {
+  return `drive:${connectionId}:${rootKind}:${driveFileId || 'root'}`;
+}
+
 function normalizeFolderPath(path: string) {
   return path.split('/').filter(Boolean).join('/');
 }
 
+function isFileRole(role: unknown): role is FileRole {
+  return role === 'uploaded' || role === 'generated';
+}
+
 function folderMoveTargetBlocked(source: Pick<StorageFolder, 'relative_path' | 'role'>, target: FolderTreeNode) {
-  if (target.role === 'all' || source.role !== target.role) {
+  if (target.provider !== 'local' || target.role === 'all' || source.role !== target.role) {
     return true;
   }
   const sourcePath = normalizeFolderPath(source.relative_path);
@@ -156,7 +183,7 @@ function storageSelectionMovePlan(selection: StorageSelectionDragPayload) {
 }
 
 function storageFolderFromNode(node: FolderTreeNode): StorageFolder | null {
-  if (node.role === 'all' || !node.relativePath) {
+  if (node.provider !== 'local' || node.role === 'all' || !node.relativePath) {
     return null;
   }
   return {
@@ -174,6 +201,7 @@ function buildFolderTree(folders: StorageFolder[]): FolderTreeNode {
     children: [],
     id: folderIdentity('uploaded', ''),
     label: roleLabels.uploaded,
+    provider: 'local',
     relativePath: '',
     role: 'uploaded',
     workspaceRelativePath: 'storage/uploaded'
@@ -182,6 +210,7 @@ function buildFolderTree(folders: StorageFolder[]): FolderTreeNode {
     children: [],
     id: folderIdentity('generated', ''),
     label: roleLabels.generated,
+    provider: 'local',
     relativePath: '',
     role: 'generated',
     workspaceRelativePath: 'storage/generated'
@@ -190,6 +219,7 @@ function buildFolderTree(folders: StorageFolder[]): FolderTreeNode {
     children: [uploadedRoot, generatedRoot],
     id: STORAGE_ROOT_ID,
     label: 'Storage',
+    provider: 'local',
     relativePath: '',
     role: 'all',
     workspaceRelativePath: 'storage'
@@ -201,6 +231,7 @@ function buildFolderTree(folders: StorageFolder[]): FolderTreeNode {
 
   folders
     .slice()
+    .filter((folder): folder is StorageFolder & { role: FileRole } => isFileRole(folder.role))
     .sort((left, right) => `${left.role}/${left.relative_path}`.localeCompare(`${right.role}/${right.relative_path}`))
     .forEach((folder) => {
       const folderPath = normalizeFolderPath(folder.relative_path);
@@ -219,6 +250,7 @@ function buildFolderTree(folders: StorageFolder[]): FolderTreeNode {
             children: [],
             id: folderIdentity(folder.role, currentPath),
             label: part,
+            provider: 'local',
             relativePath: currentPath,
             role: folder.role,
             workspaceRelativePath: `storage/${folder.role}/${currentPath}`
@@ -235,6 +267,77 @@ function buildFolderTree(folders: StorageFolder[]): FolderTreeNode {
 
   sortFolderTree(root);
   return root;
+}
+
+function buildDriveTreeNodes(connections: DriveConnection[], cache: DriveChildrenCache): FolderTreeNode[] {
+  return connections
+    .filter((connection) => connection.status !== 'pending')
+    .slice()
+    .sort((left, right) => driveConnectionLabel(left).localeCompare(driveConnectionLabel(right)))
+    .map((connection) => {
+      const nodeId = driveAccountIdentity(connection.id);
+      const cached = cache[nodeId];
+      const status = driveConnectionStatus(connection);
+      return {
+        children: cached?.children || [],
+        connectionId: connection.id,
+        displayPath: `/${driveConnectionLabel(connection)}`,
+        error: cached?.error,
+        id: nodeId,
+        label: driveConnectionLabel(connection),
+        lazy: status === 'connected',
+        loading: cached?.loading,
+        provider: 'google_drive',
+        relativePath: '',
+        role: 'all',
+        status,
+        workspaceRelativePath: connection.account_email || connection.id
+      };
+    });
+}
+
+function driveConnectionLabel(connection: DriveConnection) {
+  return connection.display_name || connection.account_email || 'Google Drive';
+}
+
+function driveConnectionStatus(connection: DriveConnection): FolderTreeNode['status'] {
+  if (connection.status !== 'connected') {
+    return connection.status;
+  }
+  return connection.credential?.secret_ref && connection.credential?.status === 'active' ? 'connected' : 'reconnect_required';
+}
+
+function driveFolderNode(connectionId: string, folder: StorageFolder): FolderTreeNode {
+  const rootKind = typeof folder.remote_locator?.root_kind === 'string' ? folder.remote_locator.root_kind : '';
+  return {
+    children: [],
+    connectionId,
+    displayPath: folder.display_path || folder.name,
+    driveFileId: folder.drive_file_id || '',
+    id: driveFolderIdentity(connectionId, folder.drive_file_id || folder.id, rootKind),
+    label: folder.name,
+    lazy: true,
+    provider: 'google_drive',
+    relativePath: '',
+    role: 'all',
+    status: 'connected',
+    workspaceRelativePath: folder.display_path || folder.name
+  };
+}
+
+function mergeDriveChildren(node: FolderTreeNode, cache: DriveChildrenCache): FolderTreeNode {
+  if (node.provider !== 'google_drive') {
+    return { ...node, children: node.children.map((child) => mergeDriveChildren(child, cache)) };
+  }
+  const cached = cache[node.id];
+  const children = (cached?.children || node.children).map((child) => mergeDriveChildren(child, cache));
+  return {
+    ...node,
+    children,
+    error: cached?.error,
+    loading: cached?.loading,
+    lazy: node.lazy || children.length > 0 || Boolean(cached?.loaded),
+  };
 }
 
 function sortFolderTree(node: FolderTreeNode) {
@@ -298,6 +401,11 @@ function folderIdentityFromTarget(target: StorageNavigationTarget | null) {
   if (!target) {
     return '';
   }
+  if (target.provider === 'google_drive' && target.connectionId) {
+    return target.driveFileId
+      ? driveFolderIdentity(target.connectionId, target.driveFileId)
+      : driveAccountIdentity(target.connectionId);
+  }
   if (target.targetType === 'folder' && target.role) {
     return folderIdentity(target.role, target.folderRelativePath || '');
   }
@@ -316,14 +424,22 @@ function folderIdentityFromWorkspacePath(workspaceRelativePath: string) {
 }
 
 function openFolderInShell(node: FolderTreeNode, appId: string) {
+  const params = node.provider === 'google_drive'
+    ? {
+      provider: 'google_drive',
+      connection_id: node.connectionId,
+      ...(node.driveFileId ? { drive_file_id: node.driveFileId } : {}),
+      display_path: node.displayPath || node.label,
+    }
+    : {
+      folder_relative_path: node.role === 'all' ? '' : node.relativePath,
+      role: node.role
+    };
   window.parent?.postMessage(
     {
       type: 'maverick.widget.open-app',
       app_id: appId,
-      params: {
-        folder_relative_path: node.role === 'all' ? '' : node.relativePath,
-        role: node.role
-      }
+      params
     },
     window.location.origin
   );
@@ -455,6 +571,8 @@ function KindFilterRail({ activeKind, availableKinds, onSelect }: {
 
 function StorageSidebarWidget() {
   const storageAppId = useMemo(() => currentStorageAppId(), []);
+  const [driveConnections, setDriveConnections] = useState<DriveConnection[]>([]);
+  const [driveChildrenCache, setDriveChildrenCache] = useState<DriveChildrenCache>({});
   const [folders, setFolders] = useState<StorageFolder[]>([]);
   const [availableKinds, setAvailableKinds] = useState<Set<PreviewKind>>(() => new Set());
   const [query, setQuery] = useState('');
@@ -469,7 +587,11 @@ function StorageSidebarWidget() {
 
   useShellSidebarCloseSwipe(isShellMobileLayout);
 
-  const folderTreeRoot = useMemo(() => buildFolderTree(folders), [folders]);
+  const folderTreeRoot = useMemo(() => {
+    const root = buildFolderTree(folders);
+    root.children = [...root.children, ...buildDriveTreeNodes(driveConnections, driveChildrenCache).map((node) => mergeDriveChildren(node, driveChildrenCache))];
+    return root;
+  }, [driveChildrenCache, driveConnections, folders]);
   const filteredTreeRoot = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return filterFolderTree(folderTreeRoot, needle);
@@ -486,6 +608,16 @@ function StorageSidebarWidget() {
     setActiveKind(normalizeKind(payload.state.view_filter.kind));
     setActiveViewMode(payload.state.view_filter.mode);
     setSelectedFolderId((current) => current || folderIdentityFromFilter(payload.state.view_filter));
+  }
+
+  async function refreshDriveConnections() {
+    const payload = await listDriveConnections();
+    setDriveConnections(payload.connections || []);
+  }
+
+  async function refreshDriveState() {
+    setDriveChildrenCache({});
+    await refreshDriveConnections();
   }
 
   function applyFolderDelta(delta: StorageCatalogDelta) {
@@ -511,7 +643,7 @@ function StorageSidebarWidget() {
 
   async function refreshAll() {
     try {
-      await Promise.all([refreshCatalog(), refreshViewFilter()]);
+      await Promise.all([refreshCatalog(), refreshViewFilter(), refreshDriveConnections()]);
       setError(null);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load Storage.');
@@ -542,6 +674,42 @@ function StorageSidebarWidget() {
       });
   }
 
+  async function ensureDriveChildren(node: FolderTreeNode) {
+    if (node.provider !== 'google_drive' || !node.lazy || !node.connectionId) {
+      return;
+    }
+    const cached = driveChildrenCache[node.id];
+    if (cached?.loaded || cached?.loading || node.status === 'reconnect_required') {
+      return;
+    }
+    setDriveChildrenCache((current) => ({
+      ...current,
+      [node.id]: { ...(current[node.id] || { children: [] }), loading: true }
+    }));
+    try {
+      const payload = node.driveFileId
+        ? await listDriveChildren(node.connectionId, node.driveFileId)
+        : await listDriveRoots(node.connectionId);
+      const children = (payload.folders || []).map((folder) => driveFolderNode(node.connectionId || payload.connection_id, folder));
+      setDriveChildrenCache((current) => ({
+        ...current,
+        [node.id]: { children, loaded: true }
+      }));
+      setError(null);
+    } catch (loadError) {
+      setDriveChildrenCache((current) => ({
+        ...current,
+        [node.id]: {
+          ...(current[node.id] || { children: [] }),
+          error: loadError instanceof Error ? loadError.message : 'Unable to load Google Drive folders.',
+          loaded: false,
+          loading: false
+        }
+      }));
+      setError(loadError instanceof Error ? loadError.message : 'Unable to load Google Drive folders.');
+    }
+  }
+
   useEffect(() => {
     function handleShellMessage(event: MessageEvent) {
       if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') {
@@ -570,6 +738,10 @@ function StorageSidebarWidget() {
       }
       if (payload.resource === 'files') {
         void refreshCatalog();
+        setDriveChildrenCache({});
+      }
+      if (payload.resource === 'drive-connections') {
+        void refreshDriveState();
       }
       if (payload.resource === 'view-state') {
         const nextFilter = storageViewFilterFromMessage(payload, storageAppId);
@@ -587,10 +759,18 @@ function StorageSidebarWidget() {
 
   function selectFolder(node: FolderTreeNode) {
     setSelectedFolderId(node.id);
+    if (node.provider === 'google_drive' && node.status === 'reconnect_required') {
+      setError('Reconnect required');
+      return;
+    }
     openFolderInShell(node, storageAppId);
   }
 
   function handleFolderDragStart(event: DragEvent<HTMLElement>, node: FolderTreeNode) {
+    if (node.provider !== 'local') {
+      event.preventDefault();
+      return;
+    }
     const folder = storageFolderFromNode(node);
     if (!folder) {
       event.preventDefault();
@@ -602,6 +782,9 @@ function StorageSidebarWidget() {
   }
 
   function handleFolderDrag(event: DragEvent<HTMLElement>, node: FolderTreeNode) {
+    if (node.provider !== 'local') {
+      return;
+    }
     let status = storageMoveDropStatus(event.dataTransfer, node.role);
     if (status === 'none') {
       return;
@@ -620,6 +803,9 @@ function StorageSidebarWidget() {
   }
 
   function handleFolderDragLeave(event: DragEvent<HTMLElement>, node: FolderTreeNode) {
+    if (node.provider !== 'local') {
+      return;
+    }
     if (storageMoveDropStatus(event.dataTransfer, node.role) === 'none') {
       return;
     }
@@ -629,6 +815,9 @@ function StorageSidebarWidget() {
   }
 
   async function handleFolderDrop(event: DragEvent<HTMLElement>, node: FolderTreeNode) {
+    if (node.provider !== 'local') {
+      return;
+    }
     const status = storageMoveDropStatus(event.dataTransfer, node.role);
     if (status === 'none') {
       return;
@@ -744,6 +933,7 @@ function StorageSidebarWidget() {
                 onDragOver={handleFolderDrag}
                 onDragStart={handleFolderDragStart}
                 onDrop={handleFolderDrop}
+                onEnsureChildren={ensureDriveChildren}
                 onSelect={selectFolder}
               />
             </TreeView>
@@ -757,7 +947,7 @@ function StorageSidebarWidget() {
   );
 }
 
-function FolderTreeNodeView({ dropTarget, node, level, isLast, onDragEnd, onDragLeave, onDragOver, onDragStart, onDrop, onSelect }: {
+function FolderTreeNodeView({ dropTarget, node, level, isLast, onDragEnd, onDragLeave, onDragOver, onDragStart, onDrop, onEnsureChildren, onSelect }: {
   dropTarget: FolderTreeDropTarget | null;
   isLast: boolean;
   level: number;
@@ -767,17 +957,22 @@ function FolderTreeNodeView({ dropTarget, node, level, isLast, onDragEnd, onDrag
   onDragOver: (event: DragEvent<HTMLElement>, node: FolderTreeNode) => void;
   onDragStart: (event: DragEvent<HTMLElement>, node: FolderTreeNode) => void;
   onDrop: (event: DragEvent<HTMLElement>, node: FolderTreeNode) => void;
+  onEnsureChildren: (node: FolderTreeNode) => void;
   onSelect: (node: FolderTreeNode) => void;
 }) {
-  const hasChildren = node.children.length > 0;
+  const hasChildren = node.children.length > 0 || Boolean(node.lazy);
   const nodeDropStatus = dropTarget?.nodeId === node.id ? dropTarget.status : null;
+  const label = node.status === 'reconnect_required' ? `${node.label} (Reconnect required)` : node.label;
 
   return (
     <TreeNode isLast={isLast} level={level} nodeId={node.id}>
       <TreeNodeTrigger
         className={nodeDropStatus === 'ready' ? 'storage-folder-tree-drop-ready' : nodeDropStatus === 'blocked' ? 'storage-folder-tree-drop-blocked' : ''}
-        onClick={() => onSelect(node)}
-        draggable={node.role !== 'all' && Boolean(node.relativePath)}
+        onClick={() => {
+          onEnsureChildren(node);
+          onSelect(node);
+        }}
+        draggable={node.provider === 'local' && node.role !== 'all' && Boolean(node.relativePath)}
         onDragEnd={onDragEnd}
         onDragEnter={(event) => onDragOver(event, node)}
         onDragLeave={(event) => onDragLeave(event, node)}
@@ -785,11 +980,20 @@ function FolderTreeNodeView({ dropTarget, node, level, isLast, onDragEnd, onDrag
         onDragStartCapture={(event) => onDragStart(event, node)}
         onDrop={(event) => onDrop(event, node)}
       >
-        <TreeExpander hasChildren={hasChildren} />
+        <TreeExpander hasChildren={hasChildren} onClick={() => onEnsureChildren(node)} />
         <TreeIcon className="storage-folder-drag-icon-source" hasChildren />
-        <TreeLabel title={node.workspaceRelativePath}>{node.label}</TreeLabel>
+        <TreeLabel title={node.error || node.workspaceRelativePath}>{node.loading ? `${label}...` : label}</TreeLabel>
       </TreeNodeTrigger>
       <TreeNodeContent hasChildren={hasChildren}>
+        {node.error ? (
+          <TreeNode isLast level={level + 1} nodeId={`${node.id}:error`}>
+            <TreeNodeTrigger className="storage-folder-tree-status">
+              <TreeExpander hasChildren={false} />
+              <TreeIcon hasChildren={false} />
+              <TreeLabel title={node.error}>{node.error}</TreeLabel>
+            </TreeNodeTrigger>
+          </TreeNode>
+        ) : null}
         {node.children.map((child, index) => (
           <FolderTreeNodeView
             dropTarget={dropTarget}
@@ -802,6 +1006,7 @@ function FolderTreeNodeView({ dropTarget, node, level, isLast, onDragEnd, onDrag
             onDragOver={onDragOver}
             onDragStart={onDragStart}
             onDrop={onDrop}
+            onEnsureChildren={onEnsureChildren}
             onSelect={onSelect}
           />
         ))}

@@ -1,4 +1,6 @@
 export type FileRole = 'uploaded' | 'generated';
+export type StorageProvider = 'local' | 'google_drive';
+export type StorageItemRole = FileRole | '';
 
 export type PreviewKind =
   | 'image'
@@ -16,7 +18,13 @@ export type StorageFile = {
   id: string;
   file_id: string;
   path_id: string;
-  role: FileRole;
+  provider?: StorageProvider;
+  connection_id?: string;
+  drive_file_id?: string;
+  display_path?: string;
+  remote_locator?: Record<string, unknown>;
+  capabilities?: StorageProviderCapabilities;
+  role: StorageItemRole;
   name: string;
   relative_path: string;
   workspace_relative_path: string;
@@ -30,11 +38,97 @@ export type StorageFile = {
 
 export type StorageFolder = {
   id: string;
-  role: FileRole;
+  provider?: StorageProvider;
+  connection_id?: string;
+  drive_file_id?: string;
+  display_path?: string;
+  remote_locator?: Record<string, unknown>;
+  capabilities?: StorageProviderCapabilities;
+  role: StorageItemRole;
   name: string;
   relative_path: string;
   workspace_relative_path: string;
   modified_at: string;
+};
+
+export type StorageProviderCapabilities = {
+  can_read: boolean;
+  can_write: boolean;
+  can_move: boolean;
+  can_rename: boolean;
+  can_delete: boolean;
+  can_preview: boolean;
+  can_index: boolean;
+};
+
+export type DriveConnection = {
+  id: string;
+  resource_type: 'drive_connection';
+  provider: 'google_drive';
+  account_email: string;
+  display_name: string;
+  status: 'pending' | 'connected' | 'disconnected' | 'error';
+  access_mode: string;
+  scopes: string[];
+  created_at: string;
+  updated_at: string;
+  connected_at: string;
+  disconnected_at: string;
+  credential?: {
+    secret_ref?: string;
+    grant_id?: string;
+    status?: string;
+    oauth_metadata?: Record<string, unknown>;
+  };
+  external_refs?: Record<string, unknown>;
+  sync_state?: {
+    start_page_token: string;
+    last_processed_page_token: string;
+    last_sync_at: string;
+    status: 'not_started' | 'healthy' | 'syncing' | 'error';
+    error: string;
+  };
+};
+
+export type DriveConnectionsPayload = {
+  connections: DriveConnection[];
+  provider: 'google_drive';
+};
+
+export type DriveStartOAuthPayload = {
+  access_mode: string;
+  authorization_url?: string;
+  connection_id?: string;
+  missing_secrets?: string[];
+  provider: 'google_drive';
+  state?: string;
+  status: 'authorization_required' | 'not_configured';
+};
+
+export type DriveCompleteOAuthPayload = {
+  access_mode: string;
+  connection?: DriveConnection;
+  connection_id?: string;
+  provider: 'google_drive';
+  status: 'connected' | 'needs_secret_grant';
+};
+
+export type DriveDisconnectPayload = {
+  connection: DriveConnection;
+  connection_id: string;
+  status: 'disconnected';
+};
+
+export type DriveListPayload = {
+  provider: 'google_drive';
+  connection_id: string;
+  files?: StorageFile[];
+  folders?: StorageFolder[];
+  pagination?: {
+    limit: number;
+    total: number;
+    has_more: boolean;
+  };
 };
 
 export type StorageViewFilter = {

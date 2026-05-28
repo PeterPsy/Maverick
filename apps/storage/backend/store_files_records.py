@@ -25,6 +25,7 @@ from store_files_paths import (
     storage_root_for_role,
     write_content_bytes,
 )
+from storage_reference_resolver import StorageReferenceResolver
 from store_files_view import text_preview_cache_path
 from text_preview import MAX_TABLE_PREVIEW_COLUMNS, MAX_TABLE_PREVIEW_ROWS, MAX_TEXT_PREVIEW_CHARS, extract_table_preview, extract_text_preview
 
@@ -131,6 +132,11 @@ def file_info_payload(*, role: str, relative_path: str, data_root: Path, uploade
     )
     root = storage_root_for_role(role=role, uploaded_root=uploaded_root, generated_root=generated_root).resolve()
     return {"file": upsert_file_record(data_root=data_root, role=role, root=root, path=path.resolve())}
+
+
+def file_info_by_id_payload(*, file_id: str, data_root: Path, uploaded_root: Path, generated_root: Path) -> dict:
+    resolver = StorageReferenceResolver(data_root=data_root, uploaded_root=uploaded_root, generated_root=generated_root)
+    return {"file": resolver.require_file(file_id)}
 
 
 

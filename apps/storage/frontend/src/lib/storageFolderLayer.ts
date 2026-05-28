@@ -39,7 +39,7 @@ export function visibleFileParentPath(file: Pick<StorageFile, 'relative_path' | 
 export function fileFolderSelection(file: Pick<StorageFile, 'relative_path' | 'role'>): StorageFolderSelection {
   return {
     relativePath: visibleFileParentPath(file),
-    role: file.role,
+    role: file.role === 'uploaded' || file.role === 'generated' ? file.role : 'all',
   };
 }
 

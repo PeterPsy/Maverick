@@ -1,4 +1,4 @@
-import type { CatalogPayload, CreateFolderPayload, DeleteFilePayload, DeleteFolderPayload, DownloadFolderPayload, FileRole, StorageFile, StorageFolder, StorageViewFilter, MoveFilePayload, MoveFolderPayload, MoveItemsPayload, PreviewTablePayload, PreviewTextPayload, ReadFilePayload, RenderPreviewPayload, UpdateMarkdownPayload, UploadFilePayload } from './types';
+import type { CatalogPayload, CreateFolderPayload, DeleteFilePayload, DeleteFolderPayload, DownloadFolderPayload, DriveCompleteOAuthPayload, DriveConnectionsPayload, DriveDisconnectPayload, DriveListPayload, DriveStartOAuthPayload, FileRole, StorageFile, StorageFolder, StorageViewFilter, MoveFilePayload, MoveFolderPayload, MoveItemsPayload, PreviewTablePayload, PreviewTextPayload, ReadFilePayload, RenderPreviewPayload, UpdateMarkdownPayload, UploadFilePayload } from './types';
 
 const DEFAULT_APP_ID = 'storage';
 
@@ -8,18 +8,60 @@ export type StorageApiOptions = {
   fetchImpl?: typeof fetch;
 };
 
+export type UploadProgressPhase = 'reading' | 'uploading' | 'complete';
+
+export type UploadProgress = {
+  loaded: number;
+  percent: number;
+  phase: UploadProgressPhase;
+  total: number;
+};
+
+export type UploadFileOptions = StorageApiOptions & {
+  onProgress?: (progress: UploadProgress) => void;
+};
+
+export type DriveListOptions = StorageApiOptions & {
+  limit?: number;
+};
+
+export type DriveOAuthStartOptions = StorageApiOptions & {
+  redirectUri?: string;
+};
+
+export type DriveOAuthCompleteOptions = {
+  code: string;
+  redirectUri: string;
+  state: string;
+};
+
 export type StorageMoveReference = {
   role: FileRole;
   relative_path: string;
   workspace_relative_path?: string;
 };
 
+export type StorageSecretRequest = {
+  logical_names?: string[];
+  required?: boolean;
+  resource_id?: string;
+  resource_type?: string;
+  selectors?: Array<{
+    logical_names: string[];
+    resource_id?: string;
+    resource_type?: string;
+  }>;
+};
+
+const DRIVE_CLIENT_SECRET_NAMES = ['google-drive-oauth-client-id', 'google-drive-oauth-client-secret'];
+const DRIVE_REFRESH_TOKEN_SECRET_NAME = 'google-drive-refresh-token';
+
 export async function callBackend<T>(body: Record<string, unknown>, options: StorageApiOptions = {}): Promise<T> {
   const fetchImpl = options.fetchImpl || fetch;
   const response = await fetchImpl(options.endpoint || storageBackendEndpoint(options.appId), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
+    body: JSON.stringify(withDefaultSecretRequest(body))
   });
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.detail || payload.error || 'Storage request failed');
@@ -78,6 +120,103 @@ export function clearCustomView() {
   return callBackend<{ state: CatalogPayload['state'] }>({ action: 'clear_custom_view' });
 }
 
+export function listDriveConnections(options: StorageApiOptions = {}) {
+  return callBackend<DriveConnectionsPayload>({
+    action: 'drive_connections.list',
+    _app_secret_request: {}
+  }, options);
+}
+
+export function startDriveOAuth(options: DriveOAuthStartOptions = {}) {
+  const { redirectUri, ...apiOptions } = options;
+  return callBackend<DriveStartOAuthPayload>({
+    action: 'drive_connections.start_oauth',
+    ...(redirectUri ? { redirect_uri: redirectUri } : {}),
+    _app_secret_request: {
+      logical_names: DRIVE_CLIENT_SECRET_NAMES,
+      required: false
+    } satisfies StorageSecretRequest
+  }, apiOptions);
+}
+
+export async function completeDriveOAuth(oauth: DriveOAuthCompleteOptions, options: StorageApiOptions = {}) {
+  const payload = await callBackend<DriveCompleteOAuthPayload>({
+    action: 'drive_connections.complete_oauth',
+    provider: 'google_drive',
+    code: oauth.code,
+    state: oauth.state,
+    redirect_uri: oauth.redirectUri,
+    _app_secret_request: {
+      logical_names: DRIVE_CLIENT_SECRET_NAMES,
+      required: true
+    } satisfies StorageSecretRequest
+  }, options);
+  if (payload.status !== 'connected' || !payload.connection) {
+    throw new Error('Google Drive connection failed. Check the Google Drive OAuth secret grants and start the connection again.');
+  }
+  return payload;
+}
+
+export function disconnectDriveConnection(connectionId: string, options: StorageApiOptions = {}) {
+  return callBackend<DriveDisconnectPayload>({
+    action: 'drive_connections.disconnect',
+    connection_id: connectionId,
+    _app_secret_request: {}
+  }, options);
+}
+
+export function listDriveRoots(connectionId: string, options: DriveListOptions = {}) {
+  const { limit, ...apiOptions } = options;
+  return callBackend<DriveListPayload>({
+    action: 'drive_list_roots',
+    connection_id: connectionId,
+    ...(limit === undefined ? {} : { limit }),
+    _app_secret_request: driveConnectionSecretRequest(connectionId)
+  }, apiOptions);
+}
+
+export function listDriveChildren(connectionId: string, driveFileId: string, options: DriveListOptions = {}) {
+  const { limit, ...apiOptions } = options;
+  return callBackend<DriveListPayload>({
+    action: 'drive_list_children',
+    connection_id: connectionId,
+    drive_file_id: driveFileId,
+    ...(limit === undefined ? {} : { limit }),
+    _app_secret_request: driveConnectionSecretRequest(connectionId)
+  }, apiOptions);
+}
+
+export function readDriveFile(file: StorageFile, maxBytes: number, options: StorageApiOptions = {}) {
+  const locator = driveFileLocator(file);
+  return callBackend<ReadFilePayload>({
+    action: 'drive_read',
+    ...locator,
+    max_bytes: maxBytes,
+    _app_secret_request: driveConnectionSecretRequest(locator.connection_id)
+  }, options);
+}
+
+export function renameDriveFile(file: StorageFile, newName: string, options: StorageApiOptions = {}) {
+  const locator = driveFileLocator(file);
+  return callBackend<{ file: StorageFile }>({
+    action: 'drive_rename',
+    ...locator,
+    new_name: newName,
+    _app_secret_request: driveConnectionSecretRequest(locator.connection_id)
+  }, options);
+}
+
+export function trashDriveFile(file: StorageFile, options: StorageApiOptions = {}) {
+  const locator = driveFileLocator(file);
+  return callBackend<{ file: StorageFile; status: string }>({
+    action: 'drive_trash',
+    ...locator,
+    confirm: true,
+    delete_policy: 'user_confirmed',
+    _app_secret_request: driveConnectionSecretRequest(locator.connection_id)
+  }, options);
+}
+
 export async function createFolder(role: FileRole, parentRelativePath: string, folderName: string) {
   return callBackend<CreateFolderPayload>({
     action: 'create_folder',
@@ -87,14 +226,25 @@ export async function createFolder(role: FileRole, parentRelativePath: string, f
   });
 }
 
-export async function uploadFile(role: FileRole, folderRelativePath: string, file: File) {
-  return callBackend<UploadFilePayload>({
+export async function uploadFile(role: FileRole, folderRelativePath: string, file: File, options: UploadFileOptions = {}) {
+  const contentBase64 = await fileToBase64(file, (loaded, total) => {
+    const percent = total > 0 ? Math.round((loaded / total) * 35) : 0;
+    options.onProgress?.({ loaded, percent: Math.min(35, percent), phase: 'reading', total });
+  });
+  const body = {
     action: 'upload_file',
     role,
     folder_relative_path: folderRelativePath,
     file_name: file.name,
-    content_base64: await fileToBase64(file)
-  });
+    content_base64: contentBase64
+  };
+  options.onProgress?.({ loaded: 0, percent: 35, phase: 'uploading', total: file.size });
+  const useProgressRequest = Boolean(options.onProgress) && typeof XMLHttpRequest !== 'undefined' && !options.fetchImpl;
+  const payload = useProgressRequest
+    ? await callBackendWithUploadProgress<UploadFilePayload>(body, options)
+    : await callBackend<UploadFilePayload>(body, options);
+  options.onProgress?.({ loaded: file.size, percent: 100, phase: 'complete', total: file.size });
+  return payload;
 }
 
 export async function readFile(file: StorageFile, maxBytes: number) {
@@ -227,13 +377,98 @@ function moveReferencePayload(item: StorageMoveReference) {
   };
 }
 
-function fileToBase64(file: File) {
+function callBackendWithUploadProgress<T>(body: Record<string, unknown>, options: UploadFileOptions): Promise<T> {
+  const endpoint = options.endpoint || storageBackendEndpoint(options.appId);
+  const serializedBody = JSON.stringify(withDefaultSecretRequest(body));
+  return new Promise<T>((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open('POST', endpoint);
+    request.setRequestHeader('Content-Type', 'application/json');
+    request.upload.onprogress = (event) => {
+      if (!event.lengthComputable) {
+        return;
+      }
+      const uploadPercent = event.total > 0 ? event.loaded / event.total : 0;
+      options.onProgress?.({
+        loaded: event.loaded,
+        percent: Math.min(98, 35 + Math.round(uploadPercent * 63)),
+        phase: 'uploading',
+        total: event.total
+      });
+    };
+    request.onerror = () => reject(new Error('Storage request failed'));
+    request.onload = () => {
+      let payload: unknown = {};
+      try {
+        payload = request.responseText ? JSON.parse(request.responseText) : {};
+      } catch {
+        reject(new Error('Storage response was not valid JSON'));
+        return;
+      }
+      if (request.status < 200 || request.status >= 300) {
+        const errorPayload = payload as { detail?: string; error?: string };
+        reject(new Error(errorPayload.detail || errorPayload.error || 'Storage request failed'));
+        return;
+      }
+      resolve(payload as T);
+    };
+    request.send(serializedBody);
+  });
+}
+
+function withDefaultSecretRequest(body: Record<string, unknown>) {
+  const explicitRequest = body._app_secret_request;
+  if (explicitRequest && typeof explicitRequest === 'object' && !Array.isArray(explicitRequest)) {
+    return body;
+  }
+  return {
+    ...body,
+    _app_secret_request: {
+      logical_names: [],
+      required: false
+    } satisfies StorageSecretRequest
+  };
+}
+
+export function driveConnectionSecretRequest(connectionId: string): StorageSecretRequest {
+  return {
+    required: true,
+    selectors: [
+      { logical_names: DRIVE_CLIENT_SECRET_NAMES },
+      {
+        logical_names: [DRIVE_REFRESH_TOKEN_SECRET_NAME],
+        resource_type: 'drive_connection',
+        resource_id: connectionId
+      }
+    ]
+  };
+}
+
+function driveFileLocator(file: StorageFile) {
+  const connectionId = String(file.connection_id || '').trim();
+  const driveFileId = String(file.drive_file_id || '').trim();
+  if (!connectionId || !driveFileId) {
+    throw new Error('Google Drive file identity is missing.');
+  }
+  return {
+    connection_id: connectionId,
+    drive_file_id: driveFileId
+  };
+}
+
+function fileToBase64(file: File, onProgress?: (loaded: number, total: number) => void) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('Unable to read selected file.'));
+    reader.onprogress = (event) => {
+      if (event.lengthComputable) {
+        onProgress?.(event.loaded, event.total);
+      }
+    };
     reader.onload = () => {
       const result = String(reader.result || '');
       const separatorIndex = result.indexOf(',');
+      onProgress?.(file.size, file.size);
       resolve(separatorIndex >= 0 ? result.slice(separatorIndex + 1) : result);
     };
     reader.readAsDataURL(file);

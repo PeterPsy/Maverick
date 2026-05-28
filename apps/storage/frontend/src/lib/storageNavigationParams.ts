@@ -3,7 +3,11 @@ import type { FileRole } from '../types';
 export type StorageNavigationParams = Record<string, string | boolean | null | undefined>;
 
 export type StorageNavigationTarget = {
+  connectionId?: string;
+  displayPath?: string;
+  driveFileId?: string;
   fileId: string;
+  provider?: 'google_drive';
   workspaceRelativePath: string;
   targetType?: 'file' | 'folder';
   role?: FileRole | 'all';
@@ -24,6 +28,26 @@ export function scalarString(value: unknown): string {
 }
 
 export function storageTargetFromParams(params: StorageNavigationParams): StorageNavigationTarget | null {
+  const provider = scalarString(params.provider);
+  if (provider === 'google_drive') {
+    const connectionId = scalarString(params.connection_id);
+    const driveFileId = scalarString(params.drive_file_id);
+    if (!connectionId) {
+      return null;
+    }
+    return {
+      connectionId,
+      displayPath: scalarString(params.display_path),
+      driveFileId,
+      fileId: '',
+      folderRelativePath: '',
+      provider: 'google_drive',
+      role: 'all',
+      targetType: 'folder',
+      workspaceRelativePath: ''
+    };
+  }
+
   const role = storageRoleFromValue(params.role);
   if (role && hasOwn(params, 'folder_relative_path')) {
     return {
@@ -80,6 +104,25 @@ export function storageTargetFromWidgetContext(message: WidgetContextMessage): S
     return null;
   }
   return storageTargetFromParams(activeAppParams as StorageNavigationParams);
+}
+
+export function folderTargetFromMissingFileTarget(target: StorageNavigationTarget): StorageNavigationTarget | null {
+  const workspaceRelativePath = scalarString(target.workspaceRelativePath);
+  const match = /^storage\/(uploaded|generated)\/(.+)$/.exec(workspaceRelativePath);
+  const role = storageRoleFromValue(match?.[1]);
+  if ((role !== 'uploaded' && role !== 'generated') || !match?.[2]) {
+    return null;
+  }
+  const pathParts = normalizeRelativePath(match[2]).split('/').filter(Boolean);
+  pathParts.pop();
+  const folderRelativePath = pathParts.join('/');
+  return {
+    fileId: '',
+    folderRelativePath,
+    role,
+    targetType: 'folder',
+    workspaceRelativePath: `storage/${role}${folderRelativePath ? `/${folderRelativePath}` : ''}`
+  };
 }
 
 function decodeParam(value: string): string {

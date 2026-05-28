@@ -15,12 +15,12 @@ import tempfile
 
 from errors import StorageValidationError
 from inventory import (
-    catalog_inventory_payload,
     content_hash,
-    list_inventory_folders,
     preview_kind as inventory_preview_kind,
     upsert_file_record,
 )
+from local_storage_provider import LocalStorageProvider
+from storage_catalog import StorageCatalog
 
 
 SCHEMA_VERSION = "1"
@@ -193,10 +193,8 @@ def catalog_files_payload(
     workspace_relative_paths: list[str] | None = None,
 ) -> dict:
     with storage_write_lock(data_root):
-        return catalog_inventory_payload(
+        return _storage_catalog(uploaded_root=uploaded_root, generated_root=generated_root).catalog_files(
             data_root=data_root,
-            uploaded_root=uploaded_root,
-            generated_root=generated_root,
             sync=sync,
             query=query,
             role=role,
@@ -218,7 +216,11 @@ def list_files(*, data_root: Path, uploaded_root: Path, generated_root: Path) ->
 
 def list_folders(*, data_root: Path, uploaded_root: Path, generated_root: Path, sync: bool = False) -> list[dict]:
     with storage_write_lock(data_root):
-        return list_inventory_folders(data_root=data_root, uploaded_root=uploaded_root, generated_root=generated_root, sync=sync)
+        return _storage_catalog(uploaded_root=uploaded_root, generated_root=generated_root).list_folders(data_root=data_root, sync=sync)
+
+
+def _storage_catalog(*, uploaded_root: Path, generated_root: Path) -> StorageCatalog:
+    return StorageCatalog(local_provider=LocalStorageProvider(uploaded_root=uploaded_root, generated_root=generated_root))
 
 
 

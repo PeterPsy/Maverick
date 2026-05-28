@@ -45,6 +45,21 @@
               "references.search",
               "references.resolve",
               "references.summarize",
+              "drive_connections.list",
+              "drive_connections.start_oauth",
+              "drive_connections.disconnect",
+              "drive_list_roots",
+              "drive_list_children",
+              "drive_sync",
+              "drive_search",
+              "drive_read",
+              "drive_preview",
+              "drive_export",
+              "drive_index",
+              "drive_write",
+              "drive_rename",
+              "drive_move",
+              "drive_trash",
               "health.check"
             ],
             "default": "operations.manifest"
@@ -75,6 +90,7 @@
           "max_columns": {"type": "integer", "minimum": 1},
           "content": {"type": "string"},
           "content_base64": {"type": "string"},
+          "content_type": {"type": "string"},
           "mode": {"type": "string", "enum": ["create", "overwrite"]},
           "new_name": {"type": "string"},
           "target_folder_relative_path": {"type": "string"},
@@ -83,7 +99,21 @@
           "title": {"type": "string"},
           "preserve_custom": {"type": "boolean", "default": false},
           "entity_type": {"type": "string", "enum": ["file", "folder"]},
-          "entity_id": {"type": "string"}
+          "entity_id": {"type": "string"},
+          "provider": {"type": "string", "enum": ["google_drive"]},
+          "connection_id": {"type": "string"},
+          "drive_file_id": {"type": "string"},
+          "stable_storage_file_id": {"type": "string"},
+          "display_path": {"type": "string"},
+          "parent_drive_file_id": {"type": "string"},
+          "target_parent_drive_file_id": {"type": "string"},
+          "export_mime_type": {"type": "string"},
+          "access_mode": {"type": "string", "enum": ["full_read", "full_rw", "picker_limited"]},
+          "redirect_uri": {"type": "string"},
+          "state": {"type": "string"},
+          "code": {"type": "string"},
+          "confirm": {"type": "boolean", "default": false},
+          "delete_policy": {"type": "string", "enum": ["user_confirmed", "workspace_policy", "explicit_policy"]}
         },
         "additionalProperties": false,
         "oneOf": [
@@ -260,15 +290,138 @@
           {
             "properties": {"action": {"enum": ["references.resolve", "references.summarize"]}},
             "required": ["action", "entity_id"]
+          },
+          {
+            "properties": {"action": {"enum": ["drive_connections.list"]}},
+            "required": ["action"]
+          },
+          {
+            "properties": {"action": {"enum": ["drive_connections.start_oauth"]}},
+            "required": ["action"]
+          },
+          {
+            "properties": {"action": {"enum": ["drive_connections.disconnect", "drive_list_roots", "drive_sync", "drive_search"]}},
+            "required": ["action", "connection_id"]
+          },
+          {
+            "properties": {"action": {"enum": ["drive_list_children"]}},
+            "required": ["action", "connection_id"],
+            "oneOf": [
+              {"required": ["parent_drive_file_id"]},
+              {"required": ["drive_file_id"]}
+            ]
+          },
+          {
+            "properties": {"action": {"enum": ["drive_read", "drive_preview", "drive_export", "drive_index", "drive_trash"]}},
+            "required": ["action"],
+            "anyOf": [
+              {"required": ["connection_id", "drive_file_id"]},
+              {"required": ["stable_storage_file_id"]}
+            ]
+          },
+          {
+            "properties": {"action": {"enum": ["drive_write"]}},
+            "required": ["action"],
+            "oneOf": [
+              {"required": ["connection_id", "drive_file_id"]},
+              {"required": ["stable_storage_file_id"]},
+              {"required": ["connection_id", "parent_drive_file_id", "file_name"]}
+            ],
+            "anyOf": [
+              {"required": ["content"]},
+              {"required": ["content_base64"]}
+            ]
+          },
+          {
+            "properties": {"action": {"enum": ["drive_rename"]}},
+            "required": ["action", "new_name"],
+            "anyOf": [
+              {"required": ["connection_id", "drive_file_id"]},
+              {"required": ["stable_storage_file_id"]}
+            ]
+          },
+          {
+            "properties": {"action": {"enum": ["drive_move"]}},
+            "required": ["action", "target_parent_drive_file_id"],
+            "anyOf": [
+              {"required": ["connection_id", "drive_file_id"]},
+              {"required": ["stable_storage_file_id"]}
+            ]
           }
         ],
         "examples": [
           {"action": "operations.manifest"},
           {"action": "catalog", "limit": 20},
           {"action": "file.content.read", "workspace_relative_path": "storage/generated/report.md"},
-          {"action": "file.content.write", "workspace_relative_path": "storage/generated/report.md", "mode": "overwrite", "content": "# Report"}
+          {"action": "file.content.write", "workspace_relative_path": "storage/generated/report.md", "mode": "overwrite", "content": "# Report"},
+          {"action": "drive_search", "connection_id": "drive_conn_example", "query": "mimeType='application/pdf'", "limit": 20},
+          {"action": "drive_export", "connection_id": "drive_conn_example", "drive_file_id": "1AbC", "export_mime_type": "application/pdf"}
         ]
-      }
+      },
+      "required_secrets": [],
+      "secret_selectors": [
+        {
+          "required_secrets": ["google-drive-oauth-client-id", "google-drive-oauth-client-secret"],
+          "when": {"action": "drive_connections.start_oauth"}
+        },
+        {
+          "required_secrets": ["google-drive-oauth-client-id", "google-drive-oauth-client-secret"],
+          "when": {
+            "action": [
+              "drive_sync",
+              "drive_list_roots",
+              "drive_list_children",
+              "drive_search",
+              "drive_read",
+              "drive_preview",
+              "drive_export",
+              "drive_index",
+              "drive_write",
+              "drive_rename",
+              "drive_move",
+              "drive_trash"
+            ]
+          }
+        },
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_id_argument": "connection_id",
+          "when": {
+            "action": [
+              "drive_sync",
+              "drive_list_roots",
+              "drive_list_children",
+              "drive_search",
+              "drive_read",
+              "drive_preview",
+              "drive_export",
+              "drive_index",
+              "drive_write",
+              "drive_rename",
+              "drive_move",
+              "drive_trash"
+            ]
+          }
+        },
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_lookup": {"kind": "storage_drive_file"},
+          "when": {
+            "action": [
+              "drive_read",
+              "drive_preview",
+              "drive_export",
+              "drive_index",
+              "drive_write",
+              "drive_rename",
+              "drive_move",
+              "drive_trash"
+            ]
+          }
+        }
+      ]
     }
   }
 }

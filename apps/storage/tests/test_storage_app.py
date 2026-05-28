@@ -151,6 +151,9 @@ class StorageAppTestCase(unittest.TestCase):
         self.assertIn("storage_set_view_filter", parsed.contract.capabilities.mcp_tools)
         self.assertIn("storage_reference_manifest", parsed.contract.capabilities.mcp_tools)
         self.assertIn("storage_write_file", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("storage_drive_list_roots", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("storage_drive_list_children", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("storage_drive_search", parsed.contract.capabilities.mcp_tools)
         self.assertEqual(parsed.contract.capabilities.cli_commands, ["storage"])
         self.assertEqual(parsed.contract.capabilities.skills, ["storage-ops"])
         provided_interfaces = {item.interface for item in parsed.contract.provides}
@@ -221,6 +224,94 @@ class StorageAppTestCase(unittest.TestCase):
             self.assertEqual(kinds["storage/generated/deck.pptx"], "presentation")
             self.assertEqual(kinds["storage/generated/clip.mp4"], "video")
             self.assertEqual(result["json"]["available_kinds"], ["video", "presentation", "markdown", "text"])
+
+    def test_backend_catalog_keeps_local_records_provider_aware(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            uploaded_root = root / "storage" / "uploaded"
+            generated_root = root / "storage" / "generated"
+            uploaded_root.mkdir(parents=True)
+            generated_root.mkdir(parents=True)
+            (uploaded_root / "brief.txt").write_text("brief", encoding="utf-8")
+            (generated_root / "report.md").write_text("# report", encoding="utf-8")
+
+            result = self.run_backend(
+                data_root=root / "data" / "storage",
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={"action": "catalog"},
+            )
+
+            self.assertEqual(result["status_code"], 200)
+            by_path = {item["workspace_relative_path"]: item for item in result["json"]["files"]}
+            self.assertEqual(set(by_path), {"storage/uploaded/brief.txt", "storage/generated/report.md"})
+            for item in by_path.values():
+                self.assertEqual(item["provider"], "local")
+                self.assertIn(item["role"], {"uploaded", "generated"})
+                self.assertEqual(item["connection_id"], "")
+                self.assertEqual(item["drive_file_id"], "")
+                self.assertEqual(item["remote_locator"], {})
+                self.assertEqual(item["display_path"], item["workspace_relative_path"])
+                self.assertEqual(item["sync_status"], "synced")
+                self.assertFalse(item["indexed"])
+                self.assertFalse(item["stale"])
+                self.assertTrue(item["capabilities"]["can_read"])
+                self.assertTrue(item["capabilities"]["can_write"])
+
+    def test_backend_catalog_preserves_remote_provider_records(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data_root = root / "data" / "storage"
+            data_root.mkdir(parents=True)
+            remote_id = "file_0123456789abcdef0123456789abcdef"
+            (data_root / "files.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "1",
+                        "files": [
+                            {
+                                "id": remote_id,
+                                "provider": "google_drive",
+                                "connection_id": "drive_conn_123",
+                                "drive_file_id": "drive_file_123",
+                                "remote_locator": {"drive_file_id": "drive_file_123"},
+                                "display_path": "/Clienti/Acme/Contratto.pdf",
+                                "name": "Contratto.pdf",
+                                "content_type": "application/pdf",
+                                "preview_kind": "pdf",
+                                "capabilities": {"can_read": True, "can_index": True},
+                                "sync_status": "synced",
+                                "indexed": True,
+                                "stale": False,
+                                "status": "active",
+                            }
+                        ],
+                        "directories": [],
+                        "updated_at": "",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            catalog = self.run_backend(
+                data_root=data_root,
+                uploaded_root=root / "storage" / "uploaded",
+                generated_root=root / "storage" / "generated",
+                body={"action": "catalog", "file_ids": [remote_id]},
+            )
+
+            self.assertEqual(catalog["status_code"], 200)
+            self.assertEqual(len(catalog["json"]["files"]), 1)
+            file_record = catalog["json"]["files"][0]
+            self.assertEqual(file_record["id"], remote_id)
+            self.assertEqual(file_record["provider"], "google_drive")
+            self.assertEqual(file_record["connection_id"], "drive_conn_123")
+            self.assertEqual(file_record["drive_file_id"], "drive_file_123")
+            self.assertEqual(file_record["workspace_relative_path"], "")
+            self.assertEqual(file_record["role"], "")
+            self.assertTrue(file_record["capabilities"]["can_read"])
+            self.assertTrue(file_record["indexed"])
+            self.assertFalse(file_record["stale"])
 
     def test_backend_catalog_orders_newest_files_first_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -547,6 +638,52 @@ class StorageAppTestCase(unittest.TestCase):
             self.assertEqual(info["json"]["file"]["relative_path"], "report.md")
             self.assertEqual(preview["status_code"], 200)
             self.assertEqual(preview["json"]["file"]["preview_kind"], "markdown")
+
+    def test_backend_file_info_resolves_stable_file_id(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            generated_root = root / "storage" / "generated"
+            generated_root.mkdir(parents=True)
+            (generated_root / "report.md").write_text("# report", encoding="utf-8")
+
+            catalog = self.run_backend(
+                data_root=root / "data" / "storage",
+                uploaded_root=root / "storage" / "uploaded",
+                generated_root=generated_root,
+                body={"action": "catalog"},
+            )
+            file_id = catalog["json"]["files"][0]["id"]
+            info = self.run_backend(
+                data_root=root / "data" / "storage",
+                uploaded_root=root / "storage" / "uploaded",
+                generated_root=generated_root,
+                body={"action": "file_info", "file_id": file_id},
+            )
+
+            self.assertEqual(info["status_code"], 200)
+            self.assertEqual(info["json"]["file"]["id"], file_id)
+            self.assertEqual(info["json"]["file"]["workspace_relative_path"], "storage/generated/report.md")
+            self.assertEqual(info["json"]["file"]["provider"], "local")
+
+    def test_backend_rejects_workspace_relative_path_for_remote_provider(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            result = self.run_backend(
+                data_root=root / "data" / "storage",
+                uploaded_root=root / "storage" / "uploaded",
+                generated_root=root / "storage" / "generated",
+                body={
+                    "action": "file_info",
+                    "provider": "google_drive",
+                    "connection_id": "drive_conn_123",
+                    "drive_file_id": "drive_file_123",
+                    "workspace_relative_path": "storage/generated/report.md",
+                },
+            )
+
+            self.assertEqual(result["status_code"], 400)
+            self.assertEqual(result["json"]["error"], "validation_error")
+            self.assertIn("workspace_relative_path", result["json"]["detail"])
 
     def test_backend_renames_file_inside_same_storage_directory(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

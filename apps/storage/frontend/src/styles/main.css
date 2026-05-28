@@ -484,11 +484,49 @@ h3 {
 }
 
 .storage-error {
+  position: absolute;
+  right: var(--storage-overlay-x);
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(460px, calc(100% - (var(--storage-overlay-x) * 2)));
   border: 1px solid rgba(255, 179, 191, 0.24);
-  border-radius: 10px;
-  background: var(--storage-danger-soft);
+  border-radius: 12px;
+  background: rgba(34, 13, 18, 0.94);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
   color: var(--storage-danger);
   padding: 10px 12px;
+}
+
+.storage-error span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.storage-error button {
+  display: inline-grid;
+  width: 1.65rem;
+  height: 1.65rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+}
+
+.storage-error button:hover,
+.storage-error button:focus-visible {
+  background: rgba(255, 255, 255, 0.08);
+  outline: none;
+}
+
+.storage-error .storage-icon {
+  width: 0.92rem;
+  height: 0.92rem;
 }
 
 .custom-view-bar {

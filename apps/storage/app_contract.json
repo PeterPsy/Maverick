@@ -50,6 +50,18 @@
         "cli",
         "mcp"
       ]
+    },
+    {
+      "interface": "file.provider.google-drive",
+      "version": "1",
+      "description": "Google Drive remote provider access through Storage-owned connections, stable Storage file ids, and Drive file locators.",
+      "surfaces": [
+        "backend",
+        "cli",
+        "mcp",
+        "reference",
+        "view"
+      ]
     }
   ],
   "requires": [],
@@ -65,11 +77,21 @@
   },
   "permissions": {
     "secrets": {
-      "read": [],
-      "write": []
+      "read": [
+        "google-drive-oauth-client-id",
+        "google-drive-oauth-client-secret",
+        "google-drive-refresh-token"
+      ],
+      "write": [
+        "google-drive-refresh-token"
+      ]
     },
     "network": {
-      "outbound": []
+      "outbound": [
+        "accounts.google.com",
+        "oauth2.googleapis.com",
+        "www.googleapis.com"
+      ]
     },
     "runtime": {
       "create_sessions": false,
@@ -92,6 +114,21 @@
       "storage_set_custom_view",
       "storage_clear_custom_view",
       "storage_write_file",
+      "storage_drive_connections_list",
+      "storage_drive_connections_start_oauth",
+      "storage_drive_connections_disconnect",
+      "storage_drive_list_roots",
+      "storage_drive_list_children",
+      "storage_drive_sync",
+      "storage_drive_search",
+      "storage_drive_read",
+      "storage_drive_preview",
+      "storage_drive_export",
+      "storage_drive_index",
+      "storage_drive_write",
+      "storage_drive_rename",
+      "storage_drive_move",
+      "storage_drive_trash",
       "storage_reference_manifest",
       "storage_reference_search",
       "storage_reference_resolve",
@@ -109,7 +146,11 @@
     "data_events": [
       {
         "resource": "files",
-        "description": "Emitted when workspace uploaded or generated files change through official Storage surfaces."
+        "description": "Emitted when workspace uploaded, generated, or remote provider file metadata changes through official Storage surfaces."
+      },
+      {
+        "resource": "drive-connections",
+        "description": "Emitted when Google Drive connection state, OAuth grants, or sync cursors change through official Storage surfaces."
       },
       {
         "resource": "view-state",

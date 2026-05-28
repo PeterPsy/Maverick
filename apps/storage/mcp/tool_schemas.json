@@ -44,6 +44,21 @@
               "references.search",
               "references.resolve",
               "references.summarize",
+              "drive_connections.list",
+              "drive_connections.start_oauth",
+              "drive_connections.disconnect",
+              "drive_list_roots",
+              "drive_list_children",
+              "drive_sync",
+              "drive_search",
+              "drive_read",
+              "drive_preview",
+              "drive_export",
+              "drive_index",
+              "drive_write",
+              "drive_rename",
+              "drive_move",
+              "drive_trash",
               "health.check"
             ],
             "default": "operations.manifest"
@@ -63,7 +78,21 @@
           "content_base64": {"type": "string"},
           "mode": {"type": "string", "enum": ["create", "overwrite"]},
           "entity_type": {"type": "string", "enum": ["file", "folder"]},
-          "entity_id": {"type": "string"}
+          "entity_id": {"type": "string"},
+          "provider": {"type": "string", "enum": ["google_drive"]},
+          "connection_id": {"type": "string"},
+          "drive_file_id": {"type": "string"},
+          "stable_storage_file_id": {"type": "string"},
+          "parent_drive_file_id": {"type": "string"},
+          "target_parent_drive_file_id": {"type": "string"},
+          "export_mime_type": {"type": "string"},
+          "content_type": {"type": "string"},
+          "access_mode": {"type": "string", "enum": ["full_read", "full_rw", "picker_limited"]},
+          "redirect_uri": {"type": "string"},
+          "state": {"type": "string"},
+          "code": {"type": "string"},
+          "confirm": {"type": "boolean", "default": false},
+          "delete_policy": {"type": "string", "enum": ["user_confirmed", "workspace_policy", "explicit_policy"]}
         },
         "additionalProperties": true,
         "examples": [{"action": "operations.manifest"}, {"action": "catalog", "limit": 20}]
@@ -197,6 +226,415 @@
         "additionalProperties": false
       },
       "output_schema": {"type": "object", "properties": {"file": {"type": "object"}}}
+    },
+    "storage_drive_connections_list": {
+      "description": "List Google Drive connections known to Storage without delivering Google tokens.",
+      "input_schema": {"type": "object", "properties": {}, "additionalProperties": false},
+      "output_schema": {"type": "object", "properties": {"connections": {"type": "array"}}}
+    },
+    "storage_drive_connections_start_oauth": {
+      "description": "Start a Storage-owned Google Drive OAuth flow for a requested access mode; defaults to full_rw when omitted.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "access_mode": {"type": "string", "enum": ["full_read", "full_rw", "picker_limited"]},
+          "redirect_uri": {"type": "string"}
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"},
+      "secret_selectors": [
+        {"required_secrets": ["google-drive-oauth-client-id", "google-drive-oauth-client-secret"]}
+      ]
+    },
+    "storage_drive_connections_disconnect": {
+      "description": "Locally disconnect one Storage Google Drive connection without receiving or deleting raw Google tokens.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "connection_id": {"type": "string"},
+          "confirm": {"type": "boolean", "default": false}
+        },
+        "required": ["connection_id"],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"},
+      "secret_selectors": []
+    },
+    "storage_drive_sync": {
+      "description": "Synchronize Google Drive metadata and change-feed state for one Storage Drive connection.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "connection_id": {"type": "string"},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 2000}
+        },
+        "required": ["connection_id"],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"},
+      "secret_selectors": [
+        {"required_secrets": ["google-drive-oauth-client-id", "google-drive-oauth-client-secret"]},
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_id_argument": "connection_id"
+        },
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_lookup": {"kind": "storage_drive_file"}
+        }
+      ]
+    },
+    "storage_drive_list_roots": {
+      "description": "List Google Drive roots for one Storage-owned Drive connection.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "connection_id": {"type": "string"},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 2000}
+        },
+        "required": ["connection_id"],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"folders": {"type": "array"}}},
+      "secret_selectors": [
+        {"required_secrets": ["google-drive-oauth-client-id", "google-drive-oauth-client-secret"]},
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_id_argument": "connection_id"
+        },
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_lookup": {"kind": "storage_drive_file"}
+        }
+      ]
+    },
+    "storage_drive_list_children": {
+      "description": "List children under one Drive parent id and return normalized Storage file and folder records.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "connection_id": {"type": "string"},
+          "parent_drive_file_id": {"type": "string"},
+          "drive_file_id": {"type": "string"},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 2000}
+        },
+        "required": ["connection_id"],
+        "oneOf": [
+          {"required": ["parent_drive_file_id"]},
+          {"required": ["drive_file_id"]}
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"files": {"type": "array"}, "folders": {"type": "array"}}},
+      "secret_selectors": [
+        {"required_secrets": ["google-drive-oauth-client-id", "google-drive-oauth-client-secret"]},
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_id_argument": "connection_id"
+        },
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_lookup": {"kind": "storage_drive_file"}
+        }
+      ]
+    },
+    "storage_drive_search": {
+      "description": "Search Google Drive through Storage and return stable Storage file ids plus Drive locators.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "connection_id": {"type": "string"},
+          "query": {"type": "string"},
+          "parent_drive_file_id": {"type": "string"},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 2000}
+        },
+        "required": ["connection_id"],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object", "properties": {"files": {"type": "array"}}},
+      "secret_selectors": [
+        {"required_secrets": ["google-drive-oauth-client-id", "google-drive-oauth-client-secret"]},
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_id_argument": "connection_id"
+        },
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_lookup": {"kind": "storage_drive_file"}
+        }
+      ]
+    },
+    "storage_drive_read": {
+      "description": "Read bounded bytes from one Google Drive file through Storage without exposing Google tokens.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "connection_id": {"type": "string"},
+          "drive_file_id": {"type": "string"},
+          "stable_storage_file_id": {"type": "string"},
+          "max_bytes": {"type": "integer", "minimum": 1}
+        },
+        "anyOf": [
+          {"required": ["connection_id", "drive_file_id"]},
+          {"required": ["stable_storage_file_id"]}
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"},
+      "secret_selectors": [
+        {"required_secrets": ["google-drive-oauth-client-id", "google-drive-oauth-client-secret"]},
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_id_argument": "connection_id"
+        },
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_lookup": {"kind": "storage_drive_file"}
+        }
+      ]
+    },
+    "storage_drive_preview": {
+      "description": "Extract bounded preview text for a Google Drive file through Storage for agent and Memory indexing workflows.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "connection_id": {"type": "string"},
+          "drive_file_id": {"type": "string"},
+          "stable_storage_file_id": {"type": "string"},
+          "max_bytes": {"type": "integer", "minimum": 1},
+          "max_chars": {"type": "integer", "minimum": 1}
+        },
+        "anyOf": [
+          {"required": ["connection_id", "drive_file_id"]},
+          {"required": ["stable_storage_file_id"]}
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"},
+      "secret_selectors": [
+        {"required_secrets": ["google-drive-oauth-client-id", "google-drive-oauth-client-secret"]},
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_id_argument": "connection_id"
+        },
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_lookup": {"kind": "storage_drive_file"}
+        }
+      ]
+    },
+    "storage_drive_export": {
+      "description": "Export a Google Drive or Google-native document through Storage in a bounded format.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "connection_id": {"type": "string"},
+          "drive_file_id": {"type": "string"},
+          "stable_storage_file_id": {"type": "string"},
+          "export_mime_type": {"type": "string"},
+          "max_bytes": {"type": "integer", "minimum": 1}
+        },
+        "anyOf": [
+          {"required": ["connection_id", "drive_file_id"]},
+          {"required": ["stable_storage_file_id"]}
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"},
+      "secret_selectors": [
+        {"required_secrets": ["google-drive-oauth-client-id", "google-drive-oauth-client-secret"]},
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_id_argument": "connection_id"
+        },
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_lookup": {"kind": "storage_drive_file"}
+        }
+      ]
+    },
+    "storage_drive_index": {
+      "description": "Request Storage-to-Memory indexing for one Google Drive file using a stable Storage reference and source version.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "connection_id": {"type": "string"},
+          "drive_file_id": {"type": "string"},
+          "stable_storage_file_id": {"type": "string"},
+          "max_bytes": {"type": "integer", "minimum": 1},
+          "max_chars": {"type": "integer", "minimum": 1}
+        },
+        "anyOf": [
+          {"required": ["connection_id", "drive_file_id"]},
+          {"required": ["stable_storage_file_id"]}
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"},
+      "secret_selectors": [
+        {"required_secrets": ["google-drive-oauth-client-id", "google-drive-oauth-client-secret"]},
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_id_argument": "connection_id"
+        },
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_lookup": {"kind": "storage_drive_file"}
+        }
+      ]
+    },
+    "storage_drive_write": {
+      "description": "Create or update Google Drive file content through Storage write policy.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "connection_id": {"type": "string"},
+          "drive_file_id": {"type": "string"},
+          "stable_storage_file_id": {"type": "string"},
+          "parent_drive_file_id": {"type": "string"},
+          "file_name": {"type": "string"},
+          "content": {"type": "string"},
+          "content_base64": {"type": "string"},
+          "content_type": {"type": "string"}
+        },
+        "oneOf": [
+          {"required": ["connection_id", "drive_file_id"]},
+          {"required": ["stable_storage_file_id"]},
+          {"required": ["connection_id", "parent_drive_file_id", "file_name"]}
+        ],
+        "anyOf": [
+          {"required": ["content"]},
+          {"required": ["content_base64"]}
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"},
+      "secret_selectors": [
+        {"required_secrets": ["google-drive-oauth-client-id", "google-drive-oauth-client-secret"]},
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_id_argument": "connection_id"
+        },
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_lookup": {"kind": "storage_drive_file"}
+        }
+      ]
+    },
+    "storage_drive_rename": {
+      "description": "Rename one Google Drive file through Storage after capability checks.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "connection_id": {"type": "string"},
+          "drive_file_id": {"type": "string"},
+          "stable_storage_file_id": {"type": "string"},
+          "new_name": {"type": "string"}
+        },
+        "required": ["new_name"],
+        "anyOf": [
+          {"required": ["connection_id", "drive_file_id"]},
+          {"required": ["stable_storage_file_id"]}
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"},
+      "secret_selectors": [
+        {"required_secrets": ["google-drive-oauth-client-id", "google-drive-oauth-client-secret"]},
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_id_argument": "connection_id"
+        },
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_lookup": {"kind": "storage_drive_file"}
+        }
+      ]
+    },
+    "storage_drive_move": {
+      "description": "Move one Google Drive file to a target Drive parent through Storage after capability checks.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "connection_id": {"type": "string"},
+          "drive_file_id": {"type": "string"},
+          "stable_storage_file_id": {"type": "string"},
+          "target_parent_drive_file_id": {"type": "string"}
+        },
+        "required": ["target_parent_drive_file_id"],
+        "anyOf": [
+          {"required": ["connection_id", "drive_file_id"]},
+          {"required": ["stable_storage_file_id"]}
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"},
+      "secret_selectors": [
+        {"required_secrets": ["google-drive-oauth-client-id", "google-drive-oauth-client-secret"]},
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_id_argument": "connection_id"
+        },
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_lookup": {"kind": "storage_drive_file"}
+        }
+      ]
+    },
+    "storage_drive_trash": {
+      "description": "Trash one Google Drive file through Storage after delete capability and confirmation policy checks.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "connection_id": {"type": "string"},
+          "drive_file_id": {"type": "string"},
+          "stable_storage_file_id": {"type": "string"},
+          "confirm": {"type": "boolean", "default": false},
+          "delete_policy": {"type": "string", "enum": ["user_confirmed", "workspace_policy", "explicit_policy"]}
+        },
+        "anyOf": [
+          {"required": ["connection_id", "drive_file_id"]},
+          {"required": ["stable_storage_file_id"]}
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"},
+      "secret_selectors": [
+        {"required_secrets": ["google-drive-oauth-client-id", "google-drive-oauth-client-secret"]},
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_id_argument": "connection_id"
+        },
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_lookup": {"kind": "storage_drive_file"}
+        }
+      ]
     },
     "storage_view_filter": {
       "description": "Read the current Storage UI filter without scanning workspace storage.",

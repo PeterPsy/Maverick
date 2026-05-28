@@ -12,12 +12,19 @@ from typing import Any
 
 from core.app_sdk.storage import read_json_state, update_json_state
 from errors import StorageValidationError
+from storage_provider_model import (
+    FILE_ROLES,
+    GOOGLE_DRIVE_PROVIDER,
+    LOCAL_PROVIDER,
+    normalize_capabilities,
+    normalize_provider,
+    normalize_remote_locator,
+)
 
 
 INVENTORY_FILE = "files.json"
 INVENTORY_SCHEMA_VERSION = "1"
 FILE_ID_PATTERN = re.compile(r"^file_[0-9a-f]{32}$")
-FILE_ROLES = {"uploaded", "generated"}
 CATALOG_SORT_FIELDS = {"modified_at", "relative_path", "name", "size_bytes", "preview_kind"}
 PREVIEW_KIND_ORDER = ("image", "video", "audio", "pdf", "document", "presentation", "spreadsheet", "markdown", "text", "file")
 STORAGE_TEMP_PREFIX = ".maverick-storage-write-"
@@ -232,6 +239,31 @@ def upsert_file_record(
         )
         inventory["updated_at"] = now
         captured.update(_public_record(entry))
+        return inventory
+
+    update_json_state(data_root, INVENTORY_FILE, updater, _empty_inventory())
+    return captured
+
+
+def upsert_remote_file_records(*, data_root: Path, records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Persist provider-normalized remote file metadata in the Storage inventory."""
+
+    captured: list[dict[str, Any]] = []
+
+    def updater(payload: dict[str, Any]) -> dict[str, Any]:
+        inventory = _normalize_inventory(payload)
+        files = list(inventory["files"])
+        now = _timestamp()
+        for record in records:
+            if not isinstance(record, dict):
+                continue
+            entry = _normalize_entry({**record, "updated_at": record.get("updated_at") or now})
+            existing = _find_by_file_id(files, entry["file_id"])
+            entry = _preserve_remote_index_state(existing=existing, entry=entry)
+            files = _replace_entry(files, entry)
+            captured.append(_public_record(entry))
+        inventory["files"] = _dedupe_by_file_id(files)
+        inventory["updated_at"] = now
         return inventory
 
     update_json_state(data_root, INVENTORY_FILE, updater, _empty_inventory())
@@ -485,7 +517,7 @@ def _sync_inventory_payload(inventory: dict[str, Any], *, uploaded_root: Path, g
     existing_by_path = {
         _path_key(str(item.get("role") or ""), str(item.get("relative_path") or "")): item
         for item in inventory["files"]
-        if item.get("status") == "active"
+        if item.get("status") == "active" and item.get("provider") == LOCAL_PROVIDER
     }
     now = _timestamp()
     discovered_files: list[dict[str, Any]] = []
@@ -534,10 +566,12 @@ def _sync_inventory_payload(inventory: dict[str, Any], *, uploaded_root: Path, g
         _deleted_entry(item, now=now)
         for item in inventory["files"]
         if item.get("status") == "active"
+        and item.get("provider") == LOCAL_PROVIDER
         and _path_key(str(item.get("role") or ""), str(item.get("relative_path") or "")) not in discovered_file_keys
     ]
-    inactive_files = [item for item in inventory["files"] if item.get("status") != "active"]
-    inventory["files"] = _dedupe_by_file_id([*discovered_files, *tombstones, *inactive_files])
+    non_local_files = [item for item in inventory["files"] if item.get("provider") != LOCAL_PROVIDER]
+    inactive_files = [item for item in inventory["files"] if item.get("provider") == LOCAL_PROVIDER and item.get("status") != "active"]
+    inventory["files"] = _dedupe_by_file_id([*discovered_files, *tombstones, *inactive_files, *non_local_files])
     inventory["directories"] = _dedupe_directories(discovered_directories)
     inventory["updated_at"] = now
     return inventory
@@ -548,11 +582,18 @@ def _refresh_inventory_payload(inventory: dict[str, Any], *, uploaded_root: Path
     changed = False
     refreshed_files: list[dict[str, Any]] = []
     for item in inventory["files"]:
+        if item.get("provider") != LOCAL_PROVIDER:
+            refreshed_files.append(item)
+            continue
         if item.get("status") != "active":
             refreshed_files.append(item)
             continue
         role = str(item.get("role") or "")
         relative_path = str(item.get("relative_path") or "")
+        if role not in FILE_ROLES:
+            refreshed_files.append(_deleted_entry(item, now=now))
+            changed = True
+            continue
         root = _root_for_role(role=role, uploaded_root=uploaded_root, generated_root=generated_root)
         path = (root / relative_path).resolve()
         try:
@@ -662,24 +703,62 @@ def _normalize_inventory(payload: dict[str, Any]) -> dict[str, Any]:
 def _normalize_entry(item: dict[str, Any]) -> dict[str, Any]:
     role = str(item.get("role") or "")
     relative_path = str(item.get("relative_path") or "")
+    provider = normalize_provider(item.get("provider"), role=role)
     file_id = str(item.get("file_id") or item.get("id") or "")
     if not stable_file_id(file_id):
         file_id = f"file_{uuid4().hex}"
-    workspace_relative_path = f"storage/{role}/{relative_path}" if role in FILE_ROLES and relative_path else str(item.get("workspace_relative_path") or "")
+    if provider == LOCAL_PROVIDER:
+        workspace_relative_path = f"storage/{role}/{relative_path}" if role in FILE_ROLES and relative_path else str(item.get("workspace_relative_path") or "")
+        path_id = f"{role}:{relative_path}" if role in FILE_ROLES and relative_path else ""
+        name = str(item.get("name") or Path(relative_path).name)
+        extension = str(item.get("extension") or Path(relative_path).suffix.lower())
+        display_path = workspace_relative_path
+        connection_id = ""
+        drive_file_id = ""
+        remote_locator: dict[str, Any] = {}
+        sync_status = str(item.get("sync_status") or "synced")
+    else:
+        connection_id = str(item.get("connection_id") or "")
+        raw_drive_file_id = str(item.get("drive_file_id") or "")
+        remote_locator = normalize_remote_locator(
+            item.get("remote_locator"),
+            provider=provider,
+            drive_file_id=raw_drive_file_id,
+        )
+        drive_file_id = str(remote_locator.get("drive_file_id") or raw_drive_file_id) if provider == GOOGLE_DRIVE_PROVIDER else raw_drive_file_id
+        role = ""
+        relative_path = ""
+        workspace_relative_path = ""
+        path_id = ""
+        display_path = str(item.get("display_path") or item.get("remote_path") or item.get("name") or "")
+        name = str(item.get("name") or Path(display_path).name or drive_file_id or file_id)
+        extension = str(item.get("extension") or Path(name).suffix.lower())
+        sync_status = str(item.get("sync_status") or "unknown")
     return {
         "id": file_id,
         "file_id": file_id,
-        "path_id": f"{role}:{relative_path}" if role in FILE_ROLES and relative_path else "",
+        "path_id": path_id,
+        "provider": provider,
+        "connection_id": connection_id,
+        "drive_file_id": drive_file_id,
+        "remote_locator": remote_locator,
+        "display_path": display_path,
         "role": role,
-        "name": str(item.get("name") or Path(relative_path).name),
+        "name": name,
         "relative_path": relative_path,
         "workspace_relative_path": workspace_relative_path,
-        "extension": str(item.get("extension") or Path(relative_path).suffix.lower()),
+        "extension": extension,
         "size_bytes": int(item.get("size_bytes") or 0),
         "modified_at": str(item.get("modified_at") or ""),
         "content_type": str(item.get("content_type") or "application/octet-stream"),
         "preview_kind": str(item.get("preview_kind") or "file"),
         "sha256": str(item.get("sha256") or ""),
+        "etag_or_version": str(item.get("etag_or_version") or item.get("source_version") or ""),
+        "capabilities": normalize_capabilities(item.get("capabilities"), provider=provider),
+        "sync_status": sync_status,
+        "indexed": bool(item.get("indexed") or False),
+        "stale": bool(item.get("stale") or False),
+        "index_status": str(item.get("index_status") or ("stale" if item.get("stale") else "not_indexed")),
         "status": str(item.get("status") or "active"),
         "created_at": str(item.get("created_at") or ""),
         "updated_at": str(item.get("updated_at") or ""),
@@ -690,20 +769,41 @@ def _normalize_entry(item: dict[str, Any]) -> dict[str, Any]:
 def _normalize_directory_entry(item: dict[str, Any]) -> dict[str, Any]:
     role = str(item.get("role") or "")
     relative_path = str(item.get("relative_path") or "")
+    provider = normalize_provider(item.get("provider"), role=role)
     name = str(item.get("name") or Path(relative_path).name or ("Uploaded" if role == "uploaded" else "Generated"))
-    workspace_relative_path = f"storage/{role}" + (f"/{relative_path}" if relative_path else "") if role in FILE_ROLES else ""
+    if provider == LOCAL_PROVIDER:
+        workspace_relative_path = f"storage/{role}" + (f"/{relative_path}" if relative_path else "") if role in FILE_ROLES else ""
+        display_path = workspace_relative_path
+        connection_id = ""
+        remote_locator: dict[str, Any] = {}
+    else:
+        role = ""
+        relative_path = ""
+        workspace_relative_path = ""
+        display_path = str(item.get("display_path") or name)
+        connection_id = str(item.get("connection_id") or "")
+        remote_locator = normalize_remote_locator(item.get("remote_locator"), provider=provider)
     try:
         mtime_ns = int(item.get("mtime_ns") or 0)
     except (TypeError, ValueError):
         mtime_ns = 0
     return {
         "id": f"{role}:{relative_path}/",
+        "provider": provider,
+        "connection_id": connection_id,
+        "remote_locator": remote_locator,
+        "display_path": display_path,
         "role": role,
         "name": name,
         "relative_path": relative_path,
         "workspace_relative_path": workspace_relative_path,
         "modified_at": str(item.get("modified_at") or ""),
         "mtime_ns": mtime_ns,
+        "capabilities": normalize_capabilities(item.get("capabilities"), provider=provider),
+        "sync_status": str(item.get("sync_status") or ("synced" if provider == LOCAL_PROVIDER else "unknown")),
+        "indexed": bool(item.get("indexed") or False),
+        "stale": bool(item.get("stale") or False),
+        "index_status": str(item.get("index_status") or ("stale" if item.get("stale") else "not_indexed")),
         "status": str(item.get("status") or "active"),
         "updated_at": str(item.get("updated_at") or ""),
         "deleted_at": str(item.get("deleted_at") or ""),
@@ -729,6 +829,11 @@ def _entry_for_path(
         "id": stable_id,
         "file_id": stable_id,
         "path_id": f"{role}:{relative}",
+        "provider": LOCAL_PROVIDER,
+        "connection_id": "",
+        "drive_file_id": "",
+        "remote_locator": {},
+        "display_path": f"storage/{role}/{relative}",
         "role": role,
         "name": path.name,
         "relative_path": relative,
@@ -739,6 +844,12 @@ def _entry_for_path(
         "content_type": content_type,
         "preview_kind": preview_kind(content_type, path.suffix),
         "sha256": sha256 or "",
+        "etag_or_version": "",
+        "capabilities": normalize_capabilities({}, provider=LOCAL_PROVIDER),
+        "sync_status": "synced",
+        "indexed": False,
+        "stale": False,
+        "index_status": "not_indexed",
         "status": status,
         "created_at": created_at,
         "updated_at": _timestamp(),
@@ -752,12 +863,21 @@ def _directory_entry_for_path(*, role: str, root: Path, path: Path) -> dict[str,
     modified = datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat()
     return {
         "id": f"{role}:{relative}/",
+        "provider": LOCAL_PROVIDER,
+        "connection_id": "",
+        "remote_locator": {},
+        "display_path": f"storage/{role}" + (f"/{relative}" if relative else ""),
         "role": role,
         "name": path.name if relative else ("Uploaded" if role == "uploaded" else "Generated"),
         "relative_path": relative,
         "workspace_relative_path": f"storage/{role}" + (f"/{relative}" if relative else ""),
         "modified_at": modified,
         "mtime_ns": stat.st_mtime_ns,
+        "capabilities": normalize_capabilities({}, provider=LOCAL_PROVIDER),
+        "sync_status": "synced",
+        "indexed": False,
+        "stale": False,
+        "index_status": "not_indexed",
         "status": "active",
         "updated_at": _timestamp(),
         "deleted_at": "",
@@ -769,6 +889,11 @@ def _public_record(item: dict[str, Any]) -> dict[str, Any]:
         "id": item["file_id"],
         "file_id": item["file_id"],
         "path_id": item["path_id"],
+        "provider": item.get("provider", LOCAL_PROVIDER),
+        "connection_id": item.get("connection_id", ""),
+        "drive_file_id": item.get("drive_file_id", ""),
+        "remote_locator": item.get("remote_locator", {}),
+        "display_path": item.get("display_path", item.get("workspace_relative_path", "")),
         "role": item["role"],
         "name": item["name"],
         "relative_path": item["relative_path"],
@@ -779,17 +904,34 @@ def _public_record(item: dict[str, Any]) -> dict[str, Any]:
         "content_type": item["content_type"],
         "preview_kind": item["preview_kind"],
         "sha256": item.get("sha256", ""),
+        "etag_or_version": item.get("etag_or_version", ""),
+        "capabilities": item.get("capabilities", normalize_capabilities({}, provider=str(item.get("provider") or LOCAL_PROVIDER))),
+        "sync_status": item.get("sync_status", "synced"),
+        "indexed": bool(item.get("indexed") or False),
+        "stale": bool(item.get("stale") or False),
+        "index_status": item.get("index_status", "not_indexed"),
+        "status": item.get("status", "active"),
     }
 
 
 def _public_folder_record(item: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": item["id"],
+        "provider": item.get("provider", LOCAL_PROVIDER),
+        "connection_id": item.get("connection_id", ""),
+        "remote_locator": item.get("remote_locator", {}),
+        "display_path": item.get("display_path", item.get("workspace_relative_path", "")),
         "role": item["role"],
         "name": item["name"],
         "relative_path": item["relative_path"],
         "workspace_relative_path": item["workspace_relative_path"],
         "modified_at": item["modified_at"],
+        "capabilities": item.get("capabilities", normalize_capabilities({}, provider=str(item.get("provider") or LOCAL_PROVIDER))),
+        "sync_status": item.get("sync_status", "synced"),
+        "indexed": bool(item.get("indexed") or False),
+        "stale": bool(item.get("stale") or False),
+        "index_status": item.get("index_status", "not_indexed"),
+        "status": item.get("status", "active"),
     }
 
 
@@ -1012,6 +1154,39 @@ def _find_active_by_file_id(files: list[dict[str, Any]], file_id: str) -> dict[s
     )
 
 
+def _find_by_file_id(files: list[dict[str, Any]], file_id: str) -> dict[str, Any] | None:
+    return next(
+        (
+            item
+            for item in files
+            if item.get("file_id") == file_id or item.get("id") == file_id
+        ),
+        None,
+    )
+
+
+def _preserve_remote_index_state(*, existing: dict[str, Any] | None, entry: dict[str, Any]) -> dict[str, Any]:
+    if entry.get("provider") == LOCAL_PROVIDER or existing is None:
+        return entry
+    updated = dict(entry)
+    was_indexed = bool(existing.get("indexed") or False)
+    existing_stale = bool(existing.get("stale") or False)
+    old_version = str(existing.get("etag_or_version") or "")
+    new_version = str(entry.get("etag_or_version") or "")
+    version_changed = bool(was_indexed and old_version and new_version and old_version != new_version)
+    removed_or_inaccessible = str(entry.get("status") or "active") != "active"
+    stale = existing_stale or bool(entry.get("stale") or False) or version_changed or removed_or_inaccessible
+    updated["indexed"] = was_indexed or bool(entry.get("indexed") or False)
+    updated["stale"] = stale
+    if stale:
+        updated["index_status"] = "stale"
+    elif updated["indexed"]:
+        updated["index_status"] = str(existing.get("index_status") or "indexed")
+    else:
+        updated["index_status"] = str(entry.get("index_status") or "not_indexed")
+    return _normalize_entry(updated)
+
+
 def _replace_entry(files: list[dict[str, Any]], entry: dict[str, Any], remove_paths: set[tuple[str, str]] | None = None) -> list[dict[str, Any]]:
     remove_paths = remove_paths or set()
     next_files = []
@@ -1137,7 +1312,7 @@ def _filter_records(
         records = [
             item
             for item in records
-            if normalized_query in f"{item['name']} {item['workspace_relative_path']} {item['content_type']}".casefold()
+            if normalized_query in f"{item['name']} {item['workspace_relative_path']} {item.get('display_path', '')} {item['content_type']}".casefold()
         ]
     return records
 

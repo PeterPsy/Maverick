@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import type { FormEvent } from 'react';
+import type { CSSProperties, FormEvent } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Check, FolderPlus, Upload, X } from 'lucide-react';
-import { createFolder, currentStorageAppId, loadCatalog, uploadFile } from '../../storageApi';
+import { Check, FolderPlus, HardDrive, Upload, X } from 'lucide-react';
+import { createFolder, currentStorageAppId, loadCatalog, startDriveOAuth, uploadFile } from '../../storageApi';
 import { roleLabels } from '../../storageMeta';
 import { storageSelectionFromMessage, type ActiveStorageSelectionMessage } from '../../lib/activeStorageSelection';
 import { applyStorageFoldersDelta } from '../../lib/storageCatalogDelta';
 import { storageTargetFromWidgetContext, type StorageNavigationTarget } from '../../lib/storageNavigationParams';
-import type { FileRole, StorageFolder } from '../../types';
+import { storageOAuthRedirectUri } from '../../lib/storageOAuthRuntime';
+import type { FileRole, StorageFile, StorageFolder } from '../../types';
 import '../../styles/sidebar-widget.css';
 
 const PRIMARY_ACTION_LABEL = 'New Folder';
@@ -30,6 +31,9 @@ function parentFolderPath(relativePath: string) {
 }
 
 function targetFromFolder(folder: StorageFolder): FolderActionTarget {
+  if (!isFileRole(folder.role)) {
+    throw new Error('Folder actions require a local Storage folder.');
+  }
   return {
     relativePath: folder.relative_path,
     role: folder.role,
@@ -89,6 +93,30 @@ function openFolderInShell(appId: string, target: FolderActionTarget) {
   );
 }
 
+function openFileInShell(appId: string, file: StorageFile) {
+  window.parent?.postMessage(
+    {
+      type: 'maverick.widget.open-app',
+      app_id: appId,
+      params: {
+        workspace_relative_path: file.workspace_relative_path
+      }
+    },
+    window.location.origin
+  );
+}
+
+function postStorageFilesChanged(appId: string) {
+  window.parent?.postMessage(
+    {
+      type: 'maverick.app.data-changed',
+      owner_app_id: appId,
+      resource: 'files'
+    },
+    window.location.origin
+  );
+}
+
 function postPrimaryActionState(appId: string, available: boolean) {
   window.parent?.postMessage(
     {
@@ -110,7 +138,10 @@ function StorageSidebarFooterWidget() {
   const [newFolderName, setNewFolderName] = useState('');
   const [isNamingFolder, setIsNamingFolder] = useState(false);
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+  const [isConnectingDrive, setIsConnectingDrive] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadLabel, setUploadLabel] = useState('');
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [status, setStatus] = useState('');
   const folderNameInputRef = useRef<HTMLInputElement | null>(null);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
@@ -222,6 +253,31 @@ function StorageSidebarFooterWidget() {
     uploadInputRef.current?.click();
   }
 
+  async function connectDrive() {
+    const authorizationWindow = openBlankAuthorizationWindow();
+    setIsConnectingDrive(true);
+    setStatus('');
+    try {
+      const payload = await startDriveOAuth({ redirectUri: storageOAuthRedirectUri(appId, window.location.origin) });
+      if (payload.status === 'not_configured') {
+        closeAuthorizationWindow(authorizationWindow);
+        setStatus('Google Drive OAuth is not configured');
+        return;
+      }
+      if (!payload.authorization_url) {
+        closeAuthorizationWindow(authorizationWindow);
+        setStatus('Google Drive authorization could not be started.');
+        return;
+      }
+      openAuthorizationUrl(payload.authorization_url, authorizationWindow);
+    } catch (connectError) {
+      closeAuthorizationWindow(authorizationWindow);
+      setStatus(connectError instanceof Error ? connectError.message : 'Unable to connect Google Drive.');
+    } finally {
+      setIsConnectingDrive(false);
+    }
+  }
+
   async function uploadSelectedFiles(selectedFiles: File[]) {
     if (!selectedFiles.length) {
       return;
@@ -231,22 +287,42 @@ function StorageSidebarFooterWidget() {
       return;
     }
     setIsUploading(true);
+    setUploadLabel(selectedFiles.length === 1 ? selectedFiles[0].name : `${selectedFiles.length} files`);
+    setUploadProgress(0);
     try {
-      for (const file of selectedFiles) {
-        await uploadFile(nextTarget.role, nextTarget.relativePath, file);
+      let uploadedFile: StorageFile | null = null;
+      for (let index = 0; index < selectedFiles.length; index += 1) {
+        const file = selectedFiles[index];
+        setUploadLabel(file.name);
+        const payload = await uploadFile(nextTarget.role, nextTarget.relativePath, file, {
+          onProgress: (progress) => {
+            const aggregateProgress = ((index + (progress.percent / 100)) / selectedFiles.length) * 100;
+            setUploadProgress(Math.max(1, Math.min(99, Math.round(aggregateProgress))));
+          }
+        });
+        uploadedFile = payload.file;
+        setUploadProgress(Math.round(((index + 1) / selectedFiles.length) * 100));
       }
       revalidateCatalog();
       setStatus('');
-      openFolderInShell(appId, nextTarget);
+      postStorageFilesChanged(appId);
+      if (uploadedFile) {
+        openFileInShell(appId, uploadedFile);
+      } else {
+        openFolderInShell(appId, nextTarget);
+      }
     } catch (uploadError) {
       setStatus(uploadError instanceof Error ? uploadError.message : 'Upload failed.');
     } finally {
       setIsUploading(false);
+      setUploadLabel('');
+      setUploadProgress(0);
     }
   }
 
   const currentTargetLabel = targetLabel(target);
   const actionDisabled = !target || isCreatingFolder || isUploading;
+  const driveConnectDisabled = isConnectingDrive || isUploading || isCreatingFolder;
   const primaryActionAvailable = !actionDisabled && !isNamingFolder;
 
   useEffect(() => {
@@ -276,8 +352,32 @@ function StorageSidebarFooterWidget() {
 
   return (
     <main className="storage-sidebar-footer-widget">
-      <span className="storage-sidebar-footer-status" aria-live="polite">{status}</span>
-      {isNamingFolder ? (
+      {status ? (
+        <button className="storage-sidebar-footer-status is-visible" onClick={() => setStatus('')} title={status} type="button">
+          {status}
+        </button>
+      ) : (
+        <span className="storage-sidebar-footer-status" aria-live="polite" />
+      )}
+      {isUploading ? (
+        <div
+          aria-label={`Uploading ${uploadLabel || 'file'} ${uploadProgress}%`}
+          className="storage-sidebar-footer-uploading"
+          role="status"
+          style={{ '--storage-upload-progress': `${uploadProgress}%` } as CSSProperties}
+        >
+          <span className="storage-sidebar-upload-skeleton" aria-hidden="true">
+            <span className="storage-sidebar-upload-skeleton__icon" />
+            <span className="storage-sidebar-upload-skeleton__copy">
+              <span />
+              <span />
+            </span>
+          </span>
+          <span className="storage-sidebar-upload-progress" aria-hidden="true">
+            <span>{uploadProgress}%</span>
+          </span>
+        </div>
+      ) : isNamingFolder ? (
         <form className="storage-sidebar-footer-actions is-naming" onSubmit={submitNewFolder}>
           <input
             aria-label="New folder name"
@@ -333,10 +433,64 @@ function StorageSidebarFooterWidget() {
           >
             <Upload aria-hidden="true" className="storage-sidebar-footer-icon" />
           </button>
+          <button
+            aria-label={isConnectingDrive ? 'Connecting Google Drive' : 'Connect Drive'}
+            className="storage-sidebar-footer-button storage-sidebar-footer-button--icon"
+            disabled={driveConnectDisabled}
+            onClick={() => connectDrive()}
+            title={isConnectingDrive ? 'Connecting Google Drive' : 'Connect Google Drive'}
+            type="button"
+          >
+            <HardDrive aria-hidden="true" className="storage-sidebar-footer-icon" />
+          </button>
         </div>
       )}
     </main>
   );
+}
+
+function openBlankAuthorizationWindow() {
+  const popup = window.open('about:blank', '_blank');
+  if (!popup) {
+    return null;
+  }
+  try {
+    popup.document.title = 'Opening Google Drive';
+    popup.document.body.style.fontFamily = 'system-ui, sans-serif';
+    popup.document.body.style.padding = '24px';
+    popup.document.body.textContent = 'Opening Google Drive...';
+  } catch {
+    return popup;
+  }
+  return popup;
+}
+
+function openAuthorizationUrl(authorizationUrl: string, popup: Window | null) {
+  if (popup && !popup.closed) {
+    popup.location.replace(authorizationUrl);
+    try {
+      popup.opener = null;
+      popup.focus();
+    } catch {
+      return;
+    }
+    return;
+  }
+  if (window.top && window.top !== window) {
+    window.parent.postMessage({ type: 'maverick.app.external-url', url: authorizationUrl }, window.location.origin);
+    return;
+  }
+  window.location.assign(authorizationUrl);
+}
+
+function closeAuthorizationWindow(popup: Window | null) {
+  if (popup && !popup.closed) {
+    try {
+      popup.close();
+    } catch {
+      return;
+    }
+  }
 }
 
 createRoot(document.getElementById('storage-sidebar-footer-root') as HTMLElement).render(<StorageSidebarFooterWidget />);

@@ -50,7 +50,7 @@ export function storageDragPayloadFromFile(file: StorageFile, ownerAppId: string
     owner_app_id: ownerAppId,
     preview_kind: file.preview_kind,
     relative_path: file.relative_path,
-    role: file.role,
+    role: file.role as FileRole,
     workspace_relative_path: file.workspace_relative_path,
   };
 }
@@ -61,7 +61,7 @@ export function storageDragPayloadFromFolder(folder: StorageFolder, ownerAppId: 
     name: folder.name,
     owner_app_id: ownerAppId,
     relative_path: folder.relative_path,
-    role: folder.role,
+    role: folder.role as FileRole,
     workspace_relative_path: folder.workspace_relative_path,
   };
 }

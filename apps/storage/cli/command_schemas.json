@@ -56,6 +56,7 @@
               "drive_preview",
               "drive_export",
               "drive_index",
+              "drive_mark_indexed",
               "drive_write",
               "drive_rename",
               "drive_move",
@@ -85,7 +86,11 @@
           "sort_direction": {"type": "string", "enum": ["asc", "desc"]},
           "sync": {"type": "boolean", "default": false},
           "max_bytes": {"type": "integer", "minimum": 1},
-          "max_chars": {"type": "integer", "minimum": 1},
+          "max_chars": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Text preview character budget. drive_index caps this at 20000 for Memory ingest compatibility."
+          },
           "max_rows": {"type": "integer", "minimum": 1},
           "max_columns": {"type": "integer", "minimum": 1},
           "content": {"type": "string"},
@@ -104,8 +109,13 @@
           "connection_id": {"type": "string"},
           "drive_file_id": {"type": "string"},
           "stable_storage_file_id": {"type": "string"},
+          "source_version": {"type": "string"},
+          "memory_node_id": {"type": "string"},
+          "memory_external_ref_id": {"type": "string"},
+          "memory_source_version_id": {"type": "string"},
           "display_path": {"type": "string"},
           "parent_drive_file_id": {"type": "string"},
+          "page_token": {"type": "string"},
           "target_parent_drive_file_id": {"type": "string"},
           "export_mime_type": {"type": "string"},
           "access_mode": {"type": "string", "enum": ["full_read", "full_rw", "picker_limited"]},
@@ -318,6 +328,10 @@
               {"required": ["connection_id", "drive_file_id"]},
               {"required": ["stable_storage_file_id"]}
             ]
+          },
+          {
+            "properties": {"action": {"enum": ["drive_mark_indexed"]}},
+            "required": ["action", "stable_storage_file_id"]
           },
           {
             "properties": {"action": {"enum": ["drive_write"]}},

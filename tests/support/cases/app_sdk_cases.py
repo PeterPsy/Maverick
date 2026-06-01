@@ -454,9 +454,77 @@ class MaverickAppSdkTestCase(unittest.TestCase):
                     "default",
                 ]
             )
+        with redirect_stdout(StringIO()):
+            register_exit_code = app_sdk_cli_main(
+                [
+                    "--repository-root",
+                    str(repo_root),
+                    "core",
+                    "cli",
+                    "run",
+                    "core.app-sdk.register-local",
+                    "--app-id",
+                    "sdk-cli",
+                    "--workspace",
+                    "default",
+                ]
+            )
+        with redirect_stdout(StringIO()):
+            install_exit_code = app_sdk_cli_main(
+                [
+                    "--repository-root",
+                    str(repo_root),
+                    "core",
+                    "cli",
+                    "run",
+                    "core.app-sdk.install-local",
+                    "--app-id",
+                    "sdk-cli",
+                    "--workspace",
+                    "default",
+                ]
+            )
+        list_output = StringIO()
+        with redirect_stdout(list_output):
+            list_exit_code = app_sdk_cli_main(
+                [
+                    "--repository-root",
+                    str(repo_root),
+                    "core",
+                    "cli",
+                    "list",
+                    "--workspace",
+                    "default",
+                    "--json",
+                ]
+            )
+        dependencies_output = StringIO()
+        with redirect_stdout(dependencies_output):
+            dependencies_exit_code = app_sdk_cli_main(
+                [
+                    "--repository-root",
+                    str(repo_root),
+                    "core",
+                    "cli",
+                    "run",
+                    "app.sdk-cli.dependencies",
+                    "--workspace",
+                    "default",
+                    "--json",
+                ]
+            )
 
         self.assertEqual(exit_code, 0)
+        self.assertEqual(register_exit_code, 0)
+        self.assertEqual(install_exit_code, 0)
+        self.assertEqual(list_exit_code, 0)
+        self.assertEqual(dependencies_exit_code, 0)
         self.assertTrue((repo_root / "workspaces" / "default" / "apps" / "sdk-cli" / "package.json").is_file())
+        list_payload = json.loads(list_output.getvalue())
+        command_ids = {command["command_id"] for command in list_payload["commands"]}
+        self.assertIn("app.sdk-cli.dependencies", command_ids)
+        dependencies_payload = json.loads(dependencies_output.getvalue())
+        self.assertEqual(dependencies_payload["status"], "resolved")
 
     def test_cli_wrapper_exposes_sdk_docs_and_templates_domain(self) -> None:
         repo_root = self.make_repo_root()

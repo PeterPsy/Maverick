@@ -10,7 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 import unittest
 
-from core.api.asgi_application import LazyAsgiApplication, PlatformAsgiHost, app
+from core.api.asgi_application import LazyAsgiApplication, PlatformAsgiHost, _is_app_backend_request, app
 from core.api.app_events import APP_EVENTS_WS_PATH
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
@@ -29,8 +29,18 @@ class AsgiApplicationTests(unittest.TestCase):
         source = (REPO_ROOT / "core/api/asgi_application.py").read_text(encoding="utf-8")
 
         self.assertIn("asyncio.to_thread", source)
+        self.assertIn("ThreadPoolExecutor", source)
+        self.assertIn("run_in_executor", source)
+        self.assertIn("maverick-app-backend", source)
         self.assertIn("_run_wsgi_http", source)
         self.assertIn("self.http_host", source)
+
+    def test_app_backend_request_detection_is_limited_to_backend_posts(self) -> None:
+        self.assertTrue(_is_app_backend_request({"path": "/api/apps/example/backend", "method": "POST"}))
+        self.assertTrue(_is_app_backend_request({"path": "/api/apps/example-fork/backend", "method": "post"}))
+        self.assertFalse(_is_app_backend_request({"path": "/api/apps/example/backend", "method": "GET"}))
+        self.assertFalse(_is_app_backend_request({"path": "/api/apps/example/frontend/", "method": "POST"}))
+        self.assertFalse(_is_app_backend_request({"path": "/api/session", "method": "POST"}))
 
     def test_lifespan_shutdown_marks_entrypoint_shutdown_controller(self) -> None:
         controller = EntrypointShutdownController()

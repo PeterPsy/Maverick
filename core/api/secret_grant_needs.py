@@ -114,6 +114,9 @@ def _need_payload(
 def _need_scopes_for_consumer(consumer: SecretConsumer, *, grants: list[SecretGrantRecord]) -> list[dict[str, object]]:
     if not bool(consumer.get("resource_scoped")):
         return [{"type": "workspace", "label": "Workspace"}]
+    inventory_scopes = _consumer_resource_scopes(consumer)
+    if inventory_scopes:
+        return inventory_scopes
     concrete = sorted(
         {
             (str(grant.resource_type or "").strip().lower(), str(grant.resource_id or "").strip().lower())
@@ -141,6 +144,36 @@ def _need_scopes_for_consumer(consumer: SecretConsumer, *, grants: list[SecretGr
         }
         for resource_type in resource_types
     ]
+
+
+def _consumer_resource_scopes(consumer: SecretConsumer) -> list[dict[str, object]]:
+    raw_scopes = consumer.get("resource_scopes")
+    if not isinstance(raw_scopes, list):
+        return []
+    scopes: list[dict[str, object]] = []
+    seen: set[tuple[str, str]] = set()
+    allowed_types = set(_consumer_resource_types(consumer))
+    for item in raw_scopes:
+        if not isinstance(item, dict):
+            continue
+        resource_type = str(item.get("resource_type") or "").strip().lower()
+        resource_id = str(item.get("resource_id") or "").strip().lower()
+        if not resource_type or not resource_id or resource_type not in allowed_types:
+            continue
+        key = (resource_type, resource_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        label = str(item.get("label") or "").strip() or f"{_human_label(resource_type)} {resource_id}"
+        scopes.append(
+            {
+                "type": "resource",
+                "resource_type": resource_type,
+                "resource_id": resource_id,
+                "label": label,
+            }
+        )
+    return scopes
 
 
 def _recommended_grant_spec(

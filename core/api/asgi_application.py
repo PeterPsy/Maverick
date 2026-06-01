@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from io import BytesIO
+import os
 from typing import Any, Awaitable, Callable
 
 from core.api.app_events import APP_EVENTS_WS_PATH, stream_app_events
@@ -33,6 +36,10 @@ class PlatformAsgiHost:
     ) -> None:
         self.state = state or bootstrap_platform_state()
         self.shutdown_controller = shutdown_controller or EntrypointShutdownController()
+        self.app_backend_executor = ThreadPoolExecutor(
+            max_workers=_app_backend_worker_count(),
+            thread_name_prefix="maverick-app-backend",
+        )
         if state is None:
             start_backend_restart_recovery(self.state)
             start_background_hook_scheduler(self.state, shutdown_controller=self.shutdown_controller)
@@ -100,6 +107,7 @@ class PlatformAsgiHost:
                 continue
             if message_type == "lifespan.shutdown":
                 self.shutdown_controller.begin_shutdown()
+                self.app_backend_executor.shutdown(wait=False, cancel_futures=True)
                 await send({"type": "lifespan.shutdown.complete"})
                 return
             raise RuntimeError(f"Unsupported ASGI lifespan event: {message_type}")
@@ -130,12 +138,20 @@ class PlatformAsgiHost:
             status_holder["status"] = int(status.split(" ", 1)[0])
             status_holder["headers"] = [(name.encode("latin1"), value.encode("latin1")) for name, value in headers]
 
-        response_body = await asyncio.to_thread(
-            _run_wsgi_http,
-            self.http_host,
-            _wsgi_environ(scope, body),
-            start_response,
-        )
+        environ = _wsgi_environ(scope, body)
+        if _is_app_backend_request(scope):
+            loop = asyncio.get_running_loop()
+            response_body = await loop.run_in_executor(
+                self.app_backend_executor,
+                partial(_run_wsgi_http, self.http_host, environ, start_response),
+            )
+        else:
+            response_body = await asyncio.to_thread(
+                _run_wsgi_http,
+                self.http_host,
+                environ,
+                start_response,
+            )
         await send(
             {
                 "type": "http.response.start",
@@ -174,6 +190,23 @@ async def _read_asgi_body(receive: AsgiReceive) -> bytes:
         if not message.get("more_body", False):
             break
     return b"".join(chunks)
+
+
+def _app_backend_worker_count() -> int:
+    raw = os.environ.get("MAVERICK_APP_BACKEND_WORKERS", "")
+    if not raw:
+        return 4
+    try:
+        value = int(raw)
+    except ValueError:
+        return 4
+    return max(1, min(value, 16))
+
+
+def _is_app_backend_request(scope: dict[str, Any]) -> bool:
+    path = str(scope.get("path") or "")
+    method = str(scope.get("method") or "GET").upper()
+    return method == "POST" and path.startswith("/api/apps/") and path.endswith("/backend")
 
 
 def _wsgi_environ(scope: dict[str, Any], body: bytes) -> dict[str, Any]:

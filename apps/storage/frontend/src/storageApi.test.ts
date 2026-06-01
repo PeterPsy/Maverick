@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { callBackend, completeDriveOAuth, currentStorageAppId, driveConnectionSecretRequest, listDriveChildren, listDriveConnections, listDriveRoots, moveItemsReferences, startDriveOAuth, storageBackendEndpoint, trashDriveFile } from './storageApi';
+import { callBackend, completeDriveOAuth, currentStorageAppId, driveConnectionSecretRequest, listDriveChildren, listDriveConnections, listDriveRoots, moveItemsReferences, previewDriveFile, startDriveOAuth, storageBackendEndpoint, trashDriveFile } from './storageApi';
 
 describe('storage api client', () => {
   it('derives the mounted app backend from app and widget routes', () => {
@@ -160,11 +160,11 @@ describe('storage api client', () => {
     );
   });
 
-  it('passes Drive list limits to the backend', async () => {
+  it('passes Drive list limits and page tokens to the backend', async () => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ files: [], folders: [], provider: 'google_drive', connection_id: 'drive_conn_1' }), { status: 200 }));
     const expectedSecretRequest = driveConnectionSecretRequest('drive_conn_1');
 
-    await listDriveChildren('drive_conn_1', 'folder-1', { fetchImpl, limit: 1000 });
+    await listDriveChildren('drive_conn_1', 'folder-1', { fetchImpl, limit: 500, pageToken: 'next-token' });
 
     expect(fetchImpl).toHaveBeenCalledWith(
       '/api/apps/storage/backend',
@@ -173,10 +173,26 @@ describe('storage api client', () => {
           action: 'drive_list_children',
           connection_id: 'drive_conn_1',
           drive_file_id: 'folder-1',
-          limit: 1000,
+          limit: 500,
+          page_token: 'next-token',
           _app_secret_request: expectedSecretRequest
         }),
         method: 'POST'
+      })
+    );
+  });
+
+  it('passes abort signals to backend fetch calls', async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ files: [], folders: [], provider: 'google_drive', connection_id: 'drive_conn_1' }), { status: 200 }));
+    const controller = new AbortController();
+
+    await listDriveChildren('drive_conn_1', 'folder-1', { fetchImpl, signal: controller.signal });
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      '/api/apps/storage/backend',
+      expect.objectContaining({
+        method: 'POST',
+        signal: controller.signal
       })
     );
   });
@@ -211,8 +227,49 @@ describe('storage api client', () => {
           action: 'drive_trash',
           connection_id: 'drive_conn_1',
           drive_file_id: 'file-1',
+          stable_storage_file_id: 'stable-file-1',
           confirm: true,
           delete_policy: 'user_confirmed',
+          _app_secret_request: expectedSecretRequest
+        }),
+        method: 'POST'
+      })
+    );
+  });
+
+  it('requests Drive previews with resource-scoped Drive secrets', async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ file: {}, preview_text: 'Preview' }), { status: 200 }));
+    const expectedSecretRequest = driveConnectionSecretRequest('drive_conn_1');
+
+    await previewDriveFile({
+      id: 'file_123',
+      file_id: 'file_123',
+      path_id: '',
+      provider: 'google_drive',
+      connection_id: 'drive_conn_1',
+      drive_file_id: 'file-1',
+      role: '',
+      name: 'Plan',
+      relative_path: '',
+      workspace_relative_path: '',
+      extension: '',
+      size_bytes: 0,
+      modified_at: '2026-05-28T00:00:00Z',
+      content_type: 'application/vnd.google-apps.document',
+      preview_kind: 'document',
+      sha256: ''
+    }, 8192, 1200, { fetchImpl });
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      '/api/apps/storage/backend',
+      expect.objectContaining({
+        body: JSON.stringify({
+          action: 'drive_preview',
+          connection_id: 'drive_conn_1',
+          drive_file_id: 'file-1',
+          stable_storage_file_id: 'file_123',
+          max_bytes: 8192,
+          max_chars: 1200,
           _app_secret_request: expectedSecretRequest
         }),
         method: 'POST'

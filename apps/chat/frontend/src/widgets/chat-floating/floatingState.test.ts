@@ -6,6 +6,7 @@ import {
   readPersistedOrDefaultWindows,
   readPersistedWindows,
   reconcileWindowsWithThreads,
+  selectSingleFloatingWindowThread,
   widgetStateStorageKey,
 } from "./floatingState";
 
@@ -107,5 +108,21 @@ describe("floating chat widget state", () => {
       windowItem({ id: "window-a", isDraft: true, threadId: "" }),
       windowItem({ id: "window-b", isDraft: false, threadId: "thread-created" }),
     ]);
+  });
+
+  it("switches the visible single-window chat in place", () => {
+    const selection = selectSingleFloatingWindowThread(
+      [
+        windowItem({ id: "window-visible", isDraft: true, threadId: "" }),
+        windowItem({ id: "window-hidden", threadId: "thread-selected" }),
+      ],
+      "window-visible",
+      "thread-selected",
+    );
+
+    expect(selection).toEqual({
+      windowId: "window-visible",
+      windows: [windowItem({ id: "window-visible", isDraft: false, threadId: "thread-selected" })],
+    });
   });
 });

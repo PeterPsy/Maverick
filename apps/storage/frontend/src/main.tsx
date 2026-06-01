@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { Home } from 'lucide-react';
 import { AnimatedFileCollection, CollectionViewToggle, type CollectionViewMode } from './components/ui/animated-collection';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from './components/ui/breadcramb';
-import { CATALOG_PAGE_LIMIT, clearCustomView, completeDriveOAuth, currentStorageAppId, decodeBase64, deleteFile, deleteFolder, downloadFolder, listDriveChildren, listDriveRoots, loadCatalog, loadViewFilter, moveFileReference, moveFolderReference, moveItemsReferences, readDriveFile, readFile, renameDriveFile, renameFile, setViewFilter, trashDriveFile, updateMarkdownFile, uploadFile } from './storageApi';
+import { CATALOG_PAGE_LIMIT, DRIVE_PAGE_LIMIT, clearCustomView, completeDriveOAuth, currentStorageAppId, decodeBase64, deleteFile, deleteFolder, downloadFolder, listDriveChildren, listDriveRoots, loadCatalog, loadViewFilter, moveFileReference, moveFolderReference, moveItemsReferences, readDriveFile, readFile, renameDriveFile, renameFile, setViewFilter, trashDriveFile, updateMarkdownFile, uploadFile } from './storageApi';
 import { canInlinePreview, canTextPreview, StoragePreview } from './filePreview';
 import { formatBytes, formatMegabytes, kindLabels, roleLabels } from './storageMeta';
 import { Icon } from './Icon';
@@ -90,6 +90,15 @@ function folderBreadcrumbItems(currentFolderPath: string) {
   return parts.map((part, index) => ({
     label: part,
     path: parts.slice(0, index + 1).join('/')
+  }));
+}
+
+function driveBreadcrumbItems(displayPath: string) {
+  const parts = displayPath.split('/').filter(Boolean);
+  const labels = parts.length ? parts : ['Google Drive'];
+  return labels.map((label, index) => ({
+    label,
+    path: labels.slice(0, index + 1).join('/')
   }));
 }
 
@@ -237,6 +246,12 @@ function mergeUniqueFiles(current: StorageFile[], incoming: StorageFile[]) {
   return Array.from(byId.values());
 }
 
+function mergeUniqueFolders(current: StorageFolder[], incoming: StorageFolder[]) {
+  const byId = new Map(current.map((folder) => [folder.id, folder]));
+  incoming.forEach((folder) => byId.set(folder.id, folder));
+  return Array.from(byId.values());
+}
+
 function driveLoadedItemCount(files: StorageFile[], folders: StorageFolder[]) {
   return files.length + folders.length;
 }
@@ -260,6 +275,10 @@ function fittedPreviewImageSize(image: PreviewImageSize, viewport: PreviewImageS
 function uploadTargetLabel(role: FileRole | 'all', folderPath: string) {
   if (role === 'all') return 'Choose Generated or Uploaded first';
   return `${roleLabels[role]}${folderPath ? ` / ${folderPath}` : ''}`;
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof Error && error.name === 'AbortError';
 }
 
 function FolderCard({ canDelete, canDownload, dragging, folder, onDelete, onDownload, onDragEnd, onDragStart, onDropStatus, onDropStorageItem, onLongPress, onOpen, onShowDetails, onToggleSelection, selected, selectionMode }: {
@@ -464,6 +483,9 @@ function App() {
   const kindRef = useRef<PreviewKind | 'all'>('all');
   const viewModeRef = useRef<'search' | 'custom'>('search');
   const driveTargetRef = useRef<DriveFolderTarget | null>(null);
+  const driveFolderAbortRef = useRef<AbortController | null>(null);
+  const driveLoadMoreAbortRef = useRef<AbortController | null>(null);
+  const appVisibleRef = useRef(true);
   const catalogRefreshRequestRef = useRef(0);
   const catalogTransitionMinRequestRef = useRef<number | null>(null);
   const catalogTransitionTokenRef = useRef(0);
@@ -497,6 +519,13 @@ function App() {
     if (minRequestId !== null && requestId === catalogRefreshRequestRef.current && requestId >= minRequestId) {
       clearCatalogTransitionLoading();
     }
+  }
+
+  function abortDriveRequests() {
+    driveFolderAbortRef.current?.abort();
+    driveFolderAbortRef.current = null;
+    driveLoadMoreAbortRef.current?.abort();
+    driveLoadMoreAbortRef.current = null;
   }
 
   function applyRemoteViewFilter(filter: StorageViewFilter) {
@@ -558,11 +587,14 @@ function App() {
     const requestId = ++catalogRefreshRequestRef.current;
     const transitionToken = loading === 'foreground' ? beginCatalogTransitionLoading(requestId) : null;
     const previousDriveTarget = driveTargetRef.current;
+    driveFolderAbortRef.current?.abort();
+    const abortController = new AbortController();
+    driveFolderAbortRef.current = abortController;
     driveTargetRef.current = target;
     try {
       const payload = target.driveFileId
-        ? await listDriveChildren(target.connectionId, target.driveFileId, { limit: CATALOG_PAGE_LIMIT })
-        : await listDriveRoots(target.connectionId, { limit: CATALOG_PAGE_LIMIT });
+        ? await listDriveChildren(target.connectionId, target.driveFileId, { limit: DRIVE_PAGE_LIMIT, signal: abortController.signal })
+        : await listDriveRoots(target.connectionId, { limit: DRIVE_PAGE_LIMIT, signal: abortController.signal });
       if (requestId !== catalogRefreshRequestRef.current) return;
       const nextFiles = payload.files || [];
       const nextFolders = payload.folders || [];
@@ -570,7 +602,7 @@ function App() {
       catalogLoadedCountRef.current = driveLoadedItemCount(nextFiles, nextFolders);
       setFiles(nextFiles);
       setFolders(nextFolders);
-      setCatalogPagination(payload.pagination ? { offset: 0, ...payload.pagination } : null);
+      setCatalogPagination(payload.pagination ? { offset: 0, ...payload.pagination, total: driveLoadedItemCount(nextFiles, nextFolders) } : null);
       setSelectedFile(null);
       setSelectedFolder(null);
       closePreviewModal();
@@ -591,9 +623,13 @@ function App() {
       setDriveTarget(target);
       setError('');
     } catch (loadError) {
+      if (isAbortError(loadError)) return;
       driveTargetRef.current = previousDriveTarget;
       setError(loadError instanceof Error ? loadError.message : 'Unable to load Google Drive folder.');
     } finally {
+      if (driveFolderAbortRef.current === abortController) {
+        driveFolderAbortRef.current = null;
+      }
       if (transitionToken !== null) {
         clearCatalogTransitionLoading(transitionToken);
       } else {
@@ -716,20 +752,24 @@ function App() {
   async function loadMoreFiles() {
     if (!catalogPagination?.has_more || catalogLoadingMore) return;
     setCatalogLoadingMore(true);
+    let driveAbortController: AbortController | null = null;
     try {
       const driveTarget = driveTargetRef.current;
       if (driveTarget) {
-        const nextLimit = Math.max(CATALOG_PAGE_LIMIT, catalogLoadedCountRef.current + CATALOG_PAGE_LIMIT);
+        const pageToken = catalogPagination.next_page_token || '';
+        driveLoadMoreAbortRef.current?.abort();
+        driveAbortController = new AbortController();
+        driveLoadMoreAbortRef.current = driveAbortController;
         const payload = driveTarget.driveFileId
-          ? await listDriveChildren(driveTarget.connectionId, driveTarget.driveFileId, { limit: nextLimit })
-          : await listDriveRoots(driveTarget.connectionId, { limit: nextLimit });
-        const nextFiles = payload.files || [];
-        const nextFolders = payload.folders || [];
+          ? await listDriveChildren(driveTarget.connectionId, driveTarget.driveFileId, { limit: DRIVE_PAGE_LIMIT, pageToken, signal: driveAbortController.signal })
+          : await listDriveRoots(driveTarget.connectionId, { limit: DRIVE_PAGE_LIMIT, pageToken, signal: driveAbortController.signal });
+        const nextFiles = mergeUniqueFiles(filesRef.current, payload.files || []);
+        const nextFolders = mergeUniqueFolders(folders, payload.folders || []);
         catalogLoadedCountRef.current = driveLoadedItemCount(nextFiles, nextFolders);
         filesRef.current = nextFiles;
         setFiles(nextFiles);
         setFolders(nextFolders);
-        setCatalogPagination(payload.pagination ? { offset: 0, ...payload.pagination } : null);
+        setCatalogPagination(payload.pagination ? { offset: 0, ...payload.pagination, total: driveLoadedItemCount(nextFiles, nextFolders) } : null);
         setError('');
         return;
       }
@@ -741,7 +781,14 @@ function App() {
       setFolders(payload.folders || []);
       setCatalogPagination(payload.pagination || null);
       setError('');
+    } catch (loadError) {
+      if (!isAbortError(loadError)) {
+        setError(loadError instanceof Error ? loadError.message : 'Unable to load more files.');
+      }
     } finally {
+      if (driveAbortController && driveLoadMoreAbortRef.current === driveAbortController) {
+        driveLoadMoreAbortRef.current = null;
+      }
       setCatalogLoadingMore(false);
     }
   }
@@ -801,6 +848,9 @@ function App() {
         setIsInitialLoading(false);
       });
     const interval = window.setInterval(() => {
+      if (!appVisibleRef.current || driveFolderAbortRef.current || driveLoadMoreAbortRef.current) {
+        return;
+      }
       syncViewFilter().catch((err: Error) => setError(err.message));
     }, VIEW_SYNC_MS);
     return () => {
@@ -862,12 +912,28 @@ function App() {
         params?: StorageNavigationParams;
         resource?: string;
         type?: string;
+        visible?: boolean;
       };
+      if (payload.type === 'maverick.app.visibility-changed' && (!payload.app_id || payload.app_id === storageAppId)) {
+        const isVisible = payload.visible !== false;
+        appVisibleRef.current = isVisible;
+        if (!isVisible) {
+          abortDriveRequests();
+          setCatalogLoadingMore(false);
+          clearCatalogTransitionLoading();
+          return;
+        }
+        refresh(undefined, { loading: 'background' }).catch((err: Error) => setError(err.message));
+        return;
+      }
       if (payload.type === 'maverick.app.navigate' && (!payload.app_id || payload.app_id === storageAppId)) {
         handleNavigationParams(payload.params || {});
         return;
       }
       if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === storageAppId) {
+        if (!appVisibleRef.current) {
+          return;
+        }
         if (payload.resource === 'files' || payload.resource === 'drive-connections') {
           refresh().catch((err: Error) => setError(err.message));
         }
@@ -1146,7 +1212,7 @@ function App() {
   }
 
   function openFilePreview(file: StorageFile) {
-    if (isDriveItem(file)) {
+    if (isDriveItem(file) && !itemCan(file, 'can_preview', false)) {
       showFileDetails(file);
       return;
     }
@@ -1349,7 +1415,8 @@ function App() {
     ? `${filteredFiles.length}/${visibleFileTotal} files`
     : `${filteredFiles.length} files`;
   const folderBreadcrumbs = isDriveView ? [] : folderBreadcrumbItems(currentFolderPath);
-  const storageBreadcrumbLabel = isDriveView ? driveTarget?.displayPath || 'Google Drive' : activeRole === 'all' ? '' : roleLabels[activeRole];
+  const driveBreadcrumbs = isDriveView ? driveBreadcrumbItems(driveTarget?.displayPath || 'Google Drive') : [];
+  const storageBreadcrumbLabel = activeRole === 'all' ? '' : roleLabels[activeRole];
   const pendingDeleteName = pendingDelete?.kind === 'file' ? pendingDelete.file.name : pendingDelete?.folder.name || '';
   const pendingDeletePath = pendingDelete?.kind === 'file'
     ? (isDriveItem(pendingDelete.file) ? driveItemPath(pendingDelete.file) : pendingDelete.file.workspace_relative_path)
@@ -2062,73 +2129,80 @@ function App() {
               </>
             ) : (
               <>
-            <Breadcrumb className="storage-breadcrumb">
-              <BreadcrumbList>
-                <BreadcrumbItem>
-                  {storageBreadcrumbLabel || folderBreadcrumbs.length ? (
-                    <BreadcrumbLink asChild>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDriveTarget(null);
-                          driveTargetRef.current = null;
-                          setCurrentFolderPathScoped('');
-                          updateViewFilter({ query: '', role: 'all' }, { folderPath: '', preserveCustom: false });
-                        }}
-                        aria-label="Show Storage root"
-                      >
+            {isDriveView ? (
+              <Breadcrumb className="storage-breadcrumb">
+                <BreadcrumbList>
+                  {driveBreadcrumbs.map((item, index) => {
+                    const isCurrent = index === driveBreadcrumbs.length - 1;
+                    const isAccountRoot = index === 0;
+                    return (
+                      <Fragment key={item.path}>
+                        {index > 0 ? <BreadcrumbSeparator /> : null}
+                        <BreadcrumbItem>
+                          {isAccountRoot && !isCurrent && driveTarget?.connectionId ? (
+                            <BreadcrumbLink asChild>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  loadDriveFolder({
+                                    connectionId: driveTarget.connectionId,
+                                    displayPath: item.label,
+                                    driveFileId: '',
+                                  }).catch((err: Error) => setError(err.message));
+                                }}
+                                aria-label={`Show ${item.label} root`}
+                              >
+                                {item.label}
+                              </button>
+                            </BreadcrumbLink>
+                          ) : isCurrent ? (
+                            <BreadcrumbPage>{item.label}</BreadcrumbPage>
+                          ) : (
+                            <span data-slot="breadcrumb-link">{item.label}</span>
+                          )}
+                        </BreadcrumbItem>
+                      </Fragment>
+                    );
+                  })}
+                </BreadcrumbList>
+              </Breadcrumb>
+            ) : (
+              <Breadcrumb className="storage-breadcrumb">
+                <BreadcrumbList>
+                  <BreadcrumbItem>
+                    {storageBreadcrumbLabel || folderBreadcrumbs.length ? (
+                      <BreadcrumbLink asChild>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDriveTarget(null);
+                            driveTargetRef.current = null;
+                            setCurrentFolderPathScoped('');
+                            updateViewFilter({ query: '', role: 'all' }, { folderPath: '', preserveCustom: false });
+                          }}
+                          aria-label="Show Storage root"
+                        >
+                          <Home className="storage-breadcrumb-icon" />
+                          Storage
+                        </button>
+                      </BreadcrumbLink>
+                    ) : (
+                      <BreadcrumbPage>
                         <Home className="storage-breadcrumb-icon" />
                         Storage
-                      </button>
-                    </BreadcrumbLink>
-                  ) : (
-                    <BreadcrumbPage>
-                      <Home className="storage-breadcrumb-icon" />
-                      Storage
-                    </BreadcrumbPage>
-                  )}
-                </BreadcrumbItem>
-                {storageBreadcrumbLabel ? (
-                  <>
-                    <BreadcrumbSeparator />
-                    <BreadcrumbItem>
-                      {folderBreadcrumbs.length ? (
-                        <BreadcrumbLink asChild>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const plan = breadcrumbRefreshPlan({ activeRole: activeRole as FileRole, folderPath: '', query, viewMode });
-                              setCurrentFolderPathScoped(plan.folderPath);
-                              if (plan.shouldWriteViewFilter) {
-                                updateViewFilter(plan.filter, plan.viewFilterOptions);
-                              } else {
-                                refresh(plan.filter, { ...plan.refreshOptions, loading: 'foreground' }).catch((err: Error) => setError(err.message));
-                              }
-                            }}
-                          >
-                            {storageBreadcrumbLabel}
-                          </button>
-                        </BreadcrumbLink>
-                      ) : (
-                        <BreadcrumbPage>{storageBreadcrumbLabel}</BreadcrumbPage>
-                      )}
-                    </BreadcrumbItem>
-                  </>
-                ) : null}
-                {folderBreadcrumbs.map((item, index) => {
-                  const isCurrent = index === folderBreadcrumbs.length - 1;
-                  return (
-                    <Fragment key={item.path}>
+                      </BreadcrumbPage>
+                    )}
+                  </BreadcrumbItem>
+                  {storageBreadcrumbLabel ? (
+                    <>
                       <BreadcrumbSeparator />
                       <BreadcrumbItem>
-                        {isCurrent ? (
-                          <BreadcrumbPage>{item.label}</BreadcrumbPage>
-                        ) : (
+                        {folderBreadcrumbs.length ? (
                           <BreadcrumbLink asChild>
                             <button
                               type="button"
                               onClick={() => {
-                                const plan = breadcrumbRefreshPlan({ activeRole: activeRole as FileRole, folderPath: item.path, query, viewMode });
+                                const plan = breadcrumbRefreshPlan({ activeRole: activeRole as FileRole, folderPath: '', query, viewMode });
                                 setCurrentFolderPathScoped(plan.folderPath);
                                 if (plan.shouldWriteViewFilter) {
                                   updateViewFilter(plan.filter, plan.viewFilterOptions);
@@ -2137,16 +2211,48 @@ function App() {
                                 }
                               }}
                             >
-                              {item.label}
+                              {storageBreadcrumbLabel}
                             </button>
                           </BreadcrumbLink>
+                        ) : (
+                          <BreadcrumbPage>{storageBreadcrumbLabel}</BreadcrumbPage>
                         )}
                       </BreadcrumbItem>
-                    </Fragment>
-                  );
-                })}
-              </BreadcrumbList>
-            </Breadcrumb>
+                    </>
+                  ) : null}
+                  {folderBreadcrumbs.map((item, index) => {
+                    const isCurrent = index === folderBreadcrumbs.length - 1;
+                    return (
+                      <Fragment key={item.path}>
+                        <BreadcrumbSeparator />
+                        <BreadcrumbItem>
+                          {isCurrent ? (
+                            <BreadcrumbPage>{item.label}</BreadcrumbPage>
+                          ) : (
+                            <BreadcrumbLink asChild>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const plan = breadcrumbRefreshPlan({ activeRole: activeRole as FileRole, folderPath: item.path, query, viewMode });
+                                  setCurrentFolderPathScoped(plan.folderPath);
+                                  if (plan.shouldWriteViewFilter) {
+                                    updateViewFilter(plan.filter, plan.viewFilterOptions);
+                                  } else {
+                                    refresh(plan.filter, { ...plan.refreshOptions, loading: 'foreground' }).catch((err: Error) => setError(err.message));
+                                  }
+                                }}
+                              >
+                                {item.label}
+                              </button>
+                            </BreadcrumbLink>
+                          )}
+                        </BreadcrumbItem>
+                      </Fragment>
+                    );
+                  })}
+                </BreadcrumbList>
+              </Breadcrumb>
+            )}
             {isCatalogTransitionLoading ? (
               <div className="content-counts storage-counts-skeleton" aria-hidden="true">
                 <span />

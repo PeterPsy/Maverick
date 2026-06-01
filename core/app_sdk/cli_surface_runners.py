@@ -30,7 +30,11 @@ def _run_core_cli(
     state,
     trusted_context: CliInvocationContext | None = None,
 ) -> dict[str, Any]:
-    commands = [command for command in _cli_commands(state, workspace_id, options=options, trusted_context=trusted_context) if command.owner_kind == "core"]
+    commands = [
+        command
+        for command in _cli_commands(state, workspace_id, options=options, trusted_context=trusted_context)
+        if command.owner_kind == "core" or command.exposure_scope == "core_global"
+    ]
     if operation == "list":
         if tokens:
             _die("usage: maverick core cli list --json")

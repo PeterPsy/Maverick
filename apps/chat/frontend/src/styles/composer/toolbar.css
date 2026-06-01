@@ -96,6 +96,28 @@
   backdrop-filter: blur(20px);
 }
 
+.chatapp-agent-menu__search {
+  display: grid;
+  padding: 0.68rem 0.78rem 0.62rem;
+}
+
+.chatapp-agent-menu__search-input {
+  width: 100%;
+  min-height: 2.2rem;
+  padding: 0.45rem 0.58rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 0.55rem;
+  outline: none;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--maverick-text);
+  font: inherit;
+}
+
+.chatapp-agent-menu__search-input:focus {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.1);
+}
+
 .chatapp-agent-menu__item {
   display: grid;
   gap: 0.18rem;
@@ -114,6 +136,7 @@
 }
 
 .chatapp-agent-menu__item:hover,
+.chatapp-agent-menu__item.is-highlighted,
 .chatapp-agent-menu__item.is-active {
   background: rgba(255, 255, 255, 0.08);
 }

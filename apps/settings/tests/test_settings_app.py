@@ -14,6 +14,7 @@ import unittest
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
 from core.apps.contracts import parse_app_contract_file
+from core.apps.models import WorkspaceAppBindingRecord, WorkspaceLocalAppProjectRecord
 from tests.support.markers import slow_test_class
 
 
@@ -83,6 +84,160 @@ class SettingsFrontendDistTests(unittest.TestCase):
         self.assertIn("Provider app links", app_links_source)
         self.assertIn("shared capabilities", pages_source)
         self.assertNotIn("Intra-app catalogs", app_links_source)
+
+    def test_app_links_render_crm_mail_calendar_storage_dependencies(self) -> None:
+        app_root = Path(__file__).resolve().parents[1]
+        typescript_root = app_root / "node_modules" / "typescript"
+        if not typescript_root.exists():
+            self.skipTest("settings frontend dependencies are not installed")
+        node_script = r"""
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const ts = require(process.argv[2]);
+
+const appRoot = process.argv[3];
+const outDir = process.argv[4];
+
+function transpile(sourcePath, outFile) {
+  const source = fs.readFileSync(sourcePath, 'utf8');
+  const result = ts.transpileModule(source, {
+    fileName: sourcePath,
+    compilerOptions: {
+      target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.CommonJS,
+      moduleResolution: ts.ModuleResolutionKind.Node10,
+      esModuleInterop: true,
+      strict: true,
+      skipLibCheck: true
+    }
+  });
+  fs.writeFileSync(outFile, result.outputText);
+}
+
+transpile(path.join(appRoot, 'frontend/src/html.ts'), path.join(outDir, 'html.js'));
+transpile(path.join(appRoot, 'frontend/src/pageFrame.ts'), path.join(outDir, 'pageFrame.js'));
+transpile(path.join(appRoot, 'frontend/src/appLinksPage.ts'), path.join(outDir, 'appLinksPage.js'));
+
+const { appLinksPageHtml } = require(path.join(outDir, 'appLinksPage.js'));
+const registry = [
+  { app_id: 'agents', name: 'Agents', views: ['agents'], logo: { kind: 'glyph', value: 'smart_toy' } },
+  { app_id: 'crm', name: 'CRM', views: ['crm'], logo: { kind: 'glyph', value: 'contacts' } },
+  { app_id: 'mail', name: 'Mail', views: ['mail'], logo: { kind: 'glyph', value: 'mail' } },
+  { app_id: 'calendar', name: 'Calendar', views: ['calendar'], logo: { kind: 'glyph', value: 'event' } },
+  { app_id: 'storage', name: 'Storage', views: ['storage'], logo: { kind: 'glyph', value: 'cloud' } }
+];
+const workspaceApps = registry.map((item) => ({
+  workspace_id: 'default',
+  workspace_name: 'Default',
+  app_id: item.app_id,
+  name: item.name,
+  description: '',
+  version: '1.0.0',
+  source_id: item.app_id,
+  installed: true,
+  status: 'enabled'
+}));
+
+function dependency(alias, providerAppId, providerName, providerInterface, description) {
+  return {
+    alias,
+    interface: providerInterface,
+    version: '^1.0.0',
+    required: false,
+    cardinality: 'one',
+    description,
+    status: 'optional_unset',
+    selected_provider_app_ids: [],
+    stale_provider_app_ids: [],
+    blocked_reason: null,
+    candidates: [{
+      app_id: providerAppId,
+      name: providerName,
+      version: '1.0.0',
+      interface: providerInterface,
+      interface_version: '1.0.0',
+      description,
+      surfaces: ['cli', 'mcp']
+    }]
+  };
+}
+
+const html = appLinksPageHtml({
+  appRegistry: registry,
+  dependencies: [{
+    workspace_id: 'default',
+    consumer_app_id: 'agents',
+    status: 'resolved',
+    dependencies: [
+      dependency('runtime-skills', 'agents', 'Agents', 'skill.catalog', 'Pick runtime skills.')
+    ]
+  }, {
+    workspace_id: 'default',
+    consumer_app_id: 'crm',
+    status: 'resolved',
+    dependencies: [
+      dependency('mail', 'mail', 'Mail', 'mail.workspace', 'Search linked customer mail.'),
+      dependency('calendar', 'calendar', 'Calendar', 'calendar.events', 'Create and link meetings.'),
+      dependency('files', 'storage', 'Storage', 'file.catalog', 'Find linked files.'),
+      dependency('file-preview', 'storage', 'Storage', 'file.preview', 'Open file previews.'),
+      dependency('file-write', 'storage', 'Storage', 'file.content.write', 'Save generated briefs.')
+    ]
+  }],
+  error: '',
+  isLoading: false,
+  loadErrors: [],
+  page: {
+    id: 'app-links',
+    title: 'App links',
+    summary: 'Choose provider apps for app interfaces and shared capabilities.',
+    icon: 'hub'
+  },
+  savingKeys: new Set(),
+  workspaceApps
+});
+
+for (const expected of [
+  'CRM',
+  'crm - resolved',
+  'href="#settings-app-link-consumer-crm"',
+  'id="settings-app-link-consumer-crm"',
+  'mail.workspace',
+  'calendar.events',
+  'file.catalog',
+  'file.preview',
+  'file.content.write',
+  'data-dependency-choice="crm:mail:mail"',
+  'data-dependency-choice="crm:calendar:calendar"',
+  'data-dependency-choice="crm:files:storage"',
+  'data-dependency-choice="crm:file-preview:storage"',
+  'data-dependency-choice="crm:file-write:storage"',
+  'Mail',
+  'Calendar',
+  'Storage'
+]) {
+  assert.ok(html.includes(expected), `missing ${expected}`);
+}
+assert.equal((html.match(/storage - 1\.0\.0/g) || []).length, 3);
+assert.ok((html.match(/auto default/g) || []).length >= 5);
+"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            script_path = Path(temp_dir) / "app_links_crm_render_test.cjs"
+            script_path.write_text(node_script, encoding="utf-8")
+            result = subprocess.run(
+                [
+                    "node",
+                    str(script_path),
+                    str(typescript_root),
+                    str(app_root),
+                    temp_dir,
+                ],
+                cwd=app_root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
 
     def test_settings_embeds_platform_settings_panel(self) -> None:
         app_root = Path(__file__).resolve().parents[1]
@@ -711,6 +866,63 @@ class SettingsApiTestCase(unittest.TestCase):
         self.assertEqual(enabled["status"], "enabled")
         self.assertEqual(status_apps_after_enable, 200)
         self.assertIn("chat", {item["app_id"] for item in visible_after_enable["items"]})
+
+    def test_workspace_apps_include_enabled_workspace_local_bindings_without_app_source(self) -> None:
+        repo_root = self.make_repo_root()
+        state = bootstrap_platform_state(
+            start_path=repo_root,
+            install_builtin_apps=False,
+            register_builtin_provider_definitions=False,
+        )
+        app = PlatformHost(state, start_path=state.repository_root)
+        admin_cookie = self.login(app)
+        parsed = parse_app_contract_file(repo_root / "apps" / "chat")
+        now = "2026-05-29T00:00:00Z"
+        state.app_store.save_workspace_local_app_project(
+            WorkspaceLocalAppProjectRecord(
+                project_id="default:local-crm",
+                workspace_id="default",
+                app_id="local-crm",
+                name="Local CRM",
+                version="0.4.1",
+                description="Workspace-local CRM app.",
+                publisher="workspace",
+                project_root="workspaces/default/apps/local-crm",
+                contract=parsed.contract,
+                created_at=now,
+                updated_at=now,
+                local_app_id="local-crm",
+                public_app_id="crm",
+            )
+        )
+        state.app_store.save_workspace_app_binding(
+            WorkspaceAppBindingRecord(
+                binding_id="default:local-crm",
+                workspace_id="default",
+                app_id="local-crm",
+                source_record_id="default:local-crm",
+                source_kind="workspace_local_project",
+                status="enabled",
+                active_version="0.4.1",
+                data_root="workspaces/default/data/local-crm",
+                installed_at=now,
+                updated_at=now,
+                local_app_id="local-crm",
+                public_app_id="crm",
+                mount_app_id="local-crm",
+            )
+        )
+
+        status_list, workspace_apps, _headers = self.invoke(app, path="/api/admin/workspace-apps", cookie=admin_cookie)
+        local_item = next((item for item in workspace_apps["items"] if item["workspace_id"] == "default" and item["app_id"] == "local-crm"), None)
+
+        self.assertEqual(status_list, 200)
+        self.assertIsNotNone(local_item)
+        self.assertEqual(local_item["name"], "Local CRM")
+        self.assertEqual(local_item["source_id"], "default:local-crm")
+        self.assertEqual(local_item["source_kind"], "workspace_local_project")
+        self.assertEqual(local_item["status"], "enabled")
+        self.assertTrue(local_item["installed"])
 
 
 if __name__ == "__main__":

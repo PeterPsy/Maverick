@@ -862,8 +862,51 @@ button.settings-adapter-card {
   gap: 10px;
 }
 
+.settings-app-link-consumer-nav {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.settings-app-link-consumer-nav__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 2.12rem;
+  border: 1px solid var(--maverick-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--maverick-text);
+  padding: 0.4rem 0.62rem;
+  text-decoration: none;
+}
+
+.settings-app-link-consumer-nav__item:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.settings-app-link-consumer-nav__item strong {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.settings-app-link-consumer-nav__item small {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.28rem;
+  height: 1.28rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.11);
+  color: var(--maverick-text-muted);
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
 .settings-app-link-consumer {
   display: grid;
+  scroll-margin-top: 18px;
   gap: 12px;
   border: 1px solid var(--maverick-border);
   border-radius: var(--maverick-control-radius);

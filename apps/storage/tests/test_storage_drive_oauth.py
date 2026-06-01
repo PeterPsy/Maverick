@@ -12,6 +12,26 @@ from urllib.parse import parse_qs, urlparse
 
 APP_ROOT = Path(__file__).resolve().parents[1]
 BACKEND_ROOT = APP_ROOT / "backend"
+BACKEND_MODULE_NAMES = {path.stem for path in BACKEND_ROOT.glob("*.py")}
+
+
+def evict_foreign_backend_modules() -> None:
+    backend_root = BACKEND_ROOT.resolve()
+    for name, module in list(sys.modules.items()):
+        if name not in BACKEND_MODULE_NAMES:
+            continue
+        module_file = getattr(module, "__file__", None)
+        if not module_file:
+            continue
+        try:
+            resolved = Path(module_file).resolve()
+        except OSError:
+            continue
+        if resolved != backend_root / resolved.name:
+            sys.modules.pop(name, None)
+
+
+evict_foreign_backend_modules()
 sys.path.insert(0, str(BACKEND_ROOT))
 
 from errors import StorageValidationError  # noqa: E402

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import multiprocessing
+import os
+import stat
 import tempfile
 import unittest
 from pathlib import Path
@@ -82,6 +84,22 @@ class JsonFileCollectionTestCase(unittest.TestCase):
             documents = JsonFileCollection(path).find({})
             self.assertEqual(len(documents), 40)
             self.assertEqual(sorted(document["value"] for document in documents), list(range(40)))
+
+    def test_writes_keep_collection_files_group_readable_under_restrictive_umask(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "collections" / "events.json"
+            previous_umask = os.umask(0o077)
+            try:
+                collection = JsonFileCollection(path)
+                collection.update_one({"event_id": "event-1"}, {"$set": {"event_id": "event-1"}}, upsert=True)
+                collection.update_one({"event_id": "event-1"}, {"$set": {"event_id": "event-1", "value": 2}})
+            finally:
+                os.umask(previous_umask)
+
+            lock_path = path.with_name(".events.json.lock")
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o660)
+            self.assertEqual(stat.S_IMODE(lock_path.stat().st_mode), 0o660)
+            self.assertEqual(stat.S_IMODE(path.parent.stat().st_mode), 0o2770)
 
 
 if __name__ == "__main__":

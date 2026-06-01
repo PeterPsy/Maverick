@@ -5,13 +5,14 @@ from __future__ import annotations
 from base64 import b64decode
 import binascii
 from pathlib import Path
+import tempfile
 from typing import Any
 
 from errors import StorageValidationError
 from drive_connection_store import append_audit, get_connection, now_timestamp, sync_state_for_connection, update_connection_sync_state
 from drive_oauth import complete_oauth, disconnect_connection, list_drive_connections, start_oauth
 from google_drive_provider import DriveProviderError, GoogleDriveProvider
-from inventory import upsert_remote_file_records
+from inventory import preview_kind as inventory_preview_kind, upsert_remote_file_records
 from operations_manifest import STORAGE_ACTION_ALIASES, STORAGE_ACTIONS, operations_manifest_payload
 from reference_entities import (
     REFERENCE_MANIFEST,
@@ -49,6 +50,7 @@ from store import (
 )
 from storage_provider_model import GOOGLE_DRIVE_PROVIDER, reject_remote_workspace_relative_path
 from storage_reference_resolver import StorageReferenceResolver
+from text_preview import extract_text_preview
 
 CATALOG_ROLES = {"all", "uploaded", "generated"}
 CATALOG_KINDS = {
@@ -85,6 +87,7 @@ DATA_CHANGED_RESOURCES = {
     "drive_connections.disconnect": "drive-connections",
     "drive_sync": ["files", "drive-connections"],
     "drive_index": "files",
+    "drive_mark_indexed": "files",
     "drive_write": "files",
     "drive_rename": "files",
     "drive_move": "files",
@@ -100,11 +103,14 @@ DRIVE_SECRET_ACTIONS = {
     "drive_preview",
     "drive_export",
     "drive_index",
+    "drive_mark_indexed",
     "drive_write",
     "drive_rename",
     "drive_move",
     "drive_trash",
 }
+
+DRIVE_INDEX_MAX_PREVIEW_CHARS = 20_000
 
 
 def app_events_for_action(action: str) -> list[dict[str, str]]:
@@ -248,12 +254,16 @@ def handle_action(
         return 200, disconnect_connection(data_root, body)
     if action == "drive_list_roots":
         provider = _google_drive_provider(data_root, body, transport=drive_transport)
-        return 200, provider.list_roots(limit=_optional_positive_int(body, "limit", maximum=2000))
+        return 200, provider.list_roots(
+            limit=_optional_positive_int(body, "limit", maximum=2000),
+            page_token=str(body.get("page_token") or body.get("pageToken") or ""),
+        )
     if action == "drive_list_children":
         provider = _google_drive_provider(data_root, body, transport=drive_transport)
         result = provider.list_children(
             parent_drive_file_id=str(body.get("parent_drive_file_id") or body.get("drive_file_id") or "root"),
             limit=_optional_positive_int(body, "limit", maximum=2000),
+            page_token=str(body.get("page_token") or body.get("pageToken") or ""),
         )
         _persist_drive_files(data_root, result)
         return 200, result
@@ -280,6 +290,7 @@ def handle_action(
         return 200, provider.read(
             drive_file_id=drive_file_id,
             max_bytes=_optional_positive_int(body, "max_bytes", maximum=MAX_READ_BYTES) or MAX_PREVIEW_BYTES,
+            file_record=_drive_cached_file_record_from_body(data_root, uploaded_root, generated_root, body, connection_id, drive_file_id),
         )
     if action == "drive_preview":
         connection_id, drive_file_id = _drive_locator_from_body(data_root, uploaded_root, generated_root, body)
@@ -288,6 +299,7 @@ def handle_action(
             drive_file_id=drive_file_id,
             max_bytes=_optional_positive_int(body, "max_bytes", maximum=MAX_READ_BYTES) or MAX_PREVIEW_BYTES,
             max_chars=_optional_positive_int(body, "max_chars"),
+            file_record=_drive_cached_file_record_from_body(data_root, uploaded_root, generated_root, body, connection_id, drive_file_id),
         )
     if action == "drive_export":
         connection_id, drive_file_id = _drive_locator_from_body(data_root, uploaded_root, generated_root, body)
@@ -296,6 +308,7 @@ def handle_action(
             drive_file_id=drive_file_id,
             export_mime_type=str(body.get("export_mime_type") or body.get("format") or "readable_text"),
             max_bytes=_optional_positive_int(body, "max_bytes", maximum=MAX_READ_BYTES) or MAX_PREVIEW_BYTES,
+            file_record=_drive_cached_file_record_from_body(data_root, uploaded_root, generated_root, body, connection_id, drive_file_id),
         )
     if action == "drive_index":
         connection_id, drive_file_id = _drive_locator_from_body(data_root, uploaded_root, generated_root, body)
@@ -306,9 +319,16 @@ def handle_action(
             connection_id=connection_id,
             drive_file_id=drive_file_id,
             max_bytes=_optional_positive_int(body, "max_bytes", maximum=MAX_READ_BYTES) or MAX_PREVIEW_BYTES,
-            max_chars=_optional_positive_int(body, "max_chars"),
+            max_chars=_optional_positive_int(body, "max_chars", maximum=DRIVE_INDEX_MAX_PREVIEW_CHARS) or DRIVE_INDEX_MAX_PREVIEW_CHARS,
         )
         return 200, result
+    if action == "drive_mark_indexed":
+        return 200, _drive_mark_indexed_payload(
+            data_root=data_root,
+            uploaded_root=uploaded_root,
+            generated_root=generated_root,
+            body=body,
+        )
     if action == "drive_write":
         content, content_type = _drive_content_from_body(body)
         if str(body.get("drive_file_id") or body.get("stable_storage_file_id") or body.get("file_id") or body.get("id") or body.get("entity_id") or "").strip():
@@ -705,6 +725,31 @@ def _drive_locator_from_body(data_root: Path, uploaded_root: Path, generated_roo
     return resolved_connection_id, resolved_drive_file_id
 
 
+def _drive_cached_file_record_from_body(
+    data_root: Path,
+    uploaded_root: Path,
+    generated_root: Path,
+    body: dict[str, Any],
+    connection_id: str,
+    drive_file_id: str,
+) -> dict[str, Any] | None:
+    stable_id = str(body.get("stable_storage_file_id") or body.get("file_id") or body.get("id") or body.get("entity_id") or "").strip()
+    if not stable_id:
+        return None
+    try:
+        record = StorageReferenceResolver(data_root=data_root, uploaded_root=uploaded_root, generated_root=generated_root).require_file(stable_id)
+    except StorageValidationError:
+        return None
+    if record.get("provider") != GOOGLE_DRIVE_PROVIDER:
+        return None
+    remote_locator = record.get("remote_locator") if isinstance(record.get("remote_locator"), dict) else {}
+    if str(record.get("connection_id") or "").strip() != connection_id:
+        return None
+    if str(record.get("drive_file_id") or remote_locator.get("drive_file_id") or "").strip() != drive_file_id:
+        return None
+    return record
+
+
 def _persist_drive_files(data_root: Path, result: dict[str, Any]) -> list[dict[str, Any]]:
     files = result.get("files") if isinstance(result.get("files"), list) else []
     return upsert_remote_file_records(data_root=data_root, records=[item for item in files if isinstance(item, dict)])
@@ -780,20 +825,18 @@ def _sync_drive_changes(
     )
     stale_records = [item for item in persisted if bool(item.get("stale")) or str(item.get("status") or "") != "active"]
     stale_ids = [str(item.get("file_id") or item.get("stable_storage_file_id") or item.get("id")) for item in stale_records]
+    indexed_stale_ids = [
+        str(item.get("file_id") or item.get("stable_storage_file_id") or item.get("id"))
+        for item in stale_records
+        if bool(item.get("indexed"))
+    ]
+    indexed_stale_id_set = set(indexed_stale_ids)
     return {
         **result,
         "synced_files": len([item for item in persisted if str(item.get("status") or "") == "active"]),
         "removed_file_count": len([item for item in persisted if str(item.get("status") or "") != "active"]),
         "stale_storage_file_ids": stale_ids,
-        "memory_staleness": [
-            {
-                "owning_app_id": "storage",
-                "entity_type": "file",
-                "entity_id": file_id,
-                "reason": "google_drive_change",
-            }
-            for file_id in stale_ids
-        ],
+        "memory_staleness": [_memory_staleness_payload(item) for item in stale_records if _storage_file_id(item) in indexed_stale_id_set],
         "sync_state": sync_state,
     }
 
@@ -814,12 +857,36 @@ def _drive_index_payload(
     max_bytes: int,
     max_chars: int | None,
 ) -> dict[str, Any]:
-    preview = provider.preview(drive_file_id=drive_file_id, max_bytes=max_bytes, max_chars=max_chars)
+    try:
+        preview = provider.preview(drive_file_id=drive_file_id, max_bytes=max_bytes, max_chars=max_chars)
+    except StorageValidationError as error:
+        raise StorageValidationError(
+            error.detail,
+            operation="drive_index",
+            expected_fields=error.expected_fields,
+            accepted_aliases=error.accepted_aliases,
+            allowed_values=error.allowed_values,
+            example=error.example,
+        ) from error
     file_record = preview.get("file") if isinstance(preview.get("file"), dict) else provider.metadata(drive_file_id=drive_file_id)
-    persisted = upsert_remote_file_records(data_root=data_root, records=[file_record])
+    if "preview_text" not in preview:
+        preview_text = _drive_index_binary_preview_text(preview=preview, file_record=file_record, max_chars=max_chars)
+    else:
+        preview_text = str(preview.get("preview_text") or "")
+    persisted = upsert_remote_file_records(
+        data_root=data_root,
+        records=[
+            {
+                **file_record,
+                "indexed": False,
+                "index_status": "ready_for_memory",
+            }
+        ],
+    )
     public_file = persisted[0] if persisted else file_record
-    source_version = str(public_file.get("etag_or_version") or public_file.get("modified_at") or "")
+    source_version = _drive_source_version(public_file)
     storage_file_id = str(public_file.get("file_id") or public_file.get("stable_storage_file_id") or public_file.get("id") or "")
+    preview_truncated = bool(preview.get("preview_truncated") or preview.get("truncated"))
     return {
         "status": "ready_for_memory",
         "provider": GOOGLE_DRIVE_PROVIDER,
@@ -827,9 +894,10 @@ def _drive_index_payload(
         "drive_file_id": drive_file_id,
         "file": public_file,
         "source_version": source_version,
-        "preview_text": str(preview.get("preview_text") or ""),
+        "preview_text": preview_text,
+        "preview_truncated": preview_truncated,
         "bytes_read": int(preview.get("bytes_read") or 0),
-        "truncated": bool(preview.get("truncated") or False),
+        "truncated": preview_truncated,
         "cache_hit": bool(preview.get("cache_hit") or False),
         "memory_source": {
             "source_kind": "remote_storage_file",
@@ -837,14 +905,149 @@ def _drive_index_payload(
             "entity_type": "file",
             "entity_id": storage_file_id,
             "file_id": storage_file_id,
+            "provider": GOOGLE_DRIVE_PROVIDER,
+            "title": str(public_file.get("name") or public_file.get("display_path") or "Google Drive file"),
             "workspace_relative_path": "",
             "metadata": {
                 "provider": GOOGLE_DRIVE_PROVIDER,
                 "connection_id": connection_id,
                 "drive_file_id": drive_file_id,
+                "stable_storage_file_id": storage_file_id,
                 "source_version": source_version,
                 "display_path": public_file.get("display_path") or "",
+                "web_url": public_file.get("web_url") or "",
             },
+        },
+    }
+
+
+def _drive_source_version(file_record: dict[str, Any]) -> str:
+    source_version = str(file_record.get("etag_or_version") or file_record.get("source_version") or file_record.get("modified_at") or "").strip()
+    if not source_version:
+        raise StorageValidationError(
+            "Google Drive metadata did not include etag/version/modified_at required for Memory source_version.",
+            operation="drive_index",
+        )
+    return source_version
+
+
+def _drive_index_binary_preview_text(*, preview: dict[str, Any], file_record: dict[str, Any], max_chars: int | None) -> str:
+    content_base64 = str(preview.get("content_base64") or "")
+    if not content_base64:
+        raise StorageValidationError(
+            "Google Drive file did not produce preview_text for Memory indexing; use drive_preview or drive_export for file display, or choose a text-exportable Drive document.",
+            operation="drive_index",
+        )
+    try:
+        payload = b64decode(content_base64, validate=True)
+    except (binascii.Error, ValueError) as error:
+        raise StorageValidationError("Google Drive preview returned invalid base64 content for Memory indexing.", operation="drive_index") from error
+    content_type = str(preview.get("content_type") or file_record.get("content_type") or "application/octet-stream")
+    file_name = str(preview.get("file_name") or file_record.get("name") or "drive-file")
+    suffix = Path(file_name).suffix.lower() or _extension_for_content_type(content_type)
+    preview_kind = str(file_record.get("preview_kind") or inventory_preview_kind(content_type, suffix))
+    with tempfile.NamedTemporaryFile(prefix="storage-drive-index-", suffix=suffix) as handle:
+        handle.write(payload)
+        handle.flush()
+        preview_text = extract_text_preview(Path(handle.name), preview_kind, max_chars)
+    if not preview_text.strip():
+        raise StorageValidationError(
+            "Google Drive file did not produce preview_text or extractable text for Memory indexing; use drive_preview or drive_export for file display, or choose a text-exportable Drive document.",
+            operation="drive_index",
+        )
+    return preview_text
+
+
+def _extension_for_content_type(content_type: str) -> str:
+    return {
+        "text/plain": ".txt",
+        "text/csv": ".csv",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+        "application/pdf": ".pdf",
+    }.get(content_type, "")
+
+
+def _drive_mark_indexed_payload(
+    *,
+    data_root: Path,
+    uploaded_root: Path,
+    generated_root: Path,
+    body: dict[str, Any],
+) -> dict[str, Any]:
+    stable_id = str(body.get("stable_storage_file_id") or body.get("file_id") or body.get("id") or body.get("entity_id") or "").strip()
+    if not stable_id:
+        raise StorageValidationError(
+            "stable_storage_file_id is required after Memory ingest succeeds.",
+            operation="drive_mark_indexed",
+            expected_fields=["stable_storage_file_id"],
+        )
+    record = StorageReferenceResolver(data_root=data_root, uploaded_root=uploaded_root, generated_root=generated_root).require_file(stable_id)
+    if record.get("provider") != GOOGLE_DRIVE_PROVIDER:
+        raise StorageValidationError("The requested Storage file is not a Google Drive file.", operation="drive_mark_indexed")
+    expected_source_version = str(body.get("source_version") or "").strip()
+    current_source_version = _drive_source_version(record)
+    if expected_source_version and expected_source_version != current_source_version:
+        raise StorageValidationError("source_version does not match the current Storage file version.", operation="drive_mark_indexed")
+    persisted = upsert_remote_file_records(
+        data_root=data_root,
+        records=[
+            {
+                **record,
+                "indexed": True,
+                "stale": False,
+                "index_status": "indexed",
+                "indexed_at": now_timestamp(),
+                "indexed_source_version": current_source_version,
+                "memory_node_id": str(body.get("memory_node_id") or body.get("node_id") or ""),
+                "memory_external_ref_id": str(body.get("memory_external_ref_id") or body.get("external_ref_id") or ""),
+                "memory_source_version_id": str(body.get("memory_source_version_id") or body.get("source_version_id") or ""),
+            }
+        ],
+    )
+    file_record = persisted[0] if persisted else record
+    return {
+        "status": "indexed",
+        "provider": GOOGLE_DRIVE_PROVIDER,
+        "stable_storage_file_id": str(file_record.get("file_id") or file_record.get("stable_storage_file_id") or file_record.get("id") or stable_id),
+        "source_version": _drive_source_version(file_record),
+        "memory_node_id": str(file_record.get("memory_node_id") or ""),
+        "memory_external_ref_id": str(file_record.get("memory_external_ref_id") or ""),
+        "memory_source_version_id": str(file_record.get("memory_source_version_id") or ""),
+        "indexed_at": str(file_record.get("indexed_at") or ""),
+        "file": file_record,
+    }
+
+
+def _storage_file_id(item: dict[str, Any]) -> str:
+    return str(item.get("file_id") or item.get("stable_storage_file_id") or item.get("id") or "")
+
+
+def _memory_staleness_payload(item: dict[str, Any]) -> dict[str, Any]:
+    file_id = _storage_file_id(item)
+    current_source_version = str(item.get("etag_or_version") or item.get("source_version") or item.get("modified_at") or "")
+    indexed_source_version = str(item.get("indexed_source_version") or "")
+    reason = "google_drive_change"
+    return {
+        "owning_app_id": "storage",
+        "entity_type": "file",
+        "entity_id": file_id,
+        "reason": reason,
+        "connection_id": str(item.get("connection_id") or ""),
+        "drive_file_id": str(item.get("drive_file_id") or ""),
+        "source_version": current_source_version,
+        "indexed_source_version": indexed_source_version,
+        "staleness": {
+            "state": "stale",
+            "reason": reason,
+            "indexed_source_version": indexed_source_version,
+            "current_source_version": current_source_version,
+            "status": str(item.get("status") or ""),
+        },
+        "sync_state": {
+            "status": str(item.get("sync_status") or "stale"),
+            "reason": reason,
         },
     }
 

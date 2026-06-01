@@ -12,13 +12,13 @@ function readWidgetFile(filename: string) {
 describe("floating chat unread indicator", () => {
   it("renders unread response borders in collapsed and menu surfaces", () => {
     const hookSource = readWidgetFile("useFloatingWindows.ts");
+    const frameSource = readWidgetFile("FloatingChatFrame.tsx");
     const launcherSource = readWidgetFile("FloatingLauncher.tsx");
     const menuSource = readWidgetFile("FloatingThreadMenu.tsx");
-    const windowSource = readWidgetFile("FloatingWindow.tsx");
     const styles = readWidgetFile("styles.css");
 
     expect(hookSource).toContain("isThreadUnread");
-    expect(windowSource).toContain("const isActiveThreadUnread");
+    expect(frameSource).toContain("const isActiveThreadUnread");
     expect(launcherSource).toContain('isActiveThreadUnread ? "is-unread" : ""');
     expect(menuSource).toContain('isUnread ? "is-unread" : ""');
     expect(styles).toContain(".chat-floating-thread-menu__trigger.is-unread:not(.is-busy)");
@@ -32,12 +32,12 @@ describe("floating chat unread indicator", () => {
 
   it("marks floating chats read only from explicit floating selections", () => {
     const hookSource = readWidgetFile("useFloatingWindows.ts");
+    const frameSource = readWidgetFile("FloatingChatFrame.tsx");
     const menuSource = readWidgetFile("FloatingThreadMenu.tsx");
-    const windowSource = readWidgetFile("FloatingWindow.tsx");
 
     expect(hookSource).toContain("markThreadReadIfNeeded");
     expect(menuSource).toContain("void onMarkThreadRead(thread);");
-    expect(windowSource).toContain("void onMarkThreadRead(activeThread);");
+    expect(frameSource).toContain("void onMarkThreadRead(activeThread);");
     expect(hookSource).toMatch(/markThreadRead\s*\(thread\.thread_id\)/);
   });
 });

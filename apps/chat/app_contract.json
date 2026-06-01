@@ -209,6 +209,24 @@
       }
     },
     {
+      "widget_id": "chat-floating-dock",
+      "host": "base-shell",
+      "content_kinds": [
+        "shell.dock.right",
+        "shell.overlay.mobile.fullscreen"
+      ],
+      "frontend": {
+        "kind": "iframe",
+        "mount": "frontend/dist/widgets/chat-floating-dock",
+        "spa_fallback": true
+      },
+      "actions": {
+        "backend": true,
+        "mcp": false,
+        "cli": false
+      }
+    },
+    {
       "widget_id": "chat-runtime-text",
       "host": "fleet",
       "content_kinds": [

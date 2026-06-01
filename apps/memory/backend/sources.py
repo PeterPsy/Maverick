@@ -9,6 +9,7 @@ from typing import Any
 
 from database import json_text, new_id, row_payload
 from storage_sources import (
+    INGEST_PREVIEW_METADATA_KEYS,
     is_remote_storage_ref,
     ref_metadata,
     remote_storage_snapshot,
@@ -46,32 +47,40 @@ def sync_sources(
             "updated_at": timestamp,
             "metadata_json": source_metadata(ref, snapshot),
         }
-        db.execute(
-            """
-            INSERT INTO sources(
-              id, source_kind, external_ref_id, owning_app_id, entity_type, entity_id, file_id,
-              workspace_relative_path, uri, title, content_hash, created_at, updated_at, metadata_json
+        if source_id:
+            db.execute(
+                """
+                UPDATE sources
+                SET source_kind = :source_kind,
+                    owning_app_id = :owning_app_id,
+                    entity_type = :entity_type,
+                    entity_id = :entity_id,
+                    file_id = :file_id,
+                    workspace_relative_path = :workspace_relative_path,
+                    uri = :uri,
+                    title = :title,
+                    content_hash = :content_hash,
+                    status = 'active',
+                    updated_at = :updated_at,
+                    metadata_json = :metadata_json
+                WHERE id = :id
+                """,
+                source,
             )
-            VALUES (
-              :id, :source_kind, :external_ref_id, :owning_app_id, :entity_type, :entity_id, :file_id,
-              :workspace_relative_path, :uri, :title, :content_hash, :created_at, :updated_at, :metadata_json
+        else:
+            db.execute(
+                """
+                INSERT INTO sources(
+                  id, source_kind, external_ref_id, owning_app_id, entity_type, entity_id, file_id,
+                  workspace_relative_path, uri, title, content_hash, created_at, updated_at, metadata_json
+                )
+                VALUES (
+                  :id, :source_kind, :external_ref_id, :owning_app_id, :entity_type, :entity_id, :file_id,
+                  :workspace_relative_path, :uri, :title, :content_hash, :created_at, :updated_at, :metadata_json
+                )
+                """,
+                source,
             )
-            ON CONFLICT(external_ref_id) DO UPDATE SET
-              source_kind = excluded.source_kind,
-              owning_app_id = excluded.owning_app_id,
-              entity_type = excluded.entity_type,
-              entity_id = excluded.entity_id,
-              file_id = excluded.file_id,
-              workspace_relative_path = excluded.workspace_relative_path,
-              uri = excluded.uri,
-              title = excluded.title,
-              content_hash = excluded.content_hash,
-              status = 'active',
-              updated_at = excluded.updated_at,
-              metadata_json = excluded.metadata_json
-            """,
-            source,
-        )
         saved = row_payload(db.execute("SELECT * FROM sources WHERE external_ref_id = ?", (ref["id"],)).fetchone()) or {}
         version = ensure_source_version(db, source=saved, ref=ref, snapshot=snapshot, timestamp=timestamp)
         ensure_node_source_link(db, node_id=node_id, source_id=saved["id"], external_ref_id=ref["id"], timestamp=timestamp)
@@ -170,6 +179,8 @@ def source_snapshot(
 
 def source_metadata(ref: sqlite3.Row, snapshot: dict[str, Any]) -> str:
     metadata = ref_metadata(ref)
+    for key in INGEST_PREVIEW_METADATA_KEYS:
+        metadata.pop(key, None)
     metadata["content_hash_kind"] = snapshot["hash_kind"]
     metadata.update(snapshot.get("metadata", {}))
     staleness = storage_ref_staleness(ref)

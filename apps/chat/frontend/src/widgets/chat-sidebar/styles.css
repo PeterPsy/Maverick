@@ -89,7 +89,7 @@ button {
 
 .bs-widget-root.is-shell-mobile {
   --chat-sidebar-scroll-under-bottom: 3.9rem;
-  --chat-sidebar-scroll-under-top: calc(3rem + 3.32rem);
+  --chat-sidebar-scroll-under-top: calc(3rem + 0.75rem);
   overscroll-behavior: contain;
   touch-action: pan-y;
 }

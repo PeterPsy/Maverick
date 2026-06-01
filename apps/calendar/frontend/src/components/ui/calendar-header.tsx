@@ -31,7 +31,7 @@ export function Header({
         ? `Week of ${currentDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
         : view === "day"
           ? currentDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })
-          : "All Events"
+          : `Events from ${currentDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`
 
   return (
     <div className="flex flex-col gap-3">

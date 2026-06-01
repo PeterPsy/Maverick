@@ -5,39 +5,68 @@ const SIDEBAR_DESKTOP_LOGO_SRC = "/apps/base-shell/sidebar-logo.svg";
 
 export function MobileShellHeader({
   activeApp,
+  chatApp,
+  isPinnedAppsOpen,
+  isMobileChatOpen,
   isPrimaryActionAvailable,
   isSidebarOpen,
+  showMobileChatAction,
+  onCloseMobileChat,
+  onOpenMobileChat,
   onOpenNewChat,
-  onOpenSidebar,
+  onTogglePinnedApps,
+  onToggleSidebar,
   onPrimaryAction,
   primaryActionLabel,
 }: {
   activeApp: AppRegistryItem | null;
+  chatApp: AppRegistryItem | null;
+  isPinnedAppsOpen: boolean;
+  isMobileChatOpen: boolean;
   isPrimaryActionAvailable: boolean;
   isSidebarOpen: boolean;
+  showMobileChatAction: boolean;
+  onCloseMobileChat: () => void;
+  onOpenMobileChat: () => void;
   onOpenNewChat: () => void;
-  onOpenSidebar: () => void;
+  onTogglePinnedApps: () => void;
+  onToggleSidebar: () => void;
   onPrimaryAction: () => void;
   primaryActionLabel: string;
 }) {
   const actionLabel = primaryActionLabel || "Azione principale";
 
   return (
-    <header className={`bs-mobile-shell-header ${isSidebarOpen ? "is-obscured" : ""}`} aria-label="Mobile shell navigation">
-      <button
-        aria-label="Apri sidebar"
-        className="bs-mobile-shell-header__button bs-mobile-shell-header__app"
-        onClick={onOpenSidebar}
-        type="button"
-      >
-        {activeApp ? (
-          <AppLogo app={activeApp} className="bs-app-logo--rail bs-mobile-shell-header__app-logo" />
-        ) : (
-          <span aria-hidden="true" className="bs-app-logo is-glyph bs-app-logo--rail bs-mobile-shell-header__app-placeholder">
-            <span className="material-symbols-rounded">apps</span>
+    <header className="bs-mobile-shell-header" aria-label="Mobile shell navigation">
+      <div className="bs-mobile-shell-header__leading">
+        <button
+          aria-label={isSidebarOpen ? "Chiudi sidebar" : "Apri sidebar"}
+          aria-pressed={isSidebarOpen}
+          className={`bs-mobile-shell-header__button bs-mobile-shell-header__menu ${isSidebarOpen ? "is-open" : ""}`}
+          onClick={onToggleSidebar}
+          type="button"
+        >
+          <span aria-hidden="true" className="bs-mobile-shell-header__burger">
+            <span />
+            <span />
           </span>
-        )}
-      </button>
+        </button>
+        <button
+          aria-label={isPinnedAppsOpen ? "Chiudi applicazioni pinnate" : "Apri applicazioni pinnate"}
+          aria-expanded={isPinnedAppsOpen}
+          className="bs-mobile-shell-header__button bs-mobile-shell-header__app"
+          onClick={onTogglePinnedApps}
+          type="button"
+        >
+          {activeApp ? (
+            <AppLogo app={activeApp} className="bs-app-logo--rail bs-mobile-shell-header__app-logo" />
+          ) : (
+            <span aria-hidden="true" className="bs-app-logo is-glyph bs-app-logo--rail bs-mobile-shell-header__app-placeholder">
+              <span className="material-symbols-rounded">apps</span>
+            </span>
+          )}
+        </button>
+      </div>
       <button
         aria-label="Nuova chat"
         className="bs-mobile-shell-header__logo-button"
@@ -47,16 +76,36 @@ export function MobileShellHeader({
       >
         <img alt="Maverick" className="bs-mobile-shell-header__logo" src={SIDEBAR_DESKTOP_LOGO_SRC} />
       </button>
-      <button
-        aria-label={actionLabel}
-        className="bs-mobile-shell-header__button bs-mobile-shell-header__primary-action"
-        disabled={!isPrimaryActionAvailable}
-        onClick={onPrimaryAction}
-        title={actionLabel}
-        type="button"
-      >
-        <span aria-hidden="true" className="material-symbols-rounded">add</span>
-      </button>
+      <div className="bs-mobile-shell-header__actions">
+        <button
+          aria-label={actionLabel}
+          className="bs-mobile-shell-header__button bs-mobile-shell-header__primary-action"
+          disabled={!isPrimaryActionAvailable}
+          onClick={onPrimaryAction}
+          title={actionLabel}
+          type="button"
+        >
+          <span aria-hidden="true" className="material-symbols-rounded">add</span>
+        </button>
+        {showMobileChatAction ? (
+          <button
+            aria-label={isMobileChatOpen ? "Chiudi chat contestuale" : "Apri chat contestuale"}
+            aria-pressed={isMobileChatOpen}
+            className={`bs-mobile-shell-header__button bs-mobile-shell-header__chat-action ${isMobileChatOpen ? "is-open" : ""}`}
+            onClick={isMobileChatOpen ? onCloseMobileChat : onOpenMobileChat}
+            title={isMobileChatOpen ? "Chiudi chat" : "Chat contestuale"}
+            type="button"
+          >
+            {isMobileChatOpen ? (
+              <span aria-hidden="true" className="material-symbols-rounded">close</span>
+            ) : chatApp ? (
+              <AppLogo app={chatApp} className="bs-app-logo--rail bs-mobile-shell-header__chat-logo" />
+            ) : (
+              <span aria-hidden="true" className="material-symbols-rounded">forum</span>
+            )}
+          </button>
+        ) : null}
+      </div>
     </header>
   );
 }

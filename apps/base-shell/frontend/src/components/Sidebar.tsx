@@ -91,12 +91,18 @@ export function Sidebar({
   const isDetailLayerOpen = isOpen || isPinned;
 
   function handlePointerEnter() {
+    if (isMobileLayout) {
+      return;
+    }
     if (!isPinned) {
       onOpenSidebar();
     }
   }
 
   function handlePointerLeave(event: ReactMouseEvent<HTMLElement>) {
+    if (isMobileLayout) {
+      return;
+    }
     if (isRailReordering || isResizeActive || resizeDragRef.current) {
       return;
     }
@@ -106,12 +112,18 @@ export function Sidebar({
   }
 
   function handleFocus() {
+    if (isMobileLayout) {
+      return;
+    }
     if (!isPinned) {
       onOpenSidebar();
     }
   }
 
   function handleBlur(event: ReactFocusEvent<HTMLElement>) {
+    if (isMobileLayout) {
+      return;
+    }
     if (isRailReordering || isResizeActive || resizeDragRef.current) {
       return;
     }
@@ -239,19 +251,21 @@ export function Sidebar({
       onTouchStart={handleTouchStart}
       style={railMetrics}
     >
-      <div className="bs-sidebar__rail" aria-label="Applications">
-        <SidebarAppRail
-          activeAppId={activeAppId}
-          appsToRender={railApps}
-          enableReorder={!isMobileLayout}
-          isInitialLoading={isInitialLoading}
-          onOpenApp={onOpenApp}
-          onOpenSettings={onOpenSettings}
-          onReorderActiveChange={setIsRailReordering}
-          onReorderPinnedApps={onReorderPinnedApps}
-          settingsApp={settingsApp}
-        />
-      </div>
+      {!isMobileLayout ? (
+        <div className="bs-sidebar__rail" aria-label="Applications">
+          <SidebarAppRail
+            activeAppId={activeAppId}
+            appsToRender={railApps}
+            enableReorder={true}
+            isInitialLoading={isInitialLoading}
+            onOpenApp={onOpenApp}
+            onOpenSettings={onOpenSettings}
+            onReorderActiveChange={setIsRailReordering}
+            onReorderPinnedApps={onReorderPinnedApps}
+            settingsApp={settingsApp}
+          />
+        </div>
+      ) : null}
 
       <div className="bs-sidebar__details" aria-hidden={!isDetailLayerOpen}>
         <div className="bs-sidebar__top-overlay">
@@ -272,19 +286,6 @@ export function Sidebar({
             />
           </div>
 
-          <div className="bs-sidebar__mobile-apps" aria-label="Applicazioni pinnate" data-no-sidebar-swipe="">
-            <SidebarAppRail
-              activeAppId={activeAppId}
-              appsToRender={sidebarMobileRailApps(railApps, activeAppId)}
-              className="bs-sidebar__rail-apps--mobile"
-              enableReorder={false}
-              isInitialLoading={isInitialLoading}
-              onOpenApp={onOpenApp}
-              onOpenSettings={onOpenSettings}
-              onReorderPinnedApps={onReorderPinnedApps}
-              settingsApp={settingsApp}
-            />
-          </div>
         </div>
 
         <WidgetSlot
@@ -377,15 +378,7 @@ function isSidebarSwipeIgnoredTarget(target: EventTarget): boolean {
   if (!(target instanceof Element)) {
     return false;
   }
-  return Boolean(target.closest("input, textarea, select, [contenteditable='true'], .bs-sidebar__mobile-apps, [data-no-sidebar-swipe]"));
-}
-
-export function sidebarMobileRailApps(railApps: AppRegistryItem[], activeAppId: string | null): AppRegistryItem[] {
-  if (!activeAppId) {
-    return railApps;
-  }
-  const normalizedActiveAppId = activeAppId.toLowerCase();
-  return railApps.filter((app) => app.app_id.toLowerCase() !== normalizedActiveAppId);
+  return Boolean(target.closest("input, textarea, select, [contenteditable='true'], [data-no-sidebar-swipe]"));
 }
 
 export { sidebarRailButtonClassName } from "./SidebarAppRail";

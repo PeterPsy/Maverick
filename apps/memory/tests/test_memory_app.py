@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import sys
 import tempfile
 import unittest
 
@@ -24,6 +25,24 @@ from tests.support.markers import full_test, integration_test
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MEMORY_ROOT = REPO_ROOT / "apps" / "memory"
+MEMORY_BACKEND_ROOT = MEMORY_ROOT / "backend"
+MEMORY_BACKEND_MODULE_NAMES = {path.stem for path in MEMORY_BACKEND_ROOT.glob("*.py")}
+
+
+def evict_foreign_backend_modules() -> None:
+    backend_root = MEMORY_BACKEND_ROOT.resolve()
+    for name, module in list(sys.modules.items()):
+        if name not in MEMORY_BACKEND_MODULE_NAMES:
+            continue
+        module_file = getattr(module, "__file__", None)
+        if not module_file:
+            continue
+        try:
+            resolved = Path(module_file).resolve()
+        except OSError:
+            continue
+        if resolved != backend_root / resolved.name:
+            sys.modules.pop(name, None)
 
 
 class MemoryAppTestCase(unittest.TestCase):
@@ -78,14 +97,37 @@ class MemoryAppTestCase(unittest.TestCase):
 
     def import_backend_module(self, module_name: str):
         import importlib
-        import sys
 
-        backend_path = str(MEMORY_ROOT / "backend")
+        evict_foreign_backend_modules()
+        backend_path = str(MEMORY_BACKEND_ROOT)
         sys.path.insert(0, backend_path)
         try:
             return importlib.import_module(module_name)
         finally:
             sys.path.remove(backend_path)
+
+    def drive_memory_source(
+        self,
+        *,
+        storage_file_id: str = "file_drive_plan",
+        drive_file_id: str = "drive_plan",
+        source_version: str = "rev-1",
+    ) -> dict:
+        return {
+            "source_kind": "remote_storage_file",
+            "owning_app_id": "storage",
+            "entity_type": "file",
+            "entity_id": storage_file_id,
+            "file_id": storage_file_id,
+            "workspace_relative_path": "",
+            "metadata": {
+                "provider": "google_drive",
+                "connection_id": "drive_conn_acme",
+                "drive_file_id": drive_file_id,
+                "source_version": source_version,
+                "display_path": "/Drive/Plans/Plan.md",
+            },
+        }
 
     def test_contract_declares_memory_surfaces_and_reference_entities(self) -> None:
         parsed = parse_app_contract_file(MEMORY_ROOT)
@@ -97,6 +139,8 @@ class MemoryAppTestCase(unittest.TestCase):
         self.assertIn("memory_compile", parsed.contract.capabilities.mcp_tools)
         self.assertIn("memory_lint", parsed.contract.capabilities.mcp_tools)
         self.assertIn("memory_wiki_query", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("memory_ingest_storage_source", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("memory_apply_storage_staleness", parsed.contract.capabilities.mcp_tools)
         self.assertIn("memory_reference_manifest", parsed.contract.capabilities.mcp_tools)
         self.assertIn("memory_set_view_filter", parsed.contract.capabilities.mcp_tools)
         self.assertEqual(parsed.contract.capabilities.cli_commands, ["memory"])
@@ -122,6 +166,27 @@ class MemoryAppTestCase(unittest.TestCase):
         self.assertIn("/apps/memory/assets/", dist_index)
         self.assertTrue((MEMORY_ROOT / "frontend" / "dist" / "widgets" / "memory-sidebar" / "index.html").is_file())
         self.assertTrue((MEMORY_ROOT / "frontend" / "dist" / "widgets" / "memory-sidebar-footer" / "index.html").is_file())
+
+    def test_cli_and_mcp_descriptors_cover_declared_agent_surfaces(self) -> None:
+        parsed = parse_app_contract_file(MEMORY_ROOT)
+        cli_descriptor = json.loads((MEMORY_ROOT / "cli" / "command_schemas.json").read_text(encoding="utf-8"))
+        mcp_descriptor = json.loads((MEMORY_ROOT / "mcp" / "tool_schemas.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(sorted(cli_descriptor["commands"]), sorted(parsed.contract.capabilities.cli_commands))
+        self.assertEqual(sorted(mcp_descriptor["tools"]), sorted(parsed.contract.capabilities.mcp_tools))
+        attach_schema = mcp_descriptor["tools"]["memory_attach_file"]["input_schema"]
+        self.assertIn("remote_storage_file", mcp_descriptor["tools"]["memory_attach_file"]["description"])
+        self.assertEqual(attach_schema["properties"]["provider"]["enum"], ["google_drive", "local"])
+        self.assertIn("source_version", attach_schema["properties"]["metadata"]["properties"])
+        ingest_schema = mcp_descriptor["tools"]["memory_ingest_storage_source"]["input_schema"]
+        self.assertIn("memory_source", ingest_schema["required"])
+        self.assertEqual(
+            ingest_schema["properties"]["memory_source"]["properties"]["source_kind"]["enum"],
+            ["remote_storage_file"],
+        )
+        staleness_schema = mcp_descriptor["tools"]["memory_apply_storage_staleness"]["input_schema"]
+        self.assertIn("memory_staleness", staleness_schema["properties"])
+        self.assertIn("entity_id", staleness_schema["properties"])
 
     def test_install_hook_is_idempotent_and_creates_schema(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -423,6 +488,412 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual(rejected["status_code"], 400)
             self.assertIn("workspace_relative_path", rejected["json"]["detail"])
 
+    def test_ingest_storage_source_creates_node_compiles_preview_and_is_idempotent(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            storage_sources = self.import_backend_module("storage_sources")
+            service = self.import_backend_module("service")
+            database = self.import_backend_module("database")
+            original_surface = storage_sources._storage_preview_surface
+            try:
+                storage_sources._storage_preview_surface = lambda _data_root, _request: (_ for _ in ()).throw(
+                    AssertionError("ingested preview_text should avoid a second Storage preview")
+                )
+                status, first = service.handle_action(
+                    data_root,
+                    {
+                        "action": "ingest_storage_source",
+                        "title": "Drive renewal plan",
+                        "memory_source": self.drive_memory_source(),
+                        "preview_text": "Drive renewal plan says the renewal owner is Dana.",
+                        "compile_after_ingest": True,
+                    },
+                )
+                second_status, second = service.handle_action(
+                    data_root,
+                    {
+                        "action": "ingest_storage_source",
+                        "title": "Drive renewal plan duplicate",
+                        "memory_source": self.drive_memory_source(),
+                        "preview_text": "Drive renewal plan says the renewal owner is Dana.",
+                    },
+                )
+                context_status, context = service.handle_action(data_root, {"action": "context", "query": "renewal owner"})
+                search_status, search = service.handle_action(data_root, {"action": "search", "query": "Dana"})
+                wiki_status, wiki_result = service.handle_action(data_root, {"action": "wiki_query", "query": "Dana"})
+            finally:
+                storage_sources._storage_preview_surface = original_surface
+
+            with database.connect(data_root) as db:
+                ref_count = db.execute("SELECT COUNT(*) AS count FROM external_refs").fetchone()["count"]
+                version = database.row_payload(db.execute("SELECT * FROM source_versions").fetchone()) or {}
+                source = database.row_payload(db.execute("SELECT * FROM sources").fetchone()) or {}
+
+            self.assertEqual(status, 200)
+            self.assertEqual(second_status, 200)
+            self.assertTrue(first["node_created"])
+            self.assertTrue(first["external_ref_created"])
+            self.assertFalse(second["node_created"])
+            self.assertFalse(second["external_ref_created"])
+            self.assertEqual(second["node"]["id"], first["node"]["id"])
+            self.assertEqual(ref_count, 1)
+            self.assertEqual(first["compiled"]["compiled_page"]["freshness"], "fresh")
+            self.assertTrue(first["compiled"]["citations"])
+            self.assertEqual(first["compiled"]["citations"][0]["metadata"]["source_version"], "rev-1")
+            self.assertEqual(first["compiled"]["citations"][0]["source_version"], "rev-1")
+            self.assertEqual(
+                first["compiled"]["citations"][0]["storage_reference"]["preview_request"]["tool"],
+                "storage_drive_preview",
+            )
+            self.assertIn("renewal owner is Dana", version["extracted_text"])
+            self.assertNotIn("ingest_preview_text", source["metadata"])
+            self.assertNotIn("ingest_preview_truncated", source["metadata"])
+            self.assertEqual(context_status, 200)
+            self.assertEqual(search_status, 200)
+            self.assertEqual(wiki_status, 200)
+            context_ref = context["items"][0]["storage_references"][0]
+            search_ref = search["results"][0]["storage_references"][0]
+            wiki_ref = wiki_result["results"][0]["storage_references"][0]
+            self.assertEqual(context_ref["stable_storage_file_id"], "file_drive_plan")
+            self.assertEqual(search_ref["preview_request"]["arguments"]["stable_storage_file_id"], "file_drive_plan")
+            self.assertEqual(wiki_ref["deep_link"], "/app/storage/files/file_drive_plan")
+            self.assertEqual(context["items"][0]["compiled"]["storage_references"][0]["drive_file_id"], "drive_plan")
+
+    def test_ingest_storage_source_accepts_empty_preview_text_without_second_storage_preview(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            storage_sources = self.import_backend_module("storage_sources")
+            service = self.import_backend_module("service")
+            database = self.import_backend_module("database")
+            original_surface = storage_sources._storage_preview_surface
+            try:
+                storage_sources._storage_preview_surface = lambda _data_root, _request: (_ for _ in ()).throw(
+                    AssertionError("empty drive_index preview_text is still an explicit Storage preview result")
+                )
+                status, result = service.handle_action(
+                    data_root,
+                    {
+                        "action": "ingest_storage_source",
+                        "title": "Empty Drive document",
+                        "memory_source": self.drive_memory_source(
+                            storage_file_id="file_drive_empty",
+                            drive_file_id="drive_empty",
+                            source_version="rev-empty",
+                        ),
+                        "preview_text": "",
+                        "preview_truncated": False,
+                        "compile_after_ingest": True,
+                    },
+                )
+            finally:
+                storage_sources._storage_preview_surface = original_surface
+
+            with database.connect(data_root) as db:
+                source = database.row_payload(db.execute("SELECT * FROM sources").fetchone()) or {}
+                version = database.row_payload(db.execute("SELECT * FROM source_versions").fetchone()) or {}
+
+            self.assertEqual(status, 200)
+            self.assertEqual(result["compiled"]["compiled_page"]["freshness"], "fresh")
+            self.assertEqual(version["extracted_text"], "")
+            self.assertNotIn("ingest_preview_text", source["metadata"])
+            self.assertNotIn("ingest_preview_truncated", source["metadata"])
+
+    def test_ingest_storage_source_compile_handles_legacy_partial_source_index(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            service = self.import_backend_module("service")
+            database = self.import_backend_module("database")
+            database.ensure_schema(data_root)
+            with database.connect(data_root) as db:
+                db.execute("DROP INDEX idx_sources_external_ref")
+                db.execute(
+                    "CREATE UNIQUE INDEX idx_sources_external_ref ON sources(external_ref_id) WHERE status = 'active'"
+                )
+
+            status, result = service.handle_action(
+                data_root,
+                {
+                    "action": "ingest_storage_source",
+                    "title": "Drive renewal plan",
+                    "memory_source": self.drive_memory_source(),
+                    "preview_text": "Drive renewal plan says the renewal owner is Dana.",
+                    "compile_after_ingest": True,
+                },
+            )
+
+            self.assertEqual(status, 200)
+            self.assertEqual(result["compiled"]["compiled_page"]["freshness"], "fresh")
+            self.assertEqual(result["compiled"]["sources"][0]["external_ref_id"], result["external_ref"]["id"])
+
+    def test_agent_drive_workflow_starts_in_memory_and_returns_storage_preview_reference(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            storage_sources = self.import_backend_module("storage_sources")
+            service = self.import_backend_module("service")
+            memory_source = self.drive_memory_source(
+                storage_file_id="file_drive_board_pack",
+                drive_file_id="drive_board_pack",
+                source_version="rev-board-7",
+            )
+            memory_source["title"] = "Board approval pack"
+            memory_source["metadata"]["display_path"] = "/Drive/Board/Approval pack.md"
+            drive_index_payload = {
+                "status": "ready_for_memory",
+                "provider": "google_drive",
+                "connection_id": "drive_conn_acme",
+                "drive_file_id": "drive_board_pack",
+                "source_version": "rev-board-7",
+                "preview_text": "Board approval pack says the deadline is June 15 and the owner is Dana.",
+                "preview_truncated": False,
+                "memory_source": memory_source,
+            }
+
+            miss_status, miss = service.handle_action(data_root, {"action": "context", "query": "June 15 approval deadline"})
+            original_surface = storage_sources._storage_preview_surface
+            try:
+                storage_sources._storage_preview_surface = lambda _data_root, _request: (_ for _ in ()).throw(
+                    AssertionError("drive_index preview_text should satisfy immediate Memory compile")
+                )
+                ingest_status, ingested = service.handle_action(
+                    data_root,
+                    {
+                        "action": "ingest_storage_source",
+                        "title": "Board approval pack",
+                        "memory_source": drive_index_payload["memory_source"],
+                        "preview_text": drive_index_payload["preview_text"],
+                        "preview_truncated": drive_index_payload["preview_truncated"],
+                        "source_version": drive_index_payload["source_version"],
+                        "compile_after_ingest": True,
+                    },
+                )
+                context_status, context = service.handle_action(data_root, {"action": "context", "query": "June 15 approval deadline"})
+                wiki_status, wiki_result = service.handle_action(data_root, {"action": "wiki_query", "query": "June 15"})
+            finally:
+                storage_sources._storage_preview_surface = original_surface
+
+            self.assertEqual(miss_status, 200)
+            self.assertEqual(miss["items"], [])
+            self.assertEqual(ingest_status, 200)
+            self.assertTrue(ingested["compiled"]["citations"])
+            citation = ingested["compiled"]["citations"][0]
+            self.assertEqual(citation["source_version"], "rev-board-7")
+            self.assertEqual(citation["storage_reference"]["deep_link"], "/app/storage/files/file_drive_board_pack")
+            self.assertEqual(context_status, 200)
+            self.assertEqual(wiki_status, 200)
+            context_ref = context["items"][0]["storage_references"][0]
+            wiki_ref = wiki_result["results"][0]["storage_references"][0]
+            for storage_ref in (context_ref, wiki_ref, citation["storage_reference"]):
+                self.assertEqual(storage_ref["provider"], "google_drive")
+                self.assertEqual(storage_ref["workspace_relative_path"], "")
+                self.assertEqual(storage_ref["stable_storage_file_id"], "file_drive_board_pack")
+                self.assertEqual(storage_ref["connection_id"], "drive_conn_acme")
+                self.assertEqual(storage_ref["drive_file_id"], "drive_board_pack")
+                self.assertEqual(storage_ref["source_version"], "rev-board-7")
+                self.assertEqual(storage_ref["preview_request"]["tool"], "storage_drive_preview")
+                self.assertEqual(storage_ref["preview_request"]["arguments"]["stable_storage_file_id"], "file_drive_board_pack")
+                self.assertEqual(storage_ref["export_request"]["tool"], "storage_drive_export")
+                self.assertEqual(storage_ref["reference_resolve_request"]["tool"], "storage_reference_resolve")
+                self.assertEqual(storage_ref["deep_link"], "/app/storage/files/file_drive_board_pack")
+
+    def test_ingest_storage_source_attaches_existing_node_and_rejects_secret_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            node = self.run_backend(
+                data_root,
+                {"action": "remember", "title": "Existing Drive node", "body": "Existing context.", "type": "fact"},
+            )["json"]["node"]
+
+            attached = self.run_backend(
+                data_root,
+                {
+                    "action": "ingest_storage_source",
+                    "node_id": node["id"],
+                    "memory_source": self.drive_memory_source(storage_file_id="file_drive_existing", drive_file_id="drive_existing"),
+                    "preview_text": "Existing Drive node evidence.",
+                },
+            )
+            rejected_source = self.drive_memory_source(storage_file_id="file_drive_secret", drive_file_id="drive_secret")
+            rejected_source["metadata"]["refresh_token"] = "sensitive"
+            rejected = self.run_backend(
+                data_root,
+                {
+                    "action": "ingest_storage_source",
+                    "memory_source": rejected_source,
+                    "preview_text": "Should not be saved.",
+                },
+            )
+            missing_version_source = self.drive_memory_source(storage_file_id="file_drive_no_version", drive_file_id="drive_no_version")
+            missing_version_source["metadata"].pop("source_version")
+            missing_version = self.run_backend(
+                data_root,
+                {
+                    "action": "ingest_storage_source",
+                    "memory_source": missing_version_source,
+                    "preview_text": "Should not be saved.",
+                },
+            )
+
+            self.assertEqual(attached["status_code"], 200)
+            self.assertFalse(attached["json"]["node_created"])
+            self.assertEqual(attached["json"]["external_ref"]["node_id"], node["id"])
+            self.assertEqual(attached["json"]["external_ref"]["entity_id"], "file_drive_existing")
+            self.assertEqual(rejected["status_code"], 400)
+            self.assertIn("secret fields", rejected["json"]["detail"])
+            self.assertEqual(missing_version["status_code"], 400)
+            self.assertIn("source_version", missing_version["json"]["detail"])
+
+    def test_ingest_storage_source_keeps_same_drive_file_on_multiple_nodes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            service = self.import_backend_module("service")
+            database = self.import_backend_module("database")
+            storage_file_id = "file_drive_shared"
+            memory_source = self.drive_memory_source(storage_file_id=storage_file_id, drive_file_id="drive_shared")
+            first_node = service.handle_action(data_root, {"action": "remember", "title": "First node", "body": "First"})[1]["node"]
+            second_node = service.handle_action(data_root, {"action": "remember", "title": "Second node", "body": "Second"})[1]["node"]
+
+            first_status, first = service.handle_action(
+                data_root,
+                {
+                    "action": "ingest_storage_source",
+                    "node_id": first_node["id"],
+                    "memory_source": memory_source,
+                    "preview_text": "Shared Drive evidence.",
+                    "compile_after_ingest": True,
+                },
+            )
+            second_status, second = service.handle_action(
+                data_root,
+                {
+                    "action": "ingest_storage_source",
+                    "node_id": second_node["id"],
+                    "memory_source": memory_source,
+                    "preview_text": "Shared Drive evidence.",
+                    "compile_after_ingest": True,
+                },
+            )
+            stale_status, stale = service.handle_action(
+                data_root,
+                {
+                    "action": "apply_storage_staleness",
+                    "memory_staleness": {
+                        "owning_app_id": "storage",
+                        "entity_type": "file",
+                        "entity_id": storage_file_id,
+                        "reason": "google_drive_change",
+                        "connection_id": "drive_conn_acme",
+                        "drive_file_id": "drive_changed",
+                        "source_version": "rev-2",
+                        "indexed_source_version": "rev-1",
+                    },
+                },
+            )
+
+            with database.connect(data_root) as db:
+                refs = [
+                    database.row_payload(row) or {}
+                    for row in db.execute("SELECT * FROM external_refs WHERE entity_id = ? ORDER BY node_id", (storage_file_id,))
+                ]
+
+            self.assertEqual(first_status, 200)
+            self.assertEqual(second_status, 200)
+            self.assertTrue(first["external_ref_created"])
+            self.assertTrue(second["external_ref_created"])
+            self.assertEqual({ref["node_id"] for ref in refs}, {first_node["id"], second_node["id"]})
+            self.assertEqual(stale_status, 200)
+            self.assertEqual(len(stale["impacted_nodes"]), 2)
+
+    def test_ingest_storage_source_rejects_nested_secret_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            source = self.drive_memory_source(storage_file_id="file_drive_nested_secret", drive_file_id="drive_nested_secret")
+            source["metadata"]["oauth"] = {"accessToken": "sensitive"}
+
+            rejected = self.run_backend(
+                data_root,
+                {
+                    "action": "ingest_storage_source",
+                    "memory_source": source,
+                    "preview_text": "Should not be saved.",
+                },
+            )
+
+            self.assertEqual(rejected["status_code"], 400)
+            self.assertIn("oauth.accessToken", rejected["json"]["detail"])
+
+    def test_ingest_storage_source_compile_failure_does_not_create_fresh_source(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            storage_sources = self.import_backend_module("storage_sources")
+            service = self.import_backend_module("service")
+            database = self.import_backend_module("database")
+            errors = self.import_backend_module("errors")
+            original_surface = storage_sources._storage_preview_surface
+            try:
+                storage_sources._storage_preview_surface = lambda _data_root, _request: (_ for _ in ()).throw(
+                    errors.MemoryValidationError("Storage preview failed.")
+                )
+                with self.assertRaises(errors.MemoryValidationError):
+                    service.handle_action(
+                        data_root,
+                        {
+                            "action": "ingest_storage_source",
+                            "title": "Preview failure",
+                            "memory_source": self.drive_memory_source(storage_file_id="file_drive_failure", drive_file_id="drive_failure"),
+                            "compile_after_ingest": True,
+                        },
+                    )
+            finally:
+                storage_sources._storage_preview_surface = original_surface
+
+            with database.connect(data_root) as db:
+                self.assertEqual(db.execute("SELECT COUNT(*) AS count FROM external_refs").fetchone()["count"], 0)
+                self.assertEqual(db.execute("SELECT COUNT(*) AS count FROM sources").fetchone()["count"], 0)
+                self.assertEqual(db.execute("SELECT COUNT(*) AS count FROM source_versions").fetchone()["count"], 0)
+                self.assertEqual(db.execute("SELECT COUNT(*) AS count FROM wiki_pages WHERE freshness = 'fresh'").fetchone()["count"], 0)
+
+    def test_platform_storage_preview_uses_mcp_argument_flags(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            storage_sources = self.import_backend_module("storage_sources")
+            calls: list[list[str]] = []
+            original_run = storage_sources.subprocess.run
+            original_which = storage_sources.shutil.which
+
+            class Completed:
+                returncode = 0
+                stdout = json.dumps({"status_code": 200, "preview_text": "Drive preview text."})
+
+            def fake_run(args: list[str], **_kwargs: object) -> Completed:
+                calls.append(args)
+                return Completed()
+
+            try:
+                storage_sources.shutil.which = lambda _name: "/usr/bin/maverick"
+                storage_sources.subprocess.run = fake_run
+                result = storage_sources.default_storage_preview_surface(
+                    data_root,
+                    {
+                        "connection_id": "drive_conn_acme",
+                        "drive_file_id": "drive_plan",
+                        "stable_storage_file_id": "file_drive_plan",
+                        "max_chars": 20000,
+                        "max_bytes": 1024,
+                    },
+                )
+            finally:
+                storage_sources.subprocess.run = original_run
+                storage_sources.shutil.which = original_which
+
+            self.assertEqual(result["preview_text"], "Drive preview text.")
+            self.assertEqual(calls[0][:7], ["maverick", "app", "storage", "mcp", "call", "storage_drive_preview", "--json"])
+            self.assertNotIn("--arguments", calls[0])
+            self.assertIn("--stable-storage-file-id", calls[0])
+            self.assertIn("file_drive_plan", calls[0])
+            self.assertIn("--connection-id", calls[0])
+            self.assertIn("--drive-file-id", calls[0])
+            self.assertIn("--max-chars", calls[0])
+
     def test_remote_storage_ingestion_uses_storage_preview_and_cites_source_version(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             workspace_root = Path(temp)
@@ -538,6 +1009,156 @@ class MemoryAppTestCase(unittest.TestCase):
 
             self.assertEqual(compiled["compiled_page"]["freshness"], "stale")
             self.assertTrue(any(finding["finding_type"] == "stale_page" for finding in compiled["lint_findings"]))
+
+    def test_apply_storage_staleness_updates_refs_and_marks_impacted_nodes_stale(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            service = self.import_backend_module("service")
+            storage_sources = self.import_backend_module("storage_sources")
+            database = self.import_backend_module("database")
+            storage_file_id = "file_drive_changed"
+            memory_source = self.drive_memory_source(storage_file_id=storage_file_id, drive_file_id="drive_changed")
+
+            first_status, first = service.handle_action(
+                data_root,
+                {
+                    "action": "ingest_storage_source",
+                    "title": "Changed Drive document",
+                    "memory_source": memory_source,
+                    "preview_text": "Drive indexed fact for changed file.",
+                    "compile_after_ingest": True,
+                },
+            )
+            second_node = service.handle_action(
+                data_root,
+                {"action": "remember", "title": "Second Drive node", "body": "Drive indexed fact for changed file.", "type": "fact"},
+            )[1]["node"]
+            service.handle_action(
+                data_root,
+                {
+                    "action": "attach_file",
+                    "node_id": second_node["id"],
+                    "owning_app_id": "storage",
+                    "entity_type": "file",
+                    "entity_id": storage_file_id,
+                    "metadata": memory_source["metadata"],
+                },
+            )
+
+            original_surface = storage_sources._storage_preview_surface
+            try:
+                storage_sources._storage_preview_surface = lambda _data_root, _request: {
+                    "file": {"etag_or_version": "rev-1", "display_path": "/Drive/Plans/Plan.md"},
+                    "preview_text": "Drive indexed fact for changed file.",
+                }
+                service.handle_action(data_root, {"action": "compile", "node_id": second_node["id"]})
+            finally:
+                storage_sources._storage_preview_surface = original_surface
+
+            status, applied = service.handle_action(
+                data_root,
+                {
+                    "action": "apply_storage_staleness",
+                    "memory_staleness": {
+                        "owning_app_id": "storage",
+                        "entity_type": "file",
+                        "entity_id": storage_file_id,
+                        "reason": "google_drive_change",
+                        "connection_id": "drive_conn_acme",
+                        "drive_file_id": "drive_changed",
+                        "source_version": "rev-2",
+                        "indexed_source_version": "rev-1",
+                    },
+                },
+            )
+            first_inspect = service.handle_action(data_root, {"action": "inspect", "node_id": first["node"]["id"]})[1]
+            second_inspect = service.handle_action(data_root, {"action": "inspect", "node_id": second_node["id"]})[1]
+
+            with database.connect(data_root) as db:
+                refs = [
+                    database.row_payload(row) or {}
+                    for row in db.execute("SELECT * FROM external_refs WHERE entity_id = ? ORDER BY node_id", (storage_file_id,))
+                ]
+                stale_claim_count = db.execute(
+                    "SELECT COUNT(*) AS count FROM claims WHERE stale = 1 AND node_id IN (?, ?)",
+                    (first["node"]["id"], second_node["id"]),
+                ).fetchone()["count"]
+
+            self.assertEqual(first_status, 200)
+            self.assertEqual(status, 200)
+            self.assertEqual(applied["status"], "applied")
+            self.assertEqual(applied["storage_identity"]["entity_id"], storage_file_id)
+            self.assertEqual(len(applied["impacted_nodes"]), 2)
+            self.assertEqual(applied["reindex_suggestion"]["mcp_tool"], "storage_drive_index")
+            self.assertEqual(applied["reindex_suggestion"]["arguments"]["stable_storage_file_id"], storage_file_id)
+            self.assertTrue(all(node["compiled_wiki_stale"] for node in applied["impacted_nodes"]))
+            self.assertEqual(len(refs), 2)
+            self.assertTrue(all(ref["metadata"]["stale"] for ref in refs))
+            self.assertTrue(all(ref["metadata"]["sync_state"]["status"] == "stale" for ref in refs))
+            self.assertTrue(all(ref["metadata"]["staleness"]["reason"] == "google_drive_change" for ref in refs))
+            self.assertTrue(all(ref["metadata"]["staleness"]["source_version"] == "rev-2" for ref in refs))
+            self.assertEqual(applied["reindex_suggestion"]["arguments"]["connection_id"], "drive_conn_acme")
+            self.assertEqual(applied["reindex_suggestion"]["arguments"]["drive_file_id"], "drive_changed")
+            self.assertGreaterEqual(stale_claim_count, 2)
+            self.assertEqual(first_inspect["node"]["compiled_page"]["freshness"], "stale")
+            self.assertEqual(second_inspect["node"]["compiled_page"]["freshness"], "stale")
+
+    def test_reingest_storage_source_clears_staleness_and_restores_fresh_compile(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            service = self.import_backend_module("service")
+            database = self.import_backend_module("database")
+            storage_file_id = "file_drive_reindexed"
+            first_source = self.drive_memory_source(storage_file_id=storage_file_id, drive_file_id="drive_reindexed", source_version="rev-1")
+
+            first_status, first = service.handle_action(
+                data_root,
+                {
+                    "action": "ingest_storage_source",
+                    "title": "Reindexed Drive document",
+                    "memory_source": first_source,
+                    "preview_text": "Drive fact before change.",
+                    "compile_after_ingest": True,
+                },
+            )
+            stale_status, stale = service.handle_action(
+                data_root,
+                {
+                    "action": "apply_storage_staleness",
+                    "memory_staleness": {
+                        "owning_app_id": "storage",
+                        "entity_type": "file",
+                        "entity_id": storage_file_id,
+                        "reason": "google_drive_change",
+                    },
+                },
+            )
+            second_source = self.drive_memory_source(storage_file_id=storage_file_id, drive_file_id="drive_reindexed", source_version="rev-2")
+            second_status, second = service.handle_action(
+                data_root,
+                {
+                    "action": "ingest_storage_source",
+                    "title": "Reindexed Drive document",
+                    "memory_source": second_source,
+                    "preview_text": "Drive fact after change.",
+                    "source_version": "rev-2",
+                    "compile_after_ingest": True,
+                },
+            )
+
+            with database.connect(data_root) as db:
+                ref = database.row_payload(db.execute("SELECT * FROM external_refs WHERE entity_id = ?", (storage_file_id,)).fetchone()) or {}
+
+            self.assertEqual(first_status, 200)
+            self.assertEqual(first["compiled"]["compiled_page"]["freshness"], "fresh")
+            self.assertEqual(stale_status, 200)
+            self.assertEqual(stale["status"], "applied")
+            self.assertEqual(second_status, 200)
+            self.assertEqual(second["compiled"]["compiled_page"]["freshness"], "fresh")
+            self.assertFalse(second["external_ref"]["metadata"].get("stale", False))
+            self.assertNotIn("staleness", second["external_ref"]["metadata"])
+            self.assertNotIn("sync_state", second["external_ref"]["metadata"])
+            self.assertFalse(ref["metadata"].get("stale", False))
 
     def test_lint_reports_uncited_claims_and_contradictions(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

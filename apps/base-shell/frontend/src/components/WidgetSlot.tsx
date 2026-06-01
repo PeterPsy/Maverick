@@ -37,6 +37,7 @@ type WidgetMessagePayload = {
   owner_app_id?: string;
   navigation_scope?: string;
   params?: Record<string, string | boolean | null>;
+  placement?: string;
   resource?: string;
   selection?: Record<string, string | boolean | null>;
   type?: string;
@@ -56,6 +57,8 @@ export function WidgetSlot({
   hostAppId,
   label,
   onCloseSidebar,
+  onCloseDock,
+  onOpenDock,
   onOpenApp,
   onOpenSidebar,
   onPrimaryActionStateChange,
@@ -69,7 +72,15 @@ export function WidgetSlot({
   contentKind: string;
   hostAppId: string;
   label: string;
+  onCloseDock?: () => void;
   onCloseSidebar?: () => void;
+  onOpenDock?: (request: {
+    navigationScope: string | null;
+    ownerAppId: string;
+    placement: "right";
+    threadId: string | null;
+    widgetId: string;
+  }) => void;
   onOpenApp: (appId: string, params?: Record<string, string | boolean | null>) => void;
   onOpenSidebar?: () => void;
   onPrimaryActionStateChange?: (state: WidgetPrimaryActionState) => void;
@@ -146,7 +157,7 @@ export function WidgetSlot({
     return () => {
       cancelled = true;
     };
-  }, [activeWorkspaceId, contentKind, hostAppId, onPrimaryActionStateChange, preferredOwnerAppId, size, supportsPrimaryActionSlot]);
+  }, [activeWorkspaceId, contentKind, hostAppId, onPrimaryActionStateChange, preferredOwnerAppId, supportsPrimaryActionSlot]);
 
   function postWidgetContextChanged() {
     if (!widget) {
@@ -210,6 +221,33 @@ export function WidgetSlot({
       }
       if (payload.type === "maverick.widget.open-app" && payload.app_id) {
         onOpenApp(payload.app_id, payload.params);
+      }
+      if (
+        payload.type === "maverick.widget.dock.open" &&
+        payload.placement === "right" &&
+        isMountedWidgetFrameMessage(event, payload, widget, widgetFrameRef.current)
+      ) {
+        const mountedWidget = widget;
+        if (!mountedWidget) {
+          return;
+        }
+        const params = payload.params && typeof payload.params === "object" ? payload.params : {};
+        onOpenDock?.({
+          navigationScope: typeof params.navigation_scope === "string" && params.navigation_scope.trim() ? params.navigation_scope.trim() : null,
+          ownerAppId: mountedWidget.owner_app_id,
+          placement: "right",
+          threadId: typeof params.thread_id === "string" && params.thread_id.trim() ? params.thread_id.trim() : null,
+          widgetId: mountedWidget.widget_id,
+        });
+        if (size === "overlay") {
+          setOverlaySize(collapsedOverlaySize());
+        }
+      }
+      if (
+        payload.type === "maverick.widget.dock.close" &&
+        isMountedWidgetFrameMessage(event, payload, widget, widgetFrameRef.current)
+      ) {
+        onCloseDock?.();
       }
       if (payload.type === "maverick.shell.sidebar.close") {
         onCloseSidebar?.();
@@ -279,7 +317,17 @@ export function WidgetSlot({
 
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [onCloseSidebar, onOpenApp, onPrimaryActionStateChange, size, supportsPrimaryActionSlot, widget?.owner_app_id, widget?.widget_id]);
+  }, [
+    onCloseDock,
+    onCloseSidebar,
+    onOpenApp,
+    onOpenDock,
+    onPrimaryActionStateChange,
+    size,
+    supportsPrimaryActionSlot,
+    widget?.owner_app_id,
+    widget?.widget_id,
+  ]);
 
   useEffect(() => {
     if (primaryActionRequestId === lastPrimaryActionRequestRef.current) {

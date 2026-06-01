@@ -1,13 +1,30 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  DEFAULT_FLOATING_CHAT_WIDTH_PX,
   DEFAULT_SIDEBAR_DETAILS_WIDTH_PX,
   MAX_SIDEBAR_DETAILS_WIDTH_PX,
   MIN_SIDEBAR_DETAILS_WIDTH_PX,
+  clampFloatingChatWidth,
   clampSidebarDetailsWidth,
   readShellSession,
   resolveInitialSidebarOpen,
   writeShellSession,
 } from "../src/session";
+import type { ShellSession } from "../src/session";
+
+function shellSession(overrides: Partial<ShellSession> = {}): ShellSession {
+  return {
+    activeAppId: "chat",
+    floatingChatMode: "overlay",
+    floatingChatNavigationScope: null,
+    floatingChatThreadId: null,
+    floatingChatWidthPx: DEFAULT_FLOATING_CHAT_WIDTH_PX,
+    isSidebarOpen: false,
+    sidebarDetailsWidthPx: DEFAULT_SIDEBAR_DETAILS_WIDTH_PX,
+    sidebarMode: "rail",
+    ...overrides,
+  };
+}
 
 describe("base-shell session", () => {
   afterEach(() => {
@@ -19,6 +36,10 @@ describe("base-shell session", () => {
 
     expect(readShellSession()).toEqual({
       activeAppId: "chat",
+      floatingChatMode: "overlay",
+      floatingChatNavigationScope: null,
+      floatingChatThreadId: null,
+      floatingChatWidthPx: DEFAULT_FLOATING_CHAT_WIDTH_PX,
       isSidebarOpen: false,
       sidebarDetailsWidthPx: DEFAULT_SIDEBAR_DETAILS_WIDTH_PX,
       sidebarMode: "rail",
@@ -31,6 +52,10 @@ describe("base-shell session", () => {
         getItem: vi.fn(() =>
           JSON.stringify({
             activeAppId: " docs ",
+            floatingChatMode: "fixed-right",
+            floatingChatNavigationScope: " window-1 ",
+            floatingChatThreadId: " thread-1 ",
+            floatingChatWidthPx: 480.3,
             isSidebarOpen: false,
             sidebarDetailsWidthPx: 420.4,
             sidebarMode: "fixed",
@@ -42,6 +67,10 @@ describe("base-shell session", () => {
 
     expect(readShellSession()).toEqual({
       activeAppId: "docs",
+      floatingChatMode: "fixed-right",
+      floatingChatNavigationScope: "window-1",
+      floatingChatThreadId: "thread-1",
+      floatingChatWidthPx: 480,
       isSidebarOpen: false,
       sidebarDetailsWidthPx: 420,
       sidebarMode: "fixed",
@@ -54,6 +83,12 @@ describe("base-shell session", () => {
     expect(clampSidebarDetailsWidth(560, 980)).toBe(440);
   });
 
+  it("clamps persisted floating chat width to the right dock contract", () => {
+    expect(clampFloatingChatWidth(120, 1400)).toBe(360);
+    expect(clampFloatingChatWidth(900, 1400)).toBe(720);
+    expect(clampFloatingChatWidth(720, 1040)).toBe(480);
+  });
+
   it("writes local shell state without backend coupling", () => {
     const setItem = vi.fn();
     vi.stubGlobal("window", {
@@ -63,17 +98,16 @@ describe("base-shell session", () => {
       },
     });
 
-    writeShellSession({
-      activeAppId: "chat",
-      isSidebarOpen: false,
-      sidebarDetailsWidthPx: DEFAULT_SIDEBAR_DETAILS_WIDTH_PX,
-      sidebarMode: "rail",
-    });
+    writeShellSession(shellSession());
 
     expect(setItem).toHaveBeenCalledWith(
       "maverick:base-shell:session",
       JSON.stringify({
         activeAppId: "chat",
+        floatingChatMode: "overlay",
+        floatingChatNavigationScope: null,
+        floatingChatThreadId: null,
+        floatingChatWidthPx: DEFAULT_FLOATING_CHAT_WIDTH_PX,
         isSidebarOpen: false,
         sidebarDetailsWidthPx: DEFAULT_SIDEBAR_DETAILS_WIDTH_PX,
         sidebarMode: "rail",
@@ -84,23 +118,20 @@ describe("base-shell session", () => {
   it("starts with the sidebar closed on mobile even when the local session was open or fixed", () => {
     expect(
       resolveInitialSidebarOpen(
-        {
+        shellSession({
           activeAppId: "memory",
           isSidebarOpen: true,
-          sidebarDetailsWidthPx: DEFAULT_SIDEBAR_DETAILS_WIDTH_PX,
           sidebarMode: "rail",
-        },
+        }),
         { isInitialChatLaunch: false, isMobileLayout: true },
       ),
     ).toBe(false);
     expect(
       resolveInitialSidebarOpen(
-        {
+        shellSession({
           activeAppId: "memory",
-          isSidebarOpen: false,
-          sidebarDetailsWidthPx: DEFAULT_SIDEBAR_DETAILS_WIDTH_PX,
           sidebarMode: "fixed",
-        },
+        }),
         { isInitialChatLaunch: false, isMobileLayout: true },
       ),
     ).toBe(false);
@@ -109,12 +140,10 @@ describe("base-shell session", () => {
   it("keeps desktop fixed sidebars open at startup", () => {
     expect(
       resolveInitialSidebarOpen(
-        {
+        shellSession({
           activeAppId: "memory",
-          isSidebarOpen: false,
-          sidebarDetailsWidthPx: DEFAULT_SIDEBAR_DETAILS_WIDTH_PX,
           sidebarMode: "fixed",
-        },
+        }),
         { isInitialChatLaunch: false, isMobileLayout: false },
       ),
     ).toBe(true);

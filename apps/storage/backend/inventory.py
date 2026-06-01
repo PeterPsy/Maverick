@@ -759,6 +759,11 @@ def _normalize_entry(item: dict[str, Any]) -> dict[str, Any]:
         "indexed": bool(item.get("indexed") or False),
         "stale": bool(item.get("stale") or False),
         "index_status": str(item.get("index_status") or ("stale" if item.get("stale") else "not_indexed")),
+        "indexed_at": str(item.get("indexed_at") or ""),
+        "indexed_source_version": str(item.get("indexed_source_version") or ""),
+        "memory_node_id": str(item.get("memory_node_id") or ""),
+        "memory_external_ref_id": str(item.get("memory_external_ref_id") or ""),
+        "memory_source_version_id": str(item.get("memory_source_version_id") or ""),
         "status": str(item.get("status") or "active"),
         "created_at": str(item.get("created_at") or ""),
         "updated_at": str(item.get("updated_at") or ""),
@@ -850,6 +855,11 @@ def _entry_for_path(
         "indexed": False,
         "stale": False,
         "index_status": "not_indexed",
+        "indexed_at": "",
+        "indexed_source_version": "",
+        "memory_node_id": "",
+        "memory_external_ref_id": "",
+        "memory_source_version_id": "",
         "status": status,
         "created_at": created_at,
         "updated_at": _timestamp(),
@@ -910,6 +920,11 @@ def _public_record(item: dict[str, Any]) -> dict[str, Any]:
         "indexed": bool(item.get("indexed") or False),
         "stale": bool(item.get("stale") or False),
         "index_status": item.get("index_status", "not_indexed"),
+        "indexed_at": item.get("indexed_at", ""),
+        "indexed_source_version": item.get("indexed_source_version", ""),
+        "memory_node_id": item.get("memory_node_id", ""),
+        "memory_external_ref_id": item.get("memory_external_ref_id", ""),
+        "memory_source_version_id": item.get("memory_source_version_id", ""),
         "status": item.get("status", "active"),
     }
 
@@ -1173,13 +1188,25 @@ def _preserve_remote_index_state(*, existing: dict[str, Any] | None, entry: dict
     existing_stale = bool(existing.get("stale") or False)
     old_version = str(existing.get("etag_or_version") or "")
     new_version = str(entry.get("etag_or_version") or "")
-    version_changed = bool(was_indexed and old_version and new_version and old_version != new_version)
     removed_or_inaccessible = str(entry.get("status") or "active") != "active"
-    stale = existing_stale or bool(entry.get("stale") or False) or version_changed or removed_or_inaccessible
+    successful_index = (
+        bool(entry.get("indexed"))
+        and str(entry.get("index_status") or "") == "indexed"
+        and not bool(entry.get("stale"))
+        and not removed_or_inaccessible
+    )
+    version_changed = bool(was_indexed and old_version and new_version and old_version != new_version)
+    stale = False if successful_index else existing_stale or bool(entry.get("stale") or False) or version_changed or removed_or_inaccessible
     updated["indexed"] = was_indexed or bool(entry.get("indexed") or False)
     updated["stale"] = stale
+    for key in ("indexed_at", "indexed_source_version", "memory_node_id", "memory_external_ref_id", "memory_source_version_id"):
+        if not str(updated.get(key) or "") and str(existing.get(key) or ""):
+            updated[key] = existing.get(key)
     if stale:
         updated["index_status"] = "stale"
+    elif successful_index:
+        updated["index_status"] = "indexed"
+        updated["indexed_source_version"] = str(entry.get("indexed_source_version") or entry.get("etag_or_version") or existing.get("indexed_source_version") or "")
     elif updated["indexed"]:
         updated["index_status"] = str(existing.get("index_status") or "indexed")
     else:

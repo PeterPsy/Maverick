@@ -34,6 +34,8 @@ GOOGLE_EXPORT_LIMIT_BYTES = 10 * 1024 * 1024
 DRIVE_TEMP_CACHE_TTL_SECONDS = 15 * 60
 DRIVE_TEMP_CACHE_MAX_BYTES = 32 * 1024 * 1024
 DRIVE_TEMP_CACHE_MAX_ITEM_BYTES = GOOGLE_EXPORT_LIMIT_BYTES
+DRIVE_ACCESS_TOKEN_CACHE_TTL_SECONDS = 5 * 60
+DRIVE_ACCESS_TOKEN_EXPIRY_SKEW_SECONDS = 30
 
 GOOGLE_NATIVE_PREVIEW_KINDS = {
     "application/vnd.google-apps.document": "document",
@@ -108,7 +110,8 @@ class GoogleDriveProvider:
         self.cache_root = cache_root
         self._access_token: str | None = None
 
-    def list_roots(self, *, limit: int | None = None) -> dict[str, Any]:
+    def list_roots(self, *, limit: int | None = None, page_token: str | None = None) -> dict[str, Any]:
+        current_token = str(page_token or "").strip()
         roots = [
             self._root_folder(
                 drive_file_id="root",
@@ -126,20 +129,28 @@ class GoogleDriveProvider:
             ),
         ]
         page_size = _bounded_limit(limit, default=100)
+        static_roots = [] if current_token else roots
+        shared_drive_page_size = min(page_size, 100)
+        next_page_token = ""
         try:
+            params: dict[str, Any] = {
+                "pageSize": shared_drive_page_size,
+                "fields": "nextPageToken,drives(id,name,capabilities(canDeleteDrive,canRenameDrive))",
+            }
+            if current_token:
+                params["pageToken"] = current_token
             payload = self._drive_request(
                 "GET",
                 "/drives",
-                params={
-                    "pageSize": min(page_size, 100),
-                    "fields": "nextPageToken,drives(id,name,capabilities(canDeleteDrive,canRenameDrive))",
-                },
+                params=params,
             )
+            next_page_token = str(payload.get("nextPageToken") or "")
         except DriveProviderError as error:
             if error.status_code in {400, 403, 404}:
                 payload = {"drives": []}
             else:
                 raise
+        shared_roots: list[dict[str, Any]] = []
         for drive in payload.get("drives") if isinstance(payload.get("drives"), list) else []:
             if not isinstance(drive, dict):
                 continue
@@ -147,7 +158,7 @@ class GoogleDriveProvider:
             name = str(drive.get("name") or "Shared drive").strip()
             if not drive_id:
                 continue
-            roots.append(
+            shared_roots.append(
                 self._root_folder(
                     drive_file_id=drive_id,
                     name=name,
@@ -156,18 +167,24 @@ class GoogleDriveProvider:
                     capabilities={"can_read": True, "can_move": True},
                 )
             )
-        return {"provider": GOOGLE_DRIVE_PROVIDER, "connection_id": self.connection_id, "folders": roots[:page_size]}
+        folders = static_roots + shared_roots
+        return {
+            "provider": GOOGLE_DRIVE_PROVIDER,
+            "connection_id": self.connection_id,
+            "folders": folders,
+            "pagination": {"limit": page_size, "total": len(folders), "has_more": bool(next_page_token), "next_page_token": next_page_token},
+        }
 
-    def list_children(self, *, parent_drive_file_id: str, limit: int | None = None) -> dict[str, Any]:
+    def list_children(self, *, parent_drive_file_id: str, limit: int | None = None, page_token: str | None = None) -> dict[str, Any]:
         parent_id = _required_drive_file_id(parent_drive_file_id, operation="drive_list_children")
         page_size = _bounded_limit(limit)
-        parent_display_path = self._parent_display_path(parent_id)
+        parent_display_path, list_scope = self._parent_list_context(parent_id)
         if parent_id == SHARED_WITH_ME_ROOT_ID:
             query = "sharedWithMe = true and trashed = false"
         else:
             query = f"'{_drive_query_literal(parent_id)}' in parents and trashed = false"
-        items = self._list_files(query=query, limit=page_size)
-        return self._split_items(items, parent_display_path=parent_display_path, limit=page_size)
+        items, next_page_token = self._list_files(query=query, limit=page_size, page_token=page_token, list_scope=list_scope)
+        return self._split_items(items, parent_display_path=parent_display_path, limit=page_size, next_page_token=next_page_token)
 
     def search(
         self,
@@ -180,14 +197,15 @@ class GoogleDriveProvider:
         drive_query = _search_query(query)
         parent_id = str(parent_drive_file_id or "").strip()
         parent_display_path = ""
+        list_scope = _drive_list_scope()
         if parent_id:
-            parent_display_path = self._parent_display_path(parent_id)
+            parent_display_path, list_scope = self._parent_list_context(parent_id)
             if parent_id == SHARED_WITH_ME_ROOT_ID:
                 drive_query = f"({drive_query}) and sharedWithMe = true"
             else:
                 drive_query = f"({drive_query}) and '{_drive_query_literal(parent_id)}' in parents"
-        items = self._list_files(query=drive_query, limit=page_size)
-        return self._split_items(items, parent_display_path=parent_display_path, limit=page_size)
+        items, next_page_token = self._list_files(query=drive_query, limit=page_size, page_token=None, list_scope=list_scope)
+        return self._split_items(items, parent_display_path=parent_display_path, limit=page_size, next_page_token=next_page_token)
 
     def start_page_token(self) -> str:
         payload = self._drive_request("GET", "/changes/startPageToken", params={"supportsAllDrives": "true"})
@@ -277,43 +295,67 @@ class GoogleDriveProvider:
             }
         return self._normalize_item(item, display_path=self._display_path_for_item(item))
 
-    def read(self, *, drive_file_id: str, max_bytes: int) -> dict[str, Any]:
+    def read(self, *, drive_file_id: str, max_bytes: int, file_record: dict[str, Any] | None = None) -> dict[str, Any]:
         """Read bounded Drive file bytes; Google-native files are exported as readable text."""
-        file_record = self._active_metadata(drive_file_id=drive_file_id, operation="drive_read")
+        file_record = self._active_metadata(drive_file_id=drive_file_id, operation="drive_read", file_record=file_record)
         if _is_google_native(file_record["content_type"]):
             return self.export(
                 drive_file_id=drive_file_id,
                 export_mime_type="readable_text",
                 max_bytes=min(max_bytes, GOOGLE_EXPORT_LIMIT_BYTES),
+                file_record=file_record,
             )
         self._require_download_capability(file_record, operation="drive_read")
         payload, cache_hit = self._download_binary(file_record=file_record, max_bytes=max_bytes, operation="drive_read")
         return _content_payload(file_record=file_record, payload=payload, content_type=file_record["content_type"], cache_hit=cache_hit)
 
-    def preview(self, *, drive_file_id: str, max_bytes: int, max_chars: int | None = None) -> dict[str, Any]:
+    def preview(
+        self,
+        *,
+        drive_file_id: str,
+        max_bytes: int,
+        max_chars: int | None = None,
+        file_record: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Return a bounded preview through Storage without exposing Google-specific rules."""
-        file_record = self._active_metadata(drive_file_id=drive_file_id, operation="drive_preview")
+        file_record = self._active_metadata(drive_file_id=drive_file_id, operation="drive_preview", file_record=file_record)
         if _is_google_native(file_record["content_type"]):
-            exported = self.export(drive_file_id=drive_file_id, export_mime_type="preview", max_bytes=min(max_bytes, GOOGLE_EXPORT_LIMIT_BYTES))
-            preview_text = _decode_preview_text(b64decode(exported["content_base64"]), max_chars=max_chars)
+            exported = self.export(
+                drive_file_id=drive_file_id,
+                export_mime_type="preview",
+                max_bytes=min(max_bytes, GOOGLE_EXPORT_LIMIT_BYTES),
+                file_record=file_record,
+            )
+            text_payload = _decode_preview_text_payload(b64decode(exported["content_base64"]), max_chars=max_chars)
             return {
                 "file": file_record,
-                "preview_text": preview_text,
+                "preview_text": text_payload["preview_text"],
                 "export_mime_type": exported["content_type"],
                 "bytes_read": exported["bytes_read"],
                 "cache_hit": exported["cache_hit"],
-                "truncated": exported["truncated"],
+                "preview_truncated": text_payload["preview_truncated"],
+                "truncated": bool(exported["truncated"] or text_payload["preview_truncated"]),
             }
         self._require_download_capability(file_record, operation="drive_preview")
         payload, cache_hit = self._download_binary(file_record=file_record, max_bytes=max_bytes, operation="drive_preview")
         result = _content_payload(file_record=file_record, payload=payload, content_type=file_record["content_type"], cache_hit=cache_hit)
         if file_record.get("preview_kind") in {"text", "markdown"} or str(file_record.get("content_type") or "").startswith("text/"):
-            result["preview_text"] = _decode_preview_text(payload, max_chars=max_chars)
+            text_payload = _decode_preview_text_payload(payload, max_chars=max_chars)
+            result["preview_text"] = text_payload["preview_text"]
+            result["preview_truncated"] = text_payload["preview_truncated"]
+            result["truncated"] = bool(result.get("truncated") or text_payload["preview_truncated"])
         return result
 
-    def export(self, *, drive_file_id: str, export_mime_type: str, max_bytes: int) -> dict[str, Any]:
+    def export(
+        self,
+        *,
+        drive_file_id: str,
+        export_mime_type: str,
+        max_bytes: int,
+        file_record: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Export or download a Drive file in a bounded Storage-owned format."""
-        file_record = self._active_metadata(drive_file_id=drive_file_id, operation="drive_export")
+        file_record = self._active_metadata(drive_file_id=drive_file_id, operation="drive_export", file_record=file_record)
         requested_mime = _select_export_mime(file_record["content_type"], export_mime_type)
         if not _is_google_native(file_record["content_type"]):
             if requested_mime and requested_mime != file_record["content_type"]:
@@ -483,10 +525,10 @@ class GoogleDriveProvider:
             "file": self._normalize_item(response, display_path=self._display_path_for_item(response)),
         }
 
-    def _split_items(self, items: list[dict[str, Any]], *, parent_display_path: str, limit: int) -> dict[str, Any]:
+    def _split_items(self, items: list[dict[str, Any]], *, parent_display_path: str, limit: int, next_page_token: str = "") -> dict[str, Any]:
         files: list[dict[str, Any]] = []
         folders: list[dict[str, Any]] = []
-        for item in items[:limit]:
+        for item in items:
             display_path = _join_display_path(parent_display_path, str(item.get("name") or ""))
             normalized = self._normalize_item(item, display_path=display_path)
             if item.get("mimeType") == DRIVE_FOLDER_MIME_TYPE:
@@ -498,46 +540,51 @@ class GoogleDriveProvider:
             "connection_id": self.connection_id,
             "files": files,
             "folders": folders,
-            "pagination": {"limit": limit, "total": len(files) + len(folders), "has_more": len(items) > limit},
+            "pagination": {"limit": limit, "total": len(files) + len(folders), "has_more": bool(next_page_token), "next_page_token": next_page_token},
         }
 
-    def _list_files(self, *, query: str, limit: int) -> list[dict[str, Any]]:
-        items: list[dict[str, Any]] = []
-        page_token = ""
-        while len(items) <= limit:
-            params: dict[str, Any] = {
-                "q": query,
-                "pageSize": min(limit - len(items) + 1, MAX_DRIVE_PAGE_SIZE),
-                "fields": f"nextPageToken,files({DRIVE_FILE_FIELDS})",
-                "supportsAllDrives": "true",
-                "includeItemsFromAllDrives": "true",
-                "corpora": "allDrives",
-            }
-            if page_token:
-                params["pageToken"] = page_token
-            payload = self._drive_request("GET", "/files", params=params)
-            for item in payload.get("files") if isinstance(payload.get("files"), list) else []:
-                if isinstance(item, dict):
-                    items.append(item)
-            page_token = str(payload.get("nextPageToken") or "")
-            if not page_token or len(items) > limit:
-                break
-        return items
+    def _list_files(
+        self,
+        *,
+        query: str,
+        limit: int,
+        page_token: str | None,
+        list_scope: dict[str, Any],
+    ) -> tuple[list[dict[str, Any]], str]:
+        params: dict[str, Any] = {
+            "q": query,
+            "pageSize": min(limit, MAX_DRIVE_PAGE_SIZE),
+            "fields": f"nextPageToken,files({DRIVE_FILE_FIELDS})",
+            "supportsAllDrives": "true",
+            **list_scope,
+        }
+        current_token = str(page_token or "").strip()
+        if current_token:
+            params["pageToken"] = current_token
+        payload = self._drive_request("GET", "/files", params=params)
+        items = [item for item in payload.get("files") if isinstance(item, dict)] if isinstance(payload.get("files"), list) else []
+        return items[:limit], str(payload.get("nextPageToken") or "")
 
-    def _parent_display_path(self, parent_id: str) -> str:
+    def _parent_list_context(self, parent_id: str) -> tuple[str, dict[str, Any]]:
         if parent_id == "root":
-            return "/My Drive"
+            return "/My Drive", _drive_list_scope(corpora="user")
         if parent_id == SHARED_WITH_ME_ROOT_ID:
-            return "/Shared with me"
+            return "/Shared with me", _drive_list_scope(corpora="user")
+        parent = self._parent_item(parent_id)
+        if not parent:
+            return "", _drive_list_scope()
+        drive_id = str(parent.get("driveId") or "").strip()
+        return self._display_path_for_item(parent), _drive_list_scope(corpora="drive", drive_id=drive_id) if drive_id else _drive_list_scope(corpora="user")
+
+    def _parent_item(self, parent_id: str) -> dict[str, Any] | None:
         try:
-            parent = self._drive_request(
+            return self._drive_request(
                 "GET",
                 f"/files/{quote(parent_id, safe='')}",
                 params={"fields": "id,name,mimeType,parents,driveId,trashed", "supportsAllDrives": "true"},
             )
         except DriveProviderError:
-            return ""
-        return self._display_path_for_item(parent)
+            return None
 
     def _display_path_for_item(self, item: dict[str, Any]) -> str:
         names = [str(item.get("name") or "").strip()]
@@ -777,12 +824,29 @@ class GoogleDriveProvider:
             raise StorageValidationError(f"Drive content exceeds the requested max_bytes limit of {max_bytes}.", operation=operation)
         return payload
 
-    def _active_metadata(self, *, drive_file_id: str, operation: str) -> dict[str, Any]:
-        file_record = self.metadata(drive_file_id=drive_file_id)
+    def _active_metadata(self, *, drive_file_id: str, operation: str, file_record: dict[str, Any] | None = None) -> dict[str, Any]:
+        file_record = self._usable_cached_file_record(drive_file_id=drive_file_id, file_record=file_record) or self.metadata(drive_file_id=drive_file_id)
         if file_record.get("status") == "removed":
             raise StorageValidationError("Google Drive file is not accessible because it was removed or cannot be found.", operation=operation)
         if file_record.get("status") == "inaccessible":
             raise StorageValidationError("Google Drive file is not accessible with the current Storage Drive connection.", operation=operation)
+        return file_record
+
+    def _usable_cached_file_record(self, *, drive_file_id: str, file_record: dict[str, Any] | None) -> dict[str, Any] | None:
+        if not isinstance(file_record, dict):
+            return None
+        if file_record.get("provider") != GOOGLE_DRIVE_PROVIDER:
+            return None
+        if str(file_record.get("connection_id") or "").strip() != self.connection_id:
+            return None
+        remote_locator = file_record.get("remote_locator") if isinstance(file_record.get("remote_locator"), dict) else {}
+        cached_drive_file_id = str(file_record.get("drive_file_id") or remote_locator.get("drive_file_id") or "").strip()
+        if cached_drive_file_id != drive_file_id:
+            return None
+        if str(file_record.get("status") or "active") != "active":
+            return file_record
+        if not str(file_record.get("content_type") or "").strip():
+            return None
         return file_record
 
     def _require_download_capability(self, file_record: dict[str, Any], *, operation: str) -> None:
@@ -911,6 +975,10 @@ class GoogleDriveProvider:
         client_id = _required_secret(self.app_secrets, GOOGLE_DRIVE_CLIENT_ID_SECRET)
         client_secret = _required_secret(self.app_secrets, GOOGLE_DRIVE_CLIENT_SECRET_SECRET)
         refresh_token = _required_secret(self.app_secrets, GOOGLE_DRIVE_REFRESH_TOKEN_SECRET)
+        cached_token = self._read_access_token_cache(refresh_token=refresh_token)
+        if cached_token:
+            self._access_token = cached_token
+            return cached_token
         status, payload = self.transport(
             "POST",
             GOOGLE_TOKEN_URL,
@@ -927,12 +995,64 @@ class GoogleDriveProvider:
         if status >= 400 or not isinstance(payload, dict) or not str(payload.get("access_token") or "").strip():
             raise StorageValidationError("Google Drive access token refresh failed.", operation="drive")
         self._access_token = str(payload["access_token"])
+        self._write_access_token_cache(refresh_token=refresh_token, access_token=self._access_token, token_payload=payload)
         return self._access_token
+
+    def _access_token_cache_path(self, *, refresh_token: str) -> Path | None:
+        if self.cache_root is None:
+            return None
+        digest = hashlib.sha256(f"{self.connection_id}\0{refresh_token}".encode("utf-8")).hexdigest()
+        return self.cache_root / f"access-token-{digest}.json"
+
+    def _read_access_token_cache(self, *, refresh_token: str) -> str | None:
+        path = self._access_token_cache_path(refresh_token=refresh_token)
+        if path is None:
+            return None
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            expires_at = float(payload.get("expires_at") or 0)
+            access_token = str(payload.get("access_token") or "").strip()
+            if not access_token or expires_at <= time.time() + DRIVE_ACCESS_TOKEN_EXPIRY_SKEW_SECONDS:
+                return None
+            return access_token
+        except (OSError, ValueError, json.JSONDecodeError):
+            return None
+
+    def _write_access_token_cache(self, *, refresh_token: str, access_token: str, token_payload: dict[str, Any]) -> None:
+        path = self._access_token_cache_path(refresh_token=refresh_token)
+        if path is None:
+            return
+        expires_in = _int_value(token_payload.get("expires_in")) or DRIVE_ACCESS_TOKEN_CACHE_TTL_SECONDS
+        ttl = max(1, min(expires_in - DRIVE_ACCESS_TOKEN_EXPIRY_SKEW_SECONDS, DRIVE_ACCESS_TOKEN_CACHE_TTL_SECONDS))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"access_token": access_token, "expires_at": time.time() + ttl}, ensure_ascii=True), encoding="utf-8")
+        path.chmod(0o600)
+        self._prune_access_token_cache()
+
+    def _prune_access_token_cache(self) -> None:
+        if self.cache_root is None or not self.cache_root.exists():
+            return
+        cutoff = time.time() - DRIVE_ACCESS_TOKEN_CACHE_TTL_SECONDS
+        for path in self.cache_root.glob("access-token-*.json"):
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+                if float(payload.get("expires_at") or 0) < cutoff:
+                    path.unlink(missing_ok=True)
+            except (OSError, ValueError, json.JSONDecodeError):
+                path.unlink(missing_ok=True)
 
 
 def stable_storage_file_id(connection_id: str, drive_file_id: str) -> str:
     digest = hashlib.sha256(f"{connection_id}\0{drive_file_id}".encode("utf-8")).hexdigest()[:32]
     return f"file_{digest}"
+
+
+def _drive_list_scope(*, corpora: str = "allDrives", drive_id: str = "") -> dict[str, Any]:
+    if corpora == "drive" and drive_id:
+        return {"corpora": "drive", "driveId": drive_id, "includeItemsFromAllDrives": "true"}
+    if corpora == "user":
+        return {"corpora": "user"}
+    return {"corpora": "allDrives", "includeItemsFromAllDrives": "true"}
 
 
 def _drive_capabilities(raw_value: object) -> dict[str, bool]:
@@ -1047,10 +1167,14 @@ def _capability(file_record: dict[str, Any], name: str) -> bool:
 
 
 def _decode_preview_text(payload: bytes, *, max_chars: int | None) -> str:
+    return _decode_preview_text_payload(payload, max_chars=max_chars)["preview_text"]
+
+
+def _decode_preview_text_payload(payload: bytes, *, max_chars: int | None) -> dict[str, Any]:
     text = payload.decode("utf-8", errors="replace")
     if max_chars is not None and len(text) > max_chars:
-        return text[:max_chars]
-    return text
+        return {"preview_text": text[:max_chars], "preview_truncated": True}
+    return {"preview_text": text, "preview_truncated": False}
 
 
 def _export_file_name(name: str, content_type: str) -> str:

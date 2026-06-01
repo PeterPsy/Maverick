@@ -2,22 +2,44 @@
 
 from __future__ import annotations
 
+import io
 import json
 from pathlib import Path
 import sys
 import tempfile
 import unittest
+import zipfile
 from urllib.parse import unquote
 from urllib.parse import parse_qs, urlparse
 
 
 APP_ROOT = Path(__file__).resolve().parents[1]
 BACKEND_ROOT = APP_ROOT / "backend"
+BACKEND_MODULE_NAMES = {path.stem for path in BACKEND_ROOT.glob("*.py")}
+
+
+def evict_foreign_backend_modules() -> None:
+    backend_root = BACKEND_ROOT.resolve()
+    for name, module in list(sys.modules.items()):
+        if name not in BACKEND_MODULE_NAMES:
+            continue
+        module_file = getattr(module, "__file__", None)
+        if not module_file:
+            continue
+        try:
+            resolved = Path(module_file).resolve()
+        except OSError:
+            continue
+        if resolved != backend_root / resolved.name:
+            sys.modules.pop(name, None)
+
+
+evict_foreign_backend_modules()
 sys.path.insert(0, str(BACKEND_ROOT))
 
 from drive_connection_store import replace_connection  # noqa: E402
 from google_drive_provider import GoogleDriveProvider, stable_storage_file_id  # noqa: E402
-from inventory import upsert_remote_file_records  # noqa: E402
+from inventory import load_inventory, upsert_remote_file_records  # noqa: E402
 from service import app_events_for_action, handle_action, secret_lookup_for_drive_action  # noqa: E402
 
 
@@ -33,6 +55,16 @@ CONNECTION = {
     "status": "connected",
     "access_mode": "full_rw",
 }
+
+
+def docx_bytes(text: str) -> bytes:
+    payload = io.BytesIO()
+    with zipfile.ZipFile(payload, "w") as archive:
+        archive.writestr(
+            "word/document.xml",
+            f"<w:document xmlns:w='http://schemas.openxmlformats.org/wordprocessingml/2006/main'><w:body><w:p><w:r><w:t>{text}</w:t></w:r></w:p></w:body></w:document>",
+        )
+    return payload.getvalue()
 
 
 class GoogleDriveProviderTest(unittest.TestCase):
@@ -65,6 +97,7 @@ class GoogleDriveProviderTest(unittest.TestCase):
         self.assertEqual(result["folders"][2]["drive_file_id"], "shared-drive-1")
         self.assertEqual(result["folders"][2]["remote_locator"]["root_kind"], "shared_drive")
         self.assertTrue(result["folders"][0]["capabilities"]["can_read"])
+        self.assertFalse(result["pagination"]["has_more"])
         self.assertEqual(transport.token_refreshes, 1)
 
     def test_list_folder_children_derives_display_paths_and_drive_capabilities(self) -> None:
@@ -120,8 +153,61 @@ class GoogleDriveProviderTest(unittest.TestCase):
         self.assertTrue(file_record["capabilities"]["can_delete"])
         self.assertEqual(result["folders"][0]["display_path"], "/My Drive/Acme/Invoices")
         list_call = transport.calls[-1]
-        self.assertEqual(parse_qs(urlparse(list_call[1]).query)["pageSize"], ["11"])
-        self.assertIn("'folder-1' in parents", parse_qs(urlparse(list_call[1]).query)["q"][0])
+        list_query = parse_qs(urlparse(list_call[1]).query)
+        self.assertEqual(list_query["pageSize"], ["10"])
+        self.assertEqual(list_query["corpora"], ["user"])
+        self.assertIn("'folder-1' in parents", list_query["q"][0])
+        self.assertFalse(result["pagination"]["has_more"])
+
+    def test_list_folder_children_uses_drive_page_tokens(self) -> None:
+        transport = FakeDriveTransport(
+            {
+                ("GET", "/drive/v3/files/folder-1"): {
+                    "id": "folder-1",
+                    "name": "Acme",
+                    "mimeType": "application/vnd.google-apps.folder",
+                    "parents": ["root"],
+                },
+                ("GET", "/drive/v3/files"): {
+                    "nextPageToken": "token-2",
+                    "files": [
+                        {
+                            "id": "file-1",
+                            "name": "Contract.pdf",
+                            "mimeType": "application/pdf",
+                            "parents": ["folder-1"],
+                            "size": "1234",
+                            "modifiedTime": "2026-05-28T10:00:00Z",
+                            "version": "9",
+                            "capabilities": {"canDownload": True},
+                        },
+                    ],
+                },
+            }
+        )
+        provider = GoogleDriveProvider(connection=CONNECTION, app_secrets=SECRETS, transport=transport)
+
+        result = provider.list_children(parent_drive_file_id="folder-1", limit=1, page_token="token-1")
+
+        list_call = transport.calls[-1]
+        query = parse_qs(urlparse(list_call[1]).query)
+        self.assertEqual(query["pageSize"], ["1"])
+        self.assertEqual(query["pageToken"], ["token-1"])
+        self.assertTrue(result["pagination"]["has_more"])
+        self.assertEqual(result["pagination"]["next_page_token"], "token-2")
+        self.assertEqual(result["files"][0]["name"], "Contract.pdf")
+
+    def test_drive_access_token_cache_is_reused_across_provider_instances(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cache_root = Path(temp_dir) / "drive_temp_cache"
+            transport = FakeDriveTransport({("GET", "/drive/v3/drives"): {"drives": []}})
+            first = GoogleDriveProvider(connection=CONNECTION, app_secrets=SECRETS, transport=transport, cache_root=cache_root)
+            second = GoogleDriveProvider(connection=CONNECTION, app_secrets=SECRETS, transport=transport, cache_root=cache_root)
+
+            first.list_roots()
+            second.list_roots()
+
+        self.assertEqual(transport.token_refreshes, 1)
 
     def test_search_is_bounded_and_persists_remote_records_into_storage_catalog(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -170,7 +256,7 @@ class GoogleDriveProviderTest(unittest.TestCase):
         self.assertEqual(result["files"][0]["preview_kind"], "spreadsheet")
         files_call = [call for call in transport.calls if "/drive/v3/files?" in call[1]][0]
         query_params = parse_qs(urlparse(files_call[1]).query)
-        self.assertEqual(query_params["pageSize"], ["2"])
+        self.assertEqual(query_params["pageSize"], ["1"])
         self.assertIn("trashed = false", query_params["q"][0])
         self.assertEqual(catalog_status, 200)
         self.assertEqual(catalog["files"][0]["drive_file_id"], "sheet-1")
@@ -262,6 +348,72 @@ class GoogleDriveProviderTest(unittest.TestCase):
         self.assertTrue(second["cache_hit"])
         self.assertEqual(len(media_calls), 1)
         self.assertEqual(first["file"]["workspace_relative_path"], "")
+
+    def test_drive_preview_reuses_persisted_metadata_when_stable_id_is_available(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data" / "storage"
+            file_id = stable_storage_file_id("drive_conn_abc", "bin-1")
+            replace_connection(data_root, {**CONNECTION, "created_at": "2026-05-28T00:00:00+00:00"})
+            upsert_remote_file_records(
+                data_root=data_root,
+                records=[
+                    {
+                        "id": file_id,
+                        "file_id": file_id,
+                        "provider": "google_drive",
+                        "connection_id": "drive_conn_abc",
+                        "drive_file_id": "bin-1",
+                        "remote_locator": {"drive_file_id": "bin-1"},
+                        "status": "active",
+                        "role": "",
+                        "relative_path": "",
+                        "workspace_relative_path": "",
+                        "display_path": "/My Drive/Contract.pdf",
+                        "name": "Contract.pdf",
+                        "extension": ".pdf",
+                        "size_bytes": 11,
+                        "modified_at": "2026-05-28T11:00:00Z",
+                        "content_type": "application/pdf",
+                        "preview_kind": "pdf",
+                        "sha256": "",
+                        "etag_or_version": "3",
+                        "capabilities": {
+                            "can_read": True,
+                            "can_write": False,
+                            "can_move": False,
+                            "can_rename": False,
+                            "can_delete": False,
+                            "can_preview": True,
+                            "can_index": True,
+                        },
+                    }
+                ],
+            )
+            transport = FakeDriveTransport({("GET", "/drive/v3/files/bin-1"): b"hello bytes"})
+
+            status, result = handle_action(
+                data_root,
+                root / "storage" / "uploaded",
+                root / "storage" / "generated",
+                {
+                    "action": "drive_preview",
+                    "connection_id": "drive_conn_abc",
+                    "drive_file_id": "bin-1",
+                    "stable_storage_file_id": file_id,
+                    "max_bytes": 64,
+                    "_app_secrets": SECRETS,
+                },
+                drive_transport=transport,
+            )
+
+        metadata_calls = [
+            call for call in transport.calls
+            if urlparse(call[1]).path == "/drive/v3/files/bin-1" and parse_qs(urlparse(call[1]).query).get("alt") != ["media"]
+        ]
+        self.assertEqual(status, 200)
+        self.assertEqual(result["content_base64"], "aGVsbG8gYnl0ZXM=")
+        self.assertEqual(metadata_calls, [])
 
     def test_drive_google_doc_exports_readable_text_centrally(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -379,19 +531,287 @@ class GoogleDriveProviderTest(unittest.TestCase):
                 root / "storage" / "generated",
                 {"action": "catalog", "file_ids": [stable_storage_file_id("drive_conn_abc", "doc-1")]},
             )
+            inventory_file = {item["file_id"]: item for item in load_inventory(data_root)["files"]}[
+                stable_storage_file_id("drive_conn_abc", "doc-1")
+            ]
+            ack_status, ack = handle_action(
+                data_root,
+                root / "storage" / "uploaded",
+                root / "storage" / "generated",
+                {
+                    "action": "drive_mark_indexed",
+                    "stable_storage_file_id": stable_storage_file_id("drive_conn_abc", "doc-1"),
+                    "source_version": result["source_version"],
+                },
+            )
+            ack_inventory_file = {item["file_id"]: item for item in load_inventory(data_root)["files"]}[
+                stable_storage_file_id("drive_conn_abc", "doc-1")
+            ]
 
         self.assertEqual(status, 200)
         self.assertEqual(result["status"], "ready_for_memory")
         self.assertEqual(result["preview_text"], "Readable plan text")
         self.assertEqual(result["source_version"], "5")
+        self.assertFalse(result["preview_truncated"])
         self.assertEqual(result["memory_source"]["source_kind"], "remote_storage_file")
         self.assertEqual(result["memory_source"]["owning_app_id"], "storage")
         self.assertEqual(result["memory_source"]["entity_type"], "file")
         self.assertEqual(result["memory_source"]["entity_id"], stable_storage_file_id("drive_conn_abc", "doc-1"))
+        self.assertEqual(result["memory_source"]["file_id"], stable_storage_file_id("drive_conn_abc", "doc-1"))
+        self.assertEqual(result["memory_source"]["provider"], "google_drive")
+        self.assertEqual(result["memory_source"]["title"], "Plan")
         self.assertEqual(result["memory_source"]["workspace_relative_path"], "")
+        self.assertEqual(result["memory_source"]["metadata"]["stable_storage_file_id"], stable_storage_file_id("drive_conn_abc", "doc-1"))
+        self.assertEqual(result["memory_source"]["metadata"]["source_version"], "5")
         self.assertEqual(result["memory_source"]["metadata"]["drive_file_id"], "doc-1")
         self.assertEqual(catalog_status, 200)
         self.assertEqual(catalog["files"][0]["workspace_relative_path"], "")
+        self.assertFalse(inventory_file["indexed"])
+        self.assertFalse(inventory_file["stale"])
+        self.assertEqual(inventory_file["index_status"], "ready_for_memory")
+        self.assertEqual(ack_status, 200)
+        self.assertEqual(ack["status"], "indexed")
+        self.assertTrue(ack_inventory_file["indexed"])
+        self.assertFalse(ack_inventory_file["stale"])
+        self.assertEqual(ack_inventory_file["index_status"], "indexed")
+
+    def test_drive_index_bounds_preview_text_for_memory_ingest(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data" / "storage"
+            replace_connection(data_root, {**CONNECTION, "created_at": "2026-05-28T00:00:00+00:00"})
+            transport = FakeDriveTransport(
+                {
+                    ("GET", "/drive/v3/files/doc-1"): {
+                        "id": "doc-1",
+                        "name": "Long Plan",
+                        "mimeType": "application/vnd.google-apps.document",
+                        "modifiedTime": "2026-05-28T11:00:00Z",
+                        "version": "5",
+                        "capabilities": {"canDownload": True},
+                    },
+                    ("GET", "/drive/v3/files/doc-1/export"): ("A" * 20001).encode("utf-8"),
+                }
+            )
+
+            status, result = handle_action(
+                data_root,
+                root / "storage" / "uploaded",
+                root / "storage" / "generated",
+                {
+                    "action": "drive_index",
+                    "connection_id": "drive_conn_abc",
+                    "drive_file_id": "doc-1",
+                    "_app_secrets": SECRETS,
+                },
+                drive_transport=transport,
+            )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(len(result["preview_text"]), 20000)
+        self.assertTrue(result["preview_truncated"])
+        self.assertTrue(result["truncated"])
+
+    def test_drive_index_rejects_files_without_text_preview(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data" / "storage"
+            replace_connection(data_root, {**CONNECTION, "created_at": "2026-05-28T00:00:00+00:00"})
+            transport = FakeDriveTransport(
+                {
+                    ("GET", "/drive/v3/files/bin-1"): [
+                        {
+                            "id": "bin-1",
+                            "name": "Scan.pdf",
+                            "mimeType": "application/pdf",
+                            "size": "9",
+                            "modifiedTime": "2026-05-28T11:00:00Z",
+                            "version": "3",
+                            "capabilities": {"canDownload": True},
+                        },
+                        b"%PDF scan",
+                    ],
+                }
+            )
+
+            with self.assertRaisesRegex(Exception, "did not produce preview_text"):
+                handle_action(
+                    data_root,
+                    root / "storage" / "uploaded",
+                    root / "storage" / "generated",
+                    {
+                        "action": "drive_index",
+                        "connection_id": "drive_conn_abc",
+                        "drive_file_id": "bin-1",
+                        "_app_secrets": SECRETS,
+                    },
+                    drive_transport=transport,
+                )
+
+    def test_drive_index_extracts_office_binary_preview_text(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data" / "storage"
+            replace_connection(data_root, {**CONNECTION, "created_at": "2026-05-28T00:00:00+00:00"})
+            transport = FakeDriveTransport(
+                {
+                    ("GET", "/drive/v3/files/docx-1"): [
+                        {
+                            "id": "docx-1",
+                            "name": "Brief.docx",
+                            "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            "size": "512",
+                            "modifiedTime": "2026-05-28T11:00:00Z",
+                            "version": "7",
+                            "capabilities": {"canDownload": True},
+                        },
+                        docx_bytes("Drive DOCX says the renewal owner is Dana."),
+                    ],
+                }
+            )
+
+            status, result = handle_action(
+                data_root,
+                root / "storage" / "uploaded",
+                root / "storage" / "generated",
+                {
+                    "action": "drive_index",
+                    "connection_id": "drive_conn_abc",
+                    "drive_file_id": "docx-1",
+                    "_app_secrets": SECRETS,
+                },
+                drive_transport=transport,
+            )
+
+        self.assertEqual(status, 200)
+        self.assertIn("renewal owner is Dana", result["preview_text"])
+        self.assertEqual(result["source_version"], "7")
+        self.assertEqual(result["memory_source"]["metadata"]["source_version"], "7")
+
+    def test_drive_index_requires_source_version(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data" / "storage"
+            replace_connection(data_root, {**CONNECTION, "created_at": "2026-05-28T00:00:00+00:00"})
+            transport = FakeDriveTransport(
+                {
+                    ("GET", "/drive/v3/files/doc-1"): {
+                        "id": "doc-1",
+                        "name": "Plan",
+                        "mimeType": "application/vnd.google-apps.document",
+                        "capabilities": {"canDownload": True},
+                    },
+                    ("GET", "/drive/v3/files/doc-1/export"): b"Readable plan text",
+                }
+            )
+
+            with self.assertRaisesRegex(Exception, "source_version"):
+                handle_action(
+                    data_root,
+                    root / "storage" / "uploaded",
+                    root / "storage" / "generated",
+                    {
+                        "action": "drive_index",
+                        "connection_id": "drive_conn_abc",
+                        "drive_file_id": "doc-1",
+                        "_app_secrets": SECRETS,
+                    },
+                    drive_transport=transport,
+                )
+
+    def test_drive_index_marks_file_for_later_sync_staleness(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data" / "storage"
+            replace_connection(data_root, {**CONNECTION, "created_at": "2026-05-28T00:00:00+00:00"})
+            index_transport = FakeDriveTransport(
+                {
+                    ("GET", "/drive/v3/files/doc-1"): {
+                        "id": "doc-1",
+                        "name": "Plan",
+                        "mimeType": "application/vnd.google-apps.document",
+                        "modifiedTime": "2026-05-28T11:00:00Z",
+                        "version": "5",
+                        "capabilities": {"canDownload": True},
+                    },
+                    ("GET", "/drive/v3/files/doc-1/export"): b"Readable plan text",
+                }
+            )
+            status, result = handle_action(
+                data_root,
+                root / "storage" / "uploaded",
+                root / "storage" / "generated",
+                {
+                    "action": "drive_index",
+                    "connection_id": "drive_conn_abc",
+                    "drive_file_id": "doc-1",
+                    "_app_secrets": SECRETS,
+                },
+                drive_transport=index_transport,
+            )
+            file_id = stable_storage_file_id("drive_conn_abc", "doc-1")
+            ack_status, _ack = handle_action(
+                data_root,
+                root / "storage" / "uploaded",
+                root / "storage" / "generated",
+                {
+                    "action": "drive_mark_indexed",
+                    "stable_storage_file_id": file_id,
+                    "source_version": result["source_version"],
+                },
+            )
+            connection_state = json.loads((data_root / "drive_connections.json").read_text(encoding="utf-8"))
+            connection_state["connections"][0]["sync_state"] = {
+                "start_page_token": "token-1",
+                "last_processed_page_token": "token-1",
+                "status": "healthy",
+            }
+            (data_root / "drive_connections.json").write_text(json.dumps(connection_state), encoding="utf-8")
+            sync_transport = FakeDriveTransport(
+                {
+                    ("GET", "/drive/v3/changes"): {
+                        "newStartPageToken": "token-2",
+                        "changes": [
+                            {
+                                "fileId": "doc-1",
+                                "file": {
+                                    "id": "doc-1",
+                                    "name": "Plan",
+                                    "mimeType": "application/vnd.google-apps.document",
+                                    "modifiedTime": "2026-05-28T12:00:00Z",
+                                    "version": "6",
+                                    "capabilities": {"canDownload": True},
+                                },
+                            }
+                        ],
+                    }
+                }
+            )
+            sync_status, sync = handle_action(
+                data_root,
+                root / "storage" / "uploaded",
+                root / "storage" / "generated",
+                {
+                    "action": "drive_sync",
+                    "connection_id": "drive_conn_abc",
+                    "_app_secrets": SECRETS,
+                },
+                drive_transport=sync_transport,
+            )
+            inventory_file = {item["file_id"]: item for item in load_inventory(data_root)["files"]}[file_id]
+
+        self.assertEqual(status, 200)
+        self.assertEqual(ack_status, 200)
+        self.assertEqual(sync_status, 200)
+        self.assertTrue(inventory_file["indexed"])
+        self.assertTrue(inventory_file["stale"])
+        self.assertEqual(inventory_file["index_status"], "stale")
+        self.assertIn(file_id, sync["stale_storage_file_ids"])
+        self.assertEqual(sync["memory_staleness"][0]["entity_id"], file_id)
+        self.assertEqual(sync["memory_staleness"][0]["connection_id"], "drive_conn_abc")
+        self.assertEqual(sync["memory_staleness"][0]["drive_file_id"], "doc-1")
+        self.assertEqual(sync["memory_staleness"][0]["indexed_source_version"], "5")
+        self.assertEqual(sync["memory_staleness"][0]["source_version"], "6")
 
     def test_drive_sheets_preview_uses_csv_and_explicit_export_uses_xlsx(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1010,7 +1430,12 @@ class GoogleDriveProviderTest(unittest.TestCase):
         self.assertTrue(by_id[file_1]["stale"])
         self.assertEqual(by_id[file_2]["status"], "removed")
         self.assertIn(file_1, result["stale_storage_file_ids"])
-        self.assertIn({"owning_app_id": "storage", "entity_type": "file", "entity_id": file_1, "reason": "google_drive_change"}, result["memory_staleness"])
+        self.assertEqual(result["memory_staleness"][0]["entity_id"], file_1)
+        self.assertEqual(result["memory_staleness"][0]["connection_id"], "drive_conn_abc")
+        self.assertEqual(result["memory_staleness"][0]["drive_file_id"], "file-1")
+        self.assertEqual(result["memory_staleness"][0]["source_version"], "2")
+        self.assertIn(file_2, result["stale_storage_file_ids"])
+        self.assertNotIn(file_2, [item["entity_id"] for item in result["memory_staleness"]])
         self.assertNotIn("/drive/v3/files", drive_paths)
 
     def test_drive_sync_persists_next_page_cursor_when_change_page_limit_is_reached(self) -> None:

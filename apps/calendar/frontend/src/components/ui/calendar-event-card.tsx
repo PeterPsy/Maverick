@@ -89,10 +89,10 @@ export function EventCard({
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         className={cn(
-          "cursor-pointer rounded-lg p-3 transition-all duration-300",
+          "calendar-event-card--detailed cursor-pointer rounded-lg p-3 transition-all duration-300",
           colorClasses.bg,
           "text-white animate-in fade-in slide-in-from-left-2",
-          isHovered && "scale-[1.03] shadow-2xl ring-2 ring-white/50",
+          isHovered && "calendar-event-card--detailed-hover shadow-2xl ring-2 ring-white/50",
         )}
       >
         <div className="font-semibold">{event.title}</div>

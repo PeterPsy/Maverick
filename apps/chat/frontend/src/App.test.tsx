@@ -348,6 +348,79 @@ describe("App thread navigation", () => {
     });
   });
 
+  it("starts a draft when a mounted floating app receives a later new-chat request id", async () => {
+    const existingThread = thread("thread-existing", "session-existing", { title: "Existing thread" });
+    const element = await renderApp({
+      navigationScope: "floating-window",
+      runtimeThreads: [existingThread],
+      runtimeThreadsLoaded: true,
+      threadId: existingThread.thread_id,
+    });
+
+    await waitForAssertion(() => {
+      expect(listApps).toHaveBeenCalled();
+      expect(element.textContent).not.toContain("How can I help today?");
+    });
+
+    await act(async () => {
+      root?.render(
+        <App
+          navigationScope="floating-window"
+          newChatProjectId="project-1"
+          newChatRequestId="request-2"
+          runtimeThreads={[existingThread]}
+          runtimeThreadsLoaded
+          threadId={existingThread.thread_id}
+        />,
+      );
+    });
+
+    await waitForAssertion(() => {
+      expect(element.textContent).toContain("How can I help today?");
+    });
+  });
+
+  it("opens a selected thread when a mounted floating app receives a new thread id", async () => {
+    const firstThread = thread("thread-first", "session-first", { title: "First thread" });
+    const secondThread = thread("thread-second", "session-second", { title: "Second thread" });
+    const element = await renderApp({
+      navigationScope: "floating-window",
+      runtimeThreads: [firstThread, secondThread],
+      runtimeThreadsLoaded: true,
+      threadId: firstThread.thread_id,
+    });
+
+    await waitForAssertion(() => {
+      expect(listApps).toHaveBeenCalled();
+      expect(element.textContent).not.toContain("How can I help today?");
+    });
+
+    const postMessageSpy = vi.spyOn(window.parent, "postMessage");
+
+    await act(async () => {
+      root?.render(
+        <App
+          navigationScope="floating-window"
+          runtimeThreads={[firstThread, secondThread]}
+          runtimeThreadsLoaded
+          threadId={secondThread.thread_id}
+        />,
+      );
+    });
+
+    await waitForAssertion(() => {
+      expect(postMessageSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          active_thread_id: secondThread.thread_id,
+          navigation_scope: "floating-window",
+          owner_app_id: "chat",
+          type: "maverick.chat.active-thread-changed",
+        }),
+        window.location.origin,
+      );
+    });
+  });
+
   it("attaches a runtime-session deep link to a chat thread", async () => {
     const runtimeThread = thread("thread-runtime", "session-runtime", {
       agent_label: "Researcher",

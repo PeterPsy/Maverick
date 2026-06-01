@@ -33,10 +33,29 @@ export function appLinksPageHtml({
       <p class="settings-card-copy">Provider links are workspace-scoped. A selected provider is reused until it becomes unavailable; otherwise one-provider interface links use the first available candidate as their automatic default.</p>
       ${error ? `<p class="settings-platform-error">${escapeHtml(error)}</p>` : ''}
       ${loadErrors.length ? `<div class="settings-app-link-errors">${loadErrors.map(loadErrorHtml).join('')}</div>` : ''}
+      ${dependencies.length > 1 ? consumerNavHtml(dependencies, appRegistry, workspaceApps) : ''}
       <div class="settings-app-link-list">
         ${dependencies.length ? dependencies.map((payload) => consumerDependencyHtml(payload, appRegistry, workspaceApps, savingKeys)).join('') : emptyStateHtml(error, isLoading)}
       </div>
     </section>`;
+}
+
+function consumerNavHtml(
+  dependencies: AppDependenciesPayload[],
+  appRegistry: AppRegistryItem[],
+  workspaceApps: WorkspaceApp[]
+) {
+  return `<nav class="settings-app-link-consumer-nav" aria-label="Provider link apps">
+    ${dependencies.map((payload) => {
+      const app = workspaceApps.find((item) => item.workspace_id === payload.workspace_id && item.app_id === payload.consumer_app_id);
+      const registryApp = appById(appRegistry, payload.consumer_app_id);
+      const label = app?.name || registryApp?.name || payload.consumer_app_id;
+      return `<a class="settings-app-link-consumer-nav__item" href="#${escapeAttr(consumerAnchorId(payload.consumer_app_id))}">
+        <strong>${escapeHtml(label)}</strong>
+        <small>${escapeHtml(String(payload.dependencies.length))}</small>
+      </a>`;
+    }).join('')}
+  </nav>`;
 }
 
 function consumerDependencyHtml(
@@ -47,7 +66,7 @@ function consumerDependencyHtml(
 ) {
   const app = workspaceApps.find((item) => item.workspace_id === payload.workspace_id && item.app_id === payload.consumer_app_id);
   const registryApp = appById(appRegistry, payload.consumer_app_id);
-  return `<article class="settings-app-link-consumer">
+  return `<article class="settings-app-link-consumer" id="${escapeAttr(consumerAnchorId(payload.consumer_app_id))}">
     <header class="settings-app-link-consumer__header">
       ${appIconHtml(registryApp, payload.consumer_app_id)}
       <span class="settings-app-copy">
@@ -134,6 +153,10 @@ function dependencyKey(consumerAppId: string, alias: string) {
 
 function choiceKey(consumerAppId: string, alias: string, providerAppId: string) {
   return `${consumerAppId}:${alias}:${providerAppId}`;
+}
+
+function consumerAnchorId(consumerAppId: string) {
+  return `settings-app-link-consumer-${consumerAppId}`;
 }
 
 function effectiveProviderIds(dependency: DependencyResolutionItem) {

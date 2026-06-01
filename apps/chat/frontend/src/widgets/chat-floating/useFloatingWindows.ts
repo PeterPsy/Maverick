@@ -15,8 +15,18 @@ import {
   persistWindows,
   readPersistedOrDefaultWindows,
   reconcileWindowsWithThreads,
+  selectSingleFloatingWindowThread,
 } from "./floatingState";
-import { debugThreadSync, loadWidgetStateStorageKey, postWidgetSize, shouldIgnoreFloatingStackDrag } from "./floatingWidgetRuntime";
+import {
+  debugThreadSync,
+  floatingWidgetHostContextFromContent,
+  loadFloatingWidgetHostContext,
+  loadWidgetStateStorageKey,
+  postDockClose,
+  postWidgetSize,
+  shouldIgnoreFloatingStackDrag,
+  type FloatingWidgetMode,
+} from "./floatingWidgetRuntime";
 
 type FloatingStackDragState = {
   isDragging: boolean;
@@ -33,6 +43,9 @@ export function useFloatingWindows() {
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [runtimeThreadsError, setRuntimeThreadsError] = useState<string | null>(null);
   const [windows, setWindows] = useState<FloatingChatWindow[]>([]);
+  const [hostMode, setHostMode] = useState<FloatingWidgetMode>("overlay");
+  const [hostNavigationScope, setHostNavigationScope] = useState("");
+  const [hostThreadId, setHostThreadId] = useState("");
   const readReceiptInFlightRef = useRef<Set<string>>(new Set());
   const stackDragRef = useRef<FloatingStackDragState | null>(null);
   const stackRef = useRef<HTMLDivElement | null>(null);
@@ -59,13 +72,23 @@ export function useFloatingWindows() {
   }, [isWindowStateReady, storageKey, windows]);
 
   useEffect(() => {
+    if (!isWindowStateReady || hostMode !== "overlay") {
+      return;
+    }
+    postWidgetSize(windowsRef.current);
+  }, [hostMode, isWindowStateReady]);
+
+  useEffect(() => {
     let cancelled = false;
     async function loadScopedWidgetState() {
-      const nextStorageKey = await loadWidgetStateStorageKey();
+      const [nextStorageKey, hostContext] = await Promise.all([loadWidgetStateStorageKey(), loadFloatingWidgetHostContext()]);
       if (cancelled) {
         return;
       }
       const persistedWindows = readPersistedOrDefaultWindows(nextStorageKey);
+      setHostMode(hostContext.mode);
+      setHostNavigationScope(hostContext.navigationScope);
+      setHostThreadId(hostContext.threadId);
       setStorageKey(nextStorageKey);
       setWindows(persistedWindows);
       setIsWindowStateReady(true);
@@ -88,8 +111,19 @@ export function useFloatingWindows() {
         active_thread_id?: string;
         navigation_scope?: string;
         owner_app_id?: string;
+        context?: { content?: unknown };
         type?: string;
       };
+      if (payload.type === "maverick.widget.context-changed" && payload.owner_app_id === "chat") {
+        const hostContext = floatingWidgetHostContextFromContent(payload.context?.content);
+        setHostMode(hostContext.mode);
+        setHostNavigationScope(hostContext.navigationScope);
+        setHostThreadId(hostContext.threadId);
+        if (hostContext.threadId) {
+          setWindows((current) => reconcileWindowsWithThreads(current, threadsRef.current, hostContext.threadId, hostContext.navigationScope));
+        }
+        return;
+      }
       if (payload.type !== "maverick.chat.active-thread-changed" || payload.owner_app_id !== "chat") {
         return;
       }
@@ -133,12 +167,46 @@ export function useFloatingWindows() {
   function createDraftChat(windowId: string, projectId: string | null = null) {
     debugThreadSync("create-draft-chat", { projectId, windowId });
     const nextWindow = createWindow("", true, projectId);
+    if (hostMode !== "overlay") {
+      setHostNavigationScope(nextWindow.id);
+      setHostThreadId("");
+    }
     setWindows((current) => [...current, nextWindow]);
+  }
+
+  function dockWindow(windowId: string) {
+    const currentWindows = windowsRef.current;
+    const selectedWindow = currentWindows.find((windowItem) => windowItem.id === windowId) || currentWindows[0] || createWindow();
+    window.parent?.postMessage(
+      {
+        type: "maverick.widget.dock.open",
+        owner_app_id: "chat",
+        widget_id: "chat-floating",
+        placement: "right",
+        params: {
+          navigation_scope: selectedWindow.id,
+          thread_id: selectedWindow.threadId,
+        },
+      },
+      window.location.origin,
+    );
+    setWindows([{ ...selectedWindow, isCollapsed: false }]);
+  }
+
+  function closeDock() {
+    postDockClose("chat-floating");
   }
 
   function selectThread(windowId: string, threadId: string) {
     debugThreadSync("select-thread", { threadId, windowId });
     if (!threadId) {
+      return;
+    }
+    if (hostMode !== "overlay") {
+      const selection = selectSingleFloatingWindowThread(windowsRef.current, windowId, threadId);
+      setHostNavigationScope(selection.windowId);
+      setHostThreadId(threadId);
+      setWindows(selection.windows);
       return;
     }
     const currentWindows = windowsRef.current;
@@ -248,7 +316,12 @@ export function useFloatingWindows() {
 
   return {
     closeWindow,
+    closeDock,
     createDraftChat,
+    dockWindow,
+    hostMode,
+    hostNavigationScope,
+    hostThreadId,
     isWindowStateReady,
     markThreadReadIfNeeded,
     removeThread,

@@ -166,6 +166,7 @@ export function EventManager({
         if (view === "month") nextDate.setMonth(prev.getMonth() + (direction === "next" ? 1 : -1))
         if (view === "week") nextDate.setDate(prev.getDate() + (direction === "next" ? 7 : -7))
         if (view === "day") nextDate.setDate(prev.getDate() + (direction === "next" ? 1 : -1))
+        if (view === "list") nextDate.setDate(prev.getDate() + (direction === "next" ? 1 : -1))
         return nextDate
       })
     },

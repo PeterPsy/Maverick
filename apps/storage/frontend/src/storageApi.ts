@@ -1,4 +1,4 @@
-import type { CatalogPayload, CreateFolderPayload, DeleteFilePayload, DeleteFolderPayload, DownloadFolderPayload, DriveCompleteOAuthPayload, DriveConnectionsPayload, DriveDisconnectPayload, DriveListPayload, DriveStartOAuthPayload, FileRole, StorageFile, StorageFolder, StorageViewFilter, MoveFilePayload, MoveFolderPayload, MoveItemsPayload, PreviewTablePayload, PreviewTextPayload, ReadFilePayload, RenderPreviewPayload, UpdateMarkdownPayload, UploadFilePayload } from './types';
+import type { CatalogPayload, CreateFolderPayload, DeleteFilePayload, DeleteFolderPayload, DownloadFolderPayload, DriveCompleteOAuthPayload, DriveConnectionsPayload, DriveDisconnectPayload, DriveListPayload, DrivePreviewPayload, DriveStartOAuthPayload, FileRole, StorageFile, StorageFolder, StorageViewFilter, MoveFilePayload, MoveFolderPayload, MoveItemsPayload, PreviewTablePayload, PreviewTextPayload, ReadFilePayload, RenderPreviewPayload, UpdateMarkdownPayload, UploadFilePayload } from './types';
 
 const DEFAULT_APP_ID = 'storage';
 
@@ -6,6 +6,7 @@ export type StorageApiOptions = {
   appId?: string;
   endpoint?: string;
   fetchImpl?: typeof fetch;
+  signal?: AbortSignal;
 };
 
 export type UploadProgressPhase = 'reading' | 'uploading' | 'complete';
@@ -23,6 +24,7 @@ export type UploadFileOptions = StorageApiOptions & {
 
 export type DriveListOptions = StorageApiOptions & {
   limit?: number;
+  pageToken?: string;
 };
 
 export type DriveOAuthStartOptions = StorageApiOptions & {
@@ -58,11 +60,15 @@ const DRIVE_REFRESH_TOKEN_SECRET_NAME = 'google-drive-refresh-token';
 
 export async function callBackend<T>(body: Record<string, unknown>, options: StorageApiOptions = {}): Promise<T> {
   const fetchImpl = options.fetchImpl || fetch;
-  const response = await fetchImpl(options.endpoint || storageBackendEndpoint(options.appId), {
+  const requestInit: RequestInit = {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(withDefaultSecretRequest(body))
-  });
+  };
+  if (options.signal) {
+    requestInit.signal = options.signal;
+  }
+  const response = await fetchImpl(options.endpoint || storageBackendEndpoint(options.appId), requestInit);
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.detail || payload.error || 'Storage request failed');
   return payload as T;
@@ -99,6 +105,7 @@ export type CatalogRequest = Partial<Pick<StorageViewFilter, 'query' | 'role' | 
 };
 
 export const CATALOG_PAGE_LIMIT = 500;
+export const DRIVE_PAGE_LIMIT = 50;
 
 export function loadCatalog(params: CatalogRequest = {}) {
   return callBackend<CatalogPayload>({ action: 'catalog', ...params });
@@ -166,22 +173,24 @@ export function disconnectDriveConnection(connectionId: string, options: Storage
 }
 
 export function listDriveRoots(connectionId: string, options: DriveListOptions = {}) {
-  const { limit, ...apiOptions } = options;
+  const { limit, pageToken, ...apiOptions } = options;
   return callBackend<DriveListPayload>({
     action: 'drive_list_roots',
     connection_id: connectionId,
     ...(limit === undefined ? {} : { limit }),
+    ...(pageToken ? { page_token: pageToken } : {}),
     _app_secret_request: driveConnectionSecretRequest(connectionId)
   }, apiOptions);
 }
 
 export function listDriveChildren(connectionId: string, driveFileId: string, options: DriveListOptions = {}) {
-  const { limit, ...apiOptions } = options;
+  const { limit, pageToken, ...apiOptions } = options;
   return callBackend<DriveListPayload>({
     action: 'drive_list_children',
     connection_id: connectionId,
     drive_file_id: driveFileId,
     ...(limit === undefined ? {} : { limit }),
+    ...(pageToken ? { page_token: pageToken } : {}),
     _app_secret_request: driveConnectionSecretRequest(connectionId)
   }, apiOptions);
 }
@@ -192,6 +201,17 @@ export function readDriveFile(file: StorageFile, maxBytes: number, options: Stor
     action: 'drive_read',
     ...locator,
     max_bytes: maxBytes,
+    _app_secret_request: driveConnectionSecretRequest(locator.connection_id)
+  }, options);
+}
+
+export function previewDriveFile(file: StorageFile, maxBytes: number, maxChars?: number, options: StorageApiOptions = {}) {
+  const locator = driveFileLocator(file);
+  return callBackend<DrivePreviewPayload>({
+    action: 'drive_preview',
+    ...locator,
+    max_bytes: maxBytes,
+    ...(maxChars === undefined ? {} : { max_chars: maxChars }),
     _app_secret_request: driveConnectionSecretRequest(locator.connection_id)
   }, options);
 }
@@ -447,12 +467,14 @@ export function driveConnectionSecretRequest(connectionId: string): StorageSecre
 function driveFileLocator(file: StorageFile) {
   const connectionId = String(file.connection_id || '').trim();
   const driveFileId = String(file.drive_file_id || '').trim();
+  const stableStorageFileId = String(file.file_id || file.id || '').trim();
   if (!connectionId || !driveFileId) {
     throw new Error('Google Drive file identity is missing.');
   }
   return {
     connection_id: connectionId,
-    drive_file_id: driveFileId
+    drive_file_id: driveFileId,
+    ...(stableStorageFileId ? { stable_storage_file_id: stableStorageFileId } : {})
   };
 }
 

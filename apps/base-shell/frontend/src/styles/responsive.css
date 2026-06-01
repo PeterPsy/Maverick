@@ -52,7 +52,7 @@
   }
 
   .bs-sidebar__details {
-    --bs-sidebar-top-fade-height: calc(env(safe-area-inset-top, 0px) + 8.2rem);
+    --bs-sidebar-top-fade-height: calc(var(--bs-mobile-shell-content-top-offset) + 4.2rem);
     --bs-sidebar-bottom-fade-height: calc(env(safe-area-inset-bottom, 0px) + 4.2rem);
     display: grid;
     grid-template-columns: minmax(0, 1fr);
@@ -63,7 +63,7 @@
     min-width: 0;
     height: 100dvh;
     padding:
-      calc(env(safe-area-inset-top, 0px) + 1rem) calc(env(safe-area-inset-right, 0px) + 1rem) calc(env(safe-area-inset-bottom, 0px) + 1rem) calc(env(safe-area-inset-left, 0px) + 1rem);
+      calc(var(--bs-mobile-shell-content-top-offset) + 0.75rem) calc(env(safe-area-inset-right, 0px) + 1rem) calc(env(safe-area-inset-bottom, 0px) + 1rem) calc(env(safe-area-inset-left, 0px) + 1rem);
     border: 0;
     border-radius: 0;
     background: var(--maverick-bg);
@@ -83,11 +83,6 @@
   }
 
   .bs-sidebar__header {
-    min-width: 0;
-    max-width: 100%;
-  }
-
-  .bs-sidebar__mobile-apps {
     min-width: 0;
     max-width: 100%;
   }
@@ -122,31 +117,9 @@
   .bs-sidebar.is-closed .bs-sidebar__details {
     width: 100%;
     padding:
-      calc(env(safe-area-inset-top, 0px) + 1rem) calc(env(safe-area-inset-right, 0px) + 1rem) calc(env(safe-area-inset-bottom, 0px) + 1rem) calc(env(safe-area-inset-left, 0px) + 1rem);
+      calc(var(--bs-mobile-shell-content-top-offset) + 0.75rem) calc(env(safe-area-inset-right, 0px) + 1rem) calc(env(safe-area-inset-bottom, 0px) + 1rem) calc(env(safe-area-inset-left, 0px) + 1rem);
     opacity: 1;
     visibility: visible;
-  }
-
-  .bs-sidebar__mobile-apps {
-    display: block;
-    overscroll-behavior-x: contain;
-    touch-action: pan-x;
-  }
-
-  .bs-sidebar__mobile-apps .bs-sidebar__rail-apps {
-    display: flex;
-    flex-direction: row;
-    justify-content: flex-start;
-    max-width: 100%;
-    min-width: 0;
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding: 0.12rem 0 0.2rem;
-    scrollbar-width: none;
-  }
-
-  .bs-sidebar__mobile-apps .bs-sidebar__rail-apps::-webkit-scrollbar {
-    display: none;
   }
 
   .bs-sidebar__rail-button,

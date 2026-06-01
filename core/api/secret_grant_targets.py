@@ -9,10 +9,16 @@ from urllib.parse import urlsplit
 from core.api.platform_state import PlatformState
 from core.apps.errors import AppHostingError
 from core.apps.surfaces import enabled_workspace_app_bindings, resolve_workspace_app_surface
-from core.apps.surface_descriptors import app_cli_command_secret_selectors, app_mcp_tool_secret_selectors
+from core.apps.surface_descriptors import (
+    app_cli_command_secret_resource_inventory_enabled,
+    app_cli_command_secret_selectors,
+    app_mcp_tool_secret_selectors,
+)
 from core.secrets.app_delivery import APP_SECRET_ACTION as APP_BACKEND_ACTION, app_secret_target
 from core.secrets.errors import SecretError, SecretPolicyError
 from core.secrets.target_policy import normalize_target_patterns_or_wildcard, target_allowed
+from core.shared.entrypoints import run_json_entrypoint
+from core.workspaces.paths import workspace_paths
 
 
 logger = logging.getLogger(__name__)
@@ -53,6 +59,23 @@ def secret_grant_target_items(
         for logical_name in app_managed_logical_names:
             if logical_name in consumers:
                 consumers[logical_name]["app_managed"] = True
+        _attach_app_secret_resource_scopes(
+            consumers,
+            source_root=source_root,
+            binding_app_id=binding.app_id,
+            public_app_id=binding.public_app_id or parsed.app_id,
+            data_root=binding.data_root,
+            cli_entrypoint=(
+                parsed.contract.entrypoints.cli
+                if _secret_resource_inventory_enabled(
+                    source_root,
+                    [str(item).strip() for item in parsed.contract.capabilities.cli_commands if str(item).strip()],
+                )
+                else None
+            ),
+            workspace_id=workspace_id,
+            start_path=start_path,
+        )
         logical_names = sorted(
             logical_name for logical_name, consumer in consumers.items() if consumer_requires_secret(consumer)
         )
@@ -285,6 +308,85 @@ def _record_consumer_resource_scope(consumer: SecretConsumer, resource_type: str
     resource_types = consumer.get("resource_types")
     if isinstance(resource_types, list) and normalized not in resource_types:
         resource_types.append(normalized)
+
+
+def _attach_app_secret_resource_scopes(
+    consumers: SecretConsumersByLogicalName,
+    *,
+    source_root: Path,
+    binding_app_id: str,
+    public_app_id: str,
+    data_root: str,
+    cli_entrypoint: str | None,
+    workspace_id: str,
+    start_path: Path,
+) -> None:
+    if not cli_entrypoint:
+        return
+    entrypoint_path = (source_root / cli_entrypoint).resolve()
+    if not entrypoint_path.is_file():
+        return
+    try:
+        paths = workspace_paths(workspace_id=workspace_id, start_path=start_path)
+        result = run_json_entrypoint(
+            str(entrypoint_path),
+            payload={
+                "surface": "secret_resource_inventory",
+                "workspace_id": workspace_id,
+                "app_id": binding_app_id,
+                "public_app_id": public_app_id,
+                "workspace_root": str(paths.root),
+                "data_root": data_root,
+                "uploaded_storage_root": str(paths.uploaded_storage),
+                "generated_storage_root": str(paths.generated_storage),
+                "app_secrets": {},
+                "arguments": {},
+            },
+            cwd=source_root,
+            timeout_seconds=10,
+        )
+    except Exception:
+        logger.exception(
+            "Skipping app-provided secret resource inventory for `%s` in workspace `%s`.",
+            binding_app_id,
+            workspace_id,
+        )
+        return
+    resources = result.get("resources") if isinstance(result, dict) else None
+    if not isinstance(resources, list):
+        return
+    for resource in resources:
+        if not isinstance(resource, dict):
+            continue
+        logical_name = str(resource.get("logical_name") or "").strip().lower()
+        consumer = consumers.get(logical_name)
+        if not consumer:
+            continue
+        resource_type = _normalize_optional_resource(resource.get("resource_type"))
+        resource_id = _normalize_optional_resource(resource.get("resource_id"))
+        if not resource_type or not resource_id:
+            continue
+        if resource_type not in _consumer_resource_types(consumer):
+            continue
+        scopes = consumer.setdefault("resource_scopes", [])
+        if not isinstance(scopes, list):
+            continue
+        scope = {
+            "resource_type": resource_type,
+            "resource_id": resource_id,
+            "label": str(resource.get("label") or "").strip(),
+        }
+        if not any(
+            isinstance(item, dict)
+            and item.get("resource_type") == resource_type
+            and item.get("resource_id") == resource_id
+            for item in scopes
+        ):
+            scopes.append(scope)
+
+
+def _secret_resource_inventory_enabled(source_root: Path, cli_commands: list[str]) -> bool:
+    return any(app_cli_command_secret_resource_inventory_enabled(source_root, command) for command in cli_commands)
 
 
 def _consumer_resource_types(consumer: SecretConsumer) -> list[str]:

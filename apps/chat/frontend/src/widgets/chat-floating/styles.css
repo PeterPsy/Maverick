@@ -39,6 +39,15 @@ body {
   background: transparent;
 }
 
+.chat-floating-dock-root {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  background: transparent;
+}
+
 .chat-floating-widget-stack {
   display: flex;
   flex-direction: row-reverse;
@@ -65,6 +74,12 @@ body {
 .chat-floating-widget-stack.is-horizontal-dragging * {
   cursor: grabbing;
   user-select: none;
+}
+
+.chat-floating-widget-stack.is-fixed-right,
+.chat-floating-widget-stack.is-mobile-fullscreen {
+  display: block;
+  overflow: hidden;
 }
 
 .chat-floating-widget-shell {
@@ -96,6 +111,39 @@ body {
 
 .chat-floating-widget-stack.has-single-window .chat-floating-widget-shell {
   box-shadow: var(--chatapp-composer-shadow);
+}
+
+.chat-floating-widget-shell--dock {
+  flex: none;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  border: 0;
+  border-radius: calc(var(--chat-sidebar-glass-radius) - 10px);
+  background: transparent;
+  box-shadow: none;
+}
+
+.chat-floating-widget-shell--mobile-fullscreen {
+  flex: none;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  border: 0;
+  border-radius: 0;
+  background: var(--maverick-bg);
+  box-shadow: none;
+}
+
+.chat-floating-widget-shell--dock::before,
+.chat-floating-widget-shell--mobile-fullscreen::before {
+  display: none;
+}
+
+.chat-floating-widget-shell--mobile-fullscreen .chat-floating-widget-shell__bar {
+  top: 0.48rem;
+  left: calc(env(safe-area-inset-left, 0px) + 0.5rem);
+  right: calc(env(safe-area-inset-right, 0px) + 0.5rem);
 }
 
 .chat-floating-widget-shell.is-hidden,
@@ -645,6 +693,11 @@ body {
   touch-action: pan-x pan-y;
 }
 
+.chat-floating-widget-shell--mobile-fullscreen .chatapp-chat-scroll__inner {
+  padding-top: 3.35rem;
+  padding-bottom: calc(var(--chatapp-composer-overlay-height, 58px) + env(safe-area-inset-bottom, 0px) + 1rem);
+}
+
 .chat-floating-widget-shell__body .chatapp-chat-scroll__inner::-webkit-scrollbar {
   display: none;
 }
@@ -660,6 +713,12 @@ body {
   bottom: 0.5rem;
   left: 0.5rem;
   width: auto;
+}
+
+.chat-floating-widget-shell--mobile-fullscreen .chatapp-composer-dock {
+  right: calc(env(safe-area-inset-right, 0px) + 0.5rem);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 0.5rem);
+  left: calc(env(safe-area-inset-left, 0px) + 0.5rem);
 }
 
 .chat-floating-widget-shell__body .chatapp-composer__runtime-badges {

@@ -40,6 +40,19 @@ const agents: AgentTypeSummary[] = [
   },
 ];
 
+const searchableAgents: AgentTypeSummary[] = [
+  ...agents,
+  {
+    id: "agent-type-ops-reviewer",
+    name: "Operations Reviewer",
+    description: "Finds workflow gaps before customer handoff.",
+    role_id: "ops-reviewer",
+    skill_ids: [],
+    trace_verbosity: "compact",
+    enabled: true,
+  },
+];
+
 class FakeDataTransfer {
   dropEffect: DataTransfer["dropEffect"] = "none";
   files: File[] = [];
@@ -822,6 +835,116 @@ describe("ChatComposer reference search", () => {
     });
 
     expect(onSelectAgent).toHaveBeenCalledWith("agent-type-social-video-content-strategist");
+  });
+
+  it("filters agent runners while keeping Default Chat available", async () => {
+    const { element } = await renderComposer({ agentOptions: searchableAgents });
+    const agentButton = element.querySelector('[aria-label="Agent runner: Default Chat"]');
+    expect(agentButton).toBeInstanceOf(HTMLButtonElement);
+    const agentButtonElement = agentButton as HTMLButtonElement;
+
+    await act(async () => {
+      agentButtonElement.click();
+    });
+    const searchInput = element.querySelector('[aria-label="Search agents"]');
+    expect(searchInput).toBeInstanceOf(HTMLInputElement);
+
+    await act(async () => {
+      changeInputValue(searchInput as HTMLInputElement, "ops-reviewer");
+    });
+
+    expect(element.textContent).toContain("Default Chat");
+    expect(element.textContent).toContain("Operations Reviewer");
+    expect(element.textContent).not.toContain("Social Video Content Strategist");
+    expect(element.textContent).not.toContain("No agent catalog available");
+  });
+
+  it("shows a filtered empty state without hiding Default Chat", async () => {
+    const { element } = await renderComposer({ agentOptions: searchableAgents });
+    const agentButton = element.querySelector('[aria-label="Agent runner: Default Chat"]');
+    expect(agentButton).toBeInstanceOf(HTMLButtonElement);
+    const agentButtonElement = agentButton as HTMLButtonElement;
+
+    await act(async () => {
+      agentButtonElement.click();
+    });
+    const searchInput = element.querySelector('[aria-label="Search agents"]');
+    expect(searchInput).toBeInstanceOf(HTMLInputElement);
+
+    await act(async () => {
+      changeInputValue(searchInput as HTMLInputElement, "finance");
+    });
+
+    expect(element.textContent).toContain("Default Chat");
+    expect(element.textContent).toContain("No matching agents");
+    expect(element.textContent).not.toContain("No agent catalog available");
+    expect(element.textContent).not.toContain("Operations Reviewer");
+  });
+
+  it("selects a filtered agent runner with ArrowDown and Enter", async () => {
+    const onSelectAgent = vi.fn();
+    const { element } = await renderComposer({ agentOptions: searchableAgents, onSelectAgent });
+    const agentButton = element.querySelector('[aria-label="Agent runner: Default Chat"]');
+    expect(agentButton).toBeInstanceOf(HTMLButtonElement);
+
+    await act(async () => {
+      (agentButton as HTMLButtonElement).click();
+    });
+    const searchInput = element.querySelector('[aria-label="Search agents"]');
+    expect(searchInput).toBeInstanceOf(HTMLInputElement);
+
+    await act(async () => {
+      changeInputValue(searchInput as HTMLInputElement, "video");
+      searchInput!.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "ArrowDown" }));
+      searchInput!.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Enter" }));
+    });
+
+    expect(onSelectAgent).toHaveBeenCalledWith("agent-type-social-video-content-strategist");
+  });
+
+  it("closes the agent selector with Escape and restores focus to the trigger", async () => {
+    const { element } = await renderComposer({ agentOptions: searchableAgents });
+    const agentButton = element.querySelector('[aria-label="Agent runner: Default Chat"]');
+    expect(agentButton).toBeInstanceOf(HTMLButtonElement);
+    const agentButtonElement = agentButton as HTMLButtonElement;
+
+    await act(async () => {
+      agentButtonElement.click();
+    });
+    const searchInput = element.querySelector('[aria-label="Search agents"]');
+    expect(searchInput).toBeInstanceOf(HTMLInputElement);
+    await act(async () => {
+      changeInputValue(searchInput as HTMLInputElement, "ops");
+      searchInput!.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Escape" }));
+    });
+
+    expect(agentButtonElement.getAttribute("aria-expanded")).toBe("false");
+    expect(element.querySelector('[aria-label="Search agents"]')).toBeNull();
+    expect(document.activeElement).toBe(agentButtonElement);
+  });
+
+  it("does not select an agent runner while IME composition is confirming", async () => {
+    const onSelectAgent = vi.fn();
+    const { element } = await renderComposer({ onSelectAgent });
+    const agentButton = element.querySelector('[aria-label="Agent runner: Default Chat"]');
+    expect(agentButton).toBeInstanceOf(HTMLButtonElement);
+    const agentButtonElement = agentButton as HTMLButtonElement;
+
+    await act(async () => {
+      agentButtonElement.click();
+    });
+    const searchInput = element.querySelector('[aria-label="Search agents"]');
+    expect(searchInput).toBeInstanceOf(HTMLInputElement);
+    const enterEvent = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "Enter" });
+    Object.defineProperty(enterEvent, "isComposing", { value: true });
+
+    await act(async () => {
+      searchInput!.dispatchEvent(enterEvent);
+    });
+
+    expect(onSelectAgent).not.toHaveBeenCalled();
+    expect(enterEvent.defaultPrevented).toBe(false);
+    expect(agentButtonElement.getAttribute("aria-expanded")).toBe("true");
   });
 
   it("keeps the agent selector open after a mobile tap sequence", async () => {

@@ -18,8 +18,9 @@ export function canInlinePreview(file: StorageFile) {
   return ['image', 'video', 'audio', 'text', 'markdown', 'pdf', 'document', 'presentation', 'spreadsheet'].includes(file.preview_kind);
 }
 
-function canCardAssetPreview(file: StorageFile) {
-  return file.preview_kind === 'image' || file.preview_kind === 'video';
+function canCardAssetPreview(_file: StorageFile) {
+  // Card thumbnails are intentionally click-to-preview only; eager backend previews can fan out during navigation.
+  return false;
 }
 
 function fileCardFormatForFile(file: StorageFile): FileCardFormat {
@@ -181,7 +182,7 @@ function CardImagePreview({ src }: { src: string }) {
 
 export function StoragePreview({ file, loading = false, previewUrl, previewText, previewTable }: { file: StorageFile; loading?: boolean; previewUrl: string; previewText: string; previewTable?: PreviewTablePayload }) {
   if (loading) return <FileTypeFallback file={file} loading />;
-  if (canTablePreview(file)) return <SpreadsheetPreview table={previewTable} />;
+  if (canTablePreview(file) && previewTable) return <SpreadsheetPreview table={previewTable} />;
   if (file.preview_kind === 'image' && previewUrl) return <img src={previewUrl} alt={file.name} />;
   if (file.preview_kind === 'video' && previewUrl) return <video src={previewUrl} controls />;
   if (file.preview_kind === 'audio' && previewUrl) return <audio src={previewUrl} controls />;

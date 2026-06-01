@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { createRoot } from 'react-dom/client';
-import { callBackend, decodeBase64, readFile } from '../../storageApi';
+import { callBackend, decodeBase64, previewDriveFile, readFile } from '../../storageApi';
 import { iconForKind, kindLabels } from '../../storageMeta';
 import { Icon } from '../../Icon';
 import { MarkdownPreview } from '../../markdownPreview';
@@ -45,6 +45,7 @@ function firstString(...values: unknown[]) {
 function fileReference(payload: Record<string, unknown>) {
   const nested = typeof payload.file === 'object' && payload.file !== null ? payload.file as Record<string, unknown> : {};
   return {
+    file_id: firstString(payload.file_id, payload.id, payload.entity_id, nested.file_id, nested.id, nested.entity_id),
     role: firstString(payload.role, nested.role),
     relative_path: firstString(payload.relative_path, nested.relative_path),
     workspace_relative_path: firstString(payload.workspace_relative_path, nested.workspace_relative_path, payload.path, nested.path)
@@ -52,7 +53,11 @@ function fileReference(payload: Record<string, unknown>) {
 }
 
 function canInlinePreview(file: StorageFile) {
-  return ['image', 'video', 'audio', 'text', 'markdown', 'pdf'].includes(file.preview_kind);
+  return ['image', 'video', 'audio', 'text', 'markdown', 'pdf', 'document', 'presentation', 'spreadsheet'].includes(file.preview_kind);
+}
+
+function isDriveFile(file: StorageFile) {
+  return file.provider === 'google_drive';
 }
 
 function openStorage(file?: StorageFile) {
@@ -96,6 +101,7 @@ function Preview({ file, previewUrl, previewText }: { file: StorageFile; preview
   if (file.preview_kind === 'pdf' && previewUrl) return <iframe src={previewUrl} title={file.name} />;
   if (file.preview_kind === 'markdown') return <MarkdownPreview text={previewText} compact />;
   if (file.preview_kind === 'text') return <pre>{previewText}</pre>;
+  if (['document', 'presentation', 'spreadsheet'].includes(file.preview_kind) && previewText) return <pre>{previewText}</pre>;
   return (
     <div className="file-widget__fallback">
       <Icon name={iconForKind(file.preview_kind)} />
@@ -157,10 +163,16 @@ function StorageFilePreviewWidget() {
     if (!file || !canInlinePreview(file)) return;
     let active = true;
     let objectUrl = '';
-    readFile(file, PREVIEW_BYTES)
+    const previewRequest = isDriveFile(file) ? previewDriveFile(file, PREVIEW_BYTES) : readFile(file, PREVIEW_BYTES);
+    previewRequest
       .then(async (payload) => {
         if (!active) return;
-        const blob = decodeBase64(payload.content_base64, payload.file.content_type);
+        if ('preview_text' in payload) {
+          setPreviewText(payload.preview_text || '');
+          return;
+        }
+        if (!payload.content_base64) return;
+        const blob = decodeBase64(payload.content_base64, payload.content_type || payload.file.content_type);
         if (['text', 'markdown'].includes(payload.file.preview_kind)) {
           const text = await blob.text();
           if (active) setPreviewText(text);

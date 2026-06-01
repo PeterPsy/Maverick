@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import type { ColorClasses, Event, ViewProps } from "./calendar-types"
 import { EventCard } from "./calendar-event-card"
-import { eventsForDate, eventsForHour, formatTime } from "./calendar-utils"
+import { eventsForDate, eventsForHour, eventsForListDate, formatTime } from "./calendar-utils"
 
 export function MonthView(props: ViewProps & { onDrop: (date: Date) => void }) {
   const firstDayOfMonth = new Date(props.currentDate.getFullYear(), props.currentDate.getMonth(), 1)
@@ -102,9 +102,19 @@ export function DayView(props: ViewProps & { onDrop: (date: Date, hour: number) 
   )
 }
 
-export function ListView({ events, onEventClick, getColorClasses }: { events: Event[]; onEventClick: (event: Event) => void; getColorClasses: (color: string) => ColorClasses }) {
-  const sortedEvents = [...events].sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
-  const groupedEvents = sortedEvents.reduce(
+export function ListView({
+  currentDate,
+  events,
+  onEventClick,
+  getColorClasses,
+}: {
+  currentDate: Date
+  events: Event[]
+  onEventClick: (event: Event) => void
+  getColorClasses: (color: string) => ColorClasses
+}) {
+  const listEvents = eventsForListDate(events, currentDate)
+  const groupedEvents = listEvents.reduce(
     (acc, event) => {
       const dateKey = event.startTime.toLocaleDateString("en-US", {
         weekday: "long",
@@ -167,7 +177,7 @@ export function ListView({ events, onEventClick, getColorClasses }: { events: Ev
             </div>
           </div>
         ))}
-        {sortedEvents.length === 0 && <div className="py-12 text-center text-sm text-muted-foreground sm:text-base">No events found</div>}
+        {listEvents.length === 0 && <div className="py-12 text-center text-sm text-muted-foreground sm:text-base">No events found</div>}
       </div>
     </Card>
   )

@@ -158,6 +158,27 @@ export function reconcileWindowsWithThreads(
   });
 }
 
+export function selectSingleFloatingWindowThread(windows: FloatingChatWindow[], windowId: string, threadId: string) {
+  const sourceWindow = windows.find((windowItem) => windowItem.id === windowId) || null;
+  if (!sourceWindow) {
+    const nextWindow = createWindow(threadId);
+    return { windowId: nextWindow.id, windows: [...windows, nextWindow] };
+  }
+  const nextWindow = {
+    ...sourceWindow,
+    draftProjectId: null,
+    isCollapsed: false,
+    isDraft: false,
+    threadId,
+  };
+  return {
+    windowId: sourceWindow.id,
+    windows: windows
+      .filter((windowItem) => windowItem.id === sourceWindow.id || windowItem.threadId !== threadId)
+      .map((windowItem) => (windowItem.id === sourceWindow.id ? nextWindow : windowItem)),
+  };
+}
+
 function windowFromPersistedState(windowItem: PersistedFloatingChatWindow): FloatingChatWindow {
   return {
     draftProjectId: typeof windowItem.draftProjectId === "string" ? windowItem.draftProjectId : null,

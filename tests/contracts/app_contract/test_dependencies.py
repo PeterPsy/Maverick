@@ -114,6 +114,97 @@ class AppDependenciesTest(AppHostingTestBase):
             )
             self.assertEqual(cli_payload["status"], "resolved")
 
+    def test_crm_dependencies_resolve_provider_candidates_for_settings_app_links(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repo_root = self.make_repo_root(temp_dir)
+            store = self.make_store()
+            mail_root = self._write_app(
+                repo_root,
+                app_id="mail",
+                contract=build_app_contract(
+                    provides=[
+                        build_provided_interface_declaration(
+                            interface="mail.workspace",
+                            description="Mail workspace.",
+                            surfaces=["backend", "mcp", "cli"],
+                        )
+                    ],
+                    lifecycle=build_app_lifecycle(install=False),
+                ),
+            )
+            calendar_root = self._write_app(
+                repo_root,
+                app_id="calendar",
+                contract=build_app_contract(
+                    provides=[
+                        build_provided_interface_declaration(
+                            interface="calendar.events",
+                            description="Calendar events.",
+                            surfaces=["backend", "mcp", "cli"],
+                        )
+                    ],
+                    lifecycle=build_app_lifecycle(install=False),
+                ),
+            )
+            storage_root = self._write_app(
+                repo_root,
+                app_id="storage",
+                contract=build_app_contract(
+                    provides=[
+                        build_provided_interface_declaration(
+                            interface="file.catalog",
+                            description="File catalog.",
+                            surfaces=["backend", "mcp", "cli"],
+                        ),
+                        build_provided_interface_declaration(
+                            interface="file.preview",
+                            description="File preview.",
+                            surfaces=["backend", "mcp"],
+                        ),
+                        build_provided_interface_declaration(
+                            interface="file.content.write",
+                            description="File writes.",
+                            surfaces=["backend", "mcp", "cli"],
+                        ),
+                    ],
+                    lifecycle=build_app_lifecycle(install=False),
+                ),
+            )
+            crm_root = self._write_app(
+                repo_root,
+                app_id="crm",
+                contract=build_app_contract(
+                    requires=[
+                        build_required_interface_declaration(alias="mail", interface="mail.workspace", required=False, description="CRM mail provider."),
+                        build_required_interface_declaration(alias="calendar", interface="calendar.events", required=False, description="CRM calendar provider."),
+                        build_required_interface_declaration(alias="files", interface="file.catalog", required=False, description="CRM file catalog provider."),
+                        build_required_interface_declaration(alias="file-preview", interface="file.preview", required=False, description="CRM file preview provider."),
+                        build_required_interface_declaration(alias="file-write", interface="file.content.write", required=False, description="CRM file write provider."),
+                    ],
+                    lifecycle=build_app_lifecycle(install=False),
+                ),
+            )
+            for app_root in (mail_root, calendar_root, storage_root, crm_root):
+                self._register_and_install(store, app_root, workspace_id="default", start_path=repo_root)
+
+            payload = resolve_app_dependencies(
+                store,
+                workspace_id="default",
+                consumer_app_id="crm",
+                start_path=repo_root,
+            )
+
+            self.assertEqual(payload["status"], "resolved")
+            candidates_by_alias = {
+                item["alias"]: [candidate["app_id"] for candidate in item["candidates"]]
+                for item in payload["dependencies"]
+            }
+            self.assertEqual(candidates_by_alias["mail"], ["mail"])
+            self.assertEqual(candidates_by_alias["calendar"], ["calendar"])
+            self.assertEqual(candidates_by_alias["files"], ["storage"])
+            self.assertEqual(candidates_by_alias["file-preview"], ["storage"])
+            self.assertEqual(candidates_by_alias["file-write"], ["storage"])
+
     def test_reports_stale_selection_when_provider_is_disabled(self) -> None:
         with TemporaryDirectory() as temp_dir:
             repo_root = self.make_repo_root(temp_dir)

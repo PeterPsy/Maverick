@@ -1,5 +1,59 @@
-import { PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
+import {
+  KeyboardEvent as ReactKeyboardEvent,
+  PointerEvent as ReactPointerEvent,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { AgentTypeSummary } from "../api/client";
+
+type AgentMenuOption =
+  | {
+      agentTypeId: "";
+      description: string;
+      key: "default";
+      label: string;
+    }
+  | {
+      agentTypeId: string;
+      description: string;
+      key: string;
+      label: string;
+    };
+
+const defaultAgentOption: AgentMenuOption = {
+  agentTypeId: "",
+  description: "Use the standard Chat runtime prompt.",
+  key: "default",
+  label: "Default Chat",
+};
+
+function normalizeAgentQuery(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function normalizedAgentSearchText(agent: AgentTypeSummary) {
+  return [agent.name, agent.description, agent.role_id].join(" ").toLowerCase();
+}
+
+function agentMatchesQuery(agent: AgentTypeSummary, normalizedQuery: string) {
+  return !normalizedQuery || normalizedAgentSearchText(agent).includes(normalizedQuery);
+}
+
+function agentToMenuOption(agent: AgentTypeSummary): AgentMenuOption {
+  return {
+    agentTypeId: agent.id,
+    description: agent.description,
+    key: agent.id,
+    label: agent.name,
+  };
+}
+
+function buildMenuOptions(agents: AgentTypeSummary[]) {
+  return [defaultAgentOption, ...agents.map(agentToMenuOption)];
+}
 
 export function AgentSelector({
   agents,
@@ -14,14 +68,61 @@ export function AgentSelector({
   onSelect: (agentTypeId: string) => void;
   selectedAgentTypeId: string;
 }) {
+  const menuId = useId();
   const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [activeIndex, setActiveIndex] = useState(0);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const activeIndexRef = useRef(0);
   const suppressNextClickRef = useRef(false);
   const suppressClickResetRef = useRef<number | null>(null);
   const selectedAgent = agents.find((agent) => agent.id === selectedAgentTypeId) || null;
   const label = selectedAgent?.name || "Default Chat";
   const isDisabled = disabled || locked;
+  const normalizedQuery = normalizeAgentQuery(query);
+  const filteredAgents = useMemo(
+    () => agents.filter((agent) => agentMatchesQuery(agent, normalizedQuery)),
+    [agents, normalizedQuery],
+  );
+  const menuOptions = useMemo(() => buildMenuOptions(filteredAgents), [filteredAgents]);
+  const activeOption = menuOptions[activeIndex] || menuOptions[0];
+  const activeOptionId = activeOption ? `${menuId}-option-${activeOption.key}` : undefined;
+
+  function selectedOptionIndex(options: AgentMenuOption[]) {
+    if (!selectedAgentTypeId) {
+      return 0;
+    }
+    const optionIndex = options.findIndex((option) => option.agentTypeId === selectedAgentTypeId);
+    return optionIndex >= 0 ? optionIndex : 0;
+  }
+
+  function openMenu() {
+    const unfilteredOptions = buildMenuOptions(agents);
+    setQuery("");
+    const nextActiveIndex = selectedOptionIndex(unfilteredOptions);
+    activeIndexRef.current = nextActiveIndex;
+    setActiveIndex(nextActiveIndex);
+    setIsOpen(true);
+  }
+
+  function closeMenu({ restoreFocus = false }: { restoreFocus?: boolean } = {}) {
+    setIsOpen(false);
+    setQuery("");
+    activeIndexRef.current = 0;
+    setActiveIndex(0);
+    if (restoreFocus) {
+      buttonRef.current?.focus();
+    }
+  }
+
+  function moveActiveOption(direction: 1 | -1) {
+    const optionCount = menuOptions.length;
+    const nextIndex = optionCount ? (activeIndexRef.current + direction + optionCount) % optionCount : 0;
+    activeIndexRef.current = nextIndex;
+    setActiveIndex(nextIndex);
+  }
 
   useEffect(() => {
     if (!isOpen) {
@@ -32,12 +133,11 @@ export function AgentSelector({
       if (!target || panelRef.current?.contains(target) || buttonRef.current?.contains(target)) {
         return;
       }
-      setIsOpen(false);
+      closeMenu();
     };
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape") {
-        setIsOpen(false);
-        buttonRef.current?.focus();
+        closeMenu({ restoreFocus: true });
       }
     };
     document.addEventListener("pointerdown", handlePointerDown);
@@ -49,6 +149,27 @@ export function AgentSelector({
   }, [isOpen]);
 
   useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      searchInputRef.current?.focus();
+    });
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+    const nextIndex = Math.min(activeIndexRef.current, Math.max(menuOptions.length - 1, 0));
+    activeIndexRef.current = nextIndex;
+    setActiveIndex(nextIndex);
+  }, [isOpen, menuOptions.length]);
+
+  useEffect(() => {
     return () => {
       if (suppressClickResetRef.current !== null) {
         window.clearTimeout(suppressClickResetRef.current);
@@ -58,7 +179,51 @@ export function AgentSelector({
 
   function selectAgent(agentTypeId: string) {
     onSelect(agentTypeId);
-    setIsOpen(false);
+    closeMenu();
+  }
+
+  function handleQueryChange(value: string) {
+    const nextNormalizedQuery = normalizeAgentQuery(value);
+    const nextFilteredAgents = agents.filter((agent) => agentMatchesQuery(agent, nextNormalizedQuery));
+    const nextOptions = buildMenuOptions(nextFilteredAgents);
+    const nextActiveIndex = selectedOptionIndex(nextOptions);
+    setQuery(value);
+    activeIndexRef.current = nextActiveIndex;
+    setActiveIndex(nextActiveIndex);
+  }
+
+  function selectActiveOption() {
+    const option = menuOptions[activeIndexRef.current] || menuOptions[0];
+    if (!option) {
+      return;
+    }
+    selectAgent(option.agentTypeId);
+  }
+
+  function handleSearchKeyDown(event: ReactKeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      closeMenu({ restoreFocus: true });
+      return;
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      moveActiveOption(1);
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      moveActiveOption(-1);
+      return;
+    }
+    if (event.key === "Enter") {
+      if (event.nativeEvent.isComposing) {
+        return;
+      }
+      event.preventDefault();
+      selectActiveOption();
+    }
   }
 
   function handleTriggerPointerDown(event: ReactPointerEvent<HTMLButtonElement>) {
@@ -75,7 +240,11 @@ export function AgentSelector({
       suppressNextClickRef.current = false;
       suppressClickResetRef.current = null;
     }, 700);
-    setIsOpen((current) => !current);
+    if (isOpen) {
+      closeMenu();
+    } else {
+      openMenu();
+    }
   }
 
   function handleTriggerClick() {
@@ -87,7 +256,11 @@ export function AgentSelector({
       }
       return;
     }
-    setIsOpen((current) => !current);
+    if (isOpen) {
+      closeMenu();
+    } else {
+      openMenu();
+    }
   }
 
   return (
@@ -109,35 +282,53 @@ export function AgentSelector({
         </span>
       </button>
       {isOpen ? (
-        <div aria-label="Choose agent runner" className="chatapp-agent-menu" ref={panelRef} role="listbox">
-          <button
-            aria-selected={!selectedAgentTypeId}
-            className={`chatapp-agent-menu__item ${!selectedAgentTypeId ? "is-active" : ""}`}
-            onClick={() => {
-              selectAgent("");
-            }}
-            role="option"
-            type="button"
-          >
-            <span className="chatapp-agent-menu__name">Default Chat</span>
-            <span className="chatapp-agent-menu__description">Use the standard Chat runtime prompt.</span>
-          </button>
-          {agents.map((agent) => (
+        <div
+          aria-activedescendant={activeOptionId}
+          aria-label="Choose agent runner"
+          className="chatapp-agent-menu"
+          id={menuId}
+          ref={panelRef}
+          role="listbox"
+        >
+          <div className="chatapp-agent-menu__search">
+            <input
+              aria-activedescendant={activeOptionId}
+              aria-controls={menuId}
+              aria-label="Search agents"
+              className="chatapp-agent-menu__search-input"
+              onChange={(event) => {
+                handleQueryChange(event.currentTarget.value);
+              }}
+              onKeyDown={handleSearchKeyDown}
+              placeholder="Search agents"
+              ref={searchInputRef}
+              type="search"
+              value={query}
+            />
+          </div>
+          {menuOptions.map((option, optionIndex) => (
             <button
-              aria-selected={agent.id === selectedAgentTypeId}
-              className={`chatapp-agent-menu__item ${agent.id === selectedAgentTypeId ? "is-active" : ""}`}
-              key={agent.id}
+              aria-selected={option.agentTypeId === selectedAgentTypeId}
+              className={`chatapp-agent-menu__item ${option.agentTypeId === selectedAgentTypeId ? "is-active" : ""} ${optionIndex === activeIndex ? "is-highlighted" : ""}`}
+              data-agent-option-index={optionIndex}
+              id={`${menuId}-option-${option.key}`}
+              key={option.key}
               onClick={() => {
-                selectAgent(agent.id);
+                selectAgent(option.agentTypeId);
+              }}
+              onMouseEnter={() => {
+                activeIndexRef.current = optionIndex;
+                setActiveIndex(optionIndex);
               }}
               role="option"
               type="button"
             >
-              <span className="chatapp-agent-menu__name">{agent.name}</span>
-              {agent.description ? <span className="chatapp-agent-menu__description">{agent.description}</span> : null}
+              <span className="chatapp-agent-menu__name">{option.label}</span>
+              {option.description ? <span className="chatapp-agent-menu__description">{option.description}</span> : null}
             </button>
           ))}
           {!agents.length ? <div className="chatapp-agent-menu__empty">No agent catalog available</div> : null}
+          {agents.length && !filteredAgents.length ? <div className="chatapp-agent-menu__empty">No matching agents</div> : null}
         </div>
       ) : null}
     </div>

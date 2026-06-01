@@ -8,6 +8,7 @@ import {
   calendarSourceOptions,
   calendarSourcePatch,
   eventIsReadOnly,
+  eventsForListDate,
   eventSourceDetails,
   isWritableGoogleAccessRole,
   selectedCalendarSourceValue,
@@ -84,6 +85,10 @@ describe("calendar viewport helpers", () => {
         "month",
       ),
     ).toMatchObject({ view: "week" })
+  })
+
+  it("keeps list views anchored to the selected date", () => {
+    expect(eventsForListDate(events, new Date("2026-01-04T12:00:00Z")).map((item) => item.id)).toEqual(["evt_2"])
   })
 
   it("builds stable signatures from normalized view-state fields", () => {

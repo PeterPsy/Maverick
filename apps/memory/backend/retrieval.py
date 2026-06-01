@@ -8,6 +8,7 @@ import sqlite3
 from typing import Any
 
 from database import connect, ensure_schema, normalize_limit, record_event, row_payload
+from storage_reference_payloads import storage_references_for_node
 from wiki_queries import compact_compiled_payload, search_compiled_node_ids
 
 TOKEN_PATTERN = re.compile(r"[A-Za-z0-9_]+")
@@ -46,6 +47,7 @@ def search_nodes(data_root: Path, query: str, *, limit: int = 10) -> list[dict[s
         results = [row_payload(row) or {} for row in rows]
         for result in results:
             result["match_sources"] = ["node"]
+            result["storage_references"] = storage_references_for_node(db, result["id"])
         if len(results) < normalized_limit:
             known_ids = {result["id"] for result in results}
             compiled_matches = search_compiled_node_ids(db, query, limit=normalized_limit)
@@ -63,6 +65,7 @@ def search_nodes(data_root: Path, query: str, *, limit: int = 10) -> list[dict[s
                     continue
                 payload = row_payload(node_row) or {}
                 payload["match_sources"] = [match_source]
+                payload["storage_references"] = storage_references_for_node(db, payload["id"])
                 results.append(payload)
                 known_ids.add(node_id)
                 if len(results) >= normalized_limit:
@@ -83,6 +86,7 @@ def search_nodes(data_root: Path, query: str, *, limit: int = 10) -> list[dict[s
             results = [row_payload(row) or {} for row in rows]
             for result in results:
                 result["match_sources"] = ["node"]
+                result["storage_references"] = storage_references_for_node(db, result["id"])
         return results[:normalized_limit]
 
 
@@ -100,6 +104,7 @@ def context_payload(data_root: Path, query: str, *, limit: int = 8, record_acces
                 row_payload(row) or {}
                 for row in db.execute("SELECT * FROM external_refs WHERE node_id = ? ORDER BY created_at", (node["id"],))
             ]
+            storage_references = storage_references_for_node(db, node["id"])
             items.append(
                 {
                     "node_id": node["id"],
@@ -108,6 +113,7 @@ def context_payload(data_root: Path, query: str, *, limit: int = 8, record_acces
                     "summary": node["summary"] or node["body_text"][:280],
                     "relevance": round(max(0.1, 1.0 - (index * 0.08)), 3),
                     "provenance": refs,
+                    "storage_references": storage_references,
                     "compiled": compact_compiled_payload(db, node["id"], data_root=data_root),
                 }
             )
@@ -135,6 +141,7 @@ def context_payload(data_root: Path, query: str, *, limit: int = 8, record_acces
                         "relevance": round(float(related_payload.get("weight") or 0.5) * float(related_payload.get("confidence") or 1.0), 3),
                         "reason": related_payload.get("reason") or f"Related through {related_payload.get('kind')}",
                         "provenance": [],
+                        "storage_references": storage_references_for_node(db, related_payload["id"]),
                         "compiled": compact_compiled_payload(db, related_payload["id"], data_root=data_root),
                     }
                 )

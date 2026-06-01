@@ -591,7 +591,7 @@ button {
 
 .storage-sidebar-widget.is-shell-mobile {
   --storage-sidebar-scroll-under-bottom: 5.1rem;
-  --storage-sidebar-scroll-under-top: 5.86rem;
+  --storage-sidebar-scroll-under-top: 3.12rem;
 }
 
 .storage-sidebar-footer-widget {

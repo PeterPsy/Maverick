@@ -2,8 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import type { AppRegistryItem } from "../src/api";
-import { sidebarMobileRailApps, sidebarRailButtonClassName } from "../src/components/Sidebar";
+import { sidebarRailButtonClassName } from "../src/components/Sidebar";
 import { calculateSidebarRailMetrics } from "../src/lib/sidebarRailMetrics";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
@@ -16,39 +15,7 @@ function readSource(filename: string): string {
   return readFileSync(resolve(currentDir, "../src", filename), "utf8");
 }
 
-function app(app_id: string): AppRegistryItem {
-  return {
-    app_id,
-    backend_mount: "",
-    description: "",
-    distribution_mode: "sealed",
-    frontend_mount: `/apps/${app_id}/`,
-    frontend_role: "workspace",
-    frontend_launchable: true,
-    logo: null,
-    name: app_id,
-    publisher: "maverick",
-    source_access: "none",
-    status: "enabled",
-    version: "1.0.0",
-    provides: [],
-    requires: [],
-    views: [],
-  };
-}
-
-describe("Sidebar mobile app rail", () => {
-  it("hides the active app from the mobile app rail", () => {
-    expect(sidebarMobileRailApps([app("chat"), app("docs"), app("app-store")], "chat").map((item) => item.app_id)).toEqual([
-      "docs",
-      "app-store",
-    ]);
-  });
-
-  it("keeps all apps when no app is active", () => {
-    expect(sidebarMobileRailApps([app("chat"), app("docs")], null).map((item) => item.app_id)).toEqual(["chat", "docs"]);
-  });
-
+describe("Sidebar app rail", () => {
   it("marks the active rail app without adding runtime busy chrome", () => {
     expect(sidebarRailButtonClassName("chat", "chat")).toContain("is-active");
     expect(sidebarRailButtonClassName("chat", "chat")).not.toContain("is-busy");
@@ -125,22 +92,45 @@ describe("Sidebar desktop layout contract", () => {
     const mobileAppGridRule = readStyle("panels.css").match(/\.bs-shell\.is-mobile-layout \.bs-app-grid-panel,[\s\S]*?\n\}/)?.[0] ?? "";
 
     expect(appShellSource).toContain("<MobileShellHeader");
+    expect(appShellSource).toContain("<FloatingChatHost");
+    expect(appShellSource).not.toContain("<MobileChatPanel");
+    expect(appShellSource).not.toContain("<RightDockPanel");
+    expect(appShellSource).not.toContain("<ShellOverlayWidgets");
+    expect(appShellSource).toContain("<MobilePinnedAppsPanel");
     expect(appShellSource).toContain("mobilePrimaryActionRequestId");
     expect(appShellSource).toContain("newChatRouteParams()");
+    expect(appShellSource).toContain("onOpenMobileChat={openMobileChatPanel}");
+    expect(appShellSource).toContain("onCloseMobileChat={closeMobileChatPanel}");
+    expect(appShellSource).toContain("showMobileChatAction={!isChatAppActive}");
     expect(appShellSource).toContain("onOpenNewChat={openNewChat}");
+    expect(appShellSource).toContain("onToggleSidebar={toggleMobileSidebar}");
+    expect(appShellSource).toContain("onTogglePinnedApps={toggleMobilePinnedApps}");
     expect(headerSource).toContain('SIDEBAR_DESKTOP_LOGO_SRC = "/apps/base-shell/sidebar-logo.svg"');
-    expect(headerSource).toContain('aria-label="Apri sidebar"');
+    expect(headerSource).toContain('aria-label={isSidebarOpen ? "Chiudi sidebar" : "Apri sidebar"}');
+    expect(headerSource).toContain('aria-label={isPinnedAppsOpen ? "Chiudi applicazioni pinnate" : "Apri applicazioni pinnate"}');
     expect(headerSource).toContain('aria-label="Nuova chat"');
+    expect(headerSource).toContain('"Apri chat contestuale"');
+    expect(headerSource).toContain('"Chiudi chat contestuale"');
     expect(headerSource).toContain('className="bs-app-logo--rail bs-mobile-shell-header__app-logo"');
+    expect(headerSource).toContain('className="bs-app-logo--rail bs-mobile-shell-header__chat-logo"');
+    expect(headerSource).toContain("bs-mobile-shell-header__burger");
+    expect(headerSource).not.toContain("<span />\n            <span />\n            <span />");
     expect(headerSource).toContain("bs-mobile-shell-header__logo-button");
     expect(headerSource).toContain("bs-mobile-shell-header__primary-action");
+    expect(headerSource).toContain("bs-mobile-shell-header__chat-action");
     expect(layoutStyles).toContain(".bs-mobile-shell-header");
+    expect(layoutStyles).toContain(".bs-mobile-pinned-apps");
+    expect(layoutStyles).toContain(".bs-floating-chat-host.is-mobile-fullscreen");
+    expect(layoutStyles).toContain("top: var(--bs-mobile-shell-content-top-offset);");
+    expect(layoutStyles).toContain("transform: translateX(-100%);");
+    expect(layoutStyles).not.toContain(".bs-mobile-shell-header__chat-action.is-open");
     expect(layoutStyles).toContain("--bs-mobile-shell-status-bar-height: env(safe-area-inset-top, 0px);");
     expect(layoutStyles).toContain("--bs-mobile-shell-header-height: 2.75rem;");
     expect(layoutStyles).toContain("var(--bs-mobile-shell-status-bar-height) +");
     expect(statusBarRule).toContain("height: var(--bs-mobile-shell-status-bar-height);");
     expect(statusBarRule).toContain("linear-gradient(180deg, rgba(7, 7, 8, 0.42), rgba(7, 7, 8, 0.18) 42%, transparent 78%);");
     expect(headerRule).toContain("top: var(--bs-mobile-shell-status-bar-height);");
+    expect(headerRule).toContain("z-index: 46;");
     expect(headerRule).toContain("border: 0;");
     expect(headerRule).toContain("background: transparent;");
     expect(headerRule).toContain("box-shadow: none;");
@@ -149,7 +139,42 @@ describe("Sidebar desktop layout contract", () => {
     expect(headerAppLogoRule).toContain("background: transparent;");
     expect(headerAppLogoRule).toContain("box-shadow: none;");
     expect(mobileWorkspaceRule).toContain("padding-top: 0;");
+    expect(layoutStyles).toContain(".bs-mobile-pinned-apps__button.is-active .bs-mobile-pinned-apps__logo.bs-app-logo");
+    expect(layoutStyles).toContain(".bs-mobile-pinned-apps__button.is-active .bs-mobile-pinned-apps__name");
+    expect(layoutStyles).toContain("background: transparent;");
+    expect(layoutStyles).toContain("border-color: rgba(255, 255, 255, 0.88);");
     expect(mobileAppGridRule).toContain("padding-top: calc(var(--bs-mobile-shell-content-top-offset) + 2rem);");
+  });
+
+  it("keeps the contextual chat iframe mounted while the shell changes placement", () => {
+    const appShellSource = readSource("AppShell.tsx");
+    const hostSource = readSource("components/FloatingChatHost.tsx");
+    const widgetSlotSource = readSource("components/WidgetSlot.tsx");
+    const layoutStyles = readStyle("layout.css");
+
+    expect(appShellSource).toContain("<FloatingChatHost");
+    expect(hostSource).toContain('contentKind="shell.overlay.bottomright"');
+    expect(hostSource).toContain("mode: placement");
+    expect(hostSource).toContain("size={widgetSize}");
+    expect(layoutStyles).toContain(".bs-floating-chat-host__resize-handle");
+    expect(layoutStyles).toContain("pointer-events: auto;");
+    expect(widgetSlotSource).toContain(
+      "[activeWorkspaceId, contentKind, hostAppId, onPrimaryActionStateChange, preferredOwnerAppId, supportsPrimaryActionSlot]",
+    );
+    expect(widgetSlotSource).not.toContain(
+      "[activeWorkspaceId, contentKind, hostAppId, onPrimaryActionStateChange, preferredOwnerAppId, size, supportsPrimaryActionSlot]",
+    );
+  });
+
+  it("removes the mobile sidebar rail and reserves header space", () => {
+    const sidebarSource = readSource("components/Sidebar.tsx");
+    const sidebarStyles = readStyle("sidebar.css");
+    const responsiveStyles = readStyle("responsive.css");
+
+    expect(sidebarSource).not.toContain("bs-sidebar__mobile-apps");
+    expect(sidebarStyles).not.toContain(".bs-sidebar__mobile-apps");
+    expect(responsiveStyles).not.toContain(".bs-sidebar__mobile-apps");
+    expect(responsiveStyles).toContain("calc(var(--bs-mobile-shell-content-top-offset) + 0.75rem)");
   });
 });
 

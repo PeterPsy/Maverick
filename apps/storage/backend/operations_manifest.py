@@ -46,6 +46,7 @@ STORAGE_ACTIONS = [
     "drive_preview",
     "drive_export",
     "drive_index",
+    "drive_mark_indexed",
     "drive_write",
     "drive_rename",
     "drive_move",
@@ -97,6 +98,7 @@ def operations_manifest_payload() -> dict[str, Any]:
             {"surface": "mcp", "name": "storage_drive_preview", "operation": "drive_preview"},
             {"surface": "mcp", "name": "storage_drive_export", "operation": "drive_export"},
             {"surface": "mcp", "name": "storage_drive_index", "operation": "drive_index"},
+            {"surface": "mcp", "name": "storage_drive_mark_indexed", "operation": "drive_mark_indexed"},
             {"surface": "mcp", "name": "storage_drive_write", "operation": "drive_write", "tool_profile": "remote_write"},
             {"surface": "mcp", "name": "storage_drive_rename", "operation": "drive_rename", "tool_profile": "remote_write"},
             {"surface": "mcp", "name": "storage_drive_move", "operation": "drive_move", "tool_profile": "remote_write"},
@@ -210,7 +212,7 @@ def operations_manifest_payload() -> dict[str, Any]:
                 "action": "drive_list_roots",
                 "description": "List Google Drive roots for one Storage-owned Drive connection.",
                 "required": ["connection_id"],
-                "optional": ["limit"],
+                "optional": ["limit", "page_token"],
                 "payload_profile": "remote_provider_metadata",
             },
             {
@@ -218,7 +220,7 @@ def operations_manifest_payload() -> dict[str, Any]:
                 "description": "List children under one Drive parent id and normalize them as Storage files and folders.",
                 "required": ["connection_id"],
                 "required_any": ["parent_drive_file_id", "drive_file_id"],
-                "optional": ["limit"],
+                "optional": ["limit", "page_token"],
                 "payload_profile": "remote_provider_metadata",
             },
             {
@@ -253,8 +255,15 @@ def operations_manifest_payload() -> dict[str, Any]:
                 "action": "drive_index",
                 "description": "Prepare a bounded Memory ingestion payload for one Google Drive file using Storage preview/export and a stable Storage reference.",
                 "required_any": ["connection_id + drive_file_id", "stable_storage_file_id"],
-                "optional": ["max_bytes", "max_chars"],
+                "optional": ["max_bytes", "max_chars <= 20000"],
                 "payload_profile": "remote_memory_source",
+            },
+            {
+                "action": "drive_mark_indexed",
+                "description": "Mark one Drive Storage reference indexed after Memory ingest succeeds. This is the post-ingest acknowledgement for agent orchestration.",
+                "required": ["stable_storage_file_id"],
+                "optional": ["source_version", "memory_node_id", "memory_external_ref_id", "memory_source_version_id"],
+                "payload_profile": "remote_index_ack",
             },
             {
                 "action": "drive_write",
@@ -306,10 +315,28 @@ def operations_manifest_payload() -> dict[str, Any]:
             "drive_preview": "remote_bounded_preview",
             "drive_export": "remote_bounded_content",
             "drive_index": "remote_memory_source",
+            "drive_mark_indexed": "remote_index_ack",
             "drive_write": "remote_write_result",
             "drive_rename": "remote_write_result",
             "drive_move": "remote_write_result",
             "drive_trash": "remote_delete_result",
+        },
+        "payload_profile_details": {
+            "remote_memory_source": {
+                "returns": [
+                    "status=ready_for_memory",
+                    "source_version",
+                    "preview_text <= 20000 chars",
+                    "preview_truncated",
+                    "Storage text extraction for supported binary Office Drive files when Drive preview has no preview_text",
+                    "memory_source.source_kind=remote_storage_file",
+                    "memory_source.metadata.stable_storage_file_id",
+                    "does not mark indexed until drive_mark_indexed",
+                ],
+            },
+            "remote_index_ack": {
+                "returns": ["status=indexed", "stable_storage_file_id", "source_version", "memory ack ids when provided", "file.index_status=indexed"],
+            },
         },
         "aliases": STORAGE_ACTION_ALIASES,
         "id_patterns": {
@@ -323,7 +350,7 @@ def operations_manifest_payload() -> dict[str, Any]:
             "requires_workspace_context": True,
             "requires_full_access": False,
             "remote_drive": {
-                "read_tools": ["drive_list_roots", "drive_list_children", "drive_search", "drive_read", "drive_preview", "drive_export", "drive_index"],
+                "read_tools": ["drive_list_roots", "drive_list_children", "drive_search", "drive_read", "drive_preview", "drive_export", "drive_index", "drive_mark_indexed"],
                 "write_tools": ["drive_write", "drive_rename", "drive_move"],
                 "delete_tools": ["drive_trash"],
                 "delete_requires": ["confirm=true", "delete_policy"],

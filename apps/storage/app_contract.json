@@ -125,6 +125,7 @@
       "storage_drive_preview",
       "storage_drive_export",
       "storage_drive_index",
+      "storage_drive_mark_indexed",
       "storage_drive_write",
       "storage_drive_rename",
       "storage_drive_move",

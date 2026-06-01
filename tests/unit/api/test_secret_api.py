@@ -651,6 +651,72 @@ class SecretApiTestCase(SecretApiTestSupport):
         self.assertEqual(target["consumers"]["refresh-token"]["cli_commands"], ["sync"])
         self.assertEqual(target["consumers"]["refresh-token"]["mcp_tools"], ["thread.get"])
 
+    def test_secret_grant_needs_use_app_provided_resource_inventory(self) -> None:
+        app = self.make_app()
+        cookie = self.login(app)
+        self.enable_workspace_app(
+            app,
+            app_id="mail",
+            secret_read=["mailbox-password"],
+            cli_commands=["mail"],
+        )
+        app_root = app.state.repository_root / "apps" / "mail"
+        contract_path = app_root / "app_contract.json"
+        contract_payload = json.loads(contract_path.read_text(encoding="utf-8"))
+        contract_payload["entrypoints"]["cli"] = "cli/app_cli.py"
+        contract_path.write_text(json.dumps(contract_payload, indent=2), encoding="utf-8")
+        (app_root / "cli").mkdir(parents=True, exist_ok=True)
+        (app_root / "cli" / "command_schemas.json").write_text(
+            json.dumps(
+                {
+                    "commands": {
+                        "mail": {
+                            "secret_resource_inventory": True,
+                            "secret_selectors": [
+                                {
+                                    "required_secrets": ["mailbox-password"],
+                                    "resource_type": "mail_connection",
+                                    "resource_lookup": {"kind": "mail_connection_from_arguments"},
+                                }
+                            ]
+                        }
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        (app_root / "cli" / "app_cli.py").write_text(
+            "import json, sys\n"
+            "payload = json.loads(sys.stdin.read() or '{}')\n"
+            "if payload.get('surface') == 'secret_resource_inventory':\n"
+            "    json.dump({'resources': [\n"
+            "        {'logical_name': 'mailbox-password', 'resource_type': 'mail_connection', 'resource_id': 'mail_connection_imap_team-loopino.ai', 'label': 'team@loopino.ai mailbox'}\n"
+            "    ]}, sys.stdout)\n"
+            "else:\n"
+            "    json.dump({'ok': True}, sys.stdout)\n",
+            encoding="utf-8",
+        )
+
+        status, payload, _ = self.invoke(app, path="/api/secret-grant-needs", cookie=cookie)
+
+        self.assertEqual(status, 200)
+        need = next(item for item in payload["items"] if item["app_id"] == "mail" and item["logical_name"] == "mailbox-password")
+        self.assertEqual(
+            need["scope"],
+            {
+                "type": "resource",
+                "resource_type": "mail_connection",
+                "resource_id": "mail_connection_imap_team-loopino.ai",
+                "label": "team@loopino.ai mailbox",
+            },
+        )
+        self.assertEqual(need["recommended_grant"]["resource_type"], "mail_connection")
+        self.assertEqual(need["recommended_grant"]["resource_id"], "mail_connection_imap_team-loopino.ai")
+        self.assertIn(
+            app_secret_target("cli/mail", resource_type="mail_connection", resource_id="mail_connection_imap_team-loopino.ai"),
+            need["recommended_grant"]["target_patterns"],
+        )
+
     def test_secret_grant_needs_recommend_workspace_scoped_spec_from_descriptors(self) -> None:
         app = self.make_app()
         cookie = self.login(app)

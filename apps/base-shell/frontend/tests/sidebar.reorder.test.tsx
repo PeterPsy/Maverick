@@ -56,6 +56,7 @@ describe("Sidebar desktop rail reorder", () => {
   let container: HTMLDivElement;
   let root: Root;
   let openApp: ReturnType<typeof vi.fn<(appId: string, params?: Record<string, string | boolean | null>) => void>>;
+  let closeSidebar: ReturnType<typeof vi.fn<() => void>>;
   let reorderPinnedApps: ReturnType<typeof vi.fn<(appIds: string[]) => void>>;
   let resizeSidebar: ReturnType<typeof vi.fn<(widthPx: number) => void>>;
 
@@ -69,6 +70,7 @@ describe("Sidebar desktop rail reorder", () => {
     document.body.append(container);
     root = createRoot(container);
     openApp = vi.fn<(appId: string, params?: Record<string, string | boolean | null>) => void>();
+    closeSidebar = vi.fn<() => void>();
     reorderPinnedApps = vi.fn<(appIds: string[]) => void>();
     resizeSidebar = vi.fn<(widthPx: number) => void>();
   });
@@ -147,18 +149,25 @@ describe("Sidebar desktop rail reorder", () => {
     expect(reorderPinnedApps).not.toHaveBeenCalled();
   });
 
-  it("does not enable long-press reorder on mobile", async () => {
+  it("does not render the application rail on mobile", async () => {
     await renderSidebar({ isMobileLayout: true });
-    const chatButton = railButton("Chat");
+
+    expect(container.querySelector(".bs-sidebar__rail")).toBeNull();
+    expect(reorderPinnedApps).not.toHaveBeenCalled();
+  });
+
+  it("keeps the mobile sidebar open when the pointer leaves toward the header", async () => {
+    await renderSidebar({ isMobileLayout: true });
+    const sidebar = container.querySelector(".bs-sidebar");
+    if (!(sidebar instanceof HTMLElement)) {
+      throw new Error("Sidebar was not mounted.");
+    }
 
     await act(async () => {
-      dispatchPointer(chatButton, "pointerdown", { clientY: 20 });
-      vi.advanceTimersByTime(360);
-      dispatchPointer(chatButton, "pointermove", { clientY: 130 });
-      dispatchPointer(chatButton, "pointerup", { clientY: 130 });
+      sidebar.dispatchEvent(new MouseEvent("mouseleave", { bubbles: true, cancelable: true }));
     });
 
-    expect(reorderPinnedApps).not.toHaveBeenCalled();
+    expect(closeSidebar).not.toHaveBeenCalled();
   });
 
   it("supports keyboard reorder with Alt and arrow keys", async () => {
@@ -250,7 +259,7 @@ describe("Sidebar desktop rail reorder", () => {
           isPinned={false}
           mobilePrimaryActionRequestId={0}
           mode="rail"
-          onClose={vi.fn()}
+          onClose={closeSidebar}
           onModeChange={vi.fn()}
           onOpenApp={(appId, params) => {
             if (params === undefined) {

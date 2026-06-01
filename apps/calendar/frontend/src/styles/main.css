@@ -247,6 +247,14 @@ button {
   transform: translateY(-1px);
 }
 
+.calendar-event-card--detailed {
+  transform-origin: center;
+}
+
+.calendar-event-card--detailed-hover {
+  transform: scaleY(1.03);
+}
+
 .calendar-event-overlay {
   position: fixed;
   inset: var(--calendar-shell-top-offset) 0 0;

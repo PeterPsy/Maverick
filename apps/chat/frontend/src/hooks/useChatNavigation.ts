@@ -107,6 +107,7 @@ export function useChatNavigation({
 }: UseChatNavigationParams) {
   const consumedNewChatRequests = useRef<Set<string>>(new Set());
   const consumedLegacyNewChatRequest = useRef(false);
+  const handledNewChatPropRequestRef = useRef<string | null>(null);
   const initialSelectionHandledRef = useRef(false);
   const navigationRequestRef = useRef<string | null>(null);
   const suppressedExternalThreadIdRef = useRef<string | null>(null);
@@ -169,10 +170,23 @@ export function useChatNavigation({
     void openThreadById(threadId);
   }, [threadId, isBootstrapping, activeThread?.thread_id, threads]);
 
+  useEffect(() => {
+    if (!threadsLoaded || isBootstrapping || !newChatRequestId || handledNewChatPropRequestRef.current === newChatRequestId) {
+      return;
+    }
+    handledNewChatPropRequestRef.current = newChatRequestId;
+    void handleNavigationParams({
+      new_chat: "1",
+      new_chat_request_id: newChatRequestId,
+      project_id: newChatProjectId || null,
+    });
+  }, [threadsLoaded, isBootstrapping, newChatProjectId, newChatRequestId]);
+
   async function selectInitialThread() {
     try {
       const query = new URLSearchParams(window.location.search);
       if (newChatRequestId) {
+        handledNewChatPropRequestRef.current = newChatRequestId;
         suppressedExternalThreadIdRef.current = threadId || null;
         createDraftChat({ activeAppContext, projectId: newChatProjectId });
         setQueuedMessages(readPersistedQueuedMessages(queueStorageKey(navigationScope, null)));
@@ -217,6 +231,7 @@ export function useChatNavigation({
     setActiveSession(null);
     setEvents([]);
     setHasLoadedHistory(false);
+    setIsHistoryLoading(false);
     setPendingUserMessages([]);
     setFailedUserMessages([]);
     setQueuedMessages([]);
@@ -243,6 +258,7 @@ export function useChatNavigation({
     setActiveSession(null);
     setEvents([]);
     setHasLoadedHistory(false);
+    setIsHistoryLoading(false);
     setActiveTurn(null);
     if (resetView) {
       setPendingUserMessages([]);

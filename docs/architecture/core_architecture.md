@@ -108,6 +108,7 @@ Rules:
 - domain records must not depend on Mongo driver types
 - services should depend on store protocols or equivalent persistence contracts, not concrete Mongo adapters
 - adapter-specific query shapes and update semantics must stay inside store adapters
+- the JSON control-plane adapter must keep collection files and lock files writable by the shared operating group used by the service process and trusted local CLI operators, so one local sidecar command cannot rewrite a collection with permissions that make the hosted backend unable to read it
 - bootstrap wiring may choose JSON, MongoDB, or another explicit adapter for platform-owned control-plane collections
 - the selected control-plane adapter must not become the storage owner for app-owned workspace data
 - migrating between control-plane adapters must be an explicit operator action with dry-run and validation; backend startup must not silently move or delete control-plane state
@@ -881,6 +882,8 @@ For the first hosted wave, this means:
 The main core host should run through the ASGI platform host so HTTP and WebSocket traffic share the same `PlatformState` and persistence adapters.
 
 The main `/health` endpoint must be served directly by the ASGI host without entering mounted app dispatch or the synchronous WSGI worker pool, so app, MCP, CLI, or runtime entrypoint saturation cannot hide basic backend liveness from the external watchdog.
+
+Mounted app backend routes under `/api/apps/<mount_app_id>/backend` must run through a dedicated ASGI executor instead of the generic WSGI dispatch pool, so slow app-owned subprocess work cannot starve core HTTP surfaces. `MAVERICK_APP_BACKEND_WORKERS` may tune that executor locally; the default should stay small enough to bound subprocess fan-out.
 
 The ASGI host must implement `lifespan` shutdown so active mounted app backend subprocess trees are terminated cooperatively during service restarts instead of relying on `systemd` timeout kills.
 

@@ -22,6 +22,22 @@ class AppSurfaceSecretSelector:
     when: dict[str, Any] | None = None
 
 
+CLI_COMMAND_DESCRIPTOR_FIELDS = {
+    "description",
+    "argument_schema",
+    "required_secrets",
+    "secret_selectors",
+    "secret_resource_inventory",
+}
+MCP_TOOL_DESCRIPTOR_FIELDS = {
+    "description",
+    "input_schema",
+    "output_schema",
+    "required_secrets",
+    "secret_selectors",
+}
+
+
 def app_cli_command_metadata(
     source_root: Path,
     command_name: str,
@@ -34,7 +50,7 @@ def app_cli_command_metadata(
             source_root / "cli" / "command_schemas.json",
             root_field="commands",
             item_name=command_name,
-            allowed_fields={"description", "argument_schema", "required_secrets", "secret_selectors"},
+            allowed_fields=CLI_COMMAND_DESCRIPTOR_FIELDS,
         )
         if item is None:
             return default_description, _object_schema()
@@ -58,7 +74,7 @@ def app_mcp_tool_metadata(
             source_root / "mcp" / "tool_schemas.json",
             root_field="tools",
             item_name=tool_name,
-            allowed_fields={"description", "input_schema", "output_schema", "required_secrets", "secret_selectors"},
+            allowed_fields=MCP_TOOL_DESCRIPTOR_FIELDS,
         )
         if item is None:
             return default_description, _object_schema(), _object_schema()
@@ -82,7 +98,7 @@ def app_cli_command_required_secrets(
         source_root / "cli" / "command_schemas.json",
         root_field="commands",
         item_name=command_name,
-        allowed_fields={"description", "argument_schema", "required_secrets", "secret_selectors"},
+        allowed_fields=CLI_COMMAND_DESCRIPTOR_FIELDS,
         declared_secret_names=declared_secret_names,
     )
 
@@ -98,7 +114,7 @@ def app_mcp_tool_required_secrets(
         source_root / "mcp" / "tool_schemas.json",
         root_field="tools",
         item_name=tool_name,
-        allowed_fields={"description", "input_schema", "output_schema", "required_secrets", "secret_selectors"},
+        allowed_fields=MCP_TOOL_DESCRIPTOR_FIELDS,
         declared_secret_names=declared_secret_names,
     )
 
@@ -114,7 +130,7 @@ def app_cli_command_secret_selectors(
         source_root / "cli" / "command_schemas.json",
         root_field="commands",
         item_name=command_name,
-        allowed_fields={"description", "argument_schema", "required_secrets", "secret_selectors"},
+        allowed_fields=CLI_COMMAND_DESCRIPTOR_FIELDS,
         declared_secret_names=declared_secret_names,
     )
 
@@ -130,9 +146,22 @@ def app_mcp_tool_secret_selectors(
         source_root / "mcp" / "tool_schemas.json",
         root_field="tools",
         item_name=tool_name,
-        allowed_fields={"description", "input_schema", "output_schema", "required_secrets", "secret_selectors"},
+        allowed_fields=MCP_TOOL_DESCRIPTOR_FIELDS,
         declared_secret_names=declared_secret_names,
     )
+
+
+def app_cli_command_secret_resource_inventory_enabled(source_root: Path, command_name: str) -> bool:
+    try:
+        item = _descriptor_item(
+            source_root / "cli" / "command_schemas.json",
+            root_field="commands",
+            item_name=command_name,
+            allowed_fields=CLI_COMMAND_DESCRIPTOR_FIELDS,
+        )
+    except ValueError:
+        return False
+    return bool(item and item.get("secret_resource_inventory"))
 
 
 def app_secret_requests_for_arguments(

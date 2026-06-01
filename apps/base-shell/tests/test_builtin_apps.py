@@ -978,6 +978,11 @@ class BuiltinAppsTestCase(unittest.TestCase):
         self.assertEqual(widgets["chat-floating"].content_kinds, ["shell.overlay.bottomright"])
         self.assertEqual(widgets["chat-floating"].frontend.mount, "frontend/dist/widgets/chat-floating")
         self.assertTrue((repo_root / "apps" / "chat" / "frontend" / "dist" / "widgets" / "chat-floating" / "index.html").is_file())
+        self.assertIn("chat-floating-dock", widgets)
+        self.assertEqual(widgets["chat-floating-dock"].host, "base-shell")
+        self.assertEqual(widgets["chat-floating-dock"].content_kinds, ["shell.dock.right", "shell.overlay.mobile.fullscreen"])
+        self.assertEqual(widgets["chat-floating-dock"].frontend.mount, "frontend/dist/widgets/chat-floating-dock")
+        self.assertTrue((repo_root / "apps" / "chat" / "frontend" / "dist" / "widgets" / "chat-floating-dock" / "index.html").is_file())
 
     def test_base_shell_discovers_chat_widgets_without_source_paths(self) -> None:
         repo_root = self.make_repo_root()
@@ -1014,6 +1019,21 @@ class BuiltinAppsTestCase(unittest.TestCase):
         self.assertEqual(overlay_payload["items"][0]["frontend_mount"], "/api/apps/widgets/chat/chat-floating/frontend/")
         self.assertNotIn("source_root", overlay_payload["items"][0])
         self.assertNotIn("source_path", overlay_payload["items"][0])
+
+        mobile_status, mobile_body, _mobile_headers = self.invoke(
+            app,
+            path="/api/apps/widgets",
+            query_string="host=base-shell&content_kind=shell.overlay.mobile.fullscreen",
+            cookie=cookie,
+        )
+        mobile_payload = json.loads(mobile_body.decode("utf-8"))
+
+        self.assertEqual(mobile_status, 200)
+        self.assertEqual(mobile_payload["items"][0]["owner_app_id"], "chat")
+        self.assertEqual(mobile_payload["items"][0]["widget_id"], "chat-floating-dock")
+        self.assertEqual(mobile_payload["items"][0]["frontend_mount"], "/api/apps/widgets/chat/chat-floating-dock/frontend/")
+        self.assertNotIn("source_root", mobile_payload["items"][0])
+        self.assertNotIn("source_path", mobile_payload["items"][0])
 
     def test_chat_projects_and_core_threads_support_sidebar_settings(self) -> None:
         repo_root = self.make_repo_root()

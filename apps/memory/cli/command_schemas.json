@@ -1,0 +1,262 @@
+{
+  "commands": {
+    "memory": {
+      "description": "Search, retrieve, update, link, inspect, compile, and lint workspace Memory nodes. Retrieval actions include reusable Storage references when available. The default action is context retrieval.",
+      "argument_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "Memory operation to run. Omit for context retrieval.",
+            "enum": [
+              "context",
+              "search",
+              "remember",
+              "create_node",
+              "update_node",
+              "delete_node",
+              "soft_delete_node",
+              "link",
+              "link_nodes",
+              "unlink",
+              "unlink_nodes",
+              "attach_file",
+              "ingest_storage_source",
+              "apply_storage_staleness",
+              "attach_entity",
+              "attach_app_entity",
+              "inspect",
+              "graph",
+              "compile",
+              "lint",
+              "wiki_query",
+              "audit",
+              "view_filter",
+              "set_view_filter",
+              "set_custom_view",
+              "clear_custom_view",
+              "references.manifest",
+              "references.search",
+              "references.resolve",
+              "references.summarize",
+              "health.check"
+            ],
+            "default": "context"
+          },
+          "query": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500
+          },
+          "record_access_event": {
+            "type": "boolean",
+            "default": false
+          },
+          "node_id": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "body_text": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "node_type": {
+            "type": "string"
+          },
+          "importance": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "memory_source": {
+            "type": "object",
+            "description": "Storage drive_index.memory_source payload for ingest_storage_source."
+          },
+          "preview_text": {
+            "type": "string",
+            "description": "Optional bounded preview text returned by Storage drive_index."
+          },
+          "preview_truncated": {
+            "type": "boolean",
+            "default": false
+          },
+          "source_version": {
+            "type": "string",
+            "description": "Required source version from Storage drive_index for ingest_storage_source; may be provided here or in memory_source.metadata.source_version."
+          },
+          "compile_after_ingest": {
+            "type": "boolean",
+            "default": false
+          },
+          "memory_staleness": {
+            "type": "object",
+            "description": "Storage drive_sync.memory_staleness payload for apply_storage_staleness."
+          },
+          "staleness": {
+            "type": "object",
+            "description": "Optional Storage staleness detail for apply_storage_staleness."
+          },
+          "sync_state": {
+            "type": "object",
+            "description": "Optional Storage sync state detail for apply_storage_staleness."
+          },
+          "source_node_id": {
+            "type": "string"
+          },
+          "target_node_id": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "edge_id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "weight": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "reason": {
+            "type": "string"
+          },
+          "workspace_relative_path": {
+            "type": "string",
+            "pattern": "^storage/(uploaded|generated)/.+$"
+          },
+          "owning_app_id": {
+            "type": "string"
+          },
+          "entity_type": {
+            "type": "string"
+          },
+          "entity_id": {
+            "type": "string"
+          },
+          "file_id": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "google_drive",
+              "local"
+            ]
+          },
+          "uri": {
+            "type": "string"
+          },
+          "preserve_custom": {
+            "type": "boolean",
+            "default": false
+          },
+          "node_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 500
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "examples": [
+          {
+            "action": "context",
+            "query": "renewal terms",
+            "limit": 8
+          },
+          {
+            "action": "remember",
+            "title": "Customer renewal notes",
+            "body": "ACME asked for revised payment terms."
+          },
+          {
+            "action": "attach_file",
+            "node_id": "node_example",
+            "owning_app_id": "storage",
+            "entity_type": "file",
+            "entity_id": "file_example",
+            "provider": "google_drive",
+            "metadata": {
+              "provider": "google_drive",
+              "connection_id": "drive_conn_example",
+              "drive_file_id": "1AbC",
+              "source_version": "etag-or-modified-at",
+              "display_path": "Drive/Folder/Document"
+            }
+          },
+          {
+            "action": "ingest_storage_source",
+            "title": "Drive document",
+            "memory_source": {
+              "source_kind": "remote_storage_file",
+              "owning_app_id": "storage",
+              "entity_type": "file",
+              "entity_id": "file_example",
+              "file_id": "file_example",
+              "workspace_relative_path": "",
+              "metadata": {
+                "provider": "google_drive",
+                "connection_id": "drive_conn_example",
+                "drive_file_id": "1AbC",
+                "source_version": "etag-or-modified-at",
+                "display_path": "Drive/Folder/Document"
+              }
+            },
+            "preview_text": "Bounded text returned by storage_drive_index.",
+            "compile_after_ingest": true
+          },
+          {
+            "action": "apply_storage_staleness",
+            "owning_app_id": "storage",
+            "entity_type": "file",
+            "entity_id": "file_example",
+            "reason": "google_drive_change"
+          },
+          {
+            "action": "compile",
+            "node_id": "node_example"
+          }
+        ]
+      },
+      "required_secrets": [],
+      "secret_selectors": []
+    }
+  }
+}

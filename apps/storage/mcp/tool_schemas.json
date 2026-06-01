@@ -242,7 +242,21 @@
         },
         "additionalProperties": false
       },
-      "output_schema": {"type": "object"},
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "provider": {"type": "string", "enum": ["google_drive"]},
+          "access_mode": {"type": "string"},
+          "status": {"type": "string", "enum": ["authorization_required"]},
+          "authorization_url": {"type": "string"},
+          "state": {"type": "string"},
+          "expires_in_seconds": {"type": "integer"},
+          "scopes": {"type": "array", "items": {"type": "string"}},
+          "callback_path": {"type": "string"},
+          "connection": {"type": "object"}
+        },
+        "additionalProperties": true
+      },
       "secret_selectors": [
         {"required_secrets": ["google-drive-oauth-client-id", "google-drive-oauth-client-secret"]}
       ]
@@ -267,12 +281,44 @@
         "type": "object",
         "properties": {
           "connection_id": {"type": "string"},
-          "limit": {"type": "integer", "minimum": 1, "maximum": 2000}
+          "limit": {"type": "integer", "minimum": 1, "maximum": 2000},
+          "page_token": {"type": "string"}
         },
         "required": ["connection_id"],
         "additionalProperties": false
       },
-      "output_schema": {"type": "object"},
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "provider": {"type": "string", "enum": ["google_drive"]},
+          "connection_id": {"type": "string"},
+          "synced_files": {"type": "integer"},
+          "removed_file_count": {"type": "integer"},
+          "stale_storage_file_ids": {"type": "array", "items": {"type": "string"}},
+          "memory_staleness": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["owning_app_id", "entity_type", "entity_id", "reason"],
+              "properties": {
+                "owning_app_id": {"type": "string", "const": "storage"},
+                "entity_type": {"type": "string", "const": "file"},
+                "entity_id": {"type": "string"},
+                "reason": {"type": "string"},
+                "connection_id": {"type": "string"},
+                "drive_file_id": {"type": "string"},
+                "source_version": {"type": "string"},
+                "indexed_source_version": {"type": "string"},
+                "staleness": {"type": "object"},
+                "sync_state": {"type": "object"}
+              },
+              "additionalProperties": true
+            }
+          },
+          "sync_state": {"type": "object"}
+        },
+        "additionalProperties": true
+      },
       "secret_selectors": [
         {"required_secrets": ["google-drive-oauth-client-id", "google-drive-oauth-client-secret"]},
         {
@@ -321,7 +367,8 @@
           "connection_id": {"type": "string"},
           "parent_drive_file_id": {"type": "string"},
           "drive_file_id": {"type": "string"},
-          "limit": {"type": "integer", "minimum": 1, "maximum": 2000}
+          "limit": {"type": "integer", "minimum": 1, "maximum": 2000},
+          "page_token": {"type": "string"}
         },
         "required": ["connection_id"],
         "oneOf": [
@@ -477,7 +524,7 @@
           "drive_file_id": {"type": "string"},
           "stable_storage_file_id": {"type": "string"},
           "max_bytes": {"type": "integer", "minimum": 1},
-          "max_chars": {"type": "integer", "minimum": 1}
+          "max_chars": {"type": "integer", "minimum": 1, "maximum": 20000}
         },
         "anyOf": [
           {"required": ["connection_id", "drive_file_id"]},
@@ -485,7 +532,53 @@
         ],
         "additionalProperties": false
       },
-      "output_schema": {"type": "object"},
+      "output_schema": {
+        "type": "object",
+        "required": ["status", "provider", "connection_id", "drive_file_id", "source_version", "preview_text", "memory_source"],
+        "properties": {
+          "status": {"type": "string", "enum": ["ready_for_memory"]},
+          "provider": {"type": "string", "enum": ["google_drive"]},
+          "connection_id": {"type": "string"},
+          "drive_file_id": {"type": "string"},
+          "file": {"type": "object"},
+          "source_version": {"type": "string", "minLength": 1},
+          "preview_text": {"type": "string", "maxLength": 20000},
+          "preview_truncated": {"type": "boolean"},
+          "truncated": {"type": "boolean"},
+          "bytes_read": {"type": "integer"},
+          "cache_hit": {"type": "boolean"},
+          "memory_source": {
+            "type": "object",
+            "required": ["source_kind", "owning_app_id", "entity_type", "entity_id", "file_id", "provider", "workspace_relative_path", "metadata"],
+            "properties": {
+              "source_kind": {"type": "string", "enum": ["remote_storage_file"]},
+              "owning_app_id": {"type": "string", "enum": ["storage"]},
+              "entity_type": {"type": "string", "enum": ["file"]},
+              "entity_id": {"type": "string"},
+              "file_id": {"type": "string"},
+              "provider": {"type": "string", "enum": ["google_drive"]},
+              "title": {"type": "string"},
+              "workspace_relative_path": {"type": "string", "enum": [""]},
+              "metadata": {
+                "type": "object",
+                "required": ["provider", "connection_id", "drive_file_id", "stable_storage_file_id", "source_version", "display_path"],
+                "properties": {
+                  "provider": {"type": "string", "enum": ["google_drive"]},
+                  "connection_id": {"type": "string"},
+                  "drive_file_id": {"type": "string"},
+                  "stable_storage_file_id": {"type": "string"},
+                  "source_version": {"type": "string", "minLength": 1},
+                  "display_path": {"type": "string"},
+                  "web_url": {"type": "string"}
+                },
+                "additionalProperties": true
+              }
+            },
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true
+      },
       "secret_selectors": [
         {"required_secrets": ["google-drive-oauth-client-id", "google-drive-oauth-client-secret"]},
         {
@@ -499,6 +592,37 @@
           "resource_lookup": {"kind": "storage_drive_file"}
         }
       ]
+    },
+    "storage_drive_mark_indexed": {
+      "description": "Acknowledge successful Memory ingest for one Drive Storage file so future Drive sync can propagate staleness only for files that actually reached Memory.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "stable_storage_file_id": {"type": "string"},
+          "source_version": {"type": "string"},
+          "memory_node_id": {"type": "string"},
+          "memory_external_ref_id": {"type": "string"},
+          "memory_source_version_id": {"type": "string"}
+        },
+        "required": ["stable_storage_file_id"],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["status", "provider", "stable_storage_file_id", "source_version", "file"],
+        "properties": {
+          "status": {"type": "string", "enum": ["indexed"]},
+          "provider": {"type": "string", "enum": ["google_drive"]},
+          "stable_storage_file_id": {"type": "string"},
+          "source_version": {"type": "string"},
+          "memory_node_id": {"type": "string"},
+          "memory_external_ref_id": {"type": "string"},
+          "memory_source_version_id": {"type": "string"},
+          "indexed_at": {"type": "string"},
+          "file": {"type": "object"}
+        },
+        "additionalProperties": true
+      }
     },
     "storage_drive_write": {
       "description": "Create or update Google Drive file content through Storage write policy.",

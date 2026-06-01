@@ -18,6 +18,9 @@ from errors import MemoryValidationError
 REMOTE_STORAGE_PROVIDERS = {"google_drive"}
 MAX_REMOTE_PREVIEW_CHARS = 20000
 MAX_REMOTE_PREVIEW_BYTES = 5 * 1024 * 1024
+INGEST_PREVIEW_TEXT_KEY = "ingest_preview_text"
+INGEST_PREVIEW_TRUNCATED_KEY = "ingest_preview_truncated"
+INGEST_PREVIEW_METADATA_KEYS = {INGEST_PREVIEW_TEXT_KEY, INGEST_PREVIEW_TRUNCATED_KEY}
 
 
 def default_storage_preview_surface(data_root: Path, request: dict[str, Any]) -> dict[str, Any]:
@@ -35,18 +38,18 @@ def platform_storage_preview(workspace_root: Path, request: dict[str, Any]) -> d
         for key, value in request.items()
         if key in {"connection_id", "drive_file_id", "stable_storage_file_id", "max_chars", "max_bytes"}
     }
+    cli_args = [
+        "maverick",
+        "app",
+        "storage",
+        "mcp",
+        "call",
+        "storage_drive_preview",
+        "--json",
+        *_mcp_cli_argument_flags(arguments),
+    ]
     completed = subprocess.run(
-        [
-            "maverick",
-            "app",
-            "storage",
-            "mcp",
-            "call",
-            "storage_drive_preview",
-            "--json",
-            "--arguments",
-            json.dumps(arguments, sort_keys=True),
-        ],
+        cli_args,
         cwd=workspace_root,
         capture_output=True,
         text=True,
@@ -63,6 +66,15 @@ def platform_storage_preview(workspace_root: Path, request: dict[str, Any]) -> d
     if status_code >= 400:
         raise MemoryValidationError(str(response.get("detail") or response.get("error") or "Storage preview failed."))
     return response
+
+
+def _mcp_cli_argument_flags(arguments: dict[str, Any]) -> list[str]:
+    cli_args: list[str] = []
+    for key, value in arguments.items():
+        if value is None or value == "":
+            continue
+        cli_args.extend([f"--{key.replace('_', '-')}", str(value)])
+    return cli_args
 
 
 def local_storage_preview(workspace_root: Path, request: dict[str, Any]) -> dict[str, Any]:
@@ -101,6 +113,28 @@ def local_storage_preview(workspace_root: Path, request: dict[str, Any]) -> dict
 _storage_preview_surface = default_storage_preview_surface
 
 
+def preview_remote_storage_source(
+    data_root: Path,
+    *,
+    provider: str,
+    stable_storage_file_id: str,
+    connection_id: str,
+    drive_file_id: str,
+) -> dict[str, Any]:
+    return _storage_preview_surface(
+        data_root,
+        {
+            "action": "drive_preview",
+            "provider": provider,
+            "stable_storage_file_id": stable_storage_file_id,
+            "connection_id": connection_id,
+            "drive_file_id": drive_file_id,
+            "max_chars": MAX_REMOTE_PREVIEW_CHARS,
+            "max_bytes": MAX_REMOTE_PREVIEW_BYTES,
+        },
+    )
+
+
 def remote_storage_snapshot(
     ref: sqlite3.Row,
     metadata: dict[str, Any],
@@ -118,18 +152,22 @@ def remote_storage_snapshot(
     if include_preview:
         if data_root is None:
             raise MemoryValidationError("data_root is required to ingest remote Storage files.")
-        preview_payload = _storage_preview_surface(data_root, remote_preview_request(ref, metadata))
-        preview_text = str(preview_payload.get("preview_text") or "")
-        file_payload = preview_payload.get("file") if isinstance(preview_payload.get("file"), dict) else {}
-        source_version = str(
-            preview_payload.get("source_version")
-            or file_payload.get("source_version")
-            or file_payload.get("etag_or_version")
-            or file_payload.get("modified_at")
-            or source_version
-            or ""
-        )
-        display_path = str(file_payload.get("display_path") or display_path or "")
+        if INGEST_PREVIEW_TEXT_KEY in metadata:
+            preview_text = str(metadata.get(INGEST_PREVIEW_TEXT_KEY) or "")
+            preview_payload = {"truncated": bool(metadata.get(INGEST_PREVIEW_TRUNCATED_KEY))}
+        else:
+            preview_payload = _storage_preview_surface(data_root, remote_preview_request(ref, metadata))
+            preview_text = str(preview_payload.get("preview_text") or "")
+            file_payload = preview_payload.get("file") if isinstance(preview_payload.get("file"), dict) else {}
+            source_version = str(
+                preview_payload.get("source_version")
+                or file_payload.get("source_version")
+                or file_payload.get("etag_or_version")
+                or file_payload.get("modified_at")
+                or source_version
+                or ""
+            )
+            display_path = str(file_payload.get("display_path") or display_path or "")
     return {
         "hash": sha256(
             json.dumps(

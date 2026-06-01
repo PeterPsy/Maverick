@@ -23,8 +23,10 @@ describe('storage Drive load more', () => {
     expect(localCatalogStart).toBeGreaterThan(driveBranchStart);
     const driveBranch = loadMoreBody.slice(driveBranchStart, localCatalogStart);
 
-    expect(driveBranch).toContain('listDriveChildren(driveTarget.connectionId, driveTarget.driveFileId, { limit: nextLimit })');
-    expect(driveBranch).toContain('listDriveRoots(driveTarget.connectionId, { limit: nextLimit })');
+    expect(driveBranch).toContain("const pageToken = catalogPagination.next_page_token || '';");
+    expect(driveBranch).toContain('listDriveChildren(driveTarget.connectionId, driveTarget.driveFileId, { limit: DRIVE_PAGE_LIMIT, pageToken, signal: driveAbortController.signal })');
+    expect(driveBranch).toContain('listDriveRoots(driveTarget.connectionId, { limit: DRIVE_PAGE_LIMIT, pageToken, signal: driveAbortController.signal })');
+    expect(driveBranch).not.toContain('nextLimit');
     expect(driveBranch).toContain('return;');
     expect(driveBranch).not.toContain('loadCatalog');
   });

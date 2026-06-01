@@ -55,6 +55,26 @@ class ChatWidgetHostingTests(unittest.TestCase):
         footer_styles = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar-footer/styles.css").read_text()
         self.assertIn("backdrop-filter: blur(18px) saturate(1.15);", footer_styles)
 
+    def test_chat_declares_shell_right_dock_widget(self) -> None:
+        contract_source = (REPO_ROOT / "apps/chat/app_contract.json").read_text()
+        vite_source = (REPO_ROOT / "apps/chat/vite.config.ts").read_text()
+        dock_source = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-floating-dock/main.tsx").read_text()
+        frame_source = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-floating/FloatingChatFrame.tsx").read_text()
+
+        self.assertIn('"widget_id": "chat-floating-dock"', contract_source)
+        self.assertIn('"shell.dock.right"', contract_source)
+        self.assertIn('"shell.overlay.mobile.fullscreen"', contract_source)
+        self.assertIn('"mount": "frontend/dist/widgets/chat-floating-dock"', contract_source)
+        self.assertIn('"widgets/chat-floating-dock/index": "frontend/widgets/chat-floating-dock/index.html"', vite_source)
+        self.assertIn("ChatFloatingDockMount", dock_source)
+        self.assertIn("FloatingChatFrame", dock_source)
+        self.assertIn("mobile-fullscreen", dock_source)
+        self.assertIn('showClose={dock.mode !== "mobile-fullscreen"}', dock_source)
+        self.assertIn("showOverlay", dock_source)
+        self.assertIn("postDockClose", dock_source)
+        self.assertIn('aria-label="Dock chat to right"', frame_source)
+        self.assertIn('aria-label="Return chat to overlay"', frame_source)
+
     def test_chat_sidebar_project_button_creates_without_opening_settings_panel(self) -> None:
         sidebar_source = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/main.tsx").read_text()
         project_actions_source = (REPO_ROOT / "apps/chat/frontend/src/widgets/chat-sidebar/useSidebarProjectActions.ts").read_text()

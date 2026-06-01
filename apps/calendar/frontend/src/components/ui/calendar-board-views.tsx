@@ -59,5 +59,5 @@ export function CalendarBoardViews({
       />
     )
   }
-  return <ListView events={events} onEventClick={onEventClick} getColorClasses={getColorClasses} />
+  return <ListView currentDate={currentDate} events={events} onEventClick={onEventClick} getColorClasses={getColorClasses} />
 }

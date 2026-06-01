@@ -53,4 +53,17 @@ describe("floating chat widget styles", () => {
     expect(dropdownBlock).toContain("-ms-overflow-style: none;");
     expect(styles).toMatch(/\.chat-floating-thread-menu__panel::-webkit-scrollbar\s*{[\s\S]*display:\s*none;/);
   });
+
+  it("uses a borderless fullscreen frame for the mobile contextual chat", () => {
+    const styles = readStyle("styles.css");
+    const mobileBlock = cssBlock(styles, ".chat-floating-widget-shell--mobile-fullscreen");
+    const mobileBarBlock = cssBlock(styles, ".chat-floating-widget-shell--mobile-fullscreen .chat-floating-widget-shell__bar");
+
+    expect(mobileBlock).toContain("width: 100%;");
+    expect(mobileBlock).toContain("height: 100%;");
+    expect(mobileBlock).toContain("border: 0;");
+    expect(mobileBlock).toContain("border-radius: 0;");
+    expect(mobileBarBlock).toContain("top: 0.48rem;");
+    expect(mobileBarBlock).toContain("env(safe-area-inset-left, 0px)");
+  });
 });

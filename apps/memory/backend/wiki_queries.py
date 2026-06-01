@@ -8,6 +8,7 @@ from typing import Any
 
 from database import connect, ensure_schema, normalize_limit, now_timestamp, row_payload
 from lint import lint_findings_for_node, refresh_compiled_freshness
+from storage_reference_payloads import storage_reference_for_citation, storage_references_for_node
 
 
 def wiki_query(data_root: Path, query: str, *, limit: int = 10) -> dict[str, Any]:
@@ -45,6 +46,7 @@ def wiki_query(data_root: Path, query: str, *, limit: int = 10) -> dict[str, Any
                 "node_type": row["node_type"],
                 "freshness": _page_freshness(db, row["id"]) or row["freshness"],
                 "compiled_at": row["compiled_at"],
+                "storage_references": storage_references_for_node(db, row["node_id"]),
             }
             for row in page_rows
         ]
@@ -68,19 +70,26 @@ def wiki_query(data_root: Path, query: str, *, limit: int = 10) -> dict[str, Any
             )
             for row in claim_rows:
                 refresh_compiled_freshness(db, row["node_id"], data_root=data_root, timestamp=timestamp)
-            results.extend(
-                {
-                    "kind": "claim",
-                    "node_id": row["node_id"],
-                    "wiki_page_id": row["wiki_page_id"],
-                    "claim_id": row["id"],
-                    "title": row["title"],
-                    "summary": row["claim_text"],
-                    "freshness": _page_freshness(db, row["wiki_page_id"]) or row["freshness"],
-                    "compiled_at": row["compiled_at"],
-                }
-                for row in claim_rows
-            )
+            for row in claim_rows:
+                citations = _citations_for_claim(db, row["id"])
+                results.append(
+                    {
+                        "kind": "claim",
+                        "node_id": row["node_id"],
+                        "wiki_page_id": row["wiki_page_id"],
+                        "claim_id": row["id"],
+                        "title": row["title"],
+                        "summary": row["claim_text"],
+                        "freshness": _page_freshness(db, row["wiki_page_id"]) or row["freshness"],
+                        "compiled_at": row["compiled_at"],
+                        "citations": citations,
+                        "storage_references": [
+                            citation["storage_reference"]
+                            for citation in citations
+                            if isinstance(citation.get("storage_reference"), dict)
+                        ],
+                    }
+                )
     return {"query": query, "results": results}
 
 
@@ -125,6 +134,7 @@ def compiled_payload_for_node(
         "claims": claims,
         "citations": citations,
         "sources": sources,
+        "storage_references": storage_references_for_node(db, node_id),
         "lint_findings": lint_findings_for_node(db, node_id),
     }
 
@@ -146,6 +156,7 @@ def compact_compiled_payload(
         "freshness": page["freshness"],
         "compiled_at": page["compiled_at"],
         "claims": payload["claims"],
+        "storage_references": payload["storage_references"],
         "lint_findings": payload["lint_findings"],
     }
 
@@ -176,9 +187,19 @@ def _claims_with_citations(db: sqlite3.Connection, page_id: str) -> list[dict[st
     claims = []
     for row in db.execute("SELECT * FROM claims WHERE wiki_page_id = ? AND status = 'active' ORDER BY created_at", (page_id,)):
         claim = row_payload(row) or {}
-        claim["citations"] = [
-            row_payload(citation) or {}
-            for citation in db.execute("SELECT * FROM citations WHERE claim_id = ? ORDER BY created_at", (claim["id"],))
-        ]
+        claim["citations"] = _citations_for_claim(db, claim["id"])
         claims.append(claim)
     return claims
+
+
+def _citations_for_claim(db: sqlite3.Connection, claim_id: str) -> list[dict[str, Any]]:
+    citations = []
+    for row in db.execute("SELECT * FROM citations WHERE claim_id = ? ORDER BY created_at", (claim_id,)):
+        citation = row_payload(row) or {}
+        metadata = citation.get("metadata") if isinstance(citation.get("metadata"), dict) else {}
+        citation["source_version"] = str(metadata.get("source_version") or "")
+        storage_reference = storage_reference_for_citation(db, citation)
+        if storage_reference:
+            citation["storage_reference"] = storage_reference
+        citations.append(citation)
+    return citations

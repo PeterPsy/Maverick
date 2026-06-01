@@ -16,6 +16,7 @@ describe('storage full preview loading state', () => {
     const styles = readSource('styles/main.css');
 
     expect(appSource).toContain('setPreviewLoading(canInlinePreview(file))');
+    expect(appSource).toContain("if (isDriveItem(file) && !itemCan(file, 'can_preview', false))");
     expect(previewSource).toContain('if (loading) return <FileTypeFallback file={file} loading />;');
     expect(previewSource).not.toContain('Loading preview...');
     expect(previewSource).not.toContain('Loading table preview...');

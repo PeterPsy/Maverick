@@ -7,19 +7,19 @@ from pathlib import Path
 
 from core.api.http import StartResponse, json_response
 from core.api.session_api import RequestSession
-from core.apps.errors import AppHostingError, WorkspaceAppBindingNotFoundError
-from core.apps.models import AppSourceRecord, WorkspaceAppBindingRecord
+from core.apps.errors import AppHostingError, WorkspaceAppBindingNotFoundError, WorkspaceLocalAppProjectNotFoundError
+from core.apps.models import AppContractDescriptor, AppSourceRecord, WorkspaceAppBindingRecord, WorkspaceLocalAppProjectRecord
 from core.apps.service import install_store_app, transition_workspace_app_status, uninstall_workspace_app
 from core.api.platform_state import PlatformState
 from core.workspaces.errors import WorkspaceNotFoundError
 
 
-def _contract_payload(source: AppSourceRecord) -> dict[str, object]:
+def _contract_payload(contract: AppContractDescriptor) -> dict[str, object]:
     return {
-        "distribution": asdict(source.contract.distribution),
-        "visibility": asdict(source.contract.visibility),
-        "capabilities": asdict(source.contract.capabilities),
-        "entrypoints": asdict(source.contract.entrypoints),
+        "distribution": asdict(contract.distribution),
+        "visibility": asdict(contract.visibility),
+        "capabilities": asdict(contract.capabilities),
+        "entrypoints": asdict(contract.entrypoints),
     }
 
 
@@ -46,6 +46,10 @@ def _latest_sources_by_app(state: PlatformState) -> dict[str, AppSourceRecord]:
     return sources
 
 
+def _workspace_local_projects_by_app(state: PlatformState, *, workspace_id: str) -> dict[str, WorkspaceLocalAppProjectRecord]:
+    return {project.app_id: project for project in state.app_store.list_workspace_local_app_projects(workspace_id)}
+
+
 def _get_binding_or_none(state: PlatformState, *, workspace_id: str, app_id: str) -> WorkspaceAppBindingRecord | None:
     try:
         return state.app_store.get_workspace_app_binding(workspace_id=workspace_id, app_id=app_id)
@@ -57,23 +61,51 @@ def _workspace_app_items(state: PlatformState) -> list[dict[str, object]]:
     sources_by_app = _latest_sources_by_app(state)
     items: list[dict[str, object]] = []
     for workspace in sorted(state.workspace_store.list_workspaces(), key=lambda item: item.workspace_id):
-        for app_id, source in sorted(sources_by_app.items()):
+        bindings_by_app = {binding.app_id: binding for binding in state.app_store.list_workspace_app_bindings(workspace.workspace_id)}
+        projects_by_app = _workspace_local_projects_by_app(state, workspace_id=workspace.workspace_id)
+        app_ids = sorted(set(sources_by_app) | set(bindings_by_app))
+        for app_id in app_ids:
+            source = sources_by_app.get(app_id)
+            project = projects_by_app.get(app_id)
             binding = _get_binding_or_none(state, workspace_id=workspace.workspace_id, app_id=app_id)
+            if binding and binding.source_kind == "workspace_local_project":
+                try:
+                    project = project or state.app_store.get_workspace_local_app_project(workspace_id=workspace.workspace_id, app_id=app_id)
+                except WorkspaceLocalAppProjectNotFoundError:
+                    project = None
+            if project and binding and binding.source_kind == "workspace_local_project":
+                name = project.name
+                description = project.description
+                publisher = project.publisher
+                version = project.version
+                source_id = project.project_id
+                source_kind = "workspace_local_project"
+                contract = project.contract
+            elif source is not None:
+                name = source.name
+                description = source.description
+                publisher = source.publisher
+                version = source.version
+                source_id = source.source_id
+                source_kind = source.source_kind
+                contract = source.contract
+            else:
+                continue
             items.append(
                 {
                     "workspace_id": workspace.workspace_id,
                     "workspace_name": workspace.name,
                     "app_id": app_id,
-                    "name": source.name,
-                    "description": source.description,
-                    "publisher": source.publisher,
-                    "version": source.version,
-                    "source_id": source.source_id,
-                    "source_kind": source.source_kind,
+                    "name": name,
+                    "description": description,
+                    "publisher": publisher,
+                    "version": version,
+                    "source_id": source_id,
+                    "source_kind": source_kind,
                     "installed": binding is not None,
                     "status": binding.status if binding else "uninstalled",
                     "binding": _binding_payload(binding),
-                    "contract": _contract_payload(source),
+                    "contract": _contract_payload(contract),
                 }
             )
     return items

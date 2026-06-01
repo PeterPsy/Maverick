@@ -67,6 +67,7 @@ describe("FloatingWindow", () => {
           onClose={vi.fn()}
           onCollapseChange={vi.fn()}
           onCreateDraftChat={vi.fn()}
+          onDock={vi.fn()}
           onMarkThreadRead={vi.fn()}
           onRemoveThread={vi.fn()}
           onRenameThread={vi.fn()}

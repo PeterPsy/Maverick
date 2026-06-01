@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent, type SVGProps } from 'react';
 import { createRoot } from 'react-dom/client';
+import { Home } from 'lucide-react';
 import {
   TreeExpander,
   TreeIcon,
@@ -11,7 +12,7 @@ import {
   TreeView,
 } from '../../components/ui/tree';
 import { FileCard } from '../../components/ui/file-card-collections';
-import { currentStorageAppId, listDriveChildren, listDriveConnections, listDriveRoots, loadCatalog, loadViewFilter, moveFileReference, moveFolderReference, moveItemsReferences, setViewFilter } from '../../storageApi';
+import { DRIVE_PAGE_LIMIT, currentStorageAppId, listDriveChildren, listDriveConnections, listDriveRoots, loadCatalog, loadViewFilter, moveFileReference, moveFolderReference, moveItemsReferences, setViewFilter } from '../../storageApi';
 import { kindLabels, roleLabels } from '../../storageMeta';
 import { useShellSidebarCloseSwipe } from '../../hooks/useShellSidebarCloseSwipe';
 import { storageSelectionFromMessage, type ActiveStorageSelectionMessage } from '../../lib/activeStorageSelection';
@@ -281,7 +282,7 @@ function buildDriveTreeNodes(connections: DriveConnection[], cache: DriveChildre
       return {
         children: cached?.children || [],
         connectionId: connection.id,
-        displayPath: `/${driveConnectionLabel(connection)}`,
+        displayPath: driveConnectionLabel(connection),
         error: cached?.error,
         id: nodeId,
         label: driveConnectionLabel(connection),
@@ -298,7 +299,7 @@ function buildDriveTreeNodes(connections: DriveConnection[], cache: DriveChildre
 
 function driveConnectionLabel(connection: DriveConnection) {
   const account = connection.account_email || connection.display_name;
-  return account ? `Google Drive - ${account}` : 'Google Drive';
+  return account || 'Google Drive';
 }
 
 function driveConnectionStatus(connection: DriveConnection): FolderTreeNode['status'] {
@@ -323,14 +324,45 @@ function isDriveAccountNode(node: FolderTreeNode) {
 }
 
 function folderTreeIcon(node: FolderTreeNode) {
+  if (node.id === STORAGE_ROOT_ID) {
+    return <Home className="h-4 w-4" />;
+  }
   return isDriveAccountNode(node) ? <GoogleDriveIcon className="h-4 w-4" /> : undefined;
 }
 
-function driveFolderNode(connectionId: string, folder: StorageFolder): FolderTreeNode {
+function normalizeDriveDisplayPath(path: string) {
+  return path.split('/').filter(Boolean).join('/');
+}
+
+function driveFolderDisplayPath(parentDisplayPath: string | undefined, folder: StorageFolder) {
+  const parent = normalizeDriveDisplayPath(parentDisplayPath || '');
+  const remotePath = normalizeDriveDisplayPath(folder.display_path || '');
+  if (remotePath) {
+    const [account, ...parentRemoteParts] = parent.split('/').filter(Boolean);
+    if (account) {
+      if (remotePath === account || remotePath.startsWith(`${account}/`)) {
+        return remotePath;
+      }
+      const parentRemotePath = parentRemoteParts.join('/');
+      if (!parentRemotePath || remotePath === parentRemotePath || remotePath.startsWith(`${parentRemotePath}/`)) {
+        return `${account}/${remotePath}`;
+      }
+    }
+    return remotePath;
+  }
+  const name = normalizeDriveDisplayPath(folder.name);
+  if (!parent) {
+    return name;
+  }
+  return name ? `${parent}/${name}` : parent;
+}
+
+function driveFolderNode(connectionId: string, folder: StorageFolder, parentDisplayPath?: string): FolderTreeNode {
+  const displayPath = driveFolderDisplayPath(parentDisplayPath, folder);
   return {
     children: [],
     connectionId,
-    displayPath: folder.display_path || folder.name,
+    displayPath,
     driveFileId: folder.drive_file_id || '',
     id: driveFolderIdentity(connectionId, folder.drive_file_id || folder.id),
     label: folder.name,
@@ -339,7 +371,7 @@ function driveFolderNode(connectionId: string, folder: StorageFolder): FolderTre
     relativePath: '',
     role: 'all',
     status: 'connected',
-    workspaceRelativePath: folder.display_path || folder.name
+    workspaceRelativePath: displayPath
   };
 }
 
@@ -718,9 +750,9 @@ function StorageSidebarWidget() {
     }));
     try {
       const payload = node.driveFileId
-        ? await listDriveChildren(node.connectionId, node.driveFileId)
-        : await listDriveRoots(node.connectionId);
-      const children = (payload.folders || []).map((folder) => driveFolderNode(node.connectionId || payload.connection_id, folder));
+        ? await listDriveChildren(node.connectionId, node.driveFileId, { limit: DRIVE_PAGE_LIMIT })
+        : await listDriveRoots(node.connectionId, { limit: DRIVE_PAGE_LIMIT });
+      const children = (payload.folders || []).map((folder) => driveFolderNode(node.connectionId || payload.connection_id, folder, node.displayPath));
       setDriveChildrenCache((current) => ({
         ...current,
         [node.id]: { children, loaded: true }
@@ -1001,10 +1033,7 @@ function FolderTreeNodeView({ dropTarget, node, level, isLast, onDragEnd, onDrag
     <TreeNode isLast={isLast} level={level} nodeId={node.id}>
       <TreeNodeTrigger
         className={nodeDropStatus === 'ready' ? 'storage-folder-tree-drop-ready' : nodeDropStatus === 'blocked' ? 'storage-folder-tree-drop-blocked' : ''}
-        onClick={() => {
-          onEnsureChildren(node);
-          onSelect(node);
-        }}
+        onClick={() => onSelect(node)}
         toggleOnTriggerClick={false}
         draggable={node.provider === 'local' && node.role !== 'all' && Boolean(node.relativePath)}
         onDragEnd={onDragEnd}

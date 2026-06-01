@@ -189,10 +189,6 @@
   display: none;
 }
 
-.bs-sidebar__mobile-apps {
-  display: none;
-}
-
 .bs-sidebar__rail-item {
   display: grid;
   place-items: center;

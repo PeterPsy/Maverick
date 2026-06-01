@@ -19,11 +19,11 @@ describe("floating chat busy indicator", () => {
 
   it("marks the collapsed launcher busy when its active thread is running", () => {
     const hookSource = readWidgetFile("useFloatingWindows.ts");
-    const windowSource = readWidgetFile("FloatingWindow.tsx");
+    const frameSource = readWidgetFile("FloatingChatFrame.tsx");
     const launcherSource = readWidgetFile("FloatingLauncher.tsx");
 
     expect(hookSource).toContain("useRuntimeThreads");
-    expect(windowSource).toContain("const isActiveThreadBusy");
+    expect(frameSource).toContain("const isActiveThreadBusy");
     expect(launcherSource).toContain("aria-busy={isActiveThreadBusy || undefined}");
     expect(launcherSource).toContain('isActiveThreadBusy ? "is-busy" : ""');
     expect(launcherSource).toContain("isActiveThreadBusy ? <BusyChatGlow /> : null");
@@ -61,5 +61,25 @@ describe("floating chat busy indicator", () => {
     expect(floatingStyles).toContain("min-height: 2.48rem;");
     expect(floatingStyles).toContain(".chatapp-composer:has(.chatapp-composer__editor:focus) .chatapp-composer__input-shell");
     expect(floatingStyles).toContain("grid-template-areas:\n    \"field\"\n    \"toolbar\";");
+  });
+
+  it("uses one floating runtime for overlay, right dock, and mobile fullscreen modes", () => {
+    const mainSource = readWidgetFile("main.tsx");
+    const hookSource = readWidgetFile("useFloatingWindows.ts");
+    const runtimeSource = readWidgetFile("floatingWidgetRuntime.ts");
+
+    expect(mainSource).toContain('const isOverlayMode = floating.hostMode === "overlay"');
+    expect(mainSource).toContain("visibleWindows.map");
+    expect(hookSource).toContain("loadFloatingWidgetHostContext");
+    expect(hookSource).toContain("floatingWidgetHostContextFromContent");
+    expect(hookSource).toContain('postDockClose("chat-floating")');
+    expect(runtimeSource).toContain('export type FloatingWidgetMode = "overlay" | "fixed-right" | "mobile-fullscreen"');
+  });
+
+  it("resizes the overlay frame when returning from the right dock", () => {
+    const hookSource = readWidgetFile("useFloatingWindows.ts");
+
+    expect(hookSource).toContain('hostMode !== "overlay"');
+    expect(hookSource).toContain("postWidgetSize(windowsRef.current)");
   });
 });

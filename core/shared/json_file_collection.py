@@ -8,12 +8,15 @@ import fcntl
 import json
 import os
 from pathlib import Path
+import stat
 from threading import RLock
 import tempfile
 from typing import Any
 
 
 DATETIME_MARKER = "__maverick_datetime__"
+COLLECTION_FILE_MODE = 0o660
+COLLECTION_DIRECTORY_MODE = 0o2770
 
 
 class JsonFileCollection:
@@ -69,7 +72,7 @@ class JsonFileCollection:
                 self._write_documents(deepcopy(documents))
 
     def _process_lock(self, *, exclusive: bool):
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        _ensure_collection_directory(self.path.parent)
         lock_path = self.path.with_name(f".{self.path.name}.lock")
         return _FileLock(lock_path, exclusive=exclusive)
 
@@ -87,7 +90,7 @@ class JsonFileCollection:
         return payload
 
     def _write_documents(self, documents: list[dict[str, Any]]) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        _ensure_collection_directory(self.path.parent)
         temporary_path: Path | None = None
         try:
             with tempfile.NamedTemporaryFile(
@@ -102,16 +105,19 @@ class JsonFileCollection:
                 handle.write(json.dumps(documents, indent=2, default=_encode_document_value) + "\n")
                 handle.flush()
                 os.fsync(handle.fileno())
+            _apply_collection_file_mode(temporary_path)
             temporary_path.replace(self.path)
+            _apply_collection_file_mode(self.path)
         finally:
             if temporary_path is not None and temporary_path.exists():
                 temporary_path.unlink()
 
     def _append_document(self, document: dict[str, Any]) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        _ensure_collection_directory(self.path.parent)
         encoded = _indented_array_item(document)
         if not self.path.exists() or self.path.stat().st_size == 0:
             self.path.write_text(f"[\n{encoded}\n]\n", encoding="utf-8")
+            _apply_collection_file_mode(self.path)
             return
         try:
             with self.path.open("r+b") as handle:
@@ -125,6 +131,7 @@ class JsonFileCollection:
                 separator = ",\n" if has_existing_items else "\n"
                 handle.write((separator + encoded + "\n]\n").encode("utf-8"))
                 handle.truncate()
+            _apply_collection_file_mode(self.path)
         except (OSError, ValueError):
             documents = self._read_documents()
             documents.append(document)
@@ -181,6 +188,37 @@ def _decode_document_value(value: dict[str, Any]) -> Any:
     return value
 
 
+def _ensure_collection_directory(path: Path) -> None:
+    missing_directories = _missing_directories(path)
+    path.mkdir(parents=True, exist_ok=True)
+    for directory in missing_directories:
+        _apply_collection_directory_mode(directory)
+
+
+def _missing_directories(path: Path) -> list[Path]:
+    missing: list[Path] = []
+    cursor = path
+    while not cursor.exists():
+        missing.append(cursor)
+        cursor = cursor.parent
+    return missing
+
+
+def _apply_collection_directory_mode(path: Path) -> None:
+    try:
+        current_mode = stat.S_IMODE(path.stat().st_mode)
+        path.chmod(current_mode | COLLECTION_DIRECTORY_MODE)
+    except OSError:
+        return
+
+
+def _apply_collection_file_mode(path: Path) -> None:
+    try:
+        path.chmod(COLLECTION_FILE_MODE)
+    except OSError:
+        return
+
+
 class _FileLock:
     def __init__(self, path: Path, *, exclusive: bool) -> None:
         self.path = path
@@ -188,7 +226,9 @@ class _FileLock:
         self._handle = None
 
     def __enter__(self):
+        _ensure_collection_directory(self.path.parent)
         self._handle = self.path.open("a+b")
+        _apply_collection_file_mode(self.path)
         operation = fcntl.LOCK_EX if self.exclusive else fcntl.LOCK_SH
         fcntl.flock(self._handle.fileno(), operation)
         return self

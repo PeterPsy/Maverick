@@ -128,6 +128,7 @@ export type DriveListPayload = {
     limit: number;
     total: number;
     has_more: boolean;
+    next_page_token?: string;
   };
 };
 
@@ -158,6 +159,7 @@ export type CatalogPayload = {
     limit: number | null;
     total: number;
     has_more: boolean;
+    next_page_token?: string;
   };
   inventory?: {
     schema_version: string;
@@ -170,6 +172,19 @@ export type ReadFilePayload = {
   content_base64: string;
   content_type?: string;
   file_name?: string;
+};
+
+export type DrivePreviewPayload = {
+  file: StorageFile;
+  content_base64?: string;
+  content_type?: string;
+  file_name?: string;
+  preview_text?: string;
+  export_mime_type?: string;
+  bytes_read?: number;
+  cache_hit?: boolean;
+  preview_truncated?: boolean;
+  truncated?: boolean;
 };
 
 export type DeleteFilePayload = {

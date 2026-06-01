@@ -41,6 +41,7 @@ tool_actions = {
     "storage_drive_preview": "drive_preview",
     "storage_drive_export": "drive_export",
     "storage_drive_index": "drive_index",
+    "storage_drive_mark_indexed": "drive_mark_indexed",
     "storage_drive_write": "drive_write",
     "storage_drive_rename": "drive_rename",
     "storage_drive_move": "drive_move",

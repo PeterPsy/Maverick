@@ -44,6 +44,14 @@ export function eventsForHour(events: Event[], date: Date, hour: number) {
     .sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
 }
 
+export function eventsForListDate(events: Event[], date: Date) {
+  const dayStart = new Date(date)
+  dayStart.setHours(0, 0, 0, 0)
+  return events
+    .filter((event) => event.endTime >= dayStart)
+    .sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
+}
+
 export function defaultDraft(date: Date, colors: { value: string }[], categories: string[]): DraftEvent {
   const startTime = new Date(date)
   const now = new Date()

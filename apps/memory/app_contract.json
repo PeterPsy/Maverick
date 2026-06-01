@@ -69,6 +69,8 @@
       "memory_link_nodes",
       "memory_unlink_nodes",
       "memory_attach_file",
+      "memory_ingest_storage_source",
+      "memory_apply_storage_staleness",
       "memory_attach_app_entity",
       "memory_inspect_node",
       "memory_compile",

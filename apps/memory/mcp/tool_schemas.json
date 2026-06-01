@@ -1,0 +1,409 @@
+{
+  "tools": {
+    "memory_context": {
+      "description": "Return compact Memory context for an agent query, including provenance, compiled wiki snippets, and reusable Storage references when available.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string"},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 8},
+          "record_access_event": {"type": "boolean", "default": false}
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
+    "memory_search": {
+      "description": "Search Memory nodes and compiled wiki text, returning reusable Storage references for matched nodes when available.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string"},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 10}
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
+    "memory_remember": {
+      "description": "Create one durable Memory node.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "node_id": {"type": "string"},
+          "title": {"type": "string"},
+          "summary": {"type": "string"},
+          "body": {"type": "string"},
+          "body_text": {"type": "string"},
+          "type": {"type": "string"},
+          "node_type": {"type": "string"},
+          "importance": {"type": "number", "minimum": 0, "maximum": 1},
+          "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+          "metadata": {"type": "object"}
+        },
+        "required": ["title"],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
+    "memory_update_node": {
+      "description": "Update title, summary, body, importance, or confidence for one active Memory node.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "node_id": {"type": "string"},
+          "id": {"type": "string"},
+          "title": {"type": "string"},
+          "summary": {"type": "string"},
+          "body": {"type": "string"},
+          "body_text": {"type": "string"},
+          "importance": {"type": "number", "minimum": 0, "maximum": 1},
+          "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+        },
+        "anyOf": [{"required": ["node_id"]}, {"required": ["id"]}],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
+    "memory_soft_delete_node": {
+      "description": "Soft-delete one Memory node and its active edges.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "node_id": {"type": "string"},
+          "id": {"type": "string"},
+          "reason": {"type": "string"},
+          "actor_id": {"type": "string"}
+        },
+        "anyOf": [{"required": ["node_id"]}, {"required": ["id"]}],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
+    "memory_link_nodes": {
+      "description": "Create a typed relationship between two active Memory nodes.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "edge_id": {"type": "string"},
+          "source_node_id": {"type": "string"},
+          "target_node_id": {"type": "string"},
+          "source": {"type": "string"},
+          "target": {"type": "string"},
+          "kind": {"type": "string"},
+          "weight": {"type": "number", "minimum": 0, "maximum": 1},
+          "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+          "reason": {"type": "string"},
+          "metadata": {"type": "object"}
+        },
+        "anyOf": [
+          {"required": ["source_node_id", "target_node_id"]},
+          {"required": ["source", "target"]}
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
+    "memory_unlink_nodes": {
+      "description": "Soft-delete one Memory edge.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "edge_id": {"type": "string"},
+          "id": {"type": "string"}
+        },
+        "anyOf": [{"required": ["edge_id"]}, {"required": ["id"]}],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
+    "memory_attach_file": {
+      "description": "Attach a Storage file reference to a Memory node. For Google Drive, pass a remote_storage_file shape from Storage drive_index.memory_source; do not pass workspace_relative_path or Google tokens.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "node_id": {"type": "string"},
+          "node": {"type": "string"},
+          "external_ref_id": {"type": "string"},
+          "owning_app_id": {"type": "string", "default": "storage"},
+          "entity_type": {"type": "string", "default": "file"},
+          "entity_id": {"type": "string"},
+          "file_id": {"type": "string"},
+          "workspace_relative_path": {"type": "string", "pattern": "^storage/(uploaded|generated)/.+$"},
+          "title": {"type": "string"},
+          "provider": {"type": "string", "enum": ["google_drive", "local"]},
+          "uri": {"type": "string"},
+          "metadata": {
+            "type": "object",
+            "properties": {
+              "provider": {"type": "string"},
+              "connection_id": {"type": "string"},
+              "drive_file_id": {"type": "string"},
+	          "source_version": {"type": "string", "description": "Required Storage source version from drive_index; may also be present in memory_source.metadata.source_version."},
+              "display_path": {"type": "string"},
+              "staleness": {"type": ["object", "string"]},
+              "sync_state": {"type": "object"}
+            },
+            "additionalProperties": true
+          }
+        },
+        "anyOf": [{"required": ["node_id"]}, {"required": ["node"]}],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
+    "memory_ingest_storage_source": {
+      "description": "Ingest one Storage drive_index.memory_source into Memory, creating or updating the target node/reference idempotently by stable Storage file id. For Google Drive, pass only Storage reference metadata and optional bounded preview_text; do not pass workspace_relative_path or Google tokens.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "node_id": {"type": "string"},
+          "title": {"type": "string"},
+          "summary": {"type": "string"},
+          "body": {"type": "string"},
+          "body_text": {"type": "string"},
+          "type": {"type": "string"},
+          "node_type": {"type": "string"},
+          "importance": {"type": "number", "minimum": 0, "maximum": 1},
+          "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+	                  "source_version": {"type": "string", "minLength": 1},
+          "preview_text": {"type": "string", "maxLength": 20000},
+          "preview_truncated": {"type": "boolean", "default": false},
+          "compile_after_ingest": {"type": "boolean", "default": false},
+          "memory_source": {
+            "type": "object",
+            "properties": {
+              "source_kind": {"type": "string", "enum": ["remote_storage_file"]},
+              "owning_app_id": {"type": "string", "default": "storage"},
+              "entity_type": {"type": "string", "default": "file"},
+              "entity_id": {"type": "string"},
+              "file_id": {"type": "string"},
+              "workspace_relative_path": {"type": "string", "maxLength": 0},
+              "title": {"type": "string"},
+              "uri": {"type": "string"},
+              "metadata": {
+                "type": "object",
+                "properties": {
+                  "provider": {"type": "string", "enum": ["google_drive"]},
+                  "connection_id": {"type": "string"},
+                  "drive_file_id": {"type": "string"},
+                  "source_version": {"type": "string"},
+                  "display_path": {"type": "string"},
+                  "staleness": {"type": ["object", "string"]},
+                  "sync_state": {"type": "object"}
+                },
+	                "required": ["provider", "connection_id", "drive_file_id", "source_version"],
+                "additionalProperties": true
+              }
+            },
+            "required": ["source_kind", "entity_id", "metadata"],
+            "additionalProperties": true
+          }
+        },
+        "required": ["memory_source"],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
+    "memory_apply_storage_staleness": {
+      "description": "Apply one Storage drive_sync.memory_staleness payload to Memory, marking linked Storage references, compiled wiki pages, and claims stale so agents can re-index through Storage drive_index.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "owning_app_id": {"type": "string", "const": "storage"},
+          "entity_type": {"type": "string", "const": "file"},
+          "entity_id": {"type": "string"},
+          "file_id": {"type": "string"},
+          "reason": {"type": "string", "default": "google_drive_change"},
+          "staleness": {"type": "object"},
+          "sync_state": {"type": "object"},
+          "memory_staleness": {
+            "type": "object",
+            "properties": {
+              "owning_app_id": {"type": "string", "const": "storage"},
+              "entity_type": {"type": "string", "const": "file"},
+              "entity_id": {"type": "string"},
+              "reason": {"type": "string"},
+              "connection_id": {"type": "string"},
+              "drive_file_id": {"type": "string"},
+              "source_version": {"type": "string"},
+              "indexed_source_version": {"type": "string"},
+              "staleness": {"type": "object"},
+              "sync_state": {"type": "object"}
+            },
+            "required": ["owning_app_id", "entity_type", "entity_id"],
+            "additionalProperties": true
+          }
+        },
+        "oneOf": [
+          {"required": ["owning_app_id", "entity_type", "entity_id"]},
+          {"required": ["memory_staleness"]}
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
+    "memory_attach_app_entity": {
+      "description": "Attach one external app entity reference to a Memory node.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "node_id": {"type": "string"},
+          "node": {"type": "string"},
+          "external_ref_id": {"type": "string"},
+          "owning_app_id": {"type": "string"},
+          "entity_type": {"type": "string"},
+          "entity_id": {"type": "string"},
+          "title": {"type": "string"},
+          "uri": {"type": "string"},
+          "metadata": {"type": "object"}
+        },
+        "required": ["owning_app_id", "entity_type", "entity_id"],
+        "anyOf": [{"required": ["node_id"]}, {"required": ["node"]}],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
+    "memory_inspect_node": {
+      "description": "Inspect one Memory node with relationships, external references, compiled wiki, claims, citations, source links, and lint findings.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "node_id": {"type": "string"},
+          "entity_id": {"type": "string"},
+          "id": {"type": "string"}
+        },
+        "anyOf": [{"required": ["node_id"]}, {"required": ["entity_id"]}, {"required": ["id"]}],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
+    "memory_compile": {
+      "description": "Compile one Memory node into deterministic internal wiki content with sources, source versions, claims, citations, and lint findings.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "node_id": {"type": "string"},
+          "id": {"type": "string"}
+        },
+        "anyOf": [{"required": ["node_id"]}, {"required": ["id"]}],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
+    "memory_lint": {
+      "description": "Refresh Memory lint findings for nodes, compiled wiki pages, and Storage-backed source freshness.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "node_id": {"type": "string"},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 500}
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
+    "memory_wiki_query": {
+      "description": "Search compiled wiki pages and claims directly for agent-facing evidence retrieval, including citation source versions and Storage preview/export references when available.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string"},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 10}
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
+    "memory_audit": {
+      "description": "Return recent Memory audit events.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 50}
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
+    "memory_view_filter": {
+      "description": "Read the current Memory graph view state.",
+      "input_schema": {"type": "object", "properties": {}, "additionalProperties": false},
+      "output_schema": {"type": "object"}
+    },
+    "memory_set_view_filter": {
+      "description": "Set the Memory graph keyword filter.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string"},
+          "preserve_custom": {"type": "boolean", "default": false}
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
+    "memory_set_custom_view": {
+      "description": "Set a curated Memory graph view using node ids or node reference payloads.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "title": {"type": "string"},
+          "node_ids": {"type": "array", "items": {"type": "string"}, "maxItems": 500},
+          "nodes": {"type": "array", "items": {"type": "object"}},
+          "query": {"type": "string"}
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
+    "memory_clear_custom_view": {
+      "description": "Return Memory to normal graph search mode.",
+      "input_schema": {"type": "object", "properties": {}, "additionalProperties": false},
+      "output_schema": {"type": "object"}
+    },
+    "memory_reference_manifest": {
+      "description": "Describe Memory node reference entity support.",
+      "input_schema": {"type": "object", "properties": {}, "additionalProperties": false},
+      "output_schema": {"type": "object"}
+    },
+    "memory_reference_search": {
+      "description": "Search Memory node references for mention pickers and agents.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string"},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 10}
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
+    "memory_reference_resolve": {
+      "description": "Resolve one Memory node reference by entity id.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_id": {"type": "string"},
+          "node_id": {"type": "string"}
+        },
+        "anyOf": [{"required": ["entity_id"]}, {"required": ["node_id"]}],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
+    "memory_reference_summarize": {
+      "description": "Return a token-efficient Memory node summary for an agent or mention preview.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_id": {"type": "string"},
+          "node_id": {"type": "string"}
+        },
+        "anyOf": [{"required": ["entity_id"]}, {"required": ["node_id"]}],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    }
+  }
+}

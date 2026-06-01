@@ -29,6 +29,8 @@ from store import (
     update_node,
     wiki_query,
 )
+from storage_ingestion import ingest_storage_source
+from storage_staleness import apply_storage_staleness
 
 
 REFERENCE_MANIFEST = {
@@ -61,6 +63,8 @@ DATA_CHANGED_RESOURCES = {
     "unlink",
     "unlink_nodes",
     "attach_file",
+    "ingest_storage_source",
+    "apply_storage_staleness",
     "attach_entity",
     "attach_app_entity",
     "compile",
@@ -77,6 +81,8 @@ MCP_TOOL_ACTIONS = {
     "memory_link_nodes": "link",
     "memory_unlink_nodes": "unlink",
     "memory_attach_file": "attach_file",
+    "memory_ingest_storage_source": "ingest_storage_source",
+    "memory_apply_storage_staleness": "apply_storage_staleness",
     "memory_attach_app_entity": "attach_entity",
     "memory_inspect_node": "inspect",
     "memory_compile": "compile",
@@ -97,6 +103,11 @@ MCP_TOOL_ACTIONS = {
 def app_events_for_action(action: str) -> list[dict[str, str]]:
     if action not in DATA_CHANGED_RESOURCES:
         return []
+    if action == "apply_storage_staleness":
+        return [
+            {"type": "maverick.app.data-changed", "resource": "graph"},
+            {"type": "maverick.app.data-changed", "resource": "wiki"},
+        ]
     if action in VIEW_STATE_ACTIONS:
         resource = "view-state"
     elif action in WIKI_ACTIONS:
@@ -153,6 +164,10 @@ def _handle_action(data_root: Path, body: dict[str, Any], *, app_id: str = "memo
         return 200, soft_delete_edge(data_root, edge_id)
     if action == "attach_file":
         return 200, {"external_ref": add_external_ref(data_root, body, ref_kind="workspace_file")}
+    if action == "ingest_storage_source":
+        return 200, ingest_storage_source(data_root, body)
+    if action == "apply_storage_staleness":
+        return 200, apply_storage_staleness(data_root, body)
     if action in {"attach_entity", "attach_app_entity"}:
         return 200, {"external_ref": add_external_ref(data_root, body, ref_kind="app_entity")}
     if action == "inspect":

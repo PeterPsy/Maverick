@@ -3,10 +3,11 @@ import {
   Archive,
   ChevronDown,
   Forward,
+  KeyRound,
+  Mail,
   MailOpen,
   RefreshCw,
   Reply,
-  Trash2,
   X
 } from 'lucide-react';
 import {
@@ -26,6 +27,7 @@ const MAILBOXES = ['inbox', 'sent', 'drafts', 'starred', 'trash'];
 const MAIL_DATA_RESOURCES = new Set(['connections', 'drafts', 'threads', 'view-state']);
 const GMAIL_OAUTH_SECRETS = ['gmail-oauth-client-id', 'gmail-oauth-client-secret'];
 const GMAIL_REFRESH_SECRET = 'gmail-refresh-token';
+const IMAP_SMTP_SECRET = 'mailbox-password';
 const THREADS_PAGE_SIZE = 50;
 const INLINE_IMAGE_MAX_BYTES = 2_000_000;
 const READER_TEXT_BODY_CHARS = 12_000;
@@ -53,6 +55,8 @@ type SendResult = {
 };
 
 type MailNavigateParams = {
+  add_account?: boolean;
+  add_account_request_id?: string;
   mailbox?: string;
   connection_id?: string;
   query?: string;
@@ -73,6 +77,25 @@ type InlineImageState = {
 };
 
 type ComposerMode = 'reply' | 'forward' | 'compose';
+
+function StorageDeleteIcon({ className = '', size = 16 }: { className?: string; size?: number }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M4 7h16M10 11v6M14 11v6M6 7l1 14h10l1-14M9 7V4h6v3" />
+    </svg>
+  );
+}
 
 function noSecretRequest() {
   return { _app_secret_request: { logical_names: [], required: false } };
@@ -95,6 +118,38 @@ function gmailSecretRequest(connectionId?: string) {
       ]
     }
   };
+}
+
+function connectionSecretRequest(connection?: MailConnection | null) {
+  if (!connection?.id) {
+    return noSecretRequest();
+  }
+  if (connection.provider === 'imap_smtp') {
+    return {
+      _app_secret_request: {
+        required: true,
+        selectors: [
+          {
+            logical_names: [IMAP_SMTP_SECRET],
+            resource_type: 'mail_connection',
+            resource_id: connection.id
+          }
+        ]
+      }
+    };
+  }
+  return gmailSecretRequest(connection.id);
+}
+
+function openVaultIssues() {
+  window.parent?.postMessage(
+    {
+      type: 'maverick.app.open-app',
+      app_id: 'vault',
+      params: { tab: 'issues', query: 'mail' }
+    },
+    window.location.origin
+  );
 }
 
 function notifySelection(selection: Record<string, string | boolean | null>) {
@@ -510,7 +565,7 @@ function MailHtmlFrame({ htmlBody }: { htmlBody: string }) {
   );
 }
 
-function MailMessageBody({ message, connectionId }: { message: MailMessage; connectionId: string }) {
+function MailMessageBody({ message, connection }: { message: MailMessage; connection?: MailConnection }) {
   const [plain, setPlain] = useState(false);
   const [showImages, setShowImages] = useState(false);
   const [inlineImages, setInlineImages] = useState<Record<string, InlineImageState>>({});
@@ -599,7 +654,7 @@ function MailMessageBody({ message, connectionId }: { message: MailMessage; conn
         attachment_id: attachmentId,
         metadata_only: false,
         max_bytes: INLINE_IMAGE_MAX_BYTES,
-        ...gmailSecretRequest(connectionId)
+        ...connectionSecretRequest(connection)
       })
         .then((payload) => {
           if (cancelled) {
@@ -625,7 +680,7 @@ function MailMessageBody({ message, connectionId }: { message: MailMessage; conn
     return () => {
       cancelled = true;
     };
-  }, [connectionId, inlineAssetsToFetch]);
+  }, [connection, inlineAssetsToFetch]);
 
   return (
     <>
@@ -677,7 +732,7 @@ function MailMessageBody({ message, connectionId }: { message: MailMessage; conn
   );
 }
 
-function MailThreadMessage({ message, connectionId }: { message: MailMessage; connectionId: string }) {
+function MailThreadMessage({ message, connection }: { message: MailMessage; connection?: MailConnection }) {
   const sender = formatAddress(message.sender);
   const recipients = formatAddressList(message.recipients);
   const cc = formatAddressList(message.cc);
@@ -713,7 +768,7 @@ function MailThreadMessage({ message, connectionId }: { message: MailMessage; co
           </div>
         </dl>
       </details>
-      <MailMessageBody message={message} connectionId={connectionId} />
+      <MailMessageBody message={message} connection={connection} />
     </article>
   );
 }
@@ -734,7 +789,15 @@ export function App() {
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [oauthCompleting, setOauthCompleting] = useState(false);
+  const [accountModalOpen, setAccountModalOpen] = useState(false);
   const composerBodyRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const secretRequestForConnectionId = useCallback((id?: string) => {
+    if (!id) {
+      return noSecretRequest();
+    }
+    return connectionSecretRequest(connections.find((item) => item.id === id));
+  }, [connections]);
 
   const openThread = useCallback(async (threadId: string, connectionId?: string, refresh = false) => {
     setBusy(true);
@@ -744,7 +807,7 @@ export function App() {
         thread_id: threadId,
         max_body_chars: READER_TEXT_BODY_CHARS,
         max_body_html_chars: READER_HTML_BODY_CHARS,
-        ...(refresh && connectionId ? gmailSecretRequest(connectionId) : noSecretRequest())
+        ...(refresh && connectionId ? secretRequestForConnectionId(connectionId) : noSecretRequest())
       });
       setSelectedThread(payload.thread);
       setConnectionId(payload.thread.connection_id);
@@ -758,7 +821,7 @@ export function App() {
     } finally {
       setBusy(false);
     }
-  }, [mailbox]);
+  }, [mailbox, secretRequestForConnectionId]);
 
   const loadThreads = useCallback(async () => {
     const offset = (page - 1) * THREADS_PAGE_SIZE;
@@ -833,6 +896,9 @@ export function App() {
       }
       const data = event.data as { type?: string; owner_app_id?: string; resource?: string; params?: MailNavigateParams };
       if (data?.type === 'maverick.app.navigate') {
+        if (data.params?.add_account) {
+          setAccountModalOpen(true);
+        }
         const nextMailbox = data.params?.mailbox;
         const nextConnectionIdParam = typeof data.params?.connection_id === 'string' && data.params.connection_id.trim()
           ? data.params.connection_id.trim()
@@ -887,6 +953,19 @@ export function App() {
     }
   }, [page, totalPages]);
 
+  useEffect(() => {
+    if (!accountModalOpen) {
+      return undefined;
+    }
+    const listener = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setAccountModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', listener);
+    return () => window.removeEventListener('keydown', listener);
+  }, [accountModalOpen]);
+
   function focusComposer() {
     window.setTimeout(() => composerBodyRef.current?.focus(), 0);
   }
@@ -924,10 +1003,53 @@ export function App() {
     notifySelection({ mailbox, thread: null });
   }
 
+  async function startGmailOAuth() {
+    setBusy(true);
+    try {
+      const payload = await callBackend<{ status: string; authorization_url?: string; detail?: string }>({
+        action: MAIL_BACKEND_ACTIONS.connectionsStartOAuth,
+        provider: 'gmail',
+        redirect_uri: `${window.location.origin}/apps/mail/oauth/callback`,
+        _app_secret_request: {
+          logical_names: GMAIL_OAUTH_SECRETS,
+          required: true
+        }
+      });
+      if (payload.authorization_url) {
+        window.location.assign(payload.authorization_url);
+        return;
+      }
+      setNotice(payload.detail || `Gmail setup status: ${payload.status}`);
+    } catch (error) {
+      setNotice((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function preparePrivateEmail() {
+    setBusy(true);
+    try {
+      const payload = await callBackend<{ connection_id: string; status: string }>({
+        action: MAIL_BACKEND_ACTIONS.connectionsPrepareImapSmtp,
+        ...noSecretRequest()
+      });
+      setConnectionId(payload.connection_id);
+      setNotice(`Private Email ${payload.status}.`);
+      await loadThreads();
+      setAccountModalOpen(false);
+      openVaultIssues();
+    } catch (error) {
+      setNotice((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function createDraft(event: FormEvent) {
     event.preventDefault();
     if (!canUseConnection || !connection) {
-      setNotice('Connect Gmail before creating drafts.');
+      setNotice('Connect a mail account before creating drafts.');
       return;
     }
     setBusy(true);
@@ -963,7 +1085,7 @@ export function App() {
         action: MAIL_BACKEND_ACTIONS.draftsSend,
         draft_id: lastDraft.id,
         confirm,
-        ...(confirm ? gmailSecretRequest(lastDraft.connection_id) : noSecretRequest())
+        ...(confirm ? secretRequestForConnectionId(lastDraft.connection_id) : noSecretRequest())
       });
       setLastSendResult(payload.result);
       setNotice(sendResultNotice(payload.result, confirm));
@@ -985,7 +1107,7 @@ export function App() {
         action: MAIL_BACKEND_ACTIONS.messagesMarkRead,
         thread_id: selectedThread.id,
         read,
-        ...gmailSecretRequest(selectedThread.connection_id)
+        ...connectionSecretRequest(connectionById.get(selectedThread.connection_id))
       });
       setSelectedThread(payload.thread);
       await loadThreads();
@@ -1007,7 +1129,7 @@ export function App() {
         thread_id: selectedThread.id,
         add,
         remove,
-        ...gmailSecretRequest(selectedThread.connection_id)
+        ...connectionSecretRequest(connectionById.get(selectedThread.connection_id))
       });
       setSelectedThread(payload.thread);
       await loadThreads();
@@ -1025,7 +1147,7 @@ export function App() {
         action: MAIL_BACKEND_ACTIONS.messagesMarkRead,
         thread_id: thread.id,
         read,
-        ...gmailSecretRequest(thread.connection_id)
+        ...connectionSecretRequest(connectionById.get(thread.connection_id))
       });
       setSelectedThread((current) => current?.id === payload.thread.id ? payload.thread : current);
       await loadThreads();
@@ -1044,7 +1166,7 @@ export function App() {
         thread_id: thread.id,
         add: ['trash'],
         remove: ['inbox'],
-        ...gmailSecretRequest(thread.connection_id)
+        ...connectionSecretRequest(connectionById.get(thread.connection_id))
       });
       setSelectedThread((current) => current?.id === payload.thread.id ? payload.thread : current);
       setNotice('Moved to trash.');
@@ -1076,12 +1198,58 @@ export function App() {
         </div>
       </div>
 
+      {accountModalOpen ? (
+        <div className="mail-modal-backdrop" role="presentation" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) {
+            setAccountModalOpen(false);
+          }
+        }}>
+          <section className="mail-account-modal" role="dialog" aria-modal="true" aria-labelledby="mail-account-modal-title">
+            <header className="mail-account-modal__header">
+              <h2 id="mail-account-modal-title">Add account</h2>
+              <button type="button" className="mail-icon-button" onClick={() => setAccountModalOpen(false)} aria-label="Close">
+                <X size={16} strokeWidth={1.9} aria-hidden="true" />
+              </button>
+            </header>
+            <div className="mail-account-modal__choices">
+              <button type="button" className="mail-account-choice" onClick={startGmailOAuth} disabled={busy}>
+                <span className="mail-account-choice__icon" aria-hidden="true">
+                  <Mail size={18} strokeWidth={1.9} />
+                </span>
+                <span>
+                  <strong>Gmail</strong>
+                  <small>Open OAuth</small>
+                </span>
+              </button>
+              <button type="button" className="mail-account-choice" onClick={preparePrivateEmail} disabled={busy}>
+                <span className="mail-account-choice__icon" aria-hidden="true">
+                  <KeyRound size={18} strokeWidth={1.9} />
+                </span>
+                <span>
+                  <strong>Private Email</strong>
+                  <small>Open Vault</small>
+                </span>
+              </button>
+            </div>
+            {connections.length ? (
+              <div className="connection-status-row" aria-label="Connection status">
+                {connections.map((item) => (
+                  <span key={item.id} className={`connection-pill is-${item.status.replace(/[^a-z0-9_-]+/gi, '-')}`}>
+                    {item.provider === 'imap_smtp' ? 'Private Email' : 'Gmail'}: {item.status}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </section>
+        </div>
+      ) : null}
+
       <div className="mail-workspace">
         <section className="thread-column">
           <div className="thread-list">
             {threads.length === 0 ? (
               <div className="thread-empty">
-                {canUseConnection ? 'No threads match this view.' : 'Connect Gmail to load mail.'}
+                {canUseConnection ? 'No threads match this view.' : 'Connect a mail account to load mail.'}
               </div>
             ) : null}
             {threads.map((thread) => {
@@ -1105,8 +1273,19 @@ export function App() {
                       <span>{recipientLabel}</span>
                     </span>
                     <span className="thread-action-row">
-                      <button type="button" className="thread-read-button" onClick={() => markThread(thread, thread.unread)} disabled={busy || !canModifyThread}>
-                        {thread.unread ? 'Mark read' : 'Mark unread'}
+                      <button
+                        type="button"
+                        className="thread-read-button"
+                        onClick={() => markThread(thread, thread.unread)}
+                        disabled={busy || !canModifyThread}
+                        aria-label={thread.unread ? 'Mark read' : 'Mark unread'}
+                        title={thread.unread ? 'Mark read' : 'Mark unread'}
+                      >
+                        {thread.unread ? (
+                          <MailOpen size={15} strokeWidth={1.9} aria-hidden="true" />
+                        ) : (
+                          <Mail size={15} strokeWidth={1.9} aria-hidden="true" />
+                        )}
                       </button>
                       <button
                         type="button"
@@ -1116,7 +1295,7 @@ export function App() {
                         aria-label="Move to trash"
                         title="Move to trash"
                       >
-                        <span className="thread-trash-icon" aria-hidden="true" />
+                        <StorageDeleteIcon className="thread-trash-icon" size={16} />
                       </button>
                     </span>
                   </span>
@@ -1152,7 +1331,7 @@ export function App() {
                 Archive
               </button>
               <button type="button" onClick={() => modifySelected(['trash'], ['inbox'])} disabled={busy}>
-                <Trash2 size={16} strokeWidth={1.8} aria-hidden="true" />
+                <StorageDeleteIcon size={16} />
                 Trash
               </button>
               <button type="button" onClick={() => openThread(selectedThread.id, selectedThread.connection_id, true)} disabled={busy}>
@@ -1166,7 +1345,7 @@ export function App() {
           </header>
           <div className="message-stack">
             {(selectedThread.messages || []).map((message) => (
-              <MailThreadMessage key={message.id} message={message} connectionId={selectedThread.connection_id} />
+              <MailThreadMessage key={message.id} message={message} connection={connectionById.get(selectedThread.connection_id)} />
             ))}
           </div>
           {canUseConnection && connection ? (

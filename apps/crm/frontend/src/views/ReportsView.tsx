@@ -1,4 +1,4 @@
-import { Activity, ClipboardList, Percent, TrendingUp } from 'lucide-react';
+import { Activity, CalendarDays, ClipboardList, Mail, Percent, ShieldAlert, TrendingUp } from 'lucide-react';
 import { CrmRecord } from '../api';
 import { PipelineStageReport, SalesReportsPayload } from '../domain/types';
 import { money } from '../domain/routing';
@@ -17,6 +17,7 @@ export function ReportsView({ reports, isLoading, onOpenStage, onOpenDeal, onOpe
   const conversion = reports?.lead_conversion || {};
   const overdue = reports?.task_overdue || {};
   const activities = reports?.activities_by_owner || [];
+  const connections = reports?.connection_metrics || {};
   const openPipelineTotals = sumByCurrency(stages, 'total_value');
   const openDealCount = stages.reduce((total, item) => total + Number(item.deal_count || 0), 0);
   const overdueFilters = overdue.drilldown_filters || { kind: 'task', status: 'open', due_overdue: 'true' };
@@ -25,6 +26,9 @@ export function ReportsView({ reports, isLoading, onOpenStage, onOpenDeal, onOpe
     { label: 'Open pipeline', value: formatCurrencyTotals(openPipelineTotals), icon: TrendingUp },
     { label: 'Weighted forecast', value: formatCurrencyTotals(forecast.currency_totals, '') || formatMoney(forecast.total_weighted_value, 'EUR'), icon: TrendingUp },
     { label: 'Lead conversion', value: percent(conversion.conversion_rate), icon: Percent },
+    { label: 'Linked email leads', value: String(connections.leads_with_linked_email || 0), icon: Mail },
+    { label: 'Deals with calls', value: String(connections.deals_with_scheduled_call || 0), icon: CalendarDays },
+    { label: 'Pending approvals', value: String(connections.records_with_pending_approvals || 0), icon: ShieldAlert, onClick: () => onOpenAgentDeck({ kind: 'workflow_proposal', status: 'pending' }) },
     { label: 'Overdue tasks', value: String(overdue.total || 0), icon: ClipboardList, onClick: () => onOpenAgentDeck(overdueFilters) }
   ];
 
@@ -64,6 +68,24 @@ export function ReportsView({ reports, isLoading, onOpenStage, onOpenDeal, onOpe
               </div>
             ))}
             {!currencyEntries(forecast.currency_totals).length ? <EmptyReport text="No forecast value yet." /> : null}
+          </div>
+        </section>
+
+        <section className="crm-panel">
+          <h2>Agentic connections</h2>
+          <div className="report-list">
+            <div className="report-row">
+              <strong>Accounts without follow-up</strong>
+              <span>{connections.accounts_without_recent_follow_up || 0}</span>
+            </div>
+            <div className="report-row">
+              <strong>Pipeline with next call</strong>
+              <span>{formatCurrencyTotals(connections.pipeline_value_with_next_call)}</span>
+            </div>
+            <div className="report-row">
+              <strong>Records pending approval</strong>
+              <span>{connections.records_with_pending_approvals || 0}</span>
+            </div>
           </div>
         </section>
 

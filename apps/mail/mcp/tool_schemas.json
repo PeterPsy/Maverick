@@ -183,8 +183,10 @@
           "to": { "type": "array", "items": { "type": "object" } },
           "cc": { "type": "array", "items": { "type": "object" } },
           "bcc": { "type": "array", "items": { "type": "object" } },
+          "reply_to": { "type": "array", "items": { "type": "object" } },
           "subject": { "type": "string" },
-          "body_text": { "type": "string" }
+          "body_text": { "type": "string" },
+          "body_html": { "type": "string" }
         },
         "required": ["subject", "body_text"],
         "anyOf": [
@@ -206,8 +208,10 @@
           "to": { "type": "array", "items": { "type": "object" } },
           "cc": { "type": "array", "items": { "type": "object" } },
           "bcc": { "type": "array", "items": { "type": "object" } },
+          "reply_to": { "type": "array", "items": { "type": "object" } },
           "subject": { "type": "string" },
-          "body_text": { "type": "string" }
+          "body_text": { "type": "string" },
+          "body_html": { "type": "string" }
         },
         "required": ["draft_id"],
         "additionalProperties": false
@@ -237,6 +241,12 @@
           "resource_type": "mail_connection",
           "resource_lookup": { "kind": "mail_connection_from_arguments" },
           "when": { "confirm": true }
+        },
+        {
+          "required_secrets": ["mailbox-password"],
+          "resource_type": "mail_connection",
+          "resource_lookup": { "kind": "mail_connection_from_arguments" },
+          "when": { "confirm": true }
         }
       ]
     },
@@ -250,8 +260,10 @@
           "to": { "type": "array", "items": { "type": "object" } },
           "cc": { "type": "array", "items": { "type": "object" } },
           "bcc": { "type": "array", "items": { "type": "object" } },
+          "reply_to": { "type": "array", "items": { "type": "object" } },
           "subject": { "type": "string" },
           "body_text": { "type": "string" },
+          "body_html": { "type": "string" },
           "confirm": { "type": "boolean", "default": false }
         },
         "required": ["subject", "body_text"],
@@ -272,6 +284,12 @@
         },
         {
           "required_secrets": ["gmail-refresh-token"],
+          "resource_type": "mail_connection",
+          "resource_lookup": { "kind": "mail_connection_from_arguments" },
+          "when": { "confirm": true }
+        },
+        {
+          "required_secrets": ["mailbox-password"],
           "resource_type": "mail_connection",
           "resource_lookup": { "kind": "mail_connection_from_arguments" },
           "when": { "confirm": true }
@@ -300,6 +318,11 @@
           "required_secrets": ["gmail-refresh-token"],
           "resource_type": "mail_connection",
           "resource_lookup": { "kind": "mail_connection_from_arguments" }
+        },
+        {
+          "required_secrets": ["mailbox-password"],
+          "resource_type": "mail_connection",
+          "resource_lookup": { "kind": "mail_connection_from_arguments" }
         }
       ]
     },
@@ -322,6 +345,11 @@
         },
         {
           "required_secrets": ["gmail-refresh-token"],
+          "resource_type": "mail_connection",
+          "resource_lookup": { "kind": "mail_connection_from_arguments" }
+        },
+        {
+          "required_secrets": ["mailbox-password"],
           "resource_type": "mail_connection",
           "resource_lookup": { "kind": "mail_connection_from_arguments" }
         }
@@ -352,6 +380,12 @@
           "resource_type": "mail_connection",
           "resource_lookup": { "kind": "mail_connection_from_arguments" },
           "when": { "metadata_only": false }
+        },
+        {
+          "required_secrets": ["mailbox-password"],
+          "resource_type": "mail_connection",
+          "resource_lookup": { "kind": "mail_connection_from_arguments" },
+          "when": { "metadata_only": false }
         }
       ]
     },
@@ -376,6 +410,11 @@
         },
         {
           "required_secrets": ["gmail-refresh-token"],
+          "resource_type": "mail_connection",
+          "resource_lookup": { "kind": "mail_connection_from_arguments" }
+        },
+        {
+          "required_secrets": ["mailbox-password"],
           "resource_type": "mail_connection",
           "resource_lookup": { "kind": "mail_connection_from_arguments" }
         }

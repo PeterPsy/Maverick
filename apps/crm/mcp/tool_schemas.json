@@ -48,6 +48,29 @@
       },
       "output_schema": { "type": "object" }
     },
+    "crm_website_intake": {
+      "description": "Ingest one public website form submission into CRM, then send CRM-owned Mail notifications through the selected Mail provider.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "submission_id": { "type": "string" },
+          "received_at": { "type": "string" },
+          "source": { "type": "string" },
+          "contact": { "type": "object" },
+          "request": { "type": "object" },
+          "answers": { "type": "object" },
+          "source_context": { "type": "object" },
+          "server_meta": { "type": "object" },
+          "notification": { "type": "object" },
+          "send_notifications": { "type": "boolean" },
+          "retry_failed_email": { "type": "boolean" },
+          "mail_provider_app_id": { "type": "string" }
+        },
+        "required": ["submission_id", "contact", "request"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
     "crm_update_lead": {
       "description": "Update one CRM lead.",
       "input_schema": {
@@ -705,12 +728,14 @@
           "source_entity_type": { "type": "string" },
           "source_entity_id": { "type": "string" },
           "link_type": { "type": "string" },
+          "provider_alias": { "type": "string", "enum": ["mail", "calendar", "files", "agent"] },
+          "source_interface": { "type": "string" },
           "title": { "type": "string" },
           "summary": { "type": "string" },
           "occurred_at": { "type": "string" },
           "metadata": { "type": "object" }
         },
-        "required": ["source_app_id", "source_entity_type", "source_entity_id"],
+        "required": ["crm_entity_type", "crm_entity_id", "source_app_id", "source_entity_type", "source_entity_id"],
         "additionalProperties": false
       },
       "output_schema": { "type": "object" }
@@ -873,6 +898,73 @@
       "description": "Check CRM data health.",
       "input_schema": { "type": "object", "properties": {}, "additionalProperties": false },
       "output_schema": { "type": "object" }
+    },
+    "crm_view_filter": {
+      "description": "Read the current CRM view state.",
+      "input_schema": { "type": "object", "properties": {}, "additionalProperties": false },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "state": { "type": "object" }
+        }
+      }
+    },
+    "crm_set_view_filter": {
+      "description": "Set CRM search query and entity filter view state.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string" },
+          "entity_type": { "type": "string", "enum": ["all", "lead", "account", "contact", "deal", "activity", "task", "note"] }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "state": { "type": "object" }
+        }
+      }
+    },
+    "crm_set_custom_view": {
+      "description": "Set CRM to a curated custom view using CRM record references.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string" },
+          "refs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "entity_type": { "type": "string", "enum": ["lead", "account", "contact", "deal", "activity", "task", "note"] },
+                "id": { "type": "string" }
+              },
+              "required": ["entity_type", "id"],
+              "additionalProperties": false
+            },
+            "maxItems": 500
+          }
+        },
+        "required": ["title", "refs"],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "state": { "type": "object" }
+        }
+      }
+    },
+    "crm_clear_custom_view": {
+      "description": "Return CRM to normal search mode.",
+      "input_schema": { "type": "object", "properties": {}, "additionalProperties": false },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "state": { "type": "object" }
+        }
+      }
     },
     "crm_reference_manifest": {
       "description": "Describe CRM reference entity support.",

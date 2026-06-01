@@ -2,7 +2,7 @@
   "app_id": "crm",
   "contract_version": "1.0",
   "name": "CRM",
-  "version": "0.4.0",
+  "version": "0.4.2",
   "description": "Workspace CRM for accounts, contacts, deals, activities, tasks, typed custom fields, import/export, and agent-friendly CRM actions.",
   "publisher": "workspace",
   "minimum_core_version": "0.1.0",
@@ -21,7 +21,48 @@
       ]
     }
   ],
-  "requires": [],
+  "requires": [
+    {
+      "alias": "mail",
+      "interface": "mail.workspace",
+      "version": "^1",
+      "required": false,
+      "cardinality": "one",
+      "description": "Optional workspace Mail provider used by agents to discover and link email threads, messages, drafts, and attachments to CRM records."
+    },
+    {
+      "alias": "calendar",
+      "interface": "calendar.events",
+      "version": "^1",
+      "required": false,
+      "cardinality": "one",
+      "description": "Optional workspace Calendar provider used by agents to schedule calls and link calendar events to CRM records."
+    },
+    {
+      "alias": "files",
+      "interface": "file.catalog",
+      "version": "^1",
+      "required": false,
+      "cardinality": "one",
+      "description": "Optional workspace Storage catalog provider used by agents to link uploaded, generated, or Drive-backed files to CRM records."
+    },
+    {
+      "alias": "file-preview",
+      "interface": "file.preview",
+      "version": "^1",
+      "required": false,
+      "cardinality": "one",
+      "description": "Optional workspace Storage preview provider used to inspect linked CRM file references through Storage-owned preview surfaces."
+    },
+    {
+      "alias": "file-write",
+      "interface": "file.content.write",
+      "version": "^1",
+      "required": false,
+      "cardinality": "one",
+      "description": "Optional workspace Storage write provider used by agents to save CRM briefs, attachments, and generated outputs before linking them back to CRM records."
+    }
+  ],
   "distribution": {
     "mode": "workspace_local",
     "source_access": "editable"
@@ -53,6 +94,7 @@
       "crm_search",
       "crm_get_record",
       "crm_create_lead",
+      "crm_website_intake",
       "crm_update_lead",
       "crm_convert_lead",
       "crm_create_contact",
@@ -105,6 +147,10 @@
       "crm_import_preview",
       "crm_import_commit",
       "crm_health",
+      "crm_view_filter",
+      "crm_set_view_filter",
+      "crm_set_custom_view",
+      "crm_clear_custom_view",
       "crm_reference_manifest",
       "crm_reference_search",
       "crm_reference_resolve",
@@ -243,7 +289,7 @@
   },
   "storage": {
     "storage_kind": "sqlite",
-    "data_schema_version": "4",
+    "data_schema_version": "6",
     "primary_paths": [
       "data/crm/crm.sqlite",
       "data/crm/view_state.json"

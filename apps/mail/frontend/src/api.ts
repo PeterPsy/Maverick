@@ -10,6 +10,7 @@ export type MailConnection = {
   display_name: string;
   status: string;
   scopes?: string[];
+  settings?: Record<string, unknown>;
 };
 
 export type MailProviderState = {
@@ -100,9 +101,11 @@ export type MailDraft = {
   thread_id?: string;
   subject: string;
   body_text: string;
+  body_html?: string;
   to: MailAddress[];
   cc?: MailAddress[];
   bcc?: MailAddress[];
+  reply_to?: MailAddress[];
   status: string;
 };
 
@@ -120,6 +123,10 @@ export const MAIL_BACKEND_ACTIONS = {
   connectionsList: 'connections.list',
   connectionsStartOAuth: 'connections.start_oauth',
   connectionsCompleteOAuth: 'connections.complete_oauth',
+  connectionsPrepareImapSmtp: 'connections.prepare_imap_smtp',
+  connectionsTestImapSmtp: 'connections.test_imap_smtp',
+  connectionsActivateImapSmtp: 'connections.activate_imap_smtp',
+  connectionsUpdateImapSmtp: 'connections.update_imap_smtp',
   connectionsDisconnect: 'connections.disconnect',
   mailboxesCounts: 'mailboxes.counts',
   threadsList: 'threads.list',

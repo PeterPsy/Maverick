@@ -23,6 +23,7 @@ const MAILBOXES = ['inbox', 'sent', 'drafts', 'starred', 'trash'];
 const MAIL_DATA_RESOURCES = new Set(['connections', 'drafts', 'threads', 'view-state']);
 const GMAIL_OAUTH_SECRETS = ['gmail-oauth-client-id', 'gmail-oauth-client-secret'];
 const GMAIL_REFRESH_SECRET = 'gmail-refresh-token';
+const IMAP_SMTP_SECRET = 'mailbox-password';
 
 type ConnectionPayload = {
   items: MailConnection[];
@@ -79,6 +80,27 @@ function gmailSecretRequest(connectionId?: string) {
       ]
     }
   };
+}
+
+function connectionSecretRequest(connection?: MailConnection | null) {
+  if (!connection?.id) {
+    return noSecretRequest();
+  }
+  if (connection.provider === 'imap_smtp') {
+    return {
+      _app_secret_request: {
+        required: true,
+        selectors: [
+          {
+            logical_names: [IMAP_SMTP_SECRET],
+            resource_type: 'mail_connection',
+            resource_id: connection.id
+          }
+        ]
+      }
+    };
+  }
+  return gmailSecretRequest(connection.id);
 }
 
 function contextToken() {
@@ -248,7 +270,7 @@ function MailSidebarWidget() {
         action: MAIL_BACKEND_ACTIONS.threadsSync,
         connection_id: targetConnection.id,
         max_threads: MAIL_INTERACTIVE_SYNC_THREADS,
-        ...gmailSecretRequest(targetConnection.id)
+        ...connectionSecretRequest(targetConnection)
       });
       const refreshed = await refresh({ preserveNotice: true });
       if (refreshed) {

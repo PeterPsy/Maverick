@@ -46,7 +46,12 @@ class GeneratedAppContractTest(unittest.TestCase):
 
         self.assertEqual(
             secrets.read,
-            ["gmail-oauth-client-id", "gmail-oauth-client-secret", "gmail-refresh-token"],
+            [
+                "gmail-oauth-client-id",
+                "gmail-oauth-client-secret",
+                "gmail-refresh-token",
+                "mailbox-password",
+            ],
         )
         self.assertEqual(secrets.write, ["gmail-refresh-token"])
 
@@ -70,6 +75,14 @@ class GeneratedAppContractTest(unittest.TestCase):
                 for selector in cli_selectors
             )
         )
+        self.assertTrue(
+            any(
+                selector.logical_names == ["mailbox-password"]
+                and selector.resource_type == "mail_connection"
+                and selector.resource_lookup == {"kind": "mail_connection_from_arguments"}
+                for selector in cli_selectors
+            )
+        )
 
         mcp_selectors = app_mcp_tool_secret_selectors(
             app_root,
@@ -86,6 +99,13 @@ class GeneratedAppContractTest(unittest.TestCase):
         self.assertTrue(
             any(
                 selector.logical_names == ["gmail-refresh-token"]
+                and selector.resource_type == "mail_connection"
+                for selector in mcp_selectors
+            )
+        )
+        self.assertTrue(
+            any(
+                selector.logical_names == ["mailbox-password"]
                 and selector.resource_type == "mail_connection"
                 for selector in mcp_selectors
             )

@@ -724,8 +724,13 @@ def _draft_message(draft: dict[str, object], *, sender_email: str, sender_name: 
         message["Cc"] = ", ".join(_format_address(item) for item in draft.get("cc", []))
     if draft.get("bcc"):
         message["Bcc"] = ", ".join(_format_address(item) for item in draft.get("bcc", []))
+    if draft.get("reply_to"):
+        message["Reply-To"] = ", ".join(_format_address(item) for item in draft.get("reply_to", []))
     message["Subject"] = str(draft.get("subject") or "")
     message.set_content(str(draft.get("body_text") or ""))
+    body_html = str(draft.get("body_html") or "")
+    if body_html:
+        message.add_alternative(body_html, subtype="html")
     return message
 
 

@@ -27,6 +27,8 @@ def provider_status(app_secrets: object | None = None, connections: list[dict[st
     secrets_map = _secret_map(app_secrets)
     connection_items = connections or []
     has_gmail = any(item.get("provider") == "gmail" and item.get("status") == "connected" for item in connection_items)
+    imap_connections = [item for item in connection_items if item.get("provider") == "imap_smtp" and item.get("status") != "disconnected"]
+    imap_connected = any(item.get("status") == "connected" for item in imap_connections)
     return {
         "providers": [
             _provider_payload(
@@ -35,8 +37,14 @@ def provider_status(app_secrets: object | None = None, connections: list[dict[st
                 configured=bool(secrets_map.get(GMAIL_CLIENT_ID_SECRET)),
                 status="connected" if has_gmail else ("needs_secret_grant" if not secrets_map.get(GMAIL_CLIENT_ID_SECRET) else "ready_for_oauth"),
             ),
+            _provider_payload(
+                "imap_smtp",
+                connected=imap_connected,
+                configured=bool(imap_connections),
+                status=("connected" if imap_connected else (str(imap_connections[0].get("status")) if imap_connections else "not_configured")),
+            ),
         ],
-        "required_secrets": [GMAIL_CLIENT_ID_SECRET, GMAIL_CLIENT_SECRET_SECRET],
+        "required_secrets": [GMAIL_CLIENT_ID_SECRET, GMAIL_CLIENT_SECRET_SECRET, "mailbox-password"],
         "callback_path": DEFAULT_REDIRECT_PATH,
     }
 

@@ -232,6 +232,10 @@
   font-size: 0.72rem;
 }
 
+.deal-card__connections {
+  margin-top: 0.05rem;
+}
+
 .deal-card__health {
   justify-self: start;
   padding: 0.18rem 0.48rem;

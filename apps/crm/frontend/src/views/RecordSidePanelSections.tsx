@@ -1,7 +1,7 @@
 import { Dispatch, FormEvent, SetStateAction } from 'react';
-import { Link2, Sparkles, Unlink } from 'lucide-react';
+import { CalendarDays, FileText, Link2, Mail, ShieldAlert, Sparkles, Unlink } from 'lucide-react';
 import { CrmRecord } from '../api';
-import { AccountBrief, AuditEvent, EnrichmentResult, ExternalRef } from '../domain/types';
+import { AccountBrief, AuditEvent, ConnectionBadge, ConnectionSummary, EnrichmentResult, ExternalRef } from '../domain/types';
 import { entityLabel, fieldLabel, money, titleFor } from '../domain/routing';
 
 export type LinkDraft = {
@@ -253,6 +253,29 @@ export function AgentSection({
   );
 }
 
+export function ConnectionSummarySection({ summary, linkedItems }: { summary: ConnectionSummary | null; linkedItems: ExternalRef[] }) {
+  const badges = summary?.badges?.filter((badge) => badge.count || badge.label) || [];
+  const visibleBadges = badges.length ? badges : summary?.total_count ? [{ key: 'connections', kind: 'connections', label: `Connections ${summary.total_count}`, count: summary.total_count }] : [];
+  if (!summary || (!visibleBadges.length && !summary.approval_count)) return null;
+  return (
+    <section className="detail-connection-summary">
+      <h3>Connection summary</h3>
+      <div className="connection-summary-grid">
+        {visibleBadges.map((badge) => {
+          const Icon = summaryIcon(badge);
+          return (
+            <div key={badge.key || badge.kind || badge.label || 'connection'}>
+              <Icon size={15} aria-hidden="true" />
+              <strong>{badge.label || summaryLabel(badge)}</strong>
+              <span>{summaryDetail(badge, summary, linkedItems)}</span>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 export function LinkedItemsSection({
   linkedItems,
   linkDraft,
@@ -268,7 +291,7 @@ export function LinkedItemsSection({
   isSaving: boolean;
   isLinking: boolean;
   onLink: (event: FormEvent<HTMLFormElement>) => void;
-  onUnlink: (id: string) => void;
+  onUnlink: (item: ExternalRef) => void;
 }) {
   const hasReferenceTarget = Boolean(
     linkDraft.source_app_id.trim() &&
@@ -279,7 +302,7 @@ export function LinkedItemsSection({
 
   return (
     <section className="detail-linked-items">
-      <h3>Linked items</h3>
+      <h3>Linked mail, calendar, and files</h3>
       {linkedItems.length ? (
         <div className="linked-list">
           {linkedItems.map((item) => (
@@ -288,8 +311,16 @@ export function LinkedItemsSection({
               <div>
                 <strong>{item.title || `${item.source_app_id}:${item.source_entity_type}`}</strong>
                 <span className="linked-meta">{[item.source_app_id || 'Unknown app', item.source_entity_type || 'Item', item.link_type || 'related'].filter(Boolean).join(' - ')}</span>
+                <span className={isInheritedRef(item) ? 'linked-origin inherited' : 'linked-origin'}>
+                  {originLabel(item)}
+                </span>
                 {item.occurred_at || item.timestamp ? <span>{formatDate(item.occurred_at || item.timestamp, true)}</span> : null}
                 {item.summary ? <p>{item.summary}</p> : null}
+                {sourceDeepLink(item) ? (
+                  <a className="linked-source-link" href={sourceDeepLink(item)} onClick={(event) => event.stopPropagation()}>
+                    Open source
+                  </a>
+                ) : null}
                 {item.source_entity_id ? (
                   <details className="linked-technical">
                     <summary>Reference details</summary>
@@ -297,7 +328,14 @@ export function LinkedItemsSection({
                   </details>
                 ) : null}
               </div>
-              <button type="button" className="detail-icon-button" onClick={() => onUnlink(item.id)} disabled={isSaving || isLinking} aria-label="Unlink item">
+              <button
+                type="button"
+                className="detail-icon-button"
+                onClick={() => onUnlink(item)}
+                disabled={isSaving || isLinking || isInheritedRef(item)}
+                aria-label={isInheritedRef(item) ? 'Inherited link cannot be unlinked here' : 'Unlink item'}
+                title={isInheritedRef(item) ? 'Inherited links can only be unlinked from their source CRM record.' : 'Unlink item'}
+              >
                 <Unlink size={15} aria-hidden="true" />
               </button>
             </article>
@@ -306,25 +344,28 @@ export function LinkedItemsSection({
       ) : (
         <p className="muted">No linked items.</p>
       )}
-      <form className="linked-form" onSubmit={onLink}>
-        <p className="linked-form-note">Reference target required</p>
-        <input aria-label="Title" placeholder="Title" value={linkDraft.title} onChange={(event) => setLinkDraft((draft) => ({ ...draft, title: event.target.value }))} />
-        <input aria-label="Date" placeholder="Date" value={linkDraft.occurred_at} onChange={(event) => setLinkDraft((draft) => ({ ...draft, occurred_at: event.target.value }))} />
-        <textarea aria-label="Summary" placeholder="Summary" value={linkDraft.summary} onChange={(event) => setLinkDraft((draft) => ({ ...draft, summary: event.target.value }))} />
-        <details className="linked-advanced">
-          <summary>Advanced reference fields</summary>
-          <div>
-            <input aria-label="Source app id" placeholder="App" value={linkDraft.source_app_id} onChange={(event) => setLinkDraft((draft) => ({ ...draft, source_app_id: event.target.value }))} />
-            <input aria-label="Source entity type" placeholder="Type" value={linkDraft.source_entity_type} onChange={(event) => setLinkDraft((draft) => ({ ...draft, source_entity_type: event.target.value }))} />
-            <input aria-label="Source entity id" placeholder="Record ID" value={linkDraft.source_entity_id} onChange={(event) => setLinkDraft((draft) => ({ ...draft, source_entity_id: event.target.value }))} />
-            <input aria-label="Link type" placeholder="Relationship" value={linkDraft.link_type} onChange={(event) => setLinkDraft((draft) => ({ ...draft, link_type: event.target.value }))} />
-          </div>
-        </details>
-        <button type="submit" disabled={isManualLinkDisabled} aria-disabled={isManualLinkDisabled}>
-          <Link2 size={15} aria-hidden="true" />
-          Link
-        </button>
-      </form>
+      <details className="linked-manual">
+        <summary>Manual reference</summary>
+        <form className="linked-form" onSubmit={onLink}>
+          <p className="linked-form-note">Reference target required</p>
+          <input aria-label="Title" placeholder="Title" value={linkDraft.title} onChange={(event) => setLinkDraft((draft) => ({ ...draft, title: event.target.value }))} />
+          <input aria-label="Date" placeholder="Date" value={linkDraft.occurred_at} onChange={(event) => setLinkDraft((draft) => ({ ...draft, occurred_at: event.target.value }))} />
+          <textarea aria-label="Summary" placeholder="Summary" value={linkDraft.summary} onChange={(event) => setLinkDraft((draft) => ({ ...draft, summary: event.target.value }))} />
+          <details className="linked-advanced">
+            <summary>Advanced reference fields</summary>
+            <div>
+              <input aria-label="Source app id" placeholder="App" value={linkDraft.source_app_id} onChange={(event) => setLinkDraft((draft) => ({ ...draft, source_app_id: event.target.value }))} />
+              <input aria-label="Source entity type" placeholder="Type" value={linkDraft.source_entity_type} onChange={(event) => setLinkDraft((draft) => ({ ...draft, source_entity_type: event.target.value }))} />
+              <input aria-label="Source entity id" placeholder="Record ID" value={linkDraft.source_entity_id} onChange={(event) => setLinkDraft((draft) => ({ ...draft, source_entity_id: event.target.value }))} />
+              <input aria-label="Link type" placeholder="Relationship" value={linkDraft.link_type} onChange={(event) => setLinkDraft((draft) => ({ ...draft, link_type: event.target.value }))} />
+            </div>
+          </details>
+          <button type="submit" disabled={isManualLinkDisabled} aria-disabled={isManualLinkDisabled}>
+            <Link2 size={15} aria-hidden="true" />
+            Link
+          </button>
+        </form>
+      </details>
     </section>
   );
 }
@@ -384,4 +425,78 @@ export function TimelineSection({ timeline }: { timeline: CrmRecord[] }) {
       ))}
     </section>
   );
+}
+
+function sourceDeepLink(item: ExternalRef) {
+  const app = String(item.source_app_id || '').trim();
+  const metadata = item.metadata && typeof item.metadata === 'object' ? item.metadata : {};
+  const explicit = stringMetadata(metadata.deep_link) || stringMetadata(metadata.href) || stringMetadata(metadata.url) || stringMetadata(metadata.source_url);
+  if (isAllowedLink(explicit)) return explicit;
+  const appPage = stringMetadata(metadata.app_page);
+  if (app && appPage && !appPage.startsWith('/') && !appPage.includes('://')) {
+    return `/app/${encodeURIComponent(app)}/${appPage.split('/').map(encodeURIComponent).join('/')}`;
+  }
+  return '';
+}
+
+function stringMetadata(value: unknown) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function isAllowedLink(value: string) {
+  return Boolean(value && (value.startsWith('/app/') || value.startsWith('https://')));
+}
+
+function summaryIcon(badge: ConnectionBadge) {
+  const kind = String(badge.kind || badge.key || '').toLowerCase();
+  if (kind.includes('mail')) return Mail;
+  if (kind.includes('calendar')) return CalendarDays;
+  if (kind.includes('file')) return FileText;
+  if (kind.includes('approval')) return ShieldAlert;
+  return Sparkles;
+}
+
+function summaryLabel(badge: ConnectionBadge) {
+  const kind = String(badge.kind || badge.key || 'Connection');
+  return `${entityLabel(kind)}${badge.count ? ` ${badge.count}` : ''}`;
+}
+
+function summaryDetail(badge: ConnectionBadge, summary: ConnectionSummary, linkedItems: ExternalRef[]) {
+  const kind = String(badge.kind || badge.key || '').toLowerCase();
+  if (kind.includes('approval')) return `${badge.count || summary.approval_count || 0} pending approval${(badge.count || summary.approval_count || 0) === 1 ? '' : 's'}`;
+  if (kind.includes('agent')) return `${badge.count || summary.agent_count || 0} agent activit${(badge.count || summary.agent_count || 0) === 1 ? 'y' : 'ies'}`;
+  if (kind.includes('calendar') && summary.next_calendar_at) return `Next ${formatDate(summary.next_calendar_at, true)}`;
+  const latest = linkedItems.find((item) => {
+    const refKind = String(badge.kind || badge.key || '').toLowerCase();
+    return refKind && refKind.replace(/s$/, '') === normalizedProviderKind(item).replace(/s$/, '');
+  });
+  return latest?.title || latest?.summary || (summary.latest_touch_at ? `Latest ${formatDate(summary.latest_touch_at, true)}` : 'Linked business context');
+}
+
+function normalizedProviderKind(item: ExternalRef) {
+  const provider = String(item.provider_alias || '').toLowerCase();
+  if (provider) return provider;
+  const sourceInterface = String(item.source_interface || '').toLowerCase();
+  if (sourceInterface.startsWith('mail.')) return 'mail';
+  if (sourceInterface.startsWith('calendar.')) return 'calendar';
+  if (sourceInterface.startsWith('file.') || sourceInterface.startsWith('files.') || sourceInterface.startsWith('storage.')) return 'files';
+  if (sourceInterface.startsWith('agent.')) return 'agent';
+  const linkType = String(item.normalized_link_type || item.link_type || '').toLowerCase();
+  if (['email', 'email_thread', 'mail', 'mail_thread', 'thread'].includes(linkType)) return 'mail';
+  if (['call', 'meeting', 'sales_call', 'calendar_event', 'event'].includes(linkType)) return 'calendar';
+  if (['attachment', 'brief', 'document', 'file', 'file_attachment'].includes(linkType)) return 'files';
+  if (['agent_activity', 'agent_run'].includes(linkType)) return 'agent';
+  return '';
+}
+
+function isInheritedRef(item: ExternalRef) {
+  return item.relationship_scope === 'inherited';
+}
+
+function originLabel(item: ExternalRef) {
+  if (!isInheritedRef(item)) return 'Direct link';
+  const origin = item.origin || {};
+  const entity = entityLabel(String(origin.entity_type || item.crm_entity_type || 'record'));
+  const title = String(origin.title || origin.entity_id || item.crm_entity_id || '').trim();
+  return title ? `Inherited from ${entity}: ${title}` : `Inherited from ${entity}`;
 }

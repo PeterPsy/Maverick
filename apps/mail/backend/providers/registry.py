@@ -8,6 +8,7 @@ from store import get_connection
 
 from .base import MailProvider
 from .gmail import GmailProvider
+from .imap_smtp import ImapSmtpProvider
 
 
 def provider_for_connection(data_root: Path, connection_id: str | None) -> MailProvider:
@@ -20,4 +21,6 @@ def provider_for_connection(data_root: Path, connection_id: str | None) -> MailP
 def provider_by_id(provider_id: str) -> MailProvider:
     if provider_id == "gmail":
         return GmailProvider()
+    if provider_id == "imap_smtp":
+        return ImapSmtpProvider()
     raise ValueError(f"Unsupported mail provider `{provider_id}`")

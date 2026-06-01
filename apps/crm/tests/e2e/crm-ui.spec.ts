@@ -460,6 +460,8 @@ async function mockCrmBackend(page: Page, options: { pipelineDealCount?: number 
       };
     } else if (action === 'crm.timeline') {
       payload = { ok: true, items: [{ id: 'activity_recent', subject: 'Recent call', status: 'done' }] };
+    } else if (action === 'crm.external_timeline') {
+      payload = { ok: true, items: [] };
     } else if (action === 'crm.list_external_refs') {
       payload = { ok: true, external_refs: [] };
     } else if (action === 'crm.audit_log') {
@@ -516,19 +518,24 @@ test('routes between CRM cockpit views and opens a legacy record deep link', asy
     window.postMessage({ type: 'maverick.app.navigate', params: { app_page: 'accounts/account_acme' } }, window.location.origin);
   });
   await expect(page.getByLabel('Record type')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Filter/ })).toHaveClass(/active/);
-  const detailPanel = page.getByRole('dialog', { name: 'Acme Corp' });
+  const detailPanel = page.getByRole('region', { name: 'Acme Corp' });
   await expect(detailPanel).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'CRM records' })).toHaveCount(0);
+  await expect(detailPanel.getByRole('button', { name: 'Back' })).toBeVisible();
   await expect(detailPanel.getByTitle('More record actions')).toBeVisible();
   await expect(detailPanel.getByRole('button', { name: 'Tag record' })).toHaveCount(0);
   await detailPanel.getByTitle('More record actions').click();
   await expect(detailPanel.getByRole('menuitem', { name: 'Tag record' })).toBeVisible();
   await expect(detailPanel.getByRole('menuitem', { name: 'Archive record' })).toBeVisible();
+  await detailPanel.getByText('Manual reference').click();
   await detailPanel.getByRole('textbox', { name: 'Title' }).fill('Intro thread');
   await detailPanel.getByRole('textbox', { name: 'Date' }).fill('2026-05-20');
   await detailPanel.getByRole('textbox', { name: 'Summary' }).fill('Initial conversation');
   await expect(detailPanel.getByRole('button', { name: 'Link' })).toBeDisabled();
   expect(lastRequest(requests, 'crm.link_external_ref')).toBeUndefined();
+  await detailPanel.getByRole('button', { name: 'Back' }).click();
+  await expect(page.getByRole('heading', { name: 'CRM records' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Filter/ })).toHaveClass(/active/);
 });
 
 test('paginates the records table with stable next and previous cursors', async ({ page }) => {
@@ -543,6 +550,28 @@ test('paginates the records table with stable next and previous cursors', async 
   await page.getByRole('button', { name: 'Previous' }).click();
   await expect.poll(() => (lastRequest(requests, 'crm.records_table')?.pagination as { cursor?: string } | undefined)?.cursor).toBe('');
   await expect(page.getByText('Northwind Expansion')).toBeVisible();
+});
+
+test('scrolls the lead detail page content vertically', async ({ page }) => {
+  await page.setViewportSize({ width: 760, height: 500 });
+  await mockCrmBackend(page);
+  await page.goto('/apps/crm/');
+
+  await page.evaluate(() => {
+    window.postMessage({ type: 'maverick.app.navigate', params: { app_page: 'leads/lead_northwind' } }, window.location.origin);
+  });
+
+  const detailPanel = page.getByRole('region', { name: 'Northwind Expansion' });
+  await expect(detailPanel).toBeVisible();
+  const detailContent = detailPanel.locator('.detail-content');
+  await expect(detailContent).toBeVisible();
+  await expect.poll(() => detailPanel.evaluate((node) => window.getComputedStyle(node).overflowY)).toBe('auto');
+  await expect.poll(() => detailPanel.evaluate((node) => node.scrollHeight > node.clientHeight)).toBe(true);
+  const box = await detailPanel.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  await page.mouse.wheel(0, 900);
+  await expect.poll(() => detailPanel.evaluate((node) => node.scrollTop > 0)).toBe(true);
 });
 
 test('renders the pipeline board with stage totals and deal context', async ({ page }) => {

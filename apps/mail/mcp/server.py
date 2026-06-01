@@ -13,7 +13,7 @@ for parent in Path(__file__).resolve().parents:
 from core.app_sdk.runtime import emit_json, read_entrypoint_payload
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
-from service import app_events_for_action, handle_action, resolve_secret_resource
+from service import app_events_for_action, handle_action, resolve_secret_resource, resolve_secret_resource_inventory
 
 
 TOOL_ACTIONS = {
@@ -41,13 +41,18 @@ TOOL_ACTIONS = {
 
 payload = read_entrypoint_payload()
 arguments = dict(payload.arguments)
+if payload.raw.get("surface") == "secret_resource_inventory":
+    emit_json(resolve_secret_resource_inventory(Path(payload.data_root)))
+    raise SystemExit(0)
 if payload.raw.get("surface") == "secret_selector":
     tool_name = str(payload.raw.get("tool_name") or "")
     arguments.setdefault("action", TOOL_ACTIONS.get(tool_name, "mail_list_threads"))
+    arguments["_app_secret_selector"] = payload.raw.get("app_secret_selector", {})
     emit_json(resolve_secret_resource(Path(payload.data_root), arguments))
     raise SystemExit(0)
 arguments["_app_secrets"] = payload.raw.get("app_secrets", {})
 arguments["_generated_storage_root"] = payload.raw.get("generated_storage_root", "")
+arguments["_workspace_id"] = payload.workspace_id
 tool_name = str(payload.raw.get("tool_name") or "")
 arguments.setdefault("action", TOOL_ACTIONS.get(tool_name, "mail_list_threads"))
 status_code, result = handle_action(Path(payload.data_root), arguments)

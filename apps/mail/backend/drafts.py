@@ -15,15 +15,17 @@ def create_draft(data_root: Path, payload: dict[str, object]) -> dict[str, objec
     connection_id = _required_string(payload.get("connection_id") or _default_connection_id(data_root), "connection_id")
     thread_id = _optional_string(payload.get("thread_id"))
     to_recipients, cc_recipients, bcc_recipients = _draft_recipients(data_root, connection_id, thread_id, payload)
+    reply_to = _address_list(payload.get("reply_to") or payload.get("replyTo"))
     subject = _required_string(payload.get("subject"), "subject")
     body_text = _required_string(payload.get("body_text"), "body_text")
+    body_html = _optional_string(payload.get("body_html")) or ""
     now = now_timestamp()
     draft_id = f"mail_draft_{uuid4().hex[:16]}"
     with connect(data_root) as db:
         db.execute(
             """
-            INSERT INTO drafts(id, connection_id, thread_id, to_json, cc_json, bcc_json, subject, body_text, status, dirty, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO drafts(id, connection_id, thread_id, to_json, cc_json, bcc_json, reply_to_json, subject, body_text, body_html, status, dirty, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 draft_id,
@@ -32,8 +34,10 @@ def create_draft(data_root: Path, payload: dict[str, object]) -> dict[str, objec
                 _json_list(to_recipients),
                 _json_list(cc_recipients),
                 _json_list(bcc_recipients),
+                _json_list(reply_to),
                 subject,
                 body_text,
+                body_html,
                 "draft",
                 1,
                 now,
@@ -60,18 +64,30 @@ def update_draft(data_root: Path, draft_id: str, payload: dict[str, object]) -> 
         "to_json": _json_list(to_recipients),
         "cc_json": _json_list(cc_recipients),
         "bcc_json": _json_list(bcc_recipients),
+        "reply_to_json": _json_list(_address_list(payload.get("reply_to", payload.get("replyTo", draft.get("reply_to", []))))),
         "subject": _required_string(payload.get("subject", draft["subject"]), "subject"),
         "body_text": _required_string(payload.get("body_text", draft["body_text"]), "body_text"),
+        "body_html": _optional_string(payload.get("body_html", draft.get("body_html"))) or "",
         "updated_at": now_timestamp(),
     }
     with connect(data_root) as db:
         db.execute(
             """
             UPDATE drafts
-            SET to_json = ?, cc_json = ?, bcc_json = ?, subject = ?, body_text = ?, dirty = 1, updated_at = ?
+            SET to_json = ?, cc_json = ?, bcc_json = ?, reply_to_json = ?, subject = ?, body_text = ?, body_html = ?, dirty = 1, updated_at = ?
             WHERE id = ? AND status != 'sent'
             """,
-            (values["to_json"], values["cc_json"], values["bcc_json"], values["subject"], values["body_text"], values["updated_at"], draft_id),
+            (
+                values["to_json"],
+                values["cc_json"],
+                values["bcc_json"],
+                values["reply_to_json"],
+                values["subject"],
+                values["body_text"],
+                values["body_html"],
+                values["updated_at"],
+                draft_id,
+            ),
         )
     audit(data_root, "draft.update", "mail_draft", draft_id, {"subject": values["subject"]})
     return get_draft(data_root, draft_id)
@@ -122,6 +138,7 @@ def _draft(row) -> dict[str, object]:
     item["to"] = _loads_list(item.pop("to_json"))
     item["cc"] = _loads_list(item.pop("cc_json"))
     item["bcc"] = _loads_list(item.pop("bcc_json"))
+    item["reply_to"] = _loads_list(item.pop("reply_to_json", "[]"))
     item["dirty"] = bool(item["dirty"])
     item["deep_link"] = f"/app/mail?draft={item['id']}"
     return item

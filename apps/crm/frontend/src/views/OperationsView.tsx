@@ -37,6 +37,7 @@ type ProposalCard = {
   actionLabel: string;
   source: string;
   reason: string;
+  evidence: string[];
   updatedAt?: string;
   proposal?: WorkflowProposal;
 };
@@ -354,6 +355,11 @@ function ProposalCardView({
           {card.status} · {recordLabel(card.entityType, card.entityId, card.record)} · {card.actionLabel}
         </span>
         <span className="operation-card-reason">{[card.source, card.reason].filter(Boolean).join(' · ') || dateLabel(card.updatedAt)}</span>
+        {card.evidence.length ? (
+          <span className="operation-evidence">
+            {card.evidence.map((item) => <small key={item}>{item}</small>)}
+          </span>
+        ) : null}
       </div>
       <span className="workflow-review-indicator">
         <Eye size={14} aria-hidden="true" />
@@ -840,6 +846,7 @@ function proposalCardFromFeedItem(item: OperationsFeedItem, proposalIndex: Map<s
     actionLabel: workflowActionLabel(proposal, item.action_type),
     source: proposal?.source || item.source || '',
     reason: item.reason || proposalReason(proposal),
+    evidence: item.evidence || [],
     updatedAt: proposal?.updated_at || item.updated_at || item.created_at,
     proposal
   };
@@ -857,6 +864,7 @@ function proposalCardFromProposal(proposal: WorkflowProposal, recordIndex: Map<s
     actionLabel: workflowActionLabel(proposal),
     source: proposal.source || 'crm.workflow',
     reason: proposalReason(proposal),
+    evidence: proposalEvidence(proposal),
     updatedAt: proposal.updated_at,
     proposal
   };
@@ -906,6 +914,12 @@ function workflowActionLabel(proposal?: WorkflowProposal, feedActionType?: strin
 function proposalReason(proposal?: WorkflowProposal) {
   const reason = proposal?.proposal?.reason;
   return typeof reason === 'string' ? reason : '';
+}
+
+function proposalEvidence(proposal?: WorkflowProposal) {
+  const raw = proposal?.proposal?.evidence;
+  if (!Array.isArray(raw)) return proposal?.status === 'pending' ? ['requires approval'] : [];
+  return raw.map((item) => typeof item === 'string' ? item : '').filter(Boolean).slice(0, 5);
 }
 
 function recordLabel(entityType: string, entityId: string, record?: CrmRecord) {

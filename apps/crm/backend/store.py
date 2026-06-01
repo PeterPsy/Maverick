@@ -12,8 +12,8 @@ from uuid import uuid4
 
 from errors import NotFoundError, ValidationError
 
-APP_VERSION = "0.4.0"
-SCHEMA_VERSION = "4"
+APP_VERSION = "0.4.2"
+SCHEMA_VERSION = "6"
 DB_NAME = "crm.sqlite"
 CUSTOM_FIELD_TYPES = {"text", "number", "date", "boolean", "select", "multi_select", "url", "email"}
 
@@ -270,6 +270,9 @@ def initialize(data_root: str | Path) -> None:
               source_entity_type TEXT NOT NULL,
               source_entity_id TEXT NOT NULL,
               link_type TEXT NOT NULL DEFAULT 'related',
+              provider_alias TEXT NOT NULL DEFAULT '',
+              source_interface TEXT NOT NULL DEFAULT '',
+              normalized_link_type TEXT NOT NULL DEFAULT 'related',
               title TEXT NOT NULL DEFAULT '',
               summary TEXT NOT NULL DEFAULT '',
               occurred_at TEXT NOT NULL DEFAULT '',
@@ -277,6 +280,36 @@ def initialize(data_root: str | Path) -> None:
               created_at TEXT NOT NULL,
               updated_at TEXT NOT NULL,
               deleted_at TEXT
+            );
+            CREATE TABLE IF NOT EXISTS website_intakes (
+              id TEXT PRIMARY KEY,
+              submission_id TEXT NOT NULL UNIQUE,
+              lead_id TEXT NOT NULL,
+              source TEXT NOT NULL DEFAULT 'website',
+              contact_email TEXT NOT NULL DEFAULT '',
+              status TEXT NOT NULL DEFAULT 'accepted',
+              email_status TEXT NOT NULL DEFAULT 'pending',
+              payload_json TEXT NOT NULL DEFAULT '{}',
+              server_meta_json TEXT NOT NULL DEFAULT '{}',
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS crm_outbox (
+              id TEXT PRIMARY KEY,
+              intake_id TEXT NOT NULL DEFAULT '',
+              entity_type TEXT NOT NULL DEFAULT '',
+              entity_id TEXT NOT NULL DEFAULT '',
+              kind TEXT NOT NULL,
+              provider_alias TEXT NOT NULL DEFAULT '',
+              provider_app_id TEXT NOT NULL DEFAULT '',
+              status TEXT NOT NULL DEFAULT 'pending',
+              attempts INTEGER NOT NULL DEFAULT 0,
+              request_json TEXT NOT NULL DEFAULT '{}',
+              result_json TEXT NOT NULL DEFAULT '{}',
+              last_error TEXT NOT NULL DEFAULT '',
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              processed_at TEXT NOT NULL DEFAULT ''
             );
             CREATE TABLE IF NOT EXISTS events (
               id TEXT PRIMARY KEY,
@@ -316,6 +349,10 @@ def initialize(data_root: str | Path) -> None:
             CREATE INDEX IF NOT EXISTS idx_external_refs_crm_record ON external_refs(crm_entity_type, crm_entity_id, deleted_at);
             CREATE INDEX IF NOT EXISTS idx_external_refs_source ON external_refs(source_app_id, source_entity_type, source_entity_id, deleted_at);
             CREATE INDEX IF NOT EXISTS idx_external_refs_occurred ON external_refs(occurred_at, updated_at);
+            CREATE INDEX IF NOT EXISTS idx_website_intakes_submission ON website_intakes(submission_id);
+            CREATE INDEX IF NOT EXISTS idx_website_intakes_lead ON website_intakes(lead_id);
+            CREATE INDEX IF NOT EXISTS idx_crm_outbox_status ON crm_outbox(status, kind, updated_at);
+            CREATE INDEX IF NOT EXISTS idx_crm_outbox_intake ON crm_outbox(intake_id, kind);
             """
         )
         _ensure_column(db, "leads", "converted_at", "TEXT NOT NULL DEFAULT ''")
@@ -335,7 +372,15 @@ def initialize(data_root: str | Path) -> None:
         _ensure_column(db, "tasks", "archived_at", "TEXT")
         _ensure_column(db, "notes", "archived_at", "TEXT")
         _ensure_column(db, "custom_field_definitions", "archived_at", "TEXT")
+        _ensure_column(db, "external_refs", "provider_alias", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(db, "external_refs", "source_interface", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(db, "external_refs", "normalized_link_type", "TEXT NOT NULL DEFAULT 'related'")
         _ensure_column(db, "external_refs", "deleted_at", "TEXT")
+        _ensure_column(db, "website_intakes", "server_meta_json", "TEXT NOT NULL DEFAULT '{}'")
+        _ensure_column(db, "crm_outbox", "provider_alias", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(db, "crm_outbox", "provider_app_id", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(db, "crm_outbox", "processed_at", "TEXT NOT NULL DEFAULT ''")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_external_refs_provider ON external_refs(provider_alias, source_interface, normalized_link_type, deleted_at)")
         _seed_pipeline(db)
         db.execute("INSERT OR REPLACE INTO schema_metadata(key, value) VALUES (?, ?)", ("schema_version", SCHEMA_VERSION))
         db.execute("INSERT OR REPLACE INTO schema_metadata(key, value) VALUES (?, ?)", ("app_version", APP_VERSION))

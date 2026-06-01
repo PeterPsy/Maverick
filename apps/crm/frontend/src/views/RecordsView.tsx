@@ -91,6 +91,7 @@ function recordTableValue(row: RecordsTableRow, columnKey: string) {
   if (columnKey === 'owner') return String(record.owner_id || '');
   if (columnKey === 'status_stage') return String(record.status || record.stage || '');
   if (columnKey === 'value') return money(record);
+  if (columnKey === 'connections') return connectionValue(row);
   if (columnKey === 'weighted_value') return typeof computed.weighted_value === 'number' ? money({ value: computed.weighted_value, currency: record.currency }) : '';
   if (columnKey === 'next_action' || columnKey === 'next_step') return String(computed.next_action || '');
   if (columnKey === 'last_touch' || columnKey === 'last_activity') return String(computed.last_activity_at || '').slice(0, 10);
@@ -98,6 +99,13 @@ function recordTableValue(row: RecordsTableRow, columnKey: string) {
   if (columnKey === 'tags') return Array.isArray(record.tags) ? record.tags.map((tag) => typeof tag === 'object' && tag ? String((tag as { name?: unknown }).name || '') : '').filter(Boolean).join(', ') : '';
   if (columnKey in computed) return String(computed[columnKey] ?? '');
   return String(record[columnKey] ?? '');
+}
+
+function connectionValue(row: RecordsTableRow) {
+  const summary = row.computed?.connection_summary;
+  if (!summary || typeof summary !== 'object' || Array.isArray(summary)) return '';
+  const badges = (summary as { badges?: Array<{ label?: unknown }> }).badges || [];
+  return badges.map((badge) => String(badge.label || '')).filter(Boolean).join(', ');
 }
 
 function customFieldValue(row: RecordsTableRow, columnKey: string) {

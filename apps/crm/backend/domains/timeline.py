@@ -6,6 +6,7 @@ from typing import Any
 
 from store import attach_tags, get_record, require_text, row_to_dict
 
+from .connection_summary import connection_summary_for_ref_context
 from .external_refs import external_timeline_rows
 
 
@@ -34,7 +35,7 @@ def timeline(db, payload: dict[str, Any]) -> dict[str, Any]:
             item["entity_type"] = "event"
             item["timestamp"] = item.get("created_at")
             items.append(item)
-    for external_ref in external_timeline_rows(db, refs):
+    for external_ref in external_timeline_rows(db, refs, (entity_type, entity_id)):
         items.append(external_ref)
     items.sort(key=lambda item: str(item.get("timestamp") or ""), reverse=True)
     return {"ok": True, "entity_type": entity_type, "id": entity_id, "items": items[:100]}
@@ -45,8 +46,14 @@ def external_timeline(db, payload: dict[str, Any]) -> dict[str, Any]:
     entity_id = require_text(payload, "id") or require_text(payload, "entity_id", required=True)
     get_record(db, entity_type, entity_id)
     refs = _timeline_refs(db, entity_type, entity_id)
-    items = external_timeline_rows(db, refs)
-    return {"ok": True, "entity_type": entity_type, "id": entity_id, "items": items[:100]}
+    items = external_timeline_rows(db, refs, (entity_type, entity_id))
+    return {
+        "ok": True,
+        "entity_type": entity_type,
+        "id": entity_id,
+        "items": items[:100],
+        "connection_summary": connection_summary_for_ref_context(db, refs),
+    }
 
 
 def _timeline_refs(db, entity_type: str, entity_id: str) -> dict[str, set[str]]:

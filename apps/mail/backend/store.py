@@ -357,6 +357,7 @@ def _connection_cache_counts(db, connection_id: str) -> dict[str, int]:
 def _connection(row) -> dict[str, object]:
     item = _row(row)
     item["scopes"] = _loads_list(item.pop("scopes_json"))
+    item["settings"] = _loads_object(item.pop("settings_json", "{}"))
     return item
 
 

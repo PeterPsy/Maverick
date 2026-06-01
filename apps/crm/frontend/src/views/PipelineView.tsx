@@ -1,5 +1,6 @@
 import { MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react';
 import { BootstrapPayload, CrmRecord, PipelineBoardPayload, PipelineBoardStage, PipelineStage } from '../api';
+import { ConnectionSummary } from '../domain/types';
 import { titleFor } from '../domain/routing';
 
 export function Pipeline({
@@ -89,6 +90,7 @@ export function Pipeline({
                     <strong>{titleFor(deal)}</strong>
                     <span className="deal-card__value">{formatDealValue(deal)}</span>
                     {relationshipLabel ? <span className="deal-card__relationship">{relationshipLabel}</span> : null}
+                    <DealConnectionBadges deal={deal} />
                     {closeDateLabel || deal.owner_id ? (
                       <span className="deal-card__meta">
                         {closeDateLabel ? <span>{closeDateLabel}</span> : null}
@@ -117,6 +119,31 @@ export function Pipeline({
       </details>
     </section>
   );
+}
+
+function DealConnectionBadges({ deal }: { deal: CrmRecord }) {
+  const summary = deal.connection_summary && typeof deal.connection_summary === 'object' && !Array.isArray(deal.connection_summary)
+    ? deal.connection_summary as ConnectionSummary
+    : {};
+  const badges = pipelineBadgeLabels(summary);
+  if (!badges.length) return null;
+  return (
+    <span className="deal-card__connections" aria-label="Deal connections">
+      {badges.map((badge) => (
+        <small key={badge} className={badge === 'Needs approval' ? 'attention' : ''}>{badge}</small>
+      ))}
+    </span>
+  );
+}
+
+function pipelineBadgeLabels(summary: ConnectionSummary) {
+  const labels: string[] = [];
+  if (summary.calendar_count) labels.push('Call booked');
+  if (summary.brief_ready || summary.file_count) labels.push(summary.brief_ready ? 'Brief ready' : 'File linked');
+  if (summary.mail_count) labels.push('Mail linked');
+  if (summary.approval_count) labels.push('Needs approval');
+  if (summary.has_recent_touch === false) labels.push('No recent touch');
+  return labels.slice(0, 4);
 }
 
 function fallbackStages(data: BootstrapPayload): PipelineBoardStage[] {

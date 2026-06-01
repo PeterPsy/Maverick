@@ -9,6 +9,8 @@ from typing import Any
 from errors import ValidationError
 from store import get_record, metadata, new_id, require_text, row_to_dict, table_for_entity, upsert_fts, utc_now, write_event
 
+from .connection_summary import connection_summaries_for_deals
+
 STUCK_AFTER_DAYS = 14
 
 
@@ -88,8 +90,10 @@ def pipeline_board(db, payload: dict[str, Any]) -> dict[str, Any]:
     ]
     stage_index = {stage["id"]: stage for stage in stages}
     stage_name_index = {str(stage["name"] or "").strip().lower(): stage for stage in stages}
-    for row in _pipeline_deal_rows(db, pipeline_id):
-        deal = _pipeline_deal(row_to_dict(row), now)
+    deals = [_pipeline_deal(row_to_dict(row), now) for row in _pipeline_deal_rows(db, pipeline_id)]
+    connection_summaries = connection_summaries_for_deals(db, deals)
+    for deal in deals:
+        deal["connection_summary"] = connection_summaries.get(str(deal.get("id") or ""), {})
         stage = stage_index.get(str(deal.get("stage_id") or "")) or stage_name_index.get(str(deal.get("stage") or "").strip().lower())
         if stage is None:
             continue

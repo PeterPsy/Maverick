@@ -80,3 +80,19 @@ Prefer MCP tools for agent-facing record operations:
 - `crm_health`
 
 Use CLI command `crm` for diagnostics, import/export smoke checks, and scripted workflows. Do not read or write CRM private data files directly when an official CRM surface can perform the operation.
+
+Before linking Mail, Calendar, Storage, or other app-owned items back to CRM, resolve CRM's provider app links through the generic dependency surface:
+
+```bash
+maverick core cli run app.crm.dependencies --json
+```
+
+If the runtime shim reports `CLI command is not available in this scope` for that command, run the same dependency lookup through the repository-local SDK CLI from the Maverick root:
+
+```bash
+python3 -m core.app_sdk.cli core cli run app.crm.dependencies --json
+```
+
+Treat `selected_provider_app_ids` in that payload as authoritative for the CRM aliases `mail`, `calendar`, `files`, `file-preview`, and `file-write`. If an optional alias is unset, use only one of that alias's listed `candidates` as an explicit fallback and make the fallback visible in your reasoning before writing the CRM link.
+
+Call the provider through its declared app surface first, then call `crm_link_external_ref` with both the CRM target (`crm_entity_type`, `crm_entity_id`) and the source reference (`source_app_id`, `source_entity_type`, `source_entity_id`). Use the selected provider app id from the CRM app links as `source_app_id`, never a hardcoded default such as `mail`, `calendar`, or `storage` when Settings selected another provider. Include a provider-supplied `metadata.deep_link` or `metadata.app_page` when one is available so CRM can open the source without guessing provider routes.

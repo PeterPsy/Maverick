@@ -4,6 +4,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from connections import (
+    IMAP_PASSWORD_SECRET,
+    IMAP_SMTP_PROVIDER,
+    MAILBOX_PASSWORD_SECRET,
+    SMTP_PASSWORD_SECRET,
+    activate_imap_smtp,
+    prepare_imap_smtp,
+    secret_resource_inventory,
+    test_imap_smtp,
+    update_imap_smtp,
+)
 from database import health_payload
 from drafts import create_draft, delete_draft, get_draft, update_draft
 from oauth import complete_oauth, provider_status, start_oauth
@@ -32,6 +43,10 @@ MUTATING_ACTIONS = {
     "connections.start_oauth",
     "connections.complete_oauth",
     "connections.disconnect",
+    "connections.prepare_imap_smtp",
+    "connections.update_imap_smtp",
+    "connections.test_imap_smtp",
+    "connections.activate_imap_smtp",
     "threads.sync",
     "mail_sync",
     "drafts.create",
@@ -70,6 +85,16 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
         if action == "connections.complete_oauth":
             result = complete_oauth(data_root, payload)
             return (200 if result.get("status") not in {"needs_secret_grant", "token_storage_required"} else 409), result
+        if action == "connections.prepare_imap_smtp":
+            return 201, prepare_imap_smtp(data_root, payload)
+        if action == "connections.update_imap_smtp":
+            return 200, update_imap_smtp(data_root, payload)
+        if action == "connections.test_imap_smtp":
+            result = test_imap_smtp(data_root, payload)
+            return (200 if result.get("status") == "ready" else 409), result
+        if action == "connections.activate_imap_smtp":
+            result = activate_imap_smtp(data_root, payload)
+            return (200 if result.get("status") == "connected" else 409), result
         if action == "connections.disconnect":
             return 200, {
                 "disconnect": disconnect_connection(
@@ -237,7 +262,7 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
 
 
 def resolve_secret_resource(data_root: Path, payload: dict[str, object]) -> dict[str, object]:
-    """Resolve whether an invocation needs a per-connection Gmail secret grant."""
+    """Resolve whether an invocation needs a per-connection provider secret grant."""
     try:
         connection_id = _secret_resource_connection_id(data_root, payload)
         if not connection_id:
@@ -245,11 +270,22 @@ def resolve_secret_resource(data_root: Path, payload: dict[str, object]) -> dict
         connection = get_connection(data_root, connection_id)
         if connection.get("status") == "disconnected":
             return {"requires_secrets": False, "resource_type": "mail_connection", "resource_id": connection_id, "status": "disconnected"}
-        if connection.get("provider") != "gmail":
-            return {"requires_secrets": False, "resource_type": "mail_connection", "resource_id": connection_id}
-        return {"requires_secrets": True, "resource_type": "mail_connection", "resource_id": connection_id}
+        provider = str(connection.get("provider") or "")
+        selector_names = _selector_logical_names(payload)
+        if provider == "gmail":
+            needs = not selector_names or any(name.startswith("gmail-") for name in selector_names)
+            return {"requires_secrets": needs, "resource_type": "mail_connection", "resource_id": connection_id, "provider": provider}
+        if provider == IMAP_SMTP_PROVIDER:
+            imap_names = {MAILBOX_PASSWORD_SECRET, IMAP_PASSWORD_SECRET, SMTP_PASSWORD_SECRET}
+            needs = not selector_names or bool(imap_names.intersection(selector_names))
+            return {"requires_secrets": needs, "resource_type": "mail_connection", "resource_id": connection_id, "provider": provider}
+        return {"requires_secrets": False, "resource_type": "mail_connection", "resource_id": connection_id, "provider": provider}
     except ValueError as error:
         return {"requires_secrets": False, "error": "validation_error", "detail": str(error)}
+
+
+def resolve_secret_resource_inventory(data_root: Path) -> dict[str, object]:
+    return secret_resource_inventory(data_root)
 
 
 def app_events_for_action(action: str, result: dict[str, object] | None = None) -> list[dict[str, str]]:
@@ -367,8 +403,9 @@ def _is_disconnected(data_root: Path, connection_id: str | None) -> bool:
 def _require_connected(data_root: Path, connection_id: str | None) -> None:
     if not connection_id:
         raise ValueError("connection_id is required")
-    if _is_disconnected(data_root, connection_id):
-        raise ValueError(f"Connection `{connection_id}` is disconnected")
+    status = str(get_connection(data_root, connection_id).get("status") or "")
+    if status != "connected":
+        raise ValueError(f"Connection `{connection_id}` is `{status or 'unknown'}`; test and activate it before mail operations.")
 
 
 def _secret_resource_connection_id(data_root: Path, payload: dict[str, object]) -> str | None:
@@ -411,3 +448,13 @@ def _secret_resource_connection_id(data_root: Path, payload: dict[str, object]) 
 def _app_secrets(payload: dict[str, object]) -> dict[str, object]:
     value = payload.get("_app_secrets")
     return value if isinstance(value, dict) else {}
+
+
+def _selector_logical_names(payload: dict[str, object]) -> set[str]:
+    selector = payload.get("_app_secret_selector")
+    if not isinstance(selector, dict):
+        return set()
+    names = selector.get("logical_names")
+    if not isinstance(names, list):
+        return set()
+    return {str(name) for name in names}

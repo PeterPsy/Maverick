@@ -1,11 +1,12 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { Archive, CopyCheck, MoreHorizontal, Pencil, Tag, Trash2, X } from 'lucide-react';
+import { Archive, ArrowLeft, CopyCheck, MoreHorizontal, Pencil, Tag, Trash2, X } from 'lucide-react';
 import { CrmRecord, callBackend } from '../api';
-import { AccountBrief, AuditEvent, EnrichmentResult, ExternalRef } from '../domain/types';
+import { AccountBrief, AuditEvent, ConnectionSummary, EnrichmentResult, ExternalRef } from '../domain/types';
 import { isCreatableEntity, titleFor } from '../domain/routing';
 import {
   AgentSection,
   AuditSection,
+  ConnectionSummarySection,
   CustomFieldsSection,
   DetailFields,
   DetailTags,
@@ -37,6 +38,7 @@ export function RecordSidePanel({
   const customFields = selected.record.custom_fields && typeof selected.record.custom_fields === 'object' ? (selected.record.custom_fields as Record<string, unknown>) : {};
   const [timeline, setTimeline] = useState<CrmRecord[]>([]);
   const [linkedItems, setLinkedItems] = useState<ExternalRef[]>([]);
+  const [connectionSummary, setConnectionSummary] = useState<ConnectionSummary | null>(null);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [auditFilters, setAuditFilters] = useState({ entity_type: selected.entity, event_type: '', date_from: '', date_to: '' });
   const [linkDraft, setLinkDraft] = useState<LinkDraft>({ source_app_id: '', source_entity_type: '', source_entity_id: '', link_type: 'related', title: '', summary: '', occurred_at: '' });
@@ -56,9 +58,11 @@ export function RecordSidePanel({
   }, [selected.entity, selected.record.id]);
 
   useEffect(() => {
-    callBackend<{ external_refs?: ExternalRef[] }>({ action: 'crm.list_external_refs', crm_entity_type: selected.entity, crm_entity_id: selected.record.id })
-      .then((result) => setLinkedItems(result.external_refs || []))
-      .catch(() => setLinkedItems([]));
+    loadLinkedItems()
+      .catch(() => {
+        setLinkedItems([]);
+        setConnectionSummary(null);
+      });
   }, [selected.entity, selected.record.id]);
 
   useEffect(() => {
@@ -81,8 +85,19 @@ export function RecordSidePanel({
   }, [auditFilters, selected.entity, selected.record.id]);
 
   async function refreshLinkedItems() {
+    await loadLinkedItems();
+  }
+
+  async function loadLinkedItems() {
+    if (['lead', 'account', 'contact', 'deal'].includes(selected.entity)) {
+      const result = await callBackend<{ items?: ExternalRef[]; connection_summary?: ConnectionSummary }>({ action: 'crm.external_timeline', entity_type: selected.entity, id: selected.record.id });
+      setLinkedItems(result.items || []);
+      setConnectionSummary(result.connection_summary || null);
+      return;
+    }
     const result = await callBackend<{ external_refs?: ExternalRef[] }>({ action: 'crm.list_external_refs', crm_entity_type: selected.entity, crm_entity_id: selected.record.id });
     setLinkedItems(result.external_refs || []);
+    setConnectionSummary(null);
   }
 
   async function refreshTimeline() {
@@ -137,11 +152,15 @@ export function RecordSidePanel({
     }
   }
 
-  async function unlinkExternalItem(id: string) {
+  async function unlinkExternalItem(item: ExternalRef) {
     setDetailError('');
+    if (item.relationship_scope === 'inherited') {
+      setDetailError('Inherited links can only be unlinked from their source CRM record.');
+      return;
+    }
     setIsLinking(true);
     try {
-      await callBackend({ action: 'crm.unlink_external_ref', id });
+      await callBackend({ action: 'crm.unlink_external_ref', id: item.id });
       await refreshLinkedItems();
       await refreshTimeline();
     } catch (unlinkError) {
@@ -152,60 +171,66 @@ export function RecordSidePanel({
   }
 
   return (
-    <div className="crm-detail-drawer" role="presentation">
-      <button className="crm-detail-scrim" type="button" onClick={onClose} aria-label="Close record details" />
-      <aside className="crm-detail-side-panel" role="dialog" aria-modal="false" aria-labelledby="crm-detail-title">
-        <header className="detail-header">
+    <section className="crm-detail-page" role="region" aria-labelledby="crm-detail-title">
+      <header className="detail-header detail-page-header">
+        <div className="detail-title-row">
+          <button className="detail-back-button" type="button" onClick={onClose}>
+            <ArrowLeft size={17} aria-hidden="true" />
+            <span>Back</span>
+          </button>
           <div>
             <small>{selected.entity}</small>
             <h2 id="crm-detail-title">{titleFor(selected.record)}</h2>
           </div>
-          <div className="detail-actions">
-            <details className="detail-secondary-actions">
-              <summary className="detail-icon-button detail-overflow-trigger" aria-label="More record actions" title="More record actions">
-                <MoreHorizontal size={17} aria-hidden="true" />
-              </summary>
-              <div className="detail-secondary-menu" role="menu" aria-label="More record actions">
-                {isCreatableEntity(selected.entity) ? (
-                  <button type="button" role="menuitem" onClick={() => onEdit(selected.entity, selected.record)} disabled={isSaving}>
-                    <Pencil size={16} aria-hidden="true" />
-                    <span>Edit record</span>
-                  </button>
-                ) : null}
-                <button type="button" role="menuitem" onClick={onTag} disabled={isSaving}>
-                  <Tag size={16} aria-hidden="true" />
-                  <span>Tag record</span>
+        </div>
+        <div className="detail-actions">
+          <details className="detail-secondary-actions">
+            <summary className="detail-icon-button detail-overflow-trigger" aria-label="More record actions" title="More record actions">
+              <MoreHorizontal size={17} aria-hidden="true" />
+            </summary>
+            <div className="detail-secondary-menu" role="menu" aria-label="More record actions">
+              {isCreatableEntity(selected.entity) ? (
+                <button type="button" role="menuitem" onClick={() => onEdit(selected.entity, selected.record)} disabled={isSaving}>
+                  <Pencil size={16} aria-hidden="true" />
+                  <span>Edit record</span>
                 </button>
-                {selected.entity === 'lead' && !selected.record.converted_at ? (
-                  <button type="button" role="menuitem" onClick={onConvertLead} disabled={isSaving}>
-                    <CopyCheck size={16} aria-hidden="true" />
-                    <span>Convert lead</span>
-                  </button>
-                ) : null}
-                <button type="button" role="menuitem" onClick={onArchive} disabled={isSaving}>
-                  <Archive size={16} aria-hidden="true" />
-                  <span>Archive record</span>
+              ) : null}
+              <button type="button" role="menuitem" onClick={onTag} disabled={isSaving}>
+                <Tag size={16} aria-hidden="true" />
+                <span>Tag record</span>
+              </button>
+              {selected.entity === 'lead' && !selected.record.converted_at ? (
+                <button type="button" role="menuitem" onClick={onConvertLead} disabled={isSaving}>
+                  <CopyCheck size={16} aria-hidden="true" />
+                  <span>Convert lead</span>
                 </button>
-                <button className="danger" type="button" role="menuitem" onClick={onDelete} disabled={isSaving}>
-                  <Trash2 size={16} aria-hidden="true" />
-                  <span>Delete record</span>
-                </button>
-              </div>
-            </details>
-            <button className="detail-close" type="button" onClick={onClose} aria-label="Close record details">
-              <X size={18} aria-hidden="true" />
-            </button>
-          </div>
-        </header>
+              ) : null}
+              <button type="button" role="menuitem" onClick={onArchive} disabled={isSaving}>
+                <Archive size={16} aria-hidden="true" />
+                <span>Archive record</span>
+              </button>
+              <button className="danger" type="button" role="menuitem" onClick={onDelete} disabled={isSaving}>
+                <Trash2 size={16} aria-hidden="true" />
+                <span>Delete record</span>
+              </button>
+            </div>
+          </details>
+          <button className="detail-close" type="button" onClick={onClose} aria-label="Close record details">
+            <X size={18} aria-hidden="true" />
+          </button>
+        </div>
+      </header>
+      <div className="detail-content">
         <DetailTags tags={tags} />
         {detailError ? <div className="crm-alert">{detailError}</div> : null}
         <DetailFields entity={selected.entity} record={selected.record} />
         <CustomFieldsSection customFields={customFields} />
+        <ConnectionSummarySection summary={connectionSummary} linkedItems={linkedItems} />
         <AgentSection entity={selected.entity} brief={brief} enrichment={enrichment} isSaving={isSaving} onGenerateBrief={generateBrief} onEnrich={enrichRecord} />
-        <LinkedItemsSection linkedItems={linkedItems} linkDraft={linkDraft} setLinkDraft={setLinkDraft} isSaving={isSaving} isLinking={isLinking} onLink={linkExternalItem} onUnlink={(id) => void unlinkExternalItem(id)} />
+        <LinkedItemsSection linkedItems={linkedItems} linkDraft={linkDraft} setLinkDraft={setLinkDraft} isSaving={isSaving} isLinking={isLinking} onLink={linkExternalItem} onUnlink={(item) => void unlinkExternalItem(item)} />
         <TimelineSection timeline={timeline} />
         <AuditSection auditFilters={auditFilters} setAuditFilters={setAuditFilters} auditEvents={auditEvents} />
-      </aside>
-    </div>
+      </div>
+    </section>
   );
 }

@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { ArrowUpDown, ChevronDown, Download, Filter, User } from 'lucide-react';
 import { RecordsTableColumn, RecordsTablePayload, RecordsTableRow } from '../../api';
-import { RecordEntityFilter } from '../../domain/types';
+import { ConnectionSummary, RecordEntityFilter } from '../../domain/types';
 import { entityLabel, recordEntityFilters } from '../../domain/routing';
+import SlidingPagination from './sliding-pagination';
 
 type RecordsTableWithModalProps = {
   title?: string;
@@ -31,6 +32,11 @@ const rowVariants = {
   visible: { opacity: 1, y: 0 },
   exit: { opacity: 0, y: -6 }
 };
+
+const RECORDS_TABLE_SELECT_COLUMN_WIDTH = '3rem';
+const RECORDS_TABLE_MIN_COLUMN_CH = 10;
+const RECORDS_TABLE_MAX_COLUMN_CH = 76;
+const RECORDS_TABLE_CELL_BUFFER_CH = 4;
 
 export function RecordsTableWithModal({
   title = 'CRM records',
@@ -63,6 +69,19 @@ export function RecordsTableWithModal({
   const totalRecords = totalForEntity(data?.counts || {}, entityFilter);
   const totalPages = Math.max(1, Math.ceil(totalRecords / pageSize));
   const selectablePageCount = Math.max(currentPage, Math.min(totalPages, currentPage + (data?.has_more ? 1 : 0)));
+  const visibleStart = totalRecords === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const visibleEnd = totalRecords === 0 ? 0 : Math.min(currentPage * pageSize, totalRecords);
+  const columnWidths = useMemo(
+    () => columns.map((column) => widthForColumn(column, rows, renderValue)),
+    [columns, rows, renderValue]
+  );
+  const tableMinWidth = useMemo(
+    () => {
+      const columnWidthSum = columnWidths.length ? `${columnWidths.map((width) => width.preferredCh).join('ch + ')}ch` : '0ch';
+      return `calc(${RECORDS_TABLE_SELECT_COLUMN_WIDTH} + ${columnWidthSum})`;
+    },
+    [columnWidths]
+  );
 
   function toggle(row: RecordsTableRow) {
     const key = rowKey(row);
@@ -153,15 +172,15 @@ export function RecordsTableWithModal({
           </div>
         </div>
         <div className="records-pagination-controls" aria-label="Records pagination">
-          <label>
-            <span>Page</span>
-            <select value={currentPage} onChange={(event) => onPageChange(Number(event.target.value))} aria-label="Records page">
-              {Array.from({ length: selectablePageCount }, (_, index) => index + 1).map((page) => (
-                <option key={page} value={page}>{page}</option>
-              ))}
-            </select>
-            <span>of {totalPages}</span>
-          </label>
+          <span className="records-page-range">{visibleStart}-{visibleEnd}</span>
+          {selectablePageCount > 1 ? (
+            <SlidingPagination
+              totalPages={selectablePageCount}
+              currentPage={currentPage}
+              onPageChange={onPageChange}
+              maxVisiblePages={7}
+            />
+          ) : null}
           <label>
             <span>Rows</span>
             <select value={pageSize} onChange={(event) => onPageSizeChange(Number(event.target.value))} aria-label="Rows per page">
@@ -176,7 +195,13 @@ export function RecordsTableWithModal({
       </div>
 
       <div className="records-table-wrap">
-        <table className="records-table">
+        <table className="records-table" style={{ '--records-table-content-width': tableMinWidth } as CSSProperties}>
+          <colgroup>
+            <col style={{ width: RECORDS_TABLE_SELECT_COLUMN_WIDTH }} />
+            {columnWidths.map((width) => (
+              <col key={width.key} style={{ width: width.cssWidth }} />
+            ))}
+          </colgroup>
           <thead>
             <tr>
               <th aria-label="Bulk select">
@@ -234,6 +259,7 @@ function totalForEntity(counts: Record<string, number>, entityFilter: RecordEnti
 }
 
 function cellForColumn(row: RecordsTableRow, columnKey: string, renderValue: (row: RecordsTableRow, columnKey: string) => string) {
+  if (columnKey === 'connections') return <ConnectionBadges summary={connectionSummaryForRow(row)} compact />;
   const value = renderValue(row, columnKey);
   if (columnKey === 'name') {
     return (
@@ -250,6 +276,36 @@ function cellForColumn(row: RecordsTableRow, columnKey: string, renderValue: (ro
     return <a href={`mailto:${value}`} onClick={(event) => event.stopPropagation()}>{value}</a>;
   }
   return value || '-';
+}
+
+function ConnectionBadges({ summary, compact = false }: { summary: ConnectionSummary; compact?: boolean }) {
+  const badges = Array.isArray(summary.badges) ? summary.badges.filter((badge) => badge?.label) : [];
+  if (!badges.length) return <span className="connection-empty">-</span>;
+  return (
+    <span className={`connection-badges ${compact ? 'compact' : ''}`} title={connectionTitle(summary)}>
+      {badges.slice(0, compact ? 4 : 6).map((badge) => (
+        <span key={badge.key || badge.label} className={`connection-badge ${badge.kind || ''}`}>
+          {badge.label}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function connectionSummaryForRow(row: RecordsTableRow): ConnectionSummary {
+  const summary = row.computed?.connection_summary;
+  return summary && typeof summary === 'object' && !Array.isArray(summary) ? summary as ConnectionSummary : {};
+}
+
+function connectionTitle(summary: ConnectionSummary) {
+  const parts = [
+    summary.mail_count ? `${summary.mail_count} mail` : '',
+    summary.calendar_count ? `${summary.calendar_count} calendar` : '',
+    summary.file_count ? `${summary.file_count} files` : '',
+    summary.agent_count ? `${summary.agent_count} agent` : '',
+    summary.approval_count ? `${summary.approval_count} approvals` : ''
+  ].filter(Boolean);
+  return parts.length ? parts.join(' · ') : 'No linked business context';
 }
 
 function statusClass(value: string) {
@@ -272,4 +328,32 @@ function csvCell(value: unknown) {
 
 function rowKey(row: RecordsTableRow) {
   return `${row.entity_type}:${row.id}`;
+}
+
+function widthForColumn(
+  column: RecordsTableColumn,
+  rows: RecordsTableRow[],
+  renderValue: (row: RecordsTableRow, columnKey: string) => string
+) {
+  const longestContent = rows.reduce((longest, row) => Math.max(longest, lengthForColumnValue(row, column.key, renderValue)), column.label.length);
+  const preferredCh = Math.min(
+    RECORDS_TABLE_MAX_COLUMN_CH,
+    Math.max(RECORDS_TABLE_MIN_COLUMN_CH, longestContent + RECORDS_TABLE_CELL_BUFFER_CH)
+  );
+  return {
+    key: column.key,
+    preferredCh,
+    cssWidth: `clamp(${RECORDS_TABLE_MIN_COLUMN_CH}ch, ${preferredCh}ch, var(--records-table-column-max-width))`
+  };
+}
+
+function lengthForColumnValue(
+  row: RecordsTableRow,
+  columnKey: string,
+  renderValue: (row: RecordsTableRow, columnKey: string) => string
+) {
+  const value = renderValue(row, columnKey).trim();
+  if (columnKey === 'name') return value.length + 3;
+  if (columnKey === 'connections') return value.length + 2;
+  return value.length;
 }

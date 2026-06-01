@@ -13,9 +13,14 @@ from service import app_events_for_action, handle_action
 
 
 payload = read_entrypoint_payload()
-action = str(payload.body.get("action") or "bootstrap")
+body = dict(payload.body)
+body["_app_dependencies"] = payload.raw.get("app_dependencies", {})
+body["_workspace_apps"] = payload.raw.get("workspace_apps", {})
+body["_workspace_id"] = payload.workspace_id
+body["_app_id"] = payload.app_id
+action = str(body.get("action") or "bootstrap")
 try:
-    status_code, result = handle_action(payload.data_root, action, payload.body)
+    status_code, result = handle_action(payload.data_root, action, body)
 except CrmError as error:
     status_code, result = error.status_code, error_payload(error)
 except Exception as error:  # pragma: no cover - final mount boundary guard

@@ -11,12 +11,13 @@ import re
 import sqlite3
 
 
-SCHEMA_VERSION = "5"
+SCHEMA_VERSION = "7"
 REFERENCE_ENTITIES = ["mail_connection", "email_thread", "email_message", "mail_attachment", "mail_draft"]
 REQUIRED_TABLES = [
     "schema_metadata",
     "connections",
     "oauth_credentials",
+    "provider_credentials",
     "oauth_flows",
     "folders",
     "labels",
@@ -67,6 +68,7 @@ def ensure_schema(data_root: Path) -> None:
               display_name TEXT NOT NULL,
               status TEXT NOT NULL,
               scopes_json TEXT NOT NULL DEFAULT '[]',
+              settings_json TEXT NOT NULL DEFAULT '{}',
               created_at TEXT NOT NULL,
               updated_at TEXT NOT NULL
             );
@@ -79,6 +81,21 @@ def ensure_schema(data_root: Path) -> None:
               status TEXT NOT NULL,
               created_at TEXT NOT NULL,
               updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS provider_credentials (
+              id TEXT PRIMARY KEY,
+              connection_id TEXT NOT NULL,
+              provider TEXT NOT NULL,
+              logical_name TEXT NOT NULL,
+              secret_ref TEXT NOT NULL DEFAULT '',
+              grant_id TEXT NOT NULL DEFAULT '',
+              resource_type TEXT NOT NULL DEFAULT '',
+              resource_id TEXT NOT NULL DEFAULT '',
+              status TEXT NOT NULL,
+              metadata_json TEXT NOT NULL DEFAULT '{}',
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              UNIQUE(connection_id, logical_name)
             );
             CREATE TABLE IF NOT EXISTS oauth_flows (
               state TEXT PRIMARY KEY,
@@ -159,8 +176,10 @@ def ensure_schema(data_root: Path) -> None:
               to_json TEXT NOT NULL DEFAULT '[]',
               cc_json TEXT NOT NULL DEFAULT '[]',
               bcc_json TEXT NOT NULL DEFAULT '[]',
+              reply_to_json TEXT NOT NULL DEFAULT '[]',
               subject TEXT NOT NULL,
               body_text TEXT NOT NULL,
+              body_html TEXT NOT NULL DEFAULT '',
               status TEXT NOT NULL,
               dirty INTEGER NOT NULL DEFAULT 1,
               created_at TEXT NOT NULL,
@@ -204,6 +223,7 @@ def ensure_schema(data_root: Path) -> None:
         _ensure_column(db, "sync_state", "last_full_sync_at", "TEXT")
         _ensure_column(db, "sync_state", "last_incremental_sync_at", "TEXT")
         _ensure_column(db, "sync_state", "provider_history_id", "TEXT")
+        _ensure_column(db, "connections", "settings_json", "TEXT NOT NULL DEFAULT '{}'")
         _ensure_column(db, "oauth_credentials", "grant_id", "TEXT NOT NULL DEFAULT ''")
         _ensure_column(db, "messages", "body_html_sanitized", "TEXT NOT NULL DEFAULT ''")
         _ensure_column(db, "messages", "body_html_original_bounded", "TEXT NOT NULL DEFAULT ''")
@@ -215,6 +235,8 @@ def ensure_schema(data_root: Path) -> None:
         _ensure_column(db, "messages", "body_truncated", "INTEGER NOT NULL DEFAULT 0")
         _ensure_column(db, "messages", "parts_json", "TEXT NOT NULL DEFAULT '[]'")
         _ensure_column(db, "messages", "inline_assets_json", "TEXT NOT NULL DEFAULT '[]'")
+        _ensure_column(db, "drafts", "reply_to_json", "TEXT NOT NULL DEFAULT '[]'")
+        _ensure_column(db, "drafts", "body_html", "TEXT NOT NULL DEFAULT ''")
         _backfill_message_render_columns(db)
         db.execute(
             "INSERT OR REPLACE INTO schema_metadata(key, value) VALUES (?, ?)",

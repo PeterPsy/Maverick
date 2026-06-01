@@ -21,7 +21,11 @@ try:
             raise NotFoundError(f"CRM MCP tool `{tool_name}` is not declared.")
     else:
         action = "operations.manifest"
-    status_code, result = handle_action(payload.data_root, action, payload.arguments)
+    arguments = dict(payload.arguments)
+    arguments["_app_dependencies"] = payload.raw.get("app_dependencies", {})
+    arguments["_workspace_id"] = payload.workspace_id
+    arguments["_app_id"] = payload.app_id
+    status_code, result = handle_action(payload.data_root, action, arguments)
 except CrmError as error:
     status_code, result = error.status_code, error_payload(error)
 

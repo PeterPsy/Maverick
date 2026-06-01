@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import sqlite3
 import sys
 import tempfile
 import unittest
@@ -14,10 +15,197 @@ sys.path.insert(0, str(APP_ROOT / "backend"))
 from service import app_events_for_action, handle_action
 from domains.records import records_table
 from errors import NotFoundError, ValidationError
-from store import connect, delete_fts, utc_now
+from store import connect, delete_fts, initialize, utc_now
 
 
 class CrmServiceTest(unittest.TestCase):
+    def test_website_intake_creates_lead_sends_mail_and_is_idempotent(self) -> None:
+        sent: list[tuple[str, dict[str, object]]] = []
+
+        def fake_mail_sender(provider_app_id: str, payload: dict[str, object]) -> dict[str, object]:
+            sent.append((provider_app_id, payload))
+            index = len(sent)
+            return {
+                "draft": {"id": f"mail_draft_{index}", "subject": payload["subject"]},
+                "result": {"sent": True, "provider_message_id": f"provider_msg_{index}", "thread_id": f"email_thread_{index}"},
+            }
+
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            payload = self._website_intake_payload(
+                {
+                    "_mail_sender": fake_mail_sender,
+                    "_app_dependencies": {"dependencies": [{"alias": "mail", "selected_provider_app_ids": ["mail"]}]},
+                }
+            )
+            status, result = handle_action(temporary_dir, "crm.website_intake", payload)
+
+            self.assertEqual(status, 201)
+            self.assertEqual(result["email_status"], "sent")
+            self.assertEqual(result["lead"]["email"], "ada@example.com")
+            self.assertEqual(result["lead"]["source"], "website:onboarding")
+            self.assertEqual(result["lead"]["owner_id"], "Peter.fioretti94@gmail.com")
+            self.assertEqual(len(sent), 2)
+            self.assertEqual(sent[0][0], "mail")
+            self.assertEqual(sent[0][1]["reply_to"][0]["email"], "ada@example.com")
+            self.assertIn("body_html", sent[1][1])
+
+            duplicate_status, duplicate = handle_action(temporary_dir, "crm.website_intake", payload)
+            self.assertEqual(duplicate_status, 201)
+            self.assertEqual(duplicate["status"], "duplicate")
+            self.assertEqual(len(sent), 2)
+
+            with connect(temporary_dir) as db:
+                intake_count = db.execute("SELECT COUNT(*) AS count FROM website_intakes").fetchone()["count"]
+                outbox_rows = db.execute("SELECT kind, status FROM crm_outbox ORDER BY kind").fetchall()
+                external_refs = db.execute("SELECT source_app_id, source_entity_type FROM external_refs WHERE crm_entity_type = 'lead' ORDER BY source_app_id, source_entity_type").fetchall()
+            self.assertEqual(intake_count, 1)
+            self.assertEqual({row["status"] for row in outbox_rows}, {"sent"})
+            self.assertIn(("loopino-website", "website_intake"), {(row["source_app_id"], row["source_entity_type"]) for row in external_refs})
+            self.assertIn(("mail", "email_thread"), {(row["source_app_id"], row["source_entity_type"]) for row in external_refs})
+
+    def test_website_intake_keeps_lead_when_mail_fails(self) -> None:
+        def failing_mail_sender(_provider_app_id: str, _payload: dict[str, object]) -> dict[str, object]:
+            raise RuntimeError("mail unavailable")
+
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            status, result = handle_action(
+                temporary_dir,
+                "crm.website_intake",
+                self._website_intake_payload(
+                    {
+                        "_mail_sender": failing_mail_sender,
+                        "_app_dependencies": {"dependencies": [{"alias": "mail", "selected_provider_app_ids": ["mail"]}]},
+                        "notification": {"team_email": "", "send_team": False, "send_lead": True},
+                    }
+                ),
+            )
+
+            self.assertEqual(status, 201)
+            self.assertEqual(result["email_status"], "failed")
+            self.assertEqual(result["lead"]["email"], "ada@example.com")
+            with connect(temporary_dir) as db:
+                outbox = db.execute("SELECT status, attempts, last_error FROM crm_outbox").fetchone()
+                lead_count = db.execute("SELECT COUNT(*) AS count FROM leads").fetchone()["count"]
+            self.assertEqual(lead_count, 1)
+            self.assertEqual(outbox["status"], "failed")
+            self.assertEqual(outbox["attempts"], 1)
+            self.assertIn("mail unavailable", outbox["last_error"])
+
+    def test_website_intake_retry_failed_email_does_not_resend_sent_outbox(self) -> None:
+        sent_subjects: list[str] = []
+
+        def partially_failing_sender(_provider_app_id: str, payload: dict[str, object]) -> dict[str, object]:
+            sent_subjects.append(str(payload["subject"]))
+            if len(sent_subjects) == 2:
+                raise RuntimeError("lead confirmation failed")
+            return {"draft": {"id": "team_draft"}, "result": {"sent": True, "thread_id": "team_thread"}}
+
+        def retry_sender(_provider_app_id: str, payload: dict[str, object]) -> dict[str, object]:
+            sent_subjects.append(f"retry:{payload['subject']}")
+            return {"draft": {"id": "retry_draft"}, "result": {"sent": True, "thread_id": "retry_thread"}}
+
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            payload = self._website_intake_payload(
+                {
+                    "_mail_sender": partially_failing_sender,
+                    "_app_dependencies": {"dependencies": [{"alias": "mail", "selected_provider_app_ids": ["mail"]}]},
+                }
+            )
+            _status, result = handle_action(temporary_dir, "crm.website_intake", payload)
+            self.assertEqual(result["email_status"], "partial_failed")
+
+            retry_payload = {**payload, "_mail_sender": retry_sender, "retry_failed_email": True}
+            _retry_status, retry_result = handle_action(temporary_dir, "crm.website_intake", retry_payload)
+
+            self.assertEqual(retry_result["email_status"], "sent")
+            self.assertEqual(sent_subjects.count("[Loopino intake] Onboarding backup - Email - ada@example.com"), 1)
+            self.assertIn("retry:Richiesta ricevuta | Loopino", sent_subjects)
+
+    def test_website_intake_records_outbox_failure_when_mail_provider_is_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            status, result = handle_action(
+                temporary_dir,
+                "crm.website_intake",
+                self._website_intake_payload({"_app_dependencies": {"dependencies": []}, "_maverick_command": "/bin/false"}),
+            )
+
+            self.assertEqual(status, 201)
+            self.assertEqual(result["email_status"], "failed")
+            self.assertTrue(result["outbox"])
+            self.assertEqual({item["status"] for item in result["outbox"]}, {"failed"})
+            self.assertTrue(all("no selected provider" in item["last_error"] for item in result["outbox"]))
+            with connect(temporary_dir) as db:
+                lead_count = db.execute("SELECT COUNT(*) AS count FROM leads").fetchone()["count"]
+                outbox_count = db.execute("SELECT COUNT(*) AS count FROM crm_outbox").fetchone()["count"]
+            self.assertEqual(lead_count, 1)
+            self.assertEqual(outbox_count, 2)
+
+    def test_initialize_migrates_external_ref_provider_columns_before_index(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            db_path = Path(temporary_dir) / "crm.sqlite"
+            db = sqlite3.connect(db_path)
+            db.executescript(
+                """
+                CREATE TABLE schema_metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                INSERT INTO schema_metadata(key, value) VALUES ('schema_version', '4');
+                CREATE TABLE external_refs (
+                  id TEXT PRIMARY KEY,
+                  crm_entity_type TEXT NOT NULL,
+                  crm_entity_id TEXT NOT NULL,
+                  source_app_id TEXT NOT NULL,
+                  source_entity_type TEXT NOT NULL,
+                  source_entity_id TEXT NOT NULL,
+                  link_type TEXT NOT NULL DEFAULT 'related',
+                  title TEXT NOT NULL DEFAULT '',
+                  summary TEXT NOT NULL DEFAULT '',
+                  occurred_at TEXT NOT NULL DEFAULT '',
+                  metadata_json TEXT NOT NULL DEFAULT '{}',
+                  created_at TEXT NOT NULL,
+                  updated_at TEXT NOT NULL,
+                  deleted_at TEXT
+                );
+                """
+            )
+            db.close()
+
+            initialize(temporary_dir)
+
+            with connect(temporary_dir) as migrated:
+                columns = {row["name"] for row in migrated.execute("PRAGMA table_info(external_refs)")}
+                indexes = {row["name"] for row in migrated.execute("PRAGMA index_list(external_refs)")}
+            self.assertIn("provider_alias", columns)
+            self.assertIn("source_interface", columns)
+            self.assertIn("normalized_link_type", columns)
+            self.assertIn("idx_external_refs_provider", indexes)
+
+    def _website_intake_payload(self, extra: dict[str, object] | None = None) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "submission_id": "intake_20260529_test",
+            "received_at": "2026-05-29T10:00:00+00:00",
+            "source": "onboarding",
+            "contact": {
+                "name": "Ada Lovelace",
+                "email": "ada@example.com",
+                "phone": "+39 123",
+                "company": "Analytical Engines",
+                "website": "https://www.ada.example",
+            },
+            "request": {
+                "type": "demo",
+                "service_interest": "maverick",
+                "primary_goal": "Vedere Maverick sul processo commerciale.",
+                "preferred_contact": "email",
+                "urgency": "30-days",
+                "team_size": "2-10",
+            },
+            "answers": {"challenge_summary": "Follow-up manuali", "ricontatto_slot": "martedi mattina"},
+            "source_context": {"source_path": "/product/maverick/", "entry_label": "Demo Maverick"},
+            "notification": {"team_email": "team@loopino.ai", "send_team": True, "send_lead": True},
+        }
+        if extra:
+            payload.update(extra)
+        return payload
+
     def test_create_account_contact_deal_and_summary(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:
             _, account_payload = handle_action(temporary_dir, "crm.create_account", {"name": "Acme", "domain": "acme.example"})
@@ -229,6 +417,69 @@ class CrmServiceTest(unittest.TestCase):
             self.assertFalse(health["ok"])
             self.assertEqual(health["checks"]["external_refs"]["malformed_count"], 1)
 
+    def test_external_ref_provider_normalization_supports_alternate_apps(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            _, lead_payload = handle_action(temporary_dir, "crm.create_lead", {"display_name": "Provider Lead", "email": "provider@example.com"})
+            lead_id = lead_payload["lead"]["id"]
+            _, account_payload = handle_action(temporary_dir, "crm.create_account", {"name": "Provider Account"})
+            account_id = account_payload["account"]["id"]
+            _, deal_payload = handle_action(temporary_dir, "crm.create_deal", {"name": "Provider Deal", "account_id": account_id, "value": 12000, "stage_id": "proposal"})
+            deal_id = deal_payload["deal"]["id"]
+
+            _, mail_link = handle_action(
+                temporary_dir,
+                "crm.link_external_ref",
+                {
+                    "crm_entity_type": "lead",
+                    "crm_entity_id": lead_id,
+                    "source_app_id": "postbox",
+                    "source_entity_type": "message",
+                    "source_entity_id": "msg_1",
+                    "provider_alias": "mail",
+                    "link_type": "related",
+                },
+            )
+            handle_action(
+                temporary_dir,
+                "crm.link_external_ref",
+                {
+                    "crm_entity_type": "deal",
+                    "crm_entity_id": deal_id,
+                    "source_app_id": "meeting-maker",
+                    "source_entity_type": "booking",
+                    "source_entity_id": "booking_1",
+                    "source_interface": "calendar.events",
+                    "link_type": "related",
+                    "occurred_at": "2999-05-30T10:00:00+00:00",
+                },
+            )
+            handle_action(
+                temporary_dir,
+                "crm.link_external_ref",
+                {
+                    "crm_entity_type": "deal",
+                    "crm_entity_id": deal_id,
+                    "source_app_id": "drivebox",
+                    "source_entity_type": "asset",
+                    "source_entity_id": "asset_1",
+                    "link_type": "related",
+                    "metadata": {"source_interface": "file.catalog"},
+                },
+            )
+
+            self.assertEqual(mail_link["external_ref"]["provider_alias"], "mail")
+            self.assertEqual(mail_link["external_ref"]["source_interface"], "mail.message")
+            self.assertEqual(mail_link["external_ref"]["metadata"]["provider_alias"], "mail")
+
+            _, detail_refs = handle_action(temporary_dir, "crm.external_timeline", {"entity_type": "deal", "id": deal_id})
+            self.assertEqual(detail_refs["connection_summary"]["calendar_count"], 1)
+            self.assertEqual(detail_refs["connection_summary"]["file_count"], 1)
+
+            _, reports = handle_action(temporary_dir, "crm.sales_reports", {})
+            self.assertEqual(reports["connection_metrics"]["leads_with_linked_email"], 1)
+            self.assertEqual(reports["connection_metrics"]["deals_with_scheduled_call"], 1)
+            self.assertEqual(reports["connection_metrics"]["pipeline_value_with_next_call"], {"EUR": 12000.0})
+
     def test_import_mapping_reports_row_errors(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:
             csv_payload = {
@@ -345,6 +596,10 @@ class CrmServiceTest(unittest.TestCase):
             account_id = account_payload["account"]["id"]
             handle_action(temporary_dir, "crm.create_task", {"title": "Call Ops Account", "status": "open", "account_id": account_id})
             handle_action(temporary_dir, "crm.create_task", {"title": "Closed Ops Account", "status": "done", "account_id": account_id})
+            handle_action(temporary_dir, "crm.link_external_ref", {"crm_entity_type": "account", "crm_entity_id": account_id, "source_app_id": "mail", "source_entity_type": "thread", "source_entity_id": "thread_ops_1"})
+            handle_action(temporary_dir, "crm.link_external_ref", {"crm_entity_type": "account", "crm_entity_id": account_id, "source_app_id": "mail", "source_entity_type": "thread", "source_entity_id": "thread_ops_2"})
+            handle_action(temporary_dir, "crm.link_external_ref", {"crm_entity_type": "account", "crm_entity_id": account_id, "source_app_id": "calendar", "source_entity_type": "event", "source_entity_id": "event_ops"})
+            handle_action(temporary_dir, "crm.link_external_ref", {"crm_entity_type": "account", "crm_entity_id": account_id, "source_app_id": "storage", "source_entity_type": "file", "source_entity_id": "brief_ops", "link_type": "brief"})
 
             workflow_ids: dict[str, str] = {}
             for key, title in {
@@ -380,6 +635,11 @@ class CrmServiceTest(unittest.TestCase):
             self.assertEqual(feed["counts"]["to_do"], 2)
             self.assertEqual({item["title"] for item in sections["to_do"]["items"]}, {"Call Ops Account", "Apply Ops action"})
             self.assertEqual({item["status"] for item in sections["to_approve"]["items"]}, {"pending", "approved"})
+            pending_evidence = next(item["evidence"] for item in sections["to_approve"]["items"] if item["status"] == "pending")
+            self.assertIn("from 2 emails", pending_evidence)
+            self.assertIn("calendar event created", pending_evidence)
+            self.assertIn("brief saved", pending_evidence)
+            self.assertIn("requires approval", pending_evidence)
             self.assertEqual([item["ref"]["proposal_id"] for item in sections["done"]["items"]], [workflow_ids["applied"]])
             self.assertEqual({item["status"] for item in sections["discarded"]["items"]}, {"dismissed", "rejected"})
             self.assertIn("Bad fit", {item["reason"] for item in sections["discarded"]["items"]})
@@ -569,6 +829,59 @@ class CrmServiceTest(unittest.TestCase):
             handle_action(temporary_dir, "crm.log_activity", {"subject": "Discovery", "account_id": account_id, "occurred_at": "2026-05-21T10:00:00+00:00"})
             handle_action(temporary_dir, "crm.create_deal", {"name": "Small deal", "account_id": account_id, "value": 1000, "stage_id": "qualified"})
             handle_action(temporary_dir, "crm.create_deal", {"name": "Large deal", "account_id": account_id, "value": 9000, "stage_id": "proposal"})
+            for index in range(2):
+                handle_action(
+                    temporary_dir,
+                    "crm.link_external_ref",
+                    {
+                        "crm_entity_type": "account",
+                        "crm_entity_id": account_id,
+                        "source_app_id": "mail",
+                        "source_entity_type": "thread",
+                        "source_entity_id": f"thread_{index}",
+                        "link_type": "email_thread",
+                        "title": f"Account thread {index}",
+                    },
+                )
+            handle_action(
+                temporary_dir,
+                "crm.link_external_ref",
+                {
+                    "crm_entity_type": "account",
+                    "crm_entity_id": account_id,
+                    "source_app_id": "calendar",
+                    "source_entity_type": "event",
+                    "source_entity_id": "event_1",
+                    "link_type": "sales_call",
+                    "title": "Discovery call",
+                    "occurred_at": "2999-05-30T10:00:00+00:00",
+                },
+            )
+            handle_action(
+                temporary_dir,
+                "crm.link_external_ref",
+                {
+                    "crm_entity_type": "account",
+                    "crm_entity_id": account_id,
+                    "source_app_id": "storage",
+                    "source_entity_type": "file",
+                    "source_entity_id": "file_brief",
+                    "link_type": "brief",
+                    "title": "Account brief",
+                },
+            )
+            handle_action(
+                temporary_dir,
+                "crm.create_automation_rule",
+                {
+                    "name": "Approve account follow-up",
+                    "trigger_event": "account.connections",
+                    "entity_type": "account",
+                    "conditions": {},
+                    "action": {"type": "create_task", "title": "Review account context"},
+                },
+            )
+            handle_action(temporary_dir, "crm.run_automation_rules", {"trigger_event": "account.connections", "entity_type": "account", "entity_id": account_id})
 
             _, first_page = handle_action(
                 temporary_dir,
@@ -614,6 +927,58 @@ class CrmServiceTest(unittest.TestCase):
             self.assertEqual(accounts["records"][0]["computed"]["open_deal_value"], 10000.0)
             self.assertEqual(accounts["records"][0]["computed"]["next_action"], "Call Acme")
             self.assertEqual(accounts["records"][0]["computed"]["last_activity_at"], "2026-05-21T10:00:00+00:00")
+            self.assertIn("connections", [column["key"] for column in accounts["columns"]])
+            connection_summary = accounts["records"][0]["computed"]["connection_summary"]
+            self.assertEqual(connection_summary["mail_count"], 2)
+            self.assertEqual(connection_summary["calendar_count"], 1)
+            self.assertEqual(connection_summary["file_count"], 1)
+            self.assertEqual(connection_summary["approval_count"], 1)
+            self.assertIn("Mail 2", [badge["label"] for badge in connection_summary["badges"]])
+
+    def test_pipeline_board_attaches_deal_connection_summary(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            _, account_payload = handle_action(temporary_dir, "crm.create_account", {"name": "Connected Account"})
+            account_id = account_payload["account"]["id"]
+            _, deal_payload = handle_action(temporary_dir, "crm.create_deal", {"name": "Connected Deal", "account_id": account_id, "value": 25000, "stage_id": "qualified"})
+            deal_id = deal_payload["deal"]["id"]
+            handle_action(temporary_dir, "crm.link_external_ref", {"crm_entity_type": "account", "crm_entity_id": account_id, "source_app_id": "mail", "source_entity_type": "thread", "source_entity_id": "thread_account"})
+            handle_action(temporary_dir, "crm.link_external_ref", {"crm_entity_type": "deal", "crm_entity_id": deal_id, "source_app_id": "calendar", "source_entity_type": "event", "source_entity_id": "event_deal", "occurred_at": "2999-05-30T10:00:00+00:00"})
+            handle_action(temporary_dir, "crm.link_external_ref", {"crm_entity_type": "deal", "crm_entity_id": deal_id, "source_app_id": "storage", "source_entity_type": "file", "source_entity_id": "brief_deal", "link_type": "brief"})
+            handle_action(temporary_dir, "crm.link_external_ref", {"crm_entity_type": "deal", "crm_entity_id": deal_id, "source_app_id": "agents", "source_entity_type": "run", "source_entity_id": "agent_run_deal", "link_type": "agent_activity"})
+            handle_action(
+                temporary_dir,
+                "crm.create_automation_rule",
+                {
+                    "name": "Review inherited context",
+                    "trigger_event": "deal.connections",
+                    "entity_type": "account",
+                    "conditions": {},
+                    "action": {"type": "create_task", "title": "Approve inherited context"},
+                },
+            )
+            handle_action(temporary_dir, "crm.run_automation_rules", {"trigger_event": "deal.connections", "entity_type": "account", "entity_id": account_id})
+            _, stale_payload = handle_action(temporary_dir, "crm.create_deal", {"name": "Stale Deal", "value": 5000, "stage_id": "qualified"})
+            stale_deal_id = stale_payload["deal"]["id"]
+            handle_action(temporary_dir, "crm.link_external_ref", {"crm_entity_type": "deal", "crm_entity_id": stale_deal_id, "source_app_id": "mail", "source_entity_type": "thread", "source_entity_id": "thread_stale", "occurred_at": "2000-01-01T00:00:00+00:00"})
+
+            _, board = handle_action(temporary_dir, "crm.pipeline_board", {})
+            connected = next(deal for stage in board["stages"] for deal in stage["deals"] if deal["id"] == deal_id)
+            stale = next(deal for stage in board["stages"] for deal in stage["deals"] if deal["id"] == stale_deal_id)
+
+            self.assertEqual(connected["connection_summary"]["mail_count"], 1)
+            self.assertEqual(connected["connection_summary"]["calendar_count"], 1)
+            self.assertTrue(connected["connection_summary"]["brief_ready"])
+            self.assertTrue(connected["connection_summary"]["has_recent_touch"])
+            self.assertFalse(stale["connection_summary"]["has_recent_touch"])
+
+            _, detail_refs = handle_action(temporary_dir, "crm.external_timeline", {"entity_type": "deal", "id": deal_id})
+            refs_by_source_id = {item["source_entity_id"]: item for item in detail_refs["items"]}
+            self.assertEqual(refs_by_source_id["thread_account"]["relationship_scope"], "inherited")
+            self.assertEqual(refs_by_source_id["thread_account"]["origin"]["entity_type"], "account")
+            self.assertEqual(refs_by_source_id["thread_account"]["origin"]["title"], "Connected Account")
+            self.assertEqual(refs_by_source_id["event_deal"]["relationship_scope"], "direct")
+            self.assertEqual(detail_refs["connection_summary"]["approval_count"], 1)
+            self.assertEqual(detail_refs["connection_summary"]["agent_count"], 1)
 
     def test_records_table_pushes_tag_query_custom_fields_and_labels_to_sql(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_dir:
@@ -739,10 +1104,27 @@ class CrmServiceTest(unittest.TestCase):
             handle_action(temporary_dir, "crm.convert_lead", {"lead_id": lead_payload["lead"]["id"], "deal_name": "Converted report deal", "value": 1000})
             _, account_payload = handle_action(temporary_dir, "crm.create_account", {"name": "Report Account", "owner_id": "owner_1"})
             account_id = account_payload["account"]["id"]
-            handle_action(temporary_dir, "crm.create_deal", {"name": "Report Deal", "account_id": account_id, "value": 20000, "stage_id": "proposal", "owner_id": "owner_1"})
+            _, deal_payload = handle_action(temporary_dir, "crm.create_deal", {"name": "Report Deal", "account_id": account_id, "value": 20000, "stage_id": "proposal", "owner_id": "owner_1"})
+            deal_id = deal_payload["deal"]["id"]
+            _, past_deal_payload = handle_action(temporary_dir, "crm.create_deal", {"name": "Past Call Deal", "account_id": account_id, "value": 7000, "stage_id": "qualified", "owner_id": "owner_1"})
+            past_deal_id = past_deal_payload["deal"]["id"]
+            _, won_deal_payload = handle_action(temporary_dir, "crm.create_deal", {"name": "Closed Call Deal", "account_id": account_id, "value": 90000, "stage_id": "won", "owner_id": "owner_1"})
+            won_deal_id = won_deal_payload["deal"]["id"]
             handle_action(temporary_dir, "crm.create_task", {"title": "Overdue report task", "account_id": account_id, "owner_id": "owner_1", "due_at": "2026-01-01T00:00:00+00:00"})
             handle_action(temporary_dir, "crm.create_task", {"title": "Future report task", "account_id": account_id, "owner_id": "owner_1", "due_at": "2999-01-01T00:00:00+00:00"})
             handle_action(temporary_dir, "crm.log_activity", {"subject": "Report call", "account_id": account_id, "owner_id": "owner_1", "activity_type": "call"})
+            handle_action(temporary_dir, "crm.link_external_ref", {"crm_entity_type": "lead", "crm_entity_id": lead_payload["lead"]["id"], "source_app_id": "mail", "source_entity_type": "thread", "source_entity_id": "thread_report"})
+            handle_action(temporary_dir, "crm.link_external_ref", {"crm_entity_type": "deal", "crm_entity_id": deal_id, "source_app_id": "calendar", "source_entity_type": "event", "source_entity_id": "event_report", "occurred_at": "2999-05-30T10:00:00+00:00"})
+            handle_action(temporary_dir, "crm.link_external_ref", {"crm_entity_type": "deal", "crm_entity_id": past_deal_id, "source_app_id": "calendar", "source_entity_type": "event", "source_entity_id": "event_past", "occurred_at": "2000-05-30T10:00:00+00:00"})
+            handle_action(temporary_dir, "crm.link_external_ref", {"crm_entity_type": "deal", "crm_entity_id": won_deal_id, "source_app_id": "calendar", "source_entity_type": "event", "source_entity_id": "event_won", "occurred_at": "2999-05-30T10:30:00+00:00"})
+            handle_action(temporary_dir, "crm.update_pipeline_stage", {"id": "won", "name": "Closed won", "probability": 1.0})
+            handle_action(temporary_dir, "crm.create_automation_rule", {"name": "Pending report approval", "trigger_event": "report.pending", "entity_type": "account", "conditions": {}, "action": {"type": "create_task", "title": "Pending approval task"}})
+            handle_action(temporary_dir, "crm.run_automation_rules", {"trigger_event": "report.pending", "entity_type": "account", "entity_id": account_id})
+            handle_action(temporary_dir, "crm.create_automation_rule", {"name": "Second pending report approval", "trigger_event": "report.pending.second", "entity_type": "account", "conditions": {}, "action": {"type": "create_task", "title": "Second pending approval task"}})
+            handle_action(temporary_dir, "crm.run_automation_rules", {"trigger_event": "report.pending.second", "entity_type": "account", "entity_id": account_id})
+            handle_action(temporary_dir, "crm.create_automation_rule", {"name": "Approved report approval", "trigger_event": "report.approved", "entity_type": "account", "conditions": {}, "action": {"type": "create_task", "title": "Approved approval task"}})
+            _, approved = handle_action(temporary_dir, "crm.run_automation_rules", {"trigger_event": "report.approved", "entity_type": "account", "entity_id": account_id})
+            handle_action(temporary_dir, "crm.approve_workflow_proposal", {"id": approved["workflow_proposals"][0]["id"]})
 
             _, reports = handle_action(temporary_dir, "crm.sales_reports", {})
             self.assertTrue(any(item["stage_id"] == "proposal" and item["total_value"] == 20000 for item in reports["pipeline_value_by_stage"]))
@@ -753,6 +1135,10 @@ class CrmServiceTest(unittest.TestCase):
             self.assertEqual(reports["task_overdue"]["by_owner"][0]["drilldown_filters"]["owner_id"], "owner_1")
             self.assertEqual(reports["activities_by_owner"][0]["owner_id"], "owner_1")
             self.assertEqual(reports["activities_by_owner"][0]["drilldown_filters"], {"kind": "activity", "owner_id": "owner_1"})
+            self.assertEqual(reports["connection_metrics"]["leads_with_linked_email"], 1)
+            self.assertEqual(reports["connection_metrics"]["deals_with_scheduled_call"], 1)
+            self.assertEqual(reports["connection_metrics"]["records_with_pending_approvals"], 1)
+            self.assertEqual(reports["connection_metrics"]["pipeline_value_with_next_call"], {"EUR": 20000.0})
 
             _, audit = handle_action(temporary_dir, "crm.audit_log", {"entity_type": "account", "entity_id": account_id, "event_type": "account.created"})
             self.assertEqual(audit["events"][0]["event_type"], "account.created")

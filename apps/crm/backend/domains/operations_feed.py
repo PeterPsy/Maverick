@@ -7,6 +7,8 @@ from typing import Any
 from domains.record_intelligence import recommendation_next_actions
 from store import parse_limit, row_to_dict, utc_now
 
+from .connection_summary import connection_summaries_for_deals, connection_summaries_for_records
+
 
 def operations_feed(db, payload: dict[str, Any]) -> dict[str, Any]:
     limit = parse_limit(payload, 20)
@@ -196,6 +198,7 @@ def _recommendation_feed_item(action: dict[str, Any]) -> dict[str, Any]:
 def _workflow_proposal_feed_item(db, proposal: dict[str, Any]) -> dict[str, Any]:
     proposal_payload = proposal.get("proposal") if isinstance(proposal.get("proposal"), dict) else {}
     action = proposal_payload.get("action") if isinstance(proposal_payload.get("action"), dict) else {}
+    evidence = _proposal_evidence(db, proposal, proposal_payload)
     return {
         "kind": "workflow_proposal",
         "ref": {
@@ -210,12 +213,67 @@ def _workflow_proposal_feed_item(db, proposal: dict[str, Any]) -> dict[str, Any]
         or proposal.get("proposal_type")
         or "",
         "source": proposal.get("source") or "crm.workflow",
+        "evidence": evidence,
         "action_type": action.get("type") or "",
         "created_at": proposal.get("created_at") or "",
         "updated_at": proposal.get("updated_at") or "",
         "approved_at": proposal.get("approved_at") or "",
         "applied_at": proposal.get("applied_at") or "",
     }
+
+
+def _proposal_evidence(db, proposal: dict[str, Any], proposal_payload: dict[str, Any]) -> list[str]:
+    explicit = proposal_payload.get("evidence") or proposal_payload.get("proof") or proposal_payload.get("source_evidence")
+    labels = _evidence_labels(explicit)
+    entity_type = str(proposal.get("entity_type") or "")
+    entity_id = str(proposal.get("entity_id") or "")
+    summary = _proposal_connection_summary(db, entity_type, entity_id)
+    mail_count = int(summary.get("mail_count") or 0)
+    if mail_count:
+        labels.append(f"from {mail_count} {'email' if mail_count == 1 else 'emails'}")
+    if int(summary.get("calendar_count") or 0):
+        labels.append("calendar event created")
+    if summary.get("brief_ready") or int(summary.get("file_count") or 0):
+        labels.append("brief saved" if summary.get("brief_ready") else "file linked")
+    if proposal.get("status") == "pending":
+        labels.append("requires approval")
+    return _dedupe(labels)[:5]
+
+
+def _proposal_connection_summary(db, entity_type: str, entity_id: str) -> dict[str, Any]:
+    if entity_type == "deal" and entity_id:
+        row = db.execute("SELECT * FROM deals WHERE id = ? AND deleted_at IS NULL", (entity_id,)).fetchone()
+        if row is not None:
+            return connection_summaries_for_deals(db, [row_to_dict(row)]).get(entity_id, {})
+    return connection_summaries_for_records(db, [(entity_type, entity_id)]).get((entity_type, entity_id), {})
+
+
+def _evidence_labels(value: Any) -> list[str]:
+    if isinstance(value, str) and value.strip():
+        return [value.strip()]
+    if not isinstance(value, list):
+        return []
+    labels: list[str] = []
+    for item in value:
+        if isinstance(item, str) and item.strip():
+            labels.append(item.strip())
+        elif isinstance(item, dict):
+            label = item.get("label") or item.get("title") or item.get("summary")
+            if label:
+                labels.append(str(label))
+    return labels
+
+
+def _dedupe(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        normalized = value.strip().lower()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        result.append(value.strip())
+    return result
 
 
 def _workflow_proposal_event_reason(db, proposal: dict[str, Any]) -> str:

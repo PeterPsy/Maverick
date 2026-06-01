@@ -2,7 +2,7 @@
   "app_id": "mail",
   "contract_version": "1.0",
   "name": "Mail",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Workspace-local Maverick Mail app with inbox, thread, draft, CLI, MCP, and reference surfaces backed by app-owned SQLite storage.",
   "publisher": "workspace",
   "minimum_core_version": "0.1.0",
@@ -37,7 +37,8 @@
       "read": [
         "gmail-oauth-client-id",
         "gmail-oauth-client-secret",
-        "gmail-refresh-token"
+        "gmail-refresh-token",
+        "mailbox-password"
       ],
       "write": [
         "gmail-refresh-token"
@@ -47,7 +48,8 @@
       "outbound": [
         "accounts.google.com",
         "oauth2.googleapis.com",
-        "gmail.googleapis.com"
+        "gmail.googleapis.com",
+        "mail.privateemail.com"
       ]
     },
     "runtime": {
@@ -201,7 +203,7 @@
   },
   "storage": {
     "storage_kind": "sqlite",
-    "data_schema_version": "5",
+    "data_schema_version": "7",
     "primary_paths": [
       "data/mail/mail.sqlite"
     ],

@@ -48,6 +48,19 @@ export type PipelineBoardDeal = CrmRecord & {
     is_stuck?: boolean;
     past_due?: boolean;
   };
+  connection_summary?: {
+    total_count?: number;
+    mail_count?: number;
+    calendar_count?: number;
+    file_count?: number;
+    agent_count?: number;
+    approval_count?: number;
+    latest_touch_at?: string;
+    next_calendar_at?: string;
+    has_recent_touch?: boolean;
+    brief_ready?: boolean;
+    badges?: Array<{ key?: string; kind?: string; label?: string; count?: number; date?: string }>;
+  };
 };
 
 export type PipelineBoardStage = PipelineStage & {
@@ -165,6 +178,7 @@ export type OperationsFeedItem = {
   title?: string;
   reason?: string;
   source?: string;
+  evidence?: string[];
   action_type?: string;
   action?: Record<string, unknown>;
   priority?: string;

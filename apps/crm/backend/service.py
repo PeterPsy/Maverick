@@ -68,6 +68,7 @@ from domains.references import reference_manifest, reference_resolve, reference_
 from domains.reports import sales_reports
 from domains.saved_views import apply_saved_view, delete_saved_view, list_saved_views, read_view_state, save_view, write_view_state
 from domains.timeline import external_timeline, timeline
+from domains.website_intake import ingest_website_intake
 from domains.workflow import approve_workflow_proposal, dismiss_workflow_proposal, list_workflow_proposals
 from domains.workflow_actions import apply_workflow_proposal, workflow_proposal_action_issues, workflow_proposal_preview
 from store import (
@@ -100,6 +101,8 @@ def handle_action(data_root: str | Path, action: str, payload: dict[str, Any]) -
                 return 200, {"record": get_record(db, require_text(payload, "entity_type", required=True), require_text(payload, "id", required=True))}
             if action in {"crm.create_lead", "create_lead"}:
                 return 201, {"lead": create_lead(db, payload)}
+            if action in {"crm.website_intake", "crm.ingest_website_intake", "website_intake"}:
+                return 201, ingest_website_intake(db, payload)
             if action in {"crm.update_lead", "update_lead"}:
                 return 200, {"lead": update_lead(db, payload)}
             if action in {"crm.convert_lead", "convert_lead"}:

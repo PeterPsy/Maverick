@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import base64
+from email import policy
+from email.message import EmailMessage
+from email.parser import BytesParser
 import json
 import os
 from pathlib import Path
@@ -16,10 +19,11 @@ APP_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_ROOT = APP_ROOT / "tests" / "fixtures"
 sys.path.insert(0, str(APP_ROOT))
 sys.path.insert(0, str(APP_ROOT / "backend"))
-from backend.service import handle_action, resolve_secret_resource
+from backend.service import handle_action, resolve_secret_resource, resolve_secret_resource_inventory
 from backend.service import app_events_for_action
 from backend.database import connect, ensure_schema, health_payload, now_timestamp
 from backend.providers.gmail import GmailProvider
+from backend.providers.imap_smtp import ImapSmtpProvider
 from backend.store import list_threads
 
 
@@ -61,6 +65,119 @@ class MailServiceTest(unittest.TestCase):
             status, payload = handle_action(Path(tmp), {"action": "connections.list"})
             self.assertEqual(status, 200)
             self.assertEqual(payload["items"], [])
+
+    def test_prepare_imap_smtp_stores_only_metadata_and_vault_scope(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            status, payload = handle_action(data_root, {"action": "connections.prepare_imap_smtp"})
+
+            self.assertEqual(status, 201)
+            self.assertEqual(payload["connection_id"], "mail_connection_imap_team-loopino.ai")
+            self.assertEqual(payload["status"], "needs_secret_grant")
+            self.assertEqual(payload["required_secrets"], ["mailbox-password"])
+            self.assertEqual(payload["resource_scope"], {"resource_type": "mail_connection", "resource_id": "mail_connection_imap_team-loopino.ai"})
+            self.assertNotIn("raw-secret", json.dumps(payload))
+            with connect(data_root) as db:
+                connection = db.execute("SELECT * FROM connections WHERE id = ?", ("mail_connection_imap_team-loopino.ai",)).fetchone()
+                credential = db.execute("SELECT * FROM provider_credentials WHERE connection_id = ?", ("mail_connection_imap_team-loopino.ai",)).fetchone()
+            self.assertEqual(connection["provider"], "imap_smtp")
+            self.assertEqual(connection["email_address"], "team@loopino.ai")
+            settings = json.loads(connection["settings_json"])
+            self.assertEqual(settings["imap_host"], "mail.privateemail.com")
+            self.assertEqual(settings["smtp_port"], 465)
+            self.assertEqual(credential["logical_name"], "mailbox-password")
+            self.assertEqual(credential["resource_type"], "mail_connection")
+            self.assertEqual(credential["resource_id"], "mail_connection_imap_team-loopino.ai")
+            inventory = resolve_secret_resource_inventory(data_root)
+            self.assertEqual(
+                inventory["resources"],
+                [
+                    {
+                        "logical_name": "mailbox-password",
+                        "resource_type": "mail_connection",
+                        "resource_id": "mail_connection_imap_team-loopino.ai",
+                        "label": "team@loopino.ai mailbox",
+                        "status": "needs_secret_grant",
+                        "provider": "imap_smtp",
+                    }
+                ],
+            )
+
+    def test_prepare_imap_smtp_is_idempotent_for_connected_unchanged_settings(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            status, payload = handle_action(data_root, {"action": "connections.prepare_imap_smtp"})
+            self.assertEqual(status, 201)
+            connection_id = payload["connection_id"]
+            with connect(data_root) as db:
+                db.execute("UPDATE connections SET status = ? WHERE id = ?", ("connected", connection_id))
+
+            status, payload = handle_action(data_root, {"action": "connections.prepare_imap_smtp"})
+            self.assertEqual(status, 201)
+            self.assertEqual(payload["connection"]["status"], "connected")
+
+            status, payload = handle_action(data_root, {"action": "connections.prepare_imap_smtp", "smtp_port": 587})
+            self.assertEqual(status, 201)
+            self.assertEqual(payload["connection"]["status"], "needs_test")
+
+    def test_secret_resource_lookup_distinguishes_gmail_and_imap_smtp(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            ensure_schema(data_root)
+            now = now_timestamp()
+            with connect(data_root) as db:
+                db.execute(
+                    """
+                    INSERT INTO connections(id, provider, email_address, display_name, status, scopes_json, settings_json, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    ("mail_connection_gmail_person-example.com", "gmail", "person@example.com", "person@example.com", "connected", "[]", "{}", now, now),
+                )
+                db.execute(
+                    """
+                    INSERT INTO connections(id, provider, email_address, display_name, status, scopes_json, settings_json, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "mail_connection_imap_team-loopino.ai",
+                        "imap_smtp",
+                        "team@loopino.ai",
+                        "team@loopino.ai",
+                        "connected",
+                        "[]",
+                        json.dumps({"email_address": "team@loopino.ai", "username": "team@loopino.ai"}),
+                        now,
+                        now,
+                    ),
+                )
+
+            self.assertFalse(
+                resolve_secret_resource(
+                    data_root,
+                    {
+                        "connection_id": "mail_connection_gmail_person-example.com",
+                        "_app_secret_selector": {"logical_names": ["mailbox-password"]},
+                    },
+                )["requires_secrets"]
+            )
+            self.assertFalse(
+                resolve_secret_resource(
+                    data_root,
+                    {
+                        "connection_id": "mail_connection_imap_team-loopino.ai",
+                        "_app_secret_selector": {"logical_names": ["gmail-refresh-token"]},
+                    },
+                )["requires_secrets"]
+            )
+            imap_lookup = resolve_secret_resource(
+                data_root,
+                {
+                    "connection_id": "mail_connection_imap_team-loopino.ai",
+                    "_app_secret_selector": {"logical_names": ["mailbox-password"]},
+                },
+            )
+            self.assertTrue(imap_lookup["requires_secrets"])
+            self.assertEqual(imap_lookup["resource_id"], "mail_connection_imap_team-loopino.ai")
 
     def test_threads_sync_uses_bounded_interactive_default(self) -> None:
         class FakeProvider:
@@ -106,6 +223,151 @@ class MailServiceTest(unittest.TestCase):
             self.assertEqual(status, 200)
             self.assertEqual(payload["sync"]["synced_threads"], 0)
             self.assertEqual(provider.max_threads, 25)
+
+    def test_imap_smtp_sync_and_send_use_delivered_mailbox_secret(self) -> None:
+        source = EmailMessage()
+        source["From"] = "Sender <sender@example.com>"
+        source["To"] = "Loopino <team@loopino.ai>"
+        source["Subject"] = "Private mailbox thread"
+        source["Date"] = "Sat, 30 May 2026 12:00:00 +0000"
+        source["Message-ID"] = "<private-1@example.com>"
+        source.set_content("Hello from private mail")
+        raw_message = source.as_bytes()
+        sent_messages: list[EmailMessage] = []
+        logins: list[tuple[str, str]] = []
+
+        class FakeImap:
+            def login(self, username: str, password: str):
+                logins.append((username, password))
+                return "OK", [b"logged in"]
+
+            def list(self):
+                return "OK", [b'(\\HasNoChildren) "/" "INBOX"']
+
+            def select(self, folder: str, readonly: bool = True):
+                return "OK", [b"1"]
+
+            def response(self, code: str):
+                return "OK", [b"42"]
+
+            def uid(self, command: str, *args):
+                if command == "SEARCH":
+                    return "OK", [b"1"]
+                if command == "FETCH":
+                    return "OK", [(b"1 (RFC822)", raw_message)]
+                if command == "STORE":
+                    return "OK", [b"stored"]
+                raise AssertionError(command)
+
+            def append(self, folder: str, flags: str, date_time: object, message: bytes):
+                return "OK", [b"appended"]
+
+            def logout(self):
+                return "OK", [b"bye"]
+
+        class FakeSmtp:
+            def login(self, username: str, password: str):
+                logins.append((username, password))
+                return (235, b"ok")
+
+            def send_message(self, message: EmailMessage):
+                sent_messages.append(message)
+                return {}
+
+            def quit(self):
+                return (221, b"bye")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            status, prepared = handle_action(data_root, {"action": "connections.prepare_imap_smtp"})
+            self.assertEqual(status, 201)
+            provider = ImapSmtpProvider(imap_factory=lambda settings: FakeImap(), smtp_factory=lambda settings: FakeSmtp())
+            with patch("providers.imap_smtp.ImapSmtpProvider", return_value=provider):
+                status, tested = handle_action(
+                    data_root,
+                    {
+                        "action": "connections.test_imap_smtp",
+                        "connection_id": prepared["connection_id"],
+                        "_app_secrets": {"mailbox-password": "mailbox-secret"},
+                    },
+                )
+            self.assertEqual(status, 200, tested)
+            self.assertEqual(tested["status"], "ready")
+            with patch("backend.service.provider_for_connection", return_value=provider):
+                status, synced = handle_action(
+                    data_root,
+                    {
+                        "action": "threads.sync",
+                        "connection_id": prepared["connection_id"],
+                        "_app_secrets": {"mailbox-password": "mailbox-secret"},
+                    },
+                )
+            self.assertEqual(status, 400)
+            self.assertIn("test and activate", synced["detail"])
+            with patch("providers.imap_smtp.ImapSmtpProvider", return_value=provider):
+                status, activated = handle_action(
+                    data_root,
+                    {
+                        "action": "connections.activate_imap_smtp",
+                        "connection_id": prepared["connection_id"],
+                        "_app_secrets": {"mailbox-password": "mailbox-secret"},
+                    },
+                )
+            self.assertEqual(status, 200, activated)
+            self.assertEqual(activated["status"], "connected")
+            with patch("providers.imap_smtp.ImapSmtpProvider", return_value=provider):
+                status, retested = handle_action(
+                    data_root,
+                    {
+                        "action": "connections.test_imap_smtp",
+                        "connection_id": prepared["connection_id"],
+                        "_app_secrets": {"mailbox-password": "mailbox-secret"},
+                    },
+                )
+            self.assertEqual(status, 200, retested)
+            self.assertEqual(retested["status"], "ready")
+            self.assertEqual(retested["connection"]["status"], "connected")
+            with patch("backend.service.provider_for_connection", return_value=provider):
+                status, synced = handle_action(
+                    data_root,
+                    {
+                        "action": "threads.sync",
+                        "connection_id": prepared["connection_id"],
+                        "_app_secrets": {"mailbox-password": "mailbox-secret"},
+                    },
+                )
+            self.assertEqual(status, 200, synced)
+            self.assertEqual(synced["sync"]["mode"], "imap_smtp")
+            threads = list_threads(data_root, {"connection_id": prepared["connection_id"]})
+            self.assertEqual(len(threads), 1)
+            self.assertEqual(threads[0]["subject"], "Private mailbox thread")
+
+            status, draft_payload = handle_action(
+                data_root,
+                {
+                    "action": "drafts.create",
+                    "connection_id": prepared["connection_id"],
+                    "to": [{"email": "customer@example.com"}],
+                    "subject": "SMTP send",
+                    "body_text": "Plain",
+                    "body_html": "<p>HTML</p>",
+                },
+            )
+            self.assertEqual(status, 201)
+            with patch("backend.service.provider_for_connection", return_value=provider):
+                status, sent = handle_action(
+                    data_root,
+                    {
+                        "action": "drafts.send",
+                        "draft_id": draft_payload["draft"]["id"],
+                        "confirm": True,
+                        "_app_secrets": {"mailbox-password": "mailbox-secret"},
+                    },
+                )
+            self.assertEqual(status, 200, sent)
+            self.assertTrue(sent["result"]["sent"])
+            self.assertEqual(sent_messages[0]["From"], "team@loopino.ai")
+            self.assertIn(("team@loopino.ai", "mailbox-secret"), logins)
 
     def test_mock_bootstrap_action_is_not_supported(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -421,6 +683,50 @@ class MailServiceTest(unittest.TestCase):
             self.assertEqual(status, 200)
             self.assertTrue(preview["result"]["dry_run"])
             self.assertTrue(preview["result"]["requires_confirmation"])
+            self.assertEqual(preview["result"]["draft"]["body_html"], "")
+            self.assertEqual(preview["result"]["draft"]["reply_to"], [])
+
+    def test_mail_send_accepts_html_body_and_sends_multipart_gmail_message(self) -> None:
+        sent_payloads: list[dict[str, object]] = []
+
+        def fake_transport(request) -> dict[str, object]:
+            if request.full_url == "https://oauth2.googleapis.com/token":
+                return {"access_token": "access-token", "expires_in": 3600, "token_type": "Bearer"}
+            if request.full_url == "https://gmail.googleapis.com/gmail/v1/users/me/messages/send":
+                payload = json.loads(request.data.decode("utf-8"))
+                sent_payloads.append(payload)
+                return {"id": "provider-message-html", "threadId": ""}
+            raise AssertionError(f"unexpected request {request.full_url}")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            self._insert_gmail_fixture(data_root)
+            with patch("backend.service.provider_for_connection", return_value=GmailProvider(transport=fake_transport)):
+                status, payload = handle_action(
+                    data_root,
+                    {
+                        "action": "mail_send",
+                        "to": [{"email": "customer@example.com", "name": "Customer"}],
+                        "subject": "Richiesta ricevuta | Loopino",
+                        "body_text": "Plain confirmation",
+                        "body_html": "<p><strong>HTML confirmation</strong></p>",
+                        "reply_to": [{"email": "team@loopino.ai", "name": "Loopino"}],
+                        "confirm": True,
+                        "_app_secrets": self._gmail_secrets(),
+                    },
+                )
+
+            self.assertEqual(status, 200, payload)
+            self.assertTrue(payload["result"]["sent"])
+            self.assertEqual(payload["draft"]["body_html"], "<p><strong>HTML confirmation</strong></p>")
+            self.assertEqual(payload["draft"]["reply_to"][0]["email"], "team@loopino.ai")
+            self.assertEqual(len(sent_payloads), 1)
+            raw = str(sent_payloads[0]["raw"])
+            padded = raw + ("=" * (-len(raw) % 4))
+            message = BytesParser(policy=policy.default).parsebytes(base64.urlsafe_b64decode(padded.encode("ascii")))
+            self.assertEqual(message["Reply-To"], "Loopino <team@loopino.ai>")
+            self.assertEqual(message.get_body(preferencelist=("plain",)).get_content().strip(), "Plain confirmation")
+            self.assertEqual(message.get_body(preferencelist=("html",)).get_content().strip(), "<p><strong>HTML confirmation</strong></p>")
 
     def test_mail_send_confirm_requires_recipient(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -502,15 +808,22 @@ class MailServiceTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             status, payload = handle_action(Path(tmp), {"action": "health.check"})
             self.assertEqual(status, 200)
-            self.assertEqual(payload["schema_version"], "5")
+            self.assertEqual(payload["schema_version"], "7")
             self.assertEqual(payload["health_status"], "healthy")
             self.assertEqual(payload["database"], "mail.sqlite")
             with connect(Path(tmp)) as db:
                 message_columns = {row["name"] for row in db.execute("PRAGMA table_info(messages)").fetchall()}
+                draft_columns = {row["name"] for row in db.execute("PRAGMA table_info(drafts)").fetchall()}
+                connection_columns = {row["name"] for row in db.execute("PRAGMA table_info(connections)").fetchall()}
+                provider_credential_table = db.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'provider_credentials'").fetchone()
             self.assertIn("body_html_original_bounded", message_columns)
             self.assertIn("body_html_gmail_sanitized", message_columns)
             self.assertIn("body_html_rendered", message_columns)
             self.assertIn("render_policy_json", message_columns)
+            self.assertIn("body_html", draft_columns)
+            self.assertIn("reply_to_json", draft_columns)
+            self.assertIn("settings_json", connection_columns)
+            self.assertIsNotNone(provider_credential_table)
 
     def test_read_only_health_reports_missing_database(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1791,8 +2104,24 @@ class MailServiceTest(unittest.TestCase):
     def test_frontend_opens_cached_thread_without_secret_refresh(self) -> None:
         app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
         self.assertIn("const openThread = useCallback(async (threadId: string, connectionId?: string, refresh = false)", app_source)
-        self.assertIn("...(refresh && connectionId ? gmailSecretRequest(connectionId) : noSecretRequest())", app_source)
+        self.assertIn("...(refresh && connectionId ? secretRequestForConnectionId(connectionId) : noSecretRequest())", app_source)
         self.assertIn("openThread(selectedThread.id, selectedThread.connection_id, true)", app_source)
+
+    def test_frontend_add_account_lives_in_sidebar_and_opens_provider_modal(self) -> None:
+        app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
+        styles = (APP_ROOT / "frontend" / "src" / "styles.css").read_text(encoding="utf-8")
+        footer_source = (APP_ROOT / "frontend" / "src" / "widgets" / "mail-sidebar-footer" / "main.tsx").read_text(encoding="utf-8")
+        self.assertNotIn("add-account-button", app_source)
+        self.assertNotIn("account-panel", app_source)
+        self.assertNotIn("privateEmailForm", app_source)
+        self.assertNotIn("provider-tabs", styles)
+        self.assertNotIn("private-email-grid", styles)
+        self.assertIn("add_account: true", footer_source)
+        self.assertIn("maverick.widget.open-app", footer_source)
+        self.assertIn("mail-account-modal", app_source)
+        self.assertIn("Open OAuth", app_source)
+        self.assertIn("Open Vault", app_source)
+        self.assertIn("action: MAIL_BACKEND_ACTIONS.connectionsPrepareImapSmtp", app_source)
 
     def test_frontend_renders_html_email_in_isolated_frame(self) -> None:
         app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")

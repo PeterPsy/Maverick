@@ -115,6 +115,7 @@ button {
   flex: 0 0 auto;
   width: 2rem;
   height: 2rem;
+  border: 1px solid transparent;
   border-radius: 15px;
   background: var(--maverick-surface);
   color: var(--crm-sidebar-icon-color);
@@ -136,6 +137,10 @@ button {
   border-color: var(--maverick-border);
   background: var(--maverick-surface-hover);
   outline: none;
+}
+
+.crm-sidebar-row.is-active svg {
+  border-color: var(--maverick-accent);
 }
 
 .crm-sidebar-row:active {

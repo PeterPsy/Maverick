@@ -8,6 +8,7 @@ from typing import Any
 
 from store import count_tables, row_to_dict, table_for_entity
 
+from .connection_summary import connection_summaries_for_records
 from .record_lifecycle import ENTITY_ROUTE_SEGMENTS, title_for_record
 
 
@@ -23,6 +24,7 @@ def records_table_records_by_key(db: sqlite3.Connection, rows: list[sqlite3.Row]
     records = _records_table_base_records(db, rows)
     _attach_records_table_tags(db, records)
     _attach_records_table_custom_fields(db, records)
+    _attach_records_table_connection_summaries(db, records)
     return records
 
 
@@ -33,6 +35,7 @@ def records_table_row_envelope(row: sqlite3.Row, records_by_key: dict[tuple[str,
         "last_activity_at": str(row["last_activity_at"] or ""),
         "next_action": str(row["next_action"] or ""),
         "open_task_count": int(row["open_task_count"] or 0),
+        "connection_summary": record.get("connection_summary", {}),
     }
     if entity_type == "account":
         computed["open_deal_value"] = float(row["open_deal_value"] or 0)
@@ -67,11 +70,11 @@ def encode_records_table_cursor(row: sqlite3.Row, sort_field: str, sort_directio
 
 def records_table_columns(db, entity_type: str) -> list[dict[str, str]]:
     columns_by_entity = {
-        "lead": ["name", "company", "email", "source", "status", "owner", "next_action", "updated"],
-        "account": ["name", "domain", "industry", "status", "owner", "open_deal_value", "contact_count", "last_activity", "tags"],
-        "contact": ["name", "account", "email", "role", "owner", "last_activity", "open_task_count", "tags"],
-        "deal": ["name", "account", "contact", "stage", "value", "probability", "weighted_value", "close_date", "deal_age_days", "owner"],
-        "all": ["type", "name", "account_company", "owner", "status_stage", "value", "next_action", "last_touch", "updated", "tags"],
+        "lead": ["name", "company", "email", "source", "status", "owner", "connections", "next_action", "updated"],
+        "account": ["name", "domain", "industry", "status", "owner", "connections", "open_deal_value", "contact_count", "last_activity", "tags"],
+        "contact": ["name", "account", "email", "role", "owner", "connections", "last_activity", "open_task_count", "tags"],
+        "deal": ["name", "account", "contact", "stage", "value", "probability", "connections", "weighted_value", "close_date", "deal_age_days", "owner"],
+        "all": ["type", "name", "account_company", "owner", "status_stage", "value", "connections", "next_action", "last_touch", "updated", "tags"],
     }
     columns = [{"key": key, "label": _field_label(key)} for key in columns_by_entity[entity_type]]
     columns.extend(_custom_field_columns(db, entity_type))
@@ -183,6 +186,12 @@ def _attach_records_table_custom_fields(db: sqlite3.Connection, records: dict[tu
         record = records.get((str(row["entity_type"]), str(row["entity_id"])))
         if record is not None:
             record["custom_fields"][str(row["field_key"])] = json.loads(row["value_json"] or "null")
+
+
+def _attach_records_table_connection_summaries(db: sqlite3.Connection, records: dict[tuple[str, str], dict[str, Any]]) -> None:
+    summaries = connection_summaries_for_records(db, records.keys())
+    for key, record in records.items():
+        record["connection_summary"] = summaries.get(key, {})
 
 
 def _records_table_entity_id_where(entity_column: str, id_column: str, records: dict[tuple[str, str], dict[str, Any]]) -> tuple[str, list[Any]]:

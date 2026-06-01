@@ -7,6 +7,8 @@ from typing import Any
 
 from store import parse_limit, row_to_dict, utc_now
 
+from .connection_summary import connection_report_metrics
+
 
 def sales_reports(db, payload: dict[str, Any]) -> dict[str, Any]:
     now = _parse_datetime(utc_now()) or datetime.now(timezone.utc)
@@ -14,7 +16,10 @@ def sales_reports(db, payload: dict[str, Any]) -> dict[str, Any]:
         """
         SELECT stage_id, stage, currency, count(*) AS deal_count, sum(value) AS total_value, sum(value * probability) AS weighted_value
         FROM deals
-        WHERE deleted_at IS NULL AND archived_at IS NULL AND lower(stage) NOT IN ('won', 'lost')
+        WHERE deleted_at IS NULL
+          AND archived_at IS NULL
+          AND stage_id NOT IN ('won', 'lost')
+          AND lower(stage) NOT IN ('won', 'lost')
         GROUP BY stage_id, stage, currency
         ORDER BY total_value DESC
         """
@@ -39,7 +44,10 @@ def sales_reports(db, payload: dict[str, Any]) -> dict[str, Any]:
         """
         SELECT id, name, stage, value, currency, owner_id, created_at, updated_at, close_date
         FROM deals
-        WHERE deleted_at IS NULL AND archived_at IS NULL AND lower(stage) NOT IN ('won', 'lost')
+        WHERE deleted_at IS NULL
+          AND archived_at IS NULL
+          AND stage_id NOT IN ('won', 'lost')
+          AND lower(stage) NOT IN ('won', 'lost')
         ORDER BY created_at ASC
         LIMIT ?
         """,
@@ -125,6 +133,7 @@ def sales_reports(db, payload: dict[str, Any]) -> dict[str, Any]:
         "weighted_forecast": weighted_forecast,
         "deal_aging": deal_aging,
         "lead_conversion": lead_conversion,
+        "connection_metrics": connection_report_metrics(db),
         "task_overdue": task_overdue,
         "activities_by_owner": list(activities_by_owner.values()),
     }

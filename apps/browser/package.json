@@ -5,7 +5,8 @@
   "private": true,
   "scripts": {
     "broker": "node broker/playwright-broker.mjs",
-    "broker:docker": "node broker/playwright-server-docker.mjs"
+    "broker:docker": "node broker/playwright-server-docker.mjs",
+    "broker:local": "node broker/playwright-server-local.mjs"
   },
   "dependencies": {
     "playwright": "1.60.0"

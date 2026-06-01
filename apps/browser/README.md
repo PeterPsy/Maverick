@@ -97,11 +97,22 @@ interactive tools only for admin-approved Maverick development UI targets.
 ## P0 Playwright Broker
 
 The P0 broker is a dev sidecar, not a normal app backend subprocess. Start the
-Playwright server first:
+Playwright server first. The Docker path is preferred for isolation when Docker
+is available:
 
 ```bash
 cd apps/browser
 npm run broker:docker
+```
+
+When Docker is not available on the host, use the local helper instead. It runs
+the pinned Playwright package from `apps/browser/node_modules` and keeps the
+same default WebSocket endpoint:
+
+```bash
+cd apps/browser
+npm ci --ignore-scripts
+npm run broker:local
 ```
 
 Then start the Browser broker:
@@ -124,9 +135,10 @@ agents do not need the token copied into their environment. Set
 delivers the shared token another way.
 
 The `playwright` package is pinned in `package.json`; the Docker helper uses
-the matching official image tag and `playwright run-server`. The broker refuses
-to connect when `MAVERICK_BROWSER_PLAYWRIGHT_VERSION` does not match the local
-client version.
+the matching official image tag and `playwright run-server`, while the local
+helper refuses to run when the installed package version differs from the pin.
+The broker refuses to connect when `MAVERICK_BROWSER_PLAYWRIGHT_VERSION` does
+not match the local client version.
 
 The controller calls the broker at `MAVERICK_BROWSER_BROKER_URL`, defaulting to
 `http://127.0.0.1:9323`, and every broker request must include the shared

@@ -60,6 +60,7 @@ class BrowserAppTests(unittest.TestCase):
         self.assertNotIn("build", package["scripts"])
         self.assertEqual(package["scripts"]["broker"], "node broker/playwright-broker.mjs")
         self.assertEqual(package["scripts"]["broker:docker"], "node broker/playwright-server-docker.mjs")
+        self.assertEqual(package["scripts"]["broker:local"], "node broker/playwright-server-local.mjs")
 
     def test_mcp_descriptor_matches_p0_tool_scope(self) -> None:
         parsed = parse_app_contract_file(APP_ROOT)
@@ -940,6 +941,21 @@ class BrowserAppTests(unittest.TestCase):
         self.assertIn("playwright@1.60.0 run-server", command)
         self.assertIn("--add-host hostmachine:host-gateway", command)
         self.assertIn("--user pwuser", command)
+
+    def test_local_helper_uses_pinned_playwright_run_server(self) -> None:
+        completed = subprocess.run(
+            ["node", str(APP_ROOT / "broker" / "playwright-server-local.mjs"), "--print"],
+            text=True,
+            capture_output=True,
+            check=True,
+            cwd=str(APP_ROOT),
+        )
+
+        command = completed.stdout.strip()
+        self.assertIn("node", command)
+        self.assertIn("node_modules/playwright/cli.js run-server", command)
+        self.assertIn("--host 127.0.0.1", command)
+        self.assertIn("--port 3100", command)
 
     def test_broker_generates_local_token_file_when_env_token_is_missing(self) -> None:
         with TemporaryDirectory() as temp_dir:

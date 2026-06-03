@@ -106,7 +106,7 @@ class ImapSmtpProvider:
         synced = 0
         max_total = _bounded_int(max_threads, 100, 1, 2000)
         folder_rows: list[dict[str, str]] = []
-        folder_cursors = cursor.get("folders") if isinstance(cursor.get("folders"), dict) else {}
+        folder_cursors = cursor.get("folders") if continue_cursor and isinstance(cursor.get("folders"), dict) else {}
         with self._imap(settings) as client:
             _imap_login(client, str(settings["username"]), password)
             folders = _list_folders(client)
@@ -122,8 +122,8 @@ class ImapSmtpProvider:
                 uidvalidity = _uidvalidity(client)
                 previous = folder_cursors.get(folder_name) if isinstance(folder_cursors, dict) else {}
                 last_uid = int(previous.get("last_uid") or 0) if isinstance(previous, dict) and previous.get("uidvalidity") == uidvalidity else 0
-                search_range = f"{last_uid + 1}:*" if last_uid else "ALL"
-                typ, data = client.uid("SEARCH", None, search_range)
+                search_args = ("UID", f"{last_uid + 1}:*") if last_uid else ("ALL",)
+                typ, data = client.uid("SEARCH", None, *search_args)
                 if str(typ).upper() != "OK":
                     continue
                 uids = _uid_values(data)

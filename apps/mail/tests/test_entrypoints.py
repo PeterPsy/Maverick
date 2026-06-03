@@ -369,6 +369,86 @@ class MailServiceTest(unittest.TestCase):
             self.assertEqual(sent_messages[0]["From"], "team@loopino.ai")
             self.assertIn(("team@loopino.ai", "mailbox-secret"), logins)
 
+    def test_imap_smtp_incremental_sync_uses_uid_search_key(self) -> None:
+        messages: dict[int, bytes] = {}
+        for uid, subject in ((1, "First cached"), (2, "New after cursor")):
+            message = EmailMessage()
+            message["From"] = "Sender <sender@example.com>"
+            message["To"] = "Loopino <team@loopino.ai>"
+            message["Subject"] = subject
+            message["Date"] = f"Tue, 02 Jun 2026 14:{uid:02d}:00 +0000"
+            message["Message-ID"] = f"<private-{uid}@example.com>"
+            message.set_content(subject)
+            messages[uid] = message.as_bytes()
+        search_calls: list[tuple[object, ...]] = []
+
+        class FakeImap:
+            def login(self, username: str, password: str):
+                return "OK", [b"logged in"]
+
+            def list(self):
+                return "OK", [b'(\\HasNoChildren) "/" "INBOX"']
+
+            def select(self, folder: str, readonly: bool = True):
+                return "OK", [b"2"]
+
+            def response(self, code: str):
+                return "OK", [b"42"]
+
+            def uid(self, command: str, *args):
+                if command == "SEARCH":
+                    search_calls.append(args)
+                    if args == (None, "ALL"):
+                        return "OK", [b"1"]
+                    if args == (None, "UID", "2:*"):
+                        return "OK", [b"2"]
+                    return "OK", [b""]
+                if command == "FETCH":
+                    uid = int(args[0])
+                    return "OK", [(f"{uid} (RFC822)".encode("ascii"), messages[uid])]
+                raise AssertionError(command)
+
+            def logout(self):
+                return "OK", [b"bye"]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            ensure_schema(data_root)
+            now = now_timestamp()
+            connection_id = "mail_connection_imap_team-loopino.ai"
+            with connect(data_root) as db:
+                db.execute(
+                    """
+                    INSERT INTO connections(id, provider, email_address, display_name, status, scopes_json, settings_json, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        connection_id,
+                        "imap_smtp",
+                        "team@loopino.ai",
+                        "team@loopino.ai",
+                        "connected",
+                        "[]",
+                        json.dumps({"username": "team@loopino.ai", "email_address": "team@loopino.ai"}),
+                        now,
+                        now,
+                    ),
+                )
+
+            provider = ImapSmtpProvider(imap_factory=lambda settings: FakeImap())
+            provider.sync_incremental(data_root, connection_id, app_secrets={"mailbox-password": "mailbox-secret"})
+            result = provider.sync_incremental(
+                data_root,
+                connection_id,
+                app_secrets={"mailbox-password": "mailbox-secret"},
+                continue_cursor=True,
+            )
+
+            self.assertEqual(search_calls[-1], (None, "UID", "2:*"))
+            self.assertEqual(result["synced_messages"], 1)
+            threads = list_threads(data_root, {"connection_id": connection_id, "query": "New after cursor"})
+            self.assertEqual(len(threads), 1)
+
     def test_mock_bootstrap_action_is_not_supported(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             status, payload = handle_action(Path(tmp), {"action": "connections.bootstrap_mock"})
@@ -2093,13 +2173,15 @@ class MailServiceTest(unittest.TestCase):
         self.assertIn("from './App'", main_source)
         self.assertNotIn("New record", main_source)
 
-    def test_frontend_reply_composer_allows_backend_recipient_derivation(self) -> None:
+    def test_frontend_reader_uses_thread_toolbar_without_inline_composer(self) -> None:
         app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
-        self.assertIn("const isContextualReply = Boolean(selectedThread && composerMode === 'reply');", app_source)
-        self.assertIn("required={!isContextualReply}", app_source)
-        self.assertIn("Reply recipients (optional)", app_source)
-        self.assertIn("to: draft.to.trim() ? [{ email: draft.to.trim() }] : []", app_source)
-        self.assertIn("thread_id: isContextualReply ? selectedThread?.id : undefined", app_source)
+        self.assertIn("const [readerPlain, setReaderPlain] = useState(false);", app_source)
+        self.assertIn("const [readerShowImages, setReaderShowImages] = useState(false);", app_source)
+        self.assertIn("modifySelected([], ['inbox'])", app_source)
+        self.assertIn("modifySelected(['trash'], ['inbox'])", app_source)
+        self.assertNotIn("composerMode", app_source)
+        self.assertNotIn("function startReply()", app_source)
+        self.assertNotIn("function startForward()", app_source)
 
     def test_frontend_opens_cached_thread_without_secret_refresh(self) -> None:
         app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
@@ -2140,9 +2222,14 @@ class MailServiceTest(unittest.TestCase):
         self.assertIn("contentWidth > parentWidth + 1", app_source)
         self.assertIn("style={{ height, width: frameWidth ? `${frameWidth}px` : undefined }}", app_source)
         self.assertIn("showRemoteImages", app_source)
+        self.assertIn("const [readerPlain, setReaderPlain] = useState(false);", app_source)
+        self.assertIn("const [readerShowImages, setReaderShowImages] = useState(false);", app_source)
+        self.assertIn("setReaderPlain((value) => !value)", app_source)
+        self.assertIn("setReaderShowImages((value) => !value)", app_source)
         self.assertIn("Show images", app_source)
-        self.assertIn("Remote images blocked", app_source)
-        self.assertIn("message-image-control", app_source)
+        self.assertIn("mail-blocked-image", app_source)
+        self.assertIn("data-mail-image", app_source)
+        self.assertIn("reader-view-actions", app_source)
         self.assertIn("replaceWith(image)", app_source)
         self.assertIn("data-mail-background-image", app_source)
         self.assertIn("backgroundImage", app_source)
@@ -2151,7 +2238,7 @@ class MailServiceTest(unittest.TestCase):
         self.assertIn("overflow-x: auto;", styles)
         self.assertIn("min-width: 100%;", styles)
         self.assertIn("flex-wrap: wrap;", styles)
-        self.assertIn(".message-image-control", styles)
+        self.assertIn(".reader-view-actions", styles)
         self.assertNotIn("color: #111827;", app_source)
         self.assertNotIn("line-height: 1.45;", app_source)
         self.assertNotIn("border-spacing: 0;", app_source)
@@ -2165,14 +2252,19 @@ class MailServiceTest(unittest.TestCase):
         self.assertIn("Show quoted text", app_source)
         self.assertIn("function MailThreadMessage", app_source)
         self.assertIn('className="message-head"', app_source)
-        self.assertIn("function startReply()", app_source)
-        self.assertIn("function startForward()", app_source)
-        self.assertIn("---------- Forwarded message ---------", app_source)
+        self.assertIn("function MailMessageBody", app_source)
+        self.assertIn("readerHasHtml", app_source)
+        self.assertIn("readerHasRemoteImages", app_source)
+        self.assertIn("readerPlain", app_source)
+        self.assertIn("readerShowImages", app_source)
+        self.assertIn("reader-thread-actions", app_source)
+        self.assertIn('aria-label="Archive"', app_source)
+        self.assertIn('aria-label="Move to trash"', app_source)
         self.assertIn("Show trimmed content", app_source)
         self.assertIn("MAIL_BACKEND_ACTIONS.messagesGet", app_source)
         self.assertIn("READER_FULL_TEXT_BODY_CHARS", app_source)
-        self.assertIn("composerMode === 'forward'", app_source)
-        self.assertIn(".composer-mode", styles)
+        self.assertIn(".reader-view-actions", styles)
+        self.assertIn(".reader-thread-actions", styles)
         self.assertIn(".message-trimmed", styles)
         self.assertIn(".message-meta", styles)
         self.assertIn("grid-template-columns: minmax(260px, 340px) minmax(760px, 1fr);", styles)

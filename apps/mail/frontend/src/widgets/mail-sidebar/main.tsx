@@ -20,6 +20,13 @@ import {
 import './styles.css';
 
 const MAILBOXES = ['inbox', 'sent', 'drafts', 'starred', 'trash'];
+const MAILBOX_LABELS: Record<string, string> = {
+  inbox: 'Inbox',
+  sent: 'Sent',
+  drafts: 'Drafts',
+  starred: 'Starred',
+  trash: 'Trash',
+};
 const MAIL_DATA_RESOURCES = new Set(['connections', 'drafts', 'threads', 'view-state']);
 const GMAIL_OAUTH_SECRETS = ['gmail-oauth-client-id', 'gmail-oauth-client-secret'];
 const GMAIL_REFRESH_SECRET = 'gmail-refresh-token';
@@ -224,9 +231,10 @@ function MailSidebarWidget() {
         if (typeof nextMailbox === 'string' && MAILBOXES.includes(nextMailbox)) {
           setMailbox(nextMailbox);
         }
+        const hasConnectionIdSelection = Object.prototype.hasOwnProperty.call(payload.selection || {}, 'connection_id');
         const nextConnectionId = payload.selection?.connection_id;
-        if (typeof nextConnectionId === 'string' && nextConnectionId.trim()) {
-          setSelectedConnectionId(nextConnectionId);
+        if (hasConnectionIdSelection) {
+          setSelectedConnectionId(typeof nextConnectionId === 'string' && nextConnectionId.trim() ? nextConnectionId : null);
         }
         return;
       }
@@ -243,19 +251,17 @@ function MailSidebarWidget() {
     return () => window.removeEventListener('message', handleMessage);
   }, [refresh]);
 
-  const activeConnections = useMemo(() => connections.filter((item) => item.status !== 'disconnected'), [connections]);
-  const connection = (selectedConnectionId ? connections.find((item) => item.id === selectedConnectionId) : null) || activeConnections[0] || connections[0];
   const accountTreeNodes = useMemo(
-    () => buildMailTree(connections, mailboxCounts, connection?.id || '', mailbox),
-    [connections, mailboxCounts, connection?.id, mailbox],
+    () => buildMailTree(connections, mailboxCounts, selectedConnectionId, mailbox),
+    [connections, mailboxCounts, selectedConnectionId, mailbox],
   );
   const defaultExpandedIds = useMemo(
     () => accountTreeNodes.flatMap((node) => collectDefaultExpandedIds(node)),
     [accountTreeNodes],
   );
   const selectedNodeIds = useMemo(
-    () => connection?.id ? [mailboxIdentity(connection.id, mailbox)] : [],
-    [connection?.id, mailbox],
+    () => [selectedConnectionId ? mailboxIdentity(selectedConnectionId, mailbox) : aggregateMailboxIdentity(mailbox)],
+    [selectedConnectionId, mailbox],
   );
   const treeProviderKey = `${connections.length}:${Object.keys(mailboxCounts).length}:${defaultExpandedIds.join('|')}`;
 
@@ -305,9 +311,7 @@ function MailSidebarWidget() {
 
   function selectMailbox(nextMailbox: string, nextConnectionId: string | null = selectedConnectionId) {
     setMailbox(nextMailbox);
-    if (nextConnectionId) {
-      setSelectedConnectionId(nextConnectionId);
-    }
+    setSelectedConnectionId(nextConnectionId);
     openMail({ mailbox: nextMailbox, connection_id: nextConnectionId });
     if (isMobileLayout) {
       closeShellSidebar();
@@ -319,8 +323,8 @@ function MailSidebarWidget() {
   }
 
   function selectTreeNode(node: MailTreeNode) {
-    if (node.type === 'mailbox' && node.mailbox && node.account) {
-      selectMailbox(node.mailbox, node.account.id);
+    if (node.type === 'mailbox' && node.mailbox) {
+      selectMailbox(node.mailbox, node.account?.id || null);
     }
   }
 
@@ -451,10 +455,24 @@ function MailTreeNodeView({ node, level, isLast, onSelect, onSyncConnection, onD
 function buildMailTree(
   connections: MailConnection[],
   mailboxCounts: Record<string, Record<string, MailboxCount>>,
-  selectedConnectionId: string,
+  selectedConnectionId: string | null,
   selectedMailbox: string,
 ): MailTreeNode[] {
-  return connections
+  const aggregateNodes = MAILBOXES.map((folder) => {
+    const count = aggregateMailboxCount(mailboxCounts, folder);
+    return {
+      children: [],
+      count,
+      id: aggregateMailboxIdentity(folder),
+      label: `All ${MAILBOX_LABELS[folder].toLowerCase()}`,
+      mailbox: folder,
+      status: !selectedConnectionId && folder === selectedMailbox ? 'active' : 'mailbox',
+      title: folder === 'inbox' ? `${count.unread} unread across all accounts` : `${count.total} threads across all accounts`,
+      type: 'mailbox' as const,
+    };
+  });
+
+  const accountNodes = connections
     .slice()
     .sort((left, right) => accountName(left).localeCompare(accountName(right)))
     .map((account) => ({
@@ -466,7 +484,7 @@ function buildMailTree(
           children: [],
           count,
           id: mailboxIdentity(account.id, folder),
-          label: folder,
+          label: MAILBOX_LABELS[folder] || folder,
           mailbox: folder,
           status: account.id === selectedConnectionId && folder === selectedMailbox ? 'active' : 'mailbox',
           title: folder === 'inbox' ? `${count.unread} unread` : `${count.total} threads`,
@@ -479,6 +497,8 @@ function buildMailTree(
       title: account.email_address || account.provider || account.id,
       type: 'account' as const,
     }));
+
+  return [...aggregateNodes, ...accountNodes];
 }
 
 function collectDefaultExpandedIds(node: MailTreeNode) {
@@ -499,12 +519,35 @@ function accountIdentity(connectionId: string) {
   return `mail-account:${connectionId}`;
 }
 
+function aggregateMailboxIdentity(folder: string) {
+  return `mailbox:all:${folder}`;
+}
+
 function mailboxIdentity(connectionId: string, folder: string) {
   return `mailbox:${connectionId}:${folder}`;
 }
 
 function accountName(connection: MailConnection) {
   return connection.display_name || connection.email_address || connection.id || 'Gmail';
+}
+
+function aggregateMailboxCount(
+  mailboxCounts: Record<string, Record<string, MailboxCount>>,
+  folder: string,
+): MailboxCount {
+  return Object.values(mailboxCounts).reduce(
+    (accumulator, counts) => {
+      const count = counts[folder];
+      if (!count) {
+        return accumulator;
+      }
+      return {
+        total: accumulator.total + count.total,
+        unread: accumulator.unread + count.unread,
+      };
+    },
+    { total: 0, unread: 0 },
+  );
 }
 
 createRoot(document.getElementById('mail-sidebar-root') as HTMLElement).render(<MailSidebarWidget />);

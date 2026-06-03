@@ -1,13 +1,11 @@
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive,
   ChevronDown,
-  Forward,
   KeyRound,
   Mail,
   MailOpen,
   RefreshCw,
-  Reply,
   X
 } from 'lucide-react';
 import {
@@ -17,7 +15,6 @@ import {
   type MailAttachmentFetchResponse,
   type MailAddress,
   type MailConnection,
-  type MailDraft,
   type MailMessage,
   type MailThread
 } from './api';
@@ -43,22 +40,11 @@ type ConnectionPayload = {
   callback_path?: string;
 };
 
-type SendResult = {
-  dry_run?: boolean;
-  requires_confirmation?: boolean;
-  sent?: boolean;
-  message_id?: string;
-  provider_message_id?: string;
-  thread_id?: string;
-  draft?: MailDraft;
-  thread?: MailThread;
-};
-
 type MailNavigateParams = {
   add_account?: boolean;
   add_account_request_id?: string;
   mailbox?: string;
-  connection_id?: string;
+  connection_id?: string | null;
   query?: string;
   thread?: string;
 };
@@ -70,13 +56,19 @@ type ThreadListPayload = {
   total_count?: number;
 };
 
+type SyncPayload = {
+  sync?: {
+    synced_messages?: number;
+    synced_threads?: number;
+    synced_at?: string;
+  };
+};
+
 type InlineImageState = {
   status: 'loading' | 'ready' | 'error' | 'too_large';
   dataUrl?: string;
   detail?: string;
 };
-
-type ComposerMode = 'reply' | 'forward' | 'compose';
 
 function StorageDeleteIcon({ className = '', size = 16 }: { className?: string; size?: number }) {
   return (
@@ -163,22 +155,6 @@ function notifySelection(selection: Record<string, string | boolean | null>) {
   );
 }
 
-function sendResultNotice(result: SendResult, confirm: boolean) {
-  if (result.dry_run || !confirm) {
-    return 'Dry-run ready. Confirm only when the user approves send.';
-  }
-  if (!result.sent) {
-    return 'Send request completed.';
-  }
-  if (result.provider_message_id) {
-    return `Sent with Gmail as provider message ${result.provider_message_id}.`;
-  }
-  if (result.message_id) {
-    return `Sent with the local mail provider as message ${result.message_id}.`;
-  }
-  return 'Message sent.';
-}
-
 function threadSender(thread: MailThread): MailAddress {
   return thread.participants[0] || { email: 'mail' };
 }
@@ -216,35 +192,20 @@ function formatAddressList(addresses?: MailAddress[]) {
   return (addresses || []).map(formatAddress).filter(Boolean).join(', ');
 }
 
-function replySubject(subject: string) {
-  return /^re:/i.test(subject.trim()) ? subject : `Re: ${subject}`;
-}
-
-function forwardSubject(subject: string) {
-  return /^fwd?:/i.test(subject.trim()) ? subject : `Fwd: ${subject}`;
-}
-
-function latestMessage(thread: MailThread | null) {
-  const messages = thread?.messages || [];
-  return messages.length ? messages[messages.length - 1] : null;
-}
-
-function forwardedBody(message: MailMessage | null, subject: string) {
-  if (!message) {
+function formatThreadDate(value?: string) {
+  if (!value) {
     return '';
   }
-  const lines = [
-    '',
-    '',
-    '---------- Forwarded message ---------',
-    `From: ${formatAddress(message.sender)}`,
-    `Date: ${new Date(message.sent_at).toLocaleString()}`,
-    `Subject: ${subject}`,
-    `To: ${formatAddressList(message.recipients)}`,
-    '',
-    message.body_text || message.body_preview || ''
-  ];
-  return lines.join('\n');
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+  const now = new Date();
+  const options: Intl.DateTimeFormatOptions =
+    date.getFullYear() === now.getFullYear()
+      ? { month: 'short', day: 'numeric' }
+      : { month: 'short', day: 'numeric', year: 'numeric' };
+  return date.toLocaleDateString(undefined, options);
 }
 
 function cidKey(value?: string) {
@@ -565,9 +526,17 @@ function MailHtmlFrame({ htmlBody }: { htmlBody: string }) {
   );
 }
 
-function MailMessageBody({ message, connection }: { message: MailMessage; connection?: MailConnection }) {
-  const [plain, setPlain] = useState(false);
-  const [showImages, setShowImages] = useState(false);
+function MailMessageBody({
+  message,
+  connection,
+  plain,
+  showImages
+}: {
+  message: MailMessage;
+  connection?: MailConnection;
+  plain: boolean;
+  showImages: boolean;
+}) {
   const [inlineImages, setInlineImages] = useState<Record<string, InlineImageState>>({});
   const [expandedMessage, setExpandedMessage] = useState<MailMessage | null>(null);
   const [loadingExpandedBody, setLoadingExpandedBody] = useState(false);
@@ -579,7 +548,6 @@ function MailMessageBody({ message, connection }: { message: MailMessage; connec
     [htmlBody, inlineImages, visibleMessage.inline_assets, showImages]
   );
   const hasHtml = Boolean(htmlBody);
-  const hasRemoteImages = /data-mail-(?:image|background-image)="https?:\/\//i.test(htmlBody);
   const visibleBodyTruncated = Boolean(
     visibleMessage.body_source_truncated ||
     (plain
@@ -606,7 +574,6 @@ function MailMessageBody({ message, connection }: { message: MailMessage; connec
     setExpandedMessage(null);
     setLoadingExpandedBody(false);
     setExpandedBodyError('');
-    setPlain(false);
   }, [message.id]);
 
   const loadTrimmedContent = useCallback(async () => {
@@ -684,21 +651,6 @@ function MailMessageBody({ message, connection }: { message: MailMessage; connec
 
   return (
     <>
-      {hasHtml ? (
-        <div className="message-body-actions">
-          <button type="button" onClick={() => setPlain((value) => !value)}>
-            {plain ? 'HTML' : 'Plain text'}
-          </button>
-        </div>
-      ) : null}
-      {hasHtml && !plain && hasRemoteImages ? (
-        <div className={`message-image-control ${showImages ? 'is-enabled' : ''}`}>
-          <span>{showImages ? 'Remote images visible' : 'Remote images blocked'}</span>
-          <button type="button" onClick={() => setShowImages((value) => !value)}>
-            {showImages ? 'Hide images' : 'Show images'}
-          </button>
-        </div>
-      ) : null}
       {hasHtml && !plain ? (
         <div className="message-html">
           <MailHtmlFrame htmlBody={renderedHtml} />
@@ -732,7 +684,17 @@ function MailMessageBody({ message, connection }: { message: MailMessage; connec
   );
 }
 
-function MailThreadMessage({ message, connection }: { message: MailMessage; connection?: MailConnection }) {
+function MailThreadMessage({
+  message,
+  connection,
+  plain,
+  showImages
+}: {
+  message: MailMessage;
+  connection?: MailConnection;
+  plain: boolean;
+  showImages: boolean;
+}) {
   const sender = formatAddress(message.sender);
   const recipients = formatAddressList(message.recipients);
   const cc = formatAddressList(message.cc);
@@ -768,7 +730,7 @@ function MailThreadMessage({ message, connection }: { message: MailMessage; conn
           </div>
         </dl>
       </details>
-      <MailMessageBody message={message} connection={connection} />
+      <MailMessageBody message={message} connection={connection} plain={plain} showImages={showImages} />
     </article>
   );
 }
@@ -782,15 +744,12 @@ export function App() {
   const [connectionId, setConnectionId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
-  const [draft, setDraft] = useState({ to: '', subject: '', body_text: '' });
-  const [composerMode, setComposerMode] = useState<ComposerMode>('compose');
-  const [lastDraft, setLastDraft] = useState<MailDraft | null>(null);
-  const [lastSendResult, setLastSendResult] = useState<SendResult | null>(null);
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [oauthCompleting, setOauthCompleting] = useState(false);
   const [accountModalOpen, setAccountModalOpen] = useState(false);
-  const composerBodyRef = useRef<HTMLTextAreaElement | null>(null);
+  const [readerPlain, setReaderPlain] = useState(false);
+  const [readerShowImages, setReaderShowImages] = useState(false);
 
   const secretRequestForConnectionId = useCallback((id?: string) => {
     if (!id) {
@@ -811,12 +770,6 @@ export function App() {
       });
       setSelectedThread(payload.thread);
       setConnectionId(payload.thread.connection_id);
-      if (!refresh) {
-        setComposerMode('reply');
-        setDraft({ to: '', subject: replySubject(payload.thread.subject), body_text: '' });
-        setLastDraft(null);
-        setLastSendResult(null);
-      }
       notifySelection({ thread: payload.thread.id, mailbox, connection_id: payload.thread.connection_id });
     } finally {
       setBusy(false);
@@ -845,6 +798,14 @@ export function App() {
   useEffect(() => {
     setPage(1);
   }, [mailbox, query]);
+
+  useEffect(() => {
+    if (!notice) {
+      return undefined;
+    }
+    const timeout = window.setTimeout(() => setNotice(''), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [notice]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -896,33 +857,34 @@ export function App() {
       }
       const data = event.data as { type?: string; owner_app_id?: string; resource?: string; params?: MailNavigateParams };
       if (data?.type === 'maverick.app.navigate') {
+        const params = data.params || {};
         if (data.params?.add_account) {
           setAccountModalOpen(true);
         }
-        const nextMailbox = data.params?.mailbox;
-        const nextConnectionIdParam = typeof data.params?.connection_id === 'string' && data.params.connection_id.trim()
-          ? data.params.connection_id.trim()
+        const nextMailbox = params.mailbox;
+        const hasConnectionIdParam = Object.prototype.hasOwnProperty.call(params, 'connection_id');
+        const nextConnectionId = typeof params.connection_id === 'string' && params.connection_id.trim()
+          ? params.connection_id.trim()
           : null;
-        const nextConnectionId = nextConnectionIdParam || connectionId;
         const resolvedMailbox = nextMailbox && MAILBOXES.includes(nextMailbox) ? nextMailbox : mailbox;
         if (nextMailbox && MAILBOXES.includes(nextMailbox)) {
           setPage(1);
           setMailbox(nextMailbox);
           setSelectedThread(null);
         }
-        if (nextConnectionIdParam) {
+        if (hasConnectionIdParam) {
           setPage(1);
-          setConnectionId(nextConnectionIdParam);
+          setConnectionId(nextConnectionId);
           setSelectedThread(null);
         }
-        if ((nextMailbox && MAILBOXES.includes(nextMailbox)) || nextConnectionId !== connectionId) {
+        if ((nextMailbox && MAILBOXES.includes(nextMailbox)) || (hasConnectionIdParam && nextConnectionId !== connectionId)) {
           notifySelection({ mailbox: resolvedMailbox, thread: null, connection_id: nextConnectionId });
         }
-        if (typeof data.params?.query === 'string') {
-          setQuery(data.params.query);
+        if (typeof params.query === 'string') {
+          setQuery(params.query);
         }
-        if (data.params?.thread) {
-          openThread(data.params.thread).catch((error: Error) => setNotice(error.message));
+        if (params.thread) {
+          openThread(params.thread).catch((error: Error) => setNotice(error.message));
         }
         return;
       }
@@ -945,7 +907,12 @@ export function App() {
   const totalPages = Math.max(1, Math.ceil(totalThreads / THREADS_PAGE_SIZE));
   const visibleStart = totalThreads === 0 ? 0 : (page - 1) * THREADS_PAGE_SIZE + 1;
   const visibleEnd = totalThreads === 0 ? 0 : Math.min(page * THREADS_PAGE_SIZE, totalThreads);
-  const isContextualReply = Boolean(selectedThread && composerMode === 'reply');
+  const selectedMessages = selectedThread?.messages || [];
+  const readerHasHtml = selectedMessages.some((message) => Boolean(message.body_html_rendered || message.body_html_sanitized));
+  const readerHasRemoteImages = selectedMessages.some((message) => {
+    const htmlBody = message.body_html_rendered || message.body_html_sanitized || '';
+    return /data-mail-(?:image|background-image)="https?:\/\//i.test(htmlBody);
+  });
 
   useEffect(() => {
     if (page > totalPages) {
@@ -966,40 +933,13 @@ export function App() {
     return () => window.removeEventListener('keydown', listener);
   }, [accountModalOpen]);
 
-  function focusComposer() {
-    window.setTimeout(() => composerBodyRef.current?.focus(), 0);
-  }
-
-  function startReply() {
-    if (!selectedThread) {
-      return;
-    }
-    setComposerMode('reply');
-    setDraft((current) => ({
-      to: '',
-      subject: composerMode === 'reply' && current.subject.trim() ? current.subject : replySubject(selectedThread.subject),
-      body_text: composerMode === 'reply' ? current.body_text : ''
-    }));
-    focusComposer();
-  }
-
-  function startForward() {
-    if (!selectedThread) {
-      return;
-    }
-    const sourceMessage = latestMessage(selectedThread);
-    setComposerMode('forward');
-    setDraft({
-      to: '',
-      subject: forwardSubject(selectedThread.subject),
-      body_text: forwardedBody(sourceMessage, selectedThread.subject)
-    });
-    focusComposer();
-  }
+  useEffect(() => {
+    setReaderPlain(false);
+    setReaderShowImages(false);
+  }, [selectedThread?.id]);
 
   function closeThread() {
     setSelectedThread(null);
-    setComposerMode('compose');
     notifySelection({ mailbox, thread: null });
   }
 
@@ -1046,49 +986,21 @@ export function App() {
     }
   }
 
-  async function createDraft(event: FormEvent) {
-    event.preventDefault();
+  async function refreshMailbox() {
     if (!canUseConnection || !connection) {
-      setNotice('Connect a mail account before creating drafts.');
+      setNotice('Connect a mail account before refreshing.');
       return;
     }
     setBusy(true);
     try {
-      const payload = await callBackend<{ draft: MailDraft }>({
-        action: MAIL_BACKEND_ACTIONS.draftsCreate,
-        connection_id: connection?.id,
-        thread_id: isContextualReply ? selectedThread?.id : undefined,
-        to: draft.to.trim() ? [{ email: draft.to.trim() }] : [],
-        subject: draft.subject,
-        body_text: draft.body_text
+      const payload = await callBackend<SyncPayload>({
+        action: MAIL_BACKEND_ACTIONS.threadsSync,
+        connection_id: connection.id,
+        max_threads: MAIL_INTERACTIVE_SYNC_THREADS,
+        ...connectionSecretRequest(connection)
       });
-      setLastDraft(payload.draft);
-      setLastSendResult(null);
-      setNotice('Draft saved. Preview before confirm.');
-      setDraft({ to: '', subject: selectedThread ? replySubject(selectedThread.subject) : '', body_text: '' });
-      setComposerMode(selectedThread ? 'reply' : 'compose');
-      await loadThreads();
-    } catch (error) {
-      setNotice((error as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function sendLastDraft(confirm: boolean) {
-    if (!lastDraft) {
-      return;
-    }
-    setBusy(true);
-    try {
-      const payload = await callBackend<{ result: SendResult }>({
-        action: MAIL_BACKEND_ACTIONS.draftsSend,
-        draft_id: lastDraft.id,
-        confirm,
-        ...(confirm ? secretRequestForConnectionId(lastDraft.connection_id) : noSecretRequest())
-      });
-      setLastSendResult(payload.result);
-      setNotice(sendResultNotice(payload.result, confirm));
+      const synced = payload.sync?.synced_messages ?? payload.sync?.synced_threads ?? 0;
+      setNotice(synced > 0 ? `Synced ${synced} message${synced === 1 ? '' : 's'}.` : 'Sync completed. No new messages found.');
       await loadThreads();
     } catch (error) {
       setNotice((error as Error).message);
@@ -1187,6 +1099,16 @@ export function App() {
         </label>
         <div className="mail-page-controls" aria-label="Mail pagination">
           <span className="mail-page-range">{visibleStart}-{visibleEnd}</span>
+          <button
+            type="button"
+            className="mail-icon-button"
+            onClick={refreshMailbox}
+            disabled={busy || !canUseConnection}
+            aria-label="Refresh mailbox"
+            title="Refresh mailbox"
+          >
+            <RefreshCw size={16} strokeWidth={1.8} aria-hidden="true" />
+          </button>
           {totalPages > 1 ? (
             <SlidingPagination
               totalPages={totalPages}
@@ -1246,6 +1168,7 @@ export function App() {
 
       <div className="mail-workspace">
         <section className="thread-column">
+          {notice ? <div className="mail-sidebar-notice" role="status" aria-live="polite">{notice}</div> : null}
           <div className="thread-list">
             {threads.length === 0 ? (
               <div className="thread-empty">
@@ -1254,6 +1177,7 @@ export function App() {
             ) : null}
             {threads.map((thread) => {
               const sender = threadSender(thread);
+              const threadDate = formatThreadDate(thread.last_message_at);
               const canModifyThread = connectionById.get(thread.connection_id)?.status !== 'disconnected';
               const recipient = connectionById.get(thread.connection_id);
               const recipientLabel = recipient?.display_name || recipient?.email_address || 'Mail account';
@@ -1262,7 +1186,10 @@ export function App() {
                   <button className="thread-row__body" type="button" onClick={() => openThread(thread.id, thread.connection_id)}>
                     <span className="thread-avatar" aria-hidden="true">{avatarInitials(thread)}</span>
                     <span className="thread-copy">
-                      <span className="thread-title">{thread.subject}</span>
+                      <span className="thread-title-line">
+                        <span className="thread-title">{thread.subject}</span>
+                        {threadDate ? <span className="thread-title-date">{threadDate}</span> : null}
+                      </span>
                       <span className="thread-snippet">{thread.snippet}</span>
                     </span>
                   </button>
@@ -1303,85 +1230,69 @@ export function App() {
               );
             })}
           </div>
-          {!selectedThread && notice ? <div className="notice">{notice}</div> : null}
         </section>
 
         {selectedThread ? (
           <section className="reader-column">
-          <header className="reader-header">
-            <div>
-              <h1>{selectedThread.subject}</h1>
-              <p>{selectedThread.participants.map((person) => person.name || person.email).join(', ')}</p>
-            </div>
-            <div className="reader-actions">
-              <button type="button" onClick={startReply} disabled={busy}>
-                <Reply size={16} strokeWidth={1.8} aria-hidden="true" />
-                Reply
-              </button>
-              <button type="button" onClick={startForward} disabled={busy}>
-                <Forward size={16} strokeWidth={1.8} aria-hidden="true" />
-                Forward
-              </button>
-              <button type="button" onClick={() => markSelected(selectedThread.unread)} disabled={busy}>
-                <MailOpen size={16} strokeWidth={1.8} aria-hidden="true" />
-                {selectedThread.unread ? 'Mark read' : 'Mark unread'}
-              </button>
-              <button type="button" onClick={() => modifySelected([], ['inbox'])} disabled={busy}>
-                <Archive size={16} strokeWidth={1.8} aria-hidden="true" />
-                Archive
-              </button>
-              <button type="button" onClick={() => modifySelected(['trash'], ['inbox'])} disabled={busy}>
-                <StorageDeleteIcon size={16} />
-                Trash
-              </button>
-              <button type="button" onClick={() => openThread(selectedThread.id, selectedThread.connection_id, true)} disabled={busy}>
-                <RefreshCw size={16} strokeWidth={1.8} aria-hidden="true" />
-                Refresh
-              </button>
-              <button type="button" className="reader-close" onClick={closeThread} aria-label="Close mail">
-                <X size={16} strokeWidth={1.8} aria-hidden="true" />
-              </button>
-            </div>
-          </header>
-          <div className="message-stack">
-            {(selectedThread.messages || []).map((message) => (
-              <MailThreadMessage key={message.id} message={message} connection={connectionById.get(selectedThread.connection_id)} />
-            ))}
-          </div>
-          {canUseConnection && connection ? (
-            <form className="composer" onSubmit={createDraft}>
-              {selectedThread ? (
-                <div className="composer-mode" aria-label="Draft mode">
-                  <button type="button" className={composerMode === 'reply' ? 'is-active' : ''} onClick={startReply}>
-                    <Reply size={15} strokeWidth={1.8} aria-hidden="true" />
-                    Reply
+            <header className="reader-header">
+              <div className="reader-actions">
+                {readerHasHtml ? (
+                  <div className="reader-view-actions">
+                    <button type="button" onClick={() => setReaderPlain((value) => !value)}>
+                      {readerPlain ? 'HTML' : 'Plain text'}
+                    </button>
+                    {!readerPlain && readerHasRemoteImages ? (
+                      <button type="button" onClick={() => setReaderShowImages((value) => !value)}>
+                        {readerShowImages ? 'Hide images' : 'Show images'}
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+                <div className="reader-thread-actions">
+                  <button
+                    type="button"
+                    onClick={() => markSelected(selectedThread.unread)}
+                    disabled={busy}
+                    aria-label={selectedThread.unread ? 'Mark read' : 'Mark unread'}
+                    title={selectedThread.unread ? 'Mark read' : 'Mark unread'}
+                  >
+                    <MailOpen size={16} strokeWidth={1.8} aria-hidden="true" />
                   </button>
-                  <button type="button" className={composerMode === 'forward' ? 'is-active' : ''} onClick={startForward}>
-                    <Forward size={15} strokeWidth={1.8} aria-hidden="true" />
-                    Forward
+                  <button type="button" onClick={() => modifySelected([], ['inbox'])} disabled={busy} aria-label="Archive" title="Archive">
+                    <Archive size={16} strokeWidth={1.8} aria-hidden="true" />
+                  </button>
+                  <button type="button" onClick={() => modifySelected(['trash'], ['inbox'])} disabled={busy} aria-label="Move to trash" title="Move to trash">
+                    <StorageDeleteIcon size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openThread(selectedThread.id, selectedThread.connection_id, true)}
+                    disabled={busy}
+                    aria-label="Refresh"
+                    title="Refresh"
+                  >
+                    <RefreshCw size={16} strokeWidth={1.8} aria-hidden="true" />
+                  </button>
+                  <button type="button" className="reader-close" onClick={closeThread} aria-label="Close mail">
+                    <X size={16} strokeWidth={1.8} aria-hidden="true" />
                   </button>
                 </div>
-              ) : null}
-              <input
-                value={draft.to}
-                onChange={(event) => setDraft({ ...draft, to: event.target.value })}
-                aria-label={isContextualReply ? 'Reply recipients' : composerMode === 'forward' ? 'Forward recipient email' : 'Recipient email'}
-                placeholder={isContextualReply ? 'Reply recipients (optional)' : composerMode === 'forward' ? 'Forward to' : 'Recipient email'}
-                required={!isContextualReply}
-              />
-              <input value={draft.subject} onChange={(event) => setDraft({ ...draft, subject: event.target.value })} placeholder="Subject" required />
-              <textarea ref={composerBodyRef} value={draft.body_text} onChange={(event) => setDraft({ ...draft, body_text: event.target.value })} placeholder={composerMode === 'forward' ? 'Add a note' : 'Write a draft'} required />
-              <div className="composer-actions">
-                <button type="submit" disabled={busy}>Save draft</button>
-                <button type="button" onClick={() => sendLastDraft(false)} disabled={busy || !lastDraft}>Preview send</button>
-                <button type="button" onClick={() => sendLastDraft(true)} disabled={busy || !lastDraft}>Confirm send</button>
               </div>
-            </form>
-          ) : null}
-          {lastDraft ? <p className="draft-note">Last draft: {lastDraft.subject}</p> : null}
-          {lastSendResult?.dry_run ? <p className="draft-note">Dry-run prepared for draft {lastSendResult.draft?.id}.</p> : null}
-          {lastSendResult?.sent ? <p className="draft-note">{sendResultNotice(lastSendResult, true)}</p> : null}
-          {notice ? <div className="notice">{notice}</div> : null}
+              <div className="reader-title-block">
+                <h1>{selectedThread.subject}</h1>
+              </div>
+            </header>
+            <div className="message-stack">
+              {(selectedThread.messages || []).map((message) => (
+                <MailThreadMessage
+                  key={message.id}
+                  message={message}
+                  connection={connectionById.get(selectedThread.connection_id)}
+                  plain={readerPlain}
+                  showImages={readerShowImages}
+                />
+              ))}
+            </div>
           </section>
         ) : null}
       </div>

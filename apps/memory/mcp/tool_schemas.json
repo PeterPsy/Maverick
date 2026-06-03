@@ -166,7 +166,7 @@
           "node_type": {"type": "string"},
           "importance": {"type": "number", "minimum": 0, "maximum": 1},
           "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-	                  "source_version": {"type": "string", "minLength": 1},
+          "source_version": {"type": "string", "minLength": 1},
           "preview_text": {"type": "string", "maxLength": 20000},
           "preview_truncated": {"type": "boolean", "default": false},
           "compile_after_ingest": {"type": "boolean", "default": false},
@@ -192,7 +192,7 @@
                   "staleness": {"type": ["object", "string"]},
                   "sync_state": {"type": "object"}
                 },
-	                "required": ["provider", "connection_id", "drive_file_id", "source_version"],
+                "required": ["provider", "connection_id", "drive_file_id"],
                 "additionalProperties": true
               }
             },
@@ -201,6 +201,20 @@
           }
         },
         "required": ["memory_source"],
+        "anyOf": [
+          {"required": ["source_version"]},
+          {
+            "properties": {
+              "memory_source": {
+                "properties": {
+                  "metadata": {
+                    "required": ["source_version"]
+                  }
+                }
+              }
+            }
+          }
+        ],
         "additionalProperties": false
       },
       "output_schema": {"type": "object"}

@@ -129,6 +129,15 @@ class StorageDriveContractTest(unittest.TestCase):
                 self.assertIn("connection_id", properties)
                 self.assertNotIn("workspace_relative_path", properties)
 
+    def test_storage_skill_documents_drive_to_memory_workflow(self) -> None:
+        skill = (STORAGE_ROOT / "skills" / "storage-ops" / "SKILL.md").read_text(encoding="utf-8")
+
+        self.assertIn("Google Drive Agent Workflow", skill)
+        self.assertIn("storage_drive_index", skill)
+        self.assertIn("memory_ingest_storage_source", skill)
+        self.assertIn("storage_drive_mark_indexed", skill)
+        self.assertIn("memory_apply_storage_staleness", skill)
+
     def test_drive_mcp_write_tools_can_resolve_refresh_token_from_stable_storage_file_id(self) -> None:
         parsed = parse_app_contract_file(STORAGE_ROOT)
 

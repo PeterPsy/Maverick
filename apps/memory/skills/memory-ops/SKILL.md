@@ -17,6 +17,8 @@ maverick app memory cli run memory --action context --query "<user question>" --
 
 Use returned provenance to mention files or app entities only when they are relevant.
 
+When a result includes `storage_references`, use those Storage references for preview, export, or reference resolution. Memory stores knowledge and citations; Storage remains the file gateway.
+
 ## Memory Views
 
 When the user asks to filter or curate the Memory graph UI, use the Memory app view surface instead of only reading data:
@@ -42,6 +44,28 @@ maverick app memory cli run memory --action remember --title "<short title>" --b
 ```
 
 Prefer updating or linking existing nodes over creating duplicates.
+
+## Ingesting Drive Sources
+
+For Google Drive, Memory consumes only Storage references. Do not pass Google tokens, Drive bytes, or `workspace_relative_path` for remote files.
+
+Use this flow after Storage `storage_drive_index` has selected one relevant Drive file:
+
+```bash
+maverick app memory mcp call memory_ingest_storage_source --json --memory-source '<storage_drive_index.memory_source>' --preview-text '<bounded preview_text>' --preview-truncated <true|false> --source-version <source_version> --compile-after-ingest true
+```
+
+If the Storage file belongs on an existing Memory node, include `--node-id <node_id>`. If no node is supplied, Memory creates or reuses a file-backed node for the stable Storage file id.
+
+After this succeeds, call Storage `storage_drive_mark_indexed` with the returned Memory ids so Drive sync can later produce staleness for files that actually reached Memory.
+
+When Storage `drive_sync` returns `memory_staleness`, apply it through Memory:
+
+```bash
+maverick app memory mcp call memory_apply_storage_staleness --json --memory-staleness '<storage_drive_sync.memory_staleness item>'
+```
+
+The returned re-index suggestion points back to Storage `storage_drive_index`; Memory never scans Drive itself.
 
 ## Linking Evidence
 

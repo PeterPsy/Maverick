@@ -184,9 +184,33 @@ class MemoryAppTestCase(unittest.TestCase):
             ingest_schema["properties"]["memory_source"]["properties"]["source_kind"]["enum"],
             ["remote_storage_file"],
         )
+        memory_source_schema = ingest_schema["properties"]["memory_source"]
+        metadata_schema = memory_source_schema["properties"]["metadata"]
+        self.assertNotIn("source_version", metadata_schema["required"])
+        self.assertIn({"required": ["source_version"]}, ingest_schema["anyOf"])
+        self.assertTrue(
+            any(
+                option.get("properties", {})
+                .get("memory_source", {})
+                .get("properties", {})
+                .get("metadata", {})
+                .get("required")
+                == ["source_version"]
+                for option in ingest_schema["anyOf"]
+            )
+        )
         staleness_schema = mcp_descriptor["tools"]["memory_apply_storage_staleness"]["input_schema"]
         self.assertIn("memory_staleness", staleness_schema["properties"])
         self.assertIn("entity_id", staleness_schema["properties"])
+
+    def test_memory_skill_documents_drive_ingest_workflow(self) -> None:
+        skill = (MEMORY_ROOT / "skills" / "memory-ops" / "SKILL.md").read_text(encoding="utf-8")
+
+        self.assertIn("storage_drive_index", skill)
+        self.assertIn("memory_ingest_storage_source", skill)
+        self.assertIn("storage_drive_mark_indexed", skill)
+        self.assertIn("memory_apply_storage_staleness", skill)
+        self.assertIn("Memory never scans Drive itself", skill)
 
     def test_install_hook_is_idempotent_and_creates_schema(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

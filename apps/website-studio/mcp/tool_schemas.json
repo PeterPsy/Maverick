@@ -1,0 +1,261 @@
+{
+  "tools": {
+    "website_manifest": {
+      "description": "Return Website Studio health, schema, and Phase 1 manifest information.",
+      "input_schema": {"type": "object", "properties": {}, "additionalProperties": false}
+    },
+    "website_sites_list": {
+      "description": "List Website Studio site records in the workspace.",
+      "input_schema": {"type": "object", "properties": {}, "additionalProperties": false}
+    },
+    "website_site_status": {
+      "description": "Return counts, revision ids, and working diff status for one site.",
+      "input_schema": {"type": "object", "required": ["site_id"], "properties": {"site_id": {"type": "string"}}, "additionalProperties": false}
+    },
+    "website_site_create": {
+      "description": "Create a new manual Website Studio site with starter static source.",
+      "input_schema": {
+        "type": "object",
+        "required": ["display_name"],
+        "properties": {
+          "display_name": {"type": "string"},
+          "slug": {"type": "string"},
+          "primary_domain": {"type": "string"},
+          "source_provider": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "website_import_git": {
+      "description": "Import a public GitHub HTTPS repository or app-local Git repository into a new or existing site source tree.",
+      "input_schema": {
+        "type": "object",
+        "required": ["repository_url"],
+        "properties": {
+          "site_id": {"type": "string"},
+          "display_name": {"type": "string"},
+          "repository_url": {"type": "string"},
+          "branch": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "website_import_zip": {
+      "description": "Safely import a base64 ZIP into a new or existing site source tree.",
+      "input_schema": {
+        "type": "object",
+        "required": ["archive_base64"],
+        "properties": {
+          "site_id": {"type": "string"},
+          "display_name": {"type": "string"},
+          "archive_base64": {"type": "string"},
+          "source_artifact_ref": {"type": "object"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "website_sitemap": {
+      "description": "Return the indexed static HTML sitemap for one site.",
+      "input_schema": {"type": "object", "required": ["site_id"], "properties": {"site_id": {"type": "string"}}, "additionalProperties": false}
+    },
+    "website_search": {
+      "description": "Search sites and indexed pages.",
+      "input_schema": {
+        "type": "object",
+        "properties": {"query": {"type": "string"}, "site_id": {"type": "string"}},
+        "additionalProperties": false
+      }
+    },
+    "website_read_file": {
+      "description": "Read one UTF-8 text file from a selected site's source tree.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id", "path"],
+        "properties": {"site_id": {"type": "string"}, "path": {"type": "string"}},
+        "additionalProperties": false
+      }
+    },
+    "website_write_file": {
+      "description": "Write one UTF-8 text file in a selected site's source tree, guarded by an expected hash. Use expected_hash=new for new files.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id", "path", "content", "expected_hash"],
+        "properties": {
+          "site_id": {"type": "string"},
+          "path": {"type": "string"},
+          "content": {"type": "string"},
+          "expected_hash": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "website_apply_patch": {
+      "description": "Replace the first matching text segment in one site file, guarded by an expected hash.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id", "path", "old_text", "new_text", "expected_hash"],
+        "properties": {
+          "site_id": {"type": "string"},
+          "path": {"type": "string"},
+          "old_text": {"type": "string"},
+          "new_text": {"type": "string"},
+          "expected_hash": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "website_diff": {
+      "description": "Return a unified diff between the active revision snapshot and the working source tree.",
+      "input_schema": {"type": "object", "required": ["site_id"], "properties": {"site_id": {"type": "string"}}, "additionalProperties": false}
+    },
+    "website_build_preview": {
+      "description": "Return static HTML preview payload for one indexed route.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id"],
+        "properties": {"site_id": {"type": "string"}, "route": {"type": "string"}},
+        "additionalProperties": false
+      }
+    },
+    "website_publish_request": {
+      "description": "Create a guarded publish request for a site's current working diff.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id"],
+        "properties": {"site_id": {"type": "string"}, "requested_by": {"type": "string"}},
+        "additionalProperties": false
+      }
+    },
+    "website_publish": {
+      "description": "Attempt to publish a request. Phase 1 remains blocked until approval ids can be verified.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id"],
+        "properties": {
+          "site_id": {"type": "string"},
+          "publish_request_id": {"type": "string"},
+          "approval_id": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "website_rollback": {
+      "description": "Restore a selected site from a previous revision snapshot.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id", "revision_id", "approval_id", "confirm"],
+        "properties": {
+          "site_id": {"type": "string"},
+          "revision_id": {"type": "string"},
+          "approval_id": {"type": "string"},
+          "confirm": {"type": "boolean", "const": true}
+        },
+        "additionalProperties": false
+      }
+    },
+    "website_active_context": {
+      "description": "Return bounded site/page context for the active Website Studio view.",
+      "input_schema": {
+        "type": "object",
+        "properties": {"site_id": {"type": "string"}, "page_id": {"type": "string"}},
+        "additionalProperties": false
+      }
+    },
+    "website_page_context": {
+      "description": "Return bounded site/page context for a selected Website Studio page.",
+      "input_schema": {
+        "type": "object",
+        "properties": {"site_id": {"type": "string"}, "page_id": {"type": "string"}},
+        "additionalProperties": false
+      }
+    },
+    "website_reference_manifest": {
+      "description": "Return Website Studio reference entity metadata.",
+      "input_schema": {"type": "object", "properties": {}, "additionalProperties": false}
+    },
+    "website_reference_search": {
+      "description": "Search Website Studio reference entities.",
+      "input_schema": {
+        "type": "object",
+        "properties": {"query": {"type": "string"}, "site_id": {"type": "string"}},
+        "additionalProperties": false
+      }
+    },
+    "website_reference_resolve": {
+      "description": "Resolve one Website Studio reference entity.",
+      "input_schema": {
+        "type": "object",
+        "properties": {"entity_type": {"type": "string"}, "id": {"type": "string"}, "entity_id": {"type": "string"}},
+        "required": ["entity_type"],
+        "anyOf": [{"required": ["id"]}, {"required": ["entity_id"]}],
+        "additionalProperties": false
+      }
+    },
+    "website_reference_summarize": {
+      "description": "Summarize one Website Studio reference entity.",
+      "input_schema": {
+        "type": "object",
+        "properties": {"entity_type": {"type": "string"}, "id": {"type": "string"}, "entity_id": {"type": "string"}},
+        "required": ["entity_type"],
+        "anyOf": [{"required": ["id"]}, {"required": ["entity_id"]}],
+        "additionalProperties": false
+      }
+    },
+    "website_studio_reference_manifest": {
+      "description": "Return Website Studio reference entity metadata.",
+      "input_schema": {"type": "object", "properties": {}, "additionalProperties": false}
+    },
+    "website_studio_reference_search": {
+      "description": "Search Website Studio reference entities.",
+      "input_schema": {
+        "type": "object",
+        "properties": {"query": {"type": "string"}, "site_id": {"type": "string"}},
+        "additionalProperties": false
+      }
+    },
+    "website_studio_reference_resolve": {
+      "description": "Resolve one Website Studio reference entity.",
+      "input_schema": {
+        "type": "object",
+        "properties": {"entity_type": {"type": "string"}, "id": {"type": "string"}, "entity_id": {"type": "string"}},
+        "required": ["entity_type"],
+        "anyOf": [{"required": ["id"]}, {"required": ["entity_id"]}],
+        "additionalProperties": false
+      }
+    },
+    "website_studio_reference_summarize": {
+      "description": "Summarize one Website Studio reference entity.",
+      "input_schema": {
+        "type": "object",
+        "properties": {"entity_type": {"type": "string"}, "id": {"type": "string"}, "entity_id": {"type": "string"}},
+        "required": ["entity_type"],
+        "anyOf": [{"required": ["id"]}, {"required": ["entity_id"]}],
+        "additionalProperties": false
+      }
+    },
+    "website_studio_view_filter": {
+      "description": "Read persisted Website Studio view filter state.",
+      "input_schema": {"type": "object", "properties": {}, "additionalProperties": false}
+    },
+    "website_studio_set_view_filter": {
+      "description": "Persist Website Studio search/filter view state.",
+      "input_schema": {
+        "type": "object",
+        "properties": {"query": {"type": "string"}, "site_id": {"type": "string"}, "preserve_custom": {"type": "boolean"}},
+        "additionalProperties": false
+      }
+    },
+    "website_studio_set_custom_view": {
+      "description": "Persist an explicit custom Website Studio view selection.",
+      "input_schema": {
+        "type": "object",
+        "properties": {"title": {"type": "string"}, "refs": {"type": "array", "items": {"type": "object"}}},
+        "additionalProperties": false
+      }
+    },
+    "website_studio_clear_custom_view": {
+      "description": "Clear the custom Website Studio view state.",
+      "input_schema": {"type": "object", "properties": {}, "additionalProperties": false}
+    }
+  }
+}

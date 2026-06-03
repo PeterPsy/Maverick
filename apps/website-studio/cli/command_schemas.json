@@ -1,0 +1,70 @@
+{
+  "commands": {
+    "website-studio": {
+      "description": "Run a Website Studio action against the workspace data root. Defaults to listing sites. File writes require expected_hash; new files use expected_hash=new.",
+      "argument_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "manifest",
+              "sites_list",
+              "site_create",
+              "site_status",
+              "import_git",
+              "import_zip",
+              "sitemap",
+              "search",
+              "read_file",
+              "write_file",
+              "apply_patch",
+              "diff",
+              "build_preview",
+              "publish_request",
+              "publish",
+              "rollback",
+              "active_context",
+              "page_context",
+              "reference_manifest",
+              "reference_search",
+              "reference_resolve",
+              "reference_summarize",
+              "view_filter",
+              "set_view_filter",
+              "set_custom_view",
+              "clear_custom_view"
+            ]
+          },
+          "site_id": {"type": "string"},
+          "display_name": {"type": "string"},
+          "slug": {"type": "string"},
+          "primary_domain": {"type": "string"},
+          "repository_url": {"type": "string"},
+          "branch": {"type": "string"},
+          "archive_base64": {"type": "string"},
+          "source_artifact_ref": {"type": "object"},
+          "query": {"type": "string"},
+          "path": {"type": "string"},
+          "content": {"type": "string"},
+          "old_text": {"type": "string"},
+          "new_text": {"type": "string"},
+          "expected_hash": {"type": "string"},
+          "route": {"type": "string"},
+          "publish_request_id": {"type": "string"},
+          "approval_id": {"type": "string"},
+          "confirm": {"type": "boolean"},
+          "revision_id": {"type": "string"},
+          "page_id": {"type": "string"},
+          "entity_type": {"type": "string"},
+          "id": {"type": "string"},
+          "entity_id": {"type": "string"},
+          "title": {"type": "string"},
+          "refs": {"type": "array", "items": {"type": "object"}},
+          "preserve_custom": {"type": "boolean"}
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Website Studio Sitemap</title>
+    <style>
+      :root { color-scheme: dark; --text: #ececec; --muted: rgba(236,236,236,.66); --soft: rgba(236,236,236,.42); --surface: rgba(12,12,14,.58); --hover: rgba(255,255,255,.105); --border: rgba(255,255,255,.08); --edge: inset 0 0 0 1px rgba(255,255,255,.075), inset 0 1px 0 rgba(255,255,255,.14); font-family: "Avenir Next", "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif; }
+      html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; background: transparent; color: var(--text); }
+      .widget { position: relative; width: 100%; height: 100%; min-height: 0; overflow: hidden; }
+      .search { position: absolute; top: 3.12rem; left: 0; right: 0; z-index: 3; display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; gap: .48rem; height: 2.65rem; border: 1px solid rgba(255,255,255,.05); border-radius: 22px; background: var(--surface); box-shadow: var(--edge); padding: 0 .72rem; }
+      .search input { min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; }
+      .site-select-frame { position: absolute; top: 6.05rem; left: 0; right: 0; z-index: 3; height: 2.65rem; border: 1px solid rgba(255,255,255,.05); border-radius: 22px; background: var(--surface); box-shadow: var(--edge); padding: 0 .72rem; }
+      .site-select-frame select { width: 100%; height: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; }
+      .list { height: 100%; min-height: 0; overflow-y: auto; padding: 9.42rem 0 7.15rem; scrollbar-width: none; }
+      button { width: 100%; min-height: 42px; display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 8px; margin: 0 0 6px; border: 1px solid transparent; border-radius: 22px; background: transparent; color: var(--text); padding: 0 .72rem; font: inherit; text-align: left; cursor: pointer; }
+      button:hover { background: var(--hover); border-color: var(--border); }
+      span, small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      small { color: var(--soft); }
+      .empty { padding: 6.7rem .72rem 0; color: var(--muted); font-size: .82rem; }
+    </style>
+  </head>
+  <body>
+    <div id="root" class="widget">
+      <label class="search"><span>⌕</span><input id="query" placeholder="Search sitemap"></label>
+      <label class="site-select-frame"><select id="siteSelect" aria-label="Website site"></select></label>
+      <div id="list" class="list"></div>
+    </div>
+    <script>
+      const list = document.getElementById('list');
+      const query = document.getElementById('query');
+      const siteSelect = document.getElementById('siteSelect');
+      let sites = [];
+      let pages = [];
+      let activeSiteId = '';
+      async function backend(body) {
+        const response = await fetch('/api/apps/website-studio/backend', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        if (!response.ok) throw new Error('backend request failed');
+        return response.json();
+      }
+      async function load() {
+        const sitePayload = await backend({ action: 'sites_list' });
+        sites = sitePayload.items || [];
+        siteSelect.replaceChildren();
+        if (sites.length) {
+          for (const site of sites) {
+            const option = document.createElement('option');
+            option.value = String(site.id);
+            option.textContent = String(site.display_name || site.id);
+            siteSelect.append(option);
+          }
+        } else {
+          const option = document.createElement('option');
+          option.value = '';
+          option.textContent = 'No website sites yet';
+          siteSelect.append(option);
+        }
+        const site = sites.find(item => item.id === activeSiteId) || sites[0];
+        if (!site) { list.replaceChildren(); return; }
+        activeSiteId = site.id;
+        siteSelect.value = activeSiteId;
+        const map = await backend({ action: 'sitemap', site_id: site.id });
+        pages = map.items || [];
+        render();
+      }
+      function render() {
+        const needle = query.value.toLowerCase();
+        const filtered = pages.filter(page => page.route.toLowerCase().includes(needle) || page.title.toLowerCase().includes(needle));
+        list.replaceChildren();
+        if (!filtered.length) {
+          const empty = document.createElement('div');
+          empty.className = 'empty';
+          empty.textContent = 'No routes match.';
+          list.append(empty);
+          return;
+        }
+        for (const page of filtered) {
+          const row = document.createElement('button');
+          row.dataset.page = String(page.id);
+          row.dataset.route = String(page.route);
+          const route = document.createElement('span');
+          route.textContent = String(page.route);
+          const status = document.createElement('small');
+          status.textContent = String(page.status);
+          row.append(route, status);
+          list.append(row);
+        }
+      }
+      query.addEventListener('input', render);
+      siteSelect.addEventListener('change', () => {
+        activeSiteId = siteSelect.value;
+        window.parent?.postMessage({ type: 'maverick.widget.open-app', app_id: 'website-studio', params: { site_id: activeSiteId } }, window.location.origin);
+        load();
+      });
+      list.addEventListener('click', event => {
+        const row = event.target.closest('button[data-page]');
+        if (!row) return;
+        window.parent?.postMessage({ type: 'maverick.widget.open-app', app_id: 'website-studio', params: { site_id: activeSiteId, page_id: row.dataset.page, route: row.dataset.route } }, window.location.origin);
+        window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, window.location.origin);
+      });
+      load().catch(() => {
+        const empty = document.createElement('div');
+        empty.className = 'empty';
+        empty.textContent = 'Sitemap unavailable.';
+        list.replaceChildren(empty);
+      });
+    </script>
+  </body>
+</html>

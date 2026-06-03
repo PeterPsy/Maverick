@@ -18,6 +18,7 @@ This repository is intentionally separate from the platform/core repository. It 
 apps/
   crm/
   mail/
+  website-studio/
 ```
 
 Each app remains a normal Maverick app root with its own `app_contract.json`, README, tests, app-owned surfaces, and frontend build artifacts when they are intentionally committed.
@@ -48,6 +49,7 @@ The active workspace paths for local app development are:
 ```text
 apps/crm/
 apps/mail/
+apps/website-studio/
 ```
 
 From the CRM app root:
@@ -68,6 +70,16 @@ maverick app crm mcp list --json
 For Mail, use the same app-local test/build pattern from `apps/mail/`, and
 validate the installed workspace surface with `maverick app mail ...` commands
 when Mail is the changed app.
+
+For Website Studio, use the same app-local test/build pattern from
+`apps/website-studio/`, and validate the installed workspace surface with:
+
+```bash
+maverick core cli run core.app-sdk.validate --app-id website-studio --json
+maverick app website-studio frontend build --json
+maverick app website-studio cli list --json
+maverick app website-studio mcp list --json
+```
 
 Commit app source changes here. Commit core/platform changes only in the separate Maverick/Loopinos core repository.
 

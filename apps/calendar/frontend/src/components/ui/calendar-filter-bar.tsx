@@ -53,47 +53,8 @@ export function FilterBar(props: {
       )}
 
       <div className="sm:hidden">
-        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-          <FilterMenu title="Colors" count={props.selectedColors.length} align="start" mobile>
-            {props.colors.map((color) => (
-              <DropdownMenuCheckboxItem
-                key={color.value}
-                checked={props.selectedColors.includes(color.value)}
-                onCheckedChange={(checked) =>
-                  props.setSelectedColors((prev) => checked ? [...prev, color.value] : prev.filter((item) => item !== color.value))
-                }
-              >
-                <div className="flex items-center gap-2">
-                  <div className={cn("h-3 w-3 rounded", color.bg)} />
-                  {color.name}
-                </div>
-              </DropdownMenuCheckboxItem>
-            ))}
-          </FilterMenu>
-          <FilterMenu title="Tags" count={props.selectedTags.length} align="start" mobile>
-            {props.availableTags.map((tag) => (
-              <DropdownMenuCheckboxItem
-                key={tag}
-                checked={props.selectedTags.includes(tag)}
-                onCheckedChange={(checked) => props.setSelectedTags((prev) => checked ? [...prev, tag] : prev.filter((item) => item !== tag))}
-              >
-                {tag}
-              </DropdownMenuCheckboxItem>
-            ))}
-          </FilterMenu>
-          <FilterMenu title="Categories" count={props.selectedCategories.length} align="start" mobile>
-            {props.categories.map((category) => (
-              <DropdownMenuCheckboxItem
-                key={category}
-                checked={props.selectedCategories.includes(category)}
-                onCheckedChange={(checked) =>
-                  props.setSelectedCategories((prev) => checked ? [...prev, category] : prev.filter((item) => item !== category))
-                }
-              >
-                {category}
-              </DropdownMenuCheckboxItem>
-            ))}
-          </FilterMenu>
+        <div className="flex items-center justify-end">
+          <MobileFiltersMenu {...props} showAccountFilters={showAccountFilters} />
           {showAccountFilters && (
             <FilterMenu title="Accounts" count={props.selectedAccounts.length} align="start" mobile>
               {props.accountOptions.map((account) => (
@@ -119,12 +80,6 @@ export function FilterBar(props: {
             >
               <RefreshCw className={cn("h-4 w-4", props.isSyncingConnections && "animate-spin")} />
               Sync
-            </Button>
-          )}
-          {props.hasActiveFilters && (
-            <Button variant="ghost" size="sm" onClick={props.clearFilters} className="gap-2 whitespace-nowrap flex-shrink-0">
-              <X className="h-4 w-4" />
-              Clear Filters
             </Button>
           )}
         </div>
@@ -200,7 +155,7 @@ export function FilterBar(props: {
         )}
       </div>
       {props.hasActiveFilters && (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="hidden flex-wrap items-center gap-2 sm:flex">
           <span className="text-sm text-muted-foreground">Active filters:</span>
           {props.selectedColors.map((colorValue) => {
             const color = props.getColorClasses(colorValue)
@@ -244,6 +199,73 @@ export function FilterBar(props: {
         </div>
       )}
     </div>
+  )
+}
+
+function MobileFiltersMenu(
+  props: Omit<Parameters<typeof FilterBar>[0], "showSearch" | "showAccountFilters"> & { showAccountFilters: boolean },
+) {
+  const activeFilterCount = props.selectedColors.length + props.selectedTags.length + props.selectedCategories.length
+  return (
+    <DropdownMenu modal>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm" className="gap-2 whitespace-nowrap bg-transparent">
+          <Filter className="h-4 w-4" />
+          Filters
+          {activeFilterCount > 0 && <Badge variant="secondary" className="ml-1 h-5 px-1.5">{activeFilterCount}</Badge>}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="max-h-[70vh] w-[min(calc(100vw-2rem),22rem)] overflow-y-auto">
+        <DropdownMenuLabel>Colors</DropdownMenuLabel>
+        {props.colors.map((color) => (
+          <DropdownMenuCheckboxItem
+            key={color.value}
+            checked={props.selectedColors.includes(color.value)}
+            onCheckedChange={(checked) =>
+              props.setSelectedColors((prev) => checked ? [...prev, color.value] : prev.filter((item) => item !== color.value))
+            }
+          >
+            <div className="flex items-center gap-2">
+              <div className={cn("h-3 w-3 rounded", color.bg)} />
+              {color.name}
+            </div>
+          </DropdownMenuCheckboxItem>
+        ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel>Tags</DropdownMenuLabel>
+        {props.availableTags.map((tag) => (
+          <DropdownMenuCheckboxItem
+            key={tag}
+            checked={props.selectedTags.includes(tag)}
+            onCheckedChange={(checked) => props.setSelectedTags((prev) => checked ? [...prev, tag] : prev.filter((item) => item !== tag))}
+          >
+            {tag}
+          </DropdownMenuCheckboxItem>
+        ))}
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel>Categories</DropdownMenuLabel>
+        {props.categories.map((category) => (
+          <DropdownMenuCheckboxItem
+            key={category}
+            checked={props.selectedCategories.includes(category)}
+            onCheckedChange={(checked) =>
+              props.setSelectedCategories((prev) => checked ? [...prev, category] : prev.filter((item) => item !== category))
+            }
+          >
+            {category}
+          </DropdownMenuCheckboxItem>
+        ))}
+        {props.hasActiveFilters && (
+          <>
+            <DropdownMenuSeparator />
+            <Button variant="ghost" size="sm" onClick={props.clearFilters} className="w-full justify-start gap-2">
+              <X className="h-4 w-4" />
+              Clear filters
+            </Button>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 

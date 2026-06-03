@@ -9,7 +9,9 @@ import {
   calendarSourcePatch,
   eventIsReadOnly,
   eventsForListDate,
+  currentTimeMarkerOffset,
   eventSourceDetails,
+  isSameCalendarDate,
   isWritableGoogleAccessRole,
   selectedCalendarSourceValue,
   validateDraft,
@@ -89,6 +91,12 @@ describe("calendar viewport helpers", () => {
 
   it("keeps list views anchored to the selected date", () => {
     expect(eventsForListDate(events, new Date("2026-01-04T12:00:00Z")).map((item) => item.id)).toEqual(["evt_2"])
+  })
+
+  it("calculates current-time marker placement with local calendar dates", () => {
+    expect(isSameCalendarDate(new Date(2026, 0, 4, 23, 59), new Date(2026, 0, 4, 0, 1))).toBe(true)
+    expect(isSameCalendarDate(new Date(2026, 0, 4, 23, 59), new Date(2026, 0, 5, 0, 1))).toBe(false)
+    expect(currentTimeMarkerOffset(new Date(2026, 0, 4, 9, 15))).toBe("25%")
   })
 
   it("builds stable signatures from normalized view-state fields", () => {

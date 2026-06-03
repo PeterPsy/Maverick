@@ -52,6 +52,18 @@ export function eventsForListDate(events: Event[], date: Date) {
     .sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
 }
 
+export function isSameCalendarDate(date: Date, comparison: Date) {
+  return (
+    date.getFullYear() === comparison.getFullYear() &&
+    date.getMonth() === comparison.getMonth() &&
+    date.getDate() === comparison.getDate()
+  )
+}
+
+export function currentTimeMarkerOffset(now: Date) {
+  return `${(now.getMinutes() / 60) * 100}%`
+}
+
 export function defaultDraft(date: Date, colors: { value: string }[], categories: string[]): DraftEvent {
   const startTime = new Date(date)
   const now = new Date()

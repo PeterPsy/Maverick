@@ -255,6 +255,36 @@ button {
   transform: scaleY(1.03);
 }
 
+.calendar-time-cell {
+  overflow: hidden;
+}
+
+.calendar-current-time-marker {
+  position: absolute;
+  left: 0.38rem;
+  right: 0.38rem;
+  z-index: 2;
+  height: 1px;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12), 0 0 12px rgba(255, 255, 255, 0.28);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.calendar-current-time-marker::before {
+  position: absolute;
+  top: 50%;
+  left: -0.16rem;
+  width: 0.48rem;
+  height: 0.48rem;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 0 0 2px rgba(12, 12, 14, 0.92);
+  content: "";
+  transform: translateY(-50%);
+}
+
 .calendar-event-overlay {
   position: fixed;
   inset: var(--calendar-shell-top-offset) 0 0;

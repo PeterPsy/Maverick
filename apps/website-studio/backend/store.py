@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 import difflib
+import fcntl
 import hashlib
 import json
 import os
 import re
 import shutil
 import subprocess
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from uuid import uuid4
 
@@ -21,8 +25,6 @@ from safety import (
     extract_zip_base64,
     preview_srcdoc_html,
     read_text_file,
-    replace_tree_from_directory,
-    replace_tree_from_snapshot,
     resolve_site_path,
     safe_relative_path,
     sha256_text,
@@ -98,6 +100,78 @@ def site_status(data_root: Path, site_id: object) -> dict[str, object]:
     }
 
 
+def archive_site(data_root: Path, site_id: object) -> dict[str, object]:
+    site = get_site(data_root, site_id)
+    now = now_timestamp()
+    with connect(data_root) as db:
+        db.execute("UPDATE sites SET status = 'archived', archived_at = ?, updated_at = ? WHERE id = ?", (now, now, site["id"]))
+    _audit(data_root, str(site["id"]), "site.archived", f"Archived site {site['display_name']}")
+    return get_site(data_root, site["id"])
+
+
+def restore_site(data_root: Path, site_id: object) -> dict[str, object]:
+    site = get_site(data_root, site_id)
+    now = now_timestamp()
+    with connect(data_root) as db:
+        db.execute("UPDATE sites SET status = 'draft', archived_at = NULL, updated_at = ? WHERE id = ?", (now, site["id"]))
+    _audit(data_root, str(site["id"]), "site.restored", f"Restored site {site['display_name']}")
+    return get_site(data_root, site["id"])
+
+
+def rename_site(
+    data_root: Path,
+    site_id: object,
+    *,
+    display_name: object = None,
+    slug: object = None,
+    primary_domain: object = None,
+) -> dict[str, object]:
+    site = get_site(data_root, site_id)
+    name = str(display_name if display_name is not None else site["display_name"]).strip()
+    if not name:
+        raise ValueError("display_name is required")
+    raw_slug = str(slug if slug is not None else site["slug"]).strip() or slugify(name)
+    clean_slug = _unique_slug(data_root, raw_slug, exclude_site_id=str(site["id"]))
+    domain = str(primary_domain if primary_domain is not None else site.get("primary_domain") or "").strip()
+    now = now_timestamp()
+    with connect(data_root) as db:
+        db.execute(
+            "UPDATE sites SET display_name = ?, slug = ?, primary_domain = ?, updated_at = ? WHERE id = ?",
+            (name, clean_slug, domain, now, site["id"]),
+        )
+    _audit(data_root, str(site["id"]), "site.renamed", f"Renamed site to {name}")
+    return get_site(data_root, site["id"])
+
+
+def duplicate_site(data_root: Path, site_id: object, *, display_name: object = None, slug: object = None) -> dict[str, object]:
+    source_site = get_site(data_root, site_id)
+    name = str(display_name or f"{source_site['display_name']} Copy").strip()
+    duplicated = create_site(
+        data_root,
+        display_name=name,
+        slug=slug,
+        primary_domain="",
+        source_provider=source_site.get("source_provider") or "manual",
+    )
+    with _site_mutation_lock(data_root, str(duplicated["id"])):
+        source_root = _source_root(data_root, str(source_site["id"]))
+        target_root = _source_root(data_root, str(duplicated["id"]))
+        copy_tree_snapshot(source_root, target_root)
+        rebuild_index(data_root, duplicated["id"])
+        revision = create_revision(data_root, duplicated["id"], label="Duplicated working copy", source="duplicate_site")
+        _set_active_revision(data_root, duplicated["id"], revision["id"])
+        _update_site(
+            data_root,
+            duplicated["id"],
+            source_provider=source_site.get("source_provider") or "manual",
+            source_label=f"Duplicated from {source_site['slug']}",
+            source_shape=classify_source_tree(target_root),
+            source_artifact_ref_json=json.dumps(source_site.get("source_artifact_ref") or {}, sort_keys=True),
+        )
+    _audit(data_root, str(duplicated["id"]), "site.duplicated", f"Duplicated site {source_site['display_name']}", {"source_site_id": source_site["id"]})
+    return get_site(data_root, duplicated["id"])
+
+
 def import_zip(
     data_root: Path,
     *,
@@ -112,27 +186,28 @@ def import_zip(
         import_result = extract_zip_base64(archive_base64, temp_root)
         if site is None:
             site = create_site(data_root, display_name=display_name or "Imported Website", source_provider="zip")
-        source_root = _source_root(data_root, str(site["id"]))
-        if source_root.exists():
-            shutil.rmtree(source_root)
-        source_root.parent.mkdir(parents=True, exist_ok=True)
-        temp_root.rename(source_root)
+        with _site_mutation_lock(data_root, str(site["id"])):
+            source_root = _source_root(data_root, str(site["id"]))
+            if source_root.exists():
+                shutil.rmtree(source_root)
+            source_root.parent.mkdir(parents=True, exist_ok=True)
+            temp_root.rename(source_root)
+            rebuild_index(data_root, site["id"])
+            revision = create_revision(data_root, site["id"], label="ZIP import", source="zip_import")
+            _set_active_revision(data_root, site["id"], revision["id"])
+            artifact_ref = _source_artifact_ref(source_artifact_ref)
+            _update_site(
+                data_root,
+                site["id"],
+                source_provider="zip",
+                source_label="ZIP import",
+                source_shape=import_result.get("source_shape") or "partial_source",
+                source_artifact_ref_json=json.dumps(artifact_ref, sort_keys=True),
+            )
+            _audit(data_root, site["id"], "site.import_zip", f"Imported {import_result['files_extracted']} ZIP files", {"source_artifact_ref": artifact_ref})
     finally:
         if temp_root.exists():
             shutil.rmtree(temp_root)
-    rebuild_index(data_root, site["id"])
-    revision = create_revision(data_root, site["id"], label="ZIP import", source="zip_import")
-    _set_active_revision(data_root, site["id"], revision["id"])
-    artifact_ref = _source_artifact_ref(source_artifact_ref)
-    _update_site(
-        data_root,
-        site["id"],
-        source_provider="zip",
-        source_label="ZIP import",
-        source_shape=import_result.get("source_shape") or "partial_source",
-        source_artifact_ref_json=json.dumps(artifact_ref, sort_keys=True),
-    )
-    _audit(data_root, site["id"], "site.import_zip", f"Imported {import_result['files_extracted']} ZIP files", {"source_artifact_ref": artifact_ref})
     return {"site": get_site(data_root, site["id"]), "import": import_result, "revision": revision}
 
 
@@ -157,26 +232,27 @@ def import_git(
         source_shape = classify_source_tree(clone_root)
         if site is None:
             site = create_site(data_root, display_name=display_name or _display_name_from_git_source(source), source_provider="git")
-        source_root = _source_root(data_root, str(site["id"]))
-        if source_root.exists():
-            shutil.rmtree(source_root)
-        source_root.parent.mkdir(parents=True, exist_ok=True)
-        clone_root.rename(source_root)
+        with _site_mutation_lock(data_root, str(site["id"])):
+            source_root = _source_root(data_root, str(site["id"]))
+            if source_root.exists():
+                shutil.rmtree(source_root)
+            source_root.parent.mkdir(parents=True, exist_ok=True)
+            clone_root.rename(source_root)
+            rebuild_index(data_root, site["id"])
+            revision = create_revision(data_root, site["id"], label="Git import", source="git_import")
+            _set_active_revision(data_root, site["id"], revision["id"])
+            _update_site(
+                data_root,
+                site["id"],
+                source_provider="git",
+                source_label=_redacted_git_source_label(source, clean_branch),
+                source_shape=source_shape,
+                source_artifact_ref_json=json.dumps({"provider": "git", "source_label": _redacted_git_source_label(source, clean_branch), "branch": clean_branch or ""}, sort_keys=True),
+            )
+            _audit(data_root, site["id"], "site.import_git", "Imported Git repository", {"branch": clean_branch or ""})
     finally:
         if temp_root.exists():
             shutil.rmtree(temp_root)
-    rebuild_index(data_root, site["id"])
-    revision = create_revision(data_root, site["id"], label="Git import", source="git_import")
-    _set_active_revision(data_root, site["id"], revision["id"])
-    _update_site(
-        data_root,
-        site["id"],
-        source_provider="git",
-        source_label=_redacted_git_source_label(source, clean_branch),
-        source_shape=source_shape,
-        source_artifact_ref_json=json.dumps({"provider": "git", "source_label": _redacted_git_source_label(source, clean_branch), "branch": clean_branch or ""}, sort_keys=True),
-    )
-    _audit(data_root, site["id"], "site.import_git", "Imported Git repository", {"branch": clean_branch or ""})
     return {
         "site": get_site(data_root, site["id"]),
         "import": {"source_provider": "git", "branch": clean_branch or "", "source_label": _redacted_git_source_label(source, clean_branch)},
@@ -197,20 +273,22 @@ def rebuild_index(data_root: Path, site_id: object) -> dict[str, object]:
         db.execute("UPDATE routes SET deleted_at = ? WHERE site_id = ?", (now, site["id"]))
         db.execute("UPDATE assets SET deleted_at = ? WHERE site_id = ?", (now, site["id"]))
         page_asset_refs: dict[str, list[str]] = {}
+        indexed_routes: set[str] = set()
         for path in html_files:
             rel_path = path.relative_to(source_root).as_posix()
             route = _route_from_html_path(rel_path)
-            title = _html_title(path) or route
-            page_id = f"page_{sha256_text(str(site['id']) + route)[:16]}"
+            indexed_routes.add(route)
             html = read_text_file(path)
+            title = _html_title_from_text(html) or route
+            page_id = f"page_{sha256_text(str(site['id']) + route)[:16]}"
             asset_refs = asset_references_from_html(html, page_path=rel_path)
             warnings = [f"missing asset `{ref}`" for ref in asset_refs if ref not in indexed_asset_paths]
             page_asset_refs[page_id] = asset_refs
-            payload = (page_id, site["id"], route, title, "static", "draft", json.dumps([rel_path]), json.dumps(asset_refs), json.dumps(warnings), now)
+            payload = (page_id, site["id"], route, title, "static", "draft", json.dumps([rel_path]), json.dumps(asset_refs), json.dumps(warnings), json.dumps(_html_seo(html), sort_keys=True), now)
             db.execute(
                 """
-                INSERT INTO pages(id, site_id, route, title, kind, status, source_files_json, asset_refs_json, warnings_json, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO pages(id, site_id, route, title, kind, status, source_files_json, asset_refs_json, warnings_json, seo_json, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                   route=excluded.route,
                   title=excluded.title,
@@ -219,6 +297,7 @@ def rebuild_index(data_root: Path, site_id: object) -> dict[str, object]:
                   source_files_json=excluded.source_files_json,
                   asset_refs_json=excluded.asset_refs_json,
                   warnings_json=excluded.warnings_json,
+                  seo_json=excluded.seo_json,
                   updated_at=excluded.updated_at,
                   deleted_at=NULL
                 """,
@@ -240,6 +319,23 @@ def rebuild_index(data_root: Path, site_id: object) -> dict[str, object]:
                   deleted_at=NULL
                 """,
                 (route_id, site["id"], route, page_id, "broken" if warnings else "draft", json.dumps([rel_path]), json.dumps(warnings), now),
+            )
+        for route, kind, source_file, warnings in _extra_static_routes(source_root, indexed_routes):
+            route_id = f"route_{sha256_text(str(site['id']) + kind + route)[:16]}"
+            db.execute(
+                """
+                INSERT INTO routes(id, site_id, route, page_id, kind, status, source_files_json, warnings_json, updated_at)
+                VALUES (?, ?, ?, '', ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                  route=excluded.route,
+                  kind=excluded.kind,
+                  status=excluded.status,
+                  source_files_json=excluded.source_files_json,
+                  warnings_json=excluded.warnings_json,
+                  updated_at=excluded.updated_at,
+                  deleted_at=NULL
+                """,
+                (route_id, site["id"], route, kind, "redirect" if kind == "redirect" else "unmatched", json.dumps([source_file]), json.dumps(warnings), now),
             )
         referenced_by: dict[str, list[str]] = {}
         for page_id, refs in page_asset_refs.items():
@@ -371,26 +467,27 @@ def read_file(data_root: Path, *, site_id: object, path: object) -> dict[str, ob
 
 def write_file(data_root: Path, *, site_id: object, path: object, content: object, expected_hash: object = None) -> dict[str, object]:
     site = get_site(data_root, site_id)
-    current = None
-    rel_path = safe_relative_path(path)
-    content_size = len(str(content if content is not None else "").encode("utf-8"))
-    validate_editable_text_path(rel_path, size_bytes=content_size)
-    target = resolve_site_path(_source_root(data_root, str(site["id"])), rel_path)
-    if target.exists():
-        current = read_text_file(target)
-    expected = str(expected_hash or "").strip()
-    if current is None:
-        if expected != "new":
-            raise ValueError("expected_hash is required for new files; use `new`")
-    elif not expected:
-        raise ValueError("expected_hash is required for file writes")
-    elif sha256_text(current) != expected:
-        raise ValueError("stale write rejected: expected_hash does not match current file")
-    write_text_file(target, content)
-    rebuild_index(data_root, site["id"])
-    changeset = _upsert_changeset(data_root, site["id"], f"Edited {rel_path}")
-    _audit(data_root, str(site["id"]), "file.write", f"Edited {rel_path}", {"changeset_id": changeset["id"]})
-    return {"file": read_file(data_root, site_id=site["id"], path=rel_path), "changeset": changeset}
+    with _site_mutation_lock(data_root, str(site["id"])):
+        current = None
+        rel_path = safe_relative_path(path)
+        content_size = len(str(content if content is not None else "").encode("utf-8"))
+        validate_editable_text_path(rel_path, size_bytes=content_size)
+        target = resolve_site_path(_source_root(data_root, str(site["id"])), rel_path)
+        if target.exists():
+            current = read_text_file(target)
+        expected = str(expected_hash or "").strip()
+        if current is None:
+            if expected != "new":
+                raise ValueError("expected_hash is required for new files; use `new`")
+        elif not expected:
+            raise ValueError("expected_hash is required for file writes")
+        elif sha256_text(current) != expected:
+            raise ValueError("stale write rejected: expected_hash does not match current file")
+        write_text_file(target, content)
+        rebuild_index(data_root, site["id"])
+        changeset = _upsert_changeset(data_root, site["id"], f"Edited {rel_path}")
+        _audit(data_root, str(site["id"]), "file.write", f"Edited {rel_path}", {"changeset_id": changeset["id"]})
+        return {"file": read_file(data_root, site_id=site["id"], path=rel_path), "changeset": changeset}
 
 
 def apply_text_patch(data_root: Path, *, site_id: object, path: object, old_text: object, new_text: object, expected_hash: object = None) -> dict[str, object]:
@@ -492,19 +589,11 @@ def rollback(data_root: Path, site_id: object, revision_id: object, *, approval_
             "status": "blocked",
             "detail": "Rollback requires approval_id and confirm=true because it replaces the selected working source tree.",
         }
-    revision = get_revision(data_root, revision_id)
-    if revision["site_id"] != str(site_id):
-        raise ValueError("revision does not belong to the selected site")
-    snapshot_root = _revision_source_root(data_root, str(site_id), str(revision["id"]))
-    if snapshot_root.exists():
-        replace_tree_from_directory(_source_root(data_root, str(site_id)), snapshot_root)
-    else:
-        replace_tree_from_snapshot(_source_root(data_root, str(site_id)), revision["snapshot"])
-    rebuild_index(data_root, site_id)
-    restored = create_revision(data_root, site_id, label=f"Rollback to {revision_id}", source="rollback")
-    _set_active_revision(data_root, site_id, restored["id"])
-    _audit(data_root, str(site_id), "rollback.completed", f"Rolled back to {revision_id}")
-    return {"site": get_site(data_root, site_id), "revision": restored}
+    return {
+        "blocked": True,
+        "status": "blocked",
+        "detail": "Rollback is blocked until Website Studio can validate approval ids through an official approval surface.",
+    }
 
 
 def active_context(data_root: Path, site_id: object = None, page_id: object = None) -> dict[str, object]:
@@ -684,6 +773,20 @@ def _revision_source_root(data_root: Path, site_id: str, revision_id: str) -> Pa
     return data_root / "sites" / site_id / "revisions" / revision_id / "source"
 
 
+@contextmanager
+def _site_mutation_lock(data_root: Path, site_id: str) -> Iterator[None]:
+    if not site_id or "/" in site_id or "\\" in site_id or site_id in {".", ".."}:
+        raise ValueError(f"Invalid site_id `{site_id}`")
+    lock_dir = data_root / ".locks"
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    with (lock_dir / f"{site_id}.lock").open("a+", encoding="utf-8") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
 def _required_id(value: object, label: str) -> str:
     clean = str(value or "").strip()
     if not clean:
@@ -798,11 +901,15 @@ def _revision_snapshot(data_root: Path, revision_id: object) -> dict[str, str]:
     return get_revision(data_root, revision_id)["snapshot"]
 
 
-def _unique_slug(data_root: Path, raw_slug: str) -> str:
+def _unique_slug(data_root: Path, raw_slug: str, *, exclude_site_id: str | None = None) -> str:
     base = slugify(raw_slug)
     ensure_schema(data_root)
     with connect(data_root) as db:
-        existing = {row["slug"] for row in db.execute("SELECT slug FROM sites").fetchall()}
+        existing = {
+            row["slug"]
+            for row in db.execute("SELECT id, slug FROM sites").fetchall()
+            if not exclude_site_id or row["id"] != exclude_site_id
+        }
     slug = base
     counter = 2
     while slug in existing:
@@ -844,13 +951,109 @@ def _route_from_html_path(rel_path: str) -> str:
 
 
 def _html_title(path: Path) -> str:
-    text = read_text_file(path)
+    return _html_title_from_text(read_text_file(path))
+
+
+def _html_title_from_text(text: str) -> str:
     lower = text.lower()
     start = lower.find("<title>")
     end = lower.find("</title>")
     if start == -1 or end == -1 or end <= start:
         return ""
     return text[start + 7 : end].strip()
+
+
+def _html_seo(text: str) -> dict[str, str]:
+    seo: dict[str, str] = {}
+    for match in re.finditer(r"(?is)<meta\b[^>]*>", text):
+        attrs = _html_attrs(match.group(0))
+        name = (attrs.get("name") or attrs.get("property") or "").lower()
+        content = attrs.get("content", "").strip()
+        if not content:
+            continue
+        if name in {"description", "og:title", "og:description"}:
+            seo[name.replace(":", "_")] = content[:500]
+    for match in re.finditer(r"(?is)<link\b[^>]*>", text):
+        attrs = _html_attrs(match.group(0))
+        if attrs.get("rel", "").lower() == "canonical" and attrs.get("href"):
+            seo["canonical"] = attrs["href"].strip()[:500]
+            break
+    return seo
+
+
+def _html_attrs(tag: str) -> dict[str, str]:
+    attrs: dict[str, str] = {}
+    for match in re.finditer(r"(?is)\b([a-z0-9_-]+)\s*=\s*([\"'])(.*?)\2", tag):
+        attrs[match.group(1).lower()] = match.group(3)
+    return attrs
+
+
+def _extra_static_routes(source_root: Path, indexed_routes: set[str]) -> list[tuple[str, str, str, list[str]]]:
+    extras: list[tuple[str, str, str, list[str]]] = []
+    seen = set(indexed_routes)
+    for route in _routes_from_sitemap_xml(source_root / "sitemap.xml"):
+        if route in seen:
+            continue
+        seen.add(route)
+        extras.append((route, "sitemap", "sitemap.xml", ["route listed in sitemap.xml without matching HTML source"]))
+    for route, target, status in _routes_from_redirects(source_root / "_redirects"):
+        if route in seen:
+            continue
+        seen.add(route)
+        extras.append((route, "redirect", "_redirects", [f"redirects to {target} ({status})"]))
+    return extras
+
+
+def _routes_from_sitemap_xml(path: Path) -> list[str]:
+    if not path.exists() or path.stat().st_size > 1024 * 1024:
+        return []
+    try:
+        root = ET.fromstring(read_text_file(path))
+    except (ET.ParseError, ValueError):
+        return []
+    routes: list[str] = []
+    for element in root.iter():
+        if element.tag.rsplit("}", 1)[-1] != "loc" or not element.text:
+            continue
+        route = _route_from_url_path(element.text.strip())
+        if route and route not in routes:
+            routes.append(route)
+    return routes
+
+
+def _routes_from_redirects(path: Path) -> list[tuple[str, str, str]]:
+    if not path.exists() or path.stat().st_size > 256 * 1024:
+        return []
+    routes: list[tuple[str, str, str]] = []
+    try:
+        text = read_text_file(path)
+    except ValueError:
+        return []
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split()
+        if len(parts) < 2 or not parts[0].startswith("/"):
+            continue
+        route = _route_from_url_path(parts[0])
+        target = parts[1]
+        status = parts[2] if len(parts) > 2 and parts[2].isdigit() else "301"
+        if route and route not in {item[0] for item in routes}:
+            routes.append((route, target, status))
+    return routes
+
+
+def _route_from_url_path(value: str) -> str:
+    path = value.strip()
+    if not path:
+        return ""
+    if "://" in path:
+        path = "/" + path.split("://", 1)[1].split("/", 1)[1] if "/" in path.split("://", 1)[1] else "/"
+    path = path.split("?", 1)[0].split("#", 1)[0]
+    if not path.startswith("/"):
+        return ""
+    return "/" + path.strip("/")
 
 
 def _set_active_revision(data_root: Path, site_id: object, revision_id: object) -> None:

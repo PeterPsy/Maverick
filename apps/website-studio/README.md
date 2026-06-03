@@ -17,7 +17,7 @@ This first implementation is Phase 1 of the specification in `storage/generated/
 
 - Frontend workspace app mounted from `frontend/dist`
 - Backend action surface at `backend/app_backend.py`
-- MCP tools for site list/create/status, ZIP import, Git import, sitemap, search, read/write/apply patch, diff, static preview, publish request, publish blocking, rollback, active context, page context, references, and view state
+- MCP tools for site list/create/status/archive/restore/rename/duplicate, ZIP import, Git import, sitemap, search, read/write/apply patch, diff, static preview, publish request, active context, page context, references, and view state
 - CLI command `website-studio`, using the same action names as the backend
 - Skill template `website-ops`
 - Base-shell sidebar widgets:
@@ -27,11 +27,11 @@ This first implementation is Phase 1 of the specification in `storage/generated/
 
 ## Phase 1 Behavior
 
-Website Studio supports multiple site records. Each site owns a working source tree under `data/website-studio/sites/<site_id>/source`. ZIP import validates archive members in a staging directory before replacing a source tree, rejects traversal, symlinks, OS executables, sensitive source files, excessive file counts, and size-limit violations, classifies the source as `full_source`, `static_export`, or `partial_source`, records the Storage artifact reference when provided, then indexes static pages, routes, and assets into the sitemap payload. Git import clones a public GitHub HTTPS repository or an app-local repository path into staging with prompt/credential helpers disabled, removes `.git` metadata for Phase 1, validates the imported source tree, classifies it, then indexes the working source.
+Website Studio supports multiple site records. Each site owns a working source tree under `data/website-studio/sites/<site_id>/source`. Sites can be archived, restored, renamed, and duplicated without deleting their source or revision history. ZIP import validates archive members in a staging directory before replacing a source tree, rejects traversal, symlinks, OS executables, sensitive source files, excessive file counts, and size-limit violations, classifies the source as `full_source`, `static_export`, or `partial_source`, records the Storage artifact reference when provided, then indexes static pages, sitemap XML routes, simple redirect routes, SEO metadata, and assets into the sitemap payload. Git import clones a public GitHub HTTPS repository or an app-local repository path into staging with prompt/credential helpers disabled, removes `.git` metadata for Phase 1, rejects symlinks, executable files, sensitive source files, excessive file counts, and size-limit violations, classifies the imported source tree, then indexes the working source.
 
-The app exposes path-safe file reads and writes. Writes and patches require `expected_hash`; new file writes use `expected_hash=new`; stale writes are rejected instead of silently overwriting concurrent edits. Diff compares the current working tree against the active revision snapshot. Static preview renders the selected HTML route into an opaque-origin frontend iframe through sanitized `srcDoc` with a restrictive preview CSP. Phase 1 preview inlines bounded local CSS and static media assets as data URLs; it still does not execute imported JavaScript or arbitrary build commands.
+The app exposes path-safe file reads and writes. Writes and patches require `expected_hash`; new file writes use `expected_hash=new`; source tree mutations are serialized per site so stale writes are rejected instead of silently overwriting concurrent edits. Diff compares the current working tree against the active revision snapshot. Static preview renders the selected HTML route into an opaque-origin frontend iframe through sanitized `srcDoc` with a restrictive preview CSP. Phase 1 preview inlines bounded local CSS and static media assets as data URLs; it still does not execute imported JavaScript or arbitrary build commands.
 
-Publishing is intentionally guarded. The app can create a publish request, but `website_publish` always returns a blocked status until Website Studio can validate approval ids through an official approval surface. Rollback is also guarded: `website_rollback` requires `approval_id` and `confirm=true` before replacing the selected working source tree. External GitHub, CMS, commerce, deployment, and managed-hosting writeback are not declared in this contract because they are not implemented in Phase 1.
+Publishing is intentionally limited to publish-request preparation in Phase 1. Live `website_publish` and `website_rollback` tools are not declared as public MCP/CLI surfaces until Website Studio can validate approvals and execute those workflows through official Phase 2 surfaces. External GitHub, CMS, commerce, deployment, and managed-hosting writeback are not declared in this contract because they are not implemented in Phase 1.
 
 ## Frontend Layout
 
@@ -51,7 +51,7 @@ The base-shell sidebar widget owns site navigation. It shows search first, then 
 - Git import rejects inline credentials, only allows public GitHub HTTPS URLs or local repository paths inside the Website Studio data root, and runs Git with credential prompts/helpers disabled; remote credentials must be handled by future Vault/Core Secrets integration.
 - Build/preview currently supports static HTML only; arbitrary dependency installs and executable build commands are not enabled.
 - Secrets are not requested or delivered by the Phase 1 contract.
-- Storage, Vault, Memory, Chat, and App Store composition must happen through official app/core surfaces.
+- The Phase 1 contract declares a required `file.content.write` Storage provider for user-uploaded ZIP artifact persistence; Storage, Vault, Memory, Chat, and App Store composition must happen through official app/core surfaces.
 
 ## Verification
 

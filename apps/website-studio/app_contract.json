@@ -7,7 +7,16 @@
   "publisher": "workspace",
   "minimum_core_version": "0.1.0",
   "provides": [],
-  "requires": [],
+  "requires": [
+    {
+      "alias": "storage-writer",
+      "interface": "file.content.write",
+      "version": "^1",
+      "required": true,
+      "cardinality": "one",
+      "description": "Storage provider used to persist user-uploaded ZIP artifacts through official workspace file surfaces."
+    }
+  ],
   "distribution": {
     "mode": "workspace_local",
     "source_access": "editable"
@@ -24,6 +33,10 @@
       "website_sites_list",
       "website_site_status",
       "website_site_create",
+      "website_site_archive",
+      "website_site_restore",
+      "website_site_rename",
+      "website_site_duplicate",
       "website_import_git",
       "website_import_zip",
       "website_sitemap",
@@ -34,8 +47,6 @@
       "website_diff",
       "website_build_preview",
       "website_publish_request",
-      "website_publish",
-      "website_rollback",
       "website_active_context",
       "website_page_context",
       "website_studio_reference_manifest",

@@ -8,11 +8,13 @@ from database import health_payload
 from store import (
     active_context,
     apply_text_patch,
+    archive_site,
     build_preview,
     clear_custom_view,
     create_publish_request,
     create_site,
     diff_site,
+    duplicate_site,
     import_git,
     import_zip,
     list_sites,
@@ -24,6 +26,8 @@ from store import (
     reference_resolve,
     reference_search,
     reference_summary,
+    rename_site,
+    restore_site,
     rollback,
     search,
     set_custom_view,
@@ -36,6 +40,10 @@ from store import (
 
 MUTATING_ACTIONS = {
     "site_create",
+    "site_archive",
+    "site_restore",
+    "site_rename",
+    "site_duplicate",
     "import_zip",
     "import_git",
     "write_file",
@@ -69,6 +77,22 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
             }
         if action == "site_status":
             return 200, site_status(data_root, payload.get("site_id"))
+        if action == "site_archive":
+            return 200, {"site": archive_site(data_root, payload.get("site_id"))}
+        if action == "site_restore":
+            return 200, {"site": restore_site(data_root, payload.get("site_id"))}
+        if action == "site_rename":
+            return 200, {
+                "site": rename_site(
+                    data_root,
+                    payload.get("site_id"),
+                    display_name=payload.get("display_name"),
+                    slug=payload.get("slug"),
+                    primary_domain=payload.get("primary_domain"),
+                )
+            }
+        if action == "site_duplicate":
+            return 201, {"site": duplicate_site(data_root, payload.get("site_id"), display_name=payload.get("display_name"), slug=payload.get("slug"))}
         if action == "import_zip":
             return 201, {
                 **import_zip(

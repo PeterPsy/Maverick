@@ -50,6 +50,18 @@ export type StorageFile = {
   sha256?: string;
 };
 
+type DependencyResolution = {
+  alias: string;
+  status: string;
+  selected_provider_app_ids?: string[];
+  blocked_reason?: string | null;
+};
+
+type AppDependencies = {
+  status: string;
+  dependencies: DependencyResolution[];
+};
+
 export async function callBackend<T = BackendStatus>(body: Record<string, unknown>): Promise<T> {
   const response = await fetch('/api/apps/website-studio/backend', {
     method: 'POST',
@@ -63,8 +75,9 @@ export async function callBackend<T = BackendStatus>(body: Record<string, unknow
   return response.json() as Promise<T>;
 }
 
-export async function callStorage<T = { file?: StorageFile }>(body: Record<string, unknown>): Promise<T> {
-  const response = await fetch('/api/apps/storage/backend', {
+export async function callStorageProvider<T = { file?: StorageFile }>(alias: string, body: Record<string, unknown>): Promise<T> {
+  const providerAppId = await selectedProviderAppId(alias);
+  const response = await fetch(`/api/apps/${encodeURIComponent(providerAppId)}/backend`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
@@ -74,4 +87,26 @@ export async function callStorage<T = { file?: StorageFile }>(body: Record<strin
     throw new Error(String(payload.detail || payload.error || `Storage request failed with ${response.status}`));
   }
   return response.json() as Promise<T>;
+}
+
+async function selectedProviderAppId(alias: string): Promise<string> {
+  const params = new URLSearchParams({ consumer_app_id: 'website-studio' });
+  const response = await fetch(`/api/apps/dependencies?${params.toString()}`);
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(String(payload.detail || payload.error || `Dependency lookup failed with ${response.status}`));
+  }
+  const payload = await response.json() as AppDependencies;
+  const dependency = payload.dependencies.find((item) => item.alias === alias);
+  if (!dependency) {
+    throw new Error(`Dependency alias ${alias} is not declared.`);
+  }
+  const providerAppId = dependency.selected_provider_app_ids?.[0] || '';
+  if (!providerAppId) {
+    throw new Error(dependency.blocked_reason || `Dependency alias ${alias} has no selected provider.`);
+  }
+  if (dependency.status !== 'resolved') {
+    throw new Error(dependency.blocked_reason || `Dependency alias ${alias} is ${dependency.status || 'unresolved'}.`);
+  }
+  return providerAppId;
 }

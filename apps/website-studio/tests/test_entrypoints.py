@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import base64
 import json
+import multiprocessing
 import os
 from io import BytesIO
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from zipfile import ZipFile
 
@@ -19,7 +21,22 @@ sys.path.insert(0, str(APP_ROOT))
 sys.path.insert(0, str(APP_ROOT / "backend"))
 
 from backend.service import handle_action
+from backend.store import _site_mutation_lock
 from safety import MAX_SOURCE_TREE_FILES, validate_source_tree_for_phase1
+
+
+def _write_with_expected_hash_worker(data_root: str, site_id: str, expected_hash: str, queue) -> None:
+    status, result = handle_action(
+        Path(data_root),
+        {
+            "action": "write_file",
+            "site_id": site_id,
+            "path": "index.html",
+            "content": "<title>Concurrent</title>",
+            "expected_hash": expected_hash,
+        },
+    )
+    queue.put((status, result.get("detail", "")))
 
 
 class WebsiteStudioEntrypointTest(unittest.TestCase):
@@ -71,6 +88,40 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             status, blocked = handle_action(data_root, {"action": "publish", "site_id": site_id})
             self.assertEqual(status, 403)
             self.assertTrue(blocked["blocked"])
+
+    def test_site_lifecycle_archive_restore_rename_and_duplicate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            status, created = handle_action(data_root, {"action": "site_create", "display_name": "Acme"})
+            self.assertEqual(status, 201)
+            site_id = created["site"]["id"]
+
+            status, renamed = handle_action(
+                data_root,
+                {"action": "site_rename", "site_id": site_id, "display_name": "Acme Studio", "slug": "acme"},
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(renamed["site"]["display_name"], "Acme Studio")
+            self.assertEqual(renamed["site"]["slug"], "acme")
+
+            status, archived = handle_action(data_root, {"action": "site_archive", "site_id": site_id})
+            self.assertEqual(status, 200)
+            self.assertEqual(archived["site"]["status"], "archived")
+            self.assertTrue(archived["site"]["archived_at"])
+
+            status, restored = handle_action(data_root, {"action": "site_restore", "site_id": site_id})
+            self.assertEqual(status, 200)
+            self.assertEqual(restored["site"]["status"], "draft")
+            self.assertIsNone(restored["site"]["archived_at"])
+
+            status, duplicated = handle_action(
+                data_root,
+                {"action": "site_duplicate", "site_id": site_id, "display_name": "Acme Clone", "slug": "acme"},
+            )
+            self.assertEqual(status, 201)
+            self.assertNotEqual(duplicated["site"]["id"], site_id)
+            self.assertEqual(duplicated["site"]["slug"], "acme-2")
+            self.assertTrue((data_root / "sites" / duplicated["site"]["id"] / "source" / "index.html").exists())
 
     def test_zip_import_rejects_path_traversal(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -159,6 +210,29 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(status, 400)
             self.assertIn("GitHub HTTPS", result["detail"])
 
+    def test_git_import_rejects_executable_mode_without_blocked_extension(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            repo_root = data_root / "fixtures" / "executable-repo"
+            repo_root.mkdir(parents=True)
+            (repo_root / "index.html").write_text("<title>Safe</title>", encoding="utf-8")
+            runner = repo_root / "runner"
+            runner.write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+            runner.chmod(0o755)
+            subprocess.run(["git", "init"], cwd=repo_root, check=True, capture_output=True, text=True)
+            subprocess.run(["git", "config", "user.email", "agent@example.com"], cwd=repo_root, check=True)
+            subprocess.run(["git", "config", "user.name", "Agent"], cwd=repo_root, check=True)
+            subprocess.run(["git", "add", "."], cwd=repo_root, check=True)
+            subprocess.run(["git", "commit", "-m", "executable"], cwd=repo_root, check=True, capture_output=True, text=True)
+
+            status, result = handle_action(
+                data_root,
+                {"action": "import_git", "repository_url": str(repo_root), "display_name": "Executable Site"},
+            )
+
+            self.assertEqual(status, 400)
+            self.assertIn("executable file", result["detail"])
+
     def test_write_rejects_site_id_escape_before_writing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp) / "data"
@@ -212,6 +286,31 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             )
             self.assertEqual(status, 200)
             self.assertEqual(created_file["file"]["path"], "new-page.html")
+
+    def test_concurrent_write_checks_hash_after_site_lock(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            status, created = handle_action(data_root, {"action": "site_create", "display_name": "Acme"})
+            self.assertEqual(status, 201)
+            site_id = created["site"]["id"]
+            status, read_payload = handle_action(data_root, {"action": "read_file", "site_id": site_id, "path": "index.html"})
+            self.assertEqual(status, 200)
+
+            ctx = multiprocessing.get_context("fork")
+            queue = ctx.Queue()
+            process = ctx.Process(target=_write_with_expected_hash_worker, args=(str(data_root), site_id, read_payload["file"]["hash"], queue))
+            source_file = data_root / "sites" / site_id / "source" / "index.html"
+            with _site_mutation_lock(data_root, site_id):
+                process.start()
+                time.sleep(0.2)
+                source_file.write_text("<title>Parent change</title>", encoding="utf-8")
+            process.join(5)
+
+            self.assertFalse(process.is_alive())
+            worker_status, worker_detail = queue.get_nowait()
+            self.assertEqual(worker_status, 400)
+            self.assertIn("stale write", worker_detail)
+            self.assertEqual(source_file.read_text(encoding="utf-8"), "<title>Parent change</title>")
 
     def test_write_rejects_sensitive_executable_and_unsupported_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -318,7 +417,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertTrue(publish_payload["blocked"])
             self.assertIn("official approval surface", publish_payload["detail"])
 
-    def test_rollback_restores_binary_assets_from_revision_snapshot(self) -> None:
+    def test_rollback_with_unverified_approval_stays_blocked(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
             archive = BytesIO()
@@ -348,9 +447,10 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
                 },
             )
 
-            self.assertEqual(status, 200)
-            self.assertEqual(rolled_back["site"]["id"], site_id)
-            self.assertEqual(logo.read_bytes(), b"\x89PNG\r\nphase1")
+            self.assertEqual(status, 403)
+            self.assertTrue(rolled_back["blocked"])
+            self.assertIn("official approval surface", rolled_back["detail"])
+            self.assertFalse(logo.exists())
 
     def test_rollback_requires_policy_guard(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -406,6 +506,45 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             home = next(item for item in map_payload["items"] if item["route"] == "/")
             self.assertIn("assets/logo.png", home["asset_refs"])
             self.assertIn("missing asset `missing.png`", home["warnings"])
+
+    def test_sitemap_index_includes_xml_redirects_and_seo_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            archive = BytesIO()
+            with ZipFile(archive, "w") as zip_file:
+                zip_file.writestr(
+                    "index.html",
+                    (
+                        "<title>Imported</title>"
+                        '<meta name="description" content="Primary page">'
+                        '<meta property="og:title" content="OG imported">'
+                        '<link rel="canonical" href="https://example.com/">'
+                    ),
+                )
+                zip_file.writestr(
+                    "sitemap.xml",
+                    """<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://example.com/missing</loc></url>
+</urlset>
+""",
+                )
+                zip_file.writestr("_redirects", "/old /new 302\n")
+            encoded = base64.b64encode(archive.getvalue()).decode("ascii")
+
+            status, imported = handle_action(data_root, {"action": "import_zip", "display_name": "Indexed", "archive_base64": encoded})
+            self.assertEqual(status, 201)
+            status, map_payload = handle_action(data_root, {"action": "sitemap", "site_id": imported["site"]["id"]})
+
+            self.assertEqual(status, 200)
+            routes = {item["route"]: item for item in map_payload["routes"]}
+            self.assertEqual(map_payload["items"][0]["seo"]["description"], "Primary page")
+            self.assertEqual(map_payload["items"][0]["seo"]["og_title"], "OG imported")
+            self.assertEqual(map_payload["items"][0]["seo"]["canonical"], "https://example.com/")
+            self.assertEqual(routes["/missing"]["kind"], "sitemap")
+            self.assertEqual(routes["/missing"]["status"], "unmatched")
+            self.assertEqual(routes["/old"]["kind"], "redirect")
+            self.assertIn("redirects to /new (302)", routes["/old"]["warnings"])
 
     def test_preview_html_is_sandbox_prepared(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -515,6 +654,14 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertNotIn('data-route="${page.route}"', widget_source)
         self.assertNotIn("list.innerHTML = filtered.map", widget_source)
         self.assertIn("document.createElement('button')", widget_source)
+
+    def test_frontend_resolves_storage_writer_dependency(self) -> None:
+        api_source = (APP_ROOT / "frontend" / "src" / "api.ts").read_text(encoding="utf-8")
+        app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
+
+        self.assertIn("/api/apps/dependencies", api_source)
+        self.assertIn("storage-writer", app_source)
+        self.assertNotIn("/api/apps/storage/backend", api_source)
 
 
 if __name__ == "__main__":

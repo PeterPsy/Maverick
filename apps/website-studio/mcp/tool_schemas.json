@@ -26,6 +26,41 @@
         "additionalProperties": false
       }
     },
+    "website_site_archive": {
+      "description": "Archive one Website Studio site without deleting its source or history.",
+      "input_schema": {"type": "object", "required": ["site_id"], "properties": {"site_id": {"type": "string"}}, "additionalProperties": false}
+    },
+    "website_site_restore": {
+      "description": "Restore one archived Website Studio site to draft status.",
+      "input_schema": {"type": "object", "required": ["site_id"], "properties": {"site_id": {"type": "string"}}, "additionalProperties": false}
+    },
+    "website_site_rename": {
+      "description": "Rename a Website Studio site and optionally update slug or primary domain.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id", "display_name"],
+        "properties": {
+          "site_id": {"type": "string"},
+          "display_name": {"type": "string"},
+          "slug": {"type": "string"},
+          "primary_domain": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "website_site_duplicate": {
+      "description": "Duplicate one Website Studio site's current source tree into a new draft site.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id"],
+        "properties": {
+          "site_id": {"type": "string"},
+          "display_name": {"type": "string"},
+          "slug": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
     "website_import_git": {
       "description": "Import a public GitHub HTTPS repository or app-local Git repository into a new or existing site source tree.",
       "input_schema": {
@@ -123,33 +158,6 @@
         "type": "object",
         "required": ["site_id"],
         "properties": {"site_id": {"type": "string"}, "requested_by": {"type": "string"}},
-        "additionalProperties": false
-      }
-    },
-    "website_publish": {
-      "description": "Attempt to publish a request. Phase 1 remains blocked until approval ids can be verified.",
-      "input_schema": {
-        "type": "object",
-        "required": ["site_id"],
-        "properties": {
-          "site_id": {"type": "string"},
-          "publish_request_id": {"type": "string"},
-          "approval_id": {"type": "string"}
-        },
-        "additionalProperties": false
-      }
-    },
-    "website_rollback": {
-      "description": "Restore a selected site from a previous revision snapshot.",
-      "input_schema": {
-        "type": "object",
-        "required": ["site_id", "revision_id", "approval_id", "confirm"],
-        "properties": {
-          "site_id": {"type": "string"},
-          "revision_id": {"type": "string"},
-          "approval_id": {"type": "string"},
-          "confirm": {"type": "boolean", "const": true}
-        },
         "additionalProperties": false
       }
     },

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { callBackend, callStorage, type Page, type Site, type StorageFile } from './api';
+import { callBackend, callStorageProvider, type Page, type Site, type StorageFile } from './api';
 
 type Notice = { tone: 'ok' | 'warn' | 'error'; text: string } | null;
 
@@ -190,7 +190,7 @@ export function App() {
 
 async function writeZipToStorage(file: File, contentBase64: string): Promise<{ file?: StorageFile }> {
   const safeName = file.name.replace(/[^A-Za-z0-9_.-]+/g, '-').replace(/^-+|-+$/g, '') || 'website.zip';
-  return callStorage<{ file?: StorageFile }>({
+  return callStorageProvider<{ file?: StorageFile }>('storage-writer', {
     action: 'file.content.write',
     workspace_relative_path: `storage/uploaded/website-studio/${Date.now()}-${safeName}`,
     mode: 'create',

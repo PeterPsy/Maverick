@@ -197,6 +197,8 @@ def validate_source_tree_for_phase1(source_root: Path) -> None:
             expanded_bytes += size_bytes
             if expanded_bytes > MAX_SOURCE_TREE_BYTES:
                 raise ValueError("source tree expanded size exceeds the Website Studio limit")
+            if _is_filesystem_executable(path):
+                raise ValueError(f"source contains unsupported executable file `{rel_path}`")
             _validate_source_member(path.name, size_bytes, rel_path)
 
 
@@ -353,6 +355,10 @@ def _is_zip_symlink(info: zipfile.ZipInfo) -> bool:
 def _is_zip_executable(info: zipfile.ZipInfo) -> bool:
     mode = info.external_attr >> 16
     return bool(mode & 0o111)
+
+
+def _is_filesystem_executable(path: Path) -> bool:
+    return bool(path.stat().st_mode & 0o111)
 
 
 def _validate_source_member(name: str, size_bytes: int, rel_path: str) -> None:

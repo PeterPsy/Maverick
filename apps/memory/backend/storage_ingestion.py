@@ -19,6 +19,7 @@ from database import (
     transaction,
 )
 from errors import MemoryValidationError
+from ingest_jobs import enqueue_job_in_db
 from lint import mark_wiki_stale
 from nodes import get_node_with_details, inspect_node
 from references import validate_storage_ref
@@ -89,6 +90,20 @@ def ingest_storage_source(data_root: Path, body: dict[str, Any]) -> dict[str, An
                 "compile_after_ingest": request["compile_after_ingest"],
             },
         )
+        if request["compile_after_ingest"]:
+            enqueue_job_in_db(
+                db,
+                job_type="lint_node",
+                dedupe_key=f"lint:{target_node_id}",
+                payload={"node_id": target_node_id, "reason": "storage_source_ingested"},
+            )
+        else:
+            enqueue_job_in_db(
+                db,
+                job_type="compile_node",
+                dedupe_key=f"compile:{target_node_id}",
+                payload={"node_id": target_node_id, "reason": "storage_source_ingested"},
+            )
         node = get_node_with_details(db, target_node_id, data_root=data_root)
 
     compiled = None

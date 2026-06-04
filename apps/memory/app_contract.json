@@ -69,6 +69,7 @@
       "memory_link_nodes",
       "memory_unlink_nodes",
       "memory_attach_file",
+      "memory_ingest_source",
       "memory_ingest_storage_source",
       "memory_apply_storage_staleness",
       "memory_attach_app_entity",
@@ -76,6 +77,10 @@
       "memory_compile",
       "memory_lint",
       "memory_wiki_query",
+      "memory_source_query",
+      "memory_fetch_chunks",
+      "memory_inspect_source",
+      "memory_jobs",
       "memory_audit",
       "memory_view_filter",
       "memory_set_view_filter",
@@ -203,10 +208,11 @@
   },
   "storage": {
     "storage_kind": "sqlite+files",
-    "data_schema_version": "2",
+    "data_schema_version": "3",
     "primary_paths": [
       "data/memory/memory.sqlite",
       "data/memory/artifacts",
+      "data/memory/content",
       "data/memory/view_state.json"
     ],
     "indices": {

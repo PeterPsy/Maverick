@@ -122,6 +122,42 @@ SCHEMA_STATEMENTS: tuple[str, ...] = (
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS ingest_jobs (
+      id TEXT PRIMARY KEY,
+      job_type TEXT NOT NULL,
+      dedupe_key TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'ready',
+      attempt_count INTEGER NOT NULL DEFAULT 0,
+      max_attempts INTEGER NOT NULL DEFAULT 3,
+      available_at TEXT NOT NULL,
+      locked_until TEXT,
+      lease_token TEXT NOT NULL DEFAULT '',
+      last_error TEXT NOT NULL DEFAULT '',
+      payload_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS source_documents (
+      id TEXT PRIMARY KEY,
+      source_key TEXT NOT NULL,
+      adapter_id TEXT NOT NULL DEFAULT '',
+      source_kind TEXT NOT NULL DEFAULT '',
+      owning_app_id TEXT NOT NULL DEFAULT '',
+      entity_type TEXT NOT NULL DEFAULT '',
+      entity_id TEXT NOT NULL DEFAULT '',
+      file_id TEXT NOT NULL DEFAULT '',
+      workspace_relative_path TEXT NOT NULL DEFAULT '',
+      uri TEXT NOT NULL DEFAULT '',
+      title TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      metadata_json TEXT NOT NULL DEFAULT '{}'
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS sources (
       id TEXT PRIMARY KEY,
       source_kind TEXT NOT NULL,
@@ -145,13 +181,39 @@ SCHEMA_STATEMENTS: tuple[str, ...] = (
     CREATE TABLE IF NOT EXISTS source_versions (
       id TEXT PRIMARY KEY,
       source_id TEXT NOT NULL,
+      source_document_id TEXT,
       version_hash TEXT NOT NULL,
       extracted_text TEXT NOT NULL DEFAULT '',
       extracted_ref TEXT NOT NULL DEFAULT '',
+      body_path TEXT NOT NULL DEFAULT '',
+      body_sha256 TEXT NOT NULL DEFAULT '',
+      body_bytes INTEGER NOT NULL DEFAULT 0,
+      hash_kind TEXT NOT NULL DEFAULT '',
+      extraction_status TEXT NOT NULL DEFAULT '',
+      source_modified_at TEXT,
+      content_type TEXT NOT NULL DEFAULT '',
       observed_at TEXT NOT NULL,
       created_at TEXT NOT NULL,
       metadata_json TEXT NOT NULL DEFAULT '{}',
-      FOREIGN KEY(source_id) REFERENCES sources(id)
+      FOREIGN KEY(source_id) REFERENCES sources(id),
+      FOREIGN KEY(source_document_id) REFERENCES source_documents(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS source_chunks (
+      id TEXT PRIMARY KEY,
+      source_version_id TEXT NOT NULL,
+      chunk_index INTEGER NOT NULL,
+      body_path TEXT NOT NULL DEFAULT '',
+      body_sha256 TEXT NOT NULL DEFAULT '',
+      token_count INTEGER NOT NULL DEFAULT 0,
+      char_start INTEGER NOT NULL DEFAULT 0,
+      char_end INTEGER NOT NULL DEFAULT 0,
+      locator TEXT NOT NULL DEFAULT '',
+      locator_kind TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      metadata_json TEXT NOT NULL DEFAULT '{}',
+      FOREIGN KEY(source_version_id) REFERENCES source_versions(id)
     )
     """,
     """
@@ -222,14 +284,20 @@ SCHEMA_STATEMENTS: tuple[str, ...] = (
       claim_id TEXT NOT NULL,
       source_id TEXT,
       source_version_id TEXT,
+      source_chunk_id TEXT,
       external_ref_id TEXT,
       locator TEXT NOT NULL DEFAULT '',
+      locator_kind TEXT NOT NULL DEFAULT '',
+      char_start INTEGER,
+      char_end INTEGER,
+      quote_sha256 TEXT NOT NULL DEFAULT '',
       quote TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL,
       metadata_json TEXT NOT NULL DEFAULT '{}',
       FOREIGN KEY(claim_id) REFERENCES claims(id),
       FOREIGN KEY(source_id) REFERENCES sources(id),
       FOREIGN KEY(source_version_id) REFERENCES source_versions(id),
+      FOREIGN KEY(source_chunk_id) REFERENCES source_chunks(id),
       FOREIGN KEY(external_ref_id) REFERENCES external_refs(id)
     )
     """,
@@ -268,9 +336,16 @@ SCHEMA_STATEMENTS: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_edges_kind ON edges(kind, status)",
     "CREATE INDEX IF NOT EXISTS idx_external_refs_app_entity ON external_refs(owning_app_id, entity_type, entity_id)",
     "CREATE INDEX IF NOT EXISTS idx_external_refs_file ON external_refs(file_id, workspace_relative_path)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_source_documents_key ON source_documents(source_key)",
+    "CREATE INDEX IF NOT EXISTS idx_source_documents_file ON source_documents(file_id, workspace_relative_path)",
+    "CREATE INDEX IF NOT EXISTS idx_source_documents_app_entity ON source_documents(owning_app_id, entity_type, entity_id)",
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_sources_external_ref ON sources(external_ref_id)",
     "CREATE INDEX IF NOT EXISTS idx_sources_file ON sources(file_id, workspace_relative_path)",
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_source_versions_hash ON source_versions(source_id, version_hash)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_source_chunks_version_index ON source_chunks(source_version_id, chunk_index)",
+    "CREATE INDEX IF NOT EXISTS idx_source_chunks_hash ON source_chunks(body_sha256)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_ingest_jobs_ready_dedupe ON ingest_jobs(dedupe_key) WHERE status IN ('ready', 'running') AND dedupe_key != ''",
+    "CREATE INDEX IF NOT EXISTS idx_ingest_jobs_status_available ON ingest_jobs(status, available_at)",
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_node_source_links_source ON node_source_links(node_id, source_id)",
     "CREATE INDEX IF NOT EXISTS idx_compile_runs_node ON compile_runs(node_id, started_at)",
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_wiki_pages_node ON wiki_pages(node_id)",

@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from hashlib import sha256
 from pathlib import Path
 import sqlite3
 from typing import Any
 
+from citation_matching import citation_quote
+from content_store import read_body
 from database import ensure_schema, json_text, new_id, now_timestamp, row_payload, transaction
 from errors import MemoryValidationError
 from lint import refresh_node_lint
@@ -24,9 +27,23 @@ def compile_node(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
         refs = _external_refs(db, node_id)
         relationships = _relationships(db, node_id)
         timestamp = now_timestamp()
-        input_hash = compile_input_hash(node, refs, relationships, data_root=data_root)
-        run = _create_compile_run(db, node_id=node_id, input_hash=input_hash, timestamp=timestamp)
         sources = sync_sources(db, data_root=data_root, node_id=node_id, refs=refs, timestamp=timestamp)
+        sources = merged_source_candidates(db, node_id=node_id, synced_sources=sources)
+        input_hash = compile_source_aware_input_hash(
+            node,
+            refs,
+            relationships,
+            sources=sources,
+            data_root=data_root,
+        )
+        provenance = compile_source_provenance(db, sources)
+        run = _create_compile_run(
+            db,
+            node_id=node_id,
+            input_hash=input_hash,
+            timestamp=timestamp,
+            metadata={"mode": "node_snapshot", **provenance},
+        )
         page = _upsert_wiki_page(
             db,
             node=node,
@@ -35,11 +52,8 @@ def compile_node(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
             compile_run_id=run["id"],
             timestamp=timestamp,
         )
-        _replace_claims(db, page_id=page["id"], node=node, sources=sources, timestamp=timestamp)
-        db.execute(
-            "UPDATE compile_runs SET status = 'completed', completed_at = ? WHERE id = ?",
-            (timestamp, run["id"]),
-        )
+        _replace_claims(db, data_root=data_root, page_id=page["id"], node=node, sources=sources, timestamp=timestamp)
+        _complete_compile_run(db, run_id=run["id"], page_id=page["id"], timestamp=timestamp, provenance=provenance)
         refresh_node_lint(db, node_id, data_root=data_root)
         return {
             "compile_run": row_payload(db.execute("SELECT * FROM compile_runs WHERE id = ?", (run["id"],)).fetchone()),
@@ -75,7 +89,14 @@ def _relationships(db: sqlite3.Connection, node_id: str) -> list[sqlite3.Row]:
     )
 
 
-def _create_compile_run(db: sqlite3.Connection, *, node_id: str, input_hash: str, timestamp: str) -> dict[str, Any]:
+def _create_compile_run(
+    db: sqlite3.Connection,
+    *,
+    node_id: str,
+    input_hash: str,
+    timestamp: str,
+    metadata: dict[str, Any],
+) -> dict[str, Any]:
     run = {
         "id": new_id("run"),
         "node_id": node_id,
@@ -83,7 +104,7 @@ def _create_compile_run(db: sqlite3.Connection, *, node_id: str, input_hash: str
         "compiler": "deterministic",
         "input_hash": input_hash,
         "started_at": timestamp,
-        "metadata_json": json_text({"mode": "node_snapshot"}),
+        "metadata_json": json_text(metadata),
     }
     db.execute(
         """
@@ -93,6 +114,37 @@ def _create_compile_run(db: sqlite3.Connection, *, node_id: str, input_hash: str
         run,
     )
     return run
+
+
+def _complete_compile_run(
+    db: sqlite3.Connection,
+    *,
+    run_id: str,
+    page_id: str,
+    timestamp: str,
+    provenance: dict[str, Any],
+) -> None:
+    rows = list(
+        db.execute(
+            """
+            SELECT source_version_id, source_chunk_id
+            FROM citations
+            WHERE claim_id IN (SELECT id FROM claims WHERE wiki_page_id = ?)
+            """,
+            (page_id,),
+        )
+    )
+    metadata = {
+        "mode": "node_snapshot",
+        **provenance,
+        "citation_count": len(rows),
+        "cited_source_version_ids": sorted({row["source_version_id"] for row in rows if row["source_version_id"]}),
+        "cited_source_chunk_ids": sorted({row["source_chunk_id"] for row in rows if row["source_chunk_id"]}),
+    }
+    db.execute(
+        "UPDATE compile_runs SET status = 'completed', completed_at = ?, metadata_json = ? WHERE id = ?",
+        (timestamp, json_text(metadata), run_id),
+    )
 
 
 def _upsert_wiki_page(
@@ -147,6 +199,7 @@ def _upsert_wiki_page(
 def _replace_claims(
     db: sqlite3.Connection,
     *,
+    data_root: Path,
     page_id: str,
     node: sqlite3.Row,
     sources: list[dict[str, Any]],
@@ -176,26 +229,34 @@ def _replace_claims(
             """,
             claim,
         )
-        claim_sources = citation_sources(db, sources)
-        for source, version in claim_sources:
-            quote = citation_quote(claim_text, str(version["extracted_text"] or ""))
+        for source, version, chunk, chunk_body in citation_sources(db, sources, data_root=data_root):
+            quote = citation_quote(claim_text, chunk_body)
+            if not quote:
+                continue
+            char_start, char_end = quote_range(chunk_body, quote)
             metadata = dict(source.get("metadata") or {})
             version_metadata = dict(version.get("metadata") or {})
             metadata["source_version"] = version_metadata.get("source_version") or metadata.get("source_version") or version["version_hash"]
             db.execute(
                 """
                 INSERT INTO citations(
-                  id, claim_id, source_id, source_version_id, external_ref_id, locator, quote, created_at, metadata_json
+                  id, claim_id, source_id, source_version_id, source_chunk_id, external_ref_id,
+                  locator, locator_kind, char_start, char_end, quote_sha256, quote, created_at, metadata_json
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     new_id("cite"),
                     claim["id"],
                     source["id"],
                     version["id"],
+                    chunk["id"],
                     source.get("external_ref_id"),
-                    citation_locator(source, version),
+                    citation_locator(source, version, chunk),
+                    chunk.get("locator_kind") or "preview_text",
+                    char_start,
+                    char_end,
+                    sha256(quote.encode("utf-8")).hexdigest(),
                     quote,
                     timestamp,
                     json_text(metadata),
@@ -203,8 +264,13 @@ def _replace_claims(
             )
 
 
-def citation_sources(db: sqlite3.Connection, sources: list[dict[str, Any]]) -> list[tuple[dict[str, Any], dict[str, Any]]]:
-    claim_sources: list[tuple[dict[str, Any], dict[str, Any]]] = []
+def citation_sources(
+    db: sqlite3.Connection,
+    sources: list[dict[str, Any]],
+    *,
+    data_root: Path,
+) -> list[tuple[dict[str, Any], dict[str, Any], dict[str, Any], str]]:
+    claim_sources: list[tuple[dict[str, Any], dict[str, Any], dict[str, Any], str]] = []
     for source in sources:
         version_id = str(source.get("source_version_id") or "")
         if not version_id:
@@ -213,14 +279,138 @@ def citation_sources(db: sqlite3.Connection, sources: list[dict[str, Any]]) -> l
         version = row_payload(version_row) or {}
         if not str(version.get("extracted_text") or "").strip():
             continue
-        claim_sources.append((source, version))
+        chunk_rows = db.execute(
+            "SELECT * FROM source_chunks WHERE source_version_id = ? ORDER BY chunk_index",
+            (version_id,),
+        )
+        for chunk_row in chunk_rows:
+            chunk = row_payload(chunk_row) or {}
+            if not chunk:
+                continue
+            chunk_body = read_body(data_root, relative_path=str(chunk.get("body_path") or ""), expected_sha256=str(chunk.get("body_sha256") or ""))
+            if not chunk_body.strip():
+                continue
+            claim_sources.append((source, version, chunk, chunk_body))
     return claim_sources
 
 
-def citation_locator(source: dict[str, Any], version: dict[str, Any]) -> str:
+def merged_source_candidates(
+    db: sqlite3.Connection,
+    *,
+    node_id: str,
+    synced_sources: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    sources_by_id = {str(source.get("id") or ""): dict(source) for source in synced_sources if source.get("id")}
+    for row in db.execute(
+        """
+        SELECT s.*
+        FROM node_source_links nsl
+        JOIN sources s ON s.id = nsl.source_id
+        WHERE nsl.node_id = ? AND s.status = 'active'
+        ORDER BY s.updated_at DESC
+        """,
+        (node_id,),
+    ):
+        source = row_payload(row) or {}
+        if not source:
+            continue
+        existing = sources_by_id.get(source["id"], source)
+        if not existing.get("source_version_id"):
+            version = latest_source_version(db, source["id"])
+            if version:
+                existing["source_version_id"] = version["id"]
+        sources_by_id[source["id"]] = existing
+    return list(sources_by_id.values())
+
+
+def latest_source_version(db: sqlite3.Connection, source_id: str) -> dict[str, Any] | None:
+    return row_payload(
+        db.execute(
+            """
+            SELECT *
+            FROM source_versions
+            WHERE source_id = ?
+            ORDER BY observed_at DESC, created_at DESC
+            LIMIT 1
+            """,
+            (source_id,),
+        ).fetchone()
+    )
+
+
+def compile_source_provenance(db: sqlite3.Connection, sources: list[dict[str, Any]]) -> dict[str, Any]:
+    source_items = []
+    source_version_ids: set[str] = set()
+    source_chunk_ids: set[str] = set()
+    for source in sources:
+        version_id = str(source.get("source_version_id") or "")
+        if not version_id:
+            continue
+        version = row_payload(db.execute("SELECT * FROM source_versions WHERE id = ?", (version_id,)).fetchone()) or {}
+        if not version:
+            continue
+        chunks = [
+            row_payload(row) or {}
+            for row in db.execute(
+                """
+                SELECT id, body_sha256, locator, locator_kind
+                FROM source_chunks
+                WHERE source_version_id = ?
+                ORDER BY chunk_index
+                """,
+                (version_id,),
+            )
+        ]
+        chunk_ids = [chunk["id"] for chunk in chunks if chunk.get("id")]
+        source_version_ids.add(version_id)
+        source_chunk_ids.update(chunk_ids)
+        source_items.append(
+            {
+                "source_id": source["id"],
+                "source_document_id": version.get("source_document_id") or "",
+                "source_version_id": version_id,
+                "version_hash": version.get("version_hash") or "",
+                "hash_kind": version.get("hash_kind") or "",
+                "extraction_status": version.get("extraction_status") or "",
+                "source_chunk_ids": chunk_ids,
+            }
+        )
+    return {
+        "source_version_ids": sorted(source_version_ids),
+        "source_chunk_ids": sorted(source_chunk_ids),
+        "sources": source_items,
+    }
+
+
+def compile_source_aware_input_hash(
+    node: sqlite3.Row,
+    refs: list[sqlite3.Row],
+    relationships: list[sqlite3.Row],
+    *,
+    sources: list[dict[str, Any]],
+    data_root: Path,
+) -> str:
+    base_hash = compile_input_hash(node, refs, relationships, data_root=data_root)
+    source_parts = [
+        "\t".join(
+            str(part or "")
+            for part in (
+                source.get("id"),
+                source.get("source_version_id"),
+                source.get("content_hash"),
+                source.get("updated_at"),
+            )
+        )
+        for source in sorted(sources, key=lambda item: str(item.get("id") or ""))
+    ]
+    return sha256("\n".join([base_hash, *source_parts]).encode("utf-8")).hexdigest()
+
+
+def citation_locator(source: dict[str, Any], version: dict[str, Any], chunk: dict[str, Any] | None = None) -> str:
     metadata = dict(source.get("metadata") or {})
     return str(
-        metadata.get("display_path")
+        (chunk or {}).get("locator")
+        or metadata.get("display_path")
         or version.get("extracted_ref")
         or source.get("workspace_relative_path")
         or source.get("entity_id")
@@ -229,10 +419,14 @@ def citation_locator(source: dict[str, Any], version: dict[str, Any]) -> str:
     )
 
 
-def citation_quote(claim_text: str, extracted_text: str) -> str:
-    normalized_claim = " ".join(claim_text.split()).lower()
-    for sentence in extracted_text.replace("\n", " ").split("."):
-        candidate = " ".join(sentence.split()).strip()
-        if candidate and (candidate.lower() in normalized_claim or normalized_claim in candidate.lower()):
-            return candidate[:500]
-    return " ".join(extracted_text.split())[:500]
+def quote_range(body: str, quote: str) -> tuple[int, int]:
+    if not quote:
+        return (0, 0)
+    start = body.find(quote)
+    if start == -1:
+        collapsed_body = " ".join(body.split())
+        collapsed_start = collapsed_body.find(quote)
+        if collapsed_start == -1:
+            return (0, min(len(body), len(quote)))
+        return (collapsed_start, collapsed_start + len(quote))
+    return (start, start + len(quote))

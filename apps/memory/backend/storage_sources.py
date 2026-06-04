@@ -168,6 +168,7 @@ def remote_storage_snapshot(
                 or ""
             )
             display_path = str(file_payload.get("display_path") or display_path or "")
+    hash_kind = "remote_storage_preview" if preview_text else "reference_snapshot"
     return {
         "hash": sha256(
             json.dumps(
@@ -183,7 +184,7 @@ def remote_storage_snapshot(
                 ensure_ascii=False,
             ).encode("utf-8")
         ).hexdigest(),
-        "hash_kind": "remote_storage_preview" if include_preview else "remote_storage_reference",
+        "hash_kind": hash_kind,
         "extracted_text": preview_text,
         "extracted_ref": display_path or str(ref["entity_id"] or ref["file_id"] or ""),
         "metadata": {

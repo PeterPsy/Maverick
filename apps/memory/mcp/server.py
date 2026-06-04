@@ -32,7 +32,8 @@ except MemoryValidationError as error:
 except sqlite3.Error as error:
     status_code, result = storage_error_response(error, app_id=app_id, action=action)
 
+event_action = result.pop("_event_action", action) if isinstance(result, dict) else action
 response = {"status_code": status_code, **result}
 if status_code < 400:
-    response["app_events"] = app_events_for_action(action)
+    response["app_events"] = app_events_for_action(event_action)
 print(json.dumps(response, ensure_ascii=False))

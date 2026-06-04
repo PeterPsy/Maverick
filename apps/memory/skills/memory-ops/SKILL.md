@@ -1,11 +1,13 @@
 ---
 name: memory-ops
-description: "Use the Memory app to retrieve workspace context, save durable business facts, and link nodes to files or app entities."
+description: "Use the Memory app to retrieve workspace context, save durable business facts, delete Memory nodes, and link nodes to files or app entities."
 ---
 
 # Memory Ops
 
 Use this skill when a user asks a workspace-specific question, asks about prior work, mentions business facts worth retaining, or asks about files, people, projects, decisions, or status.
+
+Keep user-facing progress updates short and operational. Prefer statements like "I am finding the exact Memory item before deleting it" over implementation details such as missing skill sections or internal source-code inspection.
 
 ## Retrieval First
 
@@ -18,6 +20,31 @@ maverick app memory cli run memory --action context --query "<user question>" --
 Use returned provenance to mention files or app entities only when they are relevant.
 
 When a result includes `storage_references`, use those Storage references for preview, export, or reference resolution. Memory stores knowledge and citations; Storage remains the file gateway.
+
+For direct node lookup, inspection, or verification, use the Memory CLI instead of reading app data files:
+
+```bash
+maverick app memory cli run memory --action inspect --node-id <node_id>
+```
+
+For source-level evidence, use Memory source primitives instead of reading `data/memory/` files:
+
+```bash
+maverick app memory mcp call memory_source_query --json --query "<source text or title>" --limit 10
+maverick app memory mcp call memory_fetch_chunks --json --chunk-ids '["sch_..."]'
+maverick app memory mcp call memory_inspect_source --json --source-document-id <source_document_id>
+```
+
+`memory_fetch_chunks` hydrates at most 20 chunks and verifies the content-store SHA before returning body text.
+
+When Memory returns queued ingest or compile work, inspect the app-owned job queue through Memory rather than editing SQLite:
+
+```bash
+maverick app memory cli run memory --action jobs_list --status ready --limit 20
+maverick app memory mcp call memory_jobs --json --operation claim --job-types '["compile_node"]'
+```
+
+Storage staleness can enqueue `requires_storage_reindex` jobs. Treat those jobs as action-required markers: run Storage `drive_index`, pass the returned Memory source to `memory_ingest_storage_source`, and then acknowledge Storage indexing after Memory succeeds.
 
 ## Memory Views
 
@@ -45,6 +72,22 @@ maverick app memory cli run memory --action remember --title "<short title>" --b
 
 Prefer updating or linking existing nodes over creating duplicates.
 
+For generated notes, imports, or other agent-owned Markdown evidence that is not a Storage or app-entity source, ingest it as an `inline_markdown` source so Memory stores a verifiable source version and chunk:
+
+```bash
+maverick app memory mcp call memory_ingest_source --json --adapter-id inline_markdown --source-key "<stable key>" --title "<source title>" --body-markdown "<markdown body>" --compile-after-ingest true
+```
+
+Use a stable `source_key` when the same generated source may be updated later. Re-ingesting identical content should not create duplicate source versions; changed content creates a new version and marks compiled Memory evidence stale.
+
+For local workspace Storage text or Markdown files, ingest through `storage_file` instead of reading Memory's database or content store directly:
+
+```bash
+maverick app memory mcp call memory_ingest_source --json --adapter-id storage_file --file-id <stable_file_id> --workspace-relative-path storage/generated/example.md --title "<source title>" --compile-after-ingest true
+```
+
+Memory accepts only UTF-8 text-like files under `storage/uploaded/` or `storage/generated/`. Memory resolves local file metadata, previewability, and bounded content through Storage-owned `file_info`, `preview_text`, and `read_file` surfaces; Storage remains the owner of file identity and file operations.
+
 ## Ingesting Drive Sources
 
 For Google Drive, Memory consumes only Storage references. Do not pass Google tokens, Drive bytes, or `workspace_relative_path` for remote files.
@@ -66,6 +109,31 @@ maverick app memory mcp call memory_apply_storage_staleness --json --memory-stal
 ```
 
 The returned re-index suggestion points back to Storage `storage_drive_index`; Memory never scans Drive itself.
+
+## Deleting Memory Items
+
+When the user asks to remove a Memory item, first identify the exact active node. Use a narrow query based on the user's title, file name, person, project, or other clue:
+
+```bash
+maverick app memory cli run memory --action context --query "<target title or clue>" --limit 8
+```
+
+If there is exactly one clear match, soft-delete that Memory node with a reason:
+
+```bash
+maverick app memory cli run memory --action delete_node --node-id <node_id> --reason "<why it was removed>"
+```
+
+Then verify both that the node is deleted and that it no longer appears as active context:
+
+```bash
+maverick app memory cli run memory --action inspect --node-id <node_id>
+maverick app memory cli run memory --action context --query "<target title or clue>" --limit 3
+```
+
+Deletion is a Memory soft delete: the node is marked `deleted`, active edges are removed, and the item is removed from Memory full-text retrieval. It does not delete the original file, email, CRM record, Drive document, or other external source referenced by the node.
+
+If multiple plausible nodes match, ask the user to choose before deleting. If the user asks to delete the original linked source as well, switch to the owning app's official surface, such as Storage for files, and confirm destructive external deletion when needed.
 
 ## Linking Evidence
 

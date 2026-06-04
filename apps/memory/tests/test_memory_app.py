@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from contextlib import redirect_stdout
+from base64 import b64encode
+from hashlib import sha256
 from io import StringIO
 import json
 import os
 from pathlib import Path
 import shutil
+import sqlite3
 import sys
 import tempfile
 import unittest
@@ -139,13 +142,19 @@ class MemoryAppTestCase(unittest.TestCase):
         self.assertIn("memory_compile", parsed.contract.capabilities.mcp_tools)
         self.assertIn("memory_lint", parsed.contract.capabilities.mcp_tools)
         self.assertIn("memory_wiki_query", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("memory_ingest_source", parsed.contract.capabilities.mcp_tools)
         self.assertIn("memory_ingest_storage_source", parsed.contract.capabilities.mcp_tools)
         self.assertIn("memory_apply_storage_staleness", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("memory_source_query", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("memory_fetch_chunks", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("memory_inspect_source", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("memory_jobs", parsed.contract.capabilities.mcp_tools)
         self.assertIn("memory_reference_manifest", parsed.contract.capabilities.mcp_tools)
         self.assertIn("memory_set_view_filter", parsed.contract.capabilities.mcp_tools)
         self.assertEqual(parsed.contract.capabilities.cli_commands, ["memory"])
         self.assertEqual(parsed.contract.storage.storage_kind, "sqlite+files")
-        self.assertEqual(parsed.contract.storage.data_schema_version, "2")
+        self.assertEqual(parsed.contract.storage.data_schema_version, "3")
+        self.assertIn("data/memory/content", parsed.contract.storage.primary_paths)
         self.assertEqual(parsed.contract.capabilities.reference_entities[0].entity_type, "node")
         view_surface = parsed.contract.capabilities.view_surfaces[0]
         self.assertEqual(view_surface.view_id, "memory")
@@ -202,6 +211,14 @@ class MemoryAppTestCase(unittest.TestCase):
         staleness_schema = mcp_descriptor["tools"]["memory_apply_storage_staleness"]["input_schema"]
         self.assertIn("memory_staleness", staleness_schema["properties"])
         self.assertIn("entity_id", staleness_schema["properties"])
+        jobs_schema = mcp_descriptor["tools"]["memory_jobs"]["input_schema"]
+        self.assertEqual(jobs_schema["properties"]["operation"]["enum"], ["list", "enqueue", "claim", "complete", "fail", "cancel", "run_next"])
+        self.assertIn("lease_token", jobs_schema["properties"])
+        self.assertIn("requires_storage_reindex", jobs_schema["properties"]["job_type"]["enum"])
+        self.assertEqual(
+            mcp_descriptor["tools"]["memory_ingest_source"]["input_schema"]["properties"]["adapter_id"]["enum"],
+            ["inline_markdown", "storage_file"],
+        )
 
     def test_memory_skill_documents_drive_ingest_workflow(self) -> None:
         skill = (MEMORY_ROOT / "skills" / "memory-ops" / "SKILL.md").read_text(encoding="utf-8")
@@ -224,8 +241,266 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual(second["status"], "ok")
             self.assertTrue((data_root / "memory.sqlite").is_file())
             self.assertTrue((data_root / "artifacts" / "extracted").is_dir())
+            self.assertTrue((data_root / "content").is_dir())
             health = run_json_entrypoint(MEMORY_ROOT / "hooks" / "health_check.py", payload=payload, cwd=MEMORY_ROOT)
-            self.assertEqual(health["schema_version"], "2")
+            self.assertEqual(health["schema_version"], "3")
+
+    def test_schema_v2_database_migrates_to_v3_source_chunk_foundation(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            data_root.mkdir(parents=True, exist_ok=True)
+            db_file = data_root / "memory.sqlite"
+            with sqlite3.connect(db_file) as db:
+                db.execute("CREATE TABLE schema_metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+                db.execute("INSERT INTO schema_metadata(key, value) VALUES ('schema_version', '2')")
+                db.execute(
+                    """
+                    CREATE TABLE source_versions (
+                      id TEXT PRIMARY KEY,
+                      source_id TEXT NOT NULL,
+                      version_hash TEXT NOT NULL,
+                      extracted_text TEXT NOT NULL DEFAULT '',
+                      extracted_ref TEXT NOT NULL DEFAULT '',
+                      observed_at TEXT NOT NULL,
+                      created_at TEXT NOT NULL,
+                      metadata_json TEXT NOT NULL DEFAULT '{}'
+                    )
+                    """
+                )
+                db.execute(
+                    """
+                    INSERT INTO source_versions(id, source_id, version_hash, observed_at, created_at)
+                    VALUES ('srcv_old', 'src_old', 'hash-old', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
+                    """
+                )
+                db.execute(
+                    """
+                    CREATE TABLE citations (
+                      id TEXT PRIMARY KEY,
+                      claim_id TEXT NOT NULL,
+                      source_id TEXT,
+                      source_version_id TEXT,
+                      external_ref_id TEXT,
+                      locator TEXT NOT NULL DEFAULT '',
+                      quote TEXT NOT NULL DEFAULT '',
+                      created_at TEXT NOT NULL,
+                      metadata_json TEXT NOT NULL DEFAULT '{}'
+                    )
+                    """
+                )
+                db.execute(
+                    """
+                    INSERT INTO citations(id, claim_id, source_version_id, locator, quote, created_at)
+                    VALUES ('cite_old', 'claim_old', 'srcv_old', 'old locator', 'old quote', '2026-01-01T00:00:00+00:00')
+                    """
+                )
+
+            migrated = run_json_entrypoint(MEMORY_ROOT / "hooks" / "migrate.py", payload={"data_root": str(data_root)}, cwd=MEMORY_ROOT)
+            database = self.import_backend_module("database")
+
+            with database.connect(data_root) as db:
+                schema_version = db.execute("SELECT value FROM schema_metadata WHERE key = 'schema_version'").fetchone()["value"]
+                source_version_columns = {row["name"] for row in db.execute("PRAGMA table_info(source_versions)")}
+                citation_columns = {row["name"] for row in db.execute("PRAGMA table_info(citations)")}
+                ingest_job_columns = {row["name"] for row in db.execute("PRAGMA table_info(ingest_jobs)")}
+                self.assertEqual(db.execute("SELECT COUNT(*) AS count FROM source_documents").fetchone()["count"], 0)
+                self.assertEqual(db.execute("SELECT COUNT(*) AS count FROM source_chunks").fetchone()["count"], 0)
+                self.assertEqual(db.execute("SELECT COUNT(*) AS count FROM ingest_jobs").fetchone()["count"], 0)
+                migrated_version = database.row_payload(db.execute("SELECT * FROM source_versions WHERE id = 'srcv_old'").fetchone()) or {}
+                migrated_citation = database.row_payload(db.execute("SELECT * FROM citations WHERE id = 'cite_old'").fetchone()) or {}
+
+            self.assertEqual(migrated["schema_version"], "3")
+            self.assertEqual(schema_version, "3")
+            self.assertIn("source_document_id", source_version_columns)
+            self.assertIn("body_path", source_version_columns)
+            self.assertIn("body_sha256", source_version_columns)
+            self.assertIn("hash_kind", source_version_columns)
+            self.assertIn("extraction_status", source_version_columns)
+            self.assertIn("source_chunk_id", citation_columns)
+            self.assertIn("quote_sha256", citation_columns)
+            self.assertIn("lease_token", ingest_job_columns)
+            self.assertEqual(migrated_version["version_hash"], "hash-old")
+            self.assertEqual(migrated_version["body_path"], "")
+            self.assertEqual(migrated_citation["locator"], "old locator")
+            self.assertEqual(migrated_citation["quote_sha256"], "")
+
+    def test_schema_current_shape_requires_v3_source_tables_and_indexes(self) -> None:
+        database = self.import_backend_module("database")
+
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            database.ensure_schema(data_root)
+            self.assertTrue(database.schema_is_current(data_root))
+
+            with database.connect(data_root) as db:
+                db.execute("DROP INDEX idx_source_chunks_hash")
+                db.commit()
+            self.assertFalse(database.schema_is_current(data_root))
+
+            database.ensure_schema(data_root)
+            self.assertTrue(database.schema_is_current(data_root))
+
+            with database.connect(data_root) as db:
+                db.execute("PRAGMA foreign_keys = OFF")
+                db.execute("DROP TABLE source_chunks")
+                db.commit()
+            self.assertFalse(database.schema_is_current(data_root))
+
+            database.ensure_schema(data_root)
+            with database.connect(data_root) as db:
+                source_chunk_columns = {row["name"] for row in db.execute("PRAGMA table_info(source_chunks)")}
+                source_chunk_indexes = {row["name"] for row in db.execute("PRAGMA index_list(source_chunks)")}
+
+            self.assertTrue(database.schema_is_current(data_root))
+            self.assertIn("source_version_id", source_chunk_columns)
+            self.assertIn("body_sha256", source_chunk_columns)
+            self.assertIn("idx_source_chunks_version_index", source_chunk_indexes)
+            self.assertIn("idx_source_chunks_hash", source_chunk_indexes)
+
+    def test_content_store_writes_relative_verified_immutable_bodies(self) -> None:
+        content_store = self.import_backend_module("content_store")
+
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            first = content_store.write_body(
+                data_root,
+                kind="sources",
+                body_markdown="Evidence body\r\nwith CRLF",
+                metadata={"source_version_id": "srcv_1"},
+            )
+            second = content_store.write_body(
+                data_root,
+                kind="sources",
+                body_markdown="Evidence body\nwith CRLF\n",
+                metadata={"ignored": "metadata is not authoritative"},
+            )
+
+            self.assertEqual(first, second)
+            self.assertFalse(Path(first.relative_path).is_absolute())
+            self.assertTrue(first.relative_path.startswith("content/sources/"))
+            self.assertEqual(first.body_sha256, content_store.body_hash("Evidence body\nwith CRLF\n"))
+            self.assertEqual(content_store.read_body(data_root, relative_path=first.relative_path), "Evidence body\nwith CRLF\n")
+            stored_text = (data_root / first.relative_path).read_text(encoding="utf-8")
+            self.assertTrue(stored_text.startswith("---\n"))
+            self.assertIn('"source_version_id": "srcv_1"', stored_text)
+
+    def test_content_store_rejects_unsafe_paths_and_hash_mismatch(self) -> None:
+        content_store = self.import_backend_module("content_store")
+
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            record = content_store.write_body(data_root, kind="chunks", body_markdown="Chunk evidence.")
+
+            with self.assertRaisesRegex(ValueError, "relative"):
+                content_store.read_body(data_root, relative_path=str((data_root / record.relative_path).resolve()))
+            with self.assertRaisesRegex(ValueError, "traversal"):
+                content_store.read_body(data_root, relative_path="content/chunks/aa/../../escape.md")
+
+            (data_root / record.relative_path).write_text("---\n{}\n---\nTampered evidence.\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "hash mismatch"):
+                content_store.read_body(data_root, relative_path=record.relative_path, expected_sha256=record.body_sha256)
+
+    def test_ingest_jobs_dedupe_claim_retry_and_complete_with_lease(self) -> None:
+        service = self.import_backend_module("service")
+
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            status, first = service.handle_action(
+                data_root,
+                {
+                    "action": "jobs_enqueue",
+                    "job_type": "compile_node",
+                    "dedupe_key": "compile:node_demo",
+                    "payload": {"node_id": "node_demo"},
+                },
+            )
+            second_status, second = service.handle_action(
+                data_root,
+                {
+                    "action": "jobs_enqueue",
+                    "job_type": "compile_node",
+                    "dedupe_key": "compile:node_demo",
+                    "payload": {"node_id": "node_demo", "reason": "updated"},
+                },
+            )
+            claim_status, claimed = service.handle_action(data_root, {"action": "jobs_claim", "job_types": ["compile_node"], "lease_seconds": 30})
+            job = claimed["job"]
+
+            self.assertEqual(status, 200)
+            self.assertEqual(second_status, 200)
+            self.assertTrue(first["job"]["enqueued"])
+            self.assertFalse(second["job"]["enqueued"])
+            self.assertEqual(first["job"]["id"], second["job"]["id"])
+            self.assertEqual(claim_status, 200)
+            self.assertEqual(job["status"], "running")
+            self.assertEqual(job["attempt_count"], 1)
+            self.assertTrue(job["lease_token"].startswith("lease_"))
+            with self.assertRaisesRegex(Exception, "running job lease"):
+                service.handle_action(data_root, {"action": "jobs_complete", "job_id": job["id"], "lease_token": "wrong"})
+
+            fail_status, failed = service.handle_action(
+                data_root,
+                {"action": "jobs_fail", "job_id": job["id"], "lease_token": job["lease_token"], "error": "preview unavailable"},
+            )
+            self.assertEqual(fail_status, 200)
+            self.assertEqual(failed["job"]["status"], "ready")
+            self.assertEqual(failed["job"]["last_error"], "preview unavailable")
+
+            service.handle_action(
+                data_root,
+                {
+                    "action": "jobs_enqueue",
+                    "job_type": "compile_node",
+                    "dedupe_key": "compile:node_demo",
+                    "payload": {"node_id": "node_demo"},
+                },
+            )
+            _claim_status, reclaimed = service.handle_action(data_root, {"action": "jobs_claim", "job_types": ["compile_node"], "lease_seconds": 30})
+            complete_status, completed = service.handle_action(
+                data_root,
+                {"action": "jobs_complete", "job_id": reclaimed["job"]["id"], "lease_token": reclaimed["job"]["lease_token"]},
+            )
+            list_status, listed = service.handle_action(data_root, {"action": "jobs_list", "status": "done"})
+
+            self.assertEqual(complete_status, 200)
+            self.assertEqual(completed["job"]["status"], "done")
+            self.assertEqual(completed["job"]["lease_token"], "")
+            self.assertEqual(list_status, 200)
+            self.assertEqual(listed["jobs"][0]["id"], completed["job"]["id"])
+
+    def test_ingest_jobs_run_next_executes_compile_job(self) -> None:
+        service = self.import_backend_module("service")
+
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            _node_status, node_payload = service.handle_action(
+                data_root,
+                {
+                    "action": "remember",
+                    "title": "Queued compile",
+                    "body": "Queued compile claim.",
+                    "type": "fact",
+                },
+            )
+            node = node_payload["node"]
+            service.handle_action(
+                data_root,
+                {
+                    "action": "jobs_enqueue",
+                    "job_type": "compile_node",
+                    "dedupe_key": f"compile:{node['id']}",
+                    "payload": {"node_id": node["id"]},
+                },
+            )
+
+            run_status, run = service.handle_action(data_root, {"action": "jobs_list", "operation": "run_next", "job_types": ["compile_node"]})
+            _inspect_status, inspected = service.handle_action(data_root, {"action": "inspect", "node_id": node["id"]})
+
+            self.assertEqual(run_status, 200)
+            self.assertTrue(run["ran"])
+            self.assertTrue(run["ok"])
+            self.assertEqual(run["job"]["status"], "done")
+            self.assertEqual(inspected["node"]["compiled_page"]["freshness"], "fresh")
 
     def test_sqlite_wal_cache_tracks_recreated_database_file(self) -> None:
         database = self.import_backend_module("database")
@@ -458,6 +733,384 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual({version["metadata"]["hash_kind"] for version in versions}, {"file_bytes"})
             self.assertTrue(all(not version["extracted_text"] for version in versions))
 
+    def test_ingest_source_inline_markdown_creates_verified_chunks_and_versions_idempotently(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            service = self.import_backend_module("service")
+            database = self.import_backend_module("database")
+
+            status, first = service.handle_action(
+                data_root,
+                {
+                    "action": "ingest_source",
+                    "adapter_id": "inline_markdown",
+                    "source_key": "notes:roadmap",
+                    "title": "Roadmap note",
+                    "body_markdown": "Roadmap says billing work is owned by Dana.",
+                    "compile_after_ingest": True,
+                },
+            )
+            second_status, second = service.handle_action(
+                data_root,
+                {
+                    "action": "ingest_source",
+                    "adapter_id": "inline_markdown",
+                    "source_key": "notes:roadmap",
+                    "title": "Roadmap note duplicate",
+                    "body_markdown": "Roadmap says billing work is owned by Dana.",
+                },
+            )
+            changed_status, changed = service.handle_action(
+                data_root,
+                {
+                    "action": "ingest_source",
+                    "adapter_id": "inline_markdown",
+                    "source_key": "notes:roadmap",
+                    "title": "Roadmap note changed",
+                    "body_markdown": "Roadmap says billing work is owned by Lee.",
+                },
+            )
+            source_query_status, source_query = service.handle_action(data_root, {"action": "source_query", "query": "Lee"})
+            stale_source_query_status, stale_source_query = service.handle_action(data_root, {"action": "source_query", "query": "Dana"})
+
+            with database.connect(data_root) as db:
+                document_count = db.execute("SELECT COUNT(*) AS count FROM source_documents").fetchone()["count"]
+                source_count = db.execute("SELECT COUNT(*) AS count FROM sources").fetchone()["count"]
+                versions = [database.row_payload(row) or {} for row in db.execute("SELECT * FROM source_versions ORDER BY created_at")]
+                chunks = [database.row_payload(row) or {} for row in db.execute("SELECT * FROM source_chunks ORDER BY created_at")]
+                link_count = db.execute("SELECT COUNT(*) AS count FROM node_source_links").fetchone()["count"]
+
+            fetch_status, fetched = service.handle_action(data_root, {"action": "fetch_chunks", "chunk_ids": [chunks[-1]["id"]]})
+
+            self.assertEqual(status, 200)
+            self.assertEqual(second_status, 200)
+            self.assertEqual(changed_status, 200)
+            self.assertTrue(first["document_created"])
+            self.assertTrue(first["source_version_created"])
+            self.assertFalse(second["document_created"])
+            self.assertFalse(second["source_version_created"])
+            self.assertFalse(changed["document_created"])
+            self.assertTrue(changed["source_version_created"])
+            self.assertEqual(second["node"]["id"], first["node"]["id"])
+            self.assertEqual(changed["node"]["id"], first["node"]["id"])
+            self.assertEqual(document_count, 1)
+            self.assertEqual(source_count, 1)
+            self.assertEqual(len(versions), 2)
+            self.assertEqual(len(chunks), 2)
+            self.assertEqual(link_count, 1)
+            self.assertTrue(first["compiled"]["citations"])
+            first_citation = first["compiled"]["citations"][0]
+            first_compile_metadata = first["compiled"]["compile_run"]["metadata"]
+            self.assertEqual(first_citation["source_version_id"], first["source_version"]["id"])
+            self.assertEqual(first_citation["source_chunk_id"], chunks[0]["id"])
+            self.assertIn(first["source_version"]["id"], first_compile_metadata["source_version_ids"])
+            self.assertIn(chunks[0]["id"], first_compile_metadata["source_chunk_ids"])
+            self.assertIn(chunks[0]["id"], first_compile_metadata["cited_source_chunk_ids"])
+            self.assertEqual(versions[0]["hash_kind"], "canonical_body")
+            self.assertEqual(versions[0]["extraction_status"], "available")
+            self.assertTrue(versions[0]["body_path"].startswith("content/sources/"))
+            self.assertTrue(chunks[-1]["body_path"].startswith("content/chunks/"))
+            self.assertEqual(source_query_status, 200)
+            self.assertEqual(source_query["results"][0]["chunk_id"], chunks[-1]["id"])
+            self.assertEqual(source_query["results"][0]["freshness"], "fresh")
+            self.assertEqual(stale_source_query_status, 200)
+            self.assertEqual(stale_source_query["results"][0]["chunk_id"], chunks[0]["id"])
+            self.assertEqual(stale_source_query["results"][0]["freshness"], "stale")
+            self.assertEqual(fetch_status, 200)
+            self.assertIn("owned by Lee", fetched["chunks"][0]["body"])
+
+    def test_ingest_source_chunks_long_body_and_cites_only_supporting_chunk(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            service = self.import_backend_module("service")
+            database = self.import_backend_module("database")
+            _node_status, node_payload = service.handle_action(
+                data_root,
+                {
+                    "action": "remember",
+                    "title": "Shipping owner",
+                    "body": "The verified shipping owner is Priya.",
+                    "type": "fact",
+                },
+            )
+            filler = "Filler paragraph about unrelated planning and operational context.\n\n" * 70
+            source_body = f"{filler}The verified shipping owner is Priya.\n"
+
+            status, ingested = service.handle_action(
+                data_root,
+                {
+                    "action": "ingest_source",
+                    "adapter_id": "inline_markdown",
+                    "node_id": node_payload["node"]["id"],
+                    "source_key": "notes:shipping-owner",
+                    "title": "Shipping source",
+                    "body_markdown": source_body,
+                    "compile_after_ingest": True,
+                },
+            )
+
+            with database.connect(data_root) as db:
+                chunks = [database.row_payload(row) or {} for row in db.execute("SELECT * FROM source_chunks ORDER BY chunk_index")]
+
+            citation = ingested["compiled"]["citations"][0]
+            cited_chunk = next(chunk for chunk in chunks if chunk["id"] == citation["source_chunk_id"])
+            source_query_status, source_query = service.handle_action(data_root, {"action": "source_query", "query": "Priya"})
+            search_status, search = service.handle_action(data_root, {"action": "search", "query": "Priya"})
+            self.assertEqual(status, 200)
+            self.assertGreater(len(chunks), 1)
+            self.assertGreater(cited_chunk["chunk_index"], 0)
+            self.assertIn("verified shipping owner is Priya", citation["quote"])
+            self.assertEqual(source_query_status, 200)
+            self.assertEqual(source_query["results"][0]["chunk_id"], cited_chunk["id"])
+            self.assertIn("verified shipping owner is Priya", source_query["results"][0]["summary"])
+            self.assertEqual(search_status, 200)
+            self.assertEqual(search["results"][0]["source_chunk_matches"][0]["chunk_id"], cited_chunk["id"])
+
+    def test_compile_does_not_cite_unrelated_source_chunk(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            service = self.import_backend_module("service")
+            _node_status, node_payload = service.handle_action(
+                data_root,
+                {
+                    "action": "remember",
+                    "title": "Shipping owner",
+                    "body": "The verified shipping owner is Priya.",
+                    "type": "fact",
+                },
+            )
+
+            _status, ingested = service.handle_action(
+                data_root,
+                {
+                    "action": "ingest_source",
+                    "adapter_id": "inline_markdown",
+                    "node_id": node_payload["node"]["id"],
+                    "source_key": "notes:unrelated",
+                    "title": "Unrelated source",
+                    "body_markdown": "The renewal checklist is owned by Dana.",
+                    "compile_after_ingest": True,
+                },
+            )
+
+            finding_types = {finding["finding_type"] for finding in ingested["compiled"]["lint_findings"]}
+            self.assertEqual(ingested["compiled"]["citations"], [])
+            self.assertIn("missing_citation", finding_types)
+
+    def test_compile_cites_paraphrased_source_chunk(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            service = self.import_backend_module("service")
+            _node_status, node_payload = service.handle_action(
+                data_root,
+                {
+                    "action": "remember",
+                    "title": "Renewal evidence",
+                    "body": "Dana owns the renewal evidence.",
+                    "type": "fact",
+                },
+            )
+
+            _status, ingested = service.handle_action(
+                data_root,
+                {
+                    "action": "ingest_source",
+                    "adapter_id": "inline_markdown",
+                    "node_id": node_payload["node"]["id"],
+                    "source_key": "notes:renewal-evidence",
+                    "title": "Renewal evidence source",
+                    "body_markdown": "The renewal evidence is owned by Dana.",
+                    "compile_after_ingest": True,
+                },
+            )
+
+            citation = ingested["compiled"]["citations"][0]
+            self.assertIn("renewal evidence is owned by Dana", citation["quote"])
+            self.assertTrue(citation["source_chunk_id"])
+            self.assertTrue(citation["quote_sha256"])
+
+    def test_compile_cites_multi_sentence_source_window(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            service = self.import_backend_module("service")
+            _node_status, node_payload = service.handle_action(
+                data_root,
+                {
+                    "action": "remember",
+                    "title": "Renewal launch",
+                    "body": "Dana owns the renewal evidence and the launch date is July 15.",
+                    "type": "fact",
+                },
+            )
+
+            _status, ingested = service.handle_action(
+                data_root,
+                {
+                    "action": "ingest_source",
+                    "adapter_id": "inline_markdown",
+                    "node_id": node_payload["node"]["id"],
+                    "source_key": "notes:renewal-launch",
+                    "title": "Renewal launch source",
+                    "body_markdown": "The renewal evidence is owned by Dana. The launch date is July 15.",
+                    "compile_after_ingest": True,
+                },
+            )
+
+            citation = ingested["compiled"]["citations"][0]
+            self.assertIn("renewal evidence is owned by Dana", citation["quote"])
+            self.assertIn("launch date is July 15", citation["quote"])
+            self.assertTrue(citation["source_chunk_id"])
+            self.assertTrue(citation["quote_sha256"])
+
+    def test_ingest_source_storage_file_creates_new_versions_for_local_text_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            workspace_root = Path(temp)
+            data_root = workspace_root / "data" / "memory"
+            source_path = workspace_root / "storage" / "generated" / "notes" / "handoff.md"
+            source_path.parent.mkdir(parents=True, exist_ok=True)
+            source_path.write_text("Handoff says renewal evidence is owned by Dana.", encoding="utf-8")
+            service = self.import_backend_module("service")
+            storage_file_sources = sys.modules["storage_file_sources"]
+            database = self.import_backend_module("database")
+            calls: list[tuple[str, dict]] = []
+
+            def file_payload() -> dict:
+                stat = source_path.stat()
+                return {
+                    "file_id": "generated:notes/handoff.md",
+                    "id": "generated:notes/handoff.md",
+                    "name": "handoff.md",
+                    "role": "generated",
+                    "relative_path": "notes/handoff.md",
+                    "workspace_relative_path": "storage/generated/notes/handoff.md",
+                    "extension": ".md",
+                    "size_bytes": stat.st_size,
+                    "sha256": sha256(source_path.read_bytes()).hexdigest(),
+                    "modified_at": str(stat.st_mtime_ns),
+                    "content_type": "text/markdown",
+                    "preview_kind": "markdown",
+                }
+
+            def fake_storage_surface(_data_root: Path, tool_name: str, arguments: dict) -> dict:
+                calls.append((tool_name, dict(arguments)))
+                if tool_name == "storage_file_info":
+                    return {"status_code": 200, "file": file_payload()}
+                if tool_name == "storage_preview_text":
+                    return {"status_code": 200, "file": file_payload(), "preview_text": source_path.read_text(encoding="utf-8")}
+                if tool_name == "storage_read_file":
+                    return {
+                        "status_code": 200,
+                        "file": file_payload(),
+                        "content_base64": b64encode(source_path.read_bytes()).decode("ascii"),
+                    }
+                raise AssertionError(f"unexpected Storage tool {tool_name}")
+
+            original_surface = storage_file_sources._storage_file_surface
+
+            try:
+                storage_file_sources._storage_file_surface = fake_storage_surface
+                first_status, first = service.handle_action(
+                    data_root,
+                    {
+                        "action": "ingest_source",
+                        "adapter_id": "storage_file",
+                        "file_id": "file_handoff",
+                        "workspace_relative_path": "storage/generated/notes/handoff.md",
+                        "title": "Handoff note",
+                        "compile_after_ingest": True,
+                    },
+                )
+                second_status, second = service.handle_action(
+                    data_root,
+                    {
+                        "action": "ingest_source",
+                        "adapter_id": "storage_file",
+                        "file_id": "file_handoff",
+                        "workspace_relative_path": "storage/generated/notes/handoff.md",
+                        "title": "Handoff note duplicate",
+                    },
+                )
+                source_path.write_text("Handoff says renewal evidence is owned by Dana.\n", encoding="utf-8")
+                byte_changed_status, byte_changed = service.handle_action(
+                    data_root,
+                    {
+                        "action": "ingest_source",
+                        "adapter_id": "storage_file",
+                        "file_id": "file_handoff",
+                        "workspace_relative_path": "storage/generated/notes/handoff.md",
+                        "title": "Handoff note byte changed",
+                    },
+                )
+                source_path.write_text("Handoff says renewal evidence is owned by Marta.", encoding="utf-8")
+                changed_status, changed = service.handle_action(
+                    data_root,
+                    {
+                        "action": "ingest_source",
+                        "adapter_id": "storage_file",
+                        "file_id": "file_handoff",
+                        "workspace_relative_path": "storage/generated/notes/handoff.md",
+                        "title": "Handoff note changed",
+                    },
+                )
+                rejected = self.run_backend(
+                    data_root,
+                    {
+                        "action": "ingest_source",
+                        "adapter_id": "storage_file",
+                        "workspace_relative_path": "../outside.md",
+                    },
+                )
+                fresh_status, fresh_query = service.handle_action(data_root, {"action": "source_query", "query": "Marta"})
+                stale_status, stale_query = service.handle_action(data_root, {"action": "source_query", "query": "Dana"})
+            finally:
+                storage_file_sources._storage_file_surface = original_surface
+
+            with database.connect(data_root) as db:
+                source_document = database.row_payload(db.execute("SELECT * FROM source_documents").fetchone()) or {}
+                source = database.row_payload(db.execute("SELECT * FROM sources").fetchone()) or {}
+                versions = [database.row_payload(row) or {} for row in db.execute("SELECT * FROM source_versions ORDER BY created_at")]
+                chunks = [database.row_payload(row) or {} for row in db.execute("SELECT * FROM source_chunks ORDER BY created_at")]
+
+            fetch_status, fetched = service.handle_action(data_root, {"action": "fetch_chunks", "chunk_ids": [chunks[-1]["id"]]})
+
+            self.assertEqual(first_status, 200)
+            self.assertEqual(second_status, 200)
+            self.assertEqual(byte_changed_status, 200)
+            self.assertEqual(changed_status, 200)
+            self.assertEqual(
+                [tool_name for tool_name, _arguments in calls[:3]],
+                ["storage_file_info", "storage_preview_text", "storage_read_file"],
+            )
+            self.assertTrue(all(arguments["workspace_relative_path"] == "storage/generated/notes/handoff.md" for _tool, arguments in calls))
+            self.assertTrue(first["source_version_created"])
+            self.assertFalse(second["source_version_created"])
+            self.assertTrue(byte_changed["source_version_created"])
+            self.assertTrue(changed["source_version_created"])
+            self.assertEqual(first["node"]["id"], changed["node"]["id"])
+            self.assertEqual(rejected["status_code"], 400)
+            self.assertIn("workspace_relative_path", rejected["json"]["detail"])
+            self.assertEqual(source_document["source_key"], "storage_file:file_handoff")
+            self.assertEqual(source_document["owning_app_id"], "storage")
+            self.assertEqual(source_document["workspace_relative_path"], "storage/generated/notes/handoff.md")
+            self.assertEqual(source["file_id"], "file_handoff")
+            self.assertEqual(len(versions), 3)
+            self.assertEqual(len(chunks), 3)
+            self.assertEqual({version["hash_kind"] for version in versions}, {"file_bytes"})
+            self.assertNotEqual(versions[0]["version_hash"], versions[1]["version_hash"])
+            self.assertEqual(versions[0]["body_sha256"], versions[1]["body_sha256"])
+            self.assertTrue(all(version["body_path"].startswith("content/sources/") for version in versions))
+            self.assertTrue(all(chunk["body_path"].startswith("content/chunks/") for chunk in chunks))
+            self.assertEqual(chunks[-1]["locator"], "storage/generated/notes/handoff.md")
+            self.assertEqual(chunks[-1]["locator_kind"], "workspace_relative_path")
+            self.assertEqual(fresh_status, 200)
+            self.assertEqual(fresh_query["results"][0]["chunk_id"], chunks[-1]["id"])
+            self.assertEqual(fresh_query["results"][0]["freshness"], "fresh")
+            self.assertEqual(stale_status, 200)
+            self.assertIn(stale_query["results"][0]["chunk_id"], {chunks[0]["id"], chunks[1]["id"]})
+            self.assertEqual(stale_query["results"][0]["freshness"], "stale")
+            self.assertEqual(fetch_status, 200)
+            self.assertIn("owned by Marta", fetched["chunks"][0]["body"])
+
     def test_attach_file_accepts_remote_storage_ref_without_workspace_path(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             data_root = Path(temp) / "data" / "memory"
@@ -545,6 +1198,7 @@ class MemoryAppTestCase(unittest.TestCase):
                 context_status, context = service.handle_action(data_root, {"action": "context", "query": "renewal owner"})
                 search_status, search = service.handle_action(data_root, {"action": "search", "query": "Dana"})
                 wiki_status, wiki_result = service.handle_action(data_root, {"action": "wiki_query", "query": "Dana"})
+                source_query_status, source_query = service.handle_action(data_root, {"action": "source_query", "query": "Dana"})
             finally:
                 storage_sources._storage_preview_surface = original_surface
 
@@ -552,6 +1206,14 @@ class MemoryAppTestCase(unittest.TestCase):
                 ref_count = db.execute("SELECT COUNT(*) AS count FROM external_refs").fetchone()["count"]
                 version = database.row_payload(db.execute("SELECT * FROM source_versions").fetchone()) or {}
                 source = database.row_payload(db.execute("SELECT * FROM sources").fetchone()) or {}
+                source_document = database.row_payload(db.execute("SELECT * FROM source_documents").fetchone()) or {}
+                source_chunk = database.row_payload(db.execute("SELECT * FROM source_chunks").fetchone()) or {}
+                job_count = db.execute("SELECT COUNT(*) AS count FROM ingest_jobs").fetchone()["count"]
+            fetch_status, fetched = service.handle_action(data_root, {"action": "fetch_chunks", "chunk_ids": [source_chunk["id"]]})
+            inspect_source_status, inspected_source = service.handle_action(
+                data_root,
+                {"action": "inspect_source", "source_document_id": source_document["id"]},
+            )
 
             self.assertEqual(status, 200)
             self.assertEqual(second_status, 200)
@@ -565,16 +1227,49 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertTrue(first["compiled"]["citations"])
             self.assertEqual(first["compiled"]["citations"][0]["metadata"]["source_version"], "rev-1")
             self.assertEqual(first["compiled"]["citations"][0]["source_version"], "rev-1")
+            self.assertEqual(first["compiled"]["citations"][0]["source_chunk_id"], source_chunk["id"])
+            self.assertEqual(first["compiled"]["citations"][0]["locator_kind"], "preview_text")
+            self.assertIsInstance(first["compiled"]["citations"][0]["char_start"], int)
+            self.assertIsInstance(first["compiled"]["citations"][0]["char_end"], int)
+            self.assertTrue(first["compiled"]["citations"][0]["quote_sha256"])
+            self.assertIn(version["id"], first["compiled"]["compile_run"]["metadata"]["source_version_ids"])
+            self.assertIn(source_chunk["id"], first["compiled"]["compile_run"]["metadata"]["source_chunk_ids"])
+            self.assertIn(source_chunk["id"], first["compiled"]["compile_run"]["metadata"]["cited_source_chunk_ids"])
             self.assertEqual(
                 first["compiled"]["citations"][0]["storage_reference"]["preview_request"]["tool"],
                 "storage_drive_preview",
             )
             self.assertIn("renewal owner is Dana", version["extracted_text"])
+            self.assertEqual(version["source_document_id"], source_document["id"])
+            self.assertTrue(version["body_path"].startswith("content/sources/"))
+            self.assertTrue(version["body_sha256"])
+            self.assertGreater(version["body_bytes"], 0)
+            self.assertEqual(source_document["source_key"], "remote_storage_file:file_drive_plan")
+            self.assertEqual(source_chunk["source_version_id"], version["id"])
+            self.assertTrue(source_chunk["body_path"].startswith("content/chunks/"))
+            self.assertEqual(source_chunk["char_start"], 0)
+            self.assertGreater(source_chunk["char_end"], 0)
             self.assertNotIn("ingest_preview_text", source["metadata"])
             self.assertNotIn("ingest_preview_truncated", source["metadata"])
             self.assertEqual(context_status, 200)
             self.assertEqual(search_status, 200)
             self.assertEqual(wiki_status, 200)
+            self.assertEqual(source_query_status, 200)
+            self.assertEqual(source_query["results"][0]["kind"], "source_chunk")
+            self.assertEqual(source_query["results"][0]["chunk_id"], source_chunk["id"])
+            self.assertGreaterEqual(job_count, 1)
+            self.assertIn("source_chunk", search["results"][0]["match_sources"])
+            self.assertEqual(search["results"][0]["source_chunk_matches"][0]["chunk_id"], source_chunk["id"])
+            self.assertIn("source_chunk", context["items"][0]["match_sources"])
+            self.assertEqual(context["items"][0]["source_chunk_matches"][0]["source_version_id"], version["id"])
+            self.assertEqual(fetch_status, 200)
+            self.assertEqual(fetched["chunks"][0]["id"], source_chunk["id"])
+            self.assertIn("renewal owner is Dana", fetched["chunks"][0]["body"])
+            self.assertEqual(inspect_source_status, 200)
+            self.assertEqual(inspected_source["source_document"]["id"], source_document["id"])
+            self.assertEqual(inspected_source["versions"][0]["id"], version["id"])
+            self.assertEqual(inspected_source["chunks"][0]["id"], source_chunk["id"])
+            self.assertEqual(inspected_source["linked_nodes"][0]["id"], first["node"]["id"])
             context_ref = context["items"][0]["storage_references"][0]
             search_ref = search["results"][0]["storage_references"][0]
             wiki_ref = wiki_result["results"][0]["storage_references"][0]
@@ -589,6 +1284,7 @@ class MemoryAppTestCase(unittest.TestCase):
             storage_sources = self.import_backend_module("storage_sources")
             service = self.import_backend_module("service")
             database = self.import_backend_module("database")
+            sources = self.import_backend_module("sources")
             original_surface = storage_sources._storage_preview_surface
             try:
                 storage_sources._storage_preview_surface = lambda _data_root, _request: (_ for _ in ()).throw(
@@ -615,10 +1311,19 @@ class MemoryAppTestCase(unittest.TestCase):
             with database.connect(data_root) as db:
                 source = database.row_payload(db.execute("SELECT * FROM sources").fetchone()) or {}
                 version = database.row_payload(db.execute("SELECT * FROM source_versions").fetchone()) or {}
+                remote_ref = db.execute("SELECT * FROM external_refs").fetchone()
+                snapshot_without_preview = sources.source_snapshot(remote_ref, data_root, include_remote_preview=False)
+                chunk_count = db.execute("SELECT COUNT(*) AS count FROM source_chunks").fetchone()["count"]
 
             self.assertEqual(status, 200)
             self.assertEqual(result["compiled"]["compiled_page"]["freshness"], "fresh")
             self.assertEqual(version["extracted_text"], "")
+            self.assertEqual(version["hash_kind"], "reference_snapshot")
+            self.assertEqual(version["metadata"]["hash_kind"], "reference_snapshot")
+            self.assertEqual(snapshot_without_preview["hash_kind"], "reference_snapshot")
+            self.assertEqual(version["extraction_status"], "unavailable")
+            self.assertEqual(version["body_path"], "")
+            self.assertEqual(chunk_count, 0)
             self.assertNotIn("ingest_preview_text", source["metadata"])
             self.assertNotIn("ingest_preview_truncated", source["metadata"])
 
@@ -918,6 +1623,39 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertIn("--drive-file-id", calls[0])
             self.assertIn("--max-chars", calls[0])
 
+    def test_platform_storage_file_source_uses_storage_mcp_tools(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            storage_file_sources = self.import_backend_module("storage_file_sources")
+            calls: list[list[str]] = []
+            original_run = storage_file_sources.subprocess.run
+            original_which = storage_file_sources.shutil.which
+
+            class Completed:
+                returncode = 0
+                stdout = json.dumps({"status_code": 200, "file": {"workspace_relative_path": "storage/generated/notes/handoff.md"}})
+
+            def fake_run(args: list[str], **_kwargs: object) -> Completed:
+                calls.append(args)
+                return Completed()
+
+            try:
+                storage_file_sources.shutil.which = lambda _name: "/usr/bin/maverick"
+                storage_file_sources.subprocess.run = fake_run
+                result = storage_file_sources.default_storage_file_surface(
+                    data_root,
+                    "storage_file_info",
+                    {"workspace_relative_path": "storage/generated/notes/handoff.md"},
+                )
+            finally:
+                storage_file_sources.subprocess.run = original_run
+                storage_file_sources.shutil.which = original_which
+
+            self.assertEqual(result["file"]["workspace_relative_path"], "storage/generated/notes/handoff.md")
+            self.assertEqual(calls[0][:7], ["maverick", "app", "storage", "mcp", "call", "storage_file_info", "--json"])
+            self.assertIn("--workspace-relative-path", calls[0])
+            self.assertIn("storage/generated/notes/handoff.md", calls[0])
+
     def test_remote_storage_ingestion_uses_storage_preview_and_cites_source_version(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             workspace_root = Path(temp)
@@ -990,6 +1728,9 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertTrue(compiled["citations"])
             citation = compiled["citations"][0]
             self.assertTrue(citation["source_version_id"].startswith("srcv_"))
+            self.assertTrue(citation["source_chunk_id"].startswith("sch_"))
+            self.assertEqual(citation["locator_kind"], "preview_text")
+            self.assertTrue(citation["quote_sha256"])
             self.assertEqual(citation["metadata"]["source_version"], "rev-2")
             self.assertEqual(citation["locator"], "/Agreements/Renewal.md")
 
@@ -1097,6 +1838,17 @@ class MemoryAppTestCase(unittest.TestCase):
             )
             first_inspect = service.handle_action(data_root, {"action": "inspect", "node_id": first["node"]["id"]})[1]
             second_inspect = service.handle_action(data_root, {"action": "inspect", "node_id": second_node["id"]})[1]
+            source_query = service.handle_action(data_root, {"action": "source_query", "query": "changed file"})[1]
+            ready_jobs = service.handle_action(
+                data_root,
+                {"action": "jobs_list", "status": "ready", "job_type": "requires_storage_reindex"},
+            )[1]
+            old_ingest_jobs = service.handle_action(data_root, {"action": "jobs_list", "job_type": "ingest_source"})[1]
+            reindex_run = service.handle_action(
+                data_root,
+                {"action": "jobs_list", "operation": "run_next", "job_types": ["requires_storage_reindex"]},
+            )[1]
+            failed_jobs = service.handle_action(data_root, {"action": "jobs_list", "status": "failed"})[1]
 
             with database.connect(data_root) as db:
                 refs = [
@@ -1106,6 +1858,13 @@ class MemoryAppTestCase(unittest.TestCase):
                 stale_claim_count = db.execute(
                     "SELECT COUNT(*) AS count FROM claims WHERE stale = 1 AND node_id IN (?, ?)",
                     (first["node"]["id"], second_node["id"]),
+                ).fetchone()["count"]
+                stale_chunk_count = db.execute(
+                    """
+                    SELECT COUNT(*) AS count
+                    FROM source_chunks
+                    WHERE json_extract(metadata_json, '$.staleness.state') = 'stale'
+                    """,
                 ).fetchone()["count"]
 
             self.assertEqual(first_status, 200)
@@ -1123,7 +1882,21 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertTrue(all(ref["metadata"]["staleness"]["source_version"] == "rev-2" for ref in refs))
             self.assertEqual(applied["reindex_suggestion"]["arguments"]["connection_id"], "drive_conn_acme")
             self.assertEqual(applied["reindex_suggestion"]["arguments"]["drive_file_id"], "drive_changed")
+            self.assertEqual(applied["reindex_job"]["job_type"], "requires_storage_reindex")
+            self.assertEqual(len(ready_jobs["jobs"]), 1)
+            self.assertEqual(ready_jobs["jobs"][0]["job_type"], "requires_storage_reindex")
+            self.assertEqual(old_ingest_jobs["jobs"], [])
+            self.assertTrue(reindex_run["ok"])
+            self.assertEqual(reindex_run["job"]["status"], "done")
+            self.assertEqual(reindex_run["result"]["status"], "requires_storage_reindex")
+            self.assertTrue(reindex_run["result"]["action_required"])
+            self.assertEqual(reindex_run["result"]["storage_identity"]["entity_id"], storage_file_id)
+            self.assertEqual(reindex_run["result"]["reindex_suggestion"]["mcp_tool"], "storage_drive_index")
+            self.assertEqual(failed_jobs["jobs"], [])
             self.assertGreaterEqual(stale_claim_count, 2)
+            self.assertGreaterEqual(stale_chunk_count, 1)
+            self.assertTrue(source_query["results"])
+            self.assertEqual(source_query["results"][0]["freshness"], "stale")
             self.assertEqual(first_inspect["node"]["compiled_page"]["freshness"], "stale")
             self.assertEqual(second_inspect["node"]["compiled_page"]["freshness"], "stale")
 

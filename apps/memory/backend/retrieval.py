@@ -7,7 +7,9 @@ import re
 import sqlite3
 from typing import Any
 
+from content_store import read_body
 from database import connect, ensure_schema, normalize_limit, record_event, row_payload
+from errors import MemoryValidationError
 from storage_reference_payloads import storage_references_for_node
 from wiki_queries import compact_compiled_payload, search_compiled_node_ids
 
@@ -70,6 +72,21 @@ def search_nodes(data_root: Path, query: str, *, limit: int = 10) -> list[dict[s
                 known_ids.add(node_id)
                 if len(results) >= normalized_limit:
                     break
+        if query.strip():
+            add_source_chunk_matches(db, data_root, results, query, limit=normalized_limit)
+            if len(results) < normalized_limit:
+                known_ids = {result["id"] for result in results}
+                for node, matches in source_chunk_node_matches(db, data_root, query, limit=normalized_limit):
+                    if node["id"] in known_ids:
+                        continue
+                    payload = row_payload(node) or {}
+                    payload["match_sources"] = ["source_chunk"]
+                    payload["source_chunk_matches"] = matches
+                    payload["storage_references"] = storage_references_for_node(db, payload["id"])
+                    results.append(payload)
+                    known_ids.add(payload["id"])
+                    if len(results) >= normalized_limit:
+                        break
         if not results:
             like = f"%{query.strip()}%"
             rows = list(
@@ -113,6 +130,8 @@ def context_payload(data_root: Path, query: str, *, limit: int = 8, record_acces
                     "summary": node["summary"] or node["body_text"][:280],
                     "relevance": round(max(0.1, 1.0 - (index * 0.08)), 3),
                     "provenance": refs,
+                    "match_sources": node.get("match_sources", []),
+                    "source_chunk_matches": node.get("source_chunk_matches", []),
                     "storage_references": storage_references,
                     "compiled": compact_compiled_payload(db, node["id"], data_root=data_root),
                 }
@@ -140,6 +159,8 @@ def context_payload(data_root: Path, query: str, *, limit: int = 8, record_acces
                         "summary": related_payload["summary"] or related_payload["body_text"][:280],
                         "relevance": round(float(related_payload.get("weight") or 0.5) * float(related_payload.get("confidence") or 1.0), 3),
                         "reason": related_payload.get("reason") or f"Related through {related_payload.get('kind')}",
+                        "match_sources": ["related_node"],
+                        "source_chunk_matches": [],
                         "provenance": [],
                         "storage_references": storage_references_for_node(db, related_payload["id"]),
                         "compiled": compact_compiled_payload(db, related_payload["id"], data_root=data_root),
@@ -150,6 +171,195 @@ def context_payload(data_root: Path, query: str, *, limit: int = 8, record_acces
         if record_access_event:
             record_event(db, event_type="retrieval_context_generated", payload={"query": query, "item_count": len(items)})
     return {"query": query, "items": items[:normalized_limit]}
+
+
+def add_source_chunk_matches(db: sqlite3.Connection, data_root: Path, results: list[dict[str, Any]], query: str, *, limit: int) -> None:
+    if not results:
+        return
+    node_ids = [result["id"] for result in results]
+    matches_by_node = source_chunk_matches_by_node(db, data_root, query, node_ids=node_ids, limit=limit)
+    for result in results:
+        matches = matches_by_node.get(result["id"], [])
+        if not matches:
+            continue
+        result.setdefault("source_chunk_matches", [])
+        result["source_chunk_matches"].extend(matches)
+        if "source_chunk" not in result.setdefault("match_sources", []):
+            result["match_sources"].append("source_chunk")
+
+
+def source_chunk_node_matches(
+    db: sqlite3.Connection,
+    data_root: Path,
+    query: str,
+    *,
+    limit: int,
+) -> list[tuple[sqlite3.Row, list[dict[str, Any]]]]:
+    matches_by_node = source_chunk_matches_by_node(db, data_root, query, node_ids=None, limit=limit)
+    if not matches_by_node:
+        return []
+    placeholders = ",".join("?" for _item in matches_by_node)
+    rows = list(
+        db.execute(
+            f"""
+            SELECT *, 0.0 AS score
+            FROM nodes
+            WHERE id IN ({placeholders}) AND status = 'active'
+            ORDER BY importance DESC, updated_at DESC
+            """,
+            tuple(matches_by_node),
+        )
+    )
+    return [(row, matches_by_node.get(row["id"], [])) for row in rows]
+
+
+def source_chunk_matches_by_node(
+    db: sqlite3.Connection,
+    data_root: Path,
+    query: str,
+    *,
+    node_ids: list[str] | None,
+    limit: int,
+) -> dict[str, list[dict[str, Any]]]:
+    needle = f"%{query.strip()}%"
+    if not query.strip():
+        return {}
+    node_clause = ""
+    values: list[Any] = [needle, needle, needle, needle, needle]
+    if node_ids is not None:
+        if not node_ids:
+            return {}
+        placeholders = ",".join("?" for _item in node_ids)
+        node_clause = f"AND n.id IN ({placeholders})"
+        values.extend(node_ids)
+    values.append(limit * 8)
+    rows = db.execute(
+        f"""
+        SELECT
+          n.id AS node_id,
+          sc.id AS chunk_id,
+          sc.source_version_id,
+          sc.chunk_index,
+          sc.body_path,
+          sc.body_sha256,
+          sc.char_start,
+          sc.char_end,
+          sc.locator,
+          sc.locator_kind,
+          sc.metadata_json,
+          sv.source_document_id,
+          sv.extraction_status,
+          sv.hash_kind,
+          sv.observed_at,
+          s.id AS source_id,
+          s.title AS source_title,
+          s.file_id,
+          s.workspace_relative_path,
+          s.entity_id
+        FROM source_chunks sc
+        JOIN source_versions sv ON sv.id = sc.source_version_id
+        JOIN sources s ON s.id = sv.source_id
+        JOIN node_source_links nsl ON nsl.source_id = s.id
+        JOIN nodes n ON n.id = nsl.node_id
+        WHERE n.status = 'active'
+          AND sc.body_path != ''
+          AND (
+            sv.extracted_text LIKE ?
+            OR s.title LIKE ?
+            OR s.file_id LIKE ?
+            OR s.workspace_relative_path LIKE ?
+            OR s.entity_id LIKE ?
+          )
+          {node_clause}
+        ORDER BY sv.observed_at DESC, sc.chunk_index
+        LIMIT ?
+        """,
+        tuple(values),
+    )
+    matches: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        payload = row_payload(row) or {}
+        try:
+            chunk_body = read_body(
+                data_root,
+                relative_path=str(payload.get("body_path") or ""),
+                expected_sha256=str(payload.get("body_sha256") or ""),
+            )
+        except MemoryValidationError:
+            continue
+        if not source_chunk_match_matches_query(payload, chunk_body, query):
+            continue
+        node_id = str(row["node_id"])
+        matches.setdefault(node_id, [])
+        if len(matches[node_id]) >= 3:
+            continue
+        matches[node_id].append(
+            {
+                "kind": "source_chunk",
+                "source_id": row["source_id"],
+                "source_document_id": row["source_document_id"] or "",
+                "source_version_id": row["source_version_id"],
+                "chunk_id": row["chunk_id"],
+                "title": row["source_title"] or row["source_id"],
+                "freshness": chunk_freshness(db, row),
+                "hash": row["body_sha256"] or "",
+                "locator": {
+                    "kind": row["locator_kind"] or "",
+                    "value": row["locator"] or "",
+                    "char_start": row["char_start"],
+                    "char_end": row["char_end"],
+                },
+                "source": {
+                    "file_id": row["file_id"] or "",
+                    "workspace_relative_path": row["workspace_relative_path"] or "",
+                    "entity_id": row["entity_id"] or "",
+                    "hash_kind": row["hash_kind"] or "",
+                    "extraction_status": row["extraction_status"] or "",
+                },
+            }
+        )
+    return matches
+
+
+def chunk_freshness(db: sqlite3.Connection, chunk: sqlite3.Row) -> str:
+    if chunk_marked_stale(row_payload(chunk) or {}):
+        return "stale"
+    latest = db.execute(
+        """
+        SELECT id
+        FROM source_versions
+        WHERE COALESCE(NULLIF(source_document_id, ''), source_id) = COALESCE(NULLIF(?, ''), ?)
+        ORDER BY observed_at DESC, created_at DESC
+        LIMIT 1
+        """,
+        (
+            str(chunk["source_document_id"] or ""),
+            str(chunk["source_id"] or ""),
+        ),
+    ).fetchone()
+    if latest is None:
+        return "unknown"
+    return "fresh" if str(latest["id"] or "") == str(chunk["source_version_id"] or "") else "stale"
+
+
+def source_chunk_match_matches_query(payload: dict[str, Any], chunk_body: str, query: str) -> bool:
+    normalized = query.strip().casefold()
+    if not normalized:
+        return False
+    haystacks = (
+        chunk_body,
+        str(payload.get("source_title") or ""),
+        str(payload.get("file_id") or ""),
+        str(payload.get("entity_id") or ""),
+        str(payload.get("workspace_relative_path") or ""),
+    )
+    return any(normalized in value.casefold() for value in haystacks)
+
+
+def chunk_marked_stale(chunk: dict[str, Any]) -> bool:
+    metadata = chunk.get("metadata") if isinstance(chunk.get("metadata"), dict) else {}
+    staleness = metadata.get("staleness") if isinstance(metadata.get("staleness"), dict) else {}
+    return bool(metadata.get("stale") or staleness.get("state") == "stale")
 
 
 def graph_payload(data_root: Path, *, query: str = "", node_ids: object = None, limit: int = 200) -> dict[str, Any]:

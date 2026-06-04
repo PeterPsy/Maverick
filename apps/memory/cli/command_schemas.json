@@ -21,6 +21,7 @@
               "unlink",
               "unlink_nodes",
               "attach_file",
+              "ingest_source",
               "ingest_storage_source",
               "apply_storage_staleness",
               "attach_entity",
@@ -30,6 +31,16 @@
               "compile",
               "lint",
               "wiki_query",
+              "source_query",
+              "fetch_chunks",
+              "inspect_source",
+              "jobs_enqueue",
+              "jobs_claim",
+              "jobs_complete",
+              "jobs_fail",
+              "jobs_cancel",
+              "jobs_run",
+              "jobs_list",
               "audit",
               "view_filter",
               "set_view_filter",
@@ -91,6 +102,31 @@
           },
           "metadata": {
             "type": "object"
+          },
+          "adapter_id": {
+            "type": "string",
+            "enum": [
+              "inline_markdown",
+              "storage_file"
+            ],
+            "description": "Generic source adapter for ingest_source. Supports inline_markdown and local workspace storage_file text sources fetched through Storage-owned file surfaces."
+          },
+          "source_key": {
+            "type": "string",
+            "description": "Stable caller-owned source key for ingest_source."
+          },
+          "body_markdown": {
+            "type": "string",
+            "description": "Canonical Markdown body for ingest_source with adapter_id=inline_markdown."
+          },
+          "workspace_relative_path": {
+            "type": "string",
+            "pattern": "^storage/(uploaded|generated)/.+$",
+            "description": "Workspace Storage path for ingest_source with adapter_id=storage_file."
+          },
+          "file_id": {
+            "type": "string",
+            "description": "Stable Storage file id for ingest_source with adapter_id=storage_file."
           },
           "memory_source": {
             "type": "object",
@@ -186,6 +222,90 @@
               "type": "string"
             },
             "maxItems": 500
+          },
+          "chunk_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20
+          },
+          "source_document_id": {
+            "type": "string"
+          },
+          "source_id": {
+            "type": "string"
+          },
+          "job_id": {
+            "type": "string"
+          },
+          "operation": {
+            "type": "string",
+            "enum": [
+              "list",
+              "enqueue",
+              "claim",
+              "complete",
+              "fail",
+              "cancel",
+              "run_next"
+            ]
+          },
+          "job_type": {
+            "type": "string",
+            "enum": [
+              "ingest_source",
+              "compile_node",
+              "lint_node",
+              "mark_stale",
+              "requires_storage_reindex"
+            ]
+          },
+          "job_types": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "ingest_source",
+                "compile_node",
+                "lint_node",
+                "mark_stale",
+                "requires_storage_reindex"
+              ]
+            },
+            "maxItems": 5
+          },
+          "dedupe_key": {
+            "type": "string"
+          },
+          "payload": {
+            "type": "object"
+          },
+          "available_at": {
+            "type": "string"
+          },
+          "max_attempts": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "lease_seconds": {
+            "type": "integer",
+            "minimum": 30,
+            "maximum": 3600
+          },
+          "lease_token": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "running",
+              "done",
+              "failed",
+              "cancelled"
+            ]
           },
           "nodes": {
             "type": "array",

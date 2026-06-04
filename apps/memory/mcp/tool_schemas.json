@@ -152,6 +152,58 @@
       },
       "output_schema": {"type": "object"}
     },
+    "memory_ingest_source": {
+      "description": "Ingest one generic app-owned source into Memory. Supports inline_markdown and local workspace storage_file text sources; storage_file reads metadata, previewability, and bounded content through official Storage surfaces before Memory creates verified source document, source version, and source chunk rows.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "adapter_id": {"type": "string", "enum": ["inline_markdown", "storage_file"]},
+          "source_key": {"type": "string", "description": "Stable caller-owned source key. If omitted, Memory derives one from the canonical body hash."},
+          "node_id": {"type": "string"},
+          "title": {"type": "string"},
+          "summary": {"type": "string"},
+          "body": {"type": "string"},
+          "body_markdown": {"type": "string"},
+          "workspace_relative_path": {"type": "string", "pattern": "^storage/(uploaded|generated)/.+$"},
+          "file_id": {"type": "string"},
+          "content_type": {"type": "string"},
+          "modified_at": {"type": "string"},
+          "type": {"type": "string"},
+          "node_type": {"type": "string"},
+          "importance": {"type": "number", "minimum": 0, "maximum": 1},
+          "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+          "metadata": {"type": "object"},
+          "compile_after_ingest": {"type": "boolean", "default": false},
+          "source": {
+            "type": "object",
+            "properties": {
+              "adapter_id": {"type": "string", "enum": ["inline_markdown", "storage_file"]},
+              "source_key": {"type": "string"},
+              "stable_source_id": {"type": "string"},
+              "title": {"type": "string"},
+              "summary": {"type": "string"},
+              "body": {"type": "string"},
+              "body_markdown": {"type": "string"},
+              "workspace_relative_path": {"type": "string", "pattern": "^storage/(uploaded|generated)/.+$"},
+              "file_id": {"type": "string"},
+              "entity_id": {"type": "string"},
+              "content_type": {"type": "string"},
+              "modified_at": {"type": "string"},
+              "metadata": {"type": "object"}
+            },
+            "additionalProperties": false
+          }
+        },
+        "anyOf": [
+          {"required": ["adapter_id", "body_markdown"]},
+          {"required": ["adapter_id", "body"]},
+          {"required": ["adapter_id", "workspace_relative_path"]},
+          {"required": ["source"]}
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
     "memory_ingest_storage_source": {
       "description": "Ingest one Storage drive_index.memory_source into Memory, creating or updating the target node/reference idempotently by stable Storage file id. For Google Drive, pass only Storage reference metadata and optional bounded preview_text; do not pass workspace_relative_path or Google tokens.",
       "input_schema": {
@@ -324,6 +376,95 @@
         "properties": {
           "query": {"type": "string"},
           "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 10}
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
+    "memory_source_query": {
+      "description": "Search Memory source versions and verified source chunks, returning normalized source_chunk results with locators and hashes.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {"type": "string"},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 10}
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
+    "memory_fetch_chunks": {
+      "description": "Hydrate up to 20 verified source chunks by id, reading from the Memory content store with SHA verification.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "chunk_ids": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 1,
+            "maxItems": 20
+          },
+          "limit": {"type": "integer", "minimum": 1, "maximum": 20, "default": 20}
+        },
+        "required": ["chunk_ids"],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
+    "memory_inspect_source": {
+      "description": "Inspect one Memory source document with versions, chunks, linked nodes, and recent ingest jobs.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "source_document_id": {"type": "string"},
+          "source_key": {"type": "string"},
+          "source_id": {"type": "string"},
+          "file_id": {"type": "string"},
+          "entity_id": {"type": "string"},
+          "id": {"type": "string"}
+        },
+        "anyOf": [
+          {"required": ["source_document_id"]},
+          {"required": ["source_key"]},
+          {"required": ["source_id"]},
+          {"required": ["file_id"]},
+          {"required": ["entity_id"]},
+          {"required": ["id"]}
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
+    "memory_jobs": {
+      "description": "Manage the app-owned Memory ingest job queue: list, enqueue, claim, complete, fail, cancel, or run the next job with dedupe and lease protection.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "operation": {
+            "type": "string",
+            "enum": ["list", "enqueue", "claim", "complete", "fail", "cancel", "run_next"],
+            "default": "list"
+          },
+          "job_id": {"type": "string"},
+          "id": {"type": "string"},
+          "job_type": {
+            "type": "string",
+            "enum": ["ingest_source", "compile_node", "lint_node", "mark_stale", "requires_storage_reindex"]
+          },
+          "job_types": {
+            "type": "array",
+            "items": {"type": "string", "enum": ["ingest_source", "compile_node", "lint_node", "mark_stale", "requires_storage_reindex"]},
+            "maxItems": 5
+          },
+          "dedupe_key": {"type": "string"},
+          "payload": {"type": "object"},
+          "available_at": {"type": "string"},
+          "max_attempts": {"type": "integer", "minimum": 1, "maximum": 20, "default": 3},
+          "lease_seconds": {"type": "integer", "minimum": 30, "maximum": 3600, "default": 300},
+          "lease_token": {"type": "string"},
+          "error": {"type": "string"},
+          "status": {"type": "string", "enum": ["ready", "running", "done", "failed", "cancelled"]},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 50}
         },
         "additionalProperties": false
       },

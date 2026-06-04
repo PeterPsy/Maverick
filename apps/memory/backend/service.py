@@ -11,21 +11,32 @@ from errors import MemoryValidationError
 from store import (
     add_external_ref,
     audit_events,
+    cancel_job,
+    claim_job,
     clear_custom_view_payload,
+    complete_job,
     compile_node,
     context_payload,
     create_edge,
     create_node,
+    enqueue_job,
+    fetch_chunks,
+    fail_job,
     graph_payload,
     health_payload,
+    ingest_source,
     inspect_node,
+    inspect_source,
     lint_memory,
+    list_jobs,
     load_view_state,
+    run_next_job,
     search_nodes,
     set_custom_view_payload,
     set_view_filter_payload,
     soft_delete_edge,
     soft_delete_node,
+    source_query,
     update_node,
     wiki_query,
 )
@@ -63,12 +74,19 @@ DATA_CHANGED_RESOURCES = {
     "unlink",
     "unlink_nodes",
     "attach_file",
+    "ingest_source",
     "ingest_storage_source",
     "apply_storage_staleness",
     "attach_entity",
     "attach_app_entity",
     "compile",
     "lint",
+    "jobs_enqueue",
+    "jobs_claim",
+    "jobs_complete",
+    "jobs_fail",
+    "jobs_cancel",
+    "jobs_run",
 }
 VIEW_STATE_ACTIONS = {"set_view_filter", "set_custom_view", "clear_custom_view"}
 WIKI_ACTIONS = {"compile", "lint"}
@@ -81,6 +99,7 @@ MCP_TOOL_ACTIONS = {
     "memory_link_nodes": "link",
     "memory_unlink_nodes": "unlink",
     "memory_attach_file": "attach_file",
+    "memory_ingest_source": "ingest_source",
     "memory_ingest_storage_source": "ingest_storage_source",
     "memory_apply_storage_staleness": "apply_storage_staleness",
     "memory_attach_app_entity": "attach_entity",
@@ -88,6 +107,10 @@ MCP_TOOL_ACTIONS = {
     "memory_compile": "compile",
     "memory_lint": "lint",
     "memory_wiki_query": "wiki_query",
+    "memory_source_query": "source_query",
+    "memory_fetch_chunks": "fetch_chunks",
+    "memory_inspect_source": "inspect_source",
+    "memory_jobs": "jobs_list",
     "memory_audit": "audit",
     "memory_view_filter": "view_filter",
     "memory_set_view_filter": "set_view_filter",
@@ -164,6 +187,8 @@ def _handle_action(data_root: Path, body: dict[str, Any], *, app_id: str = "memo
         return 200, soft_delete_edge(data_root, edge_id)
     if action == "attach_file":
         return 200, {"external_ref": add_external_ref(data_root, body, ref_kind="workspace_file")}
+    if action == "ingest_source":
+        return 200, ingest_source(data_root, body)
     if action == "ingest_storage_source":
         return 200, ingest_storage_source(data_root, body)
     if action == "apply_storage_staleness":
@@ -185,6 +210,57 @@ def _handle_action(data_root: Path, body: dict[str, Any], *, app_id: str = "memo
         query = str(body.get("query") or "").strip()
         limit = normalize_limit(body.get("limit"), default=10, minimum=1, maximum=50)
         return 200, wiki_query(data_root, query, limit=limit)
+    if action == "source_query":
+        query = str(body.get("query") or "").strip()
+        limit = normalize_limit(body.get("limit"), default=10, minimum=1, maximum=50)
+        return 200, source_query(data_root, query, limit=limit)
+    if action == "fetch_chunks":
+        return 200, fetch_chunks(
+            data_root,
+            body.get("chunk_ids"),
+            limit=normalize_limit(body.get("limit"), default=20, minimum=1, maximum=20),
+        )
+    if action == "inspect_source":
+        return 200, inspect_source(data_root, body)
+    if action == "jobs_enqueue":
+        return 200, {"job": enqueue_job(data_root, body)}
+    if action == "jobs_claim":
+        return 200, claim_job(data_root, body)
+    if action == "jobs_complete":
+        return 200, complete_job(data_root, body)
+    if action == "jobs_fail":
+        return 200, fail_job(data_root, body)
+    if action == "jobs_cancel":
+        return 200, cancel_job(data_root, body)
+    if action == "jobs_run":
+        return 200, run_next_job(data_root, body)
+    if action == "jobs_list":
+        operation = str(body.get("operation") or "list").strip()
+        if operation == "enqueue":
+            return 200, {"job": enqueue_job(data_root, body), "_event_action": "jobs_enqueue"}
+        if operation == "claim":
+            result = claim_job(data_root, body)
+            result["_event_action"] = "jobs_claim"
+            return 200, result
+        if operation == "complete":
+            result = complete_job(data_root, body)
+            result["_event_action"] = "jobs_complete"
+            return 200, result
+        if operation == "fail":
+            result = fail_job(data_root, body)
+            result["_event_action"] = "jobs_fail"
+            return 200, result
+        if operation == "cancel":
+            result = cancel_job(data_root, body)
+            result["_event_action"] = "jobs_cancel"
+            return 200, result
+        if operation in {"run", "run_next"}:
+            result = run_next_job(data_root, body)
+            result["_event_action"] = "jobs_run" if result.get("ran") else "jobs_list"
+            return 200, result
+        if operation != "list":
+            raise MemoryValidationError("unsupported jobs operation.")
+        return 200, list_jobs(data_root, body)
     if action == "context":
         query = str(body.get("query") or "").strip()
         return 200, context_payload(

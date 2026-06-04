@@ -282,7 +282,23 @@ def _desired_findings(
     elif any(storage_ref_staleness(ref) for ref in refs):
         findings.append(_finding("stale_page", "warning", "Storage source staleness was reported by the file provider."))
     for claim in claims:
-        citation = db.execute("SELECT id FROM citations WHERE claim_id = ? LIMIT 1", (claim["id"],)).fetchone()
+        citation = db.execute(
+            """
+            SELECT id
+            FROM citations
+            WHERE claim_id = ?
+              AND source_version_id IS NOT NULL
+              AND source_chunk_id IS NOT NULL
+              AND (
+                quote != ''
+                OR quote_sha256 != ''
+                OR (char_start IS NOT NULL AND char_end IS NOT NULL)
+                OR locator != ''
+              )
+            LIMIT 1
+            """,
+            (claim["id"],),
+        ).fetchone()
         if citation is None:
             findings.append(
                 _finding(

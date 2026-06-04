@@ -55,7 +55,7 @@ def configure_wal_if_needed(connection: sqlite3.Connection, path: Path) -> None:
         _WAL_CONFIGURED_PATHS[resolved_path] = signature
 
 
-def connect(data_root: Path) -> sqlite3.Connection:
+def open_connection(data_root: Path) -> sqlite3.Connection:
     data_root.mkdir(parents=True, exist_ok=True)
     path = db_path(data_root)
     connection = sqlite3.connect(path, timeout=SQLITE_BUSY_TIMEOUT_MS / 1000)
@@ -64,7 +64,23 @@ def connect(data_root: Path) -> sqlite3.Connection:
     connection.execute(f"PRAGMA busy_timeout = {SQLITE_BUSY_TIMEOUT_MS}")
     configure_wal_if_needed(connection, path)
     connection.execute("PRAGMA synchronous = NORMAL")
+    signature = sqlite_file_signature(path)
+    if signature is not None:
+        _WAL_CONFIGURED_PATHS[path.resolve(strict=False)] = signature
     return connection
+
+
+@contextmanager
+def connect(data_root: Path):
+    db = open_connection(data_root)
+    path = db_path(data_root)
+    try:
+        yield db
+    finally:
+        db.close()
+        signature = sqlite_file_signature(path)
+        if signature is not None:
+            _WAL_CONFIGURED_PATHS[path.resolve(strict=False)] = signature
 
 
 @contextmanager
@@ -84,11 +100,13 @@ def ensure_schema(data_root: Path) -> None:
     data_root.mkdir(parents=True, exist_ok=True)
     (artifacts_root(data_root) / "extracted").mkdir(parents=True, exist_ok=True)
     (artifacts_root(data_root) / "previews").mkdir(parents=True, exist_ok=True)
+    (data_root / "content").mkdir(parents=True, exist_ok=True)
     if schema_is_current(data_root):
         return
     with transaction(data_root, immediate=True) as db:
         for statement in SCHEMA_STATEMENTS:
             db.execute(statement)
+        apply_additive_migrations(db)
         db.execute(
             "INSERT OR REPLACE INTO schema_metadata(key, value) VALUES (?, ?)",
             ("schema_version", SCHEMA_VERSION),
@@ -101,9 +119,160 @@ def schema_is_current(data_root: Path) -> bool:
     try:
         with connect(data_root) as db:
             row = db.execute("SELECT value FROM schema_metadata WHERE key = 'schema_version'").fetchone()
+            if row is None or row["value"] != SCHEMA_VERSION:
+                return False
+            return schema_has_current_shape(db)
     except sqlite3.Error:
         return False
-    return row is not None and row["value"] == SCHEMA_VERSION
+
+
+def schema_has_current_shape(db: sqlite3.Connection) -> bool:
+    required_tables = {
+        "source_documents",
+        "source_versions",
+        "source_chunks",
+        "citations",
+        "ingest_jobs",
+    }
+    existing_tables = {
+        row["name"]
+        for row in db.execute(
+            """
+            SELECT name
+            FROM sqlite_master
+            WHERE type IN ('table', 'virtual table')
+            """
+        )
+    }
+    if not required_tables.issubset(existing_tables):
+        return False
+
+    required_columns = {
+        "source_documents": {
+            "id",
+            "source_key",
+            "adapter_id",
+            "source_kind",
+            "owning_app_id",
+            "entity_type",
+            "entity_id",
+            "file_id",
+            "workspace_relative_path",
+            "uri",
+            "title",
+            "status",
+            "created_at",
+            "updated_at",
+            "metadata_json",
+        },
+        "source_versions": {
+            "id",
+            "source_id",
+            "source_document_id",
+            "version_hash",
+            "extracted_text",
+            "extracted_ref",
+            "body_path",
+            "body_sha256",
+            "body_bytes",
+            "hash_kind",
+            "extraction_status",
+            "source_modified_at",
+            "content_type",
+            "observed_at",
+            "created_at",
+            "metadata_json",
+        },
+        "source_chunks": {
+            "id",
+            "source_version_id",
+            "chunk_index",
+            "body_path",
+            "body_sha256",
+            "token_count",
+            "char_start",
+            "char_end",
+            "locator",
+            "locator_kind",
+            "created_at",
+            "metadata_json",
+        },
+        "citations": {
+            "id",
+            "claim_id",
+            "source_id",
+            "source_version_id",
+            "source_chunk_id",
+            "external_ref_id",
+            "locator",
+            "locator_kind",
+            "char_start",
+            "char_end",
+            "quote_sha256",
+            "quote",
+            "created_at",
+            "metadata_json",
+        },
+        "ingest_jobs": {
+            "id",
+            "job_type",
+            "dedupe_key",
+            "status",
+            "attempt_count",
+            "max_attempts",
+            "available_at",
+            "locked_until",
+            "lease_token",
+            "last_error",
+            "payload_json",
+            "created_at",
+            "updated_at",
+        },
+    }
+    for table_name, required in required_columns.items():
+        columns = {row["name"] for row in db.execute(f"PRAGMA table_info({table_name})")}
+        if not required.issubset(columns):
+            return False
+
+    required_indexes = {
+        "source_documents": {
+            "idx_source_documents_key",
+            "idx_source_documents_file",
+            "idx_source_documents_app_entity",
+        },
+        "source_versions": {"idx_source_versions_hash"},
+        "source_chunks": {"idx_source_chunks_version_index", "idx_source_chunks_hash"},
+        "ingest_jobs": {"idx_ingest_jobs_ready_dedupe", "idx_ingest_jobs_status_available"},
+    }
+    for table_name, required in required_indexes.items():
+        indexes = {row["name"] for row in db.execute(f"PRAGMA index_list({table_name})")}
+        if not required.issubset(indexes):
+            return False
+    return True
+
+
+def apply_additive_migrations(db: sqlite3.Connection) -> None:
+    """Bring existing Memory databases up to the current additive schema."""
+    add_column_if_missing(db, "source_versions", "source_document_id", "TEXT")
+    add_column_if_missing(db, "source_versions", "body_path", "TEXT NOT NULL DEFAULT ''")
+    add_column_if_missing(db, "source_versions", "body_sha256", "TEXT NOT NULL DEFAULT ''")
+    add_column_if_missing(db, "source_versions", "body_bytes", "INTEGER NOT NULL DEFAULT 0")
+    add_column_if_missing(db, "source_versions", "hash_kind", "TEXT NOT NULL DEFAULT ''")
+    add_column_if_missing(db, "source_versions", "extraction_status", "TEXT NOT NULL DEFAULT ''")
+    add_column_if_missing(db, "source_versions", "source_modified_at", "TEXT")
+    add_column_if_missing(db, "source_versions", "content_type", "TEXT NOT NULL DEFAULT ''")
+    add_column_if_missing(db, "citations", "source_chunk_id", "TEXT")
+    add_column_if_missing(db, "citations", "locator_kind", "TEXT NOT NULL DEFAULT ''")
+    add_column_if_missing(db, "citations", "char_start", "INTEGER")
+    add_column_if_missing(db, "citations", "char_end", "INTEGER")
+    add_column_if_missing(db, "citations", "quote_sha256", "TEXT NOT NULL DEFAULT ''")
+    add_column_if_missing(db, "ingest_jobs", "lease_token", "TEXT NOT NULL DEFAULT ''")
+
+
+def add_column_if_missing(db: sqlite3.Connection, table_name: str, column_name: str, column_definition: str) -> None:
+    columns = {row["name"] for row in db.execute(f"PRAGMA table_info({table_name})")}
+    if column_name not in columns:
+        db.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_definition}")
 
 
 def health_payload(data_root: Path) -> dict[str, Any]:

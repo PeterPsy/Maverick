@@ -6,8 +6,9 @@ from pathlib import Path
 import sqlite3
 from typing import Any
 
-from database import ensure_schema, json_text, now_timestamp, record_event, transaction
+from database import ensure_schema, json_text, now_timestamp, record_event, row_payload, transaction
 from errors import MemoryValidationError
+from ingest_jobs import enqueue_job_in_db
 from lint import mark_wiki_stale
 from storage_sources import ref_metadata
 
@@ -23,6 +24,7 @@ def apply_storage_staleness(data_root: Path, body: dict[str, Any]) -> dict[str, 
         grouped: dict[str, dict[str, Any]] = {}
         for ref in refs:
             update_ref_staleness(db, ref, request, timestamp=timestamp)
+            mark_source_rows_stale(db, ref, request, timestamp=timestamp)
             node_id = str(ref["node_id"] or "")
             if node_id not in grouped:
                 node = db.execute("SELECT id, title FROM nodes WHERE id = ?", (node_id,)).fetchone()
@@ -59,6 +61,23 @@ def apply_storage_staleness(data_root: Path, body: dict[str, Any]) -> dict[str, 
                 },
             )
             impacted_nodes.append(item)
+        reindex_job = None
+        if impacted_nodes:
+            reindex_job = enqueue_job_in_db(
+                db,
+                job_type="requires_storage_reindex",
+                dedupe_key=f"requires_storage_reindex:{request['entity_id']}",
+                payload={
+                    "reason": request["reason"],
+                    "storage_identity": {
+                        "owning_app_id": request["owning_app_id"],
+                        "entity_type": request["entity_type"],
+                        "entity_id": request["entity_id"],
+                    },
+                    "impacted_node_ids": [item["node_id"] for item in impacted_nodes],
+                    "reindex_suggestion": reindex_suggestion(request),
+                },
+            )
 
     return {
         "status": "applied" if impacted_nodes else "not_found",
@@ -70,6 +89,7 @@ def apply_storage_staleness(data_root: Path, body: dict[str, Any]) -> dict[str, 
         "reason": request["reason"],
         "impacted_nodes": impacted_nodes,
         "reindex_suggestion": reindex_suggestion(request),
+        "reindex_job": reindex_job,
     }
 
 
@@ -150,6 +170,87 @@ def update_ref_staleness(
         "UPDATE external_refs SET metadata_json = ?, updated_at = ? WHERE id = ?",
         (json_text(metadata), timestamp, ref["id"]),
     )
+
+
+def mark_source_rows_stale(
+    db: sqlite3.Connection,
+    ref: sqlite3.Row,
+    request: dict[str, Any],
+    *,
+    timestamp: str,
+) -> None:
+    sources = list(
+        db.execute(
+            """
+            SELECT *
+            FROM sources
+            WHERE external_ref_id = ?
+               OR (
+                    owning_app_id = ?
+                AND entity_type = ?
+                AND (entity_id = ? OR file_id = ?)
+               )
+            """,
+            (ref["id"], request["owning_app_id"], request["entity_type"], request["entity_id"], request["entity_id"]),
+        )
+    )
+    if not sources:
+        return
+    source_ids = [str(source["id"] or "") for source in sources if source["id"]]
+    for source in sources:
+        update_row_metadata(db, "sources", str(source["id"]), request, timestamp=timestamp)
+    placeholders = ",".join("?" for _item in source_ids)
+    versions = list(
+        db.execute(
+            f"SELECT * FROM source_versions WHERE source_id IN ({placeholders})",
+            tuple(source_ids),
+        )
+    )
+    source_document_ids = sorted({str(version["source_document_id"] or "") for version in versions if version["source_document_id"]})
+    for version in versions:
+        update_row_metadata(db, "source_versions", str(version["id"]), request, timestamp=timestamp)
+    version_ids = [str(version["id"] or "") for version in versions if version["id"]]
+    if version_ids:
+        version_placeholders = ",".join("?" for _item in version_ids)
+        for chunk in db.execute(
+            f"SELECT * FROM source_chunks WHERE source_version_id IN ({version_placeholders})",
+            tuple(version_ids),
+        ):
+            update_row_metadata(db, "source_chunks", str(chunk["id"]), request, timestamp=timestamp)
+    for source_document_id in source_document_ids:
+        update_row_metadata(db, "source_documents", source_document_id, request, timestamp=timestamp)
+
+
+def update_row_metadata(
+    db: sqlite3.Connection,
+    table_name: str,
+    row_id: str,
+    request: dict[str, Any],
+    *,
+    timestamp: str,
+) -> None:
+    row = db.execute(f"SELECT * FROM {table_name} WHERE id = ?", (row_id,)).fetchone()
+    if row is None:
+        return
+    payload = row_payload(row) or {}
+    metadata = dict(payload.get("metadata") or {})
+    existing_staleness = metadata.get("staleness") if isinstance(metadata.get("staleness"), dict) else {}
+    metadata["stale"] = True
+    metadata["stale_reason"] = request["reason"]
+    metadata["staleness"] = {
+        **existing_staleness,
+        **request["staleness"],
+        "state": "stale",
+        "reason": request["reason"],
+        "observed_at": timestamp,
+        "owning_app_id": request["owning_app_id"],
+        "entity_type": request["entity_type"],
+        "entity_id": request["entity_id"],
+    }
+    if table_name in {"sources", "source_documents"}:
+        db.execute(f"UPDATE {table_name} SET metadata_json = ?, updated_at = ? WHERE id = ?", (json_text(metadata), timestamp, row_id))
+    else:
+        db.execute(f"UPDATE {table_name} SET metadata_json = ? WHERE id = ?", (json_text(metadata), row_id))
 
 
 def active_claim_count(db: sqlite3.Connection, node_id: str) -> int:

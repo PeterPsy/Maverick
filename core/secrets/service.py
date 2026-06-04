@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 
 from core.secrets.errors import SecretBindingError, SecretError
@@ -68,15 +68,35 @@ def update_platform_secret_metadata(
     now: datetime | None = None,
 ) -> SecretRecord:
     """Update redaction-safe platform secret metadata without reading raw values."""
-    return update_secret_metadata(
+    current = store.get_secret(secret_id)
+    updated = update_secret_metadata(
         store,
-        secret_id=secret_id,
+        secret_id=current.secret_id,
         label=label,
         alias=alias,
         description=description,
         kind=kind,
         now=now,
     )
+    _rewrite_secret_alias_refs(store, previous=current, updated=updated)
+    return updated
+
+
+def _rewrite_secret_alias_refs(store: SecretStore, *, previous: SecretRecord, updated: SecretRecord) -> None:
+    if previous.alias is None or previous.alias == updated.alias:
+        return
+    previous_ref = build_secret_ref(alias=previous.alias)
+    replacement_ref = (
+        build_secret_ref(alias=updated.alias)
+        if updated.alias is not None
+        else build_secret_ref(secret_id=updated.secret_id)
+    )
+    for binding in store.list_secret_bindings():
+        if binding.secret_ref == previous_ref:
+            store.save_secret_binding(replace(binding, secret_ref=replacement_ref, updated_at=updated.updated_at))
+    for grant in store.list_secret_grants():
+        if grant.secret_ref == previous_ref:
+            store.save_secret_grant(replace(grant, secret_ref=replacement_ref, updated_at=updated.updated_at))
 
 
 def disable_platform_secret(store: SecretStore, *, secret_id: str, now: datetime | None = None) -> SecretRecord:

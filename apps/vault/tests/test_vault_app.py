@@ -230,6 +230,9 @@ class VaultAppTest(unittest.TestCase):
             self.assertTrue(
                 all("authority" in surface for surface in payload["core_surfaces"]["mutative_full_access"])
             )
+            self.assertTrue(
+                any(surface["id"] == "core.secrets.update" for surface in payload["core_surfaces"]["mutative_full_access"])
+            )
             self.assertNotIn("raw_value", json.dumps(payload))
 
     def test_maverick_cli_and_mcp_surfaces_reject_unsupported_operations(self) -> None:

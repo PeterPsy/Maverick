@@ -19,7 +19,7 @@ For actual secret metadata and mutations, use the core-owned secret surfaces exp
 Authority rules:
 
 - Treat `core_surfaces.read_only` as redaction-safe admin review surfaces.
-- Treat `core_surfaces.mutative_full_access` as privileged operations that require an explicit full-access operator/admin context.
+- Treat `core_surfaces.mutative_full_access` as privileged operations that require an explicit full-access operator/admin context. Use `core.secrets.update` for redaction-safe metadata changes such as alias, label, description, or kind.
 - Treat `core_surfaces.admin_http` as platform-admin HTTP surfaces; raw values may be accepted on create/rotate requests but must never be reported back.
 
 Grant review rules:

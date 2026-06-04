@@ -24,7 +24,9 @@ from core.secrets.service import (
     disable_platform_secret_with_revocations,
     revoke_platform_secret_with_revocations,
     rotate_platform_secret,
+    update_platform_secret_metadata,
 )
+from core.secrets.models import SecretRecord
 from core.secrets.store import SecretStore
 
 
@@ -52,12 +54,7 @@ def secret_tool_specs(
     def _secrets_list_handler(arguments: dict[str, Any], context: McpInvocationContext) -> dict[str, Any]:
         if secret_store is None:
             return {"items": []}
-        return {
-            "items": [
-                {"secret_id": item.secret_id, "alias": item.alias, "label": item.label, "status": item.status}
-                for item in secret_store.list_secrets()
-            ]
-        }
+        return {"items": [_secret_metadata_payload(item) for item in secret_store.list_secrets()]}
 
     def _secret_grants_list_handler(arguments: dict[str, Any], context: McpInvocationContext) -> dict[str, Any]:
         state = _admin_state()
@@ -166,6 +163,25 @@ def secret_tool_specs(
         record_mcp_audit(observability_store, event_type="core.secrets.rotate", payload={"secret_id": secret.secret_id})
         return {"rotated": True, "secret_id": secret.secret_id, "status": secret.status}
 
+    def _secret_update_handler(arguments: dict[str, Any], context: McpInvocationContext) -> dict[str, Any]:
+        if secret_store is None:
+            return {"updated": False}
+        current = secret_store.get_secret(str(arguments["secret_id"]))
+        secret = update_platform_secret_metadata(
+            secret_store,
+            secret_id=current.secret_id,
+            label=str(arguments.get("label", current.label)),
+            alias=_optional_metadata_value(arguments, "alias", current.alias),
+            description=_optional_metadata_value(arguments, "description", current.description),
+            kind=str(arguments.get("kind", current.kind)),
+        )
+        record_mcp_audit(
+            observability_store,
+            event_type="core.secrets.update",
+            payload={"secret_id": secret.secret_id, "alias": secret.alias},
+        )
+        return {"updated": True, "secret": _secret_metadata_payload(secret)}
+
     def _secret_disable_handler(arguments: dict[str, Any], context: McpInvocationContext) -> dict[str, Any]:
         if secret_store is None:
             return {"disabled": False}
@@ -246,6 +262,24 @@ def secret_tool_specs(
         "type": "object",
         "additionalProperties": False,
         "properties": {"workspace_id": {"type": "string", "minLength": 1}},
+    }
+    secret_update_schema: dict[str, Any] = {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "secret_id": {"type": "string", "minLength": 1},
+            "label": {"type": "string", "minLength": 1},
+            "alias": {"type": ["string", "null"], "minLength": 1},
+            "description": {"type": ["string", "null"]},
+            "kind": {"type": "string", "enum": ["generic", "password", "api_key", "oauth_token", "private_key"]},
+        },
+        "required": ["secret_id"],
+        "anyOf": [
+            {"required": ["label"]},
+            {"required": ["alias"]},
+            {"required": ["description"]},
+            {"required": ["kind"]},
+        ],
     }
     tool_specs = [
         (
@@ -338,6 +372,13 @@ def secret_tool_specs(
             },
         ),
         (
+            "core.secrets.update",
+            "Update redaction-safe platform secret metadata without reading or changing the raw value.",
+            _secret_update_handler,
+            OPERATOR_ONLY,
+            secret_update_schema,
+        ),
+        (
             "core.secrets.disable",
             "Disable one platform secret.",
             _secret_disable_handler,
@@ -375,3 +416,21 @@ def secret_tool_specs(
         )
         for tool_name, description, handler, invocation_policy, input_schema in tool_specs
     ]
+
+
+def _optional_metadata_value(arguments: dict[str, Any], key: str, current: str | None) -> str | None:
+    if key not in arguments:
+        return current
+    value = arguments[key]
+    return None if value is None else str(value)
+
+
+def _secret_metadata_payload(secret: SecretRecord) -> dict[str, Any]:
+    return {
+        "secret_id": secret.secret_id,
+        "alias": secret.alias,
+        "label": secret.label,
+        "description": secret.description,
+        "kind": secret.kind,
+        "status": secret.status,
+    }

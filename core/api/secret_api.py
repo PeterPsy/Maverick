@@ -163,13 +163,14 @@ def _handle_secret_record(
         if method != "PATCH":
             return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")
         body = read_json_body(environ)
+        current = state.secret_store.get_secret(secret_id)
         secret = update_platform_secret_metadata(
             state.secret_store,
-            secret_id=secret_id,
-            label=str(body.get("label") or "").strip(),
-            alias=str(body.get("alias") or "").strip() or None,
-            description=str(body.get("description") or "").strip() or None,
-            kind=str(body.get("kind") or "generic"),
+            secret_id=current.secret_id,
+            label=str(body.get("label", current.label)).strip(),
+            alias=_optional_metadata_value(body, "alias", current.alias),
+            description=_optional_metadata_value(body, "description", current.description),
+            kind=str(body.get("kind", current.kind)),
         )
         record_secret_change(
             state,
@@ -211,6 +212,13 @@ def _handle_secret_record(
         start_response,
         {"secret": secret_payload(secret), "revoked_grant_count": len(revoked_grants)},
     )
+
+
+def _optional_metadata_value(body: dict, key: str, current: str | None) -> str | None:
+    if key not in body:
+        return current
+    value = body[key]
+    return None if value is None else str(value).strip() or None
 
 
 def _handle_grants_collection(

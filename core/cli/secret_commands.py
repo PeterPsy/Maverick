@@ -24,7 +24,9 @@ from core.secrets.service import (
     disable_platform_secret_with_revocations,
     revoke_platform_secret_with_revocations,
     rotate_platform_secret,
+    update_platform_secret_metadata,
 )
+from core.secrets.models import SecretRecord
 from core.secrets.store import SecretStore
 
 
@@ -54,10 +56,7 @@ def secret_command_specs(
             return {"secrets": []}
         return {
             "command_id": "core.secrets.list",
-            "secrets": [
-                {"secret_id": item.secret_id, "alias": item.alias, "label": item.label, "status": item.status}
-                for item in secret_store.list_secrets()
-            ],
+            "secrets": [_secret_metadata_payload(item) for item in secret_store.list_secrets()],
         }
 
     def _secret_grants_list_handler(arguments: dict[str, Any], context: CliInvocationContext) -> dict[str, Any]:
@@ -217,12 +216,31 @@ def secret_command_specs(
         return {
             "command_id": "core.secrets.rotate",
             "rotated": True,
-            "secret": {
-                "secret_id": secret.secret_id,
-                "alias": secret.alias,
-                "label": secret.label,
-                "status": secret.status,
-            },
+            "secret": _secret_metadata_payload(secret),
+        }
+
+    def _secret_update_handler(arguments: dict[str, Any], context: CliInvocationContext) -> dict[str, Any]:
+        if secret_store is None:
+            return {"updated": False}
+        current = secret_store.get_secret(str(arguments["secret_id"]))
+        secret = update_platform_secret_metadata(
+            secret_store,
+            secret_id=current.secret_id,
+            label=str(arguments.get("label", current.label)),
+            alias=_optional_metadata_value(arguments, "alias", current.alias),
+            description=_optional_metadata_value(arguments, "description", current.description),
+            kind=str(arguments.get("kind", current.kind)),
+        )
+        record_cli_audit(
+            observability_store,
+            action="core.secrets.update",
+            detail=f"Updated platform secret `{secret.secret_id}` metadata.",
+            payload={"secret_id": secret.secret_id, "alias": secret.alias},
+        )
+        return {
+            "command_id": "core.secrets.update",
+            "updated": True,
+            "secret": _secret_metadata_payload(secret),
         }
 
     def _secret_disable_handler(arguments: dict[str, Any], context: CliInvocationContext) -> dict[str, Any]:
@@ -309,6 +327,24 @@ def secret_command_specs(
         "type": "object",
         "additionalProperties": False,
         "properties": {"workspace_id": {"type": "string", "minLength": 1}},
+    }
+    secret_update_schema: dict[str, Any] = {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "secret_id": {"type": "string", "minLength": 1},
+            "label": {"type": "string", "minLength": 1},
+            "alias": {"type": ["string", "null"], "minLength": 1},
+            "description": {"type": ["string", "null"]},
+            "kind": {"type": "string", "enum": ["generic", "password", "api_key", "oauth_token", "private_key"]},
+        },
+        "required": ["secret_id"],
+        "anyOf": [
+            {"required": ["label"]},
+            {"required": ["alias"]},
+            {"required": ["description"]},
+            {"required": ["kind"]},
+        ],
     }
     command_specs = [
         (
@@ -426,6 +462,14 @@ def secret_command_specs(
             },
         ),
         (
+            "core.secrets.update",
+            ["core", "secrets", "update"],
+            "Update redaction-safe platform secret metadata without reading or changing the raw value.",
+            FULL_ACCESS_ADMIN,
+            _secret_update_handler,
+            secret_update_schema,
+        ),
+        (
             "core.secrets.disable",
             ["core", "secrets", "disable"],
             "Disable one platform secret.",
@@ -466,3 +510,21 @@ def secret_command_specs(
         )
         for command_id, path_segments, description, invocation_policy, handler, argument_schema in command_specs
     ]
+
+
+def _optional_metadata_value(arguments: dict[str, Any], key: str, current: str | None) -> str | None:
+    if key not in arguments:
+        return current
+    value = arguments[key]
+    return None if value is None else str(value)
+
+
+def _secret_metadata_payload(secret: SecretRecord) -> dict[str, Any]:
+    return {
+        "secret_id": secret.secret_id,
+        "alias": secret.alias,
+        "label": secret.label,
+        "description": secret.description,
+        "kind": secret.kind,
+        "status": secret.status,
+    }

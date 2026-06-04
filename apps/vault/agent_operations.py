@@ -45,6 +45,10 @@ CORE_SURFACES = {
             "authority": "full-access admin/operator; replaces a raw value but never returns it",
         },
         {
+            "id": "core.secrets.update",
+            "authority": "full-access admin/operator; updates redaction-safe metadata such as alias, label, description, and kind",
+        },
+        {
             "id": "core.secrets.disable",
             "authority": "full-access admin/operator; changes delivery eligibility",
         },
@@ -444,6 +448,7 @@ def _core_cli_surface_available(command_id: str) -> bool:
         "core.secrets.bindings.list",
         "core.secrets.create",
         "core.secrets.rotate",
+        "core.secrets.update",
         "core.secrets.disable",
         "core.secrets.revoke",
     }:

@@ -111,7 +111,7 @@ class TestSecretRecoverySurfaces(ObservabilityTestBase):
         self.assertEqual(mcp_result["items"][0]["secret_id"], secret.secret_id)
         self.assertNotIn("raw_value", mcp_result["items"][0])
 
-    def test_agent_cli_can_list_but_not_mutate_secret_metadata(self) -> None:
+    def test_secret_metadata_update_surfaces_are_admin_only_and_preserve_refs(self) -> None:
         repo_root = self.make_repo_root()
         secret_store = self.make_secret_store()
         sandbox_context = CliInvocationContext(caller_kind="sandbox_agent", workspace_id="default", agent_id="agent-1", effective_mode="sandbox")
@@ -132,6 +132,13 @@ class TestSecretRecoverySurfaces(ObservabilityTestBase):
             workspace_role="admin",
         )
         operator_context = CliInvocationContext(caller_kind="operator", workspace_id="default", agent_id=None, effective_mode="full-access")
+        mcp_context = McpInvocationContext(caller_kind="operator", workspace_id="default", agent_id=None, effective_mode="full-access")
+        sandbox_mcp_context = McpInvocationContext(
+            caller_kind="sandbox_agent",
+            workspace_id="default",
+            agent_id="agent-sandbox",
+            effective_mode="sandbox",
+        )
 
         create_result = run_core_cli_command(
             command_id="core.secrets.create",
@@ -143,6 +150,15 @@ class TestSecretRecoverySurfaces(ObservabilityTestBase):
         )
         secret_id = create_result["secret"]["secret_id"]
         bind_workspace_secret(secret_store, workspace_id="default", logical_name="recovery", secret_ref=build_secret_ref(alias="recovery-key"))
+        grant = grant_app_secret_use(
+            secret_store,
+            workspace_id="default",
+            app_id="browser",
+            logical_name="recovery",
+            secret_ref=build_secret_ref(alias="recovery-key"),
+            actions=["browser.autofill"],
+            target_patterns=["https://example.com/*"],
+        )
         list_result = run_core_cli_command(
             command_id="core.secrets.list",
             context=sandbox_context,
@@ -168,6 +184,33 @@ class TestSecretRecoverySurfaces(ObservabilityTestBase):
             )
         with self.assertRaises(CliInvocationNotAllowedError):
             run_core_cli_command(
+                command_id="core.secrets.update",
+                context=sandbox_context,
+                arguments={"secret_id": secret_id, "alias": "sandbox-key"},
+                secret_store=secret_store,
+                workspace_id="default",
+                start_path=repo_root,
+            )
+        with self.assertRaises(CliInvocationNotAllowedError):
+            run_core_cli_command(
+                command_id="core.secrets.update",
+                context=full_access_member_context,
+                arguments={"secret_id": secret_id, "alias": "member-key"},
+                secret_store=secret_store,
+                workspace_id="default",
+                start_path=repo_root,
+            )
+        with self.assertRaises(McpInvocationNotAllowedError):
+            call_mcp_tool(
+                tool_name="core.secrets.update",
+                context=sandbox_mcp_context,
+                arguments={"secret_id": secret_id, "alias": "sandbox-key"},
+                secret_store=secret_store,
+                workspace_id="default",
+                start_path=repo_root,
+            )
+        with self.assertRaises(CliInvocationNotAllowedError):
+            run_core_cli_command(
                 command_id="core.secrets.rotate",
                 context=full_access_member_context,
                 arguments={"secret_id": secret_id, "raw_value": "member-rotated-secret"},
@@ -183,11 +226,67 @@ class TestSecretRecoverySurfaces(ObservabilityTestBase):
             workspace_id="default",
             start_path=repo_root,
         )
+        update_result = run_core_cli_command(
+            command_id="core.secrets.update",
+            context=full_access_admin_context,
+            arguments={
+                "secret_id": secret_id,
+                "alias": "renamed-recovery-key",
+                "label": "Renamed Recovery Key",
+                "description": "Rotated after recovery drill.",
+                "kind": "api_key",
+            },
+            secret_store=secret_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+        binding_after_rename = run_core_cli_command(
+            command_id="core.secrets.bindings.list",
+            context=sandbox_context,
+            secret_store=secret_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+        grant_ref_after_rename = secret_store.get_secret_grant(grant.grant_id).secret_ref
+        clear_alias_result = call_mcp_tool(
+            tool_name="core.secrets.update",
+            context=mcp_context,
+            arguments={"secret_id": secret_id, "alias": None},
+            secret_store=secret_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+        binding_after_clear = run_core_cli_command(
+            command_id="core.secrets.bindings.list",
+            context=sandbox_context,
+            secret_store=secret_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
 
         self.assertTrue(create_result["created"])
         self.assertTrue(admin_rotate_result["rotated"])
+        self.assertTrue(update_result["updated"])
+        self.assertTrue(clear_alias_result["updated"])
+        self.assertEqual(update_result["secret"]["alias"], "renamed-recovery-key")
+        self.assertEqual(update_result["secret"]["description"], "Rotated after recovery drill.")
+        self.assertEqual(update_result["secret"]["kind"], "api_key")
         self.assertEqual(bindings_result["bindings"][0]["secret_ref"], "platform:secret-alias/recovery-key")
-        for payload in (create_result, admin_rotate_result, list_result, bindings_result):
+        self.assertEqual(binding_after_rename["bindings"][0]["secret_ref"], "platform:secret-alias/renamed-recovery-key")
+        self.assertEqual(grant_ref_after_rename, "platform:secret-alias/renamed-recovery-key")
+        self.assertEqual(secret_store.get_secret_grant(grant.grant_id).secret_ref, f"platform:secrets/{secret_id}")
+        self.assertEqual(binding_after_clear["bindings"][0]["secret_ref"], f"platform:secrets/{secret_id}")
+        self.assertEqual(secret_store.get_secret_value(secret_id=secret_id), "admin-rotated-secret")
+        for payload in (
+            create_result,
+            admin_rotate_result,
+            update_result,
+            clear_alias_result,
+            list_result,
+            bindings_result,
+            binding_after_rename,
+            binding_after_clear,
+        ):
             self.assert_payload_has_no_secret_material(payload, "recovery-secret", "rotated-secret", "admin-rotated-secret")
 
     def test_cli_and_mcp_expose_secret_create_and_recovery_health_surfaces(self) -> None:

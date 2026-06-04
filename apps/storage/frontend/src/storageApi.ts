@@ -37,6 +37,15 @@ export type DriveOAuthCompleteOptions = {
   state: string;
 };
 
+export type DriveSyncPayload = {
+  connection_id: string;
+  memory_staleness?: unknown[];
+  stale_storage_file_ids?: string[];
+  sync_mode?: string;
+  sync_state?: unknown;
+  synced_files?: number;
+};
+
 export type StorageMoveReference = {
   role: FileRole;
   relative_path: string;
@@ -169,6 +178,14 @@ export function disconnectDriveConnection(connectionId: string, options: Storage
     action: 'drive_connections.disconnect',
     connection_id: connectionId,
     _app_secret_request: {}
+  }, options);
+}
+
+export function syncDriveConnection(connectionId: string, options: StorageApiOptions = {}) {
+  return callBackend<DriveSyncPayload>({
+    action: 'drive_sync',
+    connection_id: connectionId,
+    _app_secret_request: driveConnectionSecretRequest(connectionId)
   }, options);
 }
 

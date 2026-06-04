@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { callBackend, completeDriveOAuth, currentStorageAppId, driveConnectionSecretRequest, listDriveChildren, listDriveConnections, listDriveRoots, moveItemsReferences, previewDriveFile, startDriveOAuth, storageBackendEndpoint, trashDriveFile } from './storageApi';
+import { callBackend, completeDriveOAuth, currentStorageAppId, driveConnectionSecretRequest, listDriveChildren, listDriveConnections, listDriveRoots, moveItemsReferences, previewDriveFile, startDriveOAuth, storageBackendEndpoint, syncDriveConnection, trashDriveFile } from './storageApi';
 
 describe('storage api client', () => {
   it('derives the mounted app backend from app and widget routes', () => {
@@ -175,6 +175,25 @@ describe('storage api client', () => {
           drive_file_id: 'folder-1',
           limit: 500,
           page_token: 'next-token',
+          _app_secret_request: expectedSecretRequest
+        }),
+        method: 'POST'
+      })
+    );
+  });
+
+  it('syncs Drive connections with resource-scoped Drive secrets', async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ connection_id: 'drive_conn_1', synced_files: 0 }), { status: 200 }));
+    const expectedSecretRequest = driveConnectionSecretRequest('drive_conn_1');
+
+    await syncDriveConnection('drive_conn_1', { fetchImpl });
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      '/api/apps/storage/backend',
+      expect.objectContaining({
+        body: JSON.stringify({
+          action: 'drive_sync',
+          connection_id: 'drive_conn_1',
           _app_secret_request: expectedSecretRequest
         }),
         method: 'POST'

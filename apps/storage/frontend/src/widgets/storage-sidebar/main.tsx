@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent, type SVGProps } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Home } from 'lucide-react';
+import { Home, LogOut, RefreshCw } from 'lucide-react';
 import {
   TreeExpander,
   TreeIcon,
@@ -12,7 +12,7 @@ import {
   TreeView,
 } from '../../components/ui/tree';
 import { FileCard } from '../../components/ui/file-card-collections';
-import { DRIVE_PAGE_LIMIT, currentStorageAppId, listDriveChildren, listDriveConnections, listDriveRoots, loadCatalog, loadViewFilter, moveFileReference, moveFolderReference, moveItemsReferences, setViewFilter } from '../../storageApi';
+import { DRIVE_PAGE_LIMIT, currentStorageAppId, disconnectDriveConnection, listDriveChildren, listDriveConnections, listDriveRoots, loadCatalog, loadViewFilter, moveFileReference, moveFolderReference, moveItemsReferences, setViewFilter, syncDriveConnection } from '../../storageApi';
 import { kindLabels, roleLabels } from '../../storageMeta';
 import { useShellSidebarCloseSwipe } from '../../hooks/useShellSidebarCloseSwipe';
 import { storageSelectionFromMessage, type ActiveStorageSelectionMessage } from '../../lib/activeStorageSelection';
@@ -272,7 +272,7 @@ function buildFolderTree(folders: StorageFolder[]): FolderTreeNode {
 
 function buildDriveTreeNodes(connections: DriveConnection[], cache: DriveChildrenCache): FolderTreeNode[] {
   return connections
-    .filter((connection) => connection.status !== 'pending')
+    .filter((connection) => connection.status !== 'pending' && connection.status !== 'disconnected')
     .slice()
     .sort((left, right) => driveConnectionLabel(left).localeCompare(driveConnectionLabel(right)))
     .map((connection) => {
@@ -644,6 +644,7 @@ function StorageSidebarWidget() {
   const [dropTarget, setDropTarget] = useState<FolderTreeDropTarget | null>(null);
   const [draggedFolder, setDraggedFolder] = useState<StorageFolder | null>(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [activeOperation, setActiveOperation] = useState('');
   const [error, setError] = useState<string | null>(null);
   const isShellMobileLayout = useShellMobileLayout();
 
@@ -670,6 +671,23 @@ function StorageSidebarWidget() {
     setActiveKind(normalizeKind(payload.state.view_filter.kind));
     setActiveViewMode(payload.state.view_filter.mode);
     setSelectedFolderId((current) => current || folderIdentityFromFilter(payload.state.view_filter));
+  }
+
+  async function syncStorageRoot() {
+    setActiveOperation('sync:storage');
+    try {
+      const payload = await loadCatalog({ limit: 1, offset: 0, sync: true });
+      setFolders(payload.folders);
+      setAvailableKinds(new Set(payload.available_kinds));
+      setActiveKind(normalizeKind(payload.state.view_filter.kind));
+      setActiveViewMode(payload.state.view_filter.mode);
+      setSelectedFolderId((current) => current || folderIdentityFromFilter(payload.state.view_filter));
+      setError(null);
+    } catch (syncError) {
+      setError(syncError instanceof Error ? syncError.message : 'Unable to sync Storage.');
+    } finally {
+      setActiveOperation('');
+    }
   }
 
   async function refreshDriveConnections() {
@@ -736,12 +754,12 @@ function StorageSidebarWidget() {
       });
   }
 
-  async function ensureDriveChildren(node: FolderTreeNode) {
+  async function loadDriveChildrenForNode(node: FolderTreeNode, force = false) {
     if (node.provider !== 'google_drive' || !node.lazy || !node.connectionId) {
       return;
     }
     const cached = driveChildrenCache[node.id];
-    if (cached?.loaded || cached?.loading || node.status === 'reconnect_required') {
+    if (!force && (cached?.loaded || cached?.loading || node.status === 'reconnect_required')) {
       return;
     }
     setDriveChildrenCache((current) => ({
@@ -769,6 +787,69 @@ function StorageSidebarWidget() {
         }
       }));
       setError(loadError instanceof Error ? loadError.message : 'Unable to load Google Drive folders.');
+    }
+  }
+
+  async function ensureDriveChildren(node: FolderTreeNode) {
+    await loadDriveChildrenForNode(node);
+  }
+
+  async function syncDriveAccount(node: FolderTreeNode) {
+    if (!node.connectionId || node.status !== 'connected') {
+      setError(node.connectionId ? 'Reconnect required' : 'Google Drive connection is missing.');
+      return;
+    }
+    setActiveOperation(`sync:${node.connectionId}`);
+    try {
+      await syncDriveConnection(node.connectionId);
+      setDriveChildrenCache((current) => {
+        const next = { ...current };
+        const cachePrefix = `${driveAccountIdentity(node.connectionId!)}:`;
+        Object.keys(next).forEach((key) => {
+          if (key === node.id || key.startsWith(cachePrefix)) {
+            delete next[key];
+          }
+        });
+        return next;
+      });
+      await refreshDriveConnections();
+      await loadDriveChildrenForNode(node, true);
+      setError(null);
+    } catch (syncError) {
+      setError(syncError instanceof Error ? syncError.message : 'Unable to sync Google Drive.');
+    } finally {
+      setActiveOperation('');
+    }
+  }
+
+  async function disconnectDriveAccount(node: FolderTreeNode) {
+    if (!node.connectionId) {
+      setError('Google Drive connection is missing.');
+      return;
+    }
+    if (node.status === 'disconnected') {
+      setError('Google Drive account is already disconnected.');
+      return;
+    }
+    setActiveOperation(`disconnect:${node.connectionId}`);
+    try {
+      await disconnectDriveConnection(node.connectionId);
+      setDriveChildrenCache((current) => {
+        const next = { ...current };
+        const cachePrefix = `${driveAccountIdentity(node.connectionId!)}:`;
+        Object.keys(next).forEach((key) => {
+          if (key === node.id || key.startsWith(cachePrefix)) {
+            delete next[key];
+          }
+        });
+        return next;
+      });
+      await refreshDriveConnections();
+      setError(null);
+    } catch (disconnectError) {
+      setError(disconnectError instanceof Error ? disconnectError.message : 'Unable to disconnect Google Drive.');
+    } finally {
+      setActiveOperation('');
     }
   }
 
@@ -998,7 +1079,11 @@ function StorageSidebarWidget() {
                   onDragStart={handleFolderDragStart}
                   onDrop={handleFolderDrop}
                   onEnsureChildren={ensureDriveChildren}
+                  onDisconnectDriveAccount={disconnectDriveAccount}
                   onSelect={selectFolder}
+                  onSyncDriveAccount={syncDriveAccount}
+                  onSyncStorageRoot={syncStorageRoot}
+                  activeOperation={activeOperation}
                 />
               ))}
             </TreeView>
@@ -1012,7 +1097,8 @@ function StorageSidebarWidget() {
   );
 }
 
-function FolderTreeNodeView({ dropTarget, node, level, isLast, onDragEnd, onDragLeave, onDragOver, onDragStart, onDrop, onEnsureChildren, onSelect }: {
+function FolderTreeNodeView({ activeOperation, dropTarget, node, level, isLast, onDragEnd, onDragLeave, onDragOver, onDragStart, onDrop, onDisconnectDriveAccount, onEnsureChildren, onSelect, onSyncDriveAccount, onSyncStorageRoot }: {
+  activeOperation: string;
   dropTarget: FolderTreeDropTarget | null;
   isLast: boolean;
   level: number;
@@ -1022,11 +1108,20 @@ function FolderTreeNodeView({ dropTarget, node, level, isLast, onDragEnd, onDrag
   onDragOver: (event: DragEvent<HTMLElement>, node: FolderTreeNode) => void;
   onDragStart: (event: DragEvent<HTMLElement>, node: FolderTreeNode) => void;
   onDrop: (event: DragEvent<HTMLElement>, node: FolderTreeNode) => void;
+  onDisconnectDriveAccount: (node: FolderTreeNode) => Promise<void>;
   onEnsureChildren: (node: FolderTreeNode) => void;
   onSelect: (node: FolderTreeNode) => void;
+  onSyncDriveAccount: (node: FolderTreeNode) => Promise<void>;
+  onSyncStorageRoot: () => Promise<void>;
 }) {
   const hasChildren = node.children.length > 0 || Boolean(node.lazy);
   const nodeDropStatus = dropTarget?.nodeId === node.id ? dropTarget.status : null;
+  const isStorageRoot = node.id === STORAGE_ROOT_ID;
+  const isDriveAccount = isDriveAccountNode(node);
+  const isDriveConnected = isDriveAccount && node.status === 'connected';
+  const isDriveDisconnected = isDriveAccount && node.status === 'disconnected';
+  const isSyncing = activeOperation === `sync:${isDriveAccount ? node.connectionId : 'storage'}`;
+  const isDisconnecting = activeOperation === `disconnect:${node.connectionId}`;
   const label = node.status === 'reconnect_required' ? `${node.label} (Reconnect required)` : node.label;
 
   return (
@@ -1050,6 +1145,38 @@ function FolderTreeNodeView({ dropTarget, node, level, isLast, onDragEnd, onDrag
           icon={folderTreeIcon(node)}
         />
         <TreeLabel title={node.error || node.workspaceRelativePath}>{node.loading ? `${label}...` : label}</TreeLabel>
+        {isStorageRoot || isDriveAccount ? (
+          <span className="storage-folder-tree-actions">
+            <button
+              aria-label={`Sync ${node.label}`}
+              className="storage-folder-tree-sync"
+              disabled={Boolean(activeOperation) || (isDriveAccount && !isDriveConnected)}
+              onClick={(event) => {
+                event.stopPropagation();
+                void (isDriveAccount ? onSyncDriveAccount(node) : onSyncStorageRoot());
+              }}
+              title={`Sync ${node.label}`}
+              type="button"
+            >
+              <RefreshCw className={isSyncing ? 'is-spinning' : ''} aria-hidden="true" />
+            </button>
+            {isDriveAccount ? (
+              <button
+                aria-label={`Disconnect ${node.label}`}
+                className="storage-folder-tree-sync storage-folder-tree-disconnect"
+                disabled={Boolean(activeOperation) || isDriveDisconnected}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void onDisconnectDriveAccount(node);
+                }}
+                title={`Disconnect ${node.label}`}
+                type="button"
+              >
+                <LogOut className={isDisconnecting ? 'is-breathing' : ''} aria-hidden="true" />
+              </button>
+            ) : null}
+          </span>
+        ) : null}
       </TreeNodeTrigger>
       <TreeNodeContent hasChildren={hasChildren}>
         {node.error ? (
@@ -1073,8 +1200,12 @@ function FolderTreeNodeView({ dropTarget, node, level, isLast, onDragEnd, onDrag
             onDragOver={onDragOver}
             onDragStart={onDragStart}
             onDrop={onDrop}
+            onDisconnectDriveAccount={onDisconnectDriveAccount}
             onEnsureChildren={onEnsureChildren}
             onSelect={onSelect}
+            onSyncDriveAccount={onSyncDriveAccount}
+            onSyncStorageRoot={onSyncStorageRoot}
+            activeOperation={activeOperation}
           />
         ))}
       </TreeNodeContent>

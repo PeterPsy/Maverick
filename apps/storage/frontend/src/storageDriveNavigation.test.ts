@@ -79,6 +79,17 @@ describe('storage Drive navigation stability', () => {
     expect(source).toContain('? children.length > 0 || Boolean(cached.error)');
   });
 
+  it('removes disconnected Drive accounts and does not spin the logout icon', () => {
+    const source = readSource('widgets/storage-sidebar/main.tsx');
+    const styles = readSource('styles/sidebar-widget.css');
+
+    expect(source).toContain("connection.status !== 'pending' && connection.status !== 'disconnected'");
+    expect(source).toContain("LogOut className={isDisconnecting ? 'is-breathing' : ''}");
+    expect(source).not.toContain("LogOut className={isDisconnecting ? 'is-spinning' : ''}");
+    expect(styles).toContain('.storage-folder-tree-sync .is-breathing');
+    expect(styles).toContain('@keyframes storage-sidebar-breathe');
+  });
+
   it('starts Drive breadcrumbs at the Drive account instead of Storage', () => {
     const source = readSource('main.tsx');
 

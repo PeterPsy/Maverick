@@ -433,6 +433,76 @@ button {
   font-weight: 400;
 }
 
+.storage-folder-tree-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.12rem;
+  margin-left: 0.42rem;
+}
+
+.storage-folder-tree-sync {
+  display: inline-grid;
+  width: 1.62rem;
+  height: 1.62rem;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--maverick-text-muted);
+  place-items: center;
+  transition: background 140ms ease, color 140ms ease, opacity 140ms ease, transform 140ms ease;
+}
+
+.storage-folder-tree-sync:hover,
+.storage-folder-tree-sync:focus-visible {
+  background: var(--maverick-surface-hover);
+  color: var(--maverick-text);
+  outline: none;
+}
+
+.storage-folder-tree-sync:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.storage-folder-tree-sync:disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.storage-folder-tree-sync svg {
+  width: 0.92rem;
+  height: 0.92rem;
+}
+
+.storage-folder-tree-disconnect {
+  color: var(--maverick-danger);
+}
+
+.storage-folder-tree-sync .is-spinning {
+  animation: storage-sidebar-spin 900ms linear infinite;
+}
+
+.storage-folder-tree-sync .is-breathing {
+  animation: storage-sidebar-breathe 900ms ease-in-out infinite;
+}
+
+@keyframes storage-sidebar-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes storage-sidebar-breathe {
+  0%,
+  100% {
+    color: rgba(255, 179, 191, 0.45);
+    opacity: 0.58;
+  }
+
+  50% {
+    color: var(--maverick-danger);
+    opacity: 1;
+  }
+}
+
 .storage-sidebar-row {
   display: grid;
   grid-template-columns: 2rem minmax(0, 1fr);

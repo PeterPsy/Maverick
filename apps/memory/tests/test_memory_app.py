@@ -871,6 +871,25 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual(fetch_status, 200)
             self.assertIn("owned by Lee", fetched["chunks"][0]["body"])
 
+    def test_ingest_source_backend_events_include_graph_and_wiki(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+
+            response = self.run_backend(
+                data_root,
+                {
+                    "action": "ingest_source",
+                    "adapter_id": "inline_markdown",
+                    "source_key": "events:evidence",
+                    "body_markdown": "Evidence note says the launch owner is Nia.",
+                },
+            )
+
+            resources = {event["resource"] for event in response["app_events"]}
+            self.assertEqual(response["status_code"], 200)
+            self.assertIn("graph", resources)
+            self.assertIn("wiki", resources)
+
     def test_ingest_source_chunks_long_body_and_cites_only_supporting_chunk(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             data_root = Path(temp) / "data" / "memory"
@@ -1318,6 +1337,7 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual(source_query_status, 200)
             self.assertEqual(source_query["results"][0]["kind"], "source_chunk")
             self.assertEqual(source_query["results"][0]["chunk_id"], source_chunk["id"])
+            self.assertEqual(source_query["results"][0]["citations"][0]["source_chunk_id"], source_chunk["id"])
             self.assertGreaterEqual(job_count, 1)
             self.assertIn("source_chunk", search["results"][0]["match_sources"])
             self.assertEqual(search["results"][0]["source_chunk_matches"][0]["chunk_id"], source_chunk["id"])
@@ -1325,6 +1345,10 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual(context["items"][0]["source_chunk_matches"][0]["source_version_id"], version["id"])
             self.assertEqual(fetch_status, 200)
             self.assertEqual(fetched["chunks"][0]["id"], source_chunk["id"])
+            self.assertEqual(fetched["chunks"][0]["kind"], "source_chunk")
+            self.assertEqual(fetched["chunks"][0]["chunk_id"], source_chunk["id"])
+            self.assertEqual(fetched["chunks"][0]["freshness"], "fresh")
+            self.assertEqual(fetched["chunks"][0]["citations"][0]["source_chunk_id"], source_chunk["id"])
             self.assertIn("renewal owner is Dana", fetched["chunks"][0]["body"])
             self.assertEqual(inspect_source_status, 200)
             self.assertEqual(inspected_source["source_document"]["id"], source_document["id"])
@@ -1338,6 +1362,43 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual(search_ref["preview_request"]["arguments"]["stable_storage_file_id"], "file_drive_plan")
             self.assertEqual(wiki_ref["deep_link"], "/app/storage/files/file_drive_plan")
             self.assertEqual(context["items"][0]["compiled"]["storage_references"][0]["drive_file_id"], "drive_plan")
+
+    def test_ingest_storage_source_without_compile_materializes_source_chunks(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            service = self.import_backend_module("service")
+            database = self.import_backend_module("database")
+
+            status, ingested = service.handle_action(
+                data_root,
+                {
+                    "action": "ingest_storage_source",
+                    "title": "Drive source only",
+                    "memory_source": self.drive_memory_source(
+                        storage_file_id="file_drive_source_only",
+                        drive_file_id="drive_source_only",
+                    ),
+                    "preview_text": "Drive source only says the accountable owner is Riley.",
+                },
+            )
+            source_query_status, source_query = service.handle_action(data_root, {"action": "source_query", "query": "Riley"})
+
+            with database.connect(data_root) as db:
+                source_document_count = db.execute("SELECT COUNT(*) AS count FROM source_documents").fetchone()["count"]
+                source_version_count = db.execute("SELECT COUNT(*) AS count FROM source_versions").fetchone()["count"]
+                source_chunk_count = db.execute("SELECT COUNT(*) AS count FROM source_chunks").fetchone()["count"]
+                fresh_wiki_count = db.execute("SELECT COUNT(*) AS count FROM wiki_pages WHERE freshness = 'fresh'").fetchone()["count"]
+
+            self.assertEqual(status, 200)
+            self.assertTrue(ingested["sources"])
+            self.assertIsNone(ingested["compiled"])
+            self.assertEqual(source_document_count, 1)
+            self.assertEqual(source_version_count, 1)
+            self.assertEqual(source_chunk_count, 1)
+            self.assertEqual(fresh_wiki_count, 0)
+            self.assertEqual(source_query_status, 200)
+            self.assertEqual(source_query["results"][0]["kind"], "source_chunk")
+            self.assertEqual(source_query["results"][0]["freshness"], "fresh")
 
     def test_remote_storage_preview_body_changes_create_new_source_version_even_with_same_storage_version(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

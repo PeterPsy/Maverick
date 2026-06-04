@@ -90,6 +90,7 @@ DATA_CHANGED_RESOURCES = {
 }
 VIEW_STATE_ACTIONS = {"set_view_filter", "set_custom_view", "clear_custom_view"}
 WIKI_ACTIONS = {"compile", "lint"}
+GRAPH_AND_WIKI_ACTIONS = {"ingest_source", "ingest_storage_source", "jobs_run"}
 MCP_TOOL_ACTIONS = {
     "memory_context": "context",
     "memory_search": "search",
@@ -127,6 +128,11 @@ def app_events_for_action(action: str) -> list[dict[str, str]]:
     if action not in DATA_CHANGED_RESOURCES:
         return []
     if action == "apply_storage_staleness":
+        return [
+            {"type": "maverick.app.data-changed", "resource": "graph"},
+            {"type": "maverick.app.data-changed", "resource": "wiki"},
+        ]
+    if action in GRAPH_AND_WIKI_ACTIONS:
         return [
             {"type": "maverick.app.data-changed", "resource": "graph"},
             {"type": "maverick.app.data-changed", "resource": "wiki"},

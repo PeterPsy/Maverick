@@ -79,7 +79,7 @@ The first implemented generic adapters stay narrow:
 - `inline_markdown` for tests, imports, and generated notes
 - `storage_file` for workspace Storage files by stable Storage file id or workspace-relative Storage path, using official Storage `reference_resolve`, `file_info`, `preview_text`, and `read_file` surfaces before Memory stores verified source/chunk content
 
-Drive ingestion remains on the transitional `memory_ingest_storage_source` surface while preserving the same v3 source document, source version, content-store, source chunk, and citation model. A future step may fold that into a generic `remote_storage_file` adapter for `memory_ingest_source`; until then, Drive remains Storage-owned and Memory never reads Drive directly.
+Drive ingestion remains on the transitional `memory_ingest_storage_source` surface while preserving the same v3 source document, source version, content-store, source chunk, and citation model. The ingest step must materialize the source document, observed source version, and source chunks before compile so Drive content is queryable as verified source evidence even when immediate compile is not requested. A future step may fold that into a generic `remote_storage_file` adapter for `memory_ingest_source`; until then, Drive remains Storage-owned and Memory never reads Drive directly.
 
 `app_entity` source snapshots are future work. They must use official reference surfaces from the owning app and must not read app-private databases directly.
 
@@ -97,7 +97,7 @@ Memory exposes agent-facing surfaces through the app contract:
 - `memory_ingest_source` ingests generic app-owned sources. The implemented adapters are `inline_markdown` for generated Markdown evidence and `storage_file` for bounded UTF-8 local workspace Storage files under `storage/uploaded/` or `storage/generated/`; `storage_file` asks Storage for file metadata, previewability, and bounded bytes through official surfaces before writing Memory-owned verified source bodies and chunks
 - `memory_wiki_query` searches compiled wiki pages and claims directly
 - `memory_source_query` searches verified source chunks and returns normalized source-chunk results
-- `memory_fetch_chunks` hydrates up to 20 source chunks from the content store with SHA verification
+- `memory_fetch_chunks` hydrates up to 20 source chunks from the content store with SHA verification; chunk retrieval surfaces should expose normalized chunk identity, freshness, locator, and citations when available
 - `memory_inspect_source` inspects one source document with versions, chunks, linked nodes, and recent ingest jobs
 - `memory_jobs` manages Memory's app-owned ingest job queue with dedupe, claim leases, retry backoff, cancellation, inspection, and `run_next` execution for the first app-owned job types. Storage staleness uses an explicit `requires_storage_reindex` job marker so Memory can report the required Storage `drive_index` step without attempting to re-ingest stale Drive content before Storage provides a fresh `memory_source`.
 

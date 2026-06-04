@@ -9,6 +9,7 @@ from typing import Any
 from content_store import read_body
 from database import connect, ensure_schema, normalize_limit, row_payload
 from errors import MemoryValidationError
+from storage_reference_payloads import storage_reference_for_citation
 
 
 def source_query(data_root: Path, query: str, *, limit: int = 10) -> dict[str, Any]:
@@ -72,6 +73,7 @@ def source_query(data_root: Path, query: str, *, limit: int = 10) -> dict[str, A
                     "title": payload.get("source_title") or payload.get("source_key") or payload["source_id"],
                     "summary": chunk_summary(chunk_body, query),
                     "freshness": chunk_freshness(db, payload),
+                    "citations": citations_for_chunk(db, payload["id"]),
                     "locator": {
                         "kind": payload.get("locator_kind") or "",
                         "value": payload.get("locator") or "",
@@ -100,21 +102,54 @@ def fetch_chunks(data_root: Path, chunk_ids: object, *, limit: int = 20) -> dict
             row["id"]: row_payload(row) or {}
             for row in db.execute(
                 f"""
-                SELECT sc.*, sv.source_id, sv.source_document_id, sv.version_hash, sv.hash_kind, sv.extraction_status
+                SELECT
+                  sc.*,
+                  sv.source_id,
+                  sv.source_document_id,
+                  sv.version_hash,
+                  sv.hash_kind,
+                  sv.extraction_status,
+                  s.title AS source_title,
+                  s.external_ref_id,
+                  s.file_id,
+                  s.workspace_relative_path,
+                  s.entity_id,
+                  s.owning_app_id,
+                  sd.source_key,
+                  sd.adapter_id
                 FROM source_chunks sc
                 JOIN source_versions sv ON sv.id = sc.source_version_id
+                JOIN sources s ON s.id = sv.source_id
+                LEFT JOIN source_documents sd ON sd.id = sv.source_document_id
                 WHERE sc.id IN ({placeholders})
                 """,
                 tuple(ids),
             )
         }
-    chunks = []
-    for chunk_id in ids:
-        chunk = rows.get(chunk_id)
-        if not chunk:
-            continue
-        body = _read_chunk_body(data_root, chunk)
-        chunks.append({**chunk, "body": body})
+        chunks = []
+        for chunk_id in ids:
+            chunk = rows.get(chunk_id)
+            if not chunk:
+                continue
+            body = _read_chunk_body(data_root, chunk)
+            chunks.append(
+                {
+                    **chunk,
+                    "kind": "source_chunk",
+                    "chunk_id": chunk["id"],
+                    "title": chunk.get("source_title") or chunk.get("source_key") or chunk["source_id"],
+                    "freshness": chunk_freshness(db, chunk),
+                    "citations": citations_for_chunk(db, chunk["id"]),
+                    "locator": {
+                        "kind": chunk.get("locator_kind") or "",
+                        "value": chunk.get("locator") or "",
+                        "char_start": chunk.get("char_start"),
+                        "char_end": chunk.get("char_end"),
+                    },
+                    "source": _source_payload(chunk),
+                    "body": body,
+                }
+            )
     return {"chunks": chunks}
 
 
@@ -229,6 +264,19 @@ def _read_chunk_body(data_root: Path, chunk: dict[str, Any]) -> str:
         relative_path=str(chunk.get("body_path") or ""),
         expected_sha256=str(chunk.get("body_sha256") or ""),
     )
+
+
+def citations_for_chunk(db: sqlite3.Connection, chunk_id: str) -> list[dict[str, Any]]:
+    citations = []
+    for row in db.execute("SELECT * FROM citations WHERE source_chunk_id = ? ORDER BY created_at", (chunk_id,)):
+        citation = row_payload(row) or {}
+        metadata = citation.get("metadata") if isinstance(citation.get("metadata"), dict) else {}
+        citation["source_version"] = str(metadata.get("source_version") or "")
+        storage_reference = storage_reference_for_citation(db, citation)
+        if storage_reference:
+            citation["storage_reference"] = storage_reference
+        citations.append(citation)
+    return citations
 
 
 def chunk_freshness(db: sqlite3.Connection, chunk: dict[str, Any]) -> str:

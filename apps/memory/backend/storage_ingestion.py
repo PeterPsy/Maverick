@@ -23,6 +23,7 @@ from ingest_jobs import enqueue_job_in_db
 from lint import mark_wiki_stale
 from nodes import get_node_with_details, inspect_node
 from references import validate_storage_ref
+from sources import sync_sources
 from storage_sources import (
     INGEST_PREVIEW_TEXT_KEY,
     INGEST_PREVIEW_TRUNCATED_KEY,
@@ -74,6 +75,12 @@ def ingest_storage_source(data_root: Path, body: dict[str, Any]) -> dict[str, An
             existing_ref=existing_ref,
         )
         timestamp = now_timestamp()
+        ref_row = db.execute("SELECT * FROM external_refs WHERE id = ?", (external_ref["id"],)).fetchone()
+        ingested_sources = (
+            sync_sources(db, data_root=data_root, node_id=target_node_id, refs=[ref_row], timestamp=timestamp)
+            if ref_row is not None
+            else []
+        )
         mark_wiki_stale(db, target_node_id, timestamp=timestamp, reason="storage_source_ingested", data_root=data_root)
         if old_node_id and old_node_id != target_node_id:
             mark_wiki_stale(db, old_node_id, timestamp=timestamp, reason="storage_source_moved", data_root=data_root)
@@ -115,6 +122,7 @@ def ingest_storage_source(data_root: Path, body: dict[str, Any]) -> dict[str, An
         "status": "ingested" if ref_created or node_created else "updated",
         "node": node,
         "external_ref": external_ref,
+        "sources": ingested_sources,
         "storage_identity": {
             "owning_app_id": "storage",
             "entity_type": "file",

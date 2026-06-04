@@ -235,14 +235,12 @@ def remote_hash_payload(
         "entity_type": str(ref["entity_type"] or ""),
         "entity_id": str(ref["entity_id"] or ""),
         "file_id": str(ref["file_id"] or ""),
-        "title": str(ref["title"] or ""),
         "provider": provider,
         "connection_id": connection_id,
         "drive_file_id": drive_file_id,
         "source_version": source_version,
         "display_path": display_path,
         "preview_body_sha256": preview_body_sha256,
-        "storage_staleness": storage_ref_staleness(ref),
     }
 
 

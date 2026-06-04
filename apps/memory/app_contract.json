@@ -32,7 +32,32 @@
       ]
     }
   ],
-  "requires": [],
+  "requires": [
+    {
+      "alias": "storage-file-catalog",
+      "interface": "file.catalog",
+      "version": "^1",
+      "required": true,
+      "cardinality": "one",
+      "description": "Storage-owned file identity and metadata used when Memory resolves local workspace files and Storage references."
+    },
+    {
+      "alias": "storage-file-content-read",
+      "interface": "file.content.read",
+      "version": "^1",
+      "required": true,
+      "cardinality": "one",
+      "description": "Storage-owned bounded file preview and read access used before Memory writes verified source bodies and chunks."
+    },
+    {
+      "alias": "storage-google-drive",
+      "interface": "file.provider.google-drive",
+      "version": "^1",
+      "required": false,
+      "cardinality": "one",
+      "description": "Optional Storage-owned Google Drive provider used for Drive-to-Memory indexing through stable Storage file references."
+    }
+  ],
   "distribution": {
     "mode": "source_available",
     "source_access": "forkable"

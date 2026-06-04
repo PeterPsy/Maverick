@@ -159,11 +159,11 @@ def normalized_storage_file_request(data_root: Path, body: dict[str, Any], sourc
     workspace_relative_path = validate_storage_workspace_relative_path(
         str(source.get("workspace_relative_path") or body.get("workspace_relative_path") or "")
     )
-    if not workspace_relative_path:
-        raise MemoryValidationError("storage_file ingest requires workspace_relative_path.")
     file_id = str(source.get("file_id") or body.get("file_id") or source.get("entity_id") or body.get("entity_id") or "").strip()
+    if not workspace_relative_path and not file_id:
+        raise MemoryValidationError("storage_file ingest requires file_id or workspace_relative_path.")
     metadata = source.get("metadata") if isinstance(source.get("metadata"), dict) else {}
-    storage_snapshot = fetch_local_storage_file_source(data_root, workspace_relative_path)
+    storage_snapshot = fetch_local_storage_file_source(data_root, workspace_relative_path, file_id=file_id)
     file_payload = storage_snapshot["file"]
     file_id = file_id or str(file_payload.get("file_id") or file_payload.get("id") or "").strip()
     resolved_workspace_relative_path = str(file_payload.get("workspace_relative_path") or workspace_relative_path).strip()

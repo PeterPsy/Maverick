@@ -155,6 +155,13 @@ class MemoryAppTestCase(unittest.TestCase):
         self.assertEqual(parsed.contract.storage.storage_kind, "sqlite+files")
         self.assertEqual(parsed.contract.storage.data_schema_version, "3")
         self.assertIn("data/memory/content", parsed.contract.storage.primary_paths)
+        required_interfaces = {requirement.alias: requirement for requirement in parsed.contract.requires}
+        self.assertEqual(required_interfaces["storage-file-catalog"].interface, "file.catalog")
+        self.assertTrue(required_interfaces["storage-file-catalog"].required)
+        self.assertEqual(required_interfaces["storage-file-content-read"].interface, "file.content.read")
+        self.assertTrue(required_interfaces["storage-file-content-read"].required)
+        self.assertEqual(required_interfaces["storage-google-drive"].interface, "file.provider.google-drive")
+        self.assertFalse(required_interfaces["storage-google-drive"].required)
         self.assertEqual(parsed.contract.capabilities.reference_entities[0].entity_type, "node")
         view_surface = parsed.contract.capabilities.view_surfaces[0]
         self.assertEqual(view_surface.view_id, "memory")
@@ -269,8 +276,16 @@ class MemoryAppTestCase(unittest.TestCase):
                 )
                 db.execute(
                     """
-                    INSERT INTO source_versions(id, source_id, version_hash, observed_at, created_at)
-                    VALUES ('srcv_old', 'src_old', 'hash-old', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
+                    INSERT INTO source_versions(id, source_id, version_hash, extracted_text, extracted_ref, observed_at, created_at)
+                    VALUES (
+                      'srcv_old',
+                      'src_old',
+                      'hash-old',
+                      'Legacy source text says migration evidence is preserved.',
+                      'legacy://source',
+                      '2026-01-01T00:00:00+00:00',
+                      '2026-01-01T00:00:00+00:00'
+                    )
                     """
                 )
                 db.execute(
@@ -303,11 +318,13 @@ class MemoryAppTestCase(unittest.TestCase):
                 source_version_columns = {row["name"] for row in db.execute("PRAGMA table_info(source_versions)")}
                 citation_columns = {row["name"] for row in db.execute("PRAGMA table_info(citations)")}
                 ingest_job_columns = {row["name"] for row in db.execute("PRAGMA table_info(ingest_jobs)")}
-                self.assertEqual(db.execute("SELECT COUNT(*) AS count FROM source_documents").fetchone()["count"], 0)
-                self.assertEqual(db.execute("SELECT COUNT(*) AS count FROM source_chunks").fetchone()["count"], 0)
+                self.assertEqual(db.execute("SELECT COUNT(*) AS count FROM source_documents").fetchone()["count"], 1)
+                self.assertEqual(db.execute("SELECT COUNT(*) AS count FROM source_chunks").fetchone()["count"], 1)
                 self.assertEqual(db.execute("SELECT COUNT(*) AS count FROM ingest_jobs").fetchone()["count"], 0)
                 migrated_version = database.row_payload(db.execute("SELECT * FROM source_versions WHERE id = 'srcv_old'").fetchone()) or {}
                 migrated_citation = database.row_payload(db.execute("SELECT * FROM citations WHERE id = 'cite_old'").fetchone()) or {}
+                migrated_document = database.row_payload(db.execute("SELECT * FROM source_documents").fetchone()) or {}
+                migrated_chunk = database.row_payload(db.execute("SELECT * FROM source_chunks").fetchone()) or {}
 
             self.assertEqual(migrated["schema_version"], "3")
             self.assertEqual(schema_version, "3")
@@ -320,7 +337,16 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertIn("quote_sha256", citation_columns)
             self.assertIn("lease_token", ingest_job_columns)
             self.assertEqual(migrated_version["version_hash"], "hash-old")
-            self.assertEqual(migrated_version["body_path"], "")
+            self.assertEqual(migrated_version["source_document_id"], migrated_document["id"])
+            self.assertEqual(migrated_document["source_key"], "legacy:src_old")
+            self.assertTrue(migrated_version["body_path"].startswith("content/sources/"))
+            self.assertTrue(migrated_version["body_sha256"])
+            self.assertEqual(migrated_version["hash_kind"], "canonical_body")
+            self.assertEqual(migrated_version["extraction_status"], "available")
+            self.assertEqual(migrated_chunk["source_version_id"], "srcv_old")
+            self.assertTrue(migrated_chunk["body_path"].startswith("content/chunks/"))
+            self.assertEqual(migrated_chunk["locator"], "legacy://source")
+            self.assertEqual(migrated_chunk["locator_kind"], "migration_extracted_text")
             self.assertEqual(migrated_citation["locator"], "old locator")
             self.assertEqual(migrated_citation["quote_sha256"], "")
 
@@ -733,6 +759,32 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual({version["metadata"]["hash_kind"] for version in versions}, {"file_bytes"})
             self.assertTrue(all(not version["extracted_text"] for version in versions))
 
+    def test_compile_input_hash_is_stable_for_unchanged_source_refs(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            workspace_root = Path(temp)
+            data_root = workspace_root / "data" / "memory"
+            source_path = workspace_root / "storage" / "generated" / "stable.md"
+            source_path.parent.mkdir(parents=True, exist_ok=True)
+            source_path.write_text("Stable source evidence.", encoding="utf-8")
+            node = self.run_backend(
+                data_root,
+                {"action": "remember", "title": "Stable source", "body": "Stable source claim.", "type": "fact"},
+            )["json"]["node"]
+            self.run_backend(
+                data_root,
+                {
+                    "action": "attach_file",
+                    "node_id": node["id"],
+                    "workspace_relative_path": "storage/generated/stable.md",
+                    "title": "Stable source evidence",
+                },
+            )
+
+            first = self.run_backend(data_root, {"action": "compile", "node_id": node["id"]})["json"]
+            second = self.run_backend(data_root, {"action": "compile", "node_id": node["id"]})["json"]
+
+            self.assertEqual(first["compile_run"]["input_hash"], second["compile_run"]["input_hash"])
+
     def test_ingest_source_inline_markdown_creates_verified_chunks_and_versions_idempotently(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             data_root = Path(temp) / "data" / "memory"
@@ -993,6 +1045,9 @@ class MemoryAppTestCase(unittest.TestCase):
 
             def fake_storage_surface(_data_root: Path, tool_name: str, arguments: dict) -> dict:
                 calls.append((tool_name, dict(arguments)))
+                if tool_name == "storage_reference_resolve":
+                    self.assertEqual(arguments["entity_id"], "file_handoff")
+                    return {"status_code": 200, "file": file_payload()}
                 if tool_name == "storage_file_info":
                     return {"status_code": 200, "file": file_payload()}
                 if tool_name == "storage_preview_text":
@@ -1015,7 +1070,6 @@ class MemoryAppTestCase(unittest.TestCase):
                         "action": "ingest_source",
                         "adapter_id": "storage_file",
                         "file_id": "file_handoff",
-                        "workspace_relative_path": "storage/generated/notes/handoff.md",
                         "title": "Handoff note",
                         "compile_after_ingest": True,
                     },
@@ -1078,10 +1132,17 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual(byte_changed_status, 200)
             self.assertEqual(changed_status, 200)
             self.assertEqual(
-                [tool_name for tool_name, _arguments in calls[:3]],
-                ["storage_file_info", "storage_preview_text", "storage_read_file"],
+                [tool_name for tool_name, _arguments in calls[:4]],
+                ["storage_reference_resolve", "storage_file_info", "storage_preview_text", "storage_read_file"],
             )
-            self.assertTrue(all(arguments["workspace_relative_path"] == "storage/generated/notes/handoff.md" for _tool, arguments in calls))
+            self.assertEqual(calls[0][1]["entity_id"], "file_handoff")
+            self.assertTrue(
+                all(
+                    arguments["workspace_relative_path"] == "storage/generated/notes/handoff.md"
+                    for tool_name, arguments in calls
+                    if tool_name in {"storage_file_info", "storage_preview_text", "storage_read_file"}
+                )
+            )
             self.assertTrue(first["source_version_created"])
             self.assertFalse(second["source_version_created"])
             self.assertTrue(byte_changed["source_version_created"])
@@ -1277,6 +1338,53 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual(search_ref["preview_request"]["arguments"]["stable_storage_file_id"], "file_drive_plan")
             self.assertEqual(wiki_ref["deep_link"], "/app/storage/files/file_drive_plan")
             self.assertEqual(context["items"][0]["compiled"]["storage_references"][0]["drive_file_id"], "drive_plan")
+
+    def test_remote_storage_preview_body_changes_create_new_source_version_even_with_same_storage_version(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            service = self.import_backend_module("service")
+            database = self.import_backend_module("database")
+            source = self.drive_memory_source(source_version="rev-same")
+
+            first_status, first = service.handle_action(
+                data_root,
+                {
+                    "action": "ingest_storage_source",
+                    "title": "Drive preview body",
+                    "memory_source": source,
+                    "preview_text": "Drive preview says renewal owner is Dana.",
+                    "compile_after_ingest": True,
+                },
+            )
+            second_status, second = service.handle_action(
+                data_root,
+                {
+                    "action": "ingest_storage_source",
+                    "title": "Drive preview body",
+                    "memory_source": source,
+                    "preview_text": "Drive preview says renewal owner is Dana. Added verified appendix.",
+                    "compile_after_ingest": True,
+                },
+            )
+
+            with database.connect(data_root) as db:
+                versions = [
+                    database.row_payload(row) or {}
+                    for row in db.execute("SELECT * FROM source_versions ORDER BY created_at")
+                ]
+                chunks = [
+                    database.row_payload(row) or {}
+                    for row in db.execute("SELECT * FROM source_chunks ORDER BY created_at")
+                ]
+
+            self.assertEqual(first_status, 200)
+            self.assertEqual(second_status, 200)
+            self.assertEqual(second["node"]["id"], first["node"]["id"])
+            self.assertEqual(len(versions), 2)
+            self.assertEqual({version["metadata"]["source_version"] for version in versions}, {"rev-same"})
+            self.assertNotEqual(versions[0]["version_hash"], versions[1]["version_hash"])
+            self.assertNotEqual(versions[0]["body_sha256"], versions[1]["body_sha256"])
+            self.assertEqual({chunk["source_version_id"] for chunk in chunks}, {version["id"] for version in versions})
 
     def test_ingest_storage_source_accepts_empty_preview_text_without_second_storage_preview(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -1655,6 +1763,25 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual(calls[0][:7], ["maverick", "app", "storage", "mcp", "call", "storage_file_info", "--json"])
             self.assertIn("--workspace-relative-path", calls[0])
             self.assertIn("storage/generated/notes/handoff.md", calls[0])
+
+    def test_storage_file_source_local_fallback_requires_explicit_dev_flag(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            storage_file_sources = self.import_backend_module("storage_file_sources")
+            original_which = storage_file_sources.shutil.which
+            original_flag = os.environ.pop("MAVERICK_MEMORY_ALLOW_LOCAL_STORAGE_FALLBACK", None)
+            try:
+                storage_file_sources.shutil.which = lambda _name: None
+                with self.assertRaises(storage_file_sources.MemoryValidationError):
+                    storage_file_sources.default_storage_file_surface(
+                        data_root,
+                        "storage_file_info",
+                        {"workspace_relative_path": "storage/generated/notes/handoff.md"},
+                    )
+            finally:
+                storage_file_sources.shutil.which = original_which
+                if original_flag is not None:
+                    os.environ["MAVERICK_MEMORY_ALLOW_LOCAL_STORAGE_FALLBACK"] = original_flag
 
     def test_remote_storage_ingestion_uses_storage_preview_and_cites_source_version(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

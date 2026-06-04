@@ -74,12 +74,14 @@ Memory ingestion is app-owned and separate from compile:
 5. create source chunks with stable hashes and locators
 6. enqueue or explicitly run compile and lint work
 
-The initial adapters should stay narrow:
+The first implemented generic adapters stay narrow:
 
 - `inline_markdown` for tests, imports, and generated notes
-- `storage_file` for workspace Storage files, using official Storage `file_info`, `preview_text`, and `read_file` surfaces before Memory stores verified source/chunk content
-- `remote_storage_file` for Storage-owned Drive references, never direct Drive access
-- `app_entity` for snapshots from official app reference surfaces
+- `storage_file` for workspace Storage files by stable Storage file id or workspace-relative Storage path, using official Storage `reference_resolve`, `file_info`, `preview_text`, and `read_file` surfaces before Memory stores verified source/chunk content
+
+Drive ingestion remains on the transitional `memory_ingest_storage_source` surface while preserving the same v3 source document, source version, content-store, source chunk, and citation model. A future step may fold that into a generic `remote_storage_file` adapter for `memory_ingest_source`; until then, Drive remains Storage-owned and Memory never reads Drive directly.
+
+`app_entity` source snapshots are future work. They must use official reference surfaces from the owning app and must not read app-private databases directly.
 
 Storage remains the owner of local files, Drive OAuth, Drive bytes, preview/export policy, and stable Storage file ids. Memory consumes Storage references and bounded previews through official Storage surfaces and must not persist Google tokens, refresh tokens, OAuth codes, client secrets, or absolute provider paths.
 
@@ -101,7 +103,7 @@ Memory exposes agent-facing surfaces through the app contract:
 
 Future ingestion and execution surfaces should expand source primitives without changing core ownership:
 
-- more `memory_ingest_source` adapters such as `app_entity` snapshots through official app reference surfaces, plus richer Storage preview/extraction paths where Storage remains the gateway
+- more `memory_ingest_source` adapters such as `remote_storage_file` and `app_entity` snapshots through official app reference surfaces, plus richer Storage preview/extraction paths where Storage remains the gateway
 - richer chunk indexing, including FTS and later optional embeddings as app-owned indices
 
 The first compiler may be deterministic and use existing node text, references, source links, and relationships. LLM-assisted compilation can be added later, but it must preserve citations, input provenance, lint results, and source version identity. Source chunk retrieval should expose freshness relative to the latest observed source version so older-version chunks remain auditable without being presented as current evidence.

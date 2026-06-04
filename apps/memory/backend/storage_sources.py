@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from hashlib import sha256
 import json
+import os
 from pathlib import Path
 import shutil
 import sqlite3
@@ -11,6 +12,7 @@ import subprocess
 import sys
 from typing import Any
 
+from content_store import body_hash
 from database import json_text
 from errors import MemoryValidationError
 
@@ -29,6 +31,8 @@ def default_storage_preview_surface(data_root: Path, request: dict[str, Any]) ->
         raise MemoryValidationError("Memory data_root must live under a workspace data directory for Storage ingestion.")
     if shutil.which("maverick"):
         return platform_storage_preview(workspace_root, request)
+    if os.environ.get("MAVERICK_MEMORY_ALLOW_LOCAL_STORAGE_FALLBACK") != "1":
+        raise MemoryValidationError("Storage MCP surface is unavailable; local Storage preview fallback is disabled.")
     return local_storage_preview(workspace_root, request)
 
 
@@ -147,6 +151,7 @@ def remote_storage_snapshot(
     drive_file_id = str(metadata.get("drive_file_id") or "").strip()
     source_version = str(metadata.get("source_version") or "").strip()
     display_path = str(metadata.get("display_path") or "").strip()
+    preview_body_sha256 = str(metadata.get("preview_body_sha256") or "").strip()
     preview_payload: dict[str, Any] = {}
     preview_text = ""
     if include_preview:
@@ -168,7 +173,9 @@ def remote_storage_snapshot(
                 or ""
             )
             display_path = str(file_payload.get("display_path") or display_path or "")
-    hash_kind = "remote_storage_preview" if preview_text else "reference_snapshot"
+    if preview_text:
+        preview_body_sha256 = body_hash(preview_text)
+    hash_kind = "remote_storage_preview" if preview_body_sha256 else "reference_snapshot"
     return {
         "hash": sha256(
             json.dumps(
@@ -179,6 +186,7 @@ def remote_storage_snapshot(
                     drive_file_id=drive_file_id,
                     source_version=source_version,
                     display_path=display_path,
+                    preview_body_sha256=preview_body_sha256,
                 ),
                 sort_keys=True,
                 ensure_ascii=False,
@@ -193,6 +201,7 @@ def remote_storage_snapshot(
             "drive_file_id": drive_file_id,
             "source_version": source_version,
             "display_path": display_path,
+            "preview_body_sha256": preview_body_sha256,
             "preview_truncated": bool(preview_payload.get("truncated")) if include_preview else False,
         },
     }
@@ -218,6 +227,7 @@ def remote_hash_payload(
     drive_file_id: str,
     source_version: str,
     display_path: str,
+    preview_body_sha256: str = "",
 ) -> dict[str, Any]:
     return {
         "ref_kind": str(ref["ref_kind"] or ""),
@@ -231,6 +241,7 @@ def remote_hash_payload(
         "drive_file_id": drive_file_id,
         "source_version": source_version,
         "display_path": display_path,
+        "preview_body_sha256": preview_body_sha256,
         "storage_staleness": storage_ref_staleness(ref),
     }
 

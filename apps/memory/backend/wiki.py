@@ -398,7 +398,6 @@ def compile_source_aware_input_hash(
                 source.get("id"),
                 source.get("source_version_id"),
                 source.get("content_hash"),
-                source.get("updated_at"),
             )
         )
         for source in sorted(sources, key=lambda item: str(item.get("id") or ""))

@@ -14,6 +14,7 @@ from uuid import uuid4
 from errors import MemoryValidationError
 from memory_schema import SCHEMA_STATEMENTS
 from models import EDGE_KINDS, NODE_TYPES, SCHEMA_VERSION
+from schema_migrations import apply_additive_migrations, source_version_foundation_needs_backfill
 
 
 SQLITE_BUSY_TIMEOUT_MS = 10000
@@ -106,7 +107,7 @@ def ensure_schema(data_root: Path) -> None:
     with transaction(data_root, immediate=True) as db:
         for statement in SCHEMA_STATEMENTS:
             db.execute(statement)
-        apply_additive_migrations(db)
+        apply_additive_migrations(db, data_root=data_root)
         db.execute(
             "INSERT OR REPLACE INTO schema_metadata(key, value) VALUES (?, ?)",
             ("schema_version", SCHEMA_VERSION),
@@ -248,32 +249,9 @@ def schema_has_current_shape(db: sqlite3.Connection) -> bool:
         indexes = {row["name"] for row in db.execute(f"PRAGMA index_list({table_name})")}
         if not required.issubset(indexes):
             return False
+    if source_version_foundation_needs_backfill(db):
+        return False
     return True
-
-
-def apply_additive_migrations(db: sqlite3.Connection) -> None:
-    """Bring existing Memory databases up to the current additive schema."""
-    add_column_if_missing(db, "source_versions", "source_document_id", "TEXT")
-    add_column_if_missing(db, "source_versions", "body_path", "TEXT NOT NULL DEFAULT ''")
-    add_column_if_missing(db, "source_versions", "body_sha256", "TEXT NOT NULL DEFAULT ''")
-    add_column_if_missing(db, "source_versions", "body_bytes", "INTEGER NOT NULL DEFAULT 0")
-    add_column_if_missing(db, "source_versions", "hash_kind", "TEXT NOT NULL DEFAULT ''")
-    add_column_if_missing(db, "source_versions", "extraction_status", "TEXT NOT NULL DEFAULT ''")
-    add_column_if_missing(db, "source_versions", "source_modified_at", "TEXT")
-    add_column_if_missing(db, "source_versions", "content_type", "TEXT NOT NULL DEFAULT ''")
-    add_column_if_missing(db, "citations", "source_chunk_id", "TEXT")
-    add_column_if_missing(db, "citations", "locator_kind", "TEXT NOT NULL DEFAULT ''")
-    add_column_if_missing(db, "citations", "char_start", "INTEGER")
-    add_column_if_missing(db, "citations", "char_end", "INTEGER")
-    add_column_if_missing(db, "citations", "quote_sha256", "TEXT NOT NULL DEFAULT ''")
-    add_column_if_missing(db, "ingest_jobs", "lease_token", "TEXT NOT NULL DEFAULT ''")
-
-
-def add_column_if_missing(db: sqlite3.Connection, table_name: str, column_name: str, column_definition: str) -> None:
-    columns = {row["name"] for row in db.execute(f"PRAGMA table_info({table_name})")}
-    if column_name not in columns:
-        db.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_definition}")
-
 
 def health_payload(data_root: Path) -> dict[str, Any]:
     ensure_schema(data_root)

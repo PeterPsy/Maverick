@@ -5,6 +5,7 @@ from __future__ import annotations
 from base64 import b64decode
 import binascii
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -30,9 +31,15 @@ TEXT_STORAGE_EXTENSIONS = {
 }
 
 
-def fetch_local_storage_file_source(data_root: Path, workspace_relative_path: str) -> dict[str, Any]:
+def fetch_local_storage_file_source(data_root: Path, workspace_relative_path: str = "", file_id: str = "") -> dict[str, Any]:
     """Fetch one local Storage file through Storage-owned read surfaces."""
 
+    workspace_relative_path = str(workspace_relative_path or "").strip()
+    file_id = str(file_id or "").strip()
+    if not workspace_relative_path and file_id:
+        workspace_relative_path = resolve_storage_file_path(data_root, file_id)
+    if not workspace_relative_path:
+        raise MemoryValidationError("storage_file ingest requires file_id or workspace_relative_path.")
     suffix = Path(workspace_relative_path).suffix.lower()
     if suffix not in TEXT_STORAGE_EXTENSIONS:
         raise MemoryValidationError("storage_file ingest currently supports text and Markdown-like files.")
@@ -71,6 +78,8 @@ def default_storage_file_surface(data_root: Path, tool_name: str, arguments: dic
         raise MemoryValidationError("Memory data_root must live under a workspace data directory for Storage ingestion.")
     if shutil.which("maverick"):
         return platform_storage_file_surface(workspace_root, tool_name, arguments)
+    if os.environ.get("MAVERICK_MEMORY_ALLOW_LOCAL_STORAGE_FALLBACK") != "1":
+        raise MemoryValidationError("Storage MCP surface is unavailable; local Storage source fallback is disabled.")
     return local_storage_file_surface(workspace_root, tool_name, arguments)
 
 
@@ -119,6 +128,19 @@ def local_storage_file_surface(workspace_root: Path, tool_name: str, arguments: 
 
 
 _storage_file_surface = default_storage_file_surface
+
+
+def resolve_storage_file_path(data_root: Path, file_id: str) -> str:
+    response = _storage_file_surface(
+        data_root,
+        "storage_reference_resolve",
+        {"entity_type": "file", "entity_id": file_id},
+    )
+    file_payload = _file_payload(response)
+    workspace_relative_path = str(file_payload.get("workspace_relative_path") or "").strip()
+    if not workspace_relative_path.startswith(("storage/uploaded/", "storage/generated/")):
+        raise MemoryValidationError("storage_file ingest requires a local workspace Storage file.")
+    return workspace_relative_path
 
 
 def workspace_root_for_data_root(data_root: Path) -> Path | None:

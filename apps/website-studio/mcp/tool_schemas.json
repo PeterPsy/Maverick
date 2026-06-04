@@ -1,7 +1,7 @@
 {
   "tools": {
     "website_manifest": {
-      "description": "Return Website Studio health, schema, and Phase 1 manifest information.",
+      "description": "Return Website Studio health, schema, and implementation phase information.",
       "input_schema": {"type": "object", "properties": {}, "additionalProperties": false}
     },
     "website_sites_list": {
@@ -57,6 +57,73 @@
           "site_id": {"type": "string"},
           "display_name": {"type": "string"},
           "slug": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "website_site_set_active": {
+      "description": "Select the active Website Studio site for workspace navigation and contextual agent surfaces.",
+      "input_schema": {"type": "object", "required": ["site_id"], "properties": {"site_id": {"type": "string"}}, "additionalProperties": false}
+    },
+    "website_git_connections_list": {
+      "description": "List redaction-safe GitHub repository connections prepared for Website Studio.",
+      "input_schema": {
+        "type": "object",
+        "properties": {"site_id": {"type": "string"}},
+        "additionalProperties": false
+      }
+    },
+    "website_git_connection_prepare": {
+      "description": "Prepare a GitHub repository connection and return Vault/Core Secrets grant requirements without receiving raw secret values.",
+      "input_schema": {
+        "type": "object",
+        "required": ["repository_url"],
+        "properties": {
+          "site_id": {"type": "string"},
+          "display_name": {"type": "string"},
+          "repository_url": {"type": "string"},
+          "base_branch": {"type": "string"},
+          "branch": {"type": "string"},
+          "auth_mode": {"type": "string", "enum": ["fine_grained_token"], "default": "fine_grained_token"},
+          "secret_logical_name": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "website_git_connection_activate": {
+      "description": "Mark a prepared GitHub connection as backed by a Vault/Core Secrets grant without receiving raw token values.",
+      "input_schema": {
+        "type": "object",
+        "required": ["connection_id", "grant_id", "confirm_no_raw_secret"],
+        "properties": {
+          "connection_id": {"type": "string"},
+          "grant_id": {"type": "string"},
+          "confirm_no_raw_secret": {"type": "boolean", "const": true}
+        },
+        "additionalProperties": false
+      }
+    },
+    "website_environments_list": {
+      "description": "List configured preview/staging/production environments for one Website Studio site.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id"],
+        "properties": {"site_id": {"type": "string"}},
+        "additionalProperties": false
+      }
+    },
+    "website_environment_configure": {
+      "description": "Create or update a site environment and approval requirement.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id", "kind"],
+        "properties": {
+          "site_id": {"type": "string"},
+          "environment_id": {"type": "string"},
+          "name": {"type": "string"},
+          "kind": {"type": "string", "enum": ["preview", "staging", "production", "custom"]},
+          "base_url": {"type": "string"},
+          "requires_approval": {"type": "boolean"}
         },
         "additionalProperties": false
       }
@@ -143,6 +210,33 @@
       "description": "Return a unified diff between the active revision snapshot and the working source tree.",
       "input_schema": {"type": "object", "required": ["site_id"], "properties": {"site_id": {"type": "string"}}, "additionalProperties": false}
     },
+    "website_list_changes": {
+      "description": "List working diff entries, changesets, publish requests, and revisions for one site.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id"],
+        "properties": {"site_id": {"type": "string"}, "status": {"type": "string"}},
+        "additionalProperties": false
+      }
+    },
+    "website_build_validate": {
+      "description": "Record a deterministic static build validation without running arbitrary imported code.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id"],
+        "properties": {"site_id": {"type": "string"}},
+        "additionalProperties": false
+      }
+    },
+    "website_builds_list": {
+      "description": "List recorded build validation attempts for one site.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id"],
+        "properties": {"site_id": {"type": "string"}},
+        "additionalProperties": false
+      }
+    },
     "website_build_preview": {
       "description": "Return static HTML preview payload for one indexed route.",
       "input_schema": {
@@ -161,6 +255,57 @@
         "additionalProperties": false
       }
     },
+    "website_approval_record": {
+      "description": "Record an explicit approval event for a pending publish request or rollback target.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id", "approval_action", "target_id", "approved_by", "confirm"],
+        "properties": {
+          "site_id": {"type": "string"},
+          "approval_action": {"type": "string", "enum": ["publish", "rollback"]},
+          "target_id": {"type": "string"},
+          "approved_by": {"type": "string"},
+          "approval_note": {"type": "string"},
+          "confirm": {"type": "boolean", "const": true}
+        },
+        "additionalProperties": false
+      }
+    },
+    "website_approvals_list": {
+      "description": "List Website Studio approval events, optionally scoped to one site.",
+      "input_schema": {
+        "type": "object",
+        "properties": {"site_id": {"type": "string"}},
+        "additionalProperties": false
+      }
+    },
+    "website_publish": {
+      "description": "Publish an approved working diff into an immutable Website Studio revision and deployment record.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id", "publish_request_id", "approval_id"],
+        "properties": {
+          "site_id": {"type": "string"},
+          "publish_request_id": {"type": "string"},
+          "approval_id": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "website_rollback": {
+      "description": "Restore a selected revision into the working tree after explicit approval.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id", "revision_id", "approval_id", "confirm"],
+        "properties": {
+          "site_id": {"type": "string"},
+          "revision_id": {"type": "string"},
+          "approval_id": {"type": "string"},
+          "confirm": {"type": "boolean", "const": true}
+        },
+        "additionalProperties": false
+      }
+    },
     "website_active_context": {
       "description": "Return bounded site/page context for the active Website Studio view.",
       "input_schema": {
@@ -173,7 +318,13 @@
       "description": "Return bounded site/page context for a selected Website Studio page.",
       "input_schema": {
         "type": "object",
-        "properties": {"site_id": {"type": "string"}, "page_id": {"type": "string"}},
+        "properties": {
+          "site_id": {"type": "string"},
+          "page_id": {"type": "string"},
+          "route_id": {"type": "string"},
+          "route": {"type": "string"},
+          "asset_id": {"type": "string"}
+        },
         "additionalProperties": false
       }
     },

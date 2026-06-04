@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from base64 import b64encode
+from collections.abc import Callable
 from collections.abc import Iterator
 from contextlib import contextmanager
 import difflib
@@ -14,6 +16,9 @@ import shutil
 import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from typing import Any
+from urllib.parse import quote, urlencode, urlparse
+from urllib.request import Request, urlopen
 from uuid import uuid4
 
 from database import REFERENCE_ENTITIES, connect, ensure_schema, now_timestamp
@@ -25,23 +30,29 @@ from safety import (
     extract_zip_base64,
     preview_srcdoc_html,
     read_text_file,
+    replace_tree_from_directory,
     resolve_site_path,
     safe_relative_path,
     sha256_text,
     slugify,
     snapshot_text_files,
+    source_profile,
     validate_editable_text_path,
     validate_git_source,
     validate_source_tree_for_phase1,
     write_text_file,
 )
 
+HttpTransport = Callable[[str, str, dict[str, Any]], tuple[int, dict[str, Any] | list[Any] | bytes]]
+GITHUB_API_BASE = "https://api.github.com"
+
 
 def list_sites(data_root: Path) -> list[dict[str, object]]:
     ensure_schema(data_root)
+    active_site_id = get_active_site_id(data_root)
     with connect(data_root) as db:
         rows = db.execute("SELECT * FROM sites ORDER BY updated_at DESC").fetchall()
-    return [_site_row(row) for row in rows]
+    return [_site_row(row, active_site_id=active_site_id) for row in rows]
 
 
 def create_site(
@@ -71,6 +82,8 @@ def create_site(
     rebuild_index(data_root, site_id)
     revision = create_revision(data_root, site_id, label="Initial working copy", source="create_site")
     _set_active_revision(data_root, site_id, revision["id"])
+    _ensure_default_environment(data_root, site_id)
+    set_active_site(data_root, site_id)
     _audit(data_root, site_id, "site.created", f"Created site {name}")
     return get_site(data_root, site_id)
 
@@ -82,13 +95,14 @@ def get_site(data_root: Path, site_id: object) -> dict[str, object]:
         row = db.execute("SELECT * FROM sites WHERE id = ?", (clean_id,)).fetchone()
     if row is None:
         raise ValueError(f"site `{clean_id}` was not found")
-    return _site_row(row)
+    return _site_row(row, active_site_id=get_active_site_id(data_root))
 
 
 def site_status(data_root: Path, site_id: object) -> dict[str, object]:
     site = get_site(data_root, site_id)
     pages = sitemap(data_root, site["id"])
     diff_payload = diff_site(data_root, site["id"])
+    profile = source_profile(_source_root(data_root, str(site["id"])))
     return {
         "site": site,
         "page_count": len(pages["items"]),
@@ -97,7 +111,28 @@ def site_status(data_root: Path, site_id: object) -> dict[str, object]:
         "changed_files_count": len(diff_payload["files"]),
         "active_revision_id": site.get("active_revision_id"),
         "published_revision_id": site.get("published_revision_id"),
+        "source_profile": profile,
+        "is_active": bool(site.get("is_active")),
     }
+
+
+def get_active_site_id(data_root: Path) -> str:
+    state = load_view_state(data_root)
+    return str(state.get("active_site_id") or "")
+
+
+def set_active_site(data_root: Path, site_id: object) -> dict[str, object]:
+    site = get_site(data_root, site_id)
+    if site.get("status") == "archived":
+        raise ValueError("archived sites cannot be selected as the active site")
+    state = load_view_state(data_root)
+    next_state = _write_view_state(
+        data_root,
+        dict(state.get("view_filter") or _default_view_filter()),
+        active_site_id=str(site["id"]),
+    )
+    _audit(data_root, str(site["id"]), "site.selected", f"Selected active site {site['display_name']}")
+    return {"site": get_site(data_root, site["id"]), "state": next_state}
 
 
 def archive_site(data_root: Path, site_id: object) -> dict[str, object]:
@@ -105,6 +140,9 @@ def archive_site(data_root: Path, site_id: object) -> dict[str, object]:
     now = now_timestamp()
     with connect(data_root) as db:
         db.execute("UPDATE sites SET status = 'archived', archived_at = ?, updated_at = ? WHERE id = ?", (now, now, site["id"]))
+    if get_active_site_id(data_root) == site["id"]:
+        state = load_view_state(data_root)
+        _write_view_state(data_root, dict(state.get("view_filter") or _default_view_filter()), active_site_id="")
     _audit(data_root, str(site["id"]), "site.archived", f"Archived site {site['display_name']}")
     return get_site(data_root, site["id"])
 
@@ -196,19 +234,21 @@ def import_zip(
             revision = create_revision(data_root, site["id"], label="ZIP import", source="zip_import")
             _set_active_revision(data_root, site["id"], revision["id"])
             artifact_ref = _source_artifact_ref(source_artifact_ref)
+            profile = source_profile(source_root)
             _update_site(
                 data_root,
                 site["id"],
                 source_provider="zip",
                 source_label="ZIP import",
-                source_shape=import_result.get("source_shape") or "partial_source",
+                source_shape=str(profile.get("source_shape") or import_result.get("source_shape") or "partial_source"),
                 source_artifact_ref_json=json.dumps(artifact_ref, sort_keys=True),
             )
+            set_active_site(data_root, site["id"])
             _audit(data_root, site["id"], "site.import_zip", f"Imported {import_result['files_extracted']} ZIP files", {"source_artifact_ref": artifact_ref})
     finally:
         if temp_root.exists():
             shutil.rmtree(temp_root)
-    return {"site": get_site(data_root, site["id"]), "import": import_result, "revision": revision}
+    return {"site": get_site(data_root, site["id"]), "import": {**import_result, "source_profile": profile}, "revision": revision}
 
 
 def import_git(
@@ -229,7 +269,8 @@ def import_git(
         if clone_git.exists():
             shutil.rmtree(clone_git)
         validate_source_tree_for_phase1(clone_root)
-        source_shape = classify_source_tree(clone_root)
+        profile = source_profile(clone_root)
+        source_shape = str(profile.get("source_shape") or classify_source_tree(clone_root))
         if site is None:
             site = create_site(data_root, display_name=display_name or _display_name_from_git_source(source), source_provider="git")
         with _site_mutation_lock(data_root, str(site["id"])):
@@ -249,15 +290,172 @@ def import_git(
                 source_shape=source_shape,
                 source_artifact_ref_json=json.dumps({"provider": "git", "source_label": _redacted_git_source_label(source, clean_branch), "branch": clean_branch or ""}, sort_keys=True),
             )
+            set_active_site(data_root, site["id"])
             _audit(data_root, site["id"], "site.import_git", "Imported Git repository", {"branch": clean_branch or ""})
     finally:
         if temp_root.exists():
             shutil.rmtree(temp_root)
     return {
         "site": get_site(data_root, site["id"]),
-        "import": {"source_provider": "git", "branch": clean_branch or "", "source_label": _redacted_git_source_label(source, clean_branch)},
+        "import": {
+            "source_provider": "git",
+            "branch": clean_branch or "",
+            "source_label": _redacted_git_source_label(source, clean_branch),
+            "source_shape": source_shape,
+            "source_profile": profile,
+        },
         "revision": revision,
     }
+
+
+def list_git_connections(data_root: Path, site_id: object = None) -> list[dict[str, object]]:
+    ensure_schema(data_root)
+    with connect(data_root) as db:
+        if site_id:
+            rows = db.execute(
+                "SELECT * FROM git_connections WHERE site_id = ? ORDER BY updated_at DESC",
+                (str(site_id),),
+            ).fetchall()
+        else:
+            rows = db.execute("SELECT * FROM git_connections ORDER BY updated_at DESC").fetchall()
+    return [_git_connection_row(row) for row in rows]
+
+
+def prepare_git_connection(
+    data_root: Path,
+    *,
+    site_id: object = None,
+    display_name: object = None,
+    repository_url: object,
+    base_branch: object = None,
+    auth_mode: object = "fine_grained_token",
+    secret_logical_name: object = None,
+    github_app_id: object = None,
+    github_installation_id: object = None,
+) -> dict[str, object]:
+    owner, repo, normalized_url = _parse_github_repository(repository_url)
+    branch = _clean_git_branch(base_branch or "main")
+    mode = str(auth_mode or "fine_grained_token").strip()
+    if mode != "fine_grained_token":
+        raise ValueError("auth_mode must be fine_grained_token until GitHub App mode is implemented")
+    logical_name = str(secret_logical_name or "github-token").strip()
+    if logical_name not in _vault_requirements_for_git_mode(mode):
+        raise ValueError(f"secret_logical_name must be one of {', '.join(_vault_requirements_for_git_mode(mode))}")
+
+    site = get_site(data_root, site_id) if site_id else create_site(
+        data_root,
+        display_name=display_name or repo.replace("-", " ").replace("_", " ").title(),
+        source_provider="git",
+    )
+    connection_id = _connection_id(owner, repo)
+    now = now_timestamp()
+    status = "pending_vault_grant"
+    ensure_schema(data_root)
+    with connect(data_root) as db:
+        db.execute(
+            """
+            INSERT INTO git_connections(
+              id, site_id, provider, owner, repo, repository_url, base_branch, auth_mode,
+              secret_logical_name, github_app_id, github_installation_id, status, created_at, updated_at
+            )
+            VALUES (?, ?, 'github', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(provider, owner, repo) DO UPDATE SET
+              site_id=excluded.site_id,
+              repository_url=excluded.repository_url,
+              base_branch=excluded.base_branch,
+              auth_mode=excluded.auth_mode,
+              secret_logical_name=excluded.secret_logical_name,
+              github_app_id=excluded.github_app_id,
+              github_installation_id=excluded.github_installation_id,
+              status=excluded.status,
+              updated_at=excluded.updated_at
+            """,
+            (
+                connection_id,
+                site["id"],
+                owner,
+                repo,
+                normalized_url,
+                branch,
+                mode,
+                logical_name,
+                str(github_app_id or "").strip(),
+                str(github_installation_id or "").strip(),
+                status,
+                now,
+                now,
+            ),
+        )
+    _update_site(
+        data_root,
+        site["id"],
+        source_provider="git",
+        source_label=f"github:{owner}/{repo}#{branch}",
+        source_artifact_ref_json=json.dumps(
+            {
+                "provider": "github",
+                "owner": owner,
+                "repo": repo,
+                "base_branch": branch,
+                "connection_id": connection_id,
+                "auth_mode": mode,
+            },
+            sort_keys=True,
+        ),
+    )
+    set_active_site(data_root, site["id"])
+    _audit(
+        data_root,
+        str(site["id"]),
+        "git.connection.prepared",
+        f"Prepared GitHub connection for {owner}/{repo}",
+        {"connection_id": connection_id, "auth_mode": mode, "secret_logical_name": logical_name},
+    )
+    connection = get_git_connection(data_root, connection_id)
+    return {
+        "site": get_site(data_root, site["id"]),
+        "connection": connection,
+        "vault_requirements": _vault_requirement_payload(mode, logical_name, connection_id),
+    }
+
+
+def get_git_connection(data_root: Path, connection_id: object) -> dict[str, object]:
+    clean_id = _required_id(connection_id, "connection_id")
+    ensure_schema(data_root)
+    with connect(data_root) as db:
+        row = db.execute("SELECT * FROM git_connections WHERE id = ?", (clean_id,)).fetchone()
+    if row is None:
+        raise ValueError(f"git connection `{clean_id}` was not found")
+    return _git_connection_row(row)
+
+
+def activate_git_connection(
+    data_root: Path,
+    connection_id: object,
+    *,
+    grant_id: object = None,
+    confirm_no_raw_secret: object = False,
+) -> dict[str, object]:
+    connection = get_git_connection(data_root, connection_id)
+    if confirm_no_raw_secret is not True:
+        raise ValueError("confirm_no_raw_secret=true is required; raw GitHub tokens must stay in Vault/Core Secrets")
+    clean_grant = str(grant_id or "").strip()
+    if not clean_grant:
+        raise ValueError("grant_id is required to activate a GitHub connection")
+    now = now_timestamp()
+    with connect(data_root) as db:
+        db.execute(
+            "UPDATE git_connections SET status = 'grant_configured', updated_at = ? WHERE id = ?",
+            (now, connection["id"]),
+        )
+    _audit(
+        data_root,
+        str(connection.get("site_id") or ""),
+        "git.connection.activated",
+        f"Activated GitHub connection for {connection['owner']}/{connection['repo']}",
+        {"connection_id": connection["id"], "grant_id": clean_grant},
+    )
+    return {"connection": get_git_connection(data_root, connection["id"]), "grant_id": clean_grant}
 
 
 def rebuild_index(data_root: Path, site_id: object) -> dict[str, object]:
@@ -441,10 +639,10 @@ def search(data_root: Path, query: object = "", site_id: object = None) -> list[
                 (needle,),
             ).fetchall()
     return (
-        [{"entity_type": "site", **_site_row(row)} for row in site_rows]
-        + [{"entity_type": "page", **_page_row(row)} for row in page_rows]
-        + [{"entity_type": "route", **_route_row(row)} for row in route_rows]
-        + [{"entity_type": "asset", **_asset_row(row)} for row in asset_rows]
+        [_reference_payload("site", _site_row(row)) for row in site_rows]
+        + [_reference_payload("page", _page_row(row)) for row in page_rows]
+        + [_reference_payload("route", _route_row(row)) for row in route_rows]
+        + [_reference_payload("asset", _asset_row(row)) for row in asset_rows]
     )
 
 
@@ -538,7 +736,6 @@ def build_preview(data_root: Path, site_id: object, route: object = "/") -> dict
     rel_path = page["source_files"][0]
     html = read_file(data_root, site_id=site_id, path=rel_path)["content"]
     preview_id = f"preview_{uuid4().hex[:12]}"
-    _audit(data_root, str(site_id), "preview.build", f"Built static preview for {route_text}", {"preview_id": preview_id})
     return {
         "preview_id": preview_id,
         "site_id": str(site["id"]),
@@ -550,35 +747,225 @@ def build_preview(data_root: Path, site_id: object, route: object = "/") -> dict
     }
 
 
-def create_publish_request(data_root: Path, site_id: object, requested_by: object = "workspace") -> dict[str, object]:
-    diff_payload = diff_site(data_root, site_id)
+def validate_build(data_root: Path, site_id: object) -> dict[str, object]:
+    site = get_site(data_root, site_id)
+    profile = source_profile(_source_root(data_root, str(site["id"])))
+    map_payload = sitemap(data_root, site["id"])
+    warnings: list[str] = []
+    for item in map_payload.get("items", []):
+        warnings.extend(str(warning) for warning in item.get("warnings", []))
+    for item in map_payload.get("routes", []):
+        warnings.extend(str(warning) for warning in item.get("warnings", []))
+    if profile.get("has_package_manifest"):
+        warnings.append("arbitrary dependency installs and build scripts are not executed in Phase 2 without a platform sandbox")
+    status = "passed" if profile.get("static_preview_supported") else "blocked"
+    logs_summary = "Static preview validation passed." if status == "passed" else "No static HTML route is available for validation."
+    build_id = f"build_{uuid4().hex[:16]}"
     now = now_timestamp()
-    request_id = f"pub_{uuid4().hex[:16]}"
-    summary = f"{len(diff_payload['files'])} changed files"
-    changeset = _upsert_changeset(data_root, site_id, summary)
     with connect(data_root) as db:
         db.execute(
             """
-            INSERT INTO publish_requests(id, site_id, changeset_id, status, diff_summary, requested_by, created_at, updated_at)
-            VALUES (?, ?, ?, 'pending', ?, ?, ?, ?)
+            INSERT INTO builds(id, site_id, status, source_profile_json, route_count, asset_count, warnings_json, logs_summary, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (request_id, str(site_id), changeset["id"], summary, str(requested_by or "workspace"), now, now),
+            (
+                build_id,
+                site["id"],
+                status,
+                json.dumps(profile, sort_keys=True),
+                len(map_payload.get("routes", [])),
+                len(map_payload.get("assets", [])),
+                json.dumps(warnings[:100]),
+                logs_summary,
+                now,
+                now,
+            ),
         )
-    _audit(data_root, str(site_id), "publish.requested", summary, {"publish_request_id": request_id})
+    _audit(data_root, str(site["id"]), "build.validated", logs_summary, {"build_id": build_id, "status": status})
+    return get_build(data_root, build_id)
+
+
+def list_builds(data_root: Path, site_id: object) -> list[dict[str, object]]:
+    site = get_site(data_root, site_id)
+    ensure_schema(data_root)
+    with connect(data_root) as db:
+        rows = db.execute("SELECT * FROM builds WHERE site_id = ? ORDER BY created_at DESC", (site["id"],)).fetchall()
+    return [_build_row(row) for row in rows]
+
+
+def get_build(data_root: Path, build_id: object) -> dict[str, object]:
+    clean_id = _required_id(build_id, "build_id")
+    ensure_schema(data_root)
+    with connect(data_root) as db:
+        row = db.execute("SELECT * FROM builds WHERE id = ?", (clean_id,)).fetchone()
+    if row is None:
+        raise ValueError(f"build `{clean_id}` was not found")
+    return _build_row(row)
+
+
+def create_publish_request(
+    data_root: Path,
+    site_id: object,
+    requested_by: object = "workspace",
+    *,
+    environment_id: object = None,
+) -> dict[str, object]:
+    site = get_site(data_root, site_id)
+    diff_payload = diff_site(data_root, site_id)
+    if not diff_payload["files"]:
+        raise ValueError("publish_request requires at least one working file change")
+    environment = get_environment(data_root, environment_id or site.get("default_environment_id") or "env_preview", site_id=site["id"])
+    build = validate_build(data_root, site["id"])
+    if build["status"] != "passed":
+        raise ValueError("publish_request requires a passing static build validation")
+    now = now_timestamp()
+    request_id = f"pub_{uuid4().hex[:16]}"
+    summary = f"{len(diff_payload['files'])} changed files"
+    changeset = _upsert_changeset(data_root, site["id"], summary)
+    with connect(data_root) as db:
+        db.execute(
+            """
+            INSERT INTO publish_requests(id, site_id, changeset_id, status, diff_summary, requested_by, environment_id, build_id, created_at, updated_at)
+            VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)
+            """,
+            (request_id, site["id"], changeset["id"], summary, str(requested_by or "workspace"), environment["id"], build["id"], now, now),
+        )
+    _audit(data_root, str(site["id"]), "publish.requested", summary, {"publish_request_id": request_id, "build_id": build["id"]})
     return get_publish_request(data_root, request_id)
 
 
-def publish(data_root: Path, site_id: object, publish_request_id: object = None, approval_id: object = None) -> dict[str, object]:
-    request = get_publish_request(data_root, publish_request_id) if publish_request_id else None
-    if not approval_id:
-        return {"blocked": True, "status": "blocked", "detail": "Publishing requires a verified human approval."}
-    if request and request["site_id"] != str(site_id):
-        raise ValueError("publish request does not belong to the selected site")
+def list_changes(data_root: Path, site_id: object, status: object = None) -> dict[str, object]:
+    site = get_site(data_root, site_id)
+    status_filter = str(status or "").strip()
+    ensure_schema(data_root)
+    with connect(data_root) as db:
+        if status_filter:
+            changeset_rows = db.execute(
+                "SELECT * FROM changesets WHERE site_id = ? AND status = ? ORDER BY updated_at DESC",
+                (site["id"], status_filter),
+            ).fetchall()
+            request_rows = db.execute(
+                "SELECT * FROM publish_requests WHERE site_id = ? AND status = ? ORDER BY updated_at DESC",
+                (site["id"], status_filter),
+            ).fetchall()
+        else:
+            changeset_rows = db.execute(
+                "SELECT * FROM changesets WHERE site_id = ? ORDER BY updated_at DESC",
+                (site["id"],),
+            ).fetchall()
+            request_rows = db.execute(
+                "SELECT * FROM publish_requests WHERE site_id = ? ORDER BY updated_at DESC",
+                (site["id"],),
+            ).fetchall()
+        revision_rows = db.execute(
+            "SELECT id, site_id, label, source, summary, created_at FROM revisions WHERE site_id = ? ORDER BY created_at DESC",
+            (site["id"],),
+        ).fetchall()
+        approval_rows = db.execute(
+            "SELECT * FROM approval_events WHERE site_id = ? ORDER BY created_at DESC",
+            (site["id"],),
+        ).fetchall()
+        build_rows = db.execute(
+            "SELECT * FROM builds WHERE site_id = ? ORDER BY created_at DESC",
+            (site["id"],),
+        ).fetchall()
+        deployment_rows = db.execute(
+            "SELECT * FROM deployments WHERE site_id = ? ORDER BY created_at DESC",
+            (site["id"],),
+        ).fetchall()
+    diff_payload = diff_site(data_root, site["id"])
     return {
-        "blocked": True,
-        "status": "blocked",
-        "detail": "Publishing is blocked until Website Studio can validate approval ids through an official approval surface.",
-        "publish_request": request,
+        "site_id": site["id"],
+        "base_revision_id": site.get("active_revision_id"),
+        "published_revision_id": site.get("published_revision_id"),
+        "working_diff": [{"path": item["path"], "status": item["status"]} for item in diff_payload["files"]],
+        "changesets": [dict(row) for row in changeset_rows],
+        "publish_requests": [dict(row) for row in request_rows],
+        "revisions": [dict(row) for row in revision_rows],
+        "approval_events": [_approval_row(row) for row in approval_rows],
+        "builds": [_build_row(row) for row in build_rows],
+        "deployments": [_deployment_row(row) for row in deployment_rows],
+    }
+
+
+def publish(
+    data_root: Path,
+    site_id: object,
+    publish_request_id: object = None,
+    approval_id: object = None,
+    *,
+    app_secrets: dict[str, object] | None = None,
+    app_secret_errors: list[dict[str, object]] | None = None,
+    github_transport: object = None,
+) -> dict[str, object]:
+    site = get_site(data_root, site_id)
+    request = get_publish_request(data_root, publish_request_id) if publish_request_id else None
+    if not request:
+        return {"blocked": True, "status": "blocked", "detail": "Publishing requires a publish_request_id and a verified approval from the official approval surface."}
+    if request["site_id"] != str(site["id"]):
+        raise ValueError("publish request does not belong to the selected site")
+    if request["status"] not in {"pending", "approved"}:
+        raise ValueError(f"publish request `{request['id']}` is already {request['status']}")
+    if not approval_id:
+        return {"blocked": True, "status": "blocked", "detail": "Publishing requires a verified human approval.", "publish_request": request}
+    build = get_build(data_root, request.get("build_id")) if request.get("build_id") else validate_build(data_root, site["id"])
+    if build["status"] != "passed":
+        raise ValueError("publish requires a passing build validation")
+    github_context = _github_publish_context(
+        data_root,
+        site,
+        app_secrets=app_secrets or {},
+        app_secret_errors=app_secret_errors or [],
+    )
+    if github_context.get("blocked"):
+        return {"blocked": True, "status": "blocked", "detail": str(github_context["detail"]), "publish_request": request, "build": build}
+    try:
+        approval = _consume_approval(data_root, site["id"], "publish", request["id"], approval_id)
+    except ValueError as error:
+        return {"blocked": True, "status": "blocked", "detail": f"{error}; use the official approval surface before publishing.", "publish_request": request}
+    with _site_mutation_lock(data_root, str(site["id"])):
+        source_ref = _publish_source_ref(site, request)
+        if github_context:
+            source_ref = _publish_to_github_pull_request(
+                data_root,
+                site,
+                request,
+                connection=github_context["connection"],
+                token=str(github_context["token"]),
+                transport=github_transport if callable(github_transport) else None,
+            )
+        revision = create_revision(data_root, site["id"], label="Published working copy", source="publish", summary=request["diff_summary"])
+        _set_active_revision(data_root, site["id"], revision["id"])
+        _update_site(data_root, site["id"], published_revision_id=revision["id"])
+        deployment = _create_deployment(
+            data_root,
+            site["id"],
+            environment_id=str(request.get("environment_id") or site.get("default_environment_id") or "env_preview"),
+            publish_request_id=request["id"],
+            revision_id=revision["id"],
+            status="published",
+            mode=_publish_mode(source_ref),
+            source_ref=source_ref,
+        )
+        now = now_timestamp()
+        with connect(data_root) as db:
+            db.execute(
+                "UPDATE publish_requests SET status = 'published', approved_by = ?, approval_id = ?, updated_at = ? WHERE id = ?",
+                (approval["approved_by"], approval["id"], now, request["id"]),
+            )
+            db.execute(
+                "UPDATE changesets SET status = 'published', updated_at = ? WHERE id = ?",
+                (now, request["changeset_id"]),
+            )
+    _audit(data_root, str(site["id"]), "publish.completed", request["diff_summary"], {"publish_request_id": request["id"], "deployment_id": deployment["id"]})
+    return {
+        "status": "published",
+        "blocked": False,
+        "publish_request": get_publish_request(data_root, request["id"]),
+        "approval": approval,
+        "build": build,
+        "revision": revision,
+        "deployment": deployment,
     }
 
 
@@ -589,32 +976,131 @@ def rollback(data_root: Path, site_id: object, revision_id: object, *, approval_
             "status": "blocked",
             "detail": "Rollback requires approval_id and confirm=true because it replaces the selected working source tree.",
         }
+    site = get_site(data_root, site_id)
+    revision = get_revision(data_root, revision_id)
+    if revision["site_id"] != site["id"]:
+        raise ValueError("revision does not belong to the selected site")
+    try:
+        approval = _consume_approval(data_root, site["id"], "rollback", revision["id"], approval_id)
+    except ValueError as error:
+        return {"blocked": True, "status": "blocked", "detail": f"{error}; use the official approval surface before rollback.", "restored_revision": revision}
+    with _site_mutation_lock(data_root, str(site["id"])):
+        replace_tree_from_directory(_source_root(data_root, str(site["id"])), _revision_source_root(data_root, str(site["id"]), str(revision["id"])))
+        rebuild_index(data_root, site["id"])
+        rollback_revision = create_revision(data_root, site["id"], label=f"Rollback to {revision['id']}", source="rollback", summary=f"Restored revision {revision['id']}")
+        _set_active_revision(data_root, site["id"], rollback_revision["id"])
+        _update_site(data_root, site["id"], published_revision_id=rollback_revision["id"])
+        deployment = _create_deployment(
+            data_root,
+            site["id"],
+            environment_id=str(site.get("default_environment_id") or "env_preview"),
+            publish_request_id="",
+            revision_id=rollback_revision["id"],
+            status="rolled_back",
+            mode="rollback",
+            source_ref={"restored_revision_id": str(revision["id"])},
+        )
+    _audit(data_root, str(site["id"]), "rollback.completed", f"Rolled back to {revision['id']}", {"deployment_id": deployment["id"]})
     return {
-        "blocked": True,
-        "status": "blocked",
-        "detail": "Rollback is blocked until Website Studio can validate approval ids through an official approval surface.",
+        "status": "rolled_back",
+        "blocked": False,
+        "approval": approval,
+        "restored_revision": revision,
+        "revision": rollback_revision,
+        "deployment": deployment,
     }
 
 
 def active_context(data_root: Path, site_id: object = None, page_id: object = None) -> dict[str, object]:
-    sites = list_sites(data_root)
-    site = get_site(data_root, site_id) if site_id else (sites[0] if sites else None)
+    site = _select_context_site(data_root, site_id)
     if not site:
         return {"active_view": "empty", "site_id": None}
     map_payload = sitemap(data_root, site["id"])
     pages = map_payload["items"]
     page = next((item for item in pages if item["id"] == page_id), pages[0] if pages else None)
+    route = None
+    if page:
+        route = next((item for item in map_payload.get("routes", []) if item.get("page_id") == page["id"]), None)
     diff_payload = diff_site(data_root, site["id"])
+    return _context_payload(data_root, site, page=page, route=route, asset=None, map_payload=map_payload, diff_payload=diff_payload)
+
+
+def page_context(
+    data_root: Path,
+    site_id: object = None,
+    *,
+    page_id: object = None,
+    route_id: object = None,
+    route: object = None,
+    asset_id: object = None,
+) -> dict[str, object]:
+    site = _select_context_site(data_root, site_id)
+    if not site:
+        return {"active_view": "empty", "site_id": None}
+    map_payload = sitemap(data_root, site["id"])
+    pages = map_payload["items"]
+    routes = map_payload.get("routes", [])
+    assets = map_payload.get("assets", [])
+    selected_page = None
+    selected_route = None
+    selected_asset = None
+    clean_asset_id = str(asset_id or "").strip()
+    if clean_asset_id:
+        selected_asset = next((item for item in assets if item["id"] == clean_asset_id), None)
+    clean_route_id = str(route_id or "").strip()
+    clean_route = str(route or "").strip()
+    if clean_route_id:
+        selected_route = next((item for item in routes if item["id"] == clean_route_id), None)
+    if selected_route is None and clean_route:
+        selected_route = next((item for item in routes if item["route"] == clean_route), None)
+    clean_page_id = str(page_id or "").strip()
+    if clean_page_id:
+        selected_page = next((item for item in pages if item["id"] == clean_page_id), None)
+    if selected_page is None and selected_route and selected_route.get("page_id"):
+        selected_page = next((item for item in pages if item["id"] == selected_route.get("page_id")), None)
+    if selected_page is None and clean_route:
+        selected_page = next((item for item in pages if item["route"] == clean_route), None)
+    diff_payload = diff_site(data_root, site["id"])
+    return _context_payload(
+        data_root,
+        site,
+        page=selected_page,
+        route=selected_route,
+        asset=selected_asset,
+        map_payload=map_payload,
+        diff_payload=diff_payload,
+    )
+
+
+def _context_payload(
+    data_root: Path,
+    site: dict[str, object],
+    *,
+    page: dict[str, object] | None,
+    route: dict[str, object] | None,
+    asset: dict[str, object] | None,
+    map_payload: dict[str, object],
+    diff_payload: dict[str, object],
+) -> dict[str, object]:
+    active_view = "asset" if asset else "route" if route and not page else "page" if page else "site"
     return {
-        "active_view": "page" if page else "site",
+        "active_view": active_view,
         "site_id": site["id"],
+        "environment_id": "preview",
         "title": site["display_name"],
         "site": site,
+        "source_profile": source_profile(_source_root(data_root, str(site["id"]))),
         "page_id": page["id"] if page else None,
-        "route": page["route"] if page else None,
+        "route_id": route["id"] if route else None,
+        "asset_id": asset["id"] if asset else None,
+        "route": page["route"] if page else route.get("route") if route else None,
         "source_files": page["source_files"] if page else [],
+        "route_source_files": route.get("source_files", []) if route else [],
+        "asset_path": asset.get("path") if asset else None,
         "asset_refs": page.get("asset_refs", []) if page else [],
         "warnings": page.get("warnings", []) if page else [],
+        "route_warnings": route.get("warnings", []) if route else [],
+        "asset_warnings": asset.get("warnings", []) if asset else [],
         "routes": map_payload.get("routes", [])[:100],
         "assets": map_payload.get("assets", [])[:200],
         "changed_files_count": len(diff_payload["files"]),
@@ -671,31 +1157,38 @@ def reference_search(data_root: Path, query: object = "", site_id: object = None
                 """,
                 (needle, needle, needle),
             ).fetchall()
-    return items + [{"entity_type": "publish_request", **dict(row)} for row in request_rows]
+    return items + [_reference_payload("publish_request", dict(row)) for row in request_rows]
 
 
 def reference_resolve(data_root: Path, entity_type: object, entity_id: object) -> dict[str, object]:
     entity = str(entity_type or "site")
     if entity == "site":
-        return {"entity_type": "site", **get_site(data_root, entity_id)}
+        return _reference_payload("site", get_site(data_root, entity_id))
     if entity == "page":
-        return {"entity_type": "page", **_get_page(data_root, entity_id)}
+        return _reference_payload("page", _get_page(data_root, entity_id))
     if entity == "route":
-        return {"entity_type": "route", **_get_route(data_root, entity_id)}
+        return _reference_payload("route", _get_route(data_root, entity_id))
     if entity == "asset":
-        return {"entity_type": "asset", **_get_asset(data_root, entity_id)}
+        return _reference_payload("asset", _get_asset(data_root, entity_id))
     if entity == "revision":
         item = get_revision(data_root, entity_id)
-        return {"entity_type": "revision", **{key: value for key, value in item.items() if key != "snapshot"}}
+        return _reference_payload("revision", {key: value for key, value in item.items() if key != "snapshot"})
     if entity == "publish_request":
-        return {"entity_type": "publish_request", **get_publish_request(data_root, entity_id)}
+        return _reference_payload("publish_request", get_publish_request(data_root, entity_id))
     raise ValueError(f"Unsupported entity_type `{entity}`")
 
 
 def reference_summary(data_root: Path, entity_type: object, entity_id: object) -> dict[str, object]:
     item = reference_resolve(data_root, entity_type, entity_id)
     title = item.get("display_name") or item.get("title") or item.get("route") or item.get("path") or item.get("id")
-    return {"entity_type": item["entity_type"], "entity_id": item["id"], "title": title, "summary": item.get("route") or item.get("path") or item.get("status") or ""}
+    return {
+        "entity_type": item["entity_type"],
+        "entity_id": item["id"],
+        "title": title,
+        "summary": item.get("route") or item.get("path") or item.get("status") or "",
+        "app_page": item.get("app_page", ""),
+        "deep_link": item.get("deep_link", ""),
+    }
 
 
 def create_revision(data_root: Path, site_id: object, *, label: str, source: str, summary: str = "") -> dict[str, object]:
@@ -738,12 +1231,16 @@ def get_publish_request(data_root: Path, request_id: object) -> dict[str, object
 def load_view_state(data_root: Path) -> dict[str, object]:
     path = data_root / "view_state.json"
     if not path.exists():
-        return {"schema_version": "1", "view_filter": _default_view_filter()}
+        return {"schema_version": "1", "active_site_id": "", "view_filter": _default_view_filter()}
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
         raw = {}
-    return {"schema_version": "1", "view_filter": raw.get("view_filter") if isinstance(raw.get("view_filter"), dict) else _default_view_filter()}
+    return {
+        "schema_version": "1",
+        "active_site_id": str(raw.get("active_site_id") or ""),
+        "view_filter": raw.get("view_filter") if isinstance(raw.get("view_filter"), dict) else _default_view_filter(),
+    }
 
 
 def set_view_filter(data_root: Path, *, query: object = None, site_id: object = None, preserve_custom: bool = False) -> dict[str, object]:
@@ -759,6 +1256,135 @@ def set_custom_view(data_root: Path, *, title: object = None, refs: object = Non
 
 def clear_custom_view(data_root: Path) -> dict[str, object]:
     return _write_view_state(data_root, _default_view_filter())
+
+
+def list_environments(data_root: Path, site_id: object) -> list[dict[str, object]]:
+    site = get_site(data_root, site_id)
+    _ensure_default_environment(data_root, str(site["id"]))
+    with connect(data_root) as db:
+        rows = db.execute("SELECT * FROM environments WHERE site_id = ? ORDER BY kind, name", (site["id"],)).fetchall()
+    return [_environment_row(row) for row in rows]
+
+
+def configure_environment(
+    data_root: Path,
+    site_id: object,
+    *,
+    environment_id: object = None,
+    name: object = None,
+    kind: object = "preview",
+    base_url: object = "",
+    requires_approval: object = True,
+) -> dict[str, object]:
+    site = get_site(data_root, site_id)
+    clean_kind = str(kind or "preview").strip()
+    if clean_kind not in {"preview", "staging", "production", "custom"}:
+        raise ValueError("environment kind must be preview, staging, production, or custom")
+    clean_id = str(environment_id or f"env_{site['id']}_{clean_kind}").strip()
+    if not clean_id.startswith("env_") or "/" in clean_id or "\\" in clean_id:
+        raise ValueError("environment_id must start with env_ and stay path-safe")
+    label = str(name or clean_kind.title()).strip()
+    if not label:
+        raise ValueError("environment name is required")
+    now = now_timestamp()
+    with connect(data_root) as db:
+        db.execute(
+            """
+            INSERT INTO environments(id, site_id, name, kind, base_url, requires_approval, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+              name=excluded.name,
+              kind=excluded.kind,
+              base_url=excluded.base_url,
+              requires_approval=excluded.requires_approval,
+              updated_at=excluded.updated_at
+            """,
+            (clean_id, site["id"], label, clean_kind, str(base_url or "").strip(), 1 if requires_approval is not False else 0, now, now),
+        )
+    if clean_kind == "preview" or not site.get("default_environment_id"):
+        _update_site(data_root, site["id"], default_environment_id=clean_id)
+    _audit(data_root, str(site["id"]), "environment.configured", f"Configured {label} environment", {"environment_id": clean_id})
+    return get_environment(data_root, clean_id, site_id=site["id"])
+
+
+def get_environment(data_root: Path, environment_id: object, *, site_id: object | None = None) -> dict[str, object]:
+    clean_id = str(environment_id or "env_preview").strip()
+    if site_id:
+        _ensure_default_environment(data_root, str(site_id))
+        if clean_id == "env_preview":
+            site = get_site(data_root, site_id)
+            clean_id = str(site.get("default_environment_id") or f"env_{site_id}_preview")
+    ensure_schema(data_root)
+    with connect(data_root) as db:
+        if site_id:
+            row = db.execute("SELECT * FROM environments WHERE id = ? AND site_id = ?", (clean_id, str(site_id))).fetchone()
+        else:
+            row = db.execute("SELECT * FROM environments WHERE id = ?", (clean_id,)).fetchone()
+    if row is None:
+        raise ValueError(f"environment `{clean_id}` was not found")
+    return _environment_row(row)
+
+
+def record_approval(
+    data_root: Path,
+    site_id: object,
+    *,
+    action: object,
+    target_id: object,
+    approved_by: object,
+    approval_note: object = "",
+    confirm: object = False,
+) -> dict[str, object]:
+    site = get_site(data_root, site_id)
+    clean_action = str(action or "").strip()
+    if clean_action not in {"publish", "rollback"}:
+        raise ValueError("approval action must be publish or rollback")
+    clean_target = _required_id(target_id, "target_id")
+    approver = str(approved_by or "").strip()
+    if not approver:
+        raise ValueError("approved_by is required")
+    if confirm is not True:
+        raise ValueError("confirm=true is required to create an approval event")
+    if clean_action == "publish":
+        request = get_publish_request(data_root, clean_target)
+        if request["site_id"] != site["id"]:
+            raise ValueError("publish request does not belong to the selected site")
+    if clean_action == "rollback":
+        revision = get_revision(data_root, clean_target)
+        if revision["site_id"] != site["id"]:
+            raise ValueError("revision does not belong to the selected site")
+    approval_id = f"appr_{uuid4().hex[:16]}"
+    now = now_timestamp()
+    with connect(data_root) as db:
+        db.execute(
+            """
+            INSERT INTO approval_events(id, site_id, action, target_id, status, approved_by, approval_note, created_at)
+            VALUES (?, ?, ?, ?, 'approved', ?, ?, ?)
+            """,
+            (approval_id, site["id"], clean_action, clean_target, approver, str(approval_note or "").strip(), now),
+        )
+    _audit(data_root, str(site["id"]), "approval.recorded", f"Approved {clean_action} for {clean_target}", {"approval_id": approval_id})
+    return get_approval(data_root, approval_id)
+
+
+def list_approvals(data_root: Path, site_id: object = None) -> list[dict[str, object]]:
+    ensure_schema(data_root)
+    with connect(data_root) as db:
+        if site_id:
+            rows = db.execute("SELECT * FROM approval_events WHERE site_id = ? ORDER BY created_at DESC", (str(site_id),)).fetchall()
+        else:
+            rows = db.execute("SELECT * FROM approval_events ORDER BY created_at DESC").fetchall()
+    return [_approval_row(row) for row in rows]
+
+
+def get_approval(data_root: Path, approval_id: object) -> dict[str, object]:
+    clean_id = _required_id(approval_id, "approval_id")
+    ensure_schema(data_root)
+    with connect(data_root) as db:
+        row = db.execute("SELECT * FROM approval_events WHERE id = ?", (clean_id,)).fetchone()
+    if row is None:
+        raise ValueError(f"approval `{clean_id}` was not found")
+    return _approval_row(row)
 
 
 def _source_root(data_root: Path, site_id: str) -> Path:
@@ -794,10 +1420,385 @@ def _required_id(value: object, label: str) -> str:
     return clean
 
 
-def _site_row(row) -> dict[str, object]:
+def _site_row(row, *, active_site_id: str = "") -> dict[str, object]:
     payload = dict(row)
     payload["source_artifact_ref"] = json.loads(payload.pop("source_artifact_ref_json", "{}") or "{}")
+    payload["is_active"] = bool(active_site_id and payload.get("id") == active_site_id and payload.get("status") != "archived")
     return payload
+
+
+def _environment_row(row) -> dict[str, object]:
+    payload = dict(row)
+    payload["requires_approval"] = bool(payload.get("requires_approval"))
+    return payload
+
+
+def _approval_row(row) -> dict[str, object]:
+    return dict(row)
+
+
+def _build_row(row) -> dict[str, object]:
+    payload = dict(row)
+    payload["source_profile"] = json.loads(payload.pop("source_profile_json") or "{}")
+    payload["warnings"] = json.loads(payload.pop("warnings_json") or "[]")
+    return payload
+
+
+def _deployment_row(row) -> dict[str, object]:
+    payload = dict(row)
+    payload["source_ref"] = json.loads(payload.pop("source_ref_json") or "{}")
+    return payload
+
+
+def _ensure_default_environment(data_root: Path, site_id: str) -> None:
+    ensure_schema(data_root)
+    now = now_timestamp()
+    environment_id = f"env_{site_id}_preview"
+    with connect(data_root) as db:
+        row = db.execute("SELECT id FROM environments WHERE site_id = ? AND kind = 'preview'", (site_id,)).fetchone()
+        if row is None:
+            db.execute(
+                """
+                INSERT INTO environments(id, site_id, name, kind, base_url, requires_approval, created_at, updated_at)
+                VALUES (?, ?, 'Preview', 'preview', '', 1, ?, ?)
+                """,
+                (environment_id, site_id, now, now),
+            )
+        else:
+            environment_id = row["id"]
+        site_row = db.execute("SELECT default_environment_id FROM sites WHERE id = ?", (site_id,)).fetchone()
+        if site_row and not site_row["default_environment_id"]:
+            db.execute("UPDATE sites SET default_environment_id = ?, updated_at = ? WHERE id = ?", (environment_id, now, site_id))
+
+
+def _consume_approval(data_root: Path, site_id: object, action: str, target_id: object, approval_id: object) -> dict[str, object]:
+    approval = get_approval(data_root, approval_id)
+    if approval["site_id"] != str(site_id):
+        raise ValueError("approval does not belong to the selected site")
+    if approval["action"] != action:
+        raise ValueError(f"approval is for {approval['action']}, not {action}")
+    if approval["target_id"] != str(target_id):
+        raise ValueError("approval target does not match this operation")
+    if approval["status"] != "approved":
+        raise ValueError("approval is not approved")
+    if approval.get("used_at"):
+        raise ValueError("approval has already been used")
+    used_at = now_timestamp()
+    with connect(data_root) as db:
+        db.execute("UPDATE approval_events SET used_at = ?, status = 'used' WHERE id = ?", (used_at, approval["id"]))
+    approval = get_approval(data_root, approval["id"])
+    return approval
+
+
+def _create_deployment(
+    data_root: Path,
+    site_id: object,
+    *,
+    environment_id: str,
+    publish_request_id: str,
+    revision_id: str,
+    status: str,
+    mode: str,
+    source_ref: dict[str, object],
+) -> dict[str, object]:
+    deployment_id = f"dep_{uuid4().hex[:16]}"
+    now = now_timestamp()
+    with connect(data_root) as db:
+        db.execute(
+            """
+            INSERT INTO deployments(id, site_id, environment_id, publish_request_id, revision_id, status, mode, source_ref_json, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (deployment_id, str(site_id), environment_id, publish_request_id, revision_id, status, mode, json.dumps(source_ref, sort_keys=True), now, now),
+        )
+        db.execute("UPDATE environments SET last_deployment_id = ?, updated_at = ? WHERE site_id = ? AND id = ?", (deployment_id, now, str(site_id), environment_id))
+    with connect(data_root) as db:
+        row = db.execute("SELECT * FROM deployments WHERE id = ?", (deployment_id,)).fetchone()
+    return _deployment_row(row)
+
+
+def _publish_mode(source_ref: dict[str, object]) -> str:
+    if source_ref.get("provider") == "github" and source_ref.get("status") == "pull_request_open":
+        return "github_pull_request"
+    if source_ref.get("provider") == "github":
+        return "github_pr_prepared"
+    return "internal_static_snapshot"
+
+
+def _publish_source_ref(site: dict[str, object], request: dict[str, object]) -> dict[str, object]:
+    ref = site.get("source_artifact_ref") if isinstance(site.get("source_artifact_ref"), dict) else {}
+    if ref.get("provider") == "github":
+        site_id = str(site.get("id") or "site")
+        slug = str(site.get("slug") or site_id)
+        return {
+            "provider": "github",
+            "connection_id": str(ref.get("connection_id") or ""),
+            "base_branch": str(ref.get("base_branch") or "main"),
+            "working_branch": f"maverick/{site_id}/{slug}",
+            "publish_request_id": str(request.get("id") or ""),
+            "note": "Remote push and PR creation require Vault/Core Secrets delivery in a trusted runtime.",
+        }
+    return {"provider": str(site.get("source_provider") or "manual"), "snapshot": "workspace_revision"}
+
+
+def _github_publish_context(
+    data_root: Path,
+    site: dict[str, object],
+    *,
+    app_secrets: dict[str, object],
+    app_secret_errors: list[dict[str, object]],
+) -> dict[str, object]:
+    ref = site.get("source_artifact_ref") if isinstance(site.get("source_artifact_ref"), dict) else {}
+    if ref.get("provider") != "github":
+        return {}
+    connection_id = str(ref.get("connection_id") or "").strip()
+    if not connection_id:
+        return {"blocked": True, "detail": "GitHub publishing requires a configured Website Studio Git connection."}
+    connection = get_git_connection(data_root, connection_id)
+    if connection.get("status") != "grant_configured":
+        return {
+            "blocked": True,
+            "detail": "GitHub publishing requires an active Vault/Core Secrets grant on the selected Git connection.",
+            "connection": connection,
+        }
+    logical_name = str(connection.get("secret_logical_name") or "github-token").strip()
+    if logical_name in _secret_error_names(app_secret_errors):
+        return {"blocked": True, "detail": f"Core Secrets did not deliver `{logical_name}` to the Website Studio backend.", "connection": connection}
+    token = str((app_secrets or {}).get(logical_name) or "").strip()
+    if not token:
+        return {"blocked": True, "detail": f"GitHub publish requires Vault/Core Secrets delivery for `{logical_name}`.", "connection": connection}
+    return {"connection": connection, "token": token}
+
+
+def _publish_to_github_pull_request(
+    data_root: Path,
+    site: dict[str, object],
+    request: dict[str, object],
+    *,
+    connection: dict[str, object],
+    token: str,
+    transport: HttpTransport | None = None,
+) -> dict[str, object]:
+    owner = str(connection.get("owner") or "").strip()
+    repo = str(connection.get("repo") or "").strip()
+    base_branch = str(connection.get("base_branch") or "main").strip()
+    source_root = _source_root(data_root, str(site["id"]))
+    diff_files = diff_site(data_root, site["id"]).get("files", [])
+    branch = _working_branch_for_site(site)
+    http = transport or _default_github_transport
+
+    base_ref = _github_request(http, "GET", f"/repos/{owner}/{repo}/git/ref/heads/{_quote_ref(base_branch)}", token=token)
+    base_sha = str(((base_ref.get("object") or {}) if isinstance(base_ref, dict) else {}).get("sha") or "")
+    if not base_sha:
+        raise ValueError("GitHub base branch did not return a commit sha")
+    base_commit = _github_request(http, "GET", f"/repos/{owner}/{repo}/git/commits/{base_sha}", token=token)
+    base_tree_sha = str(((base_commit.get("tree") or {}) if isinstance(base_commit, dict) else {}).get("sha") or "")
+    if not base_tree_sha:
+        raise ValueError("GitHub base commit did not return a tree sha")
+
+    tree_entries: list[dict[str, object]] = []
+    for item in diff_files:
+        rel_path = str(item.get("path") or "").strip()
+        if not rel_path:
+            continue
+        status = str(item.get("status") or "").strip()
+        if status == "deleted":
+            tree_entries.append({"path": rel_path, "mode": "100644", "type": "blob", "sha": None})
+            continue
+        file_path = source_root / rel_path
+        if not file_path.is_file():
+            continue
+        blob = _github_request(
+            http,
+            "POST",
+            f"/repos/{owner}/{repo}/git/blobs",
+            token=token,
+            body={"content": b64encode(file_path.read_bytes()).decode("ascii"), "encoding": "base64"},
+        )
+        blob_sha = str(blob.get("sha") or "") if isinstance(blob, dict) else ""
+        if not blob_sha:
+            raise ValueError(f"GitHub did not return a blob sha for `{rel_path}`")
+        tree_entries.append({"path": rel_path, "mode": "100644", "type": "blob", "sha": blob_sha})
+
+    if not tree_entries:
+        raise ValueError("GitHub publish requires at least one changed file")
+
+    tree = _github_request(
+        http,
+        "POST",
+        f"/repos/{owner}/{repo}/git/trees",
+        token=token,
+        body={"base_tree": base_tree_sha, "tree": tree_entries},
+    )
+    tree_sha = str(tree.get("sha") or "") if isinstance(tree, dict) else ""
+    if not tree_sha:
+        raise ValueError("GitHub did not return a tree sha")
+    commit = _github_request(
+        http,
+        "POST",
+        f"/repos/{owner}/{repo}/git/commits",
+        token=token,
+        body={
+            "message": f"Website Studio publish {request['id']}",
+            "tree": tree_sha,
+            "parents": [base_sha],
+        },
+    )
+    commit_sha = str(commit.get("sha") or "") if isinstance(commit, dict) else ""
+    if not commit_sha:
+        raise ValueError("GitHub did not return a commit sha")
+
+    branch_ref_path = f"/repos/{owner}/{repo}/git/ref/heads/{_quote_ref(branch)}"
+    existing_ref = _github_request(http, "GET", branch_ref_path, token=token, allow_status={200, 404})
+    if isinstance(existing_ref, dict) and existing_ref.get("_status_code") == 404:
+        _github_request(http, "POST", f"/repos/{owner}/{repo}/git/refs", token=token, body={"ref": f"refs/heads/{branch}", "sha": commit_sha})
+    else:
+        _github_request(http, "PATCH", branch_ref_path, token=token, body={"sha": commit_sha, "force": True})
+
+    existing_pulls = _github_request(
+        http,
+        "GET",
+        f"/repos/{owner}/{repo}/pulls?{urlencode({'state': 'open', 'head': f'{owner}:{branch}', 'base': base_branch})}",
+        token=token,
+    )
+    pull = existing_pulls[0] if isinstance(existing_pulls, list) and existing_pulls else None
+    if not isinstance(pull, dict):
+        pull = _github_request(
+            http,
+            "POST",
+            f"/repos/{owner}/{repo}/pulls",
+            token=token,
+            body={
+                "title": f"Website Studio publish: {site.get('display_name') or site.get('slug') or site['id']}",
+                "head": branch,
+                "base": base_branch,
+                "body": f"Automated Website Studio publish request `{request['id']}`.",
+            },
+        )
+
+    return {
+        "provider": "github",
+        "connection_id": str(connection.get("id") or ""),
+        "owner": owner,
+        "repo": repo,
+        "base_branch": base_branch,
+        "working_branch": branch,
+        "publish_request_id": str(request.get("id") or ""),
+        "commit_sha": commit_sha,
+        "pull_request_number": pull.get("number") if isinstance(pull, dict) else None,
+        "pull_request_url": str(pull.get("html_url") or "") if isinstance(pull, dict) else "",
+        "status": "pull_request_open",
+    }
+
+
+def _default_github_transport(method: str, url: str, request: dict[str, Any]) -> tuple[int, dict[str, Any] | list[Any] | bytes]:
+    body = request.get("json")
+    headers = dict(request.get("headers") or {})
+    data = None
+    if body is not None:
+        data = json.dumps(body).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    req = Request(url, data=data, headers=headers, method=method)
+    try:
+        with urlopen(req, timeout=30) as response:
+            payload = response.read()
+            return response.status, _decode_json_bytes(payload)
+    except Exception as error:  # pragma: no cover - exercised by live runtime failures
+        status_code = int(getattr(error, "code", 502) or 502)
+        payload = getattr(error, "read", lambda: b"")()
+        decoded = _decode_json_bytes(payload) if payload else {"message": str(error)}
+        return status_code, decoded
+
+
+def _github_request(
+    transport: HttpTransport,
+    method: str,
+    path: str,
+    *,
+    token: str,
+    body: dict[str, object] | None = None,
+    allow_status: set[int] | None = None,
+) -> dict[str, Any] | list[Any]:
+    allowed = allow_status or {200, 201}
+    status_code, payload = transport(
+        method,
+        f"{GITHUB_API_BASE}{path}",
+        {
+            "headers": {
+                "Accept": "application/vnd.github+json",
+                "Authorization": f"Bearer {token}",
+                "X-GitHub-Api-Version": "2022-11-28",
+                "User-Agent": "maverick-website-studio",
+            },
+            "json": body,
+        },
+    )
+    if status_code not in allowed:
+        detail = _github_error_detail(payload)
+        raise ValueError(f"GitHub API request failed with status {status_code}: {detail}")
+    if isinstance(payload, dict) and status_code not in {200, 201}:
+        return {**payload, "_status_code": status_code}
+    if isinstance(payload, (dict, list)):
+        return payload
+    return {}
+
+
+def _decode_json_bytes(payload: bytes) -> dict[str, Any] | list[Any] | bytes:
+    if not payload:
+        return {}
+    try:
+        decoded = json.loads(payload.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return payload
+    return decoded if isinstance(decoded, (dict, list)) else {"value": decoded}
+
+
+def _github_error_detail(payload: object) -> str:
+    if isinstance(payload, dict):
+        message = str(payload.get("message") or "request failed")
+        errors = payload.get("errors")
+        if isinstance(errors, list) and errors:
+            message = f"{message}; {len(errors)} validation error(s)"
+        return _redact_secret_text(message)
+    return "request failed"
+
+
+def _redact_secret_text(value: str) -> str:
+    return re.sub(r"(gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|Bearer\\s+\\S+)", "<redacted>", value)
+
+
+def _quote_ref(value: str) -> str:
+    return quote(value, safe="")
+
+
+def _working_branch_for_site(site: dict[str, object]) -> str:
+    site_id = str(site.get("id") or "site")
+    slug = str(site.get("slug") or site_id)
+    return f"maverick/{site_id}/{slug}"
+
+
+def _secret_error_names(app_secret_errors: list[dict[str, object]] | None) -> set[str]:
+    names: set[str] = set()
+    for item in app_secret_errors or []:
+        if isinstance(item, dict) and item.get("logical_name"):
+            names.add(str(item["logical_name"]))
+    return names
+
+
+def _select_context_site(data_root: Path, site_id: object = None) -> dict[str, object] | None:
+    if site_id:
+        site = get_site(data_root, site_id)
+        return None if site.get("status") == "archived" else site
+    sites = list_sites(data_root)
+    active_id = get_active_site_id(data_root)
+    return next(
+        (
+            item
+            for item in sites
+            if item["id"] == active_id and item.get("status") != "archived"
+        ),
+        next((item for item in sites if item.get("status") != "archived"), None),
+    )
 
 
 def _page_row(row) -> dict[str, object]:
@@ -821,6 +1822,30 @@ def _asset_row(row) -> dict[str, object]:
     payload["referenced_by"] = json.loads(payload.pop("referenced_by_json") or "[]")
     payload["warnings"] = json.loads(payload.pop("warnings_json") or "[]")
     return payload
+
+
+def _reference_payload(entity_type: str, payload: dict[str, object]) -> dict[str, object]:
+    item = {"entity_type": entity_type, **payload}
+    app_page = _reference_app_page(entity_type, str(item.get("id") or ""))
+    if app_page:
+        item["app_page"] = app_page
+        item["deep_link"] = f"/app/website-studio/{app_page}"
+    return item
+
+
+def _reference_app_page(entity_type: str, entity_id: str) -> str:
+    if not entity_id:
+        return ""
+    segments = {
+        "site": "sites",
+        "page": "pages",
+        "route": "routes",
+        "asset": "assets",
+        "revision": "revisions",
+        "publish_request": "publish-requests",
+    }
+    segment = segments.get(entity_type)
+    return f"{segment}/{entity_id}" if segment else ""
 
 
 def _source_asset_paths(source_root: Path) -> set[str]:
@@ -863,6 +1888,68 @@ def _source_artifact_ref(value: object) -> dict[str, str]:
         return {}
     allowed = {"app_id", "file_id", "workspace_relative_path", "role", "relative_path", "name", "content_type", "sha256"}
     return {key: str(value.get(key) or "") for key in allowed if value.get(key)}
+
+
+def _git_connection_row(row) -> dict[str, object]:
+    payload = dict(row)
+    payload["secret_configured"] = bool(payload.get("secret_logical_name"))
+    payload["vault_requirements"] = _vault_requirement_payload(str(payload["auth_mode"]), str(payload["secret_logical_name"]), str(payload["id"]))
+    return payload
+
+
+def _parse_github_repository(repository_url: object) -> tuple[str, str, str]:
+    raw = str(repository_url or "").strip()
+    if not raw:
+        raise ValueError("repository_url is required")
+    if raw.startswith("-"):
+        raise ValueError("repository_url is invalid")
+    owner = ""
+    repo = ""
+    parsed = urlparse(raw)
+    if parsed.scheme == "https" and "@" in parsed.netloc:
+        raise ValueError("repository_url must not include inline credentials")
+    if parsed.scheme == "https" and parsed.netloc.lower() == "github.com":
+        parts = [part for part in parsed.path.strip("/").split("/") if part]
+        if len(parts) == 2:
+            owner, repo = parts
+    elif not parsed.scheme and re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:\.git)?", raw):
+        owner, repo = raw.split("/", 1)
+    if not owner or not repo:
+        raise ValueError("repository_url must be a GitHub HTTPS URL or owner/repo")
+    repo = repo.removesuffix(".git")
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+", owner) or not re.fullmatch(r"[A-Za-z0-9_.-]+", repo):
+        raise ValueError("repository owner or name contains unsupported characters")
+    return owner, repo, f"https://github.com/{owner}/{repo}.git"
+
+
+def _clean_git_branch(value: object) -> str:
+    branch = str(value or "main").strip()
+    if branch.startswith("-") or ".." in branch or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,180}", branch):
+        raise ValueError("base_branch contains unsupported characters")
+    return branch
+
+
+def _connection_id(owner: str, repo: str) -> str:
+    return f"git_{sha256_text(f'github/{owner}/{repo}')[:16]}"
+
+
+def _vault_requirements_for_git_mode(auth_mode: str) -> list[str]:
+    if auth_mode == "fine_grained_token":
+        return ["github-token"]
+    return []
+
+
+def _vault_requirement_payload(auth_mode: str, logical_name: str, connection_id: str) -> dict[str, object]:
+    required = _vault_requirements_for_git_mode(auth_mode)
+    return {
+        "auth_mode": auth_mode,
+        "required_secrets": required,
+        "selected_logical_name": logical_name,
+        "resource_type": "git_connection",
+        "resource_id": connection_id,
+        "delivery_target": "maverick://app.backend/backend",
+        "status": "grant_required",
+    }
 
 
 def _get_page(data_root: Path, page_id: object) -> dict[str, object]:
@@ -1061,7 +2148,17 @@ def _set_active_revision(data_root: Path, site_id: object, revision_id: object) 
 
 
 def _update_site(data_root: Path, site_id: object, **fields: object) -> None:
-    allowed = {"source_provider", "source_label", "source_shape", "source_artifact_ref_json", "active_revision_id", "published_revision_id", "status"}
+    allowed = {
+        "source_provider",
+        "source_label",
+        "source_shape",
+        "source_artifact_ref_json",
+        "default_environment_id",
+        "working_branch",
+        "active_revision_id",
+        "published_revision_id",
+        "status",
+    }
     updates = {key: value for key, value in fields.items() if key in allowed}
     if not updates:
         return
@@ -1112,9 +2209,14 @@ def _default_view_filter() -> dict[str, object]:
     return {"mode": "search", "query": "", "site_id": "", "refs": [], "updated_at": None}
 
 
-def _write_view_state(data_root: Path, view_filter: dict[str, object]) -> dict[str, object]:
+def _write_view_state(data_root: Path, view_filter: dict[str, object], *, active_site_id: str | None = None) -> dict[str, object]:
     data_root.mkdir(parents=True, exist_ok=True)
-    state = {"schema_version": "1", "view_filter": view_filter}
+    current = load_view_state(data_root)
+    state = {
+        "schema_version": "1",
+        "active_site_id": str(current.get("active_site_id") if active_site_id is None else active_site_id),
+        "view_filter": view_filter,
+    }
     (data_root / "view_state.json").write_text(json.dumps(state, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
     return state
 

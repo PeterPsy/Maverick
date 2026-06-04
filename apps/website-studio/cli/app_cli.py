@@ -14,6 +14,8 @@ from service import app_events_for_action, handle_action
 payload = read_entrypoint_payload()
 arguments = dict(payload.arguments)
 arguments.setdefault("action", "sites_list")
+arguments["_app_secrets"] = dict(payload.raw.get("app_secrets") or {})
+arguments["_app_secret_errors"] = list(payload.raw.get("app_secret_errors") or [])
 status_code, result = handle_action(Path(payload.data_root), arguments)
 result["status_code"] = status_code
 if status_code < 400:

@@ -13,7 +13,12 @@ from service import app_events_for_action, handle_action
 
 payload = read_entrypoint_payload()
 action = str(payload.body.get("action") or "sites_list")
-status_code, result = handle_action(Path(payload.data_root), payload.body)
+body = {
+    **payload.body,
+    "_app_secrets": dict(payload.raw.get("app_secrets") or {}),
+    "_app_secret_errors": list(payload.raw.get("app_secret_errors") or []),
+}
+status_code, result = handle_action(Path(payload.data_root), body)
 response = backend_response(status_code, result)
 if status_code < 400:
     response["app_events"] = app_events_for_action(action)

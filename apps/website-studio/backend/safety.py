@@ -76,8 +76,12 @@ STATIC_ASSET_EXTENSIONS = {
     ".woff2",
 }
 SOURCE_CONFIG_NAMES = {
+    "astro.config.mjs",
     "astro.config.js",
+    "gatsby-config.ts",
     "gatsby-config.js",
+    "next.config.mjs",
+    "next.config.ts",
     "next.config.js",
     "package.json",
     "vite.config.js",
@@ -262,6 +266,7 @@ def extract_zip_base64(archive_base64: object, destination: Path) -> dict[str, o
             extracted_files += 1
     if extracted_files == 0:
         raise ValueError("ZIP did not contain website files")
+    _collapse_single_directory_root(destination)
     return {"files_extracted": extracted_files, "expanded_bytes": expanded_bytes, "source_shape": classify_source_tree(destination)}
 
 
@@ -313,6 +318,45 @@ def classify_source_tree(source_root: Path) -> str:
     return "partial_source"
 
 
+def source_profile(source_root: Path) -> dict[str, object]:
+    shape = classify_source_tree(source_root)
+    files = {path.name for path in source_root.rglob("*") if path.is_file()} if source_root.exists() else set()
+    framework = "static"
+    if any(name.startswith("next.config.") for name in files):
+        framework = "next"
+    elif any(name.startswith("astro.config.") for name in files):
+        framework = "astro"
+    elif any(name.startswith("gatsby-config.") for name in files):
+        framework = "gatsby"
+    elif any(name.startswith("vite.config.") for name in files):
+        framework = "vite"
+
+    package_manager = ""
+    for lockfile, manager in (
+        ("pnpm-lock.yaml", "pnpm"),
+        ("yarn.lock", "yarn"),
+        ("package-lock.json", "npm"),
+        ("bun.lockb", "bun"),
+    ):
+        if lockfile in files:
+            package_manager = manager
+            break
+    if not package_manager and "package.json" in files:
+        package_manager = "npm"
+
+    return {
+        "source_shape": shape,
+        "framework": framework,
+        "package_manager": package_manager,
+        "has_package_manifest": "package.json" in files,
+        "static_preview_supported": any(
+            path.suffix.lower() in {".html", ".htm"} for path in source_root.rglob("*") if path.is_file()
+        )
+        if source_root.exists()
+        else False,
+    }
+
+
 def detect_content_type(path: Path) -> str:
     guessed, _ = mimetypes.guess_type(path.name)
     return guessed or "application/octet-stream"
@@ -346,6 +390,16 @@ def _safe_zip_member_path(filename: str) -> str | None:
     if pure.name in IGNORED_ZIP_NAMES:
         return None
     return pure.as_posix()
+
+
+def _collapse_single_directory_root(destination: Path) -> None:
+    children = list(destination.iterdir())
+    if len(children) != 1 or not children[0].is_dir():
+        return
+    root = children[0]
+    for child in list(root.iterdir()):
+        child.replace(destination / child.name)
+    root.rmdir()
 
 
 def _is_zip_symlink(info: zipfile.ZipInfo) -> bool:
@@ -435,8 +489,16 @@ def _normal_asset_ref(raw_ref: str, page_dir: PurePosixPath) -> str | None:
     if parsed.scheme or parsed.netloc or ref.startswith(("#", "data:", "mailto:", "tel:", "javascript:")):
         return None
     path = unquote(parsed.path or "")
-    if not path or path.startswith("/"):
+    if not path:
         return None
+    if path.startswith("/"):
+        path = path.lstrip("/")
+        if not path:
+            return None
+        try:
+            return safe_relative_path(path)
+        except ValueError:
+            return None
     try:
         return safe_relative_path((page_dir / path).as_posix())
     except ValueError:

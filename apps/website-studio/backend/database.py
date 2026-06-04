@@ -9,7 +9,7 @@ from pathlib import Path
 import sqlite3
 
 
-SCHEMA_VERSION = "1"
+SCHEMA_VERSION = "2"
 REFERENCE_ENTITIES = ["site", "page", "route", "asset", "revision", "publish_request"]
 
 
@@ -51,6 +51,8 @@ def ensure_schema(data_root: Path) -> None:
               source_label TEXT NOT NULL DEFAULT '',
               source_shape TEXT NOT NULL DEFAULT '',
               source_artifact_ref_json TEXT NOT NULL DEFAULT '{}',
+              default_environment_id TEXT NOT NULL DEFAULT '',
+              working_branch TEXT NOT NULL DEFAULT '',
               active_revision_id TEXT,
               published_revision_id TEXT,
               created_at TEXT NOT NULL,
@@ -132,11 +134,104 @@ def ensure_schema(data_root: Path) -> None:
               approval_policy TEXT NOT NULL DEFAULT 'human_required',
               requested_by TEXT NOT NULL DEFAULT 'workspace',
               approved_by TEXT NOT NULL DEFAULT '',
+              approval_id TEXT NOT NULL DEFAULT '',
+              environment_id TEXT NOT NULL DEFAULT 'env_preview',
+              build_id TEXT NOT NULL DEFAULT '',
               preview_ref TEXT NOT NULL DEFAULT '',
               created_at TEXT NOT NULL,
               updated_at TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_publish_requests_site_updated ON publish_requests(site_id, updated_at);
+            CREATE TABLE IF NOT EXISTS environments (
+              id TEXT PRIMARY KEY,
+              site_id TEXT NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+              name TEXT NOT NULL,
+              kind TEXT NOT NULL,
+              base_url TEXT NOT NULL DEFAULT '',
+              publish_target_id TEXT NOT NULL DEFAULT '',
+              requires_approval INTEGER NOT NULL DEFAULT 1,
+              last_deployment_id TEXT NOT NULL DEFAULT '',
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_environments_site_kind ON environments(site_id, kind);
+            CREATE TABLE IF NOT EXISTS publish_targets (
+              id TEXT PRIMARY KEY,
+              site_id TEXT NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+              environment_id TEXT NOT NULL,
+              kind TEXT NOT NULL,
+              status TEXT NOT NULL,
+              config_json TEXT NOT NULL DEFAULT '{}',
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_publish_targets_site ON publish_targets(site_id);
+            CREATE TABLE IF NOT EXISTS approval_events (
+              id TEXT PRIMARY KEY,
+              site_id TEXT NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+              action TEXT NOT NULL,
+              target_id TEXT NOT NULL,
+              status TEXT NOT NULL,
+              approved_by TEXT NOT NULL,
+              approval_note TEXT NOT NULL DEFAULT '',
+              used_at TEXT,
+              created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_approval_events_target ON approval_events(site_id, action, target_id, status);
+            CREATE TABLE IF NOT EXISTS builds (
+              id TEXT PRIMARY KEY,
+              site_id TEXT NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+              status TEXT NOT NULL,
+              source_profile_json TEXT NOT NULL DEFAULT '{}',
+              route_count INTEGER NOT NULL DEFAULT 0,
+              asset_count INTEGER NOT NULL DEFAULT 0,
+              warnings_json TEXT NOT NULL DEFAULT '[]',
+              logs_summary TEXT NOT NULL DEFAULT '',
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_builds_site_created ON builds(site_id, created_at);
+            CREATE TABLE IF NOT EXISTS previews (
+              id TEXT PRIMARY KEY,
+              site_id TEXT NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+              route TEXT NOT NULL,
+              page_id TEXT NOT NULL DEFAULT '',
+              build_id TEXT NOT NULL DEFAULT '',
+              status TEXT NOT NULL,
+              created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_previews_site_created ON previews(site_id, created_at);
+            CREATE TABLE IF NOT EXISTS deployments (
+              id TEXT PRIMARY KEY,
+              site_id TEXT NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+              environment_id TEXT NOT NULL,
+              publish_request_id TEXT NOT NULL DEFAULT '',
+              revision_id TEXT NOT NULL,
+              status TEXT NOT NULL,
+              mode TEXT NOT NULL,
+              source_ref_json TEXT NOT NULL DEFAULT '{}',
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_deployments_site_created ON deployments(site_id, created_at);
+            CREATE TABLE IF NOT EXISTS git_connections (
+              id TEXT PRIMARY KEY,
+              site_id TEXT REFERENCES sites(id) ON DELETE SET NULL,
+              provider TEXT NOT NULL,
+              owner TEXT NOT NULL,
+              repo TEXT NOT NULL,
+              repository_url TEXT NOT NULL,
+              base_branch TEXT NOT NULL DEFAULT 'main',
+              auth_mode TEXT NOT NULL,
+              secret_logical_name TEXT NOT NULL DEFAULT '',
+              github_app_id TEXT NOT NULL DEFAULT '',
+              github_installation_id TEXT NOT NULL DEFAULT '',
+              status TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_git_connections_repo ON git_connections(provider, owner, repo);
+            CREATE INDEX IF NOT EXISTS idx_git_connections_site ON git_connections(site_id);
             CREATE TABLE IF NOT EXISTS audit_events (
               id TEXT PRIMARY KEY,
               site_id TEXT,
@@ -148,8 +243,13 @@ def ensure_schema(data_root: Path) -> None:
         """)
         _ensure_column(db, "sites", "source_shape", "TEXT NOT NULL DEFAULT ''")
         _ensure_column(db, "sites", "source_artifact_ref_json", "TEXT NOT NULL DEFAULT '{}'")
+        _ensure_column(db, "sites", "default_environment_id", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(db, "sites", "working_branch", "TEXT NOT NULL DEFAULT ''")
         _ensure_column(db, "pages", "asset_refs_json", "TEXT NOT NULL DEFAULT '[]'")
         _ensure_column(db, "pages", "warnings_json", "TEXT NOT NULL DEFAULT '[]'")
+        _ensure_column(db, "publish_requests", "approval_id", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(db, "publish_requests", "environment_id", "TEXT NOT NULL DEFAULT 'env_preview'")
+        _ensure_column(db, "publish_requests", "build_id", "TEXT NOT NULL DEFAULT ''")
         db.execute(
             "INSERT OR REPLACE INTO schema_metadata(key, value) VALUES (?, ?)",
             ("schema_version", SCHEMA_VERSION),

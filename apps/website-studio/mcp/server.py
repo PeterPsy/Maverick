@@ -20,6 +20,12 @@ TOOL_ACTIONS = {
     "website_site_restore": "site_restore",
     "website_site_rename": "site_rename",
     "website_site_duplicate": "site_duplicate",
+    "website_site_set_active": "site_set_active",
+    "website_git_connections_list": "git_connections_list",
+    "website_git_connection_prepare": "git_connection_prepare",
+    "website_git_connection_activate": "git_connection_activate",
+    "website_environments_list": "environments_list",
+    "website_environment_configure": "environment_configure",
     "website_import_git": "import_git",
     "website_import_zip": "import_zip",
     "website_sitemap": "sitemap",
@@ -28,8 +34,15 @@ TOOL_ACTIONS = {
     "website_write_file": "write_file",
     "website_apply_patch": "apply_patch",
     "website_diff": "diff",
+    "website_list_changes": "list_changes",
+    "website_build_validate": "build_validate",
+    "website_builds_list": "builds_list",
     "website_build_preview": "build_preview",
     "website_publish_request": "publish_request",
+    "website_approval_record": "approval_record",
+    "website_approvals_list": "approvals_list",
+    "website_publish": "publish",
+    "website_rollback": "rollback",
     "website_active_context": "active_context",
     "website_page_context": "page_context",
     "website_studio_reference_manifest": "reference_manifest",
@@ -51,6 +64,8 @@ payload = read_entrypoint_payload()
 arguments = dict(payload.arguments)
 tool_name = str(payload.raw.get("tool_name") or "")
 arguments.setdefault("action", TOOL_ACTIONS.get(tool_name, "sites_list"))
+arguments["_app_secrets"] = dict(payload.raw.get("app_secrets") or {})
+arguments["_app_secret_errors"] = list(payload.raw.get("app_secret_errors") or [])
 status_code, result = handle_action(Path(payload.data_root), arguments)
 if status_code < 400:
     result["app_events"] = app_events_for_action(str(arguments.get("action") or "sites_list"))

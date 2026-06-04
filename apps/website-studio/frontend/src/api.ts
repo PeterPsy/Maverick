@@ -13,6 +13,7 @@ export type Site = {
   source_provider: string;
   active_revision_id?: string | null;
   published_revision_id?: string | null;
+  is_active?: boolean;
 };
 
 export type Page = {
@@ -23,6 +24,31 @@ export type Page = {
   kind: string;
   status: string;
   source_files: string[];
+};
+
+export type Route = {
+  id: string;
+  site_id: string;
+  route: string;
+  page_id?: string;
+  kind: string;
+  status: string;
+  source_files: string[];
+};
+
+export type Asset = {
+  id: string;
+  site_id: string;
+  path: string;
+  kind: string;
+  status: string;
+};
+
+export type SitemapPayload = {
+  site_id: string;
+  items: Page[];
+  routes: Route[];
+  assets: Asset[];
 };
 
 export type WebsiteFile = {

@@ -24,15 +24,38 @@ class GeneratedAppContractTest(unittest.TestCase):
         requirements = contract.get("requires", [])
         self.assertIn("file.content.write", {item.get("interface") for item in requirements})
 
-    def test_phase2_tools_are_not_declared_until_implemented(self) -> None:
+    def test_contract_declares_github_token_secret_logical_name(self) -> None:
+        contract = json.loads((APP_ROOT / "app_contract.json").read_text(encoding="utf-8"))
+        secret_reads = set(contract.get("permissions", {}).get("secrets", {}).get("read", []))
+        self.assertIn("github-token", secret_reads)
+        self.assertNotIn("github-app-private-key", secret_reads)
+
+    def test_contract_declares_git_connection_setup_tools(self) -> None:
         contract = json.loads((APP_ROOT / "app_contract.json").read_text(encoding="utf-8"))
         mcp_tools = set(contract.get("capabilities", {}).get("mcp_tools", []))
-        self.assertNotIn("website_publish", mcp_tools)
-        self.assertNotIn("website_rollback", mcp_tools)
+        self.assertIn("website_git_connections_list", mcp_tools)
+        self.assertIn("website_git_connection_prepare", mcp_tools)
+        self.assertIn("website_git_connection_activate", mcp_tools)
 
         schemas = json.loads((APP_ROOT / "mcp" / "tool_schemas.json").read_text(encoding="utf-8"))
-        self.assertNotIn("website_publish", schemas["tools"])
-        self.assertNotIn("website_rollback", schemas["tools"])
+        self.assertIn("website_git_connection_prepare", schemas["tools"])
+        self.assertIn("website_git_connection_activate", schemas["tools"])
+
+    def test_phase2_tools_are_declared_when_implemented(self) -> None:
+        contract = json.loads((APP_ROOT / "app_contract.json").read_text(encoding="utf-8"))
+        mcp_tools = set(contract.get("capabilities", {}).get("mcp_tools", []))
+        for tool in {
+            "website_environment_configure",
+            "website_build_validate",
+            "website_approval_record",
+            "website_publish",
+            "website_rollback",
+        }:
+            self.assertIn(tool, mcp_tools)
+
+        schemas = json.loads((APP_ROOT / "mcp" / "tool_schemas.json").read_text(encoding="utf-8"))
+        self.assertIn("website_publish", schemas["tools"])
+        self.assertIn("website_rollback", schemas["tools"])
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@
   "app_id": "website-studio",
   "contract_version": "1.0",
   "name": "Website Studio",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Import, index, edit, preview, approve, and maintain workspace website projects inside Maverick.",
   "publisher": "workspace",
   "minimum_core_version": "0.1.0",
@@ -27,6 +27,27 @@
   "presentation": {
     "frontend_role": "workspace"
   },
+  "permissions": {
+    "secrets": {
+      "read": [
+        "github-token"
+      ],
+      "write": []
+    },
+    "network": {
+      "outbound": [
+        "github.com",
+        "api.github.com"
+      ]
+    },
+    "runtime": {
+      "create_sessions": false,
+      "cleanup_sessions": false
+    },
+    "host": {
+      "telemetry": false
+    }
+  },
   "capabilities": {
     "mcp_tools": [
       "website_manifest",
@@ -37,6 +58,12 @@
       "website_site_restore",
       "website_site_rename",
       "website_site_duplicate",
+      "website_site_set_active",
+      "website_git_connections_list",
+      "website_git_connection_prepare",
+      "website_git_connection_activate",
+      "website_environments_list",
+      "website_environment_configure",
       "website_import_git",
       "website_import_zip",
       "website_sitemap",
@@ -45,8 +72,15 @@
       "website_write_file",
       "website_apply_patch",
       "website_diff",
+      "website_list_changes",
+      "website_build_validate",
+      "website_builds_list",
       "website_build_preview",
       "website_publish_request",
+      "website_approval_record",
+      "website_approvals_list",
+      "website_publish",
+      "website_rollback",
       "website_active_context",
       "website_page_context",
       "website_studio_reference_manifest",
@@ -184,7 +218,7 @@
   },
   "storage": {
     "storage_kind": "sqlite",
-    "data_schema_version": "1",
+    "data_schema_version": "2",
     "primary_paths": [
       "data/website-studio/app.sqlite",
       "data/website-studio/sites"
@@ -235,8 +269,8 @@
   },
   "rollback_support": {
     "bundle": false,
-    "data": false,
-    "repair_only": false
+    "data": true,
+    "repair_only": true
   },
   "widgets": [
     {

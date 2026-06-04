@@ -7,9 +7,11 @@ from pathlib import Path
 from database import health_payload
 from store import (
     active_context,
+    activate_git_connection,
     apply_text_patch,
     archive_site,
     build_preview,
+    configure_environment,
     clear_custom_view,
     create_publish_request,
     create_site,
@@ -17,8 +19,15 @@ from store import (
     duplicate_site,
     import_git,
     import_zip,
+    list_git_connections,
+    list_changes,
+    list_approvals,
+    list_builds,
+    list_environments,
     list_sites,
     load_view_state,
+    page_context,
+    prepare_git_connection,
     publish,
     read_file,
     rebuild_index,
@@ -28,12 +37,15 @@ from store import (
     reference_summary,
     rename_site,
     restore_site,
+    record_approval,
     rollback,
     search,
+    set_active_site,
     set_custom_view,
     set_view_filter,
     sitemap,
     site_status,
+    validate_build,
     write_file,
 )
 
@@ -44,11 +56,16 @@ MUTATING_ACTIONS = {
     "site_restore",
     "site_rename",
     "site_duplicate",
+    "site_set_active",
+    "git_connection_prepare",
+    "git_connection_activate",
+    "environment_configure",
+    "approval_record",
     "import_zip",
     "import_git",
     "write_file",
     "apply_patch",
-    "build_preview",
+    "build_validate",
     "publish_request",
     "publish",
     "rollback",
@@ -62,7 +79,7 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
     action = str(payload.get("action") or "sites_list")
     try:
         if action in {"status", "manifest"}:
-            return 200, {"app_id": "website-studio", "status": "ready", **health_payload(data_root), "phase": "phase_1"}
+            return 200, {"app_id": "website-studio", "status": "ready", **health_payload(data_root), "phase": "phase_2"}
         if action == "sites_list":
             return 200, {"items": list_sites(data_root)}
         if action == "site_create":
@@ -93,6 +110,41 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
             }
         if action == "site_duplicate":
             return 201, {"site": duplicate_site(data_root, payload.get("site_id"), display_name=payload.get("display_name"), slug=payload.get("slug"))}
+        if action == "site_set_active":
+            return 200, set_active_site(data_root, payload.get("site_id"))
+        if action == "git_connections_list":
+            return 200, {"items": list_git_connections(data_root, payload.get("site_id"))}
+        if action == "git_connection_prepare":
+            return 201, prepare_git_connection(
+                data_root,
+                site_id=payload.get("site_id"),
+                display_name=payload.get("display_name"),
+                repository_url=payload.get("repository_url"),
+                base_branch=payload.get("base_branch") or payload.get("branch"),
+                auth_mode=payload.get("auth_mode") or "fine_grained_token",
+                secret_logical_name=payload.get("secret_logical_name"),
+            )
+        if action == "git_connection_activate":
+            return 200, activate_git_connection(
+                data_root,
+                payload.get("connection_id"),
+                grant_id=payload.get("grant_id"),
+                confirm_no_raw_secret=payload.get("confirm_no_raw_secret"),
+            )
+        if action == "environments_list":
+            return 200, {"items": list_environments(data_root, payload.get("site_id"))}
+        if action == "environment_configure":
+            return 200, {
+                "environment": configure_environment(
+                    data_root,
+                    payload.get("site_id"),
+                    environment_id=payload.get("environment_id"),
+                    name=payload.get("name"),
+                    kind=payload.get("kind") or "preview",
+                    base_url=payload.get("base_url"),
+                    requires_approval=payload.get("requires_approval") if "requires_approval" in payload else True,
+                )
+            }
         if action == "import_zip":
             return 201, {
                 **import_zip(
@@ -144,12 +196,47 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
             }
         if action == "diff":
             return 200, diff_site(data_root, payload.get("site_id"))
+        if action == "list_changes":
+            return 200, list_changes(data_root, payload.get("site_id"), payload.get("status"))
         if action == "build_preview":
             return 200, build_preview(data_root, payload.get("site_id"), payload.get("route") or "/")
+        if action == "build_validate":
+            return 201, {"build": validate_build(data_root, payload.get("site_id"))}
+        if action == "builds_list":
+            return 200, {"items": list_builds(data_root, payload.get("site_id"))}
         if action == "publish_request":
-            return 201, {"publish_request": create_publish_request(data_root, payload.get("site_id"), payload.get("requested_by") or "workspace")}
+            return 201, {
+                "publish_request": create_publish_request(
+                    data_root,
+                    payload.get("site_id"),
+                    payload.get("requested_by") or "workspace",
+                    environment_id=payload.get("environment_id"),
+                )
+            }
+        if action == "approval_record":
+            return 201, {
+                "approval": record_approval(
+                    data_root,
+                    payload.get("site_id"),
+                    action=payload.get("approval_action") or payload.get("target_action") or payload.get("publish_action") or payload.get("operation"),
+                    target_id=payload.get("target_id") or payload.get("publish_request_id") or payload.get("revision_id"),
+                    approved_by=payload.get("approved_by"),
+                    approval_note=payload.get("approval_note"),
+                    confirm=payload.get("confirm"),
+                )
+            }
+        if action == "approvals_list":
+            return 200, {"items": list_approvals(data_root, payload.get("site_id"))}
         if action == "publish":
-            result = publish(data_root, payload.get("site_id"), payload.get("publish_request_id"), payload.get("approval_id"))
+            result = publish(
+                data_root,
+                payload.get("site_id"),
+                payload.get("publish_request_id"),
+                payload.get("approval_id"),
+                app_secrets=payload.get("_app_secrets") if isinstance(payload.get("_app_secrets"), dict) else {},
+                app_secret_errors=payload.get("_app_secret_errors") if isinstance(payload.get("_app_secret_errors"), list) else [],
+                github_transport=payload.get("_github_transport"),
+            )
             return (403 if result.get("blocked") else 200), result
         if action == "rollback":
             result = rollback(
@@ -160,8 +247,17 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
                 confirm=payload.get("confirm"),
             )
             return (403 if result.get("blocked") else 200), result
-        if action in {"active_context", "page_context"}:
+        if action == "active_context":
             return 200, active_context(data_root, payload.get("site_id"), payload.get("page_id"))
+        if action == "page_context":
+            return 200, page_context(
+                data_root,
+                payload.get("site_id"),
+                page_id=payload.get("page_id"),
+                route_id=payload.get("route_id"),
+                route=payload.get("route"),
+                asset_id=payload.get("asset_id"),
+            )
         if action == "reference_manifest":
             return 200, reference_manifest()
         if action == "reference_search":
@@ -186,5 +282,9 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
 def app_events_for_action(action: str) -> list[dict[str, str]]:
     if action not in MUTATING_ACTIONS:
         return []
-    resource = "view-state" if action in {"clear_custom_view", "set_custom_view", "set_view_filter"} else "records"
-    return [{"type": "maverick.app.data-changed", "owner_app_id": "website-studio", "resource": resource}]
+    resources = []
+    if action not in {"clear_custom_view", "set_custom_view", "set_view_filter", "site_set_active"}:
+        resources.append("records")
+    if action in {"clear_custom_view", "set_custom_view", "set_view_filter", "site_set_active", "site_create", "site_archive", "import_zip", "import_git", "git_connection_prepare"}:
+        resources.append("view-state")
+    return [{"type": "maverick.app.data-changed", "owner_app_id": "website-studio", "resource": resource} for resource in resources]

@@ -17,6 +17,11 @@
       button:hover { background: var(--hover); border-color: var(--border); }
       span, small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       small { color: var(--soft); }
+      .label { display: grid; min-width: 0; }
+      .meta { display: flex; align-items: center; justify-content: flex-end; gap: 5px; min-width: 0; }
+      .kind { color: var(--soft); font-size: .68rem; }
+      .badge { max-width: 6.5rem; border: 1px solid rgba(255,255,255,.08); border-radius: 999px; color: var(--muted); font-size: .64rem; padding: 2px 6px; }
+      .badge.warn { color: #f6d58f; border-color: rgba(246,213,143,.28); }
       .empty { padding: 6.7rem .72rem 0; color: var(--muted); font-size: .82rem; }
     </style>
   </head>
@@ -32,6 +37,8 @@
       const siteSelect = document.getElementById('siteSelect');
       let sites = [];
       let pages = [];
+      let routes = [];
+      let assets = [];
       let activeSiteId = '';
       async function backend(body) {
         const response = await fetch('/api/apps/website-studio/backend', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -41,9 +48,10 @@
       async function load() {
         const sitePayload = await backend({ action: 'sites_list' });
         sites = sitePayload.items || [];
+        const selectableSites = sites.filter(item => item.status !== 'archived');
         siteSelect.replaceChildren();
-        if (sites.length) {
-          for (const site of sites) {
+        if (selectableSites.length) {
+          for (const site of selectableSites) {
             const option = document.createElement('option');
             option.value = String(site.id);
             option.textContent = String(site.display_name || site.id);
@@ -52,20 +60,23 @@
         } else {
           const option = document.createElement('option');
           option.value = '';
-          option.textContent = 'No website sites yet';
+          option.textContent = 'No active websites yet';
           siteSelect.append(option);
         }
-        const site = sites.find(item => item.id === activeSiteId) || sites[0];
+        const site = selectableSites.find(item => item.id === activeSiteId) || selectableSites.find(item => item.is_active) || selectableSites[0];
         if (!site) { list.replaceChildren(); return; }
         activeSiteId = site.id;
         siteSelect.value = activeSiteId;
         const map = await backend({ action: 'sitemap', site_id: site.id });
         pages = map.items || [];
+        routes = map.routes || [];
+        assets = map.assets || [];
         render();
       }
       function render() {
         const needle = query.value.toLowerCase();
-        const filtered = pages.filter(page => page.route.toLowerCase().includes(needle) || page.title.toLowerCase().includes(needle));
+        const items = sitemapItems();
+        const filtered = items.filter(item => item.label.toLowerCase().includes(needle) || item.subtitle.toLowerCase().includes(needle));
         list.replaceChildren();
         if (!filtered.length) {
           const empty = document.createElement('div');
@@ -74,29 +85,106 @@
           list.append(empty);
           return;
         }
-        for (const page of filtered) {
+        for (const item of filtered) {
           const row = document.createElement('button');
-          row.dataset.page = String(page.id);
-          row.dataset.route = String(page.route);
-          const route = document.createElement('span');
-          route.textContent = String(page.route);
+          row.dataset.kind = item.kind;
+          row.dataset.id = item.id;
+          row.dataset.page = item.page_id || '';
+          row.dataset.route = item.route || '';
+          const label = document.createElement('span');
+          label.className = 'label';
+          const title = document.createElement('span');
+          title.textContent = item.label;
+          const kind = document.createElement('small');
+          kind.className = 'kind';
+          kind.textContent = item.subtitle;
+          label.append(title, kind);
+          const meta = document.createElement('span');
+          meta.className = 'meta';
           const status = document.createElement('small');
-          status.textContent = String(page.status);
-          row.append(route, status);
+          status.className = item.warning ? 'badge warn' : 'badge';
+          status.textContent = item.status;
+          meta.append(status);
+          row.append(label, meta);
           list.append(row);
         }
       }
+      function sitemapItems() {
+        const pageItems = pages.map(page => ({
+          kind: 'page',
+          id: String(page.id),
+          page_id: String(page.id),
+          route: String(page.route || ''),
+          label: String(page.route || page.title || page.id),
+          subtitle: String(page.title || 'page'),
+          status: String(page.warnings?.length ? 'missing asset' : page.status || 'draft'),
+          warning: Boolean(page.warnings?.length)
+        }));
+        const pageRouteIds = new Set(pages.map(page => String(page.id)));
+        const routeItems = routes
+          .filter(route => !route.page_id || !pageRouteIds.has(String(route.page_id)))
+          .map(route => ({
+            kind: 'route',
+            id: String(route.id),
+            page_id: String(route.page_id || ''),
+            route: String(route.route || ''),
+            label: String(route.route || route.id),
+            subtitle: String(route.kind || 'route'),
+            status: String(route.warnings?.length ? 'broken' : route.status || 'route'),
+            warning: Boolean(route.warnings?.length || route.status === 'broken')
+          }));
+        const assetItems = assets.map(asset => ({
+          kind: 'asset',
+          id: String(asset.id),
+          page_id: '',
+          route: '',
+          label: String(asset.path || asset.id),
+          subtitle: String(asset.kind || 'asset'),
+          status: String(asset.status || 'asset'),
+          warning: Boolean(asset.warnings?.length)
+        }));
+        return [...pageItems, ...routeItems, ...assetItems];
+      }
       query.addEventListener('input', render);
-      siteSelect.addEventListener('change', () => {
+      siteSelect.addEventListener('change', async () => {
         activeSiteId = siteSelect.value;
+        if (activeSiteId) {
+          await backend({ action: 'site_set_active', site_id: activeSiteId }).catch(() => null);
+        }
         window.parent?.postMessage({ type: 'maverick.widget.open-app', app_id: 'website-studio', params: { site_id: activeSiteId } }, window.location.origin);
         load();
       });
       list.addEventListener('click', event => {
-        const row = event.target.closest('button[data-page]');
+        const row = event.target.closest('button[data-kind]');
         if (!row) return;
-        window.parent?.postMessage({ type: 'maverick.widget.open-app', app_id: 'website-studio', params: { site_id: activeSiteId, page_id: row.dataset.page, route: row.dataset.route } }, window.location.origin);
+        const kind = row.dataset.kind;
+        const id = row.dataset.id;
+        const params = { site_id: activeSiteId, app_page: `${kind}s/${id}` };
+        if (kind === 'page') {
+          params.page_id = row.dataset.page || id;
+          params.route = row.dataset.route || '';
+        }
+        if (kind === 'route') {
+          params.route_id = id;
+          params.route = row.dataset.route || '';
+        }
+        if (kind === 'asset') {
+          params.asset_id = id;
+        }
+        window.parent?.postMessage({ type: 'maverick.widget.open-app', app_id: 'website-studio', params }, window.location.origin);
         window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, window.location.origin);
+      });
+      window.addEventListener('message', event => {
+        if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') return;
+        if (event.data.type === 'maverick.widget.data-changed' && event.data.owner_app_id === 'website-studio') {
+          load();
+        }
+        if (event.data.type !== 'maverick.widget.context-changed') return;
+        const params = event.data.context?.content?.payload?.active_app_params || {};
+        if (params.site_id && params.site_id !== activeSiteId) {
+          activeSiteId = String(params.site_id);
+          load();
+        }
       });
       load().catch(() => {
         const empty = document.createElement('div');

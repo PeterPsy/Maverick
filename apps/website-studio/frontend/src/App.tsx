@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import { callBackend, callStorageProvider, type Page, type Site, type StorageFile } from './api';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { DragEvent } from 'react';
+import { callBackend, callStorageProvider, type Asset, type Page, type Route, type SitemapPayload, type Site, type StorageFile } from './api';
 
 type Notice = { tone: 'ok' | 'warn' | 'error'; text: string } | null;
 
@@ -8,6 +9,8 @@ export function App() {
   const [activeSiteId, setActiveSiteId] = useState('');
   const [pages, setPages] = useState<Page[]>([]);
   const [activePageId, setActivePageId] = useState('');
+  const [activeRouteId, setActiveRouteId] = useState('');
+  const [activeAssetId, setActiveAssetId] = useState('');
   const [previewHtml, setPreviewHtml] = useState('');
   const [showNewWebsite, setShowNewWebsite] = useState(false);
   const [gitDialogOpen, setGitDialogOpen] = useState(false);
@@ -15,30 +18,59 @@ export function App() {
   const [gitBranch, setGitBranch] = useState('');
   const [notice, setNotice] = useState<Notice>(null);
   const [busy, setBusy] = useState(false);
+  const [draggingZip, setDraggingZip] = useState(false);
+  const activeSiteIdRef = useRef('');
+  const activePageIdRef = useRef('');
 
   const activeSite = useMemo(() => sites.find((site) => site.id === activeSiteId), [sites, activeSiteId]);
   const activePage = useMemo(() => pages.find((page) => page.id === activePageId), [pages, activePageId]);
   const importOnly = showNewWebsite || !activeSite;
 
-  async function refresh(nextSiteId = activeSiteId, nextPageId = activePageId) {
+  useEffect(() => {
+    activeSiteIdRef.current = activeSiteId;
+  }, [activeSiteId]);
+
+  useEffect(() => {
+    activePageIdRef.current = activePageId;
+  }, [activePageId]);
+
+  async function refresh(nextSiteId = activeSiteIdRef.current, nextPageId = activePageIdRef.current, nextRoute = '', nextRouteId = '', nextAssetId = '') {
     const sitePayload = await callBackend<{ items: Site[] }>({ action: 'sites_list' });
     setSites(sitePayload.items);
-    const selectedSite = nextSiteId || sitePayload.items[0]?.id || '';
+    const availableSites = sitePayload.items.filter((site) => site.status !== 'archived');
+    const requestedSite = availableSites.find((site) => site.id === nextSiteId)?.id || '';
+    const persistedSite = availableSites.find((site) => site.is_active)?.id || '';
+    const selectedSite = requestedSite || persistedSite || availableSites[0]?.id || '';
     setActiveSiteId(selectedSite);
     if (!selectedSite) {
       setPages([]);
       setActivePageId('');
+      setActiveRouteId('');
+      setActiveAssetId('');
       setPreviewHtml('');
       setShowNewWebsite(true);
       return;
     }
+    if (selectedSite !== persistedSite) {
+      await callBackend({ action: 'site_set_active', site_id: selectedSite });
+    }
 
-    const map = await callBackend<{ items: Page[] }>({ action: 'sitemap', site_id: selectedSite });
+    const map = await callBackend<SitemapPayload>({ action: 'sitemap', site_id: selectedSite });
     setPages(map.items);
-    const selectedPage = map.items.find((page) => page.id === nextPageId) || map.items[0];
+    const selectedRoute = (map.routes || []).find((route) => route.id === nextRouteId) || (map.routes || []).find((route) => route.route === nextRoute);
+    const selectedAsset = (map.assets || []).find((asset) => asset.id === nextAssetId);
+    const selectedPage =
+      map.items.find((page) => page.id === nextPageId) ||
+      (selectedRoute?.page_id ? map.items.find((page) => page.id === selectedRoute.page_id) : undefined) ||
+      map.items.find((page) => page.route === nextRoute) ||
+      map.items[0];
     setActivePageId(selectedPage?.id || '');
-    if (selectedPage) {
-      await renderSite(selectedSite, selectedPage.route);
+    setActiveRouteId(selectedRoute?.id || '');
+    setActiveAssetId(selectedAsset?.id || '');
+    const previewRoute = selectedPage?.route || selectedRoute?.route || map.items[0]?.route || '';
+    postSelection(selectedSite, selectedPage, selectedRoute, selectedAsset);
+    if (previewRoute) {
+      await renderSite(selectedSite, previewRoute);
     } else {
       setPreviewHtml('');
     }
@@ -63,9 +95,19 @@ export function App() {
         setNotice(null);
         return;
       }
-      if (payload.params?.site_id) {
+      const appPage = (payload.params?.app_page || '').replace(/^\/+|\/+$/g, '');
+      const pageFromRoute = appPage.startsWith('pages/') ? appPage.slice('pages/'.length) : '';
+      const routeFromRoute = appPage.startsWith('routes/') ? appPage.slice('routes/'.length) : '';
+      const assetFromRoute = appPage.startsWith('assets/') ? appPage.slice('assets/'.length) : '';
+      if (payload.params?.site_id || pageFromRoute || routeFromRoute || assetFromRoute || payload.params?.route) {
         setShowNewWebsite(false);
-        refresh(payload.params.site_id, payload.params.page_id || '').catch((error: Error) => setNotice({ tone: 'error', text: error.message }));
+        refresh(
+          payload.params?.site_id || activeSiteIdRef.current,
+          payload.params?.page_id || pageFromRoute,
+          payload.params?.route || '',
+          payload.params?.route_id || routeFromRoute,
+          payload.params?.asset_id || assetFromRoute
+        ).catch((error: Error) => setNotice({ tone: 'error', text: error.message }));
       }
     }
     window.addEventListener('message', handleMessage);
@@ -89,6 +131,10 @@ export function App() {
 
   async function importZip(fileInput: File | null) {
     if (!fileInput) return;
+    if (!fileInput.name.toLowerCase().endsWith('.zip')) {
+      setNotice({ tone: 'warn', text: 'Select a ZIP archive.' });
+      return;
+    }
     const encoded = await toBase64(fileInput);
     const displayName = fileInput.name.replace(/\.zip$/i, '').replace(/[-_]+/g, ' ').trim() || 'Imported Website';
     const payload = await run(
@@ -109,6 +155,18 @@ export function App() {
     }
   }
 
+  function handleZipDrop(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault();
+    setDraggingZip(false);
+    if (busy) return;
+    const file = Array.from(event.dataTransfer.files).find((item) => item.name.toLowerCase().endsWith('.zip'));
+    if (!file) {
+      setNotice({ tone: 'warn', text: 'Drop a ZIP archive.' });
+      return;
+    }
+    void importZip(file);
+  }
+
   async function importGit() {
     const repositoryUrl = gitUrl.trim();
     if (!repositoryUrl) {
@@ -118,11 +176,12 @@ export function App() {
     const payload = await run(
       () =>
         callBackend<{ site: Site }>({
-          action: 'import_git',
+          action: 'git_connection_prepare',
           repository_url: repositoryUrl,
-          branch: gitBranch.trim() || undefined
+          base_branch: gitBranch.trim() || undefined,
+          auth_mode: 'fine_grained_token'
         }),
-      'Git repository imported'
+      'Git connection prepared'
     );
     if (payload?.site) {
       setGitDialogOpen(false);
@@ -140,7 +199,20 @@ export function App() {
       {importOnly ? (
         <section className="import-screen" aria-label="New website">
           <div className="import-actions">
-            <label className="import-button">
+            <label
+              className={`import-button drop-target${draggingZip ? ' dragging' : ''}`}
+              onDragEnter={(event) => {
+                event.preventDefault();
+                if (!busy) setDraggingZip(true);
+              }}
+              onDragOver={(event) => {
+                event.preventDefault();
+                if (!busy) event.dataTransfer.dropEffect = 'copy';
+              }}
+              onDragLeave={() => setDraggingZip(false)}
+              onDrop={handleZipDrop}
+              aria-disabled={busy}
+            >
               Drop ZIP
               <input type="file" accept=".zip,application/zip" onChange={(event) => importZip(event.target.files?.[0] || null)} disabled={busy} />
             </label>
@@ -164,13 +236,13 @@ export function App() {
               <input
                 value={gitBranch}
                 onChange={(event) => setGitBranch(event.target.value)}
-                placeholder="branch"
+                placeholder="base branch"
                 autoComplete="off"
                 disabled={busy}
               />
               <div className="git-import-actions">
                 <button type="button" onClick={() => setGitDialogOpen(false)} disabled={busy}>Cancel</button>
-                <button type="submit" disabled={busy}>Import</button>
+                <button type="submit" disabled={busy}>Connect</button>
               </div>
             </form>
           ) : null}
@@ -178,13 +250,34 @@ export function App() {
       ) : (
         <section className="site-canvas" aria-label={activeSite?.display_name || 'Website'}>
           {previewHtml ? (
-            <iframe title={activePage?.title || activeSite?.display_name || 'Website preview'} sandbox="" srcDoc={previewHtml} />
+            <iframe title={activePage?.title || activeSite?.display_name || 'Website preview'} data-route-id={activeRouteId} data-asset-id={activeAssetId} sandbox="" srcDoc={previewHtml} />
           ) : (
             <div className="site-empty">No renderable page in this site.</div>
           )}
         </section>
       )}
     </main>
+  );
+}
+
+function postSelection(siteId: string, page?: Page, route?: Route, asset?: Asset) {
+  if (!siteId) return;
+  const appPage = asset ? `assets/${asset.id}` : route ? `routes/${route.id}` : page ? `pages/${page.id}` : `sites/${siteId}`;
+  window.parent?.postMessage(
+    {
+      type: 'maverick.app.selection-changed',
+      app_id: 'website-studio',
+      owner_app_id: 'website-studio',
+      params: {
+        site_id: siteId,
+        page_id: page?.id || '',
+        route_id: route?.id || '',
+        asset_id: asset?.id || '',
+        route: page?.route || route?.route || '',
+        app_page: appPage
+      }
+    },
+    window.location.origin
   );
 }
 

@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { ChatThread, RuntimeEvent, RuntimeSession, RuntimeTurn } from "../api/client";
 import type { ExternalFileDrop, ExternalMentionDrop } from "../lib/externalInputs";
 import { type ActiveAppContext, loadWidgetActiveAppContext } from "../lib/activeAppContext";
@@ -72,7 +72,11 @@ export function useChatAppController({
   const [activeTurn, setActiveTurn] = useState<RuntimeTurn | null>(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [isOlderHistoryLoading, setIsOlderHistoryLoading] = useState(false);
   const [hasLoadedHistory, setHasLoadedHistory] = useState(false);
+  const [hasMoreHistory, setHasMoreHistory] = useState(false);
+  const [olderHistoryRequestId, setOlderHistoryRequestId] = useState(0);
+  const [visibleMessageLimit, setVisibleMessageLimit] = useState(50);
   const [error, setError] = useState<string | null>(null);
   const [composerError, setComposerError] = useState<string | null>(null);
   const [activeAppContext, setActiveAppContext] = useState<ActiveAppContext | null>(null);
@@ -162,6 +166,7 @@ export function useChatAppController({
     events,
     hasExternalRuntimeThreads,
     hasLoadedHistory,
+    hasMoreHistory,
     isBootstrapping,
     navigationScope,
     newChatProjectId,
@@ -179,8 +184,10 @@ export function useChatAppController({
     setEvents,
     setFailedUserMessages,
     setHasLoadedHistory,
+    setHasMoreHistory,
     setIsBootstrapping,
     setIsHistoryLoading,
+    setIsOlderHistoryLoading,
     setPendingUserMessages,
     setQueuedMessages,
     setSelectedReferences,
@@ -189,6 +196,11 @@ export function useChatAppController({
     threads,
   });
   const executionMode = activeSession?.effective_mode === "sandbox" || activeSession?.effective_mode === "full-access" ? activeSession.effective_mode : null;
+  const activeConversationKey = activeThread?.thread_id || (draftChat ? "draft" : "");
+
+  useEffect(() => {
+    setVisibleMessageLimit(50);
+  }, [activeConversationKey]);
 
   const loadInitialState = useCallback(async () => {
     setIsBootstrapping(true);
@@ -205,6 +217,18 @@ export function useChatAppController({
     setHasLoadedHistory(true);
     setIsHistoryLoading(false);
   }, []);
+
+  const handleRevealOlderMessages = useCallback(() => {
+    setVisibleMessageLimit((current) => current + 50);
+  }, []);
+
+  const handleLoadOlderHistory = useCallback(() => {
+    if (!activeThread?.runtime_session_id || !hasMoreHistory || isOlderHistoryLoading) {
+      return;
+    }
+    setIsOlderHistoryLoading(true);
+    setOlderHistoryRequestId((current) => current + 1);
+  }, [activeThread?.runtime_session_id, hasMoreHistory, isOlderHistoryLoading]);
 
   function notifyActiveThreadChanged(activeThreadId: string) {
     postActiveThreadChanged({ activeThread, activeThreadId, navigationScope, threadId });
@@ -241,9 +265,13 @@ export function useChatAppController({
     hasLoadedHistory,
     isBootstrapping,
     isHistoryLoading,
+    isOlderHistoryLoading,
     isRuntimeBusy,
     isSending,
     mentionItems,
+    hasMoreHistory,
+    onLoadOlderHistory: handleLoadOlderHistory,
+    onRevealOlderMessages: handleRevealOlderMessages,
     pendingUserMessages,
     providers,
     queuedMessages,
@@ -259,6 +287,7 @@ export function useChatAppController({
     transcriptionMaxDurationSeconds,
     transcriptionProviderAppId,
     transcriptionProviderAvailable,
+    visibleMessageLimit,
   });
 
   return {
@@ -266,13 +295,17 @@ export function useChatAppController({
     rootProps: presentation.rootProps,
     runtimeEvents: {
       activeTurn,
+      hasMoreHistory,
       onRuntimeSessionUnavailable: handleUnavailableRuntimeSession,
       onRuntimeSnapshot: handleRuntimeSnapshot,
+      olderHistoryRequestId,
       runtimeSessionId: activeThread?.runtime_session_id || null,
       setActiveSession,
       setActiveTurn,
       setError,
       setEvents,
+      setHasMoreHistory,
+      setIsOlderHistoryLoading,
       setPendingUserMessages,
     },
     shellMessages: {

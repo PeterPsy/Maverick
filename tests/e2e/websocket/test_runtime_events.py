@@ -12,8 +12,11 @@ from core.api.app_events import APP_EVENTS_WS_PATH, AppEventBus, stream_app_even
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
 from core.api.runtime_thread_websocket import stream_runtime_thread_events
-from core.api.runtime_websocket import WEBSOCKET_UNAUTHORIZED, stream_runtime_session_events
+from core.api.runtime_websocket import WEBSOCKET_UNAUTHORIZED, initial_runtime_event_page, stream_runtime_session_events
+from core.runtime.runtime_events import RuntimeEventRecord
+from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.service import create_runtime_session, record_runtime_event, transition_runtime_session
+from core.runtime.store import RuntimeEventPage
 from core.shared.entrypoints import EntrypointShutdownController
 from tests.support.markers import slow_test_class
 
@@ -162,6 +165,223 @@ class RuntimeWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(frames[0]["type"], "runtime.snapshot")
         self.assertEqual([event["event_id"] for event in frames[0]["events"]], ["event-2", "event-3"])
         self.assertEqual(frames[0]["last_event_id"], "event-3")
+
+    async def test_runtime_websocket_rehydrates_tail_when_cursor_is_current(self) -> None:
+        state = bootstrap_platform_state(start_path=self.make_repo_root())
+        cookie = self.login_cookie(state)
+        session_id, _event_ids = self.create_session_with_events(state)
+
+        sent = await self.collect_websocket_messages(state, session_id=session_id, cookie=cookie, query_string=b"last_event_id=event-3")
+
+        frames = [json.loads(item["text"]) for item in sent if item.get("type") == "websocket.send"]
+        self.assertEqual(frames[0]["type"], "runtime.snapshot")
+        self.assertEqual([event["event_id"] for event in frames[0]["events"]], ["event-1", "event-2", "event-3"])
+        self.assertEqual(frames[0]["last_event_id"], "event-3")
+
+    async def test_runtime_websocket_initial_snapshot_is_bounded(self) -> None:
+        state = bootstrap_platform_state(start_path=self.make_repo_root())
+        cookie = self.login_cookie(state)
+        session_id, _event_ids = self.create_session_with_events(state)
+
+        sent = await self.collect_websocket_messages(state, session_id=session_id, cookie=cookie, query_string=b"initial_event_limit=2")
+
+        frames = [json.loads(item["text"]) for item in sent if item.get("type") == "websocket.send"]
+        self.assertEqual(frames[0]["type"], "runtime.snapshot")
+        self.assertEqual([event["event_id"] for event in frames[0]["events"]], ["event-2", "event-3"])
+        self.assertEqual(frames[0]["oldest_event_id"], "event-2")
+        self.assertTrue(frames[0]["has_more_before"])
+
+    async def test_runtime_websocket_initial_snapshot_includes_turn_metadata_for_cut_tail(self) -> None:
+        state = bootstrap_platform_state(start_path=self.make_repo_root())
+        cookie = self.login_cookie(state)
+        session_id, _event_ids = self.create_session_with_events(state)
+        created_at = datetime(2026, 4, 19, 9, 59, 59, tzinfo=UTC)
+        state.runtime_store.save_turn(
+            RuntimeTurnRecord(
+                turn_id="turn-1",
+                session_id=session_id,
+                workspace_id="default",
+                status="completed",
+                input_text="important user request",
+                created_at=created_at,
+                updated_at=created_at + timedelta(seconds=1),
+                started_at=created_at + timedelta(milliseconds=500),
+                completed_at=created_at + timedelta(seconds=1),
+                failure_reason=None,
+            )
+        )
+
+        sent = await self.collect_websocket_messages(state, session_id=session_id, cookie=cookie, query_string=b"initial_event_limit=2")
+
+        frames = [json.loads(item["text"]) for item in sent if item.get("type") == "websocket.send"]
+        self.assertEqual(frames[0]["type"], "runtime.snapshot")
+        self.assertEqual([event["event_id"] for event in frames[0]["events"]], ["event-2", "event-3"])
+        self.assertEqual([turn["turn_id"] for turn in frames[0]["turns"]], ["turn-1"])
+        self.assertEqual(frames[0]["turns"][0]["input_text"], "important user request")
+
+    async def test_runtime_websocket_initial_snapshot_compacts_replay_only_payloads(self) -> None:
+        state = bootstrap_platform_state(start_path=self.make_repo_root())
+        cookie = self.login_cookie(state)
+        session = create_runtime_session(
+            state.runtime_store,
+            session_id=str(uuid4()),
+            workspace_id="default",
+            agent_id="test-agent",
+            requested_mode=None,
+            governance=state.workspace_store.get_governance("default"),
+            platform_allows_full_access=True,
+            start_path=state.repository_root,
+        )
+        transition_runtime_session(state.runtime_store, session_id=session.session_id, target_status="running")
+        record_runtime_event(
+            state.runtime_store,
+            event_id="event-step",
+            session_id=session.session_id,
+            turn_id="turn-1",
+            process_id=None,
+            plane="turn",
+            event_type="runtime.step.updated",
+            payload={"label": "turn diff updated", "raw": "x" * 20000},
+            now=datetime(2026, 4, 19, 10, 0, tzinfo=UTC),
+        )
+        record_runtime_event(
+            state.runtime_store,
+            event_id="event-tool",
+            session_id=session.session_id,
+            turn_id="turn-1",
+            process_id=None,
+            plane="turn",
+            event_type="runtime.tool_call.completed",
+            payload={"name": "command", "stdout": "y" * 20000, "summary": "done"},
+            now=datetime(2026, 4, 19, 10, 0, 1, tzinfo=UTC),
+        )
+
+        sent = await self.collect_websocket_messages(state, session_id=session.session_id, cookie=cookie)
+
+        frames = [json.loads(item["text"]) for item in sent if item.get("type") == "websocket.send"]
+        events = {event["event_id"]: event for event in frames[0]["events"]}
+        self.assertNotIn("raw", events["event-step"]["payload"])
+        self.assertEqual(len(events["event-tool"]["payload"]["stdout"]), 8000)
+        self.assertTrue(events["event-tool"]["payload"]["stdout_truncated"])
+        self.assertEqual(events["event-tool"]["payload"]["stdout_original_chars"], 20000)
+
+    async def test_runtime_websocket_initial_snapshot_uses_bounded_event_page_not_recovery_tail(self) -> None:
+        event = RuntimeEventRecord(
+            event_id="event-2",
+            workspace_id="default",
+            session_id="session-1",
+            plane="turn",
+            event_type="runtime.output.delta",
+            turn_id="turn-1",
+            process_id=None,
+            payload={"text": "hello"},
+            created_at=datetime(2026, 4, 19, 10, 0, tzinfo=UTC),
+        )
+
+        class _RuntimeStore:
+            def list_recent_events(self, session_id: str, *, limit: int) -> list[RuntimeEventRecord]:
+                raise AssertionError("initial snapshots must not use recovery-skipping recent event reads")
+
+            def list_turns(self, session_id: str):
+                return []
+
+            def has_events_before(self, session_id: str, *, before_event_id: str | None) -> bool:
+                raise AssertionError("bounded event pages already report older-history availability")
+
+            def list_event_page(self, session_id: str, *, before_event_id: str | None = None, limit: int = 200):
+                return RuntimeEventPage(
+                    events=[event],
+                    has_more_before=True,
+                    before_event_id=before_event_id,
+                    oldest_event_id=event.event_id,
+                    newest_event_id=event.event_id,
+                )
+
+        page = initial_runtime_event_page(
+            type("State", (), {"runtime_store": _RuntimeStore()})(),
+            "session-1",
+            last_event_id=None,
+            limit=2,
+        )
+
+        self.assertEqual([item.event_id for item in page.events], ["event-2"])
+        self.assertTrue(page.has_more_before)
+
+    async def test_runtime_websocket_serves_older_history_page(self) -> None:
+        state = bootstrap_platform_state(start_path=self.make_repo_root())
+        cookie = self.login_cookie(state)
+        session_id, _event_ids = self.create_session_with_events(state)
+        sent: list[dict] = []
+        received = [
+            {"type": "websocket.connect"},
+            {
+                "type": "websocket.receive",
+                "text": json.dumps({"type": "runtime.history.before", "before_event_id": "event-2", "limit": 2}),
+            },
+            {"type": "websocket.disconnect"},
+        ]
+
+        async def receive() -> dict:
+            return received.pop(0)
+
+        async def send(message: dict) -> None:
+            sent.append(message)
+
+        await stream_runtime_session_events(
+            state=state,
+            scope={
+                "type": "websocket",
+                "path": f"/ws/runtime/sessions/{session_id}",
+                "query_string": b"initial_event_limit=2",
+                "headers": [(b"cookie", cookie.encode("latin1"))],
+            },
+            receive=receive,
+            send=send,
+        )
+
+        frames = [json.loads(item["text"]) for item in sent if item.get("type") == "websocket.send"]
+        history_frames = [frame for frame in frames if frame["type"] == "runtime.history.page"]
+        self.assertEqual(len(history_frames), 1)
+        self.assertEqual([event["event_id"] for event in history_frames[0]["events"]], ["event-1"])
+        self.assertFalse(history_frames[0]["has_more_before"])
+
+    async def test_runtime_websocket_history_page_with_unknown_cursor_is_empty(self) -> None:
+        state = bootstrap_platform_state(start_path=self.make_repo_root())
+        cookie = self.login_cookie(state)
+        session_id, _event_ids = self.create_session_with_events(state)
+        sent: list[dict] = []
+        received = [
+            {"type": "websocket.connect"},
+            {
+                "type": "websocket.receive",
+                "text": json.dumps({"type": "runtime.history.before", "before_event_id": "missing-event", "limit": 2}),
+            },
+            {"type": "websocket.disconnect"},
+        ]
+
+        async def receive() -> dict:
+            return received.pop(0)
+
+        async def send(message: dict) -> None:
+            sent.append(message)
+
+        await stream_runtime_session_events(
+            state=state,
+            scope={
+                "type": "websocket",
+                "path": f"/ws/runtime/sessions/{session_id}",
+                "query_string": b"initial_event_limit=2",
+                "headers": [(b"cookie", cookie.encode("latin1"))],
+            },
+            receive=receive,
+            send=send,
+        )
+
+        frames = [json.loads(item["text"]) for item in sent if item.get("type") == "websocket.send"]
+        history_frames = [frame for frame in frames if frame["type"] == "runtime.history.page"]
+        self.assertEqual(len(history_frames), 1)
+        self.assertEqual(history_frames[0]["events"], [])
+        self.assertFalse(history_frames[0]["has_more_before"])
 
     async def test_runtime_websocket_rejects_unauthenticated_clients(self) -> None:
         state = bootstrap_platform_state(start_path=self.make_repo_root())

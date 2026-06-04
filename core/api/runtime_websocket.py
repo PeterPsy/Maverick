@@ -15,6 +15,8 @@ from core.api.platform_state import PlatformState
 from core.api.session_api import resolve_request_session
 from core.runtime.errors import RuntimeSessionNotFoundError
 from core.runtime.runtime_events import RuntimeEventRecord
+from core.runtime.runtime_turns import RuntimeTurnRecord
+from core.runtime.store import RuntimeEventPage
 from core.shared.entrypoints import EntrypointShutdownController
 
 
@@ -25,6 +27,9 @@ RUNTIME_SESSION_WS_PREFIX = "/ws/runtime/sessions/"
 WEBSOCKET_UNAUTHORIZED = 4401
 WEBSOCKET_NOT_FOUND = 4404
 WEBSOCKET_POLICY_VIOLATION = 4408
+DEFAULT_INITIAL_EVENT_LIMIT = 500
+MAX_HISTORY_EVENT_LIMIT = 500
+MAX_REPLAY_PAYLOAD_TEXT_CHARS = 8000
 
 
 def runtime_websocket_manifest() -> dict[str, object]:
@@ -35,9 +40,11 @@ def runtime_websocket_manifest() -> dict[str, object]:
         "primary_for": ["runtime_events", "agent_turn_updates"],
         "client_query": {
             "last_event_id": "optional last persisted runtime event id for replay after reconnect",
+            "initial_event_limit": "optional bounded tail event count for the initial snapshot",
         },
         "frames": {
             "runtime.snapshot": "runtime session metadata and persisted event replay after the requested cursor",
+            "runtime.history.page": "older persisted runtime event page requested by the client",
             "runtime.event": "persisted runtime event record",
             "runtime.heartbeat": "transport keepalive frame, never persisted as a runtime event",
         },
@@ -82,13 +89,54 @@ def runtime_event_frame(event: RuntimeEventRecord) -> dict[str, Any]:
     return {"type": "runtime.event", "event": asdict(event)}
 
 
-def runtime_snapshot_frame(*, session, events: list[RuntimeEventRecord], last_event_id: str | None) -> dict[str, Any]:
+def replay_runtime_event_payload(event: RuntimeEventRecord) -> dict[str, Any]:
+    """Return the runtime event payload used in bounded replay frames."""
+    payload = asdict(event)
+    event_payload = dict(payload.get("payload") or {})
+    if event.event_type == "runtime.step.updated":
+        event_payload.pop("raw", None)
+    elif event.event_type.startswith("runtime.tool_call."):
+        for key in ("raw", "stdout", "stderr", "output"):
+            value = event_payload.get(key)
+            if isinstance(value, str) and len(value) > MAX_REPLAY_PAYLOAD_TEXT_CHARS:
+                event_payload[key] = value[:MAX_REPLAY_PAYLOAD_TEXT_CHARS]
+                event_payload[f"{key}_truncated"] = True
+                event_payload[f"{key}_original_chars"] = len(value)
+    payload["payload"] = event_payload
+    return payload
+
+
+def runtime_snapshot_frame(
+    *,
+    session,
+    events: list[RuntimeEventRecord],
+    turns: list[RuntimeTurnRecord] | None = None,
+    last_event_id: str | None,
+    has_more_before: bool = False,
+    oldest_event_id: str | None = None,
+) -> dict[str, Any]:
     """Wrap the initial runtime session state in a transport frame."""
     return {
         "type": "runtime.snapshot",
         "session": asdict(session),
-        "events": [asdict(event) for event in events],
+        "events": [replay_runtime_event_payload(event) for event in events],
+        "turns": [asdict(turn) for turn in turns or []],
         "last_event_id": last_event_id,
+        "has_more_before": has_more_before,
+        "oldest_event_id": oldest_event_id,
+    }
+
+
+def runtime_history_page_frame(page: RuntimeEventPage, *, turns: list[RuntimeTurnRecord] | None = None) -> dict[str, Any]:
+    """Wrap one older runtime history page in a transport frame."""
+    return {
+        "type": "runtime.history.page",
+        "events": [replay_runtime_event_payload(event) for event in page.events],
+        "turns": [asdict(turn) for turn in turns or []],
+        "before_event_id": page.before_event_id,
+        "oldest_event_id": page.oldest_event_id,
+        "newest_event_id": page.newest_event_id,
+        "has_more_before": page.has_more_before,
     }
 
 
@@ -101,6 +149,44 @@ def ordered_events_after(events: list[RuntimeEventRecord], last_event_id: str | 
         if event.event_id == last_event_id:
             return ordered[index + 1 :]
     return ordered
+
+
+def initial_runtime_event_page(state: PlatformState, session_id: str, *, last_event_id: str | None, limit: int) -> RuntimeEventPage:
+    """Return the bounded initial replay page for a WebSocket connection."""
+    page = state.runtime_store.list_event_page(session_id, before_event_id=None, limit=limit)
+    tail_events = page.events
+    if last_event_id:
+        events = ordered_events_after(tail_events, last_event_id)
+        if not events:
+            events = tail_events
+        return RuntimeEventPage(
+            events=events,
+            has_more_before=page.has_more_before,
+            before_event_id=None,
+            oldest_event_id=events[0].event_id if events else None,
+            newest_event_id=events[-1].event_id if events else None,
+        )
+    return page
+
+
+def runtime_turns_for_events(state: PlatformState, session_id: str, events: list[RuntimeEventRecord]) -> list[RuntimeTurnRecord]:
+    """Return turn records needed to rehydrate bounded event pages."""
+    turn_ids = {event.turn_id for event in events if event.turn_id}
+    if not turn_ids:
+        return []
+    return [turn for turn in state.runtime_store.list_turns(session_id) if turn.turn_id in turn_ids]
+
+
+def _bounded_positive_int(value: str | None, *, default: int, maximum: int) -> int:
+    if value is None:
+        return default
+    try:
+        parsed = int(value)
+    except ValueError:
+        return default
+    if parsed <= 0:
+        return default
+    return min(parsed, maximum)
 
 
 async def _send_json(send: AsgiSend, frame: dict[str, Any]) -> None:
@@ -149,16 +235,33 @@ async def stream_runtime_session_events(
 
     query = websocket_query(scope)
     last_event_id = query.get("last_event_id") or None
+    initial_event_limit = _bounded_positive_int(
+        query.get("initial_event_limit"),
+        default=DEFAULT_INITIAL_EVENT_LIMIT,
+        maximum=MAX_HISTORY_EVENT_LIMIT,
+    )
     subscription = state.runtime_event_bus.subscribe(session_id)
     seen_event_ids: set[str] = set()
     last_heartbeat_at = datetime.now(tz=UTC)
     try:
         await send({"type": "websocket.accept", "subprotocol": None, "headers": []})
-        replay_events = ordered_events_after(state.runtime_store.list_events(session_id), last_event_id)
+        initial_page = initial_runtime_event_page(state, session_id, last_event_id=last_event_id, limit=initial_event_limit)
+        replay_events = initial_page.events
+        replay_turns = runtime_turns_for_events(state, session_id, replay_events)
         for event in replay_events:
             last_event_id = event.event_id
             seen_event_ids.add(event.event_id)
-        await _send_json(send, runtime_snapshot_frame(session=session, events=replay_events, last_event_id=last_event_id))
+        await _send_json(
+            send,
+            runtime_snapshot_frame(
+                session=session,
+                events=replay_events,
+                turns=replay_turns,
+                last_event_id=last_event_id,
+                has_more_before=initial_page.has_more_before,
+                oldest_event_id=initial_page.oldest_event_id,
+            ),
+        )
 
         while True:
             receive_task = asyncio.create_task(receive())
@@ -186,7 +289,28 @@ async def stream_runtime_session_events(
                 if incoming and incoming.get("type") == "websocket.disconnect":
                     return
                 if incoming and incoming.get("type") == "websocket.receive":
-                    last_event_id = _handle_client_frame(incoming, fallback_last_event_id=last_event_id)
+                    client_frame = _parse_client_frame(incoming)
+                    if client_frame is not None:
+                        ack_event_id = _ack_event_id(client_frame)
+                        if ack_event_id:
+                            last_event_id = ack_event_id
+                        if client_frame.get("type") == "runtime.history.before":
+                            before_event_id = client_frame.get("before_event_id")
+                            page_limit = _bounded_positive_int(
+                                str(client_frame.get("limit") or "") or None,
+                                default=DEFAULT_INITIAL_EVENT_LIMIT,
+                                maximum=MAX_HISTORY_EVENT_LIMIT,
+                            )
+                            if isinstance(before_event_id, str) and before_event_id:
+                                page = state.runtime_store.list_event_page(
+                                    session_id,
+                                    before_event_id=before_event_id,
+                                    limit=page_limit,
+                                )
+                                await _send_json(
+                                    send,
+                                    runtime_history_page_frame(page, turns=runtime_turns_for_events(state, session_id, page.events)),
+                                )
 
             if event_task in done:
                 event = event_task.result()
@@ -204,21 +328,25 @@ async def stream_runtime_session_events(
         state.runtime_event_bus.unsubscribe(subscription)
 
 
-def _handle_client_frame(frame: dict[str, Any], *, fallback_last_event_id: str | None) -> str | None:
-    """Handle optional client ack/replay control frames."""
+def _parse_client_frame(frame: dict[str, Any]) -> dict[str, Any] | None:
+    """Parse optional client control frames."""
     text = frame.get("text")
     if not isinstance(text, str) or not text.strip():
-        return fallback_last_event_id
+        return None
     try:
         payload = json.loads(text)
     except json.JSONDecodeError:
-        return fallback_last_event_id
+        return None
     if not isinstance(payload, dict):
-        return fallback_last_event_id
-    if payload.get("type") in {"runtime.ack", "runtime.replay"}:
-        event_id = payload.get("last_event_id")
-        return event_id if isinstance(event_id, str) and event_id else fallback_last_event_id
-    return fallback_last_event_id
+        return None
+    return payload
+
+
+def _ack_event_id(payload: dict[str, Any]) -> str | None:
+    if payload.get("type") not in {"runtime.ack", "runtime.replay"}:
+        return None
+    event_id = payload.get("last_event_id")
+    return event_id if isinstance(event_id, str) and event_id else None
 
 
 def _shutdown_task(shutdown_controller: EntrypointShutdownController | None) -> asyncio.Task | None:

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ChatThread } from "../../api/client";
+import type { ChatProject, ChatThread } from "../../api/client";
 import { buildSections, isThreadBusy, isThreadUnread } from "./sections";
 
 function thread(overrides: Partial<ChatThread> = {}): ChatThread {
@@ -22,6 +22,16 @@ function thread(overrides: Partial<ChatThread> = {}): ChatThread {
   };
 }
 
+function project(overrides: Partial<ChatProject> = {}): ChatProject {
+  return {
+    project_id: "project-1",
+    name: "Client",
+    created_at: "2026-04-19T00:00:00.000Z",
+    updated_at: "2026-04-19T00:00:01.000Z",
+    ...overrides,
+  };
+}
+
 describe("chat sidebar runtime status", () => {
   it("groups threads without replacing the websocket-provided order", () => {
     const sections = buildSections([], [
@@ -30,6 +40,28 @@ describe("chat sidebar runtime status", () => {
     ]);
 
     expect(sections[0].items.map((item) => item.thread_id)).toEqual(["first", "second"]);
+  });
+
+  it("keeps project-assigned threads out of No project while project names are still loading", () => {
+    const sections = buildSections([], [
+      thread({ thread_id: "assigned", project_id: "project-1" }),
+      thread({ thread_id: "unassigned", project_id: null }),
+    ]);
+
+    expect(sections.map((section) => section.id)).toEqual(["unassigned", "project:project-1"]);
+    expect(sections[0].items.map((item) => item.thread_id)).toEqual(["unassigned"]);
+    expect(sections[1].items.map((item) => item.thread_id)).toEqual(["assigned"]);
+    expect(sections[1].canManage).toBe(false);
+  });
+
+  it("reuses loaded project names for project sections", () => {
+    const sections = buildSections([project({ project_id: "project-1", name: "Client" })], [
+      thread({ thread_id: "assigned", project_id: "project-1" }),
+    ]);
+
+    expect(sections).toHaveLength(1);
+    expect(sections[0]).toMatchObject({ id: "project-1", title: "Client", canManage: true });
+    expect(sections[0].items.map((item) => item.thread_id)).toEqual(["assigned"]);
   });
 
   it("uses the runtime thread availability supplied over websocket", () => {

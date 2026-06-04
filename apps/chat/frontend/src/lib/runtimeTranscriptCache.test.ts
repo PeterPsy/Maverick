@@ -49,6 +49,22 @@ describe("runtime transcript cache", () => {
       activeSession: { session_id: "session-1" },
       events: [{ event_id: "event-1" }],
       hasLoadedHistory: true,
+      hasMoreHistory: false,
+    });
+  });
+
+  it("preserves explicit older-history metadata", () => {
+    const fakeStorage = storage();
+    writeStoredRuntimeTranscript(
+      "session-1",
+      { activeSession: null, activeTurn: null, events: [event(1)], hasLoadedHistory: true, hasMoreHistory: true },
+      fakeStorage,
+    );
+
+    expect(readStoredRuntimeTranscript("session-1", fakeStorage)).toMatchObject({
+      events: [{ event_id: "event-1" }],
+      hasLoadedHistory: true,
+      hasMoreHistory: true,
     });
   });
 

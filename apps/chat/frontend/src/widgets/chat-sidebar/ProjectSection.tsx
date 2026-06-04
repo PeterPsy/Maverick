@@ -140,7 +140,7 @@ export function ProjectSection({
               </span>
             </button>
           ) : null}
-          {!section.canManage ? (
+          {section.projectId === null ? (
             <button
               aria-label="New project"
               className="bs-chat-folder__action-button"

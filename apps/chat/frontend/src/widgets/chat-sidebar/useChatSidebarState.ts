@@ -7,6 +7,7 @@ import {
   updateThread,
 } from "../../api/client";
 import { useRuntimeThreads } from "../../hooks/useRuntimeThreads";
+import { readStoredChatProjects, writeStoredChatProjects } from "../../lib/chatProjectCache";
 import { useShellSidebarCloseSwipe } from "../../hooks/useShellSidebarCloseSwipe";
 import {
   isMobileLayoutContext,
@@ -22,6 +23,8 @@ import { useThreadTouchSelection } from "./useThreadTouchSelection";
 export function useChatSidebarState() {
   const [projects, setProjects] = useState<ChatProject[]>([]);
   const [threads, setThreads] = useState<ChatThread[]>([]);
+  const [workspaceId, setWorkspaceId] = useState("");
+  const [hasLoadedProjectCatalog, setHasLoadedProjectCatalog] = useState(false);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [expandedThreadId, setExpandedThreadId] = useState<string | null>(null);
@@ -32,6 +35,11 @@ export function useChatSidebarState() {
   const [error, setError] = useState<string | null>(null);
   const readReceiptInFlightRef = useRef<Set<string>>(new Set());
   const sections = useMemo(() => buildSections(projects, threads), [projects, threads]);
+  function applyProjects(nextProjects: ChatProject[]) {
+    setProjects(nextProjects);
+    setHasLoadedProjectCatalog(true);
+  }
+
   const projectActions = useSidebarProjectActions({
     activeThreadId,
     projects,
@@ -40,24 +48,43 @@ export function useChatSidebarState() {
     setExpandedThreadId,
     setExpandedThreadTitle,
     setIsPending,
-    setProjects,
+    setProjects: applyProjects,
     setThreads,
     threads,
   });
 
   useShellSidebarCloseSwipe(isShellMobileLayout);
-  useRuntimeThreads({ onSnapshot: () => setIsInitialLoading(false), setError, setThreads });
+  useRuntimeThreads({
+    onSnapshot: (frame) => {
+      setWorkspaceId(frame.workspace_id);
+      if (!hasLoadedProjectCatalog) {
+        const cachedProjects = readStoredChatProjects(frame.workspace_id);
+        if (cachedProjects.length) {
+          setProjects(cachedProjects);
+        }
+      }
+      setIsInitialLoading(false);
+    },
+    setError,
+    setThreads,
+  });
 
   async function refreshProjects() {
     try {
       const payload = await listChatProjects();
-      setProjects(payload.projects || []);
+      applyProjects(payload.projects || []);
       setError(null);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to load chat projects.");
       setIsInitialLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (workspaceId && hasLoadedProjectCatalog) {
+      writeStoredChatProjects(workspaceId, projects);
+    }
+  }, [hasLoadedProjectCatalog, projects, workspaceId]);
 
   useEffect(() => {
     void refreshProjects();
@@ -112,7 +139,7 @@ export function useChatSidebarState() {
     }
     try {
       const payload = await updateThread({ thread_id: thread.thread_id, project_id: projectId });
-      updateFromSidebarPayload(payload, setProjects);
+      updateFromSidebarPayload(payload, applyProjects);
       setActiveThreadId(payload.thread.thread_id);
       setExpandedThreadId(null);
       setExpandedThreadTitle("");
@@ -143,7 +170,7 @@ export function useChatSidebarState() {
     try {
       const payload = await markThreadRead(thread.thread_id);
       setThreads(payload.threads);
-      updateFromSidebarPayload(payload, setProjects);
+      updateFromSidebarPayload(payload, applyProjects);
     } catch {
       // Selection should not be blocked by a best-effort read receipt.
     } finally {
@@ -158,7 +185,7 @@ export function useChatSidebarState() {
 
   async function renameThread(threadId: string, title: string, projectId: string | null) {
     const payload = await updateThread({ thread_id: threadId, title, project_id: projectId });
-    updateFromSidebarPayload(payload, setProjects);
+    updateFromSidebarPayload(payload, applyProjects);
     setActiveThreadId(payload.thread.thread_id);
     setExpandedThreadId(null);
     setExpandedThreadTitle("");
@@ -167,7 +194,7 @@ export function useChatSidebarState() {
 
   async function removeThread(threadId: string) {
     const payload = await deleteThread(threadId);
-    updateFromSidebarPayload(payload, setProjects);
+    updateFromSidebarPayload(payload, applyProjects);
     if (activeThreadId === threadId) {
       setActiveThreadId(null);
     }

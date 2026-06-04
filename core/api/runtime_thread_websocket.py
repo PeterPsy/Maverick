@@ -103,14 +103,17 @@ def runtime_thread_changed_frame(
 
 
 def _ordered_runtime_threads(state: PlatformState, *, workspace_id: str):
+    threads = sorted(state.runtime_store.list_threads(workspace_id), key=thread_recency_key, reverse=True)
+    if threads:
+        return threads
     sessions = state.runtime_store.list_sessions(workspace_id)
-    threads = ensure_runtime_threads_for_sessions(
+    backfilled_threads = ensure_runtime_threads_for_sessions(
         state.runtime_store,
         workspace_id=workspace_id,
         sessions=sessions,
         title_for_session=lambda session: _thread_title_for_session(state, session),
     )
-    return sorted(threads, key=thread_recency_key, reverse=True)
+    return sorted(backfilled_threads, key=thread_recency_key, reverse=True)
 
 
 def _event_thread_id(event: dict[str, Any]) -> str:

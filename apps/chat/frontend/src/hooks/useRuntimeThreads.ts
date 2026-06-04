@@ -2,9 +2,11 @@ import { useEffect, useRef } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { ChatThread, orderChatThreads, RuntimeThreadWebSocketFrame, runtimeThreadWebSocketUrl } from "../api/client";
 
+type RuntimeThreadSnapshotFrame = Extract<RuntimeThreadWebSocketFrame, { type: "runtime.thread.snapshot" }>;
+
 type RuntimeThreadsArgs = {
   enabled?: boolean;
-  onSnapshot?: (() => void) | null;
+  onSnapshot?: ((frame: RuntimeThreadSnapshotFrame) => void) | null;
   setError: Dispatch<SetStateAction<string | null>>;
   setThreads: Dispatch<SetStateAction<ChatThread[]>>;
 };
@@ -53,7 +55,7 @@ export function useRuntimeThreads({ enabled = true, onSnapshot, setError, setThr
           const frame = JSON.parse(event.data) as RuntimeThreadWebSocketFrame;
           if (frame.type === "runtime.thread.snapshot") {
             applyThreads(frame.threads);
-            onSnapshotRef.current?.();
+            onSnapshotRef.current?.(frame);
             return;
           }
           if (frame.type === "runtime.thread.changed") {

@@ -107,6 +107,23 @@
   backdrop-filter: none;
 }
 
+.chatapp-history-loader {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  align-self: center;
+  min-height: 1.8rem;
+  margin: 0.15rem auto 0.4rem;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+
+.chatapp-history-loader__icon {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
 .chatapp-morphing-spinner {
   position: relative;
   display: inline-block;

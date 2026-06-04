@@ -43,6 +43,7 @@ type UseChatNavigationParams = {
   events: RuntimeEvent[];
   hasExternalRuntimeThreads: boolean;
   hasLoadedHistory: boolean;
+  hasMoreHistory: boolean;
   isBootstrapping: boolean;
   navigationScope: string;
   newChatProjectId: string | null;
@@ -60,6 +61,8 @@ type UseChatNavigationParams = {
   setEvents: Dispatch<SetStateAction<RuntimeEvent[]>>;
   setFailedUserMessages: Dispatch<SetStateAction<PendingMessage[]>>;
   setHasLoadedHistory: Dispatch<SetStateAction<boolean>>;
+  setHasMoreHistory: Dispatch<SetStateAction<boolean>>;
+  setIsOlderHistoryLoading: Dispatch<SetStateAction<boolean>>;
   setIsBootstrapping: Dispatch<SetStateAction<boolean>>;
   setIsHistoryLoading: Dispatch<SetStateAction<boolean>>;
   setPendingUserMessages: Dispatch<SetStateAction<PendingMessage[]>>;
@@ -79,6 +82,7 @@ export function useChatNavigation({
   events,
   hasExternalRuntimeThreads,
   hasLoadedHistory,
+  hasMoreHistory,
   isBootstrapping,
   navigationScope,
   newChatProjectId,
@@ -96,8 +100,10 @@ export function useChatNavigation({
   setEvents,
   setFailedUserMessages,
   setHasLoadedHistory,
+  setHasMoreHistory,
   setIsBootstrapping,
   setIsHistoryLoading,
+  setIsOlderHistoryLoading,
   setPendingUserMessages,
   setQueuedMessages,
   setSelectedReferences,
@@ -130,6 +136,7 @@ export function useChatNavigation({
       activeTurn,
       events,
       hasLoadedHistory,
+      hasMoreHistory,
       setActiveSession,
       setActiveThread,
       setActiveTurn,
@@ -137,6 +144,7 @@ export function useChatNavigation({
       setEvents,
       setFailedUserMessages,
       setHasLoadedHistory,
+      setHasMoreHistory,
       setPendingUserMessages,
       setQueuedMessages,
       setThreads,
@@ -231,7 +239,9 @@ export function useChatNavigation({
     setActiveSession(null);
     setEvents([]);
     setHasLoadedHistory(false);
+    setHasMoreHistory(false);
     setIsHistoryLoading(false);
+    setIsOlderHistoryLoading(false);
     setPendingUserMessages([]);
     setFailedUserMessages([]);
     setQueuedMessages([]);
@@ -258,7 +268,9 @@ export function useChatNavigation({
     setActiveSession(null);
     setEvents([]);
     setHasLoadedHistory(false);
+    setHasMoreHistory(false);
     setIsHistoryLoading(false);
+    setIsOlderHistoryLoading(false);
     setActiveTurn(null);
     if (resetView) {
       setPendingUserMessages([]);
@@ -281,6 +293,8 @@ export function useChatNavigation({
     setActiveSession(cachedTranscript?.activeSession ?? null);
     setEvents(cachedTranscript?.events ?? []);
     setHasLoadedHistory(cachedHistoryLoaded);
+    setHasMoreHistory(cachedTranscript?.hasMoreHistory === true);
+    setIsOlderHistoryLoading(false);
     setPendingUserMessages([]);
     setFailedUserMessages([]);
     setQueuedMessages([]);
@@ -388,6 +402,8 @@ export function useChatNavigation({
       setActiveSession(null);
       setEvents([]);
       setHasLoadedHistory(false);
+      setHasMoreHistory(false);
+      setIsOlderHistoryLoading(false);
       setPendingUserMessages([]);
       setFailedUserMessages([]);
       setQueuedMessages([]);

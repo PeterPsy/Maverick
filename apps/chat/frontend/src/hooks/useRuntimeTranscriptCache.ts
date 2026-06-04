@@ -14,6 +14,7 @@ type UseRuntimeTranscriptCacheParams = {
   activeTurn: RuntimeTurn | null;
   events: RuntimeEvent[];
   hasLoadedHistory: boolean;
+  hasMoreHistory: boolean;
   setActiveSession: Dispatch<SetStateAction<RuntimeSession | null>>;
   setActiveThread: Dispatch<SetStateAction<ChatThread | null>>;
   setActiveTurn: Dispatch<SetStateAction<RuntimeTurn | null>>;
@@ -21,6 +22,7 @@ type UseRuntimeTranscriptCacheParams = {
   setEvents: Dispatch<SetStateAction<RuntimeEvent[]>>;
   setFailedUserMessages: Dispatch<SetStateAction<PendingMessage[]>>;
   setHasLoadedHistory: Dispatch<SetStateAction<boolean>>;
+  setHasMoreHistory: Dispatch<SetStateAction<boolean>>;
   setPendingUserMessages: Dispatch<SetStateAction<PendingMessage[]>>;
   setQueuedMessages: Dispatch<SetStateAction<QueuedMessage[]>>;
   setThreads: Dispatch<SetStateAction<ChatThread[]>>;
@@ -36,6 +38,7 @@ export function useRuntimeTranscriptCache({
   activeTurn,
   events,
   hasLoadedHistory,
+  hasMoreHistory,
   setActiveSession,
   setActiveThread,
   setActiveTurn,
@@ -43,6 +46,7 @@ export function useRuntimeTranscriptCache({
   setEvents,
   setFailedUserMessages,
   setHasLoadedHistory,
+  setHasMoreHistory,
   setPendingUserMessages,
   setQueuedMessages,
   setThreads,
@@ -65,10 +69,11 @@ export function useRuntimeTranscriptCache({
       activeTurn,
       events,
       hasLoadedHistory: hasLoadedHistory || events.length > 0,
+      hasMoreHistory,
     };
     runtimeTranscriptCacheRef.current.set(runtimeSessionId, cacheEntry);
     writeStoredRuntimeTranscript(runtimeSessionId, cacheEntry);
-  }, [activeSession, activeThread?.runtime_session_id, activeTurn, events, hasLoadedHistory]);
+  }, [activeSession, activeThread?.runtime_session_id, activeTurn, events, hasLoadedHistory, hasMoreHistory]);
 
   function cachedTranscriptForThread(thread: ChatThread | null) {
     if (!thread?.runtime_session_id) {
@@ -107,6 +112,7 @@ export function useRuntimeTranscriptCache({
       setActiveSession(null);
       setEvents([]);
       setHasLoadedHistory(false);
+      setHasMoreHistory(false);
       setPendingUserMessages([]);
       setFailedUserMessages([]);
       setQueuedMessages([]);

@@ -5,6 +5,7 @@ export type RuntimeTranscriptCacheEntry = {
   activeTurn: RuntimeTurn | null;
   events: RuntimeEvent[];
   hasLoadedHistory: boolean;
+  hasMoreHistory?: boolean;
 };
 
 type TranscriptStorage = Pick<Storage, "getItem" | "removeItem" | "setItem">;
@@ -19,6 +20,7 @@ export function normalizeRuntimeTranscriptCacheEntry(entry: RuntimeTranscriptCac
     activeTurn: entry.activeTurn,
     events,
     hasLoadedHistory: entry.hasLoadedHistory || events.length > 0,
+    hasMoreHistory: entry.hasMoreHistory === true,
   };
 }
 
@@ -41,6 +43,7 @@ export function readStoredRuntimeTranscript(runtimeSessionId: string, storage = 
       activeTurn: parsed.activeTurn || null,
       events: parsed.events,
       hasLoadedHistory: parsed.hasLoadedHistory === true,
+      hasMoreHistory: parsed.hasMoreHistory === true,
     });
   } catch {
     storage.removeItem(storageKey(runtimeSessionId));

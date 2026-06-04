@@ -9,21 +9,36 @@ import {
   runtimeWebSocketUrl,
 } from "../api/client";
 import { PendingMessage } from "../lib/messageState";
-import { inferActiveRuntimeTurn, lastRuntimeEventId, mergeRuntimeEvents } from "../lib/runtimeEvents";
+import {
+  firstPersistedRuntimeEventId,
+  firstRuntimeEventId,
+  hydrateMissingTurnAnchors,
+  inferActiveRuntimeTurn,
+  isSyntheticRuntimeEvent,
+  lastRuntimeEventId,
+  mergeRuntimeEvents,
+} from "../lib/runtimeEvents";
 
 type RuntimeEventsArgs = {
   runtimeSessionId: string | null;
   activeTurn: RuntimeTurn | null;
+  hasMoreHistory?: boolean;
   onRuntimeSessionUnavailable?: ((runtimeSessionId: string) => void) | null;
   onRuntimeSnapshot?: (() => void) | null;
+  olderHistoryRequestId?: number;
   setActiveSession: Dispatch<SetStateAction<RuntimeSession | null>>;
   setActiveTurn: Dispatch<SetStateAction<RuntimeTurn | null>>;
   setEvents: Dispatch<SetStateAction<RuntimeEvent[]>>;
   setError: Dispatch<SetStateAction<string | null>>;
+  setHasMoreHistory?: Dispatch<SetStateAction<boolean>>;
+  setIsOlderHistoryLoading?: Dispatch<SetStateAction<boolean>>;
   setPendingUserMessages: Dispatch<SetStateAction<PendingMessage[]>>;
 };
 
 function terminalStatus(eventType: string): RuntimeTurn["status"] | null {
+  if (eventType === "runtime.output.final") {
+    return "completed";
+  }
   if (eventType === "runtime.turn.completed") {
     return "completed";
   }
@@ -58,21 +73,31 @@ export function applyRuntimeEventEffects(
 
 export function useRuntimeEvents({
   activeTurn,
+  hasMoreHistory = false,
   onRuntimeSessionUnavailable,
   onRuntimeSnapshot,
+  olderHistoryRequestId = 0,
   runtimeSessionId,
   setActiveSession,
   setActiveTurn,
   setError,
   setEvents,
+  setHasMoreHistory,
+  setIsOlderHistoryLoading,
   setPendingUserMessages,
 }: RuntimeEventsArgs) {
   const activeTurnRef = useRef<RuntimeTurn | null>(activeTurn);
+  const hasMoreHistoryRef = useRef(hasMoreHistory);
+  const oldestEventIdRef = useRef<string | null>(null);
   const onRuntimeSnapshotRef = useRef<typeof onRuntimeSnapshot>(onRuntimeSnapshot);
   const onRuntimeSessionUnavailableRef = useRef<typeof onRuntimeSessionUnavailable>(onRuntimeSessionUnavailable);
+  const socketRef = useRef<WebSocket | null>(null);
   useEffect(() => {
     activeTurnRef.current = activeTurn;
   }, [activeTurn]);
+  useEffect(() => {
+    hasMoreHistoryRef.current = hasMoreHistory;
+  }, [hasMoreHistory]);
   useEffect(() => {
     onRuntimeSnapshotRef.current = onRuntimeSnapshot;
   }, [onRuntimeSnapshot]);
@@ -90,6 +115,7 @@ export function useRuntimeEvents({
     let reconnectTimer: number | null = null;
     let heartbeatTimer: number | null = null;
     let lastEventId: string | null = null;
+    let receivedInitialSnapshot = false;
     let unavailableReported = false;
     let lastFrameAt = Date.now();
 
@@ -107,17 +133,32 @@ export function useRuntimeEvents({
       onRuntimeSessionUnavailableRef.current?.(currentSessionId);
     }
 
-    function applyIncomingEvents(incoming: RuntimeEvent[]) {
+    function setOldestEventCursor(events: RuntimeEvent[], oldestEventId?: string | null) {
+      oldestEventIdRef.current = oldestEventId || firstPersistedRuntimeEventId(events) || firstRuntimeEventId(events);
+    }
+
+    function applyIncomingEvents(incoming: RuntimeEvent[], oldestEventId?: string | null) {
       if (!incoming.length) {
         return;
       }
-      lastEventId = incoming[incoming.length - 1].event_id;
+      const persistedIncoming = incoming.filter((event) => !isSyntheticRuntimeEvent(event));
+      lastEventId = (persistedIncoming.at(-1) || incoming[incoming.length - 1]).event_id;
       setEvents((current) => {
         const merged = mergeRuntimeEvents(current, incoming);
+        setOldestEventCursor(merged, oldestEventId);
         const currentTurn = activeTurnRef.current;
         if (currentTurn) {
           applyRuntimeEventEffects(merged, currentTurn, setActiveTurn, setPendingUserMessages);
         }
+        setActiveTurn(inferActiveRuntimeTurn(merged, currentSessionId));
+        return merged;
+      });
+    }
+
+    function applyHistoryPage(incoming: RuntimeEvent[], oldestEventId?: string | null) {
+      setEvents((current) => {
+        const merged = mergeRuntimeEvents(current, incoming);
+        setOldestEventCursor(merged, oldestEventId);
         setActiveTurn(inferActiveRuntimeTurn(merged, currentSessionId));
         return merged;
       });
@@ -130,13 +171,16 @@ export function useRuntimeEvents({
 
     setEvents((current) => {
       lastEventId = lastRuntimeEventId(current);
+      setOldestEventCursor(current);
       setActiveTurn(inferActiveRuntimeTurn(current, currentSessionId));
       return current;
     });
 
     function connectWebSocket() {
       let socketOpened = false;
-      socket = new WebSocket(runtimeWebSocketUrl(currentSessionId, lastEventId));
+      const replayCursor = receivedInitialSnapshot ? lastEventId : null;
+      socket = new WebSocket(runtimeWebSocketUrl(currentSessionId, replayCursor));
+      socketRef.current = socket;
       socket.onopen = () => {
         socketOpened = true;
         lastFrameAt = Date.now();
@@ -148,10 +192,23 @@ export function useRuntimeEvents({
         try {
           const frame = JSON.parse(event.data) as RuntimeWebSocketFrame;
           if (frame.type === "runtime.snapshot") {
+            receivedInitialSnapshot = true;
             setActiveSession(frame.session);
             lastEventId = frame.last_event_id || lastEventId;
-            applyIncomingEvents(frame.events || []);
+            if (typeof frame.has_more_before === "boolean") {
+              setHasMoreHistory?.(frame.has_more_before === true);
+            }
+            applyIncomingEvents(hydrateMissingTurnAnchors(frame.events || [], frame.turns), frame.oldest_event_id);
+            if (!frame.events?.length) {
+              oldestEventIdRef.current = frame.oldest_event_id || oldestEventIdRef.current;
+            }
             onRuntimeSnapshotRef.current?.();
+            return;
+          }
+          if (frame.type === "runtime.history.page") {
+            setHasMoreHistory?.(frame.has_more_before === true);
+            applyHistoryPage(hydrateMissingTurnAnchors(frame.events || [], frame.turns), frame.oldest_event_id);
+            setIsOlderHistoryLoading?.(false);
             return;
           }
           const runtimeEvent = runtimeEventFromWebSocketFrame(frame);
@@ -169,6 +226,9 @@ export function useRuntimeEvents({
       };
       socket.onclose = (event) => {
         stopHeartbeatWatchdog();
+        if (socketRef.current === socket) {
+          socketRef.current = null;
+        }
         if (cancelled || unavailableReported) {
           return;
         }
@@ -205,6 +265,32 @@ export function useRuntimeEvents({
       }
       stopHeartbeatWatchdog();
       socket?.close();
+      if (socketRef.current === socket) {
+        socketRef.current = null;
+      }
     };
-  }, [runtimeSessionId, setActiveSession, setActiveTurn, setError, setEvents, setPendingUserMessages]);
+  }, [runtimeSessionId, setActiveSession, setActiveTurn, setError, setEvents, setHasMoreHistory, setIsOlderHistoryLoading, setPendingUserMessages]);
+
+  useEffect(() => {
+    if (!runtimeSessionId || olderHistoryRequestId <= 0) {
+      return;
+    }
+    if (!hasMoreHistoryRef.current) {
+      setIsOlderHistoryLoading?.(false);
+      return;
+    }
+    const beforeEventId = oldestEventIdRef.current;
+    const socket = socketRef.current;
+    if (!beforeEventId || !socket || socket.readyState !== WebSocket.OPEN) {
+      setIsOlderHistoryLoading?.(false);
+      return;
+    }
+    socket.send(
+      JSON.stringify({
+        type: "runtime.history.before",
+        before_event_id: beforeEventId,
+        limit: 250,
+      }),
+    );
+  }, [olderHistoryRequestId, runtimeSessionId, setIsOlderHistoryLoading]);
 }

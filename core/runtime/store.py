@@ -26,6 +26,17 @@ from core.runtime.runtime_turns import RuntimeTurnRecord
 MAX_RUNTIME_EVENTS_PER_SESSION = 500
 
 
+@dataclass(frozen=True)
+class RuntimeEventPage:
+    """One bounded page of ordered runtime events."""
+
+    events: list[RuntimeEventRecord]
+    has_more_before: bool
+    before_event_id: str | None
+    oldest_event_id: str | None
+    newest_event_id: str | None
+
+
 class DocumentCollection(Protocol):
     """Minimal collection protocol used by runtime stores."""
 
@@ -86,6 +97,18 @@ class RuntimeStore(Protocol):
         ...
 
     def list_recent_events(self, session_id: str, *, limit: int) -> list[RuntimeEventRecord]:
+        ...
+
+    def list_event_page(
+        self,
+        session_id: str,
+        *,
+        before_event_id: str | None = None,
+        limit: int = 200,
+    ) -> RuntimeEventPage:
+        ...
+
+    def has_events_before(self, session_id: str, *, before_event_id: str | None) -> bool:
         ...
 
     def list_all_events(self) -> list[RuntimeEventRecord]:
@@ -234,6 +257,12 @@ class RuntimeDocumentStore:
         return [RuntimeTurnRecord(**document) for document in self.collections.turns.find({"session_id": session_id})]
 
     def save_event(self, record: RuntimeEventRecord) -> RuntimeEventRecord:
+        append_history_upsert = getattr(self.collections.events, "append_history_upsert", None)
+        if callable(append_history_upsert):
+            append_history_upsert(
+                {"event_id": record.event_id},
+                {"$set": asdict(record)},
+            )
         append_bounded_upsert = getattr(self.collections.events, "append_bounded_upsert", None)
         if callable(append_bounded_upsert):
             append_bounded_upsert(
@@ -258,6 +287,60 @@ class RuntimeDocumentStore:
             documents.sort(key=lambda item: str(item.get("created_at") or ""))
             documents = documents[-limit:]
         return [RuntimeEventRecord(**document) for document in documents]
+
+    def list_event_page(
+        self,
+        session_id: str,
+        *,
+        before_event_id: str | None = None,
+        limit: int = 200,
+    ) -> RuntimeEventPage:
+        bounded_limit = max(1, min(int(limit), MAX_RUNTIME_EVENTS_PER_SESSION))
+        find_event_page = getattr(self.collections.events, "find_event_page", None)
+        if callable(find_event_page):
+            page = find_event_page({"session_id": session_id}, before_event_id=before_event_id, limit=bounded_limit)
+            events = [RuntimeEventRecord(**document) for document in page["documents"]]
+            return RuntimeEventPage(
+                events=events,
+                has_more_before=bool(page["has_more_before"]),
+                before_event_id=before_event_id,
+                oldest_event_id=events[0].event_id if events else None,
+                newest_event_id=events[-1].event_id if events else None,
+            )
+        documents = self.collections.events.find({"session_id": session_id})
+        documents.sort(key=lambda item: (str(item.get("created_at") or ""), str(item.get("event_id") or "")))
+        if before_event_id:
+            cursor_found = False
+            for index, document in enumerate(documents):
+                if document.get("event_id") == before_event_id:
+                    documents = documents[:index]
+                    cursor_found = True
+                    break
+            if not cursor_found:
+                documents = []
+        has_more_before = len(documents) > bounded_limit
+        documents = documents[-bounded_limit:]
+        events = [RuntimeEventRecord(**document) for document in documents]
+        return RuntimeEventPage(
+            events=events,
+            has_more_before=has_more_before,
+            before_event_id=before_event_id,
+            oldest_event_id=events[0].event_id if events else None,
+            newest_event_id=events[-1].event_id if events else None,
+        )
+
+    def has_events_before(self, session_id: str, *, before_event_id: str | None) -> bool:
+        if not before_event_id:
+            return False
+        has_event_before = getattr(self.collections.events, "has_event_before", None)
+        if callable(has_event_before):
+            return bool(has_event_before({"session_id": session_id}, before_event_id=before_event_id))
+        documents = self.collections.events.find({"session_id": session_id})
+        documents.sort(key=lambda item: (str(item.get("created_at") or ""), str(item.get("event_id") or "")))
+        for index, document in enumerate(documents):
+            if document.get("event_id") == before_event_id:
+                return index > 0
+        return False
 
     def list_all_events(self) -> list[RuntimeEventRecord]:
         return [RuntimeEventRecord(**document) for document in self.collections.events.find({})]

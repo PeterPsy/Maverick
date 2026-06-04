@@ -6,8 +6,9 @@ import {
   runtimeEventFromWebSocketFrame,
   runtimeWebSocketUrl,
 } from "../api/client";
-import { inferActiveRuntimeTurn, lastRuntimeEventId, mergeRuntimeEvents } from "./runtimeEvents";
+import { firstPersistedRuntimeEventId, hydrateMissingTurnAnchors, inferActiveRuntimeTurn, lastRuntimeEventId, mergeRuntimeEvents } from "./runtimeEvents";
 import { isNoisyRuntimeLabel, latestRuntimeStepLabel, runtimeStepLabel } from "./runtimeStepLabels";
+import { eventsToMessages } from "./transcript";
 
 function event(event_id: string, created_at: string): RuntimeEvent {
   return {
@@ -25,7 +26,7 @@ describe("runtime websocket helpers", () => {
     vi.stubGlobal("window", { location: { protocol: "https:", host: "example.localhost" } });
 
     expect(runtimeWebSocketUrl("session 1", "event-1")).toBe(
-      "wss://example.localhost/ws/runtime/sessions/session%201?last_event_id=event-1",
+      "wss://example.localhost/ws/runtime/sessions/session%201?last_event_id=event-1&initial_event_limit=500",
     );
 
     vi.unstubAllGlobals();
@@ -56,6 +57,38 @@ describe("runtime websocket helpers", () => {
     expect(lastRuntimeEventId(merged)).toBe("event-2");
   });
 
+  it("hydrates missing turn anchors from bounded WebSocket turn metadata", () => {
+    const hydrated = hydrateMissingTurnAnchors(
+      [
+        { ...event("event-2", "2026-04-19T10:00:01Z"), event_type: "runtime.output.delta", payload: { text: "done" } },
+        { ...event("event-3", "2026-04-19T10:00:02Z"), event_type: "runtime.output.final", payload: { text: "done" } },
+      ],
+      [
+        {
+          turn_id: "turn-1",
+          session_id: "session-1",
+          workspace_id: "default",
+          status: "completed",
+          input_text: "user request",
+          failure_reason: null,
+          created_at: "2026-04-19T10:00:00Z",
+          updated_at: "2026-04-19T10:00:02Z",
+        },
+      ],
+    );
+
+    expect(hydrated[0]).toMatchObject({
+      event_id: "synthetic-turn-anchor:turn-1",
+      event_type: "runtime.turn.queued",
+      payload: { input_text: "user request", synthetic_turn_anchor: true },
+    });
+    expect(firstPersistedRuntimeEventId(hydrated)).toBe("event-2");
+    expect(eventsToMessages(hydrated).map((message) => [message.role, message.content])).toEqual([
+      ["human", "user request"],
+      ["agent", "done"],
+    ]);
+  });
+
   it("infers an active turn from persisted runtime events after refresh", () => {
     const activeTurn = inferActiveRuntimeTurn(
       [
@@ -80,7 +113,7 @@ describe("runtime websocket helpers", () => {
     expect(activeTurn).toBeNull();
   });
 
-  it("keeps a turn active until a canonical terminal turn event arrives", () => {
+  it("treats a final output event as terminal for UI busy state", () => {
     const activeTurn = inferActiveRuntimeTurn(
       [
         { ...event("queued", "2026-04-19T10:00:00Z"), event_type: "runtime.turn.queued", payload: { input_text: "work" } },
@@ -90,7 +123,7 @@ describe("runtime websocket helpers", () => {
       "session-1",
     );
 
-    expect(activeTurn).toMatchObject({ turn_id: "turn-1", status: "active" });
+    expect(activeTurn).toBeNull();
   });
 
   it("does not let a late started event reactivate a terminal turn", () => {

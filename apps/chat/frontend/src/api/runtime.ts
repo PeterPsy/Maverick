@@ -89,12 +89,13 @@ export function createRuntimeSessionWithTurn({
   });
 }
 
-export function runtimeWebSocketUrl(sessionId: string, lastEventId?: string | null): string {
+export function runtimeWebSocketUrl(sessionId: string, lastEventId?: string | null, initialEventLimit = 500): string {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   const url = new URL(`${protocol}//${window.location.host}/ws/runtime/sessions/${encodeURIComponent(sessionId)}`);
   if (lastEventId) {
     url.searchParams.set("last_event_id", lastEventId);
   }
+  url.searchParams.set("initial_event_limit", String(initialEventLimit));
   return url.toString();
 }
 

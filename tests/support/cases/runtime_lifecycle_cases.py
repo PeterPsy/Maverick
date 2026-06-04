@@ -408,6 +408,31 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
         self.assertEqual(events[0].event_id, "evt-0005")
         self.assertEqual(events[-1].event_id, f"evt-{MAX_RUNTIME_EVENTS_PER_SESSION + 4:04d}")
 
+        latest_page = store.list_event_page("sess-bounded-events", limit=MAX_RUNTIME_EVENTS_PER_SESSION)
+        self.assertTrue(latest_page.has_more_before)
+        self.assertEqual(len(latest_page.events), MAX_RUNTIME_EVENTS_PER_SESSION)
+        self.assertEqual(latest_page.oldest_event_id, "evt-0005")
+
+        older_page = store.list_event_page(
+            "sess-bounded-events",
+            before_event_id=latest_page.oldest_event_id,
+            limit=10,
+        )
+        self.assertFalse(older_page.has_more_before)
+        self.assertEqual([event.event_id for event in older_page.events], ["evt-0000", "evt-0001", "evt-0002", "evt-0003", "evt-0004"])
+
+        missing_cursor_page = store.list_event_page(
+            "sess-bounded-events",
+            before_event_id="evt-missing",
+            limit=10,
+        )
+        self.assertFalse(missing_cursor_page.has_more_before)
+        self.assertEqual(missing_cursor_page.events, [])
+
+        history_root = repo_root / "workspaces" / "acme" / "runtime" / "sessions" / "sess-bounded-events" / "events-history"
+        self.assertTrue(history_root.is_dir())
+        self.assertGreaterEqual(len(list(history_root.glob("*.json"))), 2)
+
     def test_workspace_runtime_threads_are_persisted_under_workspace_runtime_root(self) -> None:
         repo_root = self.make_repo_root()
         store = self.make_json_store(repo_root)

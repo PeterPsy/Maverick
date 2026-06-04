@@ -1,5 +1,7 @@
 import type { RuntimeEvent, RuntimeTurn } from "../api/client";
 
+const SYNTHETIC_TURN_ANCHOR_PREFIX = "synthetic-turn-anchor:";
+
 export function mergeRuntimeEvents(current: RuntimeEvent[], incoming: RuntimeEvent[]): RuntimeEvent[] {
   const byId = new Map<string, RuntimeEvent>();
   for (const event of current) {
@@ -16,6 +18,51 @@ export function mergeRuntimeEvents(current: RuntimeEvent[], incoming: RuntimeEve
 
 export function lastRuntimeEventId(events: RuntimeEvent[]): string | null {
   return events.length ? events[events.length - 1].event_id : null;
+}
+
+export function firstRuntimeEventId(events: RuntimeEvent[]): string | null {
+  return events.length ? events[0].event_id : null;
+}
+
+export function firstPersistedRuntimeEventId(events: RuntimeEvent[]): string | null {
+  return events.find((event) => !isSyntheticRuntimeEvent(event))?.event_id || null;
+}
+
+export function isSyntheticRuntimeEvent(event: RuntimeEvent): boolean {
+  return event.event_id.startsWith(SYNTHETIC_TURN_ANCHOR_PREFIX);
+}
+
+export function hydrateMissingTurnAnchors(events: RuntimeEvent[], turns: RuntimeTurn[] | undefined): RuntimeEvent[] {
+  if (!events.length || !turns?.length) {
+    return events;
+  }
+  const turnIdsInEvents = new Set(events.map((event) => event.turn_id).filter((turnId): turnId is string => Boolean(turnId)));
+  if (!turnIdsInEvents.size) {
+    return events;
+  }
+  const queuedTurnIds = new Set(
+    events
+      .filter((event) => event.turn_id && event.event_type === "runtime.turn.queued")
+      .map((event) => event.turn_id as string),
+  );
+  const anchors = turns
+    .filter((turn) => turnIdsInEvents.has(turn.turn_id) && !queuedTurnIds.has(turn.turn_id) && Boolean(turn.input_text?.trim()))
+    .map((turn) => syntheticTurnAnchor(turn));
+  return anchors.length ? mergeRuntimeEvents(events, anchors) : events;
+}
+
+function syntheticTurnAnchor(turn: RuntimeTurn): RuntimeEvent {
+  return {
+    event_id: `${SYNTHETIC_TURN_ANCHOR_PREFIX}${turn.turn_id}`,
+    session_id: turn.session_id,
+    turn_id: turn.turn_id,
+    event_type: "runtime.turn.queued",
+    payload: {
+      input_text: turn.input_text || "",
+      synthetic_turn_anchor: true,
+    },
+    created_at: turn.created_at,
+  };
 }
 
 export function inferActiveRuntimeTurn(events: RuntimeEvent[], sessionId: string | null): RuntimeTurn | null {
@@ -83,6 +130,9 @@ function turnStatusFromEvent(eventType: string): RuntimeTurn["status"] | null {
   }
   if (eventType === "runtime.turn.started") {
     return "active";
+  }
+  if (eventType === "runtime.output.final") {
+    return "completed";
   }
   if (eventType === "runtime.turn.completed") {
     return "completed";

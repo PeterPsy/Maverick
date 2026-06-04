@@ -1100,7 +1100,7 @@ Turn submission is implemented through a dedicated runtime service so future CLI
 
 The runtime WebSocket endpoints are the official realtime transports for mounted apps and other interactive clients.
 
-`WS /ws/runtime/sessions/<session_id>` sends a `runtime.snapshot` frame containing session metadata and persisted events, then live `runtime.event` frames from the runtime event bus. `WS /ws/runtime/threads` sends a `runtime.thread.snapshot` frame containing the workspace thread catalog, ordered by the most recent accepted user message for each thread, then live `runtime.thread.changed` frames from the runtime thread event bus. Thread frames include core-derived response completion metadata such as `last_completed_response_at`, `last_completed_turn_id`, and the viewer-specific `has_unread_completed_response` boolean. Per-user read receipt storage remains internal to the core runtime thread record and must not be exposed as a raw user-id map in app payloads.
+`WS /ws/runtime/sessions/<session_id>` sends a `runtime.snapshot` frame containing session metadata, a bounded recent tail of persisted events, and the runtime turn records needed to project that bounded page even when it starts mid-turn, then live `runtime.event` frames from the runtime event bus. Clients may request older persisted pages over the same connection with `runtime.history.before` and receive `runtime.history.page`; history pages carry the same bounded event page plus the relevant turn records. Initial chat load must remain bounded and independent of total transcript length. `WS /ws/runtime/threads` sends a `runtime.thread.snapshot` frame containing the workspace thread catalog, ordered by the most recent accepted user message for each thread, then live `runtime.thread.changed` frames from the runtime thread event bus. Thread frames include core-derived response completion metadata such as `last_completed_response_at`, `last_completed_turn_id`, and the viewer-specific `has_unread_completed_response` boolean. Per-user read receipt storage remains internal to the core runtime thread record and must not be exposed as a raw user-id map in app payloads.
 
 The HTTP event and thread endpoints remain command, diagnostics, and operator surfaces. Product chat rendering must not bootstrap transcripts or thread lists by replaying runtime data over HTTP.
 
@@ -1247,7 +1247,8 @@ The session runtime root is `workspaces/<workspace_id>/runtime/sessions/<runtime
 Runtime history and operational records for that agent session must also be partitioned there. The core stores per-session runtime records under the session root, including:
 
 - `session.json` for the runtime session lifecycle record
-- `events.json` for the persisted runtime event stream and chat transcript projection
+- `events.json` for the bounded hot tail used by fast runtime replay
+- `events-history/` for append-only chunked persisted runtime event pages and chat transcript projection
 - `turns.json` for turn lifecycle records
 - `processes.json` for local process metadata
 - `state.json` for the mutable runtime state snapshot
@@ -1323,7 +1324,7 @@ Chat thread records and runtime event history are still persisted by Maverick fo
 
 WebSocket delivery is the canonical realtime transport for active runtime turns.
 
-The runtime WebSocket stream must deliver the same persisted event records that `GET /api/runtime/sessions/<session_id>/events` returns, but live delivery must not poll the persistence adapter.
+The runtime WebSocket stream is the complete interactive history surface: the initial snapshot delivers a bounded hot tail, and explicit history frames page older persisted events. `GET /api/runtime/sessions/<session_id>/events` remains a diagnostics/operator endpoint and may expose only the bounded hot tail unless a separate paged HTTP contract is added. Live delivery must not poll the persistence adapter.
 
 Runtime event recording has two distinct responsibilities:
 

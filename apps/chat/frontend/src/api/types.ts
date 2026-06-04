@@ -220,7 +220,24 @@ export type RuntimeEvent = {
 };
 
 export type RuntimeWebSocketFrame =
-  | { type: "runtime.snapshot"; session: RuntimeSession; events: RuntimeEvent[]; last_event_id: string | null }
+  | {
+      type: "runtime.snapshot";
+      session: RuntimeSession;
+      events: RuntimeEvent[];
+      turns?: RuntimeTurn[];
+      last_event_id: string | null;
+      has_more_before?: boolean;
+      oldest_event_id?: string | null;
+    }
+  | {
+      type: "runtime.history.page";
+      events: RuntimeEvent[];
+      turns?: RuntimeTurn[];
+      before_event_id: string | null;
+      oldest_event_id: string | null;
+      newest_event_id: string | null;
+      has_more_before: boolean;
+    }
   | { type: "runtime.event"; event: RuntimeEvent }
   | { type: "runtime.heartbeat"; session_id: string; at: string };
 

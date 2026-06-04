@@ -12,7 +12,7 @@ type UseSidebarProjectActionsParams = {
   setExpandedThreadId: Dispatch<SetStateAction<string | null>>;
   setExpandedThreadTitle: Dispatch<SetStateAction<string>>;
   setIsPending: Dispatch<SetStateAction<boolean>>;
-  setProjects: Dispatch<SetStateAction<ChatProject[]>>;
+  setProjects: (projects: ChatProject[]) => void;
   setThreads: Dispatch<SetStateAction<ChatThread[]>>;
   threads: ChatThread[];
 };

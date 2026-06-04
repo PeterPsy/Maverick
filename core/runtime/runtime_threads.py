@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from dataclasses import asdict, replace
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from typing import Callable
 from uuid import uuid4
 
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_thread import RuntimeThreadRecord
+from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.store import RuntimeStore
 from core.runtime.thread_titles import (
     DEFAULT_THREAD_TITLE,
@@ -18,6 +19,13 @@ from core.runtime.thread_titles import (
 
 
 RuntimeCleanupCallback = Callable[[str, str], dict[str, object]]
+
+
+@dataclass(frozen=True)
+class _ThreadTurnFacts:
+    availability: str
+    last_user_message_at: datetime | None
+    latest_completed_response: tuple[str, datetime] | None
 
 
 def utcnow() -> datetime:
@@ -45,9 +53,16 @@ def thread_recency_key(thread: RuntimeThreadRecord) -> tuple[bool, datetime, dat
 
 
 def list_runtime_threads(store: RuntimeStore, *, workspace_id: str) -> list[RuntimeThreadRecord]:
+    stored_threads = store.list_threads(workspace_id)
+    facts_by_session_id = _turn_facts_by_session_id(store, stored_threads)
     threads = [
-        reconcile_runtime_thread_availability(store, workspace_id=workspace_id, thread=thread)
-        for thread in store.list_threads(workspace_id)
+        _reconcile_runtime_thread_with_facts(
+            store,
+            workspace_id=workspace_id,
+            thread=thread,
+            facts=facts_by_session_id.get(thread.runtime_session_id),
+        )
+        for thread in stored_threads
     ]
     return sorted(
         threads,
@@ -223,9 +238,29 @@ def reconcile_runtime_thread_availability(
 ) -> RuntimeThreadRecord:
     if thread.workspace_id != workspace_id or not thread.runtime_session_id:
         return thread
-    expected_availability = runtime_thread_availability_for_session(store, runtime_session_id=thread.runtime_session_id)
-    expected_last_user_message_at = runtime_thread_last_user_message_at_for_session(store, runtime_session_id=thread.runtime_session_id)
-    expected_completed_response = runtime_thread_last_completed_response_for_session(store, runtime_session_id=thread.runtime_session_id)
+    return _reconcile_runtime_thread_with_facts(
+        store,
+        workspace_id=workspace_id,
+        thread=thread,
+        facts=_turn_facts_for_session(store.list_turns(thread.runtime_session_id)),
+        now=now,
+    )
+
+
+def _reconcile_runtime_thread_with_facts(
+    store: RuntimeStore,
+    *,
+    workspace_id: str,
+    thread: RuntimeThreadRecord,
+    facts: _ThreadTurnFacts | None,
+    now: datetime | None = None,
+) -> RuntimeThreadRecord:
+    if thread.workspace_id != workspace_id or not thread.runtime_session_id:
+        return thread
+    facts = facts or _ThreadTurnFacts(availability="free", last_user_message_at=None, latest_completed_response=None)
+    expected_availability = facts.availability
+    expected_last_user_message_at = facts.last_user_message_at
+    expected_completed_response = facts.latest_completed_response
     patch: dict[str, object] = {}
     if thread.availability != expected_availability:
         patch["availability"] = expected_availability
@@ -246,6 +281,35 @@ def reconcile_runtime_thread_availability(
         return thread
     patch["updated_at"] = now or utcnow()
     return store.save_thread(replace(thread, **patch))
+
+
+def _turn_facts_by_session_id(store: RuntimeStore, threads: list[RuntimeThreadRecord]) -> dict[str, _ThreadTurnFacts]:
+    facts_by_session_id: dict[str, _ThreadTurnFacts] = {}
+    for session_id in {thread.runtime_session_id for thread in threads if thread.runtime_session_id}:
+        facts_by_session_id[session_id] = _turn_facts_for_session(store.list_turns(session_id))
+    return facts_by_session_id
+
+
+def _turn_facts_for_session(turns: list[RuntimeTurnRecord]) -> _ThreadTurnFacts:
+    if not turns:
+        return _ThreadTurnFacts(availability="free", last_user_message_at=None, latest_completed_response=None)
+    statuses = {turn.status for turn in turns}
+    if "active" in statuses:
+        availability = "active"
+    elif "queued" in statuses:
+        availability = "queued"
+    else:
+        availability = "free"
+    completed_turns = [turn for turn in turns if turn.status == "completed"]
+    latest_completed_response: tuple[str, datetime] | None = None
+    if completed_turns:
+        latest = max(completed_turns, key=lambda turn: turn.completed_at or turn.updated_at)
+        latest_completed_response = (latest.turn_id, latest.completed_at or latest.updated_at)
+    return _ThreadTurnFacts(
+        availability=availability,
+        last_user_message_at=max(turn.created_at for turn in turns),
+        latest_completed_response=latest_completed_response,
+    )
 
 
 def runtime_thread_availability_for_session(store: RuntimeStore, *, runtime_session_id: str) -> str:

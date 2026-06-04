@@ -9,7 +9,7 @@ export type FolderSection = {
 };
 
 export function buildSections(projects: ChatProject[], threads: ChatThread[]): FolderSection[] {
-  const sections: FolderSection[] = projects
+  const projectSections: FolderSection[] = projects
     .slice()
     .sort((left, right) => left.name.localeCompare(right.name, "en", { sensitivity: "base" }))
     .map((project) => ({
@@ -17,10 +17,33 @@ export function buildSections(projects: ChatProject[], threads: ChatThread[]): F
       projectId: project.project_id,
       title: project.name,
       canManage: true,
-      items: threads.filter((thread) => thread.project_id === project.project_id),
+      items: [],
     }));
-  const projectIds = new Set(projects.map((project) => project.project_id));
-  const unassigned = threads.filter((thread) => !thread.project_id || !projectIds.has(thread.project_id));
+  const sectionsByProjectId = new Map(projectSections.map((section) => [section.projectId, section]));
+  const placeholderSections: FolderSection[] = [];
+  const unassigned: ChatThread[] = [];
+
+  for (const thread of threads) {
+    if (!thread.project_id) {
+      unassigned.push(thread);
+      continue;
+    }
+    let section = sectionsByProjectId.get(thread.project_id);
+    if (!section) {
+      section = {
+        id: `project:${thread.project_id}`,
+        projectId: thread.project_id,
+        title: "Project",
+        canManage: false,
+        items: [],
+      };
+      sectionsByProjectId.set(thread.project_id, section);
+      placeholderSections.push(section);
+    }
+    section.items.push(thread);
+  }
+
+  const sections = [...projectSections, ...placeholderSections];
   if (unassigned.length || !sections.length) {
     sections.unshift({
       id: "unassigned",

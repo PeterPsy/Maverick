@@ -11,7 +11,8 @@ import { useChatRootDropHandlers } from "./useChatRootDropHandlers";
 import { useDockedComposerHeight } from "./useDockedComposerHeight";
 import type { DraftChat } from "./useMessageSubmission";
 
-const MESSAGE_HISTORY_LIMIT = 50;
+const EVENT_PROJECTION_MIN_LIMIT = 500;
+const EVENT_PROJECTION_EVENTS_PER_VISIBLE_MESSAGE = 80;
 
 type UseChatControllerPresentationParams = {
   activeProviderId: string;
@@ -42,6 +43,7 @@ type UseChatControllerPresentationParams = {
   hasLoadedHistory: boolean;
   isBootstrapping: boolean;
   isHistoryLoading: boolean;
+  isOlderHistoryLoading: boolean;
   isRuntimeBusy: boolean;
   isSending: boolean;
   mentionItems: MentionItem[];
@@ -49,6 +51,9 @@ type UseChatControllerPresentationParams = {
   providers: ProviderItem[];
   queuedMessages: QueuedMessage[];
   removeAttachment: (attachmentId: string) => void;
+  hasMoreHistory: boolean;
+  onLoadOlderHistory: () => void;
+  onRevealOlderMessages: () => void;
   selectedAgentTypeId: string;
   setComposer: (value: string) => void;
   speechMaxTextChars: number;
@@ -60,6 +65,7 @@ type UseChatControllerPresentationParams = {
   transcriptionMaxDurationSeconds: number;
   transcriptionProviderAppId: string;
   transcriptionProviderAvailable: boolean;
+  visibleMessageLimit: number;
 };
 
 export function useChatControllerPresentation({
@@ -91,6 +97,7 @@ export function useChatControllerPresentation({
   hasLoadedHistory,
   isBootstrapping,
   isHistoryLoading,
+  isOlderHistoryLoading,
   isRuntimeBusy,
   isSending,
   mentionItems,
@@ -98,6 +105,9 @@ export function useChatControllerPresentation({
   providers,
   queuedMessages,
   removeAttachment,
+  hasMoreHistory,
+  onLoadOlderHistory,
+  onRevealOlderMessages,
   selectedAgentTypeId,
   setComposer,
   speechMaxTextChars,
@@ -109,8 +119,9 @@ export function useChatControllerPresentation({
   transcriptionMaxDurationSeconds,
   transcriptionProviderAppId,
   transcriptionProviderAvailable,
+  visibleMessageLimit,
 }: UseChatControllerPresentationParams) {
-  const messages = useVisibleChatMessages(events, pendingUserMessages, failedUserMessages);
+  const { hasHiddenMessages, messages } = useVisibleChatMessages(events, pendingUserMessages, failedUserMessages, visibleMessageLimit);
   const composerSelectedAgentTypeId = activeThread
     ? activeThread.source_app_id && activeThread.source_app_id !== "chat"
       ? activeThread.agent_type_id
@@ -185,10 +196,13 @@ export function useChatControllerPresentation({
     },
     transcriptProps: {
       error,
+      hasMoreOlderMessages: hasHiddenMessages || hasMoreHistory,
       isLoading: canStopTurn || isThreadLoading,
+      isLoadingOlderHistory: isOlderHistoryLoading,
       loadingLabel,
       mentionItems,
       messages,
+      onLoadOlderMessages: hasHiddenMessages ? onRevealOlderMessages : onLoadOlderHistory,
       speechMaxTextChars,
       speechProviderAppId,
       speechProviderAvailable,
@@ -206,9 +220,15 @@ export function useChatControllerPresentation({
   };
 }
 
-function useVisibleChatMessages(events: RuntimeEvent[], pendingUserMessages: PendingMessage[], failedUserMessages: PendingMessage[]): ChatMessage[] {
+function useVisibleChatMessages(
+  events: RuntimeEvent[],
+  pendingUserMessages: PendingMessage[],
+  failedUserMessages: PendingMessage[],
+  messageHistoryLimit: number,
+): { hasHiddenMessages: boolean; messages: ChatMessage[] } {
   return useMemo(() => {
-    const currentMessages = eventsToMessages(events);
+    const projectedEvents = visibleProjectionEvents(events, messageHistoryLimit);
+    const currentMessages = eventsToMessages(projectedEvents);
     const confirmedHumanMessageIds = new Set(currentMessages.filter((message) => message.role === "human").map((message) => message.id));
     const visibleMessages = [
       ...currentMessages,
@@ -233,6 +253,12 @@ function useVisibleChatMessages(events: RuntimeEvent[], pendingUserMessages: Pen
         appReferences: message.appReferences,
       })),
     ];
-    return visibleMessages.slice(-MESSAGE_HISTORY_LIMIT);
-  }, [events, failedUserMessages, pendingUserMessages]);
+    const messages = visibleMessages.slice(-messageHistoryLimit);
+    return { hasHiddenMessages: projectedEvents.length < events.length || visibleMessages.length > messages.length, messages };
+  }, [events, failedUserMessages, messageHistoryLimit, pendingUserMessages]);
+}
+
+function visibleProjectionEvents(events: RuntimeEvent[], messageHistoryLimit: number): RuntimeEvent[] {
+  const eventLimit = Math.max(EVENT_PROJECTION_MIN_LIMIT, messageHistoryLimit * EVENT_PROJECTION_EVENTS_PER_VISIBLE_MESSAGE);
+  return events.length > eventLimit ? events.slice(-eventLimit) : events;
 }

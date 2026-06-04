@@ -195,6 +195,7 @@ Runtime session history and operational records that belong to one agent must li
 ```text
 /workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/session.json
 /workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/events.json
+/workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/events-history/
 /workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/turns.json
 /workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/processes.json
 /workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/state.json

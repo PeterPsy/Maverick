@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ChatMessage } from "../api/client";
 import type { MentionItem } from "../lib/mentions";
 import { ChatTranscriptSkeleton } from "./ChatTranscriptSkeleton";
@@ -8,9 +8,12 @@ import { MorphingSpinner } from "./ui/morphing-spinner";
 export type ChatTranscriptProps = {
   error: string | null;
   isLoading: boolean;
+  isLoadingOlderHistory?: boolean;
   loadingLabel: string;
   mentionItems: MentionItem[];
   messages: ChatMessage[];
+  hasMoreOlderMessages?: boolean;
+  onLoadOlderMessages?: () => void;
   speechMaxTextChars?: number;
   speechProviderAvailable?: boolean;
   speechProviderAppId?: string;
@@ -20,15 +23,20 @@ export type ChatTranscriptProps = {
 export function ChatTranscript({
   error,
   isLoading,
+  isLoadingOlderHistory = false,
   loadingLabel,
   mentionItems,
   messages,
+  hasMoreOlderMessages = false,
+  onLoadOlderMessages,
   speechMaxTextChars = 0,
   speechProviderAvailable = true,
   speechProviderAppId = "",
   speechProviderQualityProfile = "",
 }: ChatTranscriptProps) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
+  const scrollAnchorRef = useRef<{ height: number; top: number } | null>(null);
+  const loadOlderPendingRef = useRef(false);
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [showScrollJump, setShowScrollJump] = useState(false);
   const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set());
@@ -67,6 +75,11 @@ export function ChatTranscript({
     if (!viewport) {
       return;
     }
+    if (viewport.scrollTop < 80 && hasMoreOlderMessages && !isLoadingOlderHistory && !loadOlderPendingRef.current) {
+      loadOlderPendingRef.current = true;
+      scrollAnchorRef.current = { height: viewport.scrollHeight, top: viewport.scrollTop };
+      onLoadOlderMessages?.();
+    }
     const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
     const nextIsNearBottom = distanceFromBottom < 96;
     setIsNearBottom(nextIsNearBottom);
@@ -87,6 +100,17 @@ export function ChatTranscript({
       setShowScrollJump(true);
     }
   }, [messages.length, isLoading, error]);
+
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current;
+    const anchor = scrollAnchorRef.current;
+    if (!viewport || !anchor) {
+      return;
+    }
+    viewport.scrollTop = viewport.scrollHeight - anchor.height + anchor.top;
+    scrollAnchorRef.current = null;
+    loadOlderPendingRef.current = false;
+  }, [messages.length, isLoadingOlderHistory]);
 
   const latestToolMessageId =
     [...messages]
@@ -114,6 +138,12 @@ export function ChatTranscript({
   return (
     <section className="chatapp-chat-scroll" aria-live="polite">
       <div className="chatapp-chat-scroll__inner" onScroll={updateScrollState} ref={viewportRef}>
+        {isLoadingOlderHistory ? (
+          <div className="chatapp-history-loader" role="status" aria-live="polite">
+            <MorphingSpinner size="sm" className="chatapp-history-loader__icon" />
+            <span>Loading earlier messages</span>
+          </div>
+        ) : null}
         <MessageList
           expandedMessages={expandedMessages}
           latestToolMessageId={latestToolMessageId}

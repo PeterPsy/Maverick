@@ -255,15 +255,14 @@ function MailSidebarWidget() {
     () => buildMailTree(connections, mailboxCounts, selectedConnectionId, mailbox),
     [connections, mailboxCounts, selectedConnectionId, mailbox],
   );
-  const defaultExpandedIds = useMemo(
-    () => accountTreeNodes.flatMap((node) => collectDefaultExpandedIds(node)),
-    [accountTreeNodes],
-  );
   const selectedNodeIds = useMemo(
     () => [selectedConnectionId ? mailboxIdentity(selectedConnectionId, mailbox) : aggregateMailboxIdentity(mailbox)],
     [selectedConnectionId, mailbox],
   );
-  const treeProviderKey = `${connections.length}:${Object.keys(mailboxCounts).length}:${defaultExpandedIds.join('|')}`;
+  const treeProviderKey = useMemo(
+    () => connections.map((connection) => connection.id).sort().join('|'),
+    [connections],
+  );
 
   async function sync(targetConnection: MailConnection) {
     if (targetConnection.status === 'disconnected') {
@@ -335,7 +334,6 @@ function MailSidebarWidget() {
           <TreeProvider
             animateExpand
             className="mail-folder-tree"
-            defaultExpandedIds={defaultExpandedIds}
             indent={18}
             key={treeProviderKey}
             onSelectionChange={() => undefined}
@@ -499,20 +497,6 @@ function buildMailTree(
     }));
 
   return [...aggregateNodes, ...accountNodes];
-}
-
-function collectDefaultExpandedIds(node: MailTreeNode) {
-  const ids: string[] = [];
-
-  function visit(current: MailTreeNode) {
-    if (current.children.length) {
-      ids.push(current.id);
-    }
-    current.children.forEach(visit);
-  }
-
-  visit(node);
-  return ids;
 }
 
 function accountIdentity(connectionId: string) {

@@ -54,7 +54,7 @@ function workspaceAppRowHtml(app: WorkspaceApp) {
   const statusLabel = installed ? app.status : 'not installed';
   const appKey = `${app.workspace_id}:${app.app_id}`;
   return `<div class="settings-app-row">
-    <span class="settings-app-icon material-symbols-rounded" aria-hidden="true">${enabled ? 'apps' : 'hide_source'}</span>
+    <span class="settings-app-icon material-symbols-rounded" aria-hidden="true">${escapeHtml(appIcon(app))}</span>
     <span class="settings-app-copy">
       <strong>${escapeHtml(app.name)}</strong>
       <small>${escapeHtml(app.app_id)} · v${escapeHtml(app.version)} · ${escapeHtml(statusLabel)}</small>
@@ -75,4 +75,35 @@ function workspaceAppRowHtml(app: WorkspaceApp) {
         </button>`
     }
   </div>`;
+}
+
+function appIcon(app: WorkspaceApp): string {
+  if (app.status !== 'enabled') {
+    return 'hide_source';
+  }
+  const iconByAppId: Record<string, string> = {
+    agents: 'smart_toy',
+    'app-store': 'storefront',
+    'base-shell': 'dashboard',
+    browser: 'language',
+    calendar: 'calendar_month',
+    chat: 'forum',
+    checklist: 'checklist',
+    crm: 'contacts',
+    'developer-kit': 'developer_board',
+    'docs-studio': 'description',
+    'document-generator': 'description',
+    'dynamic-views': 'dashboard_customize',
+    'gmail-app': 'mail',
+    mail: 'mail',
+    memory: 'database',
+    'maverick-monitor': 'monitor_heart',
+    settings: 'admin_panel_settings',
+    skills: 'school',
+    speech: 'record_voice_over',
+    storage: 'cloud',
+    vault: 'key',
+    'website-studio': 'web_asset'
+  };
+  return iconByAppId[app.app_id] || 'apps';
 }

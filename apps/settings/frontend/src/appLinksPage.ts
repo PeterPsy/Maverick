@@ -224,7 +224,8 @@ function defaultIcon(app: AppRegistryItem | null, fallbackAppId: string): string
     settings: 'admin_panel_settings',
     skills: 'school',
     speech: 'record_voice_over',
-    storage: 'cloud'
+    storage: 'cloud',
+    'website-studio': 'web_asset'
   };
   if (iconByAppId[fallbackAppId]) {
     return iconByAppId[fallbackAppId];

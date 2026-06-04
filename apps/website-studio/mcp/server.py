@@ -8,7 +8,7 @@ import sys
 from core.app_sdk.runtime import emit_json, read_entrypoint_payload
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
-from service import app_events_for_action, handle_action
+from service import app_events_for_action, handle_action, resolve_secret_resource
 
 
 TOOL_ACTIONS = {
@@ -26,6 +26,8 @@ TOOL_ACTIONS = {
     "website_git_connection_activate": "git_connection_activate",
     "website_environments_list": "environments_list",
     "website_environment_configure": "environment_configure",
+    "website_publish_targets_list": "publish_targets_list",
+    "website_publish_target_configure": "publish_target_configure",
     "website_import_git": "import_git",
     "website_import_zip": "import_zip",
     "website_sitemap": "sitemap",
@@ -64,6 +66,10 @@ payload = read_entrypoint_payload()
 arguments = dict(payload.arguments)
 tool_name = str(payload.raw.get("tool_name") or "")
 arguments.setdefault("action", TOOL_ACTIONS.get(tool_name, "sites_list"))
+if payload.raw.get("surface") == "secret_selector":
+    arguments["_app_secret_selector"] = payload.raw.get("app_secret_selector", {})
+    emit_json(resolve_secret_resource(Path(payload.data_root), arguments))
+    raise SystemExit(0)
 arguments["_app_secrets"] = dict(payload.raw.get("app_secrets") or {})
 arguments["_app_secret_errors"] = list(payload.raw.get("app_secret_errors") or [])
 status_code, result = handle_action(Path(payload.data_root), arguments)

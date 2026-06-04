@@ -21,7 +21,7 @@
           "display_name": {"type": "string"},
           "slug": {"type": "string"},
           "primary_domain": {"type": "string"},
-          "source_provider": {"type": "string"}
+          "source_provider": {"type": "string", "enum": ["manual", "zip", "git"]}
         },
         "additionalProperties": false
       }
@@ -128,6 +128,30 @@
         "additionalProperties": false
       }
     },
+    "website_publish_targets_list": {
+      "description": "List configured Website Studio publish targets for one site.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id"],
+        "properties": {"site_id": {"type": "string"}},
+        "additionalProperties": false
+      }
+    },
+    "website_publish_target_configure": {
+      "description": "Configure a managed static or Git pull-request publish target for one site environment.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id"],
+        "properties": {
+          "site_id": {"type": "string"},
+          "environment_id": {"type": "string"},
+          "kind": {"type": "string", "enum": ["managed_static", "git_pull_request"], "default": "managed_static"},
+          "status": {"type": "string", "enum": ["active", "disabled"], "default": "active"},
+          "config": {"type": "object"}
+        },
+        "additionalProperties": false
+      }
+    },
     "website_import_git": {
       "description": "Import a public GitHub HTTPS repository or app-local Git repository into a new or existing site source tree.",
       "input_schema": {
@@ -140,7 +164,13 @@
           "branch": {"type": "string"}
         },
         "additionalProperties": false
-      }
+      },
+      "secret_selectors": [
+        {
+          "required_secrets": ["github-token"],
+          "resource_lookup": { "kind": "website_git_connection_from_arguments" }
+        }
+      ]
     },
     "website_import_zip": {
       "description": "Safely import a base64 ZIP into a new or existing site source tree.",
@@ -290,7 +320,13 @@
           "approval_id": {"type": "string"}
         },
         "additionalProperties": false
-      }
+      },
+      "secret_selectors": [
+        {
+          "required_secrets": ["github-token"],
+          "resource_lookup": { "kind": "website_git_publish_from_arguments" }
+        }
+      ]
     },
     "website_rollback": {
       "description": "Restore a selected revision into the working tree after explicit approval.",

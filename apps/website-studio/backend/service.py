@@ -12,11 +12,15 @@ from store import (
     archive_site,
     build_preview,
     configure_environment,
+    configure_publish_target,
     clear_custom_view,
     create_publish_request,
     create_site,
     diff_site,
     duplicate_site,
+    get_environment,
+    get_git_connection,
+    get_site,
     import_git,
     import_zip,
     list_git_connections,
@@ -24,6 +28,7 @@ from store import (
     list_approvals,
     list_builds,
     list_environments,
+    list_publish_targets,
     list_sites,
     load_view_state,
     page_context,
@@ -47,6 +52,10 @@ from store import (
     site_status,
     validate_build,
     write_file,
+    _connection_id,
+    _parse_github_repository,
+    _publish_target_for_environment,
+    _should_publish_to_github,
 )
 
 
@@ -60,6 +69,7 @@ MUTATING_ACTIONS = {
     "git_connection_prepare",
     "git_connection_activate",
     "environment_configure",
+    "publish_target_configure",
     "approval_record",
     "import_zip",
     "import_git",
@@ -79,7 +89,7 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
     action = str(payload.get("action") or "sites_list")
     try:
         if action in {"status", "manifest"}:
-            return 200, {"app_id": "website-studio", "status": "ready", **health_payload(data_root), "phase": "phase_2"}
+            return 200, {"app_id": "website-studio", "status": "ready", **health_payload(data_root), "phase": "phase_3"}
         if action == "sites_list":
             return 200, {"items": list_sites(data_root)}
         if action == "site_create":
@@ -145,6 +155,19 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
                     requires_approval=payload.get("requires_approval") if "requires_approval" in payload else True,
                 )
             }
+        if action == "publish_targets_list":
+            return 200, {"items": list_publish_targets(data_root, payload.get("site_id"))}
+        if action == "publish_target_configure":
+            return 200, {
+                "publish_target": configure_publish_target(
+                    data_root,
+                    payload.get("site_id"),
+                    environment_id=payload.get("environment_id"),
+                    kind=payload.get("kind") or "managed_static",
+                    status=payload.get("status") or "active",
+                    config=payload.get("config"),
+                )
+            }
         if action == "import_zip":
             return 201, {
                 **import_zip(
@@ -163,6 +186,8 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
                     display_name=payload.get("display_name"),
                     repository_url=payload.get("repository_url"),
                     branch=payload.get("branch"),
+                    app_secrets=payload.get("_app_secrets") if isinstance(payload.get("_app_secrets"), dict) else {},
+                    app_secret_errors=payload.get("_app_secret_errors") if isinstance(payload.get("_app_secret_errors"), list) else [],
                 )
             }
         if action == "sitemap":
@@ -277,6 +302,82 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
     except ValueError as error:
         return 400, {"error": "validation_error", "detail": str(error)}
     return 400, {"error": "unsupported_action", "detail": f"Unsupported action `{action}`."}
+
+
+def resolve_secret_resource(data_root: Path, payload: dict[str, object]) -> dict[str, object]:
+    """Resolve whether a CLI/MCP invocation needs Website Studio GitHub credentials."""
+    try:
+        if "github-token" not in _selector_logical_names(payload):
+            return {"requires_secrets": False}
+        action = str(payload.get("action") or "").strip()
+        if action == "import_git":
+            return _resolve_git_import_secret_resource(data_root, payload)
+        if action == "publish":
+            return _resolve_publish_secret_resource(data_root, payload)
+        return {"requires_secrets": False}
+    except ValueError as error:
+        return {"requires_secrets": False, "error": "validation_error", "detail": str(error)}
+
+
+def _resolve_git_import_secret_resource(data_root: Path, payload: dict[str, object]) -> dict[str, object]:
+    source = payload.get("repository_url")
+    if not source:
+        return {"requires_secrets": False}
+    try:
+        owner, repo, _normalized_url = _parse_github_repository(source)
+    except ValueError:
+        return {"requires_secrets": False}
+    try:
+        connection = get_git_connection(data_root, _connection_id(owner, repo))
+    except ValueError:
+        return {"requires_secrets": False, "provider": "github", "owner": owner, "repo": repo}
+    site_id = str(payload.get("site_id") or "").strip()
+    if site_id and connection.get("site_id") != site_id:
+        return {"requires_secrets": False, "provider": "github", "connection_id": connection.get("id"), "status": "site_mismatch"}
+    return {
+        "requires_secrets": connection.get("auth_mode") == "fine_grained_token",
+        "provider": "github",
+        "connection_id": connection.get("id"),
+        "status": connection.get("status"),
+    }
+
+
+def _resolve_publish_secret_resource(data_root: Path, payload: dict[str, object]) -> dict[str, object]:
+    site_id = str(payload.get("site_id") or "").strip()
+    if not site_id:
+        return {"requires_secrets": False}
+    site = get_site(data_root, site_id)
+    ref = site.get("source_artifact_ref") if isinstance(site.get("source_artifact_ref"), dict) else {}
+    if ref.get("provider") != "github":
+        return {"requires_secrets": False, "provider": str(site.get("source_provider") or "manual")}
+    environment = get_environment(data_root, _publish_environment_id(site, payload), site_id=site["id"])
+    publish_target = _publish_target_for_environment(data_root, site, environment)
+    if not _should_publish_to_github(site, publish_target):
+        return {"requires_secrets": False, "provider": "github", "publish_target": publish_target.get("kind") if publish_target else ""}
+    connection_id = str(ref.get("connection_id") or "").strip()
+    if not connection_id:
+        return {"requires_secrets": False, "provider": "github", "status": "missing_connection"}
+    connection = get_git_connection(data_root, connection_id)
+    return {
+        "requires_secrets": connection.get("auth_mode") == "fine_grained_token",
+        "provider": "github",
+        "connection_id": connection.get("id"),
+        "status": connection.get("status"),
+    }
+
+
+def _publish_environment_id(site: dict[str, object], payload: dict[str, object]) -> object:
+    explicit = str(payload.get("environment_id") or "").strip()
+    if explicit:
+        return explicit
+    return site.get("default_environment_id") or "env_preview"
+
+
+def _selector_logical_names(payload: dict[str, object]) -> set[str]:
+    selector = payload.get("_app_secret_selector")
+    if not isinstance(selector, dict):
+        return set()
+    return {str(name).strip().lower() for name in selector.get("logical_names", []) if str(name).strip()}
 
 
 def app_events_for_action(action: str) -> list[dict[str, str]]:

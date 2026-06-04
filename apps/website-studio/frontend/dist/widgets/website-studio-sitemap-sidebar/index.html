@@ -5,34 +5,66 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Website Studio Sitemap</title>
     <style>
-      :root { color-scheme: dark; --text: #ececec; --muted: rgba(236,236,236,.66); --soft: rgba(236,236,236,.42); --surface: rgba(12,12,14,.58); --hover: rgba(255,255,255,.105); --border: rgba(255,255,255,.08); --edge: inset 0 0 0 1px rgba(255,255,255,.075), inset 0 1px 0 rgba(255,255,255,.14); font-family: "Avenir Next", "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif; }
+      :root {
+        color-scheme: dark;
+        --text: #ececec;
+        --muted: rgba(236,236,236,.66);
+        --soft: rgba(236,236,236,.42);
+        --surface: rgba(12,12,14,.58);
+        --hover: rgba(255,255,255,.105);
+        --active: rgba(255,255,255,.14);
+        --border: rgba(255,255,255,.08);
+        --warning: #f6d58f;
+        --edge: inset 0 0 0 1px rgba(255,255,255,.075), inset 0 1px 0 rgba(255,255,255,.14);
+        font-family: "Avenir Next", "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
+      }
+      * { box-sizing: border-box; }
       html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; background: transparent; color: var(--text); }
       .widget { position: relative; width: 100%; height: 100%; min-height: 0; overflow: hidden; }
       .search { position: absolute; top: 3.12rem; left: 0; right: 0; z-index: 3; display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; gap: .48rem; height: 2.65rem; border: 1px solid rgba(255,255,255,.05); border-radius: 22px; background: var(--surface); box-shadow: var(--edge); padding: 0 .72rem; }
       .search input { min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; }
       .site-select-frame { position: absolute; top: 6.05rem; left: 0; right: 0; z-index: 3; height: 2.65rem; border: 1px solid rgba(255,255,255,.05); border-radius: 22px; background: var(--surface); box-shadow: var(--edge); padding: 0 .72rem; }
       .site-select-frame select { width: 100%; height: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; }
-      .list { height: 100%; min-height: 0; overflow-y: auto; padding: 9.42rem 0 7.15rem; scrollbar-width: none; }
-      button { width: 100%; min-height: 42px; display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 8px; margin: 0 0 6px; border: 1px solid transparent; border-radius: 22px; background: transparent; color: var(--text); padding: 0 .72rem; font: inherit; text-align: left; cursor: pointer; }
-      button:hover { background: var(--hover); border-color: var(--border); }
-      span, small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      small { color: var(--soft); }
-      .label { display: grid; min-width: 0; }
-      .meta { display: flex; align-items: center; justify-content: flex-end; gap: 5px; min-width: 0; }
-      .kind { color: var(--soft); font-size: .68rem; }
-      .badge { max-width: 6.5rem; border: 1px solid rgba(255,255,255,.08); border-radius: 999px; color: var(--muted); font-size: .64rem; padding: 2px 6px; }
-      .badge.warn { color: #f6d58f; border-color: rgba(246,213,143,.28); }
+      .tree { height: 100%; min-height: 0; overflow-y: auto; padding: 9.42rem 0 7.15rem; scrollbar-width: none; }
+      .tree::-webkit-scrollbar { display: none; width: 0; height: 0; }
+      button { border: 0; color: inherit; font: inherit; }
+      .node { display: grid; grid-template-columns: 1.15rem 1.5rem minmax(0,1fr) auto; align-items: center; gap: .32rem; width: 100%; min-height: 2.72rem; margin: 0 0 .2rem; border: 1px solid transparent; border-radius: 20px; background: transparent; padding: 0 .62rem; text-align: left; cursor: pointer; transition: background 140ms ease, border-color 140ms ease, transform 140ms ease; }
+      .node:hover, .node:focus-visible { outline: none; border-color: var(--border); background: var(--hover); }
+      .node:active { transform: scale(.988); }
+      .node.leaf { grid-template-columns: 1.15rem 1.5rem minmax(0,1fr) auto; }
+      .node.group { color: var(--muted); }
+      .node[data-depth="1"] { padding-left: 1.05rem; }
+      .node[data-depth="2"] { padding-left: 1.72rem; }
+      .node[data-depth="3"] { padding-left: 2.38rem; }
+      .node[data-depth="4"] { padding-left: 3.04rem; }
+      .expander { display: grid; place-items: center; width: 1rem; height: 1rem; color: var(--soft); }
+      .expander::before { content: ""; width: 0; height: 0; border-top: .25rem solid transparent; border-bottom: .25rem solid transparent; border-left: .32rem solid currentColor; transform: translateX(.08rem); transition: transform 140ms ease; }
+      .node[data-expanded="true"] .expander::before { transform: rotate(90deg) translateX(.08rem); }
+      .leaf .expander::before { display: none; }
+      .icon { display: grid; place-items: center; width: 1.5rem; height: 1.5rem; border-radius: 12px; color: var(--muted); box-shadow: var(--edge); font-size: .7rem; line-height: 1; }
+      .copy { display: grid; min-width: 0; gap: .1rem; }
+      .copy strong, .copy small, .badge { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .copy strong { color: var(--text); font-size: .82rem; font-weight: 400; letter-spacing: 0; }
+      .copy small { color: var(--soft); font-size: .69rem; }
+      .badge { max-width: 6.75rem; border: 1px solid rgba(255,255,255,.08); border-radius: 999px; color: var(--muted); font-size: .64rem; padding: 2px 6px; }
+      .badge.warn { color: var(--warning); border-color: rgba(246,213,143,.28); }
+      .badge.empty { color: var(--soft); }
+      .children { position: relative; margin: 0 0 .25rem; }
+      .children::before { content: ""; position: absolute; top: 0; bottom: .22rem; left: .68rem; width: 1px; background: rgba(255,255,255,.08); }
+      .children.depth-1::before { left: 1.11rem; }
+      .children.depth-2::before { left: 1.78rem; }
+      .children.depth-3::before { left: 2.44rem; }
       .empty { padding: 6.7rem .72rem 0; color: var(--muted); font-size: .82rem; }
     </style>
   </head>
   <body>
     <div id="root" class="widget">
-      <label class="search"><span>⌕</span><input id="query" placeholder="Search sitemap"></label>
+      <label class="search"><span>⌕</span><input id="query" placeholder="Search site tree"></label>
       <label class="site-select-frame"><select id="siteSelect" aria-label="Website site"></select></label>
-      <div id="list" class="list"></div>
+      <div id="tree" class="tree"></div>
     </div>
     <script>
-      const list = document.getElementById('list');
+      const tree = document.getElementById('tree');
       const query = document.getElementById('query');
       const siteSelect = document.getElementById('siteSelect');
       let sites = [];
@@ -40,11 +72,14 @@
       let routes = [];
       let assets = [];
       let activeSiteId = '';
+      let expanded = new Set(['group:pages', 'group:routes', 'group:components']);
+
       async function backend(body) {
         const response = await fetch('/api/apps/website-studio/backend', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         if (!response.ok) throw new Error('backend request failed');
         return response.json();
       }
+
       async function load() {
         const sitePayload = await backend({ action: 'sites_list' });
         sites = sitePayload.items || [];
@@ -64,7 +99,7 @@
           siteSelect.append(option);
         }
         const site = selectableSites.find(item => item.id === activeSiteId) || selectableSites.find(item => item.is_active) || selectableSites[0];
-        if (!site) { list.replaceChildren(); return; }
+        if (!site) { renderEmpty('No websites yet.'); return; }
         activeSiteId = site.id;
         siteSelect.value = activeSiteId;
         const map = await backend({ action: 'sitemap', site_id: site.id });
@@ -73,78 +108,248 @@
         assets = map.assets || [];
         render();
       }
+
       function render() {
-        const needle = query.value.toLowerCase();
-        const items = sitemapItems();
-        const filtered = items.filter(item => item.label.toLowerCase().includes(needle) || item.subtitle.toLowerCase().includes(needle));
-        list.replaceChildren();
-        if (!filtered.length) {
-          const empty = document.createElement('div');
-          empty.className = 'empty';
-          empty.textContent = 'No routes match.';
-          list.append(empty);
+        const needle = query.value.trim().toLowerCase();
+        const roots = filterTree(buildTree(), needle);
+        tree.replaceChildren();
+        if (!roots.length) {
+          renderEmpty('No matching site items.');
           return;
         }
-        for (const item of filtered) {
-          const row = document.createElement('button');
-          row.dataset.kind = item.kind;
-          row.dataset.id = item.id;
-          row.dataset.page = item.page_id || '';
-          row.dataset.route = item.route || '';
-          const label = document.createElement('span');
-          label.className = 'label';
-          const title = document.createElement('span');
-          title.textContent = item.label;
-          const kind = document.createElement('small');
-          kind.className = 'kind';
-          kind.textContent = item.subtitle;
-          label.append(title, kind);
-          const meta = document.createElement('span');
-          meta.className = 'meta';
-          const status = document.createElement('small');
-          status.className = item.warning ? 'badge warn' : 'badge';
-          status.textContent = item.status;
-          meta.append(status);
-          row.append(label, meta);
-          list.append(row);
-        }
+        const fragment = document.createDocumentFragment();
+        for (const node of roots) appendNode(fragment, node, 0, needle);
+        tree.append(fragment);
       }
-      function sitemapItems() {
-        const pageItems = pages.map(page => ({
-          kind: 'page',
-          id: String(page.id),
-          page_id: String(page.id),
-          route: String(page.route || ''),
-          label: String(page.route || page.title || page.id),
-          subtitle: String(page.title || 'page'),
-          status: String(page.warnings?.length ? 'missing asset' : page.status || 'draft'),
-          warning: Boolean(page.warnings?.length)
-        }));
+
+      function renderEmpty(text) {
+        tree.replaceChildren();
+        const empty = document.createElement('div');
+        empty.className = 'empty';
+        empty.textContent = text;
+        tree.append(empty);
+      }
+
+      function buildTree() {
+        const pageNodes = pages
+          .slice()
+          .sort((left, right) => String(left.route || '').localeCompare(String(right.route || '')))
+          .map(page => ({
+            id: `page:${page.id}`,
+            kind: 'page',
+            entityId: String(page.id),
+            pageId: String(page.id),
+            route: String(page.route || ''),
+            label: String(page.route || page.title || page.id),
+            subtitle: String(page.title || 'static page'),
+            status: page.warnings?.length ? 'warning' : 'preview',
+            warning: Boolean(page.warnings?.length),
+            icon: 'P'
+          }));
+        if (!pageNodes.length) {
+          pageNodes.push(emptyNode('No static HTML pages', 'source tree has no .html files'));
+        }
+
         const pageRouteIds = new Set(pages.map(page => String(page.id)));
-        const routeItems = routes
+        const routeNodes = routes
           .filter(route => !route.page_id || !pageRouteIds.has(String(route.page_id)))
+          .slice()
+          .sort((left, right) => String(left.route || '').localeCompare(String(right.route || '')))
           .map(route => ({
+            id: `route:${route.id}`,
             kind: 'route',
-            id: String(route.id),
-            page_id: String(route.page_id || ''),
+            entityId: String(route.id),
+            routeId: String(route.id),
             route: String(route.route || ''),
             label: String(route.route || route.id),
             subtitle: String(route.kind || 'route'),
-            status: String(route.warnings?.length ? 'broken' : route.status || 'route'),
-            warning: Boolean(route.warnings?.length || route.status === 'broken')
+            status: route.page_id ? String(route.status || 'route') : 'no html',
+            warning: Boolean(!route.page_id || route.warnings?.length || route.status === 'broken' || route.status === 'unmatched'),
+            icon: 'R'
           }));
-        const assetItems = assets.map(asset => ({
-          kind: 'asset',
-          id: String(asset.id),
-          page_id: '',
-          route: '',
-          label: String(asset.path || asset.id),
-          subtitle: String(asset.kind || 'asset'),
-          status: String(asset.status || 'asset'),
-          warning: Boolean(asset.warnings?.length)
-        }));
-        return [...pageItems, ...routeItems, ...assetItems];
+        if (!routeNodes.length) {
+          routeNodes.push(emptyNode('No sitemap-only routes', 'all routes map to pages'));
+        }
+
+        const assetBuckets = bucketAssets(assets);
+        return [
+          groupNode('group:pages', 'Pages', `${pages.length} static`, pageNodes, 'P'),
+          groupNode('group:routes', 'Sitemap routes', `${routeNodes.filter(node => !node.empty).length} checked`, routeNodes, 'R'),
+          groupNode('group:components', 'Components', `${assetBuckets.components.count} files`, assetBuckets.components.children, 'C'),
+          groupNode('group:assets', 'Assets', `${assetBuckets.assets.count} files`, assetBuckets.assets.children, 'A'),
+          groupNode('group:backend', 'Backend and config', `${assetBuckets.backend.count} files`, assetBuckets.backend.children, 'B')
+        ];
       }
+
+      function groupNode(id, label, subtitle, children, icon) {
+        return { id, kind: 'group', label, subtitle, status: String(children.filter(child => !child.empty).length), icon, children };
+      }
+
+      function emptyNode(label, subtitle) {
+        return { id: `empty:${label}`, kind: 'empty', label, subtitle, status: 'empty', empty: true, icon: '-' };
+      }
+
+      function bucketAssets(sourceAssets) {
+        const buckets = {
+          components: { count: 0, children: [] },
+          assets: { count: 0, children: [] },
+          backend: { count: 0, children: [] }
+        };
+        for (const asset of sourceAssets) {
+          const path = String(asset.path || '');
+          const category = assetCategory(path, String(asset.kind || 'file'));
+          buckets[category].count += 1;
+          addPathNode(buckets[category].children, path, {
+            id: `asset:${asset.id}`,
+            kind: 'asset',
+            entityId: String(asset.id),
+            assetId: String(asset.id),
+            label: basename(path),
+            subtitle: dirname(path) || String(asset.kind || 'file'),
+            status: String(asset.kind || 'file'),
+            warning: Boolean(asset.warnings?.length),
+            icon: assetIcon(asset)
+          });
+        }
+        for (const bucket of Object.values(buckets)) {
+          if (!bucket.children.length) bucket.children.push(emptyNode('No files', ''));
+          sortNodes(bucket.children);
+        }
+        return buckets;
+      }
+
+      function assetCategory(path, kind) {
+        const lower = path.toLowerCase();
+        if (lower.startsWith('frontend-website/src/') || lower.startsWith('src/') || lower.includes('/components/') || lower.endsWith('.scss')) return 'components';
+        if (['image', 'font', 'media', 'stylesheet', 'script'].includes(kind) && !lower.endsWith('.php')) return 'assets';
+        if (/\.(png|jpe?g|gif|webp|svg|ico|avif|mp4|webm|mp3|woff2?|ttf|css|js)$/i.test(path)) return 'assets';
+        return 'backend';
+      }
+
+      function assetIcon(asset) {
+        const kind = String(asset.kind || 'file');
+        if (kind === 'stylesheet') return 'S';
+        if (kind === 'script') return 'J';
+        if (kind === 'image') return 'I';
+        return 'F';
+      }
+
+      function addPathNode(children, path, leaf) {
+        const parts = path.split('/').filter(Boolean);
+        let currentChildren = children;
+        let currentPath = '';
+        for (let index = 0; index < parts.length - 1; index += 1) {
+          const part = parts[index];
+          currentPath = currentPath ? `${currentPath}/${part}` : part;
+          let folder = currentChildren.find(node => node.kind === 'folder' && node.path === currentPath);
+          if (!folder) {
+            folder = { id: `folder:${currentPath}`, kind: 'folder', path: currentPath, label: part, subtitle: currentPath, status: '', icon: 'D', children: [] };
+            currentChildren.push(folder);
+          }
+          currentChildren = folder.children;
+        }
+        currentChildren.push(leaf);
+      }
+
+      function sortNodes(nodes) {
+        nodes.sort((left, right) => {
+          if (Boolean(left.children) !== Boolean(right.children)) return left.children ? -1 : 1;
+          return String(left.label).localeCompare(String(right.label));
+        });
+        nodes.forEach(node => node.children && sortNodes(node.children));
+      }
+
+      function filterTree(nodes, needle) {
+        if (!needle) return nodes;
+        return nodes.map(node => filterNode(node, needle)).filter(Boolean);
+      }
+
+      function filterNode(node, needle) {
+        const children = (node.children || []).map(child => filterNode(child, needle)).filter(Boolean);
+        if (nodeMatches(node, needle)) return { ...node, children: node.children || [] };
+        if (children.length) return { ...node, children };
+        return null;
+      }
+
+      function nodeMatches(node, needle) {
+        return `${node.label || ''} ${node.subtitle || ''} ${node.status || ''}`.toLowerCase().includes(needle);
+      }
+
+      function appendNode(parent, node, depth, needle) {
+        const hasChildren = Boolean(node.children && node.children.length);
+        const isExpanded = needle || expanded.has(node.id);
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = hasChildren ? 'node group' : 'node leaf';
+        row.dataset.depth = String(Math.min(depth, 4));
+        row.dataset.id = node.id;
+        row.dataset.kind = node.kind;
+        row.dataset.expanded = String(Boolean(hasChildren && isExpanded));
+        row.setAttribute('aria-expanded', hasChildren ? String(Boolean(isExpanded)) : 'false');
+
+        const expander = document.createElement('span');
+        expander.className = 'expander';
+        const icon = document.createElement('span');
+        icon.className = 'icon';
+        icon.textContent = node.icon || '';
+        const copy = document.createElement('span');
+        copy.className = 'copy';
+        const title = document.createElement('strong');
+        title.textContent = node.label || '';
+        const subtitle = document.createElement('small');
+        subtitle.textContent = node.subtitle || '';
+        copy.append(title, subtitle);
+        const badge = document.createElement('span');
+        badge.className = node.warning ? 'badge warn' : node.empty ? 'badge empty' : 'badge';
+        badge.textContent = node.status || '';
+        row.append(expander, icon, copy, badge);
+        row.addEventListener('click', () => hasChildren ? toggleNode(node.id) : openNode(node));
+        parent.append(row);
+
+        if (hasChildren && isExpanded) {
+          const children = document.createElement('div');
+          children.className = `children depth-${Math.min(depth, 3)}`;
+          for (const child of node.children) appendNode(children, child, depth + 1, needle);
+          parent.append(children);
+        }
+      }
+
+      function toggleNode(id) {
+        if (expanded.has(id)) expanded.delete(id);
+        else expanded.add(id);
+        render();
+      }
+
+      function openNode(node) {
+        if (!node || node.empty || !node.kind || !node.entityId) return;
+        const kind = node.kind;
+        const id = node.entityId;
+        const params = { site_id: activeSiteId, app_page: `${kind}s/${id}` };
+        if (kind === 'page') {
+          params.page_id = node.pageId || id;
+          params.route = node.route || '';
+        }
+        if (kind === 'route') {
+          params.route_id = node.routeId || id;
+          params.route = node.route || '';
+        }
+        if (kind === 'asset') {
+          params.asset_id = node.assetId || id;
+        }
+        window.parent?.postMessage({ type: 'maverick.widget.open-app', app_id: 'website-studio', params }, window.location.origin);
+        window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, window.location.origin);
+      }
+
+      function basename(path) {
+        return path.split('/').filter(Boolean).pop() || path || '/';
+      }
+
+      function dirname(path) {
+        const parts = path.split('/').filter(Boolean);
+        parts.pop();
+        return parts.join('/');
+      }
+
       query.addEventListener('input', render);
       siteSelect.addEventListener('change', async () => {
         activeSiteId = siteSelect.value;
@@ -153,26 +358,6 @@
         }
         window.parent?.postMessage({ type: 'maverick.widget.open-app', app_id: 'website-studio', params: { site_id: activeSiteId } }, window.location.origin);
         load();
-      });
-      list.addEventListener('click', event => {
-        const row = event.target.closest('button[data-kind]');
-        if (!row) return;
-        const kind = row.dataset.kind;
-        const id = row.dataset.id;
-        const params = { site_id: activeSiteId, app_page: `${kind}s/${id}` };
-        if (kind === 'page') {
-          params.page_id = row.dataset.page || id;
-          params.route = row.dataset.route || '';
-        }
-        if (kind === 'route') {
-          params.route_id = id;
-          params.route = row.dataset.route || '';
-        }
-        if (kind === 'asset') {
-          params.asset_id = id;
-        }
-        window.parent?.postMessage({ type: 'maverick.widget.open-app', app_id: 'website-studio', params }, window.location.origin);
-        window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, window.location.origin);
       });
       window.addEventListener('message', event => {
         if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') return;
@@ -186,12 +371,7 @@
           load();
         }
       });
-      load().catch(() => {
-        const empty = document.createElement('div');
-        empty.className = 'empty';
-        empty.textContent = 'Sitemap unavailable.';
-        list.replaceChildren(empty);
-      });
+      load().catch(() => renderEmpty('Sitemap unavailable.'));
     </script>
   </body>
 </html>

@@ -250,6 +250,8 @@ def ensure_schema(data_root: Path) -> None:
         _ensure_column(db, "publish_requests", "approval_id", "TEXT NOT NULL DEFAULT ''")
         _ensure_column(db, "publish_requests", "environment_id", "TEXT NOT NULL DEFAULT 'env_preview'")
         _ensure_column(db, "publish_requests", "build_id", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(db, "environments", "publish_target_id", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(db, "environments", "last_deployment_id", "TEXT NOT NULL DEFAULT ''")
         db.execute(
             "INSERT OR REPLACE INTO schema_metadata(key, value) VALUES (?, ?)",
             ("schema_version", SCHEMA_VERSION),

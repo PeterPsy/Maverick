@@ -22,6 +22,8 @@
               "git_connection_activate",
               "environments_list",
               "environment_configure",
+              "publish_targets_list",
+              "publish_target_configure",
               "import_git",
               "import_zip",
               "sitemap",
@@ -56,6 +58,7 @@
           "slug": {"type": "string"},
           "primary_domain": {"type": "string"},
           "status": {"type": "string"},
+          "source_provider": {"type": "string", "enum": ["manual", "zip", "git"]},
           "repository_url": {"type": "string"},
           "base_branch": {"type": "string"},
           "branch": {"type": "string"},
@@ -69,6 +72,7 @@
           "name": {"type": "string"},
           "base_url": {"type": "string"},
           "requires_approval": {"type": "boolean"},
+          "config": {"type": "object"},
           "archive_base64": {"type": "string"},
           "source_artifact_ref": {"type": "object"},
           "query": {"type": "string"},
@@ -95,7 +99,19 @@
           "preserve_custom": {"type": "boolean"}
         },
         "additionalProperties": false
-      }
+      },
+      "secret_selectors": [
+        {
+          "required_secrets": ["github-token"],
+          "resource_lookup": { "kind": "website_git_connection_from_arguments" },
+          "when": { "action": "import_git" }
+        },
+        {
+          "required_secrets": ["github-token"],
+          "resource_lookup": { "kind": "website_git_publish_from_arguments" },
+          "when": { "action": "publish" }
+        }
+      ]
     }
   }
 }

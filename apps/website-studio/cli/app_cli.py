@@ -8,12 +8,16 @@ import sys
 from core.app_sdk.runtime import emit_json, read_entrypoint_payload
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
-from service import app_events_for_action, handle_action
+from service import app_events_for_action, handle_action, resolve_secret_resource
 
 
 payload = read_entrypoint_payload()
 arguments = dict(payload.arguments)
 arguments.setdefault("action", "sites_list")
+if payload.raw.get("surface") == "secret_selector":
+    arguments["_app_secret_selector"] = payload.raw.get("app_secret_selector", {})
+    emit_json(resolve_secret_resource(Path(payload.data_root), arguments))
+    raise SystemExit(0)
 arguments["_app_secrets"] = dict(payload.raw.get("app_secrets") or {})
 arguments["_app_secret_errors"] = list(payload.raw.get("app_secret_errors") or [])
 status_code, result = handle_action(Path(payload.data_root), arguments)

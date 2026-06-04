@@ -63,11 +63,11 @@ export function App() {
       map.items.find((page) => page.id === nextPageId) ||
       (selectedRoute?.page_id ? map.items.find((page) => page.id === selectedRoute.page_id) : undefined) ||
       map.items.find((page) => page.route === nextRoute) ||
-      map.items[0];
+      (selectedRoute && !selectedRoute.page_id ? undefined : map.items[0]);
     setActivePageId(selectedPage?.id || '');
     setActiveRouteId(selectedRoute?.id || '');
     setActiveAssetId(selectedAsset?.id || '');
-    const previewRoute = selectedPage?.route || selectedRoute?.route || map.items[0]?.route || '';
+    const previewRoute = selectedPage?.route || (selectedRoute?.page_id ? selectedRoute.route : '') || '';
     postSelection(selectedSite, selectedPage, selectedRoute, selectedAsset);
     if (previewRoute) {
       await renderSite(selectedSite, previewRoute);
@@ -89,6 +89,10 @@ export function App() {
     function handleMessage(event: MessageEvent) {
       if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') return;
       const payload = event.data as { type?: string; params?: Record<string, string> };
+      if (payload.type === 'maverick.app.data-changed' && (payload as { owner_app_id?: string }).owner_app_id === 'website-studio') {
+        refresh(activeSiteIdRef.current, activePageIdRef.current).catch((error: Error) => setNotice({ tone: 'error', text: error.message }));
+        return;
+      }
       if (payload.type !== 'maverick.app.navigate') return;
       if (payload.params?.new_website_request_id) {
         setShowNewWebsite(true);
@@ -169,19 +173,27 @@ export function App() {
 
   async function importGit() {
     const repositoryUrl = gitUrl.trim();
+    const baseBranch = gitBranch.trim() || undefined;
     if (!repositoryUrl) {
       setNotice({ tone: 'warn', text: 'Repository URL is required.' });
       return;
     }
     const payload = await run(
-      () =>
-        callBackend<{ site: Site }>({
+      async () => {
+        const prepared = await callBackend<{ site: Site }>({
           action: 'git_connection_prepare',
           repository_url: repositoryUrl,
-          base_branch: gitBranch.trim() || undefined,
+          base_branch: baseBranch,
           auth_mode: 'fine_grained_token'
-        }),
-      'Git connection prepared'
+        });
+        return callBackend<{ site: Site }>({
+          action: 'import_git',
+          site_id: prepared.site.id,
+          repository_url: repositoryUrl,
+          branch: baseBranch
+        });
+      },
+      'Git connected and imported'
     );
     if (payload?.site) {
       setGitDialogOpen(false);

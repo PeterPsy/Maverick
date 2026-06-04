@@ -8,11 +8,13 @@ import multiprocessing
 import os
 from io import BytesIO
 from pathlib import Path
+import sqlite3
 import subprocess
 import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 from zipfile import ZipFile
 
 APP_ROOT = Path(__file__).resolve().parents[1]
@@ -20,8 +22,8 @@ MAVERICK_ROOT = APP_ROOT.parents[3]
 sys.path.insert(0, str(APP_ROOT))
 sys.path.insert(0, str(APP_ROOT / "backend"))
 
-from backend.service import app_events_for_action, handle_action
-from backend.store import _site_mutation_lock
+from backend.service import app_events_for_action, handle_action, resolve_secret_resource
+from backend.store import _git_import_source_ref, _github_error_detail, _redact_secret_text, _site_mutation_lock
 from safety import MAX_SOURCE_TREE_FILES, validate_source_tree_for_phase1
 
 
@@ -134,6 +136,82 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(status, 403)
             self.assertTrue(blocked["blocked"])
 
+    def test_site_create_rejects_future_source_providers_until_implemented(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            status, result = handle_action(
+                Path(tmp),
+                {"action": "site_create", "display_name": "CMS Later", "source_provider": "cms"},
+            )
+
+            self.assertEqual(status, 400)
+            self.assertIn("CMS and commerce providers are later phases", result["detail"])
+
+    def test_secret_selector_requests_github_token_for_prepared_import(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            status, prepared = handle_action(
+                data_root,
+                {
+                    "action": "git_connection_prepare",
+                    "display_name": "Private Site",
+                    "repository_url": "https://github.com/example-org/private-site",
+                    "base_branch": "main",
+                },
+            )
+            self.assertEqual(status, 201)
+            site_id = prepared["site"]["id"]
+
+            result = resolve_secret_resource(
+                data_root,
+                {
+                    "action": "import_git",
+                    "site_id": site_id,
+                    "repository_url": "https://github.com/example-org/private-site.git",
+                    "_app_secret_selector": {"logical_names": ["github-token"]},
+                },
+            )
+
+            self.assertTrue(result["requires_secrets"])
+            self.assertEqual(result["provider"], "github")
+            self.assertEqual(result["connection_id"], prepared["connection"]["id"])
+
+            public_result = resolve_secret_resource(
+                data_root,
+                {
+                    "action": "import_git",
+                    "repository_url": "https://github.com/example-org/public-site.git",
+                    "_app_secret_selector": {"logical_names": ["github-token"]},
+                },
+            )
+            self.assertFalse(public_result["requires_secrets"])
+
+    def test_secret_selector_requests_github_token_for_git_publish(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            status, prepared = handle_action(
+                data_root,
+                {
+                    "action": "git_connection_prepare",
+                    "display_name": "Private Site",
+                    "repository_url": "https://github.com/example-org/private-site",
+                    "base_branch": "main",
+                },
+            )
+            self.assertEqual(status, 201)
+
+            result = resolve_secret_resource(
+                data_root,
+                {
+                    "action": "publish",
+                    "site_id": prepared["site"]["id"],
+                    "_app_secret_selector": {"logical_names": ["github-token"]},
+                },
+            )
+
+            self.assertTrue(result["requires_secrets"])
+            self.assertEqual(result["provider"], "github")
+            self.assertEqual(result["connection_id"], prepared["connection"]["id"])
+
     def test_site_lifecycle_archive_restore_rename_and_duplicate(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
@@ -167,6 +245,28 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertNotEqual(duplicated["site"]["id"], site_id)
             self.assertEqual(duplicated["site"]["slug"], "acme-2")
             self.assertTrue((data_root / "sites" / duplicated["site"]["id"] / "source" / "index.html").exists())
+
+    def test_rebuild_index_allows_route_to_change_from_sitemap_to_static(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            status, created = handle_action(data_root, {"action": "site_create", "display_name": "Routes"})
+            self.assertEqual(status, 201)
+            site_id = created["site"]["id"]
+            source_root = data_root / "sites" / site_id / "source"
+            (source_root / "sitemap.xml").write_text(
+                '<urlset><url><loc>https://example.com/about</loc></url></urlset>',
+                encoding="utf-8",
+            )
+
+            status, sitemap_payload = handle_action(data_root, {"action": "sitemap", "site_id": site_id})
+            self.assertEqual(status, 200)
+            self.assertIn("/about", {route["route"] for route in sitemap_payload["routes"]})
+
+            (source_root / "about.html").write_text("<html><title>About</title></html>", encoding="utf-8")
+            status, status_payload = handle_action(data_root, {"action": "site_status", "site_id": site_id})
+
+            self.assertEqual(status, 200)
+            self.assertGreaterEqual(status_payload["route_count"], 1)
 
     def test_active_site_selection_persists_for_context_and_listing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -350,6 +450,20 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(status, 200)
             self.assertEqual(listed["items"][0]["id"], prepared["connection"]["id"])
 
+    def test_git_import_source_ref_preserves_prepared_github_connection(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            status, prepared = handle_action(data_root, {"action": "git_connection_prepare", "repository_url": "example-org/site-web", "base_branch": "main"})
+            self.assertEqual(status, 201)
+
+            source_ref = _git_import_source_ref(data_root, prepared["site"], "https://github.com/example-org/site-web.git", "maverick-work")
+
+            self.assertEqual(source_ref["provider"], "github")
+            self.assertEqual(source_ref["connection_id"], prepared["connection"]["id"])
+            self.assertEqual(source_ref["base_branch"], "maverick-work")
+            self.assertEqual(source_ref["owner"], "example-org")
+            self.assertEqual(source_ref["repo"], "site-web")
+
     def test_git_connection_prepare_defaults_to_fine_grained_token_reference(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             status, prepared = handle_action(
@@ -376,13 +490,14 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
                 self.assertEqual(status, 400)
                 self.assertIn(expected, result["detail"])
 
-    def test_git_import_rejects_executable_mode_without_blocked_extension(self) -> None:
+    def test_git_import_normalizes_executable_script_mode_without_running_source(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
             repo_root = data_root / "fixtures" / "executable-repo"
             repo_root.mkdir(parents=True)
             (repo_root / "index.html").write_text("<title>Safe</title>", encoding="utf-8")
-            runner = repo_root / "runner"
+            runner = repo_root / "scripts" / "start_local.sh"
+            runner.parent.mkdir()
             runner.write_text("#!/usr/bin/env bash\n", encoding="utf-8")
             runner.chmod(0o755)
             subprocess.run(["git", "init"], cwd=repo_root, check=True, capture_output=True, text=True)
@@ -396,8 +511,10 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
                 {"action": "import_git", "repository_url": str(repo_root), "display_name": "Executable Site"},
             )
 
-            self.assertEqual(status, 400)
-            self.assertIn("executable file", result["detail"])
+            self.assertEqual(status, 201)
+            imported_script = data_root / "sites" / result["site"]["id"] / "source" / "scripts" / "start_local.sh"
+            self.assertTrue(imported_script.exists())
+            self.assertFalse(imported_script.stat().st_mode & 0o111)
 
     def test_write_rejects_site_id_escape_before_writing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -487,7 +604,6 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
 
             for rel_path, expected_detail in (
                 (".env", "sensitive file"),
-                ("deploy.sh", "executable file"),
                 ("README", "not a supported Website Studio text file"),
             ):
                 status, result = handle_action(
@@ -502,6 +618,19 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
                 )
                 self.assertEqual(status, 400)
                 self.assertIn(expected_detail, result["detail"])
+            status, script = handle_action(
+                data_root,
+                {
+                    "action": "write_file",
+                    "site_id": site_id,
+                    "path": "scripts/deploy.sh",
+                    "content": "#!/usr/bin/env bash\n",
+                    "expected_hash": "new",
+                },
+            )
+            self.assertEqual(status, 200)
+            script_path = data_root / "sites" / site_id / "source" / "scripts" / "deploy.sh"
+            self.assertFalse(script_path.stat().st_mode & 0o111)
 
     def test_zip_reimport_failure_keeps_existing_source(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -627,6 +756,8 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
                 {"action": "import_zip", "display_name": "Imported", "archive_base64": encoded},
             )
             self.assertEqual(status, 201)
+            self.assertNotIn("snapshot", imported["revision"])
+            self.assertIn("snapshot_path", imported["revision"])
             site_id = imported["site"]["id"]
             revision_id = imported["revision"]["id"]
             logo = data_root / "sites" / site_id / "source" / "assets" / "logo.png"
@@ -803,6 +934,107 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(routes["/old"]["kind"], "redirect")
             self.assertIn("redirects to /new (302)", routes["/old"]["warnings"])
 
+    def test_phase1_acceptance_workflow_covers_multisite_zip_git_edit_preview_references_and_context(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            status, manual = handle_action(data_root, {"action": "site_create", "display_name": "Manual Site"})
+            self.assertEqual(status, 201)
+
+            archive = BytesIO()
+            with ZipFile(archive, "w") as zip_file:
+                zip_file.writestr("index.html", '<title>Zip Home</title><link rel="stylesheet" href="assets/site.css"><img src="assets/logo.png">')
+                zip_file.writestr("pages/contact.html", "<title>Contact</title>")
+                zip_file.writestr("assets/site.css", "body { color: #123; }")
+                zip_file.writestr("assets/logo.png", b"\x89PNG\r\nacceptance")
+            encoded = base64.b64encode(archive.getvalue()).decode("ascii")
+            status, zip_import = handle_action(
+                data_root,
+                {
+                    "action": "import_zip",
+                    "display_name": "Zip Site",
+                    "archive_base64": encoded,
+                    "source_artifact_ref": {
+                        "app_id": "storage",
+                        "file_id": "file_acceptance_zip",
+                        "workspace_relative_path": "storage/uploaded/website-studio/acceptance.zip",
+                    },
+                },
+            )
+            self.assertEqual(status, 201)
+            zip_site_id = zip_import["site"]["id"]
+
+            repo_root = data_root / "fixtures" / "repo"
+            repo_root.mkdir(parents=True)
+            (repo_root / "index.html").write_text("<title>Git Home</title><main>Imported</main>", encoding="utf-8")
+            (repo_root / "about.html").write_text("<title>Git About</title>", encoding="utf-8")
+            subprocess.run(["git", "init"], cwd=repo_root, check=True, capture_output=True, text=True)
+            subprocess.run(["git", "config", "user.email", "agent@example.com"], cwd=repo_root, check=True)
+            subprocess.run(["git", "config", "user.name", "Agent"], cwd=repo_root, check=True)
+            subprocess.run(["git", "add", "."], cwd=repo_root, check=True)
+            subprocess.run(["git", "commit", "-m", "initial"], cwd=repo_root, check=True, capture_output=True, text=True)
+            status, git_import = handle_action(data_root, {"action": "import_git", "repository_url": str(repo_root), "display_name": "Git Site"})
+            self.assertEqual(status, 201)
+            self.assertEqual(git_import["site"]["source_provider"], "git")
+
+            status, sites = handle_action(data_root, {"action": "sites_list"})
+            self.assertEqual(status, 200)
+            self.assertEqual({item["id"] for item in sites["items"]}, {manual["site"]["id"], zip_site_id, git_import["site"]["id"]})
+
+            status, active = handle_action(data_root, {"action": "site_set_active", "site_id": zip_site_id})
+            self.assertEqual(status, 200)
+            self.assertEqual(active["state"]["active_site_id"], zip_site_id)
+            status, map_payload = handle_action(data_root, {"action": "sitemap", "site_id": zip_site_id})
+            self.assertEqual(status, 200)
+            self.assertEqual({item["route"] for item in map_payload["items"]}, {"/", "/pages/contact"})
+            self.assertTrue(map_payload["assets"])
+
+            status, read_payload = handle_action(data_root, {"action": "read_file", "site_id": zip_site_id, "path": "index.html"})
+            self.assertEqual(status, 200)
+            stale_hash = read_payload["file"]["hash"]
+            status, write_payload = handle_action(
+                data_root,
+                {
+                    "action": "write_file",
+                    "site_id": zip_site_id,
+                    "path": "index.html",
+                    "content": read_payload["file"]["content"].replace("</title>", " Updated</title>", 1),
+                    "expected_hash": stale_hash,
+                },
+            )
+            self.assertEqual(status, 200)
+            status, stale = handle_action(
+                data_root,
+                {
+                    "action": "write_file",
+                    "site_id": zip_site_id,
+                    "path": "index.html",
+                    "content": read_payload["file"]["content"],
+                    "expected_hash": stale_hash,
+                },
+            )
+            self.assertEqual(status, 400)
+            self.assertIn("stale write rejected", stale["detail"])
+
+            status, diff_payload = handle_action(data_root, {"action": "diff", "site_id": zip_site_id})
+            self.assertEqual(status, 200)
+            self.assertEqual(diff_payload["files"][0]["path"], "index.html")
+            status, preview = handle_action(data_root, {"action": "build_preview", "site_id": zip_site_id, "route": "/"})
+            self.assertEqual(status, 200)
+            self.assertIn("Content-Security-Policy", preview["html"])
+
+            page_id = map_payload["items"][0]["id"]
+            route_id = map_payload["routes"][0]["id"]
+            asset_id = map_payload["assets"][0]["id"]
+            status, page_ref = handle_action(data_root, {"action": "reference_resolve", "entity_type": "page", "id": page_id})
+            self.assertEqual(status, 200)
+            self.assertTrue(page_ref["item"]["deep_link"].startswith("/app/website-studio/pages/"))
+            status, route_context = handle_action(data_root, {"action": "page_context", "site_id": zip_site_id, "route_id": route_id})
+            self.assertEqual(status, 200)
+            self.assertEqual(route_context["route_id"], route_id)
+            status, asset_context = handle_action(data_root, {"action": "page_context", "site_id": zip_site_id, "asset_id": asset_id})
+            self.assertEqual(status, 200)
+            self.assertEqual(asset_context["asset_id"], asset_id)
+
     def test_preview_html_is_sandbox_prepared(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
@@ -973,6 +1205,11 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("route_id", widget_source)
         self.assertIn("asset_id", widget_source)
         self.assertIn("maverick.widget.data-changed", widget_source)
+        self.assertIn("function buildTree()", widget_source)
+        self.assertIn("groupNode('group:pages'", widget_source)
+        self.assertIn("groupNode('group:components'", widget_source)
+        self.assertIn("toggleNode", widget_source)
+        self.assertIn("No static HTML pages", widget_source)
 
     def test_frontend_handles_route_and_asset_deep_links(self) -> None:
         app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
@@ -982,6 +1219,23 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("route_id", app_source)
         self.assertIn("asset_id", app_source)
         self.assertIn("maverick.app.selection-changed", app_source)
+        self.assertIn("selectedRoute && !selectedRoute.page_id ? undefined : map.items[0]", app_source)
+        self.assertIn("selectedRoute?.page_id ? selectedRoute.route : ''", app_source)
+
+    def test_frontend_connect_git_prepares_and_imports_source(self) -> None:
+        app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
+
+        self.assertIn("action: 'git_connection_prepare'", app_source)
+        self.assertIn("action: 'import_git'", app_source)
+        self.assertIn("site_id: prepared.site.id", app_source)
+        self.assertIn("'Git connected and imported'", app_source)
+
+    def test_frontend_refreshes_on_app_data_changed_events(self) -> None:
+        app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
+
+        self.assertIn("maverick.app.data-changed", app_source)
+        self.assertIn("owner_app_id === 'website-studio'", app_source)
+        self.assertIn("refresh(activeSiteIdRef.current, activePageIdRef.current)", app_source)
 
     def test_frontend_and_sidebar_do_not_select_archived_sites(self) -> None:
         app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
@@ -1009,6 +1263,30 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("handleZipDrop", app_source)
         self.assertIn("onDrop={handleZipDrop}", app_source)
         self.assertIn("Drop a ZIP archive", app_source)
+
+    def test_phase1_frontend_and_widgets_follow_operational_design_rules(self) -> None:
+        app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
+        styles = (APP_ROOT / "frontend" / "src" / "styles.css").read_text(encoding="utf-8")
+        sitemap_widget = (APP_ROOT / "frontend" / "public" / "widgets" / "website-studio-sitemap-sidebar" / "index.html").read_text(encoding="utf-8")
+        footer_widget = (APP_ROOT / "frontend" / "public" / "widgets" / "website-studio-sidebar-footer" / "index.html").read_text(encoding="utf-8")
+
+        self.assertIn("--website-studio-bg: var(--maverick-bg)", styles)
+        self.assertIn("height: 100dvh", styles)
+        self.assertIn("overflow: hidden", styles)
+        self.assertIn("Drop ZIP", app_source)
+        self.assertIn("Connect Git", app_source)
+        for forbidden in {"Commit", "Push", "Deploy", "Publish", "Rollback"}:
+            self.assertNotIn(f">{forbidden}<", app_source)
+        self.assertLess(sitemap_widget.index('class="search"'), sitemap_widget.index('class="site-select-frame"'))
+        self.assertIn("maverick.widget.open-app", sitemap_widget)
+        self.assertIn("app_page: `${kind}s/${id}`", sitemap_widget)
+        self.assertIn("class=\"tree\"", sitemap_widget)
+        self.assertIn("Components", sitemap_widget)
+        self.assertIn("Backend and config", sitemap_widget)
+        self.assertIn("params.page_id", sitemap_widget)
+        self.assertIn("params.route_id", sitemap_widget)
+        self.assertIn("params.asset_id", sitemap_widget)
+        self.assertIn("New website", footer_widget)
 
     def test_phase2_approval_publish_and_rollback_flow(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1051,7 +1329,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(published["status"], "published")
             self.assertEqual(published["publish_request"]["status"], "published")
             self.assertEqual(published["deployment"]["status"], "published")
-            self.assertEqual(published["deployment"]["mode"], "internal_static_snapshot")
+            self.assertEqual(published["deployment"]["mode"], "maverick_managed_static")
 
             status, diff = handle_action(data_root, {"action": "diff", "site_id": site_id})
             self.assertEqual(status, 200)
@@ -1091,6 +1369,152 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertTrue(changes["approval_events"])
             self.assertTrue(changes["builds"])
             self.assertTrue(changes["deployments"])
+
+    def test_phase2_publish_request_records_human_policy_and_blocks_without_confirm(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            status, created = handle_action(data_root, {"action": "site_create", "display_name": "Policy"})
+            self.assertEqual(status, 201)
+            site_id = created["site"]["id"]
+            _edit_index(data_root, site_id, marker="Policy")
+
+            status, request_payload = handle_action(data_root, {"action": "publish_request", "site_id": site_id})
+            self.assertEqual(status, 201)
+            self.assertEqual(request_payload["publish_request"]["approval_policy"], "human_required")
+
+            status, blocked = handle_action(
+                data_root,
+                {
+                    "action": "approval_record",
+                    "site_id": site_id,
+                    "approval_action": "publish",
+                    "target_id": request_payload["publish_request"]["id"],
+                    "approved_by": "owner@example.com",
+                    "confirm": False,
+                },
+            )
+            self.assertEqual(status, 400)
+            self.assertIn("confirm=true", blocked["detail"])
+
+    def test_phase3_managed_static_publish_target_creates_artifact_record(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            status, created = handle_action(data_root, {"action": "site_create", "display_name": "Hosted"})
+            self.assertEqual(status, 201)
+            site_id = created["site"]["id"]
+            status, target_payload = handle_action(data_root, {"action": "publish_target_configure", "site_id": site_id, "kind": "managed_static"})
+            self.assertEqual(status, 200)
+            self.assertEqual(target_payload["publish_target"]["kind"], "managed_static")
+            self.assertEqual(target_payload["publish_target"]["config"]["platform_surface"], "generic_static_hosting")
+            _edit_index(data_root, site_id, marker="Hosted")
+
+            status, request_payload = handle_action(data_root, {"action": "publish_request", "site_id": site_id, "requested_by": "agent"})
+            self.assertEqual(status, 201)
+            status, approval_payload = handle_action(
+                data_root,
+                {
+                    "action": "approval_record",
+                    "site_id": site_id,
+                    "approval_action": "publish",
+                    "target_id": request_payload["publish_request"]["id"],
+                    "approved_by": "owner@example.com",
+                    "confirm": True,
+                },
+            )
+            self.assertEqual(status, 201)
+            status, published = handle_action(
+                data_root,
+                {
+                    "action": "publish",
+                    "site_id": site_id,
+                    "publish_request_id": request_payload["publish_request"]["id"],
+                    "approval_id": approval_payload["approval"]["id"],
+                },
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(published["deployment"]["mode"], "maverick_managed_static")
+            source_ref = published["deployment"]["source_ref"]
+            self.assertEqual(source_ref["provider"], "maverick-managed-static")
+            self.assertEqual(source_ref["status"], "artifact_ready")
+            self.assertEqual(source_ref["platform_binding_status"], "pending_generic_surface")
+            artifact_index = data_root / source_ref["artifact_root"] / "index.html"
+            self.assertTrue(artifact_index.exists())
+            self.assertIn("Hosted", artifact_index.read_text(encoding="utf-8"))
+
+            status, targets = handle_action(data_root, {"action": "publish_targets_list", "site_id": site_id})
+            self.assertEqual(status, 200)
+            self.assertEqual([item["id"] for item in targets["items"]], [target_payload["publish_target"]["id"]])
+
+    def test_phase3_publish_target_migrates_existing_environment_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            data_root.mkdir(parents=True, exist_ok=True)
+            db_path = data_root / "app.sqlite"
+            now = "2026-06-04T00:00:00+00:00"
+            with sqlite3.connect(db_path) as db:
+                db.executescript(
+                    """
+                    CREATE TABLE schema_metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                    CREATE TABLE sites (
+                      id TEXT PRIMARY KEY,
+                      display_name TEXT NOT NULL,
+                      slug TEXT NOT NULL UNIQUE,
+                      status TEXT NOT NULL,
+                      primary_domain TEXT NOT NULL DEFAULT '',
+                      source_provider TEXT NOT NULL,
+                      source_label TEXT NOT NULL DEFAULT '',
+                      source_shape TEXT NOT NULL DEFAULT '',
+                      source_artifact_ref_json TEXT NOT NULL DEFAULT '{}',
+                      default_environment_id TEXT NOT NULL DEFAULT '',
+                      working_branch TEXT NOT NULL DEFAULT '',
+                      active_revision_id TEXT,
+                      published_revision_id TEXT,
+                      created_at TEXT NOT NULL,
+                      updated_at TEXT NOT NULL,
+                      archived_at TEXT
+                    );
+                    CREATE TABLE environments (
+                      id TEXT PRIMARY KEY,
+                      site_id TEXT NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+                      name TEXT NOT NULL,
+                      kind TEXT NOT NULL,
+                      base_url TEXT NOT NULL DEFAULT '',
+                      requires_approval INTEGER NOT NULL DEFAULT 1,
+                      created_at TEXT NOT NULL,
+                      updated_at TEXT NOT NULL
+                    );
+                    """
+                )
+                db.execute(
+                    """
+                    INSERT INTO sites(
+                      id, display_name, slug, status, primary_domain, source_provider,
+                      source_label, source_shape, source_artifact_ref_json,
+                      default_environment_id, working_branch, created_at, updated_at
+                    )
+                    VALUES ('site_legacy', 'Legacy', 'legacy', 'draft', '', 'manual', '', '', '{}', 'env_legacy_preview', '', ?, ?)
+                    """,
+                    (now, now),
+                )
+                db.execute(
+                    """
+                    INSERT INTO environments(id, site_id, name, kind, base_url, requires_approval, created_at, updated_at)
+                    VALUES ('env_legacy_preview', 'site_legacy', 'Preview', 'preview', '', 1, ?, ?)
+                    """,
+                    (now, now),
+                )
+
+            status, target_payload = handle_action(
+                data_root,
+                {"action": "publish_target_configure", "site_id": "site_legacy", "kind": "managed_static"},
+            )
+
+            self.assertEqual(status, 200)
+            self.assertEqual(target_payload["publish_target"]["kind"], "managed_static")
+            with sqlite3.connect(db_path) as db:
+                columns = {row[1] for row in db.execute("PRAGMA table_info(environments)").fetchall()}
+            self.assertIn("publish_target_id", columns)
+            self.assertIn("last_deployment_id", columns)
 
     def test_phase2_approval_cannot_be_reused(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1169,6 +1593,74 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             )
             self.assertEqual(status, 200)
             self.assertEqual(activated["connection"]["status"], "grant_configured")
+
+    def test_private_github_import_uses_vault_delivered_token_without_command_line_secret(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            status, prepared = handle_action(data_root, {"action": "git_connection_prepare", "repository_url": "example-org/private-site"})
+            self.assertEqual(status, 201)
+            calls: list[tuple[list[str], dict[str, str]]] = []
+
+            def fake_run(command, check, capture_output, text, timeout, env):
+                calls.append((list(command), dict(env)))
+                self.assertNotIn("test-private-token", " ".join(command))
+                self.assertEqual(env["WEBSITE_STUDIO_GIT_TOKEN"], "test-private-token")
+                self.assertTrue(Path(env["GIT_ASKPASS"]).exists())
+                clone_root = Path(command[-1])
+                clone_root.mkdir(parents=True)
+                (clone_root / ".git").mkdir()
+                (clone_root / "index.html").write_text("<title>Private</title>", encoding="utf-8")
+                return subprocess.CompletedProcess(command, 0, "", "")
+
+            with patch("backend.store.subprocess.run", fake_run):
+                status, imported = handle_action(
+                    data_root,
+                    {
+                        "action": "import_git",
+                        "site_id": prepared["site"]["id"],
+                        "repository_url": "https://github.com/example-org/private-site.git",
+                        "_app_secrets": {"github-token": "test-private-token"},
+                    },
+                )
+
+            self.assertEqual(status, 201)
+            self.assertEqual(imported["site"]["source_artifact_ref"]["provider"], "github")
+            self.assertEqual(imported["site"]["source_artifact_ref"]["connection_id"], prepared["connection"]["id"])
+            self.assertEqual(len(calls), 1)
+            status, connections = handle_action(data_root, {"action": "git_connections_list", "site_id": prepared["site"]["id"]})
+            self.assertEqual(status, 200)
+            self.assertEqual(connections["items"][0]["status"], "grant_configured")
+
+    def test_private_github_import_blocks_when_core_secrets_does_not_deliver_token(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            status, prepared = handle_action(data_root, {"action": "git_connection_prepare", "repository_url": "example-org/private-site"})
+            self.assertEqual(status, 201)
+            status, _activated = handle_action(
+                data_root,
+                {
+                    "action": "git_connection_activate",
+                    "connection_id": prepared["connection"]["id"],
+                    "grant_id": "grant:default:website-studio:github-token:private-site",
+                    "confirm_no_raw_secret": True,
+                },
+            )
+            self.assertEqual(status, 200)
+
+            with patch("backend.store.subprocess.run") as run:
+                status, blocked = handle_action(
+                    data_root,
+                    {
+                        "action": "import_git",
+                        "site_id": prepared["site"]["id"],
+                        "repository_url": "https://github.com/example-org/private-site.git",
+                        "_app_secret_errors": [{"logical_name": "github-token"}],
+                    },
+                )
+
+            self.assertEqual(status, 400)
+            self.assertIn("Core Secrets did not deliver", blocked["detail"])
+            run.assert_not_called()
 
     def test_phase2_github_publish_opens_pull_request_with_vault_delivered_token(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1280,6 +1772,20 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             approval = next(item for item in approvals["items"] if item["id"] == approval_payload["approval"]["id"])
             self.assertEqual(approval["status"], "approved")
             self.assertIsNone(approval["used_at"])
+
+    def test_phase2_secret_redaction_covers_github_tokens_bearer_and_inline_credentials(self) -> None:
+        raw = (
+            "https://user:ghp_inlineSecret@example.com/repo.git "
+            "Bearer github_pat_runtimeSecret ghp_apiSecret"
+        )
+        redacted = _redact_secret_text(raw)
+        self.assertNotIn("ghp_inlineSecret", redacted)
+        self.assertNotIn("github_pat_runtimeSecret", redacted)
+        self.assertNotIn("ghp_apiSecret", redacted)
+        self.assertIn("https://***:***@example.com/repo.git", redacted)
+        detail = _github_error_detail({"message": "failed with Bearer ghp_errorSecret and github_pat_errorSecret"})
+        self.assertNotIn("ghp_errorSecret", detail)
+        self.assertNotIn("github_pat_errorSecret", detail)
 
     def test_phase2_build_validation_records_static_policy(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

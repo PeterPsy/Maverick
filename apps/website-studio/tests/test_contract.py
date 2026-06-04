@@ -41,6 +41,38 @@ class GeneratedAppContractTest(unittest.TestCase):
         self.assertIn("website_git_connection_prepare", schemas["tools"])
         self.assertIn("website_git_connection_activate", schemas["tools"])
 
+    def test_git_secret_consumers_are_declared_for_cli_and_mcp(self) -> None:
+        mcp_schemas = json.loads((APP_ROOT / "mcp" / "tool_schemas.json").read_text(encoding="utf-8"))
+        import_selectors = mcp_schemas["tools"]["website_import_git"].get("secret_selectors", [])
+        publish_selectors = mcp_schemas["tools"]["website_publish"].get("secret_selectors", [])
+        self.assertIn(
+            {"required_secrets": ["github-token"], "resource_lookup": {"kind": "website_git_connection_from_arguments"}},
+            import_selectors,
+        )
+        self.assertIn(
+            {"required_secrets": ["github-token"], "resource_lookup": {"kind": "website_git_publish_from_arguments"}},
+            publish_selectors,
+        )
+
+        cli_schemas = json.loads((APP_ROOT / "cli" / "command_schemas.json").read_text(encoding="utf-8"))
+        cli_selectors = cli_schemas["commands"]["website-studio"].get("secret_selectors", [])
+        self.assertIn(
+            {
+                "required_secrets": ["github-token"],
+                "resource_lookup": {"kind": "website_git_connection_from_arguments"},
+                "when": {"action": "import_git"},
+            },
+            cli_selectors,
+        )
+        self.assertIn(
+            {
+                "required_secrets": ["github-token"],
+                "resource_lookup": {"kind": "website_git_publish_from_arguments"},
+                "when": {"action": "publish"},
+            },
+            cli_selectors,
+        )
+
     def test_phase2_tools_are_declared_when_implemented(self) -> None:
         contract = json.loads((APP_ROOT / "app_contract.json").read_text(encoding="utf-8"))
         mcp_tools = set(contract.get("capabilities", {}).get("mcp_tools", []))
@@ -56,6 +88,16 @@ class GeneratedAppContractTest(unittest.TestCase):
         schemas = json.loads((APP_ROOT / "mcp" / "tool_schemas.json").read_text(encoding="utf-8"))
         self.assertIn("website_publish", schemas["tools"])
         self.assertIn("website_rollback", schemas["tools"])
+
+    def test_phase3_publish_target_tools_are_declared_when_implemented(self) -> None:
+        contract = json.loads((APP_ROOT / "app_contract.json").read_text(encoding="utf-8"))
+        mcp_tools = set(contract.get("capabilities", {}).get("mcp_tools", []))
+        self.assertIn("website_publish_targets_list", mcp_tools)
+        self.assertIn("website_publish_target_configure", mcp_tools)
+
+        schemas = json.loads((APP_ROOT / "mcp" / "tool_schemas.json").read_text(encoding="utf-8"))
+        self.assertIn("website_publish_targets_list", schemas["tools"])
+        self.assertIn("website_publish_target_configure", schemas["tools"])
 
 
 if __name__ == "__main__":

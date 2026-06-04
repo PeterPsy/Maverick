@@ -45,6 +45,7 @@ from safety import (
 
 HttpTransport = Callable[[str, str, dict[str, Any]], tuple[int, dict[str, Any] | list[Any] | bytes]]
 GITHUB_API_BASE = "https://api.github.com"
+IMPLEMENTED_SOURCE_PROVIDERS = {"manual", "zip", "git"}
 
 
 def list_sites(data_root: Path) -> list[dict[str, object]]:
@@ -66,6 +67,7 @@ def create_site(
     name = str(display_name or "").strip()
     if not name:
         raise ValueError("display_name is required")
+    clean_source_provider = _clean_source_provider(source_provider)
     site_id = f"site_{uuid4().hex[:16]}"
     clean_slug = _unique_slug(data_root, str(slug or slugify(name)))
     now = now_timestamp()
@@ -76,7 +78,7 @@ def create_site(
             INSERT INTO sites(id, display_name, slug, status, primary_domain, source_provider, created_at, updated_at)
             VALUES (?, ?, ?, 'draft', ?, ?, ?, ?)
             """,
-            (site_id, name, clean_slug, str(primary_domain or "").strip(), str(source_provider or "manual"), now, now),
+            (site_id, name, clean_slug, str(primary_domain or "").strip(), clean_source_provider, now, now),
         )
     _write_starter_site(_source_root(data_root, site_id), name)
     rebuild_index(data_root, site_id)
@@ -258,13 +260,25 @@ def import_git(
     display_name: object = None,
     repository_url: object,
     branch: object = None,
+    app_secrets: dict[str, object] | None = None,
+    app_secret_errors: list[dict[str, object]] | None = None,
 ) -> dict[str, object]:
     source, clean_branch = validate_git_source(repository_url, branch, data_root=data_root)
     site = get_site(data_root, site_id) if site_id else None
     temp_root = data_root / ".tmp" / f"git_import_{uuid4().hex}"
     clone_root = temp_root / "repo"
     try:
-        _run_git_clone(source, clean_branch, clone_root)
+        auth_context = _git_import_auth_context(
+            data_root,
+            site,
+            source,
+            app_secrets=app_secrets or {},
+            app_secret_errors=app_secret_errors or [],
+        )
+        _run_git_clone(source, clean_branch, clone_root, token=auth_context.get("token"))
+        if isinstance(auth_context.get("connection"), dict):
+            _mark_git_connection_runtime_grant(data_root, auth_context["connection"])
+        _normalize_git_import_file_modes(clone_root)
         clone_git = clone_root / ".git"
         if clone_git.exists():
             shutil.rmtree(clone_git)
@@ -288,7 +302,7 @@ def import_git(
                 source_provider="git",
                 source_label=_redacted_git_source_label(source, clean_branch),
                 source_shape=source_shape,
-                source_artifact_ref_json=json.dumps({"provider": "git", "source_label": _redacted_git_source_label(source, clean_branch), "branch": clean_branch or ""}, sort_keys=True),
+                source_artifact_ref_json=json.dumps(_git_import_source_ref(data_root, site, source, clean_branch), sort_keys=True),
             )
             set_active_site(data_root, site["id"])
             _audit(data_root, site["id"], "site.import_git", "Imported Git repository", {"branch": clean_branch or ""})
@@ -506,8 +520,8 @@ def rebuild_index(data_root: Path, site_id: object) -> dict[str, object]:
                 """
                 INSERT INTO routes(id, site_id, route, page_id, kind, status, source_files_json, warnings_json, updated_at)
                 VALUES (?, ?, ?, ?, 'static', ?, ?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET
-                  route=excluded.route,
+                ON CONFLICT(site_id, route) DO UPDATE SET
+                  id=excluded.id,
                   page_id=excluded.page_id,
                   kind=excluded.kind,
                   status=excluded.status,
@@ -524,8 +538,9 @@ def rebuild_index(data_root: Path, site_id: object) -> dict[str, object]:
                 """
                 INSERT INTO routes(id, site_id, route, page_id, kind, status, source_files_json, warnings_json, updated_at)
                 VALUES (?, ?, ?, '', ?, ?, ?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET
-                  route=excluded.route,
+                ON CONFLICT(site_id, route) DO UPDATE SET
+                  id=excluded.id,
+                  page_id=excluded.page_id,
                   kind=excluded.kind,
                   status=excluded.status,
                   source_files_json=excluded.source_files_json,
@@ -911,11 +926,18 @@ def publish(
     build = get_build(data_root, request.get("build_id")) if request.get("build_id") else validate_build(data_root, site["id"])
     if build["status"] != "passed":
         raise ValueError("publish requires a passing build validation")
-    github_context = _github_publish_context(
-        data_root,
-        site,
-        app_secrets=app_secrets or {},
-        app_secret_errors=app_secret_errors or [],
+    environment = get_environment(data_root, request.get("environment_id") or site.get("default_environment_id") or "env_preview", site_id=site["id"])
+    publish_target = _publish_target_for_environment(data_root, site, environment)
+    use_github_publish = _should_publish_to_github(site, publish_target)
+    github_context = (
+        _github_publish_context(
+            data_root,
+            site,
+            app_secrets=app_secrets or {},
+            app_secret_errors=app_secret_errors or [],
+        )
+        if use_github_publish
+        else {}
     )
     if github_context.get("blocked"):
         return {"blocked": True, "status": "blocked", "detail": str(github_context["detail"]), "publish_request": request, "build": build}
@@ -924,7 +946,7 @@ def publish(
     except ValueError as error:
         return {"blocked": True, "status": "blocked", "detail": f"{error}; use the official approval surface before publishing.", "publish_request": request}
     with _site_mutation_lock(data_root, str(site["id"])):
-        source_ref = _publish_source_ref(site, request)
+        source_ref = _publish_source_ref(site, request, publish_target=publish_target)
         if github_context:
             source_ref = _publish_to_github_pull_request(
                 data_root,
@@ -937,10 +959,12 @@ def publish(
         revision = create_revision(data_root, site["id"], label="Published working copy", source="publish", summary=request["diff_summary"])
         _set_active_revision(data_root, site["id"], revision["id"])
         _update_site(data_root, site["id"], published_revision_id=revision["id"])
+        if not github_context:
+            source_ref = _publish_to_managed_static_artifact(data_root, site, request, revision, environment, publish_target)
         deployment = _create_deployment(
             data_root,
             site["id"],
-            environment_id=str(request.get("environment_id") or site.get("default_environment_id") or "env_preview"),
+            environment_id=str(environment["id"]),
             publish_request_id=request["id"],
             revision_id=revision["id"],
             status="published",
@@ -1202,7 +1226,7 @@ def create_revision(data_root: Path, site_id: object, *, label: str, source: str
             "INSERT INTO revisions(id, site_id, label, source, summary, snapshot_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
             (revision_id, str(site_id), label, source, summary, json.dumps(snapshot, sort_keys=True), now),
         )
-    return get_revision(data_root, revision_id)
+    return _public_revision(get_revision(data_root, revision_id))
 
 
 def get_revision(data_root: Path, revision_id: object) -> dict[str, object]:
@@ -1215,6 +1239,13 @@ def get_revision(data_root: Path, revision_id: object) -> dict[str, object]:
     payload = dict(row)
     payload["snapshot"] = json.loads(payload.pop("snapshot_json") or "{}")
     payload["snapshot_path"] = str(_revision_source_root(data_root, payload["site_id"], payload["id"]))
+    return payload
+
+
+def _public_revision(revision: dict[str, object]) -> dict[str, object]:
+    payload = {key: value for key, value in revision.items() if key != "snapshot"}
+    snapshot = revision.get("snapshot")
+    payload["snapshot_text_file_count"] = len(snapshot) if isinstance(snapshot, dict) else 0
     return payload
 
 
@@ -1305,6 +1336,77 @@ def configure_environment(
         _update_site(data_root, site["id"], default_environment_id=clean_id)
     _audit(data_root, str(site["id"]), "environment.configured", f"Configured {label} environment", {"environment_id": clean_id})
     return get_environment(data_root, clean_id, site_id=site["id"])
+
+
+def list_publish_targets(data_root: Path, site_id: object) -> list[dict[str, object]]:
+    site = get_site(data_root, site_id)
+    ensure_schema(data_root)
+    with connect(data_root) as db:
+        rows = db.execute("SELECT * FROM publish_targets WHERE site_id = ? ORDER BY updated_at DESC", (site["id"],)).fetchall()
+    return [_publish_target_row(row) for row in rows]
+
+
+def configure_publish_target(
+    data_root: Path,
+    site_id: object,
+    *,
+    environment_id: object = None,
+    kind: object = "managed_static",
+    status: object = "active",
+    config: object = None,
+) -> dict[str, object]:
+    site = get_site(data_root, site_id)
+    environment = get_environment(data_root, environment_id or site.get("default_environment_id") or "env_preview", site_id=site["id"])
+    clean_kind = str(kind or "managed_static").strip()
+    if clean_kind not in {"managed_static", "git_pull_request"}:
+        raise ValueError("publish target kind must be managed_static or git_pull_request")
+    clean_status = str(status or "active").strip()
+    if clean_status not in {"active", "disabled"}:
+        raise ValueError("publish target status must be active or disabled")
+    config_payload = dict(config) if isinstance(config, dict) else {}
+    if clean_kind == "managed_static":
+        config_payload = {
+            "provider": "maverick-managed-static",
+            "runtime": "local_static_artifact",
+            "platform_surface": "generic_static_hosting",
+            "platform_binding_status": "pending_generic_surface",
+            **config_payload,
+        }
+    target_id = f"target_{site['id']}_{clean_kind}_{environment['kind']}"
+    now = now_timestamp()
+    with connect(data_root) as db:
+        db.execute(
+            """
+            INSERT INTO publish_targets(id, site_id, environment_id, kind, status, config_json, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+              environment_id=excluded.environment_id,
+              kind=excluded.kind,
+              status=excluded.status,
+              config_json=excluded.config_json,
+              updated_at=excluded.updated_at
+            """,
+            (target_id, site["id"], environment["id"], clean_kind, clean_status, json.dumps(config_payload, sort_keys=True), now, now),
+        )
+        db.execute(
+            "UPDATE environments SET publish_target_id = ?, updated_at = ? WHERE id = ? AND site_id = ?",
+            (target_id, now, environment["id"], site["id"]),
+        )
+    _audit(data_root, str(site["id"]), "publish_target.configured", f"Configured {clean_kind} publish target", {"target_id": target_id})
+    return get_publish_target(data_root, target_id, site_id=site["id"])
+
+
+def get_publish_target(data_root: Path, target_id: object, *, site_id: object | None = None) -> dict[str, object]:
+    clean_id = _required_id(target_id, "publish_target_id")
+    ensure_schema(data_root)
+    with connect(data_root) as db:
+        if site_id:
+            row = db.execute("SELECT * FROM publish_targets WHERE id = ? AND site_id = ?", (clean_id, str(site_id))).fetchone()
+        else:
+            row = db.execute("SELECT * FROM publish_targets WHERE id = ?", (clean_id,)).fetchone()
+    if row is None:
+        raise ValueError(f"publish target `{clean_id}` was not found")
+    return _publish_target_row(row)
 
 
 def get_environment(data_root: Path, environment_id: object, *, site_id: object | None = None) -> dict[str, object]:
@@ -1420,6 +1522,14 @@ def _required_id(value: object, label: str) -> str:
     return clean
 
 
+def _clean_source_provider(value: object) -> str:
+    provider = str(value or "manual").strip() or "manual"
+    if provider not in IMPLEMENTED_SOURCE_PROVIDERS:
+        supported = ", ".join(sorted(IMPLEMENTED_SOURCE_PROVIDERS))
+        raise ValueError(f"source_provider must be one of {supported}; CMS and commerce providers are later phases")
+    return provider
+
+
 def _site_row(row, *, active_site_id: str = "") -> dict[str, object]:
     payload = dict(row)
     payload["source_artifact_ref"] = json.loads(payload.pop("source_artifact_ref_json", "{}") or "{}")
@@ -1430,6 +1540,12 @@ def _site_row(row, *, active_site_id: str = "") -> dict[str, object]:
 def _environment_row(row) -> dict[str, object]:
     payload = dict(row)
     payload["requires_approval"] = bool(payload.get("requires_approval"))
+    return payload
+
+
+def _publish_target_row(row) -> dict[str, object]:
+    payload = dict(row)
+    payload["config"] = json.loads(payload.pop("config_json") or "{}")
     return payload
 
 
@@ -1522,12 +1638,14 @@ def _publish_mode(source_ref: dict[str, object]) -> str:
         return "github_pull_request"
     if source_ref.get("provider") == "github":
         return "github_pr_prepared"
+    if source_ref.get("provider") == "maverick-managed-static":
+        return "maverick_managed_static"
     return "internal_static_snapshot"
 
 
-def _publish_source_ref(site: dict[str, object], request: dict[str, object]) -> dict[str, object]:
+def _publish_source_ref(site: dict[str, object], request: dict[str, object], *, publish_target: dict[str, object] | None = None) -> dict[str, object]:
     ref = site.get("source_artifact_ref") if isinstance(site.get("source_artifact_ref"), dict) else {}
-    if ref.get("provider") == "github":
+    if ref.get("provider") == "github" and not (publish_target and publish_target.get("kind") == "managed_static"):
         site_id = str(site.get("id") or "site")
         slug = str(site.get("slug") or site_id)
         return {
@@ -1539,6 +1657,54 @@ def _publish_source_ref(site: dict[str, object], request: dict[str, object]) -> 
             "note": "Remote push and PR creation require Vault/Core Secrets delivery in a trusted runtime.",
         }
     return {"provider": str(site.get("source_provider") or "manual"), "snapshot": "workspace_revision"}
+
+
+def _should_publish_to_github(site: dict[str, object], publish_target: dict[str, object] | None) -> bool:
+    ref = site.get("source_artifact_ref") if isinstance(site.get("source_artifact_ref"), dict) else {}
+    if ref.get("provider") != "github":
+        return False
+    return not publish_target or publish_target.get("kind") == "git_pull_request"
+
+
+def _publish_target_for_environment(data_root: Path, site: dict[str, object], environment: dict[str, object]) -> dict[str, object] | None:
+    target_id = str(environment.get("publish_target_id") or "").strip()
+    if target_id:
+        target = get_publish_target(data_root, target_id, site_id=site["id"])
+        if target["status"] != "active":
+            raise ValueError(f"publish target `{target_id}` is {target['status']}")
+        return target
+    return None
+
+
+def _publish_to_managed_static_artifact(
+    data_root: Path,
+    site: dict[str, object],
+    request: dict[str, object],
+    revision: dict[str, object],
+    environment: dict[str, object],
+    publish_target: dict[str, object] | None,
+) -> dict[str, object]:
+    target = publish_target or configure_publish_target(data_root, site["id"], environment_id=environment["id"], kind="managed_static")
+    artifact_id = f"artifact_{uuid4().hex[:16]}"
+    artifact_root = data_root / "sites" / str(site["id"]) / "deployments" / artifact_id / "public"
+    copy_tree_snapshot(_source_root(data_root, str(site["id"])), artifact_root)
+    relative_root = artifact_root.relative_to(data_root).as_posix()
+    index_path = artifact_root / "index.html"
+    artifact_url = f"/app/website-studio/sites/{site['id']}/deployments/{artifact_id}/"
+    return {
+        "provider": "maverick-managed-static",
+        "status": "artifact_ready",
+        "publish_target_id": str(target.get("id") or ""),
+        "environment_id": str(environment.get("id") or ""),
+        "publish_request_id": str(request.get("id") or ""),
+        "revision_id": str(revision.get("id") or ""),
+        "artifact_id": artifact_id,
+        "artifact_root": relative_root,
+        "entrypoint": "index.html" if index_path.exists() else "",
+        "artifact_url": artifact_url,
+        "platform_surface": "generic_static_hosting",
+        "platform_binding_status": str((target.get("config") or {}).get("platform_binding_status") or "pending_generic_surface"),
+    }
 
 
 def _github_publish_context(
@@ -1764,7 +1930,8 @@ def _github_error_detail(payload: object) -> str:
 
 
 def _redact_secret_text(value: str) -> str:
-    return re.sub(r"(gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|Bearer\\s+\\S+)", "<redacted>", value)
+    text = re.sub(r"(https?://)([^/@:\s]+):([^/@\s]+)@", r"\1***:***@", value)
+    return re.sub(r"(gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|Bearer\s+\S+)", "<redacted>", text)
 
 
 def _quote_ref(value: str) -> str:
@@ -1890,6 +2057,80 @@ def _source_artifact_ref(value: object) -> dict[str, str]:
     return {key: str(value.get(key) or "") for key in allowed if value.get(key)}
 
 
+def _git_import_source_ref(data_root: Path, site: dict[str, object], source: str, branch: str) -> dict[str, object]:
+    label = _redacted_git_source_label(source, branch)
+    fallback = {"provider": "git", "source_label": label, "branch": branch or ""}
+    try:
+        owner, repo, _normalized_url = _parse_github_repository(source)
+    except ValueError:
+        return fallback
+    connection_id = _connection_id(owner, repo)
+    try:
+        connection = get_git_connection(data_root, connection_id)
+    except ValueError:
+        return fallback
+    if connection.get("site_id") != site.get("id"):
+        return fallback
+    return {
+        "provider": "github",
+        "owner": owner,
+        "repo": repo,
+        "connection_id": connection_id,
+        "base_branch": branch or str(connection.get("base_branch") or "main"),
+        "auth_mode": str(connection.get("auth_mode") or "fine_grained_token"),
+        "source_label": label,
+    }
+
+
+def _git_import_auth_context(
+    data_root: Path,
+    site: dict[str, object] | None,
+    source: str,
+    *,
+    app_secrets: dict[str, object],
+    app_secret_errors: list[dict[str, object]],
+) -> dict[str, object]:
+    try:
+        owner, repo, _normalized_url = _parse_github_repository(source)
+    except ValueError:
+        return {}
+    try:
+        connection = get_git_connection(data_root, _connection_id(owner, repo))
+    except ValueError:
+        return {}
+    if site is not None and connection.get("site_id") != site.get("id"):
+        return {}
+    logical_name = str(connection.get("secret_logical_name") or "github-token").strip()
+    if logical_name in _secret_error_names(app_secret_errors):
+        if connection.get("status") == "grant_configured":
+            raise ValueError(f"Core Secrets did not deliver `{logical_name}` to the Website Studio backend for Git import.")
+        return {}
+    token = str((app_secrets or {}).get(logical_name) or "").strip()
+    if not token and connection.get("status") == "grant_configured":
+        raise ValueError(f"GitHub private import requires Vault/Core Secrets delivery for `{logical_name}`.")
+    if not token:
+        return {}
+    return {"connection": connection, "token": token}
+
+
+def _mark_git_connection_runtime_grant(data_root: Path, connection: dict[str, object]) -> None:
+    if connection.get("status") == "grant_configured":
+        return
+    now = now_timestamp()
+    with connect(data_root) as db:
+        db.execute(
+            "UPDATE git_connections SET status = 'grant_configured', updated_at = ? WHERE id = ?",
+            (now, connection["id"]),
+        )
+    _audit(
+        data_root,
+        str(connection.get("site_id") or ""),
+        "git.connection.runtime_secret_delivered",
+        f"Core Secrets delivered GitHub credentials for {connection['owner']}/{connection['repo']}",
+        {"connection_id": connection["id"], "secret_logical_name": connection.get("secret_logical_name") or "github-token"},
+    )
+
+
 def _git_connection_row(row) -> dict[str, object]:
     payload = dict(row)
     payload["secret_configured"] = bool(payload.get("secret_logical_name"))
@@ -1948,6 +2189,12 @@ def _vault_requirement_payload(auth_mode: str, logical_name: str, connection_id:
         "resource_type": "git_connection",
         "resource_id": connection_id,
         "delivery_target": "maverick://app.backend/backend",
+        "delivery_targets": [
+            "maverick://app.backend/backend",
+            "maverick://app.backend/cli/website-studio",
+            "maverick://app.backend/mcp/website-import-git",
+            "maverick://app.backend/mcp/website-publish",
+        ],
         "status": "grant_required",
     }
 
@@ -2221,11 +2468,13 @@ def _write_view_state(data_root: Path, view_filter: dict[str, object], *, active
     return state
 
 
-def _run_git_clone(source: str, branch: str, destination: Path) -> None:
+def _run_git_clone(source: str, branch: str, destination: Path, *, token: object = None) -> None:
     command = ["git", "clone", "--depth", "1"]
     if branch:
         command.extend(["--branch", branch])
     command.extend([source, str(destination)])
+    clean_token = str(token or "").strip()
+    askpass_path = _write_git_askpass(destination.parent) if clean_token else None
     try:
         subprocess.run(
             command,
@@ -2233,14 +2482,14 @@ def _run_git_clone(source: str, branch: str, destination: Path) -> None:
             capture_output=True,
             text=True,
             timeout=90,
-            env=_git_import_env(),
+            env=_git_import_env(token=clean_token, askpass_path=askpass_path),
         )
     except FileNotFoundError as error:
         raise ValueError("git executable is not available for Website Studio import") from error
     except subprocess.TimeoutExpired as error:
         raise ValueError("git import timed out") from error
     except subprocess.CalledProcessError as error:
-        detail = _redact_secret_text(error.stderr or error.stdout or "git clone failed")
+        detail = _redact_git_clone_error(error.stderr or error.stdout or "git clone failed", clean_token)
         raise ValueError(f"git import failed: {detail.strip()[:400]}") from error
 
 
@@ -2254,11 +2503,35 @@ def _redacted_git_source_label(source: str, branch: str) -> str:
     return f"{label}#{branch}" if branch else label
 
 
-def _redact_secret_text(value: str) -> str:
-    return re.sub(r"(https?://)([^/@:\s]+):([^/@\s]+)@", r"\1***:***@", value)
+def _write_git_askpass(directory: Path) -> Path:
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / "git-askpass.sh"
+    path.write_text(
+        "#!/bin/sh\n"
+        "case \"$1\" in\n"
+        "  *Username*) printf '%s\\n' \"${WEBSITE_STUDIO_GIT_USERNAME:-x-access-token}\" ;;\n"
+        "  *) printf '%s\\n' \"${WEBSITE_STUDIO_GIT_TOKEN:-}\" ;;\n"
+        "esac\n",
+        encoding="utf-8",
+    )
+    path.chmod(0o700)
+    return path
 
 
-def _git_import_env() -> dict[str, str]:
+def _normalize_git_import_file_modes(source_root: Path) -> None:
+    for path in source_root.rglob("*"):
+        if path.is_file() and not path.is_symlink():
+            path.chmod(path.stat().st_mode & ~0o111)
+
+
+def _redact_git_clone_error(value: str, token: str = "") -> str:
+    text = _redact_secret_text(value)
+    if token:
+        text = text.replace(token, "<redacted>")
+    return text
+
+
+def _git_import_env(*, token: str = "", askpass_path: Path | None = None) -> dict[str, str]:
     env = {
         "GIT_ASKPASS": "true",
         "GIT_CONFIG_GLOBAL": "/dev/null",
@@ -2267,6 +2540,10 @@ def _git_import_env() -> dict[str, str]:
         "GIT_TERMINAL_PROMPT": "0",
         "PATH": os.environ.get("PATH", ""),
     }
+    if token and askpass_path is not None:
+        env["GIT_ASKPASS"] = str(askpass_path)
+        env["WEBSITE_STUDIO_GIT_USERNAME"] = "x-access-token"
+        env["WEBSITE_STUDIO_GIT_TOKEN"] = token
     for key in ("LANG", "LC_ALL", "TMPDIR"):
         if os.environ.get(key):
             env[key] = os.environ[key]

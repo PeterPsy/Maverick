@@ -64,6 +64,8 @@
       "website_git_connection_activate",
       "website_environments_list",
       "website_environment_configure",
+      "website_publish_targets_list",
+      "website_publish_target_configure",
       "website_import_git",
       "website_import_zip",
       "website_sitemap",

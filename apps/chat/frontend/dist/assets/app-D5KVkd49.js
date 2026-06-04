@@ -1,1 +1,0 @@
-import{c as o,j as t,R as r}from"./runtime-DVn85dOB.js";import{A as e}from"./main-B7-FYOWe.js";import"./useRuntimeEvents-Bimcgf1P.js";import"./useRuntimeThreads-BinvWDtk.js";o.createRoot(document.getElementById("root")).render(t.jsx(r.StrictMode,{children:t.jsx(e,{})}));

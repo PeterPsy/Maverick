@@ -136,6 +136,42 @@ describe("WidgetSlot primary action protocol", () => {
     );
   });
 
+  it("shows shell pending chrome until a sidebar widget frame is loaded", async () => {
+    const context = deferred<{ context: Record<string, unknown>; context_token: string }>();
+    vi.mocked(createWidgetContext).mockReturnValueOnce(context.promise);
+
+    await act(async () => {
+      root.render(
+        <WidgetSlot
+          activeWorkspaceId="default"
+          content={{ is_mobile_layout: false }}
+          contentKind="shell.sidebar.primary"
+          hostAppId="base-shell"
+          label="App sidebar content"
+          onOpenApp={vi.fn()}
+          preferredOwnerAppId={ownerAppId}
+        />,
+      );
+    });
+
+    expect(pendingIndicator(container)?.textContent).toBe("Loading App sidebar content");
+    expect(container.querySelector("iframe")).toBeNull();
+
+    await act(async () => {
+      context.resolve({ context: {}, context_token: "context-token" });
+      await Promise.resolve();
+    });
+    const iframe = await waitForIframe(container);
+
+    expect(pendingIndicator(container)?.textContent).toBe("Loading App sidebar content");
+
+    await act(async () => {
+      iframe.dispatchEvent(new Event("load"));
+    });
+
+    expect(pendingIndicator(container)).toBeNull();
+  });
+
   it("opens the shell sidebar when a mounted widget or app requests it", async () => {
     const openSidebar = vi.fn();
     await act(async () => {
@@ -206,6 +242,18 @@ function primaryActionButton(parent: HTMLElement): HTMLButtonElement {
     throw new Error("Primary action button was not mounted.");
   }
   return button;
+}
+
+function pendingIndicator(parent: HTMLElement): HTMLElement | null {
+  return parent.querySelector(".bs-shell-pending-indicator");
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
 }
 
 async function dispatchWidgetState(source: MessageEventSource) {

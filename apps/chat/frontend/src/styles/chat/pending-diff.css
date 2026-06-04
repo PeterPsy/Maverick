@@ -83,7 +83,7 @@
 
 .chatapp-pending-turn__label {
   display: inline-block;
-  font-weight: 600;
+  font-weight: 400;
   letter-spacing: 0.01em;
   color: transparent;
   background: linear-gradient(90deg, rgba(255, 255, 255, 0.48) 0%, rgba(255, 255, 255, 0.68) 34%, #ffffff 50%, rgba(255, 255, 255, 0.68) 66%, rgba(255, 255, 255, 0.48) 100%);

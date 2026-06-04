@@ -23,6 +23,7 @@
     "storage": "cloud",
     "settings": "admin_panel_settings",
     "vault": "key",
+    "website-studio": "web_asset",
   };
 
   function includes(list, value) {

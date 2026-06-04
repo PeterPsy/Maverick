@@ -40,6 +40,7 @@ import { MobileShellHeader } from "./components/MobileShellHeader";
 import { MobilePinnedAppsPanel } from "./components/MobilePinnedAppsPanel";
 import { Sidebar } from "./components/Sidebar";
 import { ProviderSetupDialog } from "./components/ProviderSetupDialog";
+import { ShellPendingIndicator } from "./components/ShellPendingIndicator";
 import { WorkspaceView } from "./components/WorkspaceView";
 import type { WidgetPrimaryActionState } from "./components/WidgetSlot";
 
@@ -531,7 +532,13 @@ export function AppShell() {
   }
 
   if (isLoading && session === null) {
-    return <main className="bs-shell" />;
+    return (
+      <main className="bs-shell">
+        <div className="bs-shell-initial-pending">
+          <ShellPendingIndicator ariaLabel="Loading workspace" label="Loading workspace" />
+        </div>
+      </main>
+    );
   }
 
   if (!session?.authenticated) {

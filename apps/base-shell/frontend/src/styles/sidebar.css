@@ -635,6 +635,7 @@
 }
 
 .bs-widget-slot {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow: hidden;
@@ -659,6 +660,27 @@
   min-height: 0;
   border: 0;
   background: transparent;
+}
+
+.bs-widget-slot__pending {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
+  background: var(--maverick-bg);
+  color: var(--maverick-text);
+  pointer-events: none;
+}
+
+.bs-widget-slot--pending {
+  display: block;
+}
+
+.bs-widget-slot--compact .bs-widget-slot__pending {
+  padding: 0 0.4rem;
 }
 
 .bs-widget-slot__fallback {

@@ -75,11 +75,21 @@ describe("AppFrameHost app frame readiness", () => {
 
     expect(frameByTitle(container, "Chat viewport").className).toContain("is-active");
     expect(agentsFrame.className).toContain("is-hidden");
+    expect(pendingIndicator(container)).toBeNull();
+
+    await act(async () => {
+      vi.advanceTimersByTime(140);
+      await Promise.resolve();
+    });
+
+    expect(pendingIndicator(container)?.textContent).toBe("Loading Agents");
+    expect(pendingIndicator(container)?.parentElement?.className).toContain("is-over-frame");
 
     await dispatchAppReady(agentsFrame, "agents");
 
     expect(frameByTitle(container, "Chat viewport").className).toContain("is-hidden");
     expect(frameByTitle(container, "Agents viewport").className).toContain("is-active");
+    expect(pendingIndicator(container)).toBeNull();
   });
 
   it("reveals a loaded target frame if it does not send ready", async () => {
@@ -90,12 +100,14 @@ describe("AppFrameHost app frame readiness", () => {
     expect(agentsFrame.className).toContain("is-hidden");
 
     await act(async () => {
+      vi.advanceTimersByTime(140);
       agentsFrame.dispatchEvent(new Event("load"));
       vi.advanceTimersByTime(900);
       await Promise.resolve();
     });
 
     expect(frameByTitle(container, "Agents viewport").className).toContain("is-active");
+    expect(pendingIndicator(container)).toBeNull();
   });
 
   it("resends pending navigation when a cold target app becomes ready", async () => {
@@ -185,6 +197,10 @@ function navigateMessages(postMessageSpy: { mock: { calls: unknown[][] } }): Pos
       }
       return (message as PostedMessage).type === "maverick.app.navigate";
     });
+}
+
+function pendingIndicator(parent: HTMLElement): HTMLElement | null {
+  return parent.querySelector(".bs-shell-pending-indicator");
 }
 
 async function dispatchAppReady(frame: HTMLIFrameElement, appId: string) {

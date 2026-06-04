@@ -38,6 +38,7 @@ function defaultIcon(app: AppRegistryItem): string {
     speech: "record_voice_over",
     "settings": "admin_panel_settings",
     vault: "key",
+    "website-studio": "web_asset",
   };
   if (iconByAppId[app.app_id]) {
     return iconByAppId[app.app_id];

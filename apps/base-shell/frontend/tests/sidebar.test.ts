@@ -153,7 +153,9 @@ describe("Sidebar desktop layout contract", () => {
     const layoutStyles = readStyle("layout.css");
 
     expect(appShellSource).toContain("<FloatingChatHost");
-    expect(hostSource).toContain('contentKind="shell.overlay.bottomright"');
+    expect(hostSource).toContain('const contentKind = isDockMode');
+    expect(hostSource).toContain('"shell.overlay.bottomright"');
+    expect(hostSource).toContain("contentKind={contentKind}");
     expect(hostSource).toContain("mode: placement");
     expect(hostSource).toContain("size={widgetSize}");
     expect(layoutStyles).toContain(".bs-floating-chat-host__resize-handle");

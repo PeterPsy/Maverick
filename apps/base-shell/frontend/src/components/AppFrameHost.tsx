@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { AppDependenciesPayload, AppRegistryItem, getAppDependencies } from "../api";
 import { MAVERICK_IFRAME_SANDBOX, postMaverickFrameVisibility, postToMaverickFrame } from "../iframePolicy";
 import { syncAppFrameShellLayout } from "../lib/appFrameShellLayout";
+import { ShellPendingIndicator } from "./ShellPendingIndicator";
 
 type AppFrameParams = Record<string, string | boolean | null>;
 const APP_EVENTS_WS_PATH = "/api/apps/events/ws";
@@ -28,6 +29,7 @@ const DEPENDENCY_CACHE_STORAGE_KEY = "maverick.baseShell.appDependencies";
 const DEPENDENCY_DEBUG_STORAGE_KEY = "maverick.baseShell.debug.dependencies";
 const DEPENDENCY_LOG_PREFIX = "[Maverick dependencies]";
 const APP_READY_LOAD_FALLBACK_MS = 900;
+const APP_PENDING_OVERLAY_DELAY_MS = 140;
 
 export function AppFrameHost({
   activeApp,
@@ -53,6 +55,7 @@ export function AppFrameHost({
   const [visibleFrameKey, setVisibleFrameKey] = useState<string | null>(() => appFrameInstanceKey(activeMountKey, 0));
   const [dependencies, setDependencies] = useState<AppDependenciesPayload | null>(null);
   const [dependencyCache, setDependencyCache] = useState<DependencyCache>(() => loadDependencyCache());
+  const [showDelayedPendingOverlay, setShowDelayedPendingOverlay] = useState(false);
   const frameRefs = useRef<Record<string, HTMLIFrameElement | null>>({});
   const readyFallbackTimersRef = useRef<Record<string, number>>({});
   const latestNavigationRef = useRef<{ appId: string; params: AppFrameParams }>({
@@ -69,7 +72,8 @@ export function AppFrameHost({
   const activeFrameKey = appFrameInstanceKey(activeMountKey, activeFrameRevision);
   const activeFrameReady = Boolean(readyFrames[activeFrameKey]);
   const visibleFrameIsMounted = mountedApps.some(({ mountKey }) => appFrameInstanceKey(mountKey, frameRevisions[mountKey] || 0) === visibleFrameKey);
-  const showPendingState = !visibleFrameIsMounted && !activeFrameReady;
+  const activeFramePending = !activeFrameReady;
+  const showPendingState = activeFramePending && (!visibleFrameIsMounted || showDelayedPendingOverlay);
 
   async function refreshDependencies(appId = activeApp.app_id) {
     logDependencySetup("fetch:start", {
@@ -145,6 +149,22 @@ export function AppFrameHost({
       setVisibleFrameKey(null);
     }
   }, [activeFrameKey, activeFrameReady, visibleFrameIsMounted]);
+
+  useEffect(() => {
+    if (!activeFramePending) {
+      setShowDelayedPendingOverlay(false);
+      return undefined;
+    }
+    if (!visibleFrameIsMounted) {
+      setShowDelayedPendingOverlay(true);
+      return undefined;
+    }
+    setShowDelayedPendingOverlay(false);
+    const timer = window.setTimeout(() => {
+      setShowDelayedPendingOverlay(true);
+    }, APP_PENDING_OVERLAY_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [activeFrameKey, activeFramePending, visibleFrameIsMounted]);
 
   useEffect(() => {
     const mountedFrameKeys = new Set(
@@ -380,8 +400,8 @@ export function AppFrameHost({
           );
         })}
         {showPendingState ? (
-          <div className="bs-workspace-app-pending" role="status" aria-label={`Loading ${activeApp.name}`}>
-            <span className="bs-workspace-app-pending__mark" aria-hidden="true" />
+          <div className={`bs-workspace-app-pending ${visibleFrameIsMounted ? "is-over-frame" : "is-empty"}`}>
+            <ShellPendingIndicator ariaLabel={`Loading ${activeApp.name}`} label={`Loading ${activeApp.name}`} />
           </div>
         ) : null}
       </div>

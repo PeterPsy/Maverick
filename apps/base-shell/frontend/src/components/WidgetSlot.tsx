@@ -2,6 +2,7 @@ import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } f
 import { createWidgetContext, listWidgets, WidgetRegistryItem } from "../api";
 import { MAVERICK_IFRAME_SANDBOX, postMaverickFrameVisibility, postToMaverickFrame } from "../iframePolicy";
 import { widgetSelectionChangedMessage } from "../lib/widgetSelectionMessages";
+import { ShellPendingIndicator } from "./ShellPendingIndicator";
 
 export type PrimaryActionPreferredSurface = "app" | "sidebar";
 
@@ -91,6 +92,8 @@ export function WidgetSlot({
   const [widget, setWidget] = useState<WidgetRegistryItem | null>(null);
   const [contextToken, setContextToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isResolvingWidget, setIsResolvingWidget] = useState(true);
+  const [loadedFrameKey, setLoadedFrameKey] = useState("");
   const [overlaySize, setOverlaySize] = useState(collapsedOverlaySize());
   const [captureDraft, setCaptureDraft] = useState<CaptureRect | null>(null);
   const [captureStart, setCaptureStart] = useState<{ x: number; y: number } | null>(null);
@@ -110,6 +113,8 @@ export function WidgetSlot({
     setWidget(null);
     setContextToken(null);
     setError(null);
+    setIsResolvingWidget(true);
+    setLoadedFrameKey("");
     setOverlaySize(collapsedOverlaySize());
     if (supportsPrimaryActionSlot) {
       onPrimaryActionStateChange?.(UNAVAILABLE_PRIMARY_ACTION_STATE);
@@ -123,6 +128,7 @@ export function WidgetSlot({
           if (!cancelled) {
             setWidget(null);
             setContextToken(null);
+            setIsResolvingWidget(false);
             if (supportsPrimaryActionSlot) {
               onPrimaryActionStateChange?.(UNAVAILABLE_PRIMARY_ACTION_STATE);
             }
@@ -140,12 +146,14 @@ export function WidgetSlot({
           setWidget(selected);
           setContextToken(context.context_token);
           setError(null);
+          setIsResolvingWidget(false);
         }
       } catch (loadError) {
         if (!cancelled) {
           setWidget(null);
           setContextToken(null);
           setError(loadError instanceof Error ? loadError.message : "Widget non disponibile.");
+          setIsResolvingWidget(false);
           if (supportsPrimaryActionSlot) {
             onPrimaryActionStateChange?.(UNAVAILABLE_PRIMARY_ACTION_STATE);
           }
@@ -475,19 +483,26 @@ export function WidgetSlot({
 
   useEffect(() => cleanupCaptureMedia, []);
 
-  if (!widget || !contextToken || (size === "overlay" && activeAppId && activeAppId === widget.owner_app_id)) {
-    return error ? <p className="bs-widget-slot__fallback">{error}</p> : null;
-  }
-
-  const src = widgetFrameSrc(widget.frontend_mount, contextToken, frameRevision);
-  const isCollapsedOverlay = size === "overlay" && overlaySize.width === COLLAPSED_OVERLAY_SIZE && overlaySize.height === COLLAPSED_OVERLAY_SIZE;
-  const widgetAllowPolicy = widget.owner_app_id === "chat" ? "fullscreen; microphone" : "fullscreen";
   const slotStyle =
     size === "overlay"
       ? overlaySize
       : size === "compact"
         ? { height: "2.65rem", maxHeight: "2.65rem", minHeight: "2.65rem" }
         : undefined;
+  const supportsShellPending = contentKind === "shell.sidebar.primary";
+
+  if (!widget || !contextToken || (size === "overlay" && activeAppId && activeAppId === widget.owner_app_id)) {
+    if (isResolvingWidget && supportsShellPending) {
+      return <WidgetSlotPending label={label} size={size} style={slotStyle} />;
+    }
+    return error ? <p className="bs-widget-slot__fallback">{error}</p> : null;
+  }
+
+  const src = widgetFrameSrc(widget.frontend_mount, contextToken, frameRevision);
+  const widgetFrameKey = `${activeWorkspaceId}:${widget.owner_app_id}:${widget.widget_id}:${contextToken}:${frameRevision}`;
+  const isWidgetFrameLoading = supportsShellPending && loadedFrameKey !== widgetFrameKey;
+  const isCollapsedOverlay = size === "overlay" && overlaySize.width === COLLAPSED_OVERLAY_SIZE && overlaySize.height === COLLAPSED_OVERLAY_SIZE;
+  const widgetAllowPolicy = widget.owner_app_id === "chat" ? "fullscreen; microphone" : "fullscreen";
 
   return (
     <>
@@ -500,13 +515,21 @@ export function WidgetSlot({
           allow={widgetAllowPolicy}
           allowFullScreen
           className="bs-widget-slot__frame"
-          key={`${activeWorkspaceId}:${widget.owner_app_id}:${widget.widget_id}:${contextToken}:${frameRevision}`}
-          onLoad={postWidgetContextChanged}
+          key={widgetFrameKey}
+          onLoad={() => {
+            setLoadedFrameKey(widgetFrameKey);
+            postWidgetContextChanged();
+          }}
           ref={widgetFrameRef}
           sandbox={MAVERICK_IFRAME_SANDBOX}
           src={src}
           title={label}
         />
+        {isWidgetFrameLoading ? (
+          <div className="bs-widget-slot__pending">
+            <ShellPendingIndicator ariaLabel={`Loading ${label}`} label={pendingLabelForSlot(label, size)} size={size === "compact" ? "sm" : "md"} />
+          </div>
+        ) : null}
       </section>
       {isCaptureActive ? (
         <div
@@ -527,6 +550,28 @@ export function WidgetSlot({
       ) : null}
     </>
   );
+}
+
+function WidgetSlotPending({
+  label,
+  size,
+  style,
+}: {
+  label: string;
+  size: "compact" | "fill" | "overlay";
+  style?: { height?: string; maxHeight?: string; minHeight?: string; width?: string };
+}) {
+  return (
+    <section className={`bs-widget-slot bs-widget-slot--${size} bs-widget-slot--pending`} aria-label={label} style={style}>
+      <div className="bs-widget-slot__pending">
+        <ShellPendingIndicator ariaLabel={`Loading ${label}`} label={pendingLabelForSlot(label, size)} size={size === "compact" ? "sm" : "md"} />
+      </div>
+    </section>
+  );
+}
+
+function pendingLabelForSlot(label: string, size: "compact" | "fill" | "overlay"): string {
+  return size === "compact" ? "Loading" : `Loading ${label}`;
 }
 
 function collapsedOverlaySize() {

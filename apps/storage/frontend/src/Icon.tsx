@@ -41,6 +41,7 @@ const paths: Record<string, ReactNode> = {
   save: <path d="M5 4h12l2 2v14H5zM8 4v6h8V4M8 20v-6h8v6" />,
   search: <path d="m20 20-4.5-4.5M18 11a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" />,
   slideshow: <path d="M4 5h16v12H4zM10 9l5 2-5 2zM8 21h8" />,
+  sort: <path d="M7 4v14M4 15l3 3 3-3M17 20V6M14 9l3-3 3 3" />,
   table: <path d="M4 5h16v14H4zM4 10h16M4 15h16M10 5v14M15 5v14" />,
   upload_file: <path d="M7 3h7l4 4v14H7zM14 3v5h5M12 18v-7M9 14l3-3 3 3" />,
   view_list: <path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" />

@@ -29,7 +29,7 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { FileCardPreview } from "@/filePreview";
 import { useLongPressSelection } from "@/hooks/useLongPressSelection";
-import { formatBytes, kindLabels, roleLabels } from "@/storageMeta";
+import { formatBytes, formatStorageTimestamp, kindLabels, roleLabels } from "@/storageMeta";
 import { cn } from "@/lib/utils";
 import type { StorageFile, PreviewKind } from "@/types";
 
@@ -203,6 +203,10 @@ function AnimatedFileItem({
   const canRead = file.capabilities ? Boolean(file.capabilities.can_read) : true;
   const canDelete = file.capabilities ? Boolean(file.capabilities.can_delete) : true;
   const canMove = file.provider === "google_drive" ? false : file.capabilities ? Boolean(file.capabilities.can_move) : true;
+  const timestamp = file.created_at || file.modified_at;
+  const timestampLabel = formatStorageTimestamp(timestamp, {
+    fallback: file.provider === "google_drive" ? "Drive" : roleLabels[file.role as keyof typeof roleLabels],
+  });
   const { cancelLongPress, longPressHandlers } = useLongPressSelection({
     disabled: !canMove,
     item: file,
@@ -346,8 +350,8 @@ function AnimatedFileItem({
                 <HugeiconsIcon icon={Delete02Icon} size={16} />
               </button>
             </div>
-            <span className={cn("animated-file-role-badge", file.role || file.provider)}>
-              {file.provider === "google_drive" ? "Drive" : roleLabels[file.role as keyof typeof roleLabels]}
+            <span className={cn("animated-file-role-badge", file.role || file.provider)} title={timestampLabel}>
+              {timestampLabel}
             </span>
           </motion.div>
         </motion.div>

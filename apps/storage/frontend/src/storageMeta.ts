@@ -47,3 +47,21 @@ export function formatBytes(value: number) {
 export function formatMegabytes(value: number) {
   return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }
+
+export type StorageTimestampFormatOptions = {
+  fallback?: string;
+  locale?: Intl.LocalesArgument;
+  timeZone?: string;
+};
+
+export function formatStorageTimestamp(value: string | undefined, options: StorageTimestampFormatOptions = {}) {
+  const timestamp = value?.trim();
+  if (!timestamp) return options.fallback || '';
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return options.fallback || '';
+  return new Intl.DateTimeFormat(options.locale, {
+    dateStyle: 'short',
+    timeStyle: 'short',
+    ...(options.timeZone ? { timeZone: options.timeZone } : {})
+  }).format(date);
+}

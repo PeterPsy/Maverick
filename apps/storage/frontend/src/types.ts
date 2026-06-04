@@ -30,6 +30,7 @@ export type StorageFile = {
   workspace_relative_path: string;
   extension: string;
   size_bytes: number;
+  created_at?: string;
   modified_at: string;
   content_type: string;
   preview_kind: PreviewKind;

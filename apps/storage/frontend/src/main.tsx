@@ -16,6 +16,7 @@ import { fileFolderSelection, folderParentPath, folderStatsForSelection, normali
 import { attachStorageFolderDragImage } from './lib/storageDragImage';
 import { readStorageFileDragData, readStorageFolderDragData, readStorageSelectionDragData, storageDragPayloadFromFile, storageDragPayloadFromFolder, storageDragPayloadFromSelection, storageMoveDropStatus, writeStorageFileDragData, writeStorageFolderDragData, writeStorageSelectionDragData, type StorageFileDragPayload, type StorageMoveDropStatus, type StorageSelectionDragPayload } from './lib/storageDragDrop';
 import { canRequestFullscreen, elementIsFullscreen, exitDocumentFullscreen, requestElementFullscreen } from './lib/browserFullscreen';
+import { sortStorageFiles, type FileSortKey } from './lib/storageFileSort';
 import { folderTargetFromMissingFileTarget, storageTargetFromParams, type StorageNavigationParams, type StorageNavigationTarget } from './lib/storageNavigationParams';
 import { storageOAuthCallbackFromLocation, type StorageOAuthCallback } from './lib/storageOAuthRuntime';
 import { storageCustomScopedFiles, storageViewVisibleFiles, storageViewVisibleFolders } from './lib/storageSearch';
@@ -27,6 +28,7 @@ import './styles/main.css';
 const DOWNLOAD_BYTES = 100 * 1024 * 1024;
 const VIEW_SYNC_MS = 2000;
 const LAYOUT_STORAGE_KEY = 'storage.layout-mode';
+const FILE_SORT_STORAGE_KEY = 'storage.file-sort';
 const PREVIEW_VIEWPORT_GAP = 44;
 const PREVIEW_IMAGE_MAX_WIDTH = 1040;
 const PREVIEW_IMAGE_MIN_SIZE = 120;
@@ -59,6 +61,11 @@ type DriveFolderTarget = {
 const viewKinds = new Set<PreviewKind | 'all'>(['all', 'image', 'video', 'audio', 'pdf', 'document', 'presentation', 'spreadsheet', 'markdown', 'text', 'file']);
 const storageRootRoles: FileRole[] = ['uploaded', 'generated'];
 const emptyIdSet = new Set<string>();
+const fileSortOptions: Array<{ key: FileSortKey; label: string }> = [
+  { key: 'date', label: 'Date' },
+  { key: 'size', label: 'Size' },
+  { key: 'type', label: 'Type' }
+];
 
 type PreviewImageSize = {
   width: number;
@@ -230,6 +237,11 @@ function pathAfterFolderMove(path: string, sourceFolderPath: string, movedFolder
 function initialLayoutMode(): CollectionViewMode {
   const storedMode = window.localStorage.getItem(LAYOUT_STORAGE_KEY);
   return storedMode === 'card' || storedMode === 'cards' ? 'card' : 'list';
+}
+
+function initialFileSortKey(): FileSortKey {
+  const storedKey = window.localStorage.getItem(FILE_SORT_STORAGE_KEY);
+  return storedKey === 'size' || storedKey === 'type' ? storedKey : 'date';
 }
 
 function fileFromNavigationTarget(files: StorageFile[], target: StorageNavigationTarget | null) {
@@ -439,6 +451,8 @@ function App() {
   const [dropFeedback, setDropFeedback] = useState<DropFeedback>('idle');
   const [dropMessage, setDropMessage] = useState('');
   const [layoutMode, setLayoutMode] = useState<CollectionViewMode>(initialLayoutMode);
+  const [fileSortKey, setFileSortKey] = useState<FileSortKey>(initialFileSortKey);
+  const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'search' | 'custom'>('search');
   const [customTitle, setCustomTitle] = useState('');
   const [customFileIds, setCustomFileIds] = useState<string[]>([]);
@@ -472,6 +486,7 @@ function App() {
   const dropFeedbackTimerRef = useRef<number | null>(null);
   const previewModalRef = useRef<HTMLElement | null>(null);
   const previewHeaderRef = useRef<HTMLElement | null>(null);
+  const sortMenuRef = useRef<HTMLDivElement | null>(null);
   const filesRef = useRef<StorageFile[]>([]);
   const draggedSelectionRef = useRef<StorageSelectionDragPayload | null>(null);
   const catalogLoadedCountRef = useRef(0);
@@ -1167,6 +1182,12 @@ function App() {
     window.localStorage.setItem(LAYOUT_STORAGE_KEY, nextMode);
   }
 
+  function chooseFileSortKey(nextKey: FileSortKey) {
+    setFileSortKey(nextKey);
+    window.localStorage.setItem(FILE_SORT_STORAGE_KEY, nextKey);
+    setSortMenuOpen(false);
+  }
+
   function openFolder(folder: StorageFolder) {
     if (isDriveItem(folder)) {
       if (!folder.connection_id || !folder.drive_file_id) {
@@ -1375,7 +1396,8 @@ function App() {
       viewMode,
     });
   }, [activeRole, currentFolderPath, customScopedFiles, files, isDriveView, kind, query, viewMode]);
-  const selectedFiles = useMemo(() => filteredFiles.filter((file) => selectedFileIds.has(file.id)), [filteredFiles, selectedFileIds]);
+  const sortedFiles = useMemo(() => sortStorageFiles(filteredFiles, fileSortKey), [fileSortKey, filteredFiles]);
+  const selectedFiles = useMemo(() => sortedFiles.filter((file) => selectedFileIds.has(file.id)), [selectedFileIds, sortedFiles]);
   const selectedFolders = useMemo(() => visibleFolders.filter((folder) => selectedFolderIds.has(folder.id) && Boolean(folder.relative_path)), [selectedFolderIds, visibleFolders]);
   const selectedMoveItems = useMemo(() => storageSelectionMovePlan(selectedFiles, selectedFolders), [selectedFiles, selectedFolders]);
   const selectedItemCount = selectedFiles.length + selectedFolders.length;
@@ -1430,13 +1452,32 @@ function App() {
     ? 'This removes the folder and every file inside it from workspace storage.'
     : 'This removes the file from workspace storage.';
   const pendingDeleteActionLabel = pendingDelete?.kind === 'folder' ? 'Delete folder' : 'Delete file';
+  const activeSortLabel = fileSortOptions.find((option) => option.key === fileSortKey)?.label || 'Date';
 
   useEffect(() => {
-    const visibleFileIds = new Set(filteredFiles.map((file) => file.id));
+    if (!sortMenuOpen) return;
+    function handleSortMenuPointerDown(event: PointerEvent) {
+      const target = event.target instanceof Node ? event.target : null;
+      if (target && sortMenuRef.current?.contains(target)) return;
+      setSortMenuOpen(false);
+    }
+    function handleSortMenuKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setSortMenuOpen(false);
+    }
+    window.addEventListener('pointerdown', handleSortMenuPointerDown);
+    window.addEventListener('keydown', handleSortMenuKeyDown);
+    return () => {
+      window.removeEventListener('pointerdown', handleSortMenuPointerDown);
+      window.removeEventListener('keydown', handleSortMenuKeyDown);
+    };
+  }, [sortMenuOpen]);
+
+  useEffect(() => {
+    const visibleFileIds = new Set(sortedFiles.map((file) => file.id));
     const visibleFolderIds = new Set(visibleFolders.filter((folder) => folder.relative_path).map((folder) => folder.id));
     setSelectedFileIds((current) => pruneSelection(current, visibleFileIds));
     setSelectedFolderIds((current) => pruneSelection(current, visibleFolderIds));
-  }, [filteredFiles, visibleFolders]);
+  }, [sortedFiles, visibleFolders]);
 
   useEffect(() => {
     if (!selectionMode) return;
@@ -2109,6 +2150,36 @@ function App() {
                 </button>
               </div>
             ) : null}
+            <div className="storage-sort-menu" ref={sortMenuRef}>
+              <button
+                aria-expanded={sortMenuOpen}
+                aria-haspopup="menu"
+                className="storage-sort-trigger"
+                onClick={() => setSortMenuOpen((open) => !open)}
+                title="Sort files"
+                type="button"
+              >
+                <Icon name="sort" />
+                <span>Sort: {activeSortLabel}</span>
+              </button>
+              {sortMenuOpen ? (
+                <div className="storage-sort-options" role="menu" aria-label="Sort files">
+                  {fileSortOptions.map((option) => (
+                    <button
+                      aria-checked={fileSortKey === option.key}
+                      className={fileSortKey === option.key ? 'selected' : ''}
+                      key={option.key}
+                      onClick={() => chooseFileSortKey(option.key)}
+                      role="menuitemradio"
+                      type="button"
+                    >
+                      <Icon name={fileSortKey === option.key ? 'check' : 'sort'} />
+                      <span>{option.label}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
             <CollectionViewToggle view={layoutMode} onChange={chooseLayoutMode} />
           </div>
         </header>
@@ -2321,10 +2392,10 @@ function App() {
                 selectionMode={selectionMode}
               />
             )) : null}
-            {!isCatalogContentLoading && filteredFiles.length ? (
+            {!isCatalogContentLoading && sortedFiles.length ? (
               <AnimatedFileCollection
                 draggingFileIds={draggingFileIds}
-                files={filteredFiles}
+                files={sortedFiles}
                 onDelete={requestFileDelete}
                 onDownload={(file) => download(file).catch((err: Error) => setError(err.message))}
                 onDragEnd={clearStorageDragState}

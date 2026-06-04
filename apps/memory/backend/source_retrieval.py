@@ -9,14 +9,17 @@ from typing import Any
 from content_store import read_body
 from database import connect, ensure_schema, normalize_limit, row_payload
 from errors import MemoryValidationError
+from source_chunk_index import source_chunk_fts_query
 from storage_reference_payloads import storage_reference_for_citation
 
 
 def source_query(data_root: Path, query: str, *, limit: int = 10) -> dict[str, Any]:
     ensure_schema(data_root)
     normalized_limit = normalize_limit(limit, default=10, minimum=1, maximum=50)
-    needle = f"%{query.strip()}%"
+    search = source_chunk_fts_query(query)
     if not query.strip():
+        return {"query": query, "results": []}
+    if not search:
         return {"query": query, "results": []}
     with connect(data_root) as db:
         chunk_rows = list(
@@ -37,23 +40,19 @@ def source_query(data_root: Path, query: str, *, limit: int = 10) -> dict[str, A
                   s.entity_id,
                   s.owning_app_id,
                   sd.source_key,
-                  sd.adapter_id
+                  sd.adapter_id,
+                  bm25(source_chunk_fts) AS rank
                 FROM source_chunks sc
+                JOIN source_chunk_fts ON source_chunk_fts.chunk_id = sc.id
                 JOIN source_versions sv ON sv.id = sc.source_version_id
                 JOIN sources s ON s.id = sv.source_id
                 LEFT JOIN source_documents sd ON sd.id = sv.source_document_id
                 WHERE sc.body_path != ''
-                  AND (
-                    s.title LIKE ?
-                    OR s.file_id LIKE ?
-                    OR s.entity_id LIKE ?
-                    OR s.workspace_relative_path LIKE ?
-                    OR sv.extracted_text LIKE ?
-                  )
-                ORDER BY sv.observed_at DESC, sc.chunk_index
+                  AND source_chunk_fts MATCH ?
+                ORDER BY rank, sv.observed_at DESC, sc.chunk_index
                 LIMIT ?
                 """,
-                (needle, needle, needle, needle, needle, normalized_limit * 8),
+                (search, normalized_limit * 8),
             )
         )
         results = []

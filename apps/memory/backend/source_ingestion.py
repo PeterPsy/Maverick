@@ -29,13 +29,17 @@ from sources import ensure_node_source_link, ensure_source_chunks, replace_sourc
 from wiki import compile_node
 
 
-SUPPORTED_ADAPTERS = {"inline_markdown", "storage_file"}
+SUPPORTED_ADAPTERS = {"inline_markdown", "storage_file", "remote_storage_file"}
 
 
 def ingest_source(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
     """Ingest a normalized source payload into source document/version/chunk rows."""
 
     ensure_schema(data_root)
+    if is_remote_storage_ingest(body):
+        from storage_ingestion import ingest_storage_source
+
+        return ingest_storage_source(data_root, remote_storage_ingest_payload(body))
     request = normalized_ingest_request(data_root, body)
     with transaction(data_root, immediate=True) as db:
         timestamp = now_timestamp()
@@ -69,14 +73,8 @@ def ingest_source(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
                 "compile_after_ingest": request["compile_after_ingest"],
             },
         )
-        if request["compile_after_ingest"]:
-            enqueue_job_in_db(
-                db,
-                job_type="lint_node",
-                dedupe_key=f"lint:{target_node_id}",
-                payload={"node_id": target_node_id, "reason": "source_ingested"},
-            )
-        else:
+        work_changed = document_created or source_created or version_created or node_created
+        if not request["compile_after_ingest"] and work_changed:
             enqueue_job_in_db(
                 db,
                 job_type="compile_node",
@@ -110,10 +108,33 @@ def normalized_ingest_request(data_root: Path, body: dict[str, Any]) -> dict[str
     source = body.get("source") if isinstance(body.get("source"), dict) else body
     adapter_id = str(source.get("adapter_id") or body.get("adapter_id") or "").strip()
     if adapter_id not in SUPPORTED_ADAPTERS:
-        raise MemoryValidationError("memory_ingest_source supports adapter_id=inline_markdown or storage_file.")
+        raise MemoryValidationError("memory_ingest_source supports adapter_id=inline_markdown, storage_file, or remote_storage_file.")
     if adapter_id == "storage_file":
         return normalized_storage_file_request(data_root, body, source)
+    if adapter_id == "remote_storage_file":
+        raise MemoryValidationError("remote_storage_file ingest requires source_kind=remote_storage_file.")
     return normalized_inline_markdown_request(body, source, adapter_id=adapter_id)
+
+
+def is_remote_storage_ingest(body: dict[str, Any]) -> bool:
+    source = body.get("memory_source") if isinstance(body.get("memory_source"), dict) else body.get("source")
+    if not isinstance(source, dict):
+        source = body
+    source_kind = str(source.get("source_kind") or source.get("ref_kind") or "").strip()
+    adapter_id = str(source.get("adapter_id") or body.get("adapter_id") or "").strip()
+    return source_kind == "remote_storage_file" or adapter_id == "remote_storage_file"
+
+
+def remote_storage_ingest_payload(body: dict[str, Any]) -> dict[str, Any]:
+    source = body.get("memory_source") if isinstance(body.get("memory_source"), dict) else body.get("source")
+    if not isinstance(source, dict):
+        source = body
+    memory_source = {key: value for key, value in source.items() if key != "adapter_id"}
+    memory_source.setdefault("source_kind", "remote_storage_file")
+    payload = {key: value for key, value in body.items() if key not in {"adapter_id", "source"}}
+    payload["action"] = "ingest_storage_source"
+    payload["memory_source"] = memory_source
+    return payload
 
 
 def normalized_inline_markdown_request(body: dict[str, Any], source: dict[str, Any], *, adapter_id: str) -> dict[str, Any]:

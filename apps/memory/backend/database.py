@@ -15,6 +15,7 @@ from errors import MemoryValidationError
 from memory_schema import SCHEMA_STATEMENTS
 from models import EDGE_KINDS, NODE_TYPES, SCHEMA_VERSION
 from schema_migrations import apply_additive_migrations, source_version_foundation_needs_backfill
+from source_chunk_index import source_chunk_fts_needs_rebuild
 
 
 SQLITE_BUSY_TIMEOUT_MS = 10000
@@ -132,6 +133,7 @@ def schema_has_current_shape(db: sqlite3.Connection) -> bool:
         "source_documents",
         "source_versions",
         "source_chunks",
+        "source_chunk_fts",
         "citations",
         "ingest_jobs",
     }
@@ -250,6 +252,8 @@ def schema_has_current_shape(db: sqlite3.Connection) -> bool:
         if not required.issubset(indexes):
             return False
     if source_version_foundation_needs_backfill(db):
+        return False
+    if source_chunk_fts_needs_rebuild(db):
         return False
     return True
 

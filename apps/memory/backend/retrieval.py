@@ -10,6 +10,7 @@ from typing import Any
 from content_store import read_body
 from database import connect, ensure_schema, normalize_limit, record_event, row_payload
 from errors import MemoryValidationError
+from source_chunk_index import source_chunk_fts_query
 from storage_reference_payloads import storage_references_for_node
 from wiki_queries import compact_compiled_payload, search_compiled_node_ids
 
@@ -221,11 +222,13 @@ def source_chunk_matches_by_node(
     node_ids: list[str] | None,
     limit: int,
 ) -> dict[str, list[dict[str, Any]]]:
-    needle = f"%{query.strip()}%"
+    search = source_chunk_fts_query(query)
     if not query.strip():
         return {}
+    if not search:
+        return {}
     node_clause = ""
-    values: list[Any] = [needle, needle, needle, needle, needle]
+    values: list[Any] = [search]
     if node_ids is not None:
         if not node_ids:
             return {}
@@ -255,23 +258,19 @@ def source_chunk_matches_by_node(
           s.title AS source_title,
           s.file_id,
           s.workspace_relative_path,
-          s.entity_id
+          s.entity_id,
+          bm25(source_chunk_fts) AS rank
         FROM source_chunks sc
+        JOIN source_chunk_fts ON source_chunk_fts.chunk_id = sc.id
         JOIN source_versions sv ON sv.id = sc.source_version_id
         JOIN sources s ON s.id = sv.source_id
         JOIN node_source_links nsl ON nsl.source_id = s.id
         JOIN nodes n ON n.id = nsl.node_id
         WHERE n.status = 'active'
           AND sc.body_path != ''
-          AND (
-            sv.extracted_text LIKE ?
-            OR s.title LIKE ?
-            OR s.file_id LIKE ?
-            OR s.workspace_relative_path LIKE ?
-            OR s.entity_id LIKE ?
-          )
+          AND source_chunk_fts MATCH ?
           {node_clause}
-        ORDER BY sv.observed_at DESC, sc.chunk_index
+        ORDER BY rank, sv.observed_at DESC, sc.chunk_index
         LIMIT ?
         """,
         tuple(values),

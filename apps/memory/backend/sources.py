@@ -10,6 +10,7 @@ from typing import Any
 from chunking import chunk_source_body
 from content_store import canonical_body, write_body
 from database import json_text, new_id, row_payload
+from source_chunk_index import delete_source_chunk_fts_for_version, upsert_source_chunk_fts
 from storage_sources import (
     INGEST_PREVIEW_METADATA_KEYS,
     is_remote_storage_ref,
@@ -282,6 +283,7 @@ def replace_source_chunks(
             )
         ]
 
+    delete_source_chunk_fts_for_version(db, str(version["id"]))
     db.execute("DELETE FROM source_chunks WHERE source_version_id = ?", (version["id"],))
     chunks: list[dict[str, Any]] = []
     for draft in chunk_source_body(body):
@@ -318,6 +320,7 @@ def replace_source_chunks(
             """,
             chunk,
         )
+        upsert_source_chunk_fts(db, chunk_id=chunk["id"], body_text=draft.body)
         chunks.append(row_payload(db.execute("SELECT * FROM source_chunks WHERE id = ?", (chunk["id"],)).fetchone()) or chunk)
     return chunks
 

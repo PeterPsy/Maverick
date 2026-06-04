@@ -224,13 +224,14 @@ class MemoryAppTestCase(unittest.TestCase):
         self.assertIn("requires_storage_reindex", jobs_schema["properties"]["job_type"]["enum"])
         self.assertEqual(
             mcp_descriptor["tools"]["memory_ingest_source"]["input_schema"]["properties"]["adapter_id"]["enum"],
-            ["inline_markdown", "storage_file"],
+            ["inline_markdown", "storage_file", "remote_storage_file"],
         )
 
     def test_memory_skill_documents_drive_ingest_workflow(self) -> None:
         skill = (MEMORY_ROOT / "skills" / "memory-ops" / "SKILL.md").read_text(encoding="utf-8")
 
         self.assertIn("storage_drive_index", skill)
+        self.assertIn("adapter-id remote_storage_file", skill)
         self.assertIn("memory_ingest_storage_source", skill)
         self.assertIn("storage_drive_mark_indexed", skill)
         self.assertIn("memory_apply_storage_staleness", skill)
@@ -320,6 +321,7 @@ class MemoryAppTestCase(unittest.TestCase):
                 ingest_job_columns = {row["name"] for row in db.execute("PRAGMA table_info(ingest_jobs)")}
                 self.assertEqual(db.execute("SELECT COUNT(*) AS count FROM source_documents").fetchone()["count"], 1)
                 self.assertEqual(db.execute("SELECT COUNT(*) AS count FROM source_chunks").fetchone()["count"], 1)
+                self.assertEqual(db.execute("SELECT COUNT(*) AS count FROM source_chunk_fts").fetchone()["count"], 1)
                 self.assertEqual(db.execute("SELECT COUNT(*) AS count FROM ingest_jobs").fetchone()["count"], 0)
                 migrated_version = database.row_payload(db.execute("SELECT * FROM source_versions WHERE id = 'srcv_old'").fetchone()) or {}
                 migrated_citation = database.row_payload(db.execute("SELECT * FROM citations WHERE id = 'cite_old'").fetchone()) or {}
@@ -376,12 +378,15 @@ class MemoryAppTestCase(unittest.TestCase):
             with database.connect(data_root) as db:
                 source_chunk_columns = {row["name"] for row in db.execute("PRAGMA table_info(source_chunks)")}
                 source_chunk_indexes = {row["name"] for row in db.execute("PRAGMA index_list(source_chunks)")}
+                source_chunk_fts_columns = {row["name"] for row in db.execute("PRAGMA table_info(source_chunk_fts)")}
 
             self.assertTrue(database.schema_is_current(data_root))
             self.assertIn("source_version_id", source_chunk_columns)
             self.assertIn("body_sha256", source_chunk_columns)
             self.assertIn("idx_source_chunks_version_index", source_chunk_indexes)
             self.assertIn("idx_source_chunks_hash", source_chunk_indexes)
+            self.assertIn("chunk_id", source_chunk_fts_columns)
+            self.assertIn("body_text", source_chunk_fts_columns)
 
     def test_content_store_writes_relative_verified_immutable_bodies(self) -> None:
         content_store = self.import_backend_module("content_store")
@@ -1338,7 +1343,7 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual(source_query["results"][0]["kind"], "source_chunk")
             self.assertEqual(source_query["results"][0]["chunk_id"], source_chunk["id"])
             self.assertEqual(source_query["results"][0]["citations"][0]["source_chunk_id"], source_chunk["id"])
-            self.assertGreaterEqual(job_count, 1)
+            self.assertEqual(job_count, 0)
             self.assertIn("source_chunk", search["results"][0]["match_sources"])
             self.assertEqual(search["results"][0]["source_chunk_matches"][0]["chunk_id"], source_chunk["id"])
             self.assertIn("source_chunk", context["items"][0]["match_sources"])
@@ -1362,6 +1367,48 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual(search_ref["preview_request"]["arguments"]["stable_storage_file_id"], "file_drive_plan")
             self.assertEqual(wiki_ref["deep_link"], "/app/storage/files/file_drive_plan")
             self.assertEqual(context["items"][0]["compiled"]["storage_references"][0]["drive_file_id"], "drive_plan")
+
+    def test_ingest_source_accepts_remote_storage_file_adapter(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            service = self.import_backend_module("service")
+            database = self.import_backend_module("database")
+
+            status, ingested = service.handle_action(
+                data_root,
+                {
+                    "action": "ingest_source",
+                    "adapter_id": "remote_storage_file",
+                    "title": "Drive board plan",
+                    "memory_source": self.drive_memory_source(
+                        storage_file_id="file_drive_generic_ingest",
+                        drive_file_id="drive_generic_ingest",
+                    ),
+                    "preview_text": "Drive board plan says the accountable owner is Lee.",
+                    "compile_after_ingest": True,
+                },
+            )
+            source_query_status, source_query = service.handle_action(data_root, {"action": "source_query", "query": "Lee"})
+
+            with database.connect(data_root) as db:
+                source_document = database.row_payload(db.execute("SELECT * FROM source_documents").fetchone()) or {}
+                job_count = db.execute("SELECT COUNT(*) AS count FROM ingest_jobs").fetchone()["count"]
+                db.execute("UPDATE source_versions SET extracted_text = ''")
+                db.commit()
+            fts_only_status, fts_only_query = service.handle_action(data_root, {"action": "source_query", "query": "Lee"})
+
+            self.assertEqual(status, 200)
+            self.assertEqual(ingested["storage_identity"]["entity_id"], "file_drive_generic_ingest")
+            self.assertEqual(source_document["adapter_id"], "remote_storage_file")
+            self.assertEqual(source_document["source_key"], "remote_storage_file:file_drive_generic_ingest")
+            self.assertEqual(ingested["compiled"]["citations"][0]["source_version"], "rev-1")
+            self.assertEqual(source_query_status, 200)
+            self.assertEqual(source_query["results"][0]["kind"], "source_chunk")
+            self.assertEqual(source_query["results"][0]["freshness"], "fresh")
+            self.assertEqual(fts_only_status, 200)
+            self.assertEqual(fts_only_query["results"][0]["kind"], "source_chunk")
+            self.assertEqual(fts_only_query["results"][0]["chunk_id"], source_query["results"][0]["chunk_id"])
+            self.assertEqual(job_count, 0)
 
     def test_ingest_storage_source_without_compile_materializes_source_chunks(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

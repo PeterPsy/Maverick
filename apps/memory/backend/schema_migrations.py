@@ -12,6 +12,7 @@ from uuid import uuid4
 
 from chunking import chunk_source_body
 from content_store import write_body
+from source_chunk_index import rebuild_source_chunk_fts, upsert_source_chunk_fts
 
 
 def apply_additive_migrations(db: sqlite3.Connection, *, data_root: Path) -> None:
@@ -32,6 +33,7 @@ def apply_additive_migrations(db: sqlite3.Connection, *, data_root: Path) -> Non
     add_column_if_missing(db, "citations", "quote_sha256", "TEXT NOT NULL DEFAULT ''")
     add_column_if_missing(db, "ingest_jobs", "lease_token", "TEXT NOT NULL DEFAULT ''")
     backfill_source_version_foundation(db, data_root=data_root)
+    rebuild_source_chunk_fts(db, data_root=data_root)
 
 
 def source_version_foundation_needs_backfill(db: sqlite3.Connection) -> bool:
@@ -301,6 +303,7 @@ def write_migrated_source_chunks(
             """,
             chunk,
         )
+        upsert_source_chunk_fts(db, chunk_id=chunk["id"], body_text=draft.body)
 
 
 def migrated_source_chunk_id(source_version_id: str, chunk_index: int, chunk_body_sha256: str) -> str:

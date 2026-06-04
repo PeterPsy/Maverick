@@ -329,6 +329,19 @@ SCHEMA_STATEMENTS: tuple[str, ...] = (
       body_text
     )
     """,
+    """
+    CREATE VIRTUAL TABLE IF NOT EXISTS source_chunk_fts USING fts5(
+      chunk_id UNINDEXED,
+      source_version_id UNINDEXED,
+      source_id UNINDEXED,
+      source_document_id UNINDEXED,
+      title,
+      body_text,
+      file_id,
+      workspace_relative_path,
+      entity_id
+    )
+    """,
     "CREATE INDEX IF NOT EXISTS idx_nodes_type_status ON nodes(type, status)",
     "CREATE INDEX IF NOT EXISTS idx_nodes_updated ON nodes(updated_at)",
     "CREATE INDEX IF NOT EXISTS idx_edges_source ON edges(source_node_id, status)",

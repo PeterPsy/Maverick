@@ -107,9 +107,10 @@
             "type": "string",
             "enum": [
               "inline_markdown",
-              "storage_file"
+              "storage_file",
+              "remote_storage_file"
             ],
-            "description": "Generic source adapter for ingest_source. Supports inline_markdown and local workspace storage_file text sources fetched through Storage-owned file surfaces."
+            "description": "Generic source adapter for ingest_source. Supports inline_markdown, local workspace storage_file text sources, and remote_storage_file Storage memory_source payloads."
           },
           "source_key": {
             "type": "string",
@@ -130,7 +131,7 @@
           },
           "memory_source": {
             "type": "object",
-            "description": "Storage drive_index.memory_source payload for ingest_storage_source."
+            "description": "Storage drive_index.memory_source payload for ingest_source with adapter_id=remote_storage_file or for the transitional ingest_storage_source action."
           },
           "preview_text": {
             "type": "string",
@@ -142,7 +143,7 @@
           },
           "source_version": {
             "type": "string",
-            "description": "Required source version from Storage drive_index for ingest_storage_source; may be provided here or in memory_source.metadata.source_version."
+            "description": "Required source version from Storage drive_index for remote_storage_file ingest; may be provided here or in memory_source.metadata.source_version."
           },
           "compile_after_ingest": {
             "type": "boolean",

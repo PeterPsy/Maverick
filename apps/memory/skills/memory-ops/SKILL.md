@@ -44,7 +44,7 @@ maverick app memory cli run memory --action jobs_list --status ready --limit 20
 maverick app memory mcp call memory_jobs --json --operation claim --job-types '["compile_node"]'
 ```
 
-Storage staleness can enqueue `requires_storage_reindex` jobs. Treat those jobs as action-required markers: run Storage `drive_index`, pass the returned Memory source to `memory_ingest_storage_source`, and then acknowledge Storage indexing after Memory succeeds.
+Storage staleness can enqueue `requires_storage_reindex` jobs. Treat those jobs as action-required markers: run Storage `drive_index`, pass the returned Memory source to `memory_ingest_source` with `adapter_id=remote_storage_file`, and then acknowledge Storage indexing after Memory succeeds.
 
 ## Memory Views
 
@@ -96,6 +96,12 @@ Use this flow after Storage `storage_drive_index` has selected one relevant Driv
 
 ```bash
 maverick app memory mcp call memory_ingest_storage_source --json --memory-source '<storage_drive_index.memory_source>' --preview-text '<bounded preview_text>' --preview-truncated <true|false> --source-version <source_version> --compile-after-ingest true
+```
+
+Prefer the generic ingest front door for new workflows:
+
+```bash
+maverick app memory mcp call memory_ingest_source --json --adapter-id remote_storage_file --memory-source '<storage_drive_index.memory_source>' --preview-text '<bounded preview_text>' --preview-truncated <true|false> --source-version <source_version> --compile-after-ingest true
 ```
 
 If the Storage file belongs on an existing Memory node, include `--node-id <node_id>`. If no node is supplied, Memory creates or reuses a file-backed node for the stable Storage file id.

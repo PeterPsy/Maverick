@@ -68,6 +68,7 @@ def ingest_storage_source(data_root: Path, body: dict[str, Any]) -> dict[str, An
         target_node_id, node_created = ensure_target_node(db, request)
         existing_ref = find_existing_storage_ref_for_node(db, request["storage_file_id"], target_node_id)
         old_node_id = str(existing_ref["node_id"] or "") if existing_ref is not None else ""
+        old_source_version = source_version_for_ref(existing_ref)
         external_ref, ref_created = upsert_storage_ref(
             db,
             request=request,
@@ -97,14 +98,10 @@ def ingest_storage_source(data_root: Path, body: dict[str, Any]) -> dict[str, An
                 "compile_after_ingest": request["compile_after_ingest"],
             },
         )
-        if request["compile_after_ingest"]:
-            enqueue_job_in_db(
-                db,
-                job_type="lint_node",
-                dedupe_key=f"lint:{target_node_id}",
-                payload={"node_id": target_node_id, "reason": "storage_source_ingested"},
-            )
-        else:
+        new_source_version = str(request["metadata"].get("source_version") or "").strip()
+        source_version_changed = bool(new_source_version and old_source_version != new_source_version)
+        work_changed = ref_created or node_created or source_version_changed or (old_node_id and old_node_id != target_node_id)
+        if not request["compile_after_ingest"] and work_changed:
             enqueue_job_in_db(
                 db,
                 job_type="compile_node",
@@ -133,6 +130,14 @@ def ingest_storage_source(data_root: Path, body: dict[str, Any]) -> dict[str, An
         "compile_after_ingest": request["compile_after_ingest"],
         "compiled": compiled,
     }
+
+
+def source_version_for_ref(ref: sqlite3.Row | None) -> str:
+    if ref is None:
+        return ""
+    payload = row_payload(ref) or {}
+    metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+    return str(metadata.get("source_version") or "").strip()
 
 
 def normalized_ingest_request(body: dict[str, Any]) -> dict[str, Any]:

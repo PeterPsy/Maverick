@@ -9,7 +9,7 @@ from pathlib import Path
 import sqlite3
 
 
-SCHEMA_VERSION = "2"
+SCHEMA_VERSION = "3"
 REFERENCE_ENTITIES = ["site", "page", "route", "asset", "revision", "publish_request"]
 
 
@@ -182,10 +182,14 @@ def ensure_schema(data_root: Path) -> None:
               id TEXT PRIMARY KEY,
               site_id TEXT NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
               status TEXT NOT NULL,
+              runtime_kind TEXT NOT NULL DEFAULT '',
+              preview_url TEXT NOT NULL DEFAULT '',
+              artifact_ref_json TEXT NOT NULL DEFAULT '{}',
               source_profile_json TEXT NOT NULL DEFAULT '{}',
               route_count INTEGER NOT NULL DEFAULT 0,
               asset_count INTEGER NOT NULL DEFAULT 0,
               warnings_json TEXT NOT NULL DEFAULT '[]',
+              missing_requirements_json TEXT NOT NULL DEFAULT '[]',
               logs_summary TEXT NOT NULL DEFAULT '',
               created_at TEXT NOT NULL,
               updated_at TEXT NOT NULL
@@ -211,10 +215,30 @@ def ensure_schema(data_root: Path) -> None:
               route TEXT NOT NULL,
               page_id TEXT NOT NULL DEFAULT '',
               build_id TEXT NOT NULL DEFAULT '',
+              runtime_kind TEXT NOT NULL DEFAULT '',
+              preview_url TEXT NOT NULL DEFAULT '',
+              warnings_json TEXT NOT NULL DEFAULT '[]',
+              missing_requirements_json TEXT NOT NULL DEFAULT '[]',
+              artifact_ref_json TEXT NOT NULL DEFAULT '{}',
               status TEXT NOT NULL,
               created_at TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_previews_site_created ON previews(site_id, created_at);
+            CREATE TABLE IF NOT EXISTS runtime_sessions (
+              id TEXT PRIMARY KEY,
+              site_id TEXT NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+              preview_id TEXT NOT NULL DEFAULT '',
+              build_id TEXT NOT NULL DEFAULT '',
+              runtime_kind TEXT NOT NULL,
+              status TEXT NOT NULL,
+              preview_url TEXT NOT NULL DEFAULT '',
+              route TEXT NOT NULL DEFAULT '/',
+              health_json TEXT NOT NULL DEFAULT '{}',
+              missing_requirements_json TEXT NOT NULL DEFAULT '[]',
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_runtime_sessions_site_created ON runtime_sessions(site_id, created_at);
             CREATE TABLE IF NOT EXISTS deployments (
               id TEXT PRIMARY KEY,
               site_id TEXT NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
@@ -266,6 +290,15 @@ def ensure_schema(data_root: Path) -> None:
         _ensure_column(db, "publish_requests", "build_id", "TEXT NOT NULL DEFAULT ''")
         _ensure_column(db, "environments", "publish_target_id", "TEXT NOT NULL DEFAULT ''")
         _ensure_column(db, "environments", "last_deployment_id", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(db, "builds", "runtime_kind", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(db, "builds", "preview_url", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(db, "builds", "artifact_ref_json", "TEXT NOT NULL DEFAULT '{}'")
+        _ensure_column(db, "builds", "missing_requirements_json", "TEXT NOT NULL DEFAULT '[]'")
+        _ensure_column(db, "previews", "runtime_kind", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(db, "previews", "preview_url", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(db, "previews", "warnings_json", "TEXT NOT NULL DEFAULT '[]'")
+        _ensure_column(db, "previews", "missing_requirements_json", "TEXT NOT NULL DEFAULT '[]'")
+        _ensure_column(db, "previews", "artifact_ref_json", "TEXT NOT NULL DEFAULT '{}'")
         db.execute(
             "INSERT OR REPLACE INTO schema_metadata(key, value) VALUES (?, ?)",
             ("schema_version", SCHEMA_VERSION),

@@ -2,7 +2,7 @@
   "app_id": "website-studio",
   "contract_version": "1.0",
   "name": "Website Studio",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Import, index, edit, preview, approve, and maintain workspace website projects inside Maverick.",
   "publisher": "workspace",
   "minimum_core_version": "0.1.0",
@@ -79,6 +79,8 @@
       "website_build_validate",
       "website_builds_list",
       "website_build_preview",
+      "website_preview_document",
+      "website_runtime_status",
       "website_publish_request",
       "website_approval_record",
       "website_approvals_list",
@@ -221,7 +223,7 @@
   },
   "storage": {
     "storage_kind": "sqlite",
-    "data_schema_version": "2",
+    "data_schema_version": "3",
     "primary_paths": [
       "data/website-studio/app.sqlite",
       "data/website-studio/sites"

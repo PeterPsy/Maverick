@@ -41,6 +41,8 @@ TOOL_ACTIONS = {
     "website_build_validate": "build_validate",
     "website_builds_list": "builds_list",
     "website_build_preview": "build_preview",
+    "website_preview_document": "preview_document",
+    "website_runtime_status": "runtime_status",
     "website_publish_request": "publish_request",
     "website_approval_record": "approval_record",
     "website_approvals_list": "approvals_list",

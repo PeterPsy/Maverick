@@ -33,6 +33,7 @@ from store import (
     load_view_state,
     page_context,
     prepare_git_connection,
+    preview_document,
     publish,
     read_file,
     rebuild_index,
@@ -44,6 +45,7 @@ from store import (
     restore_site,
     record_approval,
     rollback,
+    runtime_status,
     search,
     set_active_site,
     set_custom_view,
@@ -237,6 +239,10 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
             return 200, list_changes(data_root, payload.get("site_id"), payload.get("status"))
         if action == "build_preview":
             return 200, build_preview(data_root, payload.get("site_id"), payload.get("route") or "/")
+        if action == "preview_document":
+            return 200, preview_document(data_root, payload.get("preview_id"))
+        if action == "runtime_status":
+            return 200, runtime_status(data_root, payload.get("site_id"))
         if action == "build_validate":
             return 201, {"build": validate_build(data_root, payload.get("site_id"))}
         if action == "builds_list":

@@ -287,11 +287,29 @@
       }
     },
     "website_build_preview": {
-      "description": "Return the preview contract for one indexed route, including current static fallback HTML, runtime status, warnings, and missing runtime requirements.",
+      "description": "Return the preview contract for one indexed route, including preview HTML, isolated preview_url, runtime status, warnings, and missing runtime requirements.",
       "input_schema": {
         "type": "object",
         "required": ["site_id"],
         "properties": {"site_id": {"type": "string"}, "route": {"type": "string"}},
+        "additionalProperties": false
+      }
+    },
+    "website_preview_document": {
+      "description": "Return one prepared Website Studio preview document by preview id for the isolated preview runtime frontend.",
+      "input_schema": {
+        "type": "object",
+        "required": ["preview_id"],
+        "properties": {"preview_id": {"type": "string"}},
+        "additionalProperties": false
+      }
+    },
+    "website_runtime_status": {
+      "description": "Return bounded runtime health, latest build, latest preview, and missing requirements for one Website Studio site.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id"],
+        "properties": {"site_id": {"type": "string"}},
         "additionalProperties": false
       }
     },

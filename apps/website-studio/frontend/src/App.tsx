@@ -26,6 +26,7 @@ export function App() {
   const activeSite = useMemo(() => sites.find((site) => site.id === activeSiteId), [sites, activeSiteId]);
   const activePage = useMemo(() => pages.find((page) => page.id === activePageId), [pages, activePageId]);
   const importOnly = showNewWebsite || !activeSite;
+  const previewUrl = previewState?.preview_url || '';
 
   useEffect(() => {
     activeSiteIdRef.current = activeSiteId;
@@ -69,14 +70,9 @@ export function App() {
     setActivePageId(selectedPage?.id || '');
     setActiveRouteId(selectedRoute?.id || '');
     setActiveAssetId(selectedAsset?.id || '');
-    const previewRoute = selectedPage?.route || (selectedRoute?.page_id ? selectedRoute.route : '') || '';
+    const previewRoute = selectedPage?.route || selectedRoute?.route || '/';
     postSelection(selectedSite, selectedPage, selectedRoute, selectedAsset);
-    if (previewRoute) {
-      await renderSite(selectedSite, previewRoute);
-    } else {
-      setPreviewHtml('');
-      setPreviewState(null);
-    }
+    await renderSite(selectedSite, previewRoute);
   }
 
   async function renderSite(siteId: string, route = '/') {
@@ -267,7 +263,23 @@ export function App() {
         <section className="site-canvas" aria-label={activeSite?.display_name || 'Website'}>
           {previewHtml ? (
             <>
-              <iframe title={activePage?.title || activeSite?.display_name || 'Website preview'} data-route-id={activeRouteId} data-asset-id={activeAssetId} sandbox="" srcDoc={previewHtml} />
+              {previewUrl ? (
+                <iframe
+                  title={activePage?.title || activeSite?.display_name || 'Website preview'}
+                  data-route-id={activeRouteId}
+                  data-asset-id={activeAssetId}
+                  sandbox="allow-scripts allow-same-origin"
+                  src={previewUrl}
+                />
+              ) : (
+                <iframe
+                  title={activePage?.title || activeSite?.display_name || 'Website preview'}
+                  data-route-id={activeRouteId}
+                  data-asset-id={activeAssetId}
+                  sandbox=""
+                  srcDoc={previewHtml}
+                />
+              )}
               {previewState ? <PreviewStatus preview={previewState} /> : null}
             </>
           ) : (

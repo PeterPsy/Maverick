@@ -45,6 +45,8 @@ MAX_SOURCE_TREE_BYTES = 200 * 1024 * 1024
 MAX_TEXT_FILE_BYTES = 512 * 1024
 MAX_PREVIEW_ASSET_BYTES = 2 * 1024 * 1024
 MAX_PREVIEW_TOTAL_ASSET_BYTES = 4 * 1024 * 1024
+MAX_PREVIEW_SCRIPT_BYTES = 512 * 1024
+MAX_PREVIEW_TOTAL_SCRIPT_BYTES = 1024 * 1024
 TEXT_EXTENSIONS = {
     ".html",
     ".htm",
@@ -224,6 +226,37 @@ def preview_srcdoc_html(html: object, *, source_root: Path | None = None, page_p
     return "<!doctype html><html><head>" + csp + "</head><body>" + text + "</body></html>"
 
 
+def runtime_srcdoc_html(html: object, *, source_root: Path, page_path: object = None) -> str:
+    """Prepare runnable static preview HTML for an opaque-origin sandbox iframe."""
+    text = str(html if html is not None else "")
+    text = _inline_stylesheets(text, source_root, page_path)
+    text = _inline_runtime_scripts(text, source_root, page_path)
+    text = _inline_media_assets(text, source_root, page_path)
+    csp = (
+        '<meta http-equiv="Content-Security-Policy" '
+        'content="default-src &#39;none&#39;; img-src data: blob:; style-src &#39;unsafe-inline&#39;; '
+        'font-src data:; media-src data: blob:; script-src &#39;unsafe-inline&#39;; connect-src &#39;none&#39;; '
+        'frame-ancestors &#39;self&#39;; form-action &#39;none&#39;; base-uri &#39;none&#39;">'
+    )
+    head_match = re.search(r"(?i)<head[^>]*>", text)
+    if head_match:
+        return text[: head_match.end()] + csp + text[head_match.end() :]
+    return "<!doctype html><html><head>" + csp + "</head><body>" + text + "</body></html>"
+
+
+def runtime_diagnostic_html(title: str, details: list[str]) -> str:
+    items = "".join(f"<li>{_escape_html(item)}</li>" for item in details[:20])
+    return (
+        "<!doctype html><html><head><meta charset=\"utf-8\">"
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+        "<style>body{margin:0;background:#080808;color:#ececec;font:14px system-ui,sans-serif;}"
+        "main{display:grid;place-content:center;min-height:100vh;padding:32px;}"
+        "section{max-width:720px;border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:18px;background:rgba(255,255,255,.055);}"
+        "h1{margin:0 0 10px;font-size:18px;font-weight:600;}li{margin:6px 0;color:rgba(236,236,236,.72);}</style>"
+        f"<title>{_escape_html(title)}</title></head><body><main><section><h1>{_escape_html(title)}</h1><ul>{items}</ul></section></main></body></html>"
+    )
+
+
 def extract_zip_base64(archive_base64: object, destination: Path) -> dict[str, object]:
     encoded = str(archive_base64 or "")
     if not encoded:
@@ -361,7 +394,7 @@ def source_profile(source_root: Path) -> dict[str, object]:
     missing_requirements: list[str] = []
     runtime_status = "static_fallback" if static_preview_supported else "blocked"
     if runtime_kind == "static_export" and static_preview_supported:
-        runtime_status = "static_fallback"
+        runtime_status = "ready"
     elif runtime_kind == "node_build":
         missing_requirements.append("platform preview sandbox for allowlisted package install/build commands")
     elif runtime_kind == "php":
@@ -506,6 +539,32 @@ def _inline_media_assets(html: str, source_root: Path, page_path: object) -> str
     return re.sub(r"(?is)\b(src|poster)\s*=\s*([\"'])(.*?)\2", replace, html)
 
 
+def _inline_runtime_scripts(html: str, source_root: Path, page_path: object) -> str:
+    page_dir = PurePosixPath(str(page_path or "index.html")).parent
+    budget = {"used": 0}
+
+    def replace(match: re.Match[str]) -> str:
+        tag = match.group(0)
+        attrs = _html_attrs(tag)
+        raw_src = attrs.get("src", "")
+        if not raw_src:
+            return tag
+        rel_path = _normal_asset_ref(raw_src, page_dir)
+        if not rel_path:
+            return ""
+        target = resolve_site_path(source_root, rel_path)
+        if not target.exists() or not target.is_file() or target.suffix.lower() not in {".js", ".mjs"}:
+            return ""
+        size = target.stat().st_size
+        if size > MAX_PREVIEW_SCRIPT_BYTES or budget["used"] + size > MAX_PREVIEW_TOTAL_SCRIPT_BYTES:
+            return ""
+        budget["used"] += size
+        script = read_text_file(target).replace("</script", "<\\/script")
+        return f"<script>{script}</script>"
+
+    return re.sub(r"(?is)<script\b[^>]*\bsrc\s*=\s*([\"']).*?\1[^>]*>\s*</script\s*>", replace, html)
+
+
 def _html_attrs(tag: str) -> dict[str, str]:
     attrs: dict[str, str] = {}
     for match in re.finditer(r"(?is)\b([a-z0-9_-]+)\s*=\s*([\"'])(.*?)\2", tag):
@@ -541,3 +600,8 @@ def _normal_asset_ref(raw_ref: str, page_dir: PurePosixPath) -> str | None:
         return safe_relative_path((page_dir / path).as_posix())
     except ValueError:
         return None
+
+
+def _escape_html(value: object) -> str:
+    text = str(value if value is not None else "")
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")

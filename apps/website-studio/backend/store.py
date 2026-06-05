@@ -32,6 +32,8 @@ from safety import (
     read_text_file,
     replace_tree_from_directory,
     resolve_site_path,
+    runtime_diagnostic_html,
+    runtime_srcdoc_html,
     safe_relative_path,
     sha256_text,
     slugify,
@@ -848,12 +850,29 @@ def build_preview(data_root: Path, site_id: object, route: object = "/") -> dict
     pages = sitemap(data_root, site["id"])["items"]
     route_text = str(route or "/")
     page = next((item for item in pages if item["route"] == route_text), pages[0] if pages else None)
+    preview_id = f"preview_{uuid4().hex[:12]}"
+    contract = _preview_contract(data_root, site, page=page, route=page["route"] if page else route_text, preview_id=preview_id)
     if not page:
-        raise ValueError("site has no HTML page to preview")
+        _record_preview(data_root, site, contract)
+        html = runtime_diagnostic_html("Preview runtime unavailable", contract["missing_requirements"] or ["site has no HTML page to preview"])
+        return {
+            "preview_id": preview_id,
+            "site_id": str(site["id"]),
+            "environment_id": contract["environment_id"],
+            "route": route_text,
+            "page_id": "",
+            "route_id": contract["route_id"],
+            "runtime_kind": contract["runtime_kind"],
+            "runtime_status": contract["runtime_status"],
+            "preview_url": contract["preview_url"],
+            "build_id": contract["build_id"],
+            "missing_requirements": contract["missing_requirements"],
+            "asset_refs": [],
+            "warnings": contract["warnings"],
+            "html": html,
+        }
     rel_path = page["source_files"][0]
     html = read_file(data_root, site_id=site_id, path=rel_path)["content"]
-    preview_id = f"preview_{uuid4().hex[:12]}"
-    contract = _preview_contract(data_root, site, page=page, route=page["route"], preview_id=preview_id)
     _record_preview(data_root, site, contract)
     return {
         "preview_id": preview_id,
@@ -882,26 +901,36 @@ def validate_build(data_root: Path, site_id: object) -> dict[str, object]:
         warnings.extend(str(warning) for warning in item.get("warnings", []))
     for item in map_payload.get("routes", []):
         warnings.extend(str(warning) for warning in item.get("warnings", []))
-    if profile.get("has_package_manifest"):
+    runtime_kind = str(profile.get("preview_runtime_kind") or "unavailable")
+    missing_requirements = [str(item) for item in profile.get("missing_requirements", []) if str(item).strip()] if isinstance(profile.get("missing_requirements"), list) else []
+    if profile.get("has_package_manifest") and runtime_kind != "static_export":
         warnings.append("arbitrary dependency installs and build scripts are not executed in Phase 2 without a platform sandbox")
     status = "passed" if profile.get("static_preview_supported") else "blocked"
-    logs_summary = "Static preview validation passed." if status == "passed" else "No static HTML route is available for validation."
+    logs_summary = "Static preview artifact prepared." if status == "passed" else "No runnable preview artifact is available without a platform runtime sandbox."
     build_id = f"build_{uuid4().hex[:16]}"
+    artifact_ref = _create_static_build_artifact(data_root, site, build_id) if status == "passed" else {}
     now = now_timestamp()
     with connect(data_root) as db:
         db.execute(
             """
-            INSERT INTO builds(id, site_id, status, source_profile_json, route_count, asset_count, warnings_json, logs_summary, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO builds(
+              id, site_id, status, runtime_kind, preview_url, artifact_ref_json, source_profile_json,
+              route_count, asset_count, warnings_json, missing_requirements_json, logs_summary, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 build_id,
                 site["id"],
                 status,
+                runtime_kind,
+                "",
+                json.dumps(artifact_ref, sort_keys=True),
                 json.dumps(profile, sort_keys=True),
                 len(map_payload.get("routes", [])),
                 len(map_payload.get("assets", [])),
                 json.dumps(warnings[:100]),
+                json.dumps(missing_requirements[:50]),
                 logs_summary,
                 now,
                 now,
@@ -927,6 +956,58 @@ def get_build(data_root: Path, build_id: object) -> dict[str, object]:
     if row is None:
         raise ValueError(f"build `{clean_id}` was not found")
     return _build_row(row)
+
+
+def runtime_status(data_root: Path, site_id: object) -> dict[str, object]:
+    site = get_site(data_root, site_id)
+    profile = source_profile(_source_root(data_root, str(site["id"])))
+    ensure_schema(data_root)
+    with connect(data_root) as db:
+        build_row = db.execute("SELECT * FROM builds WHERE site_id = ? ORDER BY created_at DESC LIMIT 1", (site["id"],)).fetchone()
+        preview_row = db.execute("SELECT * FROM previews WHERE site_id = ? ORDER BY created_at DESC LIMIT 1", (site["id"],)).fetchone()
+        session_row = db.execute("SELECT * FROM runtime_sessions WHERE site_id = ? ORDER BY created_at DESC LIMIT 1", (site["id"],)).fetchone()
+    return {
+        "site_id": site["id"],
+        "source_profile": profile,
+        "runtime_kind": profile.get("preview_runtime_kind") or "unavailable",
+        "runtime_status": profile.get("runtime_preview_status") or "blocked",
+        "missing_requirements": profile.get("missing_requirements") if isinstance(profile.get("missing_requirements"), list) else [],
+        "latest_build": _build_row(build_row) if build_row else None,
+        "latest_preview": _preview_row(preview_row) if preview_row else None,
+        "latest_runtime_session": _runtime_session_row(session_row) if session_row else None,
+    }
+
+
+def preview_document(data_root: Path, preview_id: object) -> dict[str, object]:
+    preview = get_preview(data_root, preview_id)
+    site = get_site(data_root, preview["site_id"])
+    details = [str(item) for item in preview.get("missing_requirements", []) if str(item).strip()]
+    if not preview.get("page_id"):
+        html = runtime_diagnostic_html("Preview runtime unavailable", details or ["site has no HTML page to preview"])
+        return {"preview": preview, "html": html}
+    try:
+        page = _get_page(data_root, preview["page_id"])
+        rel_path = page["source_files"][0]
+        html = read_file(data_root, site_id=site["id"], path=rel_path)["content"]
+        if preview.get("status") in {"ready", "static_fallback"}:
+            return {
+                "preview": preview,
+                "html": runtime_srcdoc_html(html, source_root=_source_root(data_root, str(site["id"])), page_path=rel_path),
+            }
+    except (IndexError, ValueError) as error:
+        details.append(str(error))
+    html = runtime_diagnostic_html("Preview runtime unavailable", details or ["preview source could not be rendered"])
+    return {"preview": preview, "html": html}
+
+
+def get_preview(data_root: Path, preview_id: object) -> dict[str, object]:
+    clean_id = _required_id(preview_id, "preview_id")
+    ensure_schema(data_root)
+    with connect(data_root) as db:
+        row = db.execute("SELECT * FROM previews WHERE id = ?", (clean_id,)).fetchone()
+    if row is None:
+        raise ValueError(f"preview `{clean_id}` was not found")
+    return _preview_row(row)
 
 
 def create_publish_request(
@@ -1277,16 +1358,20 @@ def _preview_contract(
     runtime_status = str(profile.get("runtime_preview_status") or "blocked")
     warnings = list(page.get("warnings", [])) if page else []
     missing_requirements = [str(item) for item in profile.get("missing_requirements", []) if str(item).strip()] if isinstance(profile.get("missing_requirements"), list) else []
-    if runtime_kind != "static_export" and profile.get("static_preview_supported"):
+    if runtime_kind == "static_export" and profile.get("static_preview_supported"):
+        runtime_status = "ready"
+    elif runtime_kind != "static_export" and profile.get("static_preview_supported"):
+        runtime_status = "static_fallback"
         warnings.append(f"{runtime_kind} runtime is not available yet; serving sanitized static HTML fallback")
-    if runtime_kind == "static_export":
-        warnings.append("serving sanitized static HTML fallback with imported JavaScript disabled")
+    if runtime_kind == "static_export" and profile.get("static_preview_supported"):
+        warnings.append("serving static export in an isolated preview runtime")
+    preview_url = _preview_runtime_url(preview_id, route_text) if preview_id else ""
     return {
         "preview_id": preview_id,
         "site_id": str(site["id"]),
         "environment_id": str(site.get("default_environment_id") or "env_preview"),
         "runtime_kind": runtime_kind,
-        "preview_url": "",
+        "preview_url": preview_url,
         "route": route_text,
         "route_id": route_id,
         "page_id": page["id"] if page else "",
@@ -1304,17 +1389,71 @@ def _record_preview(data_root: Path, site: dict[str, object], contract: dict[str
     now = now_timestamp()
     with connect(data_root) as db:
         db.execute(
-            "INSERT INTO previews(id, site_id, route, page_id, build_id, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            """
+            INSERT INTO previews(
+              id, site_id, route, page_id, build_id, runtime_kind, preview_url,
+              warnings_json, missing_requirements_json, artifact_ref_json, status, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
             (
                 preview_id,
                 str(site["id"]),
                 str(contract.get("route") or "/"),
                 str(contract.get("page_id") or ""),
                 str(contract.get("build_id") or ""),
+                str(contract.get("runtime_kind") or ""),
+                str(contract.get("preview_url") or ""),
+                json.dumps(list(contract.get("warnings") or [])[:100]),
+                json.dumps(list(contract.get("missing_requirements") or [])[:50]),
+                json.dumps(dict(contract.get("artifact_ref") or {}), sort_keys=True),
                 str(contract.get("runtime_status") or "blocked"),
                 now,
             ),
         )
+    _record_runtime_session(data_root, site, contract, created_at=now)
+
+
+def _record_runtime_session(data_root: Path, site: dict[str, object], contract: dict[str, object], *, created_at: str) -> None:
+    preview_id = str(contract.get("preview_id") or "").strip()
+    session_id = f"runtime_{uuid4().hex[:16]}"
+    health = {
+        "route": str(contract.get("route") or "/"),
+        "runtime_kind": str(contract.get("runtime_kind") or "unavailable"),
+        "runtime_status": str(contract.get("runtime_status") or "blocked"),
+        "preview_url": str(contract.get("preview_url") or ""),
+        "warnings": list(contract.get("warnings") or [])[:100],
+    }
+    with connect(data_root) as db:
+        db.execute(
+            """
+            INSERT INTO runtime_sessions(
+              id, site_id, preview_id, build_id, runtime_kind, status, preview_url,
+              route, health_json, missing_requirements_json, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                session_id,
+                str(site["id"]),
+                preview_id,
+                str(contract.get("build_id") or ""),
+                str(contract.get("runtime_kind") or "unavailable"),
+                str(contract.get("runtime_status") or "blocked"),
+                str(contract.get("preview_url") or ""),
+                str(contract.get("route") or "/"),
+                json.dumps(health, sort_keys=True),
+                json.dumps(list(contract.get("missing_requirements") or [])[:50]),
+                created_at,
+                created_at,
+            ),
+        )
+
+
+def _preview_runtime_url(preview_id: str, route: str) -> str:
+    if not preview_id:
+        return ""
+    return f"/apps/website-studio/preview-runtime/?{urlencode({'preview_id': preview_id, 'route': route or '/'})}"
 
 
 def reference_manifest() -> dict[str, object]:
@@ -1737,9 +1876,32 @@ def _approval_row(row) -> dict[str, object]:
 
 
 def _build_row(row) -> dict[str, object]:
+    if row is None:
+        return {}
     payload = dict(row)
     payload["source_profile"] = json.loads(payload.pop("source_profile_json") or "{}")
+    payload["artifact_ref"] = json.loads(payload.pop("artifact_ref_json", "{}") or "{}")
     payload["warnings"] = json.loads(payload.pop("warnings_json") or "[]")
+    payload["missing_requirements"] = json.loads(payload.pop("missing_requirements_json", "[]") or "[]")
+    return payload
+
+
+def _preview_row(row) -> dict[str, object]:
+    if row is None:
+        return {}
+    payload = dict(row)
+    payload["warnings"] = json.loads(payload.pop("warnings_json", "[]") or "[]")
+    payload["missing_requirements"] = json.loads(payload.pop("missing_requirements_json", "[]") or "[]")
+    payload["artifact_ref"] = json.loads(payload.pop("artifact_ref_json", "{}") or "{}")
+    return payload
+
+
+def _runtime_session_row(row) -> dict[str, object]:
+    if row is None:
+        return {}
+    payload = dict(row)
+    payload["health"] = json.loads(payload.pop("health_json", "{}") or "{}")
+    payload["missing_requirements"] = json.loads(payload.pop("missing_requirements_json", "[]") or "[]")
     return payload
 
 
@@ -1864,6 +2026,20 @@ def _publish_target_for_environment(data_root: Path, site: dict[str, object], en
             raise ValueError(f"publish target `{target_id}` is {target['status']}")
         return target
     return None
+
+
+def _create_static_build_artifact(data_root: Path, site: dict[str, object], build_id: str) -> dict[str, object]:
+    artifact_root = data_root / "sites" / str(site["id"]) / "builds" / build_id / "public"
+    copy_tree_snapshot(_source_root(data_root, str(site["id"])), artifact_root)
+    entrypoint = "index.html" if (artifact_root / "index.html").exists() else ""
+    return {
+        "provider": "website-studio",
+        "kind": "static_preview_artifact",
+        "build_id": build_id,
+        "artifact_root": artifact_root.relative_to(data_root).as_posix(),
+        "entrypoint": entrypoint,
+        "platform_surface": "website_studio_preview_runtime",
+    }
 
 
 def _publish_to_managed_static_artifact(

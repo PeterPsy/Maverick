@@ -1,7 +1,7 @@
 {
   "commands": {
     "website-studio": {
-      "description": "Run a Website Studio action against the workspace data root. Defaults to listing sites. File writes require expected_hash; new files use expected_hash=new. build_preview returns static fallback HTML plus runtime status and missing runtime requirements.",
+      "description": "Run a Website Studio action against the workspace data root. Defaults to listing sites. File writes require expected_hash; new files use expected_hash=new. build_preview returns preview HTML, an isolated preview_url when available, runtime status, and missing runtime requirements.",
       "argument_schema": {
         "type": "object",
         "properties": {
@@ -37,6 +37,8 @@
               "build_validate",
               "builds_list",
               "build_preview",
+              "preview_document",
+              "runtime_status",
               "publish_request",
               "approval_record",
               "approvals_list",
@@ -84,6 +86,7 @@
           "new_text": {"type": "string"},
           "expected_hash": {"type": "string"},
           "route": {"type": "string"},
+          "preview_id": {"type": "string"},
           "page_id": {"type": "string"},
           "publish_request_id": {"type": "string"},
           "approval_id": {"type": "string"},

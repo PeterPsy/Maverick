@@ -1088,7 +1088,8 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(status, 200)
             self.assertIn("Content-Security-Policy", preview["html"])
             self.assertEqual(preview["runtime_kind"], "static_export")
-            self.assertEqual(preview["runtime_status"], "static_fallback")
+            self.assertEqual(preview["runtime_status"], "ready")
+            self.assertTrue(preview["preview_url"].startswith("/apps/website-studio/preview-runtime/?"))
             self.assertEqual(preview["missing_requirements"], [])
 
             page_id = map_payload["items"][0]["id"]
@@ -1128,8 +1129,9 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
 
             self.assertEqual(status, 200)
             self.assertEqual(preview["runtime_kind"], "static_export")
-            self.assertEqual(preview["runtime_status"], "static_fallback")
-            self.assertEqual(preview["preview_url"], "")
+            self.assertEqual(preview["runtime_status"], "ready")
+            self.assertTrue(preview["preview_url"].startswith("/apps/website-studio/preview-runtime/?"))
+            self.assertIn(f"preview_id={preview['preview_id']}", preview["preview_url"])
             self.assertIn("Content-Security-Policy", preview["html"])
             self.assertNotIn("<script", preview["html"].lower())
             self.assertNotIn("onclick", preview["html"].lower())
@@ -1151,6 +1153,43 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(status, 200)
             self.assertIn("<style>body { color: #111; }</style>", preview["html"])
             self.assertIn("data:image/png;base64,", preview["html"])
+
+    def test_runtime_preview_document_inlines_local_scripts_for_static_sites(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            archive = BytesIO()
+            with ZipFile(archive, "w") as zip_file:
+                zip_file.writestr(
+                    "index.html",
+                    (
+                        "<!doctype html><html><head>"
+                        '<link rel="stylesheet" href="assets/site.css">'
+                        "</head><body><main>Runtime</main>"
+                        '<script src="assets/site.js"></script>'
+                        "</body></html>"
+                    ),
+                )
+                zip_file.writestr("assets/site.css", "main { color: #123; }")
+                zip_file.writestr("assets/site.js", "window.__websiteStudioRuntimeTest = true;")
+            encoded = base64.b64encode(archive.getvalue()).decode("ascii")
+
+            status, imported = handle_action(data_root, {"action": "import_zip", "display_name": "Runtime Static", "archive_base64": encoded})
+            self.assertEqual(status, 201)
+            status, preview = handle_action(data_root, {"action": "build_preview", "site_id": imported["site"]["id"]})
+            self.assertEqual(status, 200)
+            self.assertEqual(preview["runtime_kind"], "static_export")
+            self.assertEqual(preview["runtime_status"], "ready")
+            self.assertTrue(preview["preview_url"].startswith("/apps/website-studio/preview-runtime/?"))
+            self.assertNotIn("<script", preview["html"].lower())
+
+            status, document = handle_action(data_root, {"action": "preview_document", "preview_id": preview["preview_id"]})
+            self.assertEqual(status, 200)
+            self.assertEqual(document["preview"]["id"], preview["preview_id"])
+            self.assertEqual(document["preview"]["status"], "ready")
+            self.assertIn("<style>main { color: #123; }</style>", document["html"])
+            self.assertIn("window.__websiteStudioRuntimeTest = true;", document["html"])
+            self.assertIn("script-src &#39;unsafe-inline&#39;", document["html"])
+            self.assertNotIn('src="assets/site.js"', document["html"])
 
     def test_preview_contract_reports_missing_runtime_requirements_for_build_and_php_sites(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1181,6 +1220,65 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
                 row = db.execute("SELECT status, route FROM previews WHERE id = ?", (preview["preview_id"],)).fetchone()
             self.assertEqual(row, ("static_fallback", preview["route"]))
 
+    def test_php_site_without_static_html_returns_runtime_diagnostic_preview(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            archive = BytesIO()
+            with ZipFile(archive, "w") as zip_file:
+                zip_file.writestr("frontend-website/index.php", "<?php echo 'Home';")
+                zip_file.writestr("package.json", '{"scripts":{"build":"vite build"}}')
+            encoded = base64.b64encode(archive.getvalue()).decode("ascii")
+
+            status, imported = handle_action(data_root, {"action": "import_zip", "display_name": "PHP Runtime", "archive_base64": encoded})
+            self.assertEqual(status, 201)
+            profile = imported["import"]["source_profile"]
+            self.assertFalse(profile["static_preview_supported"])
+            self.assertEqual(profile["preview_runtime_kind"], "php")
+            self.assertIn("platform PHP preview runtime", profile["missing_requirements"][0])
+
+            status, preview = handle_action(data_root, {"action": "build_preview", "site_id": imported["site"]["id"]})
+            self.assertEqual(status, 200)
+            self.assertEqual(preview["runtime_kind"], "php")
+            self.assertEqual(preview["runtime_status"], "blocked")
+            self.assertEqual(preview["page_id"], "")
+            self.assertTrue(preview["preview_url"].startswith("/apps/website-studio/preview-runtime/?"))
+            self.assertIn("Preview runtime unavailable", preview["html"])
+            self.assertIn("platform PHP preview runtime", preview["missing_requirements"][0])
+
+            status, document = handle_action(data_root, {"action": "preview_document", "preview_id": preview["preview_id"]})
+            self.assertEqual(status, 200)
+            self.assertEqual(document["preview"]["status"], "blocked")
+            self.assertIn("Preview runtime unavailable", document["html"])
+            self.assertIn("platform PHP preview runtime", document["html"])
+
+            with sqlite3.connect(data_root / "app.sqlite") as db:
+                preview_row = db.execute("SELECT status, page_id FROM previews WHERE id = ?", (preview["preview_id"],)).fetchone()
+                session_row = db.execute("SELECT status, runtime_kind FROM runtime_sessions WHERE preview_id = ?", (preview["preview_id"],)).fetchone()
+            self.assertEqual(preview_row, ("blocked", ""))
+            self.assertEqual(session_row, ("blocked", "php"))
+
+    def test_runtime_status_reports_latest_build_preview_and_session(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            status, created = handle_action(data_root, {"action": "site_create", "display_name": "Runtime Health"})
+            self.assertEqual(status, 201)
+            site_id = created["site"]["id"]
+
+            status, preview = handle_action(data_root, {"action": "build_preview", "site_id": site_id})
+            self.assertEqual(status, 200)
+            status, build_payload = handle_action(data_root, {"action": "build_validate", "site_id": site_id})
+            self.assertEqual(status, 201)
+
+            status, runtime = handle_action(data_root, {"action": "runtime_status", "site_id": site_id})
+            self.assertEqual(status, 200)
+            self.assertEqual(runtime["site_id"], site_id)
+            self.assertEqual(runtime["runtime_kind"], "static_export")
+            self.assertEqual(runtime["runtime_status"], "ready")
+            self.assertEqual(runtime["latest_preview"]["id"], preview["preview_id"])
+            self.assertEqual(runtime["latest_build"]["id"], build_payload["build"]["id"])
+            self.assertEqual(runtime["latest_runtime_session"]["preview_id"], preview["preview_id"])
+            self.assertEqual(runtime["latest_runtime_session"]["status"], "ready")
+
     def test_active_context_includes_route_assets_and_change_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
@@ -1198,7 +1296,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertIn("source_profile", context)
             self.assertTrue(context["source_profile"]["static_preview_supported"])
             self.assertEqual(context["runtime_kind"], "static_export")
-            self.assertEqual(context["runtime_status"], "static_fallback")
+            self.assertEqual(context["runtime_status"], "ready")
             self.assertIn("preview", context)
 
     def test_page_context_accepts_route_and_asset_selection(self) -> None:
@@ -1325,10 +1423,24 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("asset_id", app_source)
         self.assertIn("maverick.app.selection-changed", app_source)
         self.assertIn("selectedRoute && !selectedRoute.page_id ? undefined : map.items[0]", app_source)
-        self.assertIn("selectedRoute?.page_id ? selectedRoute.route : ''", app_source)
+        self.assertIn("selectedPage?.route || selectedRoute?.route || '/'", app_source)
         self.assertIn("PreviewStatus", app_source)
         self.assertIn("runtime_status", app_source)
         self.assertIn("missing_requirements", app_source)
+        self.assertIn("previewState?.preview_url || ''", app_source)
+        self.assertIn("sandbox=\"allow-scripts allow-same-origin\"", app_source)
+        self.assertIn("src={previewUrl}", app_source)
+        self.assertIn("srcDoc={previewHtml}", app_source)
+
+    def test_preview_runtime_frontend_uses_backend_document_and_opaque_inner_frame(self) -> None:
+        runtime_source = (APP_ROOT / "frontend" / "public" / "preview-runtime" / "index.html").read_text(encoding="utf-8")
+
+        self.assertIn("action: 'preview_document'", runtime_source)
+        self.assertIn("preview_id: previewId", runtime_source)
+        self.assertIn("frame.srcdoc = String(payload.html || '')", runtime_source)
+        self.assertIn('sandbox="allow-scripts allow-forms"', runtime_source)
+        self.assertNotIn("allow-popups", runtime_source)
+        self.assertNotIn("allow-same-origin", runtime_source)
 
     def test_frontend_connect_git_prepares_and_imports_source(self) -> None:
         app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
@@ -1910,6 +2022,12 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(status, 201)
             self.assertEqual(build_payload["build"]["status"], "passed")
             self.assertIn("not executed", " ".join(build_payload["build"]["warnings"]))
+            self.assertEqual(build_payload["build"]["runtime_kind"], "node_build")
+            artifact_ref = build_payload["build"]["artifact_ref"]
+            self.assertEqual(artifact_ref["kind"], "static_preview_artifact")
+            artifact_index = data_root / artifact_ref["artifact_root"] / "index.html"
+            self.assertTrue(artifact_index.exists())
+            self.assertIn("Build", artifact_index.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

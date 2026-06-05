@@ -109,6 +109,21 @@ class GeneratedAppContractTest(unittest.TestCase):
         self.assertIn("website_publish_targets_list", schemas["tools"])
         self.assertIn("website_publish_target_configure", schemas["tools"])
 
+    def test_phase3a_runtime_preview_tools_are_declared_when_implemented(self) -> None:
+        contract = json.loads((APP_ROOT / "app_contract.json").read_text(encoding="utf-8"))
+        mcp_tools = set(contract.get("capabilities", {}).get("mcp_tools", []))
+        self.assertIn("website_preview_document", mcp_tools)
+        self.assertIn("website_runtime_status", mcp_tools)
+
+        schemas = json.loads((APP_ROOT / "mcp" / "tool_schemas.json").read_text(encoding="utf-8"))
+        self.assertIn("website_preview_document", schemas["tools"])
+        self.assertIn("website_runtime_status", schemas["tools"])
+
+        cli_schema = json.loads((APP_ROOT / "cli" / "command_schemas.json").read_text(encoding="utf-8"))
+        actions = set(cli_schema["commands"]["website-studio"]["argument_schema"]["properties"]["action"]["enum"])
+        self.assertIn("preview_document", actions)
+        self.assertIn("runtime_status", actions)
+
 
 if __name__ == "__main__":
     unittest.main()

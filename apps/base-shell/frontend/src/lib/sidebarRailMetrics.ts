@@ -1,11 +1,10 @@
 import type { CSSProperties } from "react";
 
-const PREFERRED_ICON_SIZE_REM = 3;
+const PREFERRED_ICON_SIZE_REM = 2.4;
 const MIN_ICON_SIZE_REM = 2.05;
 const RAIL_WIDTH_EXTRA_REM = 0.95;
-const RAIL_MAX_HEIGHT_REM = 38;
 const RAIL_VIEWPORT_MARGIN_REM = 2;
-const RAIL_ITEM_GAP_REM = 0.32;
+const RAIL_ITEM_GAP_REM = 0.48;
 const RAIL_INTERACTIVE_PADDING_REM = 0.42 * 2;
 
 export type SidebarRailMetricsInput = {
@@ -35,7 +34,7 @@ export function calculateSidebarRailMetrics({
 }
 
 function fitIconSizeToViewport(itemCount: number, viewportHeightRem: number): number {
-  const availableRailHeight = Math.max(0, Math.min(RAIL_MAX_HEIGHT_REM, viewportHeightRem - RAIL_VIEWPORT_MARGIN_REM));
+  const availableRailHeight = availableRailHeightForViewport(viewportHeightRem);
   const gapHeight = Math.max(0, itemCount - 1) * RAIL_ITEM_GAP_REM;
   const fitSize = (availableRailHeight - RAIL_INTERACTIVE_PADDING_REM - gapHeight) / itemCount;
 
@@ -46,11 +45,15 @@ function requiresOverflowAtMinimum(itemCount: number, viewportHeightRem: number 
   if (!viewportHeightRem) {
     return false;
   }
-  const availableRailHeight = Math.max(0, Math.min(RAIL_MAX_HEIGHT_REM, viewportHeightRem - RAIL_VIEWPORT_MARGIN_REM));
+  const availableRailHeight = availableRailHeightForViewport(viewportHeightRem);
   const minimumContentHeight =
     itemCount * MIN_ICON_SIZE_REM + Math.max(0, itemCount - 1) * RAIL_ITEM_GAP_REM + RAIL_INTERACTIVE_PADDING_REM;
 
   return minimumContentHeight > availableRailHeight;
+}
+
+function availableRailHeightForViewport(viewportHeightRem: number): number {
+  return Math.max(0, viewportHeightRem - RAIL_VIEWPORT_MARGIN_REM);
 }
 
 function formatRem(value: number): string {

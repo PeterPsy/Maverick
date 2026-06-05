@@ -132,7 +132,7 @@
   flex-direction: column;
   align-self: center;
   width: var(--bs-sidebar-rail-width, var(--maverick-sidebar-rail-width));
-  max-height: min(38rem, calc(100dvh - 2rem));
+  max-height: calc(100dvh - 2rem);
   padding: 0.34rem;
 }
 
@@ -171,7 +171,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.32rem;
+  gap: 0.48rem;
   min-height: 0;
   max-height: 100%;
   overflow-x: visible;
@@ -202,12 +202,12 @@
   position: relative;
   display: grid;
   place-items: center;
-  width: var(--bs-sidebar-icon-size, 3.55rem);
-  height: var(--bs-sidebar-icon-size, 3.55rem);
-  min-width: var(--bs-sidebar-icon-size, 3.55rem);
-  min-height: var(--bs-sidebar-icon-size, 3.55rem);
+  width: var(--bs-sidebar-icon-size, 2.4rem);
+  height: var(--bs-sidebar-icon-size, 2.4rem);
+  min-width: var(--bs-sidebar-icon-size, 2.4rem);
+  min-height: var(--bs-sidebar-icon-size, 2.4rem);
   padding: 0;
-  border-radius: min(1.125rem, calc(var(--bs-sidebar-icon-size, 3.55rem) * 0.375));
+  border-radius: min(1.125rem, calc(var(--bs-sidebar-icon-size, 2.4rem) * 0.375));
   background: transparent;
   color: #111;
   transition:
@@ -296,9 +296,9 @@
 }
 
 .bs-app-logo--rail {
-  width: var(--bs-sidebar-icon-size, 3.55rem);
-  height: var(--bs-sidebar-icon-size, 3.55rem);
-  border-radius: min(1.125rem, calc(var(--bs-sidebar-icon-size, 3.55rem) * 0.375));
+  width: var(--bs-sidebar-icon-size, 2.4rem);
+  height: var(--bs-sidebar-icon-size, 2.4rem);
+  border-radius: min(1.125rem, calc(var(--bs-sidebar-icon-size, 2.4rem) * 0.375));
   box-shadow:
     var(--bs-sidebar-inner-edge),
     0 10px 24px rgba(0, 0, 0, 0.22);
@@ -306,7 +306,7 @@
 }
 
 .bs-app-logo--rail .material-symbols-rounded {
-  font-size: calc(var(--bs-sidebar-icon-size, 3.55rem) * 0.52);
+  font-size: calc(var(--bs-sidebar-icon-size, 2.4rem) * 0.52);
 }
 
 .bs-sidebar__rail-button:hover .bs-app-logo--rail,

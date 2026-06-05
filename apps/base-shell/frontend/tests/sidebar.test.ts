@@ -20,6 +20,12 @@ describe("Sidebar app rail", () => {
     expect(sidebarRailButtonClassName("chat", "chat")).toContain("is-active");
     expect(sidebarRailButtonClassName("chat", "chat")).not.toContain("is-busy");
   });
+
+  it("sizes loading skeletons with the same rail logo contract as real apps", () => {
+    const railSource = readSource("components/SidebarAppRail.tsx");
+
+    expect(railSource).toContain("bs-app-logo bs-app-logo--rail bs-sidebar__rail-skeleton-logo");
+  });
 });
 
 describe("Sidebar mobile layout contract", () => {
@@ -37,6 +43,10 @@ describe("Sidebar desktop layout contract", () => {
     const layoutStyles = readStyle("layout.css");
     const panelsStyles = readStyle("panels.css");
     const sidebarStyles = readStyle("sidebar.css");
+    const railLayoutRule = sidebarStyles.match(/\.bs-sidebar__rail \{\n  display: flex;[\s\S]*?\n\}/)?.[0] ?? "";
+    const railAppsRule = sidebarStyles.match(/\.bs-sidebar__rail-apps \{[\s\S]*?\n\}/)?.[0] ?? "";
+    const railButtonRule = sidebarStyles.match(/\.bs-sidebar__rail-button \{[\s\S]*?\n\}/)?.[0] ?? "";
+    const railLogoRule = sidebarStyles.match(/\.bs-app-logo--rail \{\n  width:[\s\S]*?\n\}/)?.[0] ?? "";
 
     expect(layoutStyles).toContain("--bs-shell-desktop-rail-space");
     expect(layoutStyles).toContain(".bs-shell:not(.is-mobile-layout) .bs-workspace-view-shell");
@@ -45,6 +55,12 @@ describe("Sidebar desktop layout contract", () => {
     expect(layoutStyles).toContain("margin-left: var(--bs-shell-desktop-fixed-sidebar-space);");
     expect(panelsStyles).not.toContain("calc(var(--maverick-sidebar-width) + 2rem)");
     expect(sidebarStyles).toContain("left: var(--bs-sidebar-desktop-rail-left, 1rem);");
+    expect(railLayoutRule).toContain("max-height: calc(100dvh - 2rem);");
+    expect(railLayoutRule).not.toContain("min(38rem");
+    expect(railAppsRule).toContain("gap: 0.48rem;");
+    expect(railButtonRule).toContain("width: var(--bs-sidebar-icon-size, 2.4rem);");
+    expect(railLogoRule).toContain("width: var(--bs-sidebar-icon-size, 2.4rem);");
+    expect(panelsStyles).toContain("width: var(--bs-sidebar-icon-size, 2.4rem);");
   });
 
   it("keeps the desktop logo inline with sidebar controls only on desktop", () => {
@@ -197,7 +213,18 @@ describe("Sidebar desktop rail metrics", () => {
       viewportHeightPx: 900,
     }) as Record<string, string>;
 
-    expect(metrics["--bs-sidebar-icon-size"]).toBe("3rem");
+    expect(metrics["--bs-sidebar-icon-size"]).toBe("2.4rem");
+    expect(metrics["--bs-sidebar-rail-apps-overflow-y"]).toBe("visible");
+  });
+
+  it("does not shrink icons at the old fixed rail height when the viewport has room", () => {
+    const metrics = calculateSidebarRailMetrics({
+      itemCount: 14,
+      rootFontSizePx: 16,
+      viewportHeightPx: 900,
+    }) as Record<string, string>;
+
+    expect(metrics["--bs-sidebar-icon-size"]).toBe("2.4rem");
     expect(metrics["--bs-sidebar-rail-apps-overflow-y"]).toBe("visible");
   });
 
@@ -205,11 +232,11 @@ describe("Sidebar desktop rail metrics", () => {
     const metrics = calculateSidebarRailMetrics({
       itemCount: 8,
       rootFontSizePx: 16,
-      viewportHeightPx: 420,
+      viewportHeightPx: 380,
     }) as Record<string, string>;
     const iconSize = Number.parseFloat(metrics["--bs-sidebar-icon-size"]);
 
-    expect(iconSize).toBeLessThan(3);
+    expect(iconSize).toBeLessThan(2.4);
     expect(iconSize).toBeGreaterThan(2.05);
     expect(metrics["--bs-sidebar-rail-apps-overflow-y"]).toBe("visible");
   });

@@ -319,15 +319,15 @@
 }
 
 .bs-app-logo.bs-app-logo--rail {
-  width: var(--bs-sidebar-icon-size, 3rem);
-  height: var(--bs-sidebar-icon-size, 3rem);
-  min-width: var(--bs-sidebar-icon-size, 3rem);
-  min-height: var(--bs-sidebar-icon-size, 3rem);
-  border-radius: min(1.125rem, calc(var(--bs-sidebar-icon-size, 3rem) * 0.375));
+  width: var(--bs-sidebar-icon-size, 2.4rem);
+  height: var(--bs-sidebar-icon-size, 2.4rem);
+  min-width: var(--bs-sidebar-icon-size, 2.4rem);
+  min-height: var(--bs-sidebar-icon-size, 2.4rem);
+  border-radius: min(1.125rem, calc(var(--bs-sidebar-icon-size, 2.4rem) * 0.375));
 }
 
 .bs-app-logo.bs-app-logo--rail .material-symbols-rounded {
-  font-size: calc(var(--bs-sidebar-icon-size, 3rem) * 0.52);
+  font-size: calc(var(--bs-sidebar-icon-size, 2.4rem) * 0.52);
 }
 
 .bs-app-logo--card {

@@ -73,3 +73,19 @@ Use this repo for changes to workspace-local apps such as `apps/crm` and
 `apps/mail`.
 
 Do not make Maverick core or built-in app changes in this repo.
+
+## User-Created Files Go Through Storage
+
+When the user asks to create, save, deliver, or export a file/document/report,
+create it through the Storage app (`app_id: storage`) unless the user explicitly
+asks for a repository source file or code change.
+
+Use the official Storage surfaces and write generated deliverables under:
+
+```text
+storage/generated/<folder>/<file>
+```
+
+After creating the file, verify it with Storage metadata/preview and return the
+Storage deep link or `workspace_relative_path`. Do not return a repository
+filesystem path as the primary deliverable for user-facing files.

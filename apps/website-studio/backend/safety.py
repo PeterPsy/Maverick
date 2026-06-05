@@ -391,18 +391,14 @@ def source_profile(source_root: Path) -> dict[str, object]:
     else:
         runtime_kind = "unavailable"
 
-    missing_requirements: list[str] = []
     runtime_status = "static_fallback" if static_preview_supported else "blocked"
+    runtime_supported = runtime_kind in {"static_export", "php", "node_build"}
+    missing_requirements: list[str] = []
     if runtime_kind == "static_export" and static_preview_supported:
         runtime_status = "ready"
-    elif runtime_kind == "node_build":
-        missing_requirements.append("platform preview sandbox for allowlisted package install/build commands")
-    elif runtime_kind == "php":
-        missing_requirements.append("platform PHP preview runtime with isolated origin and bounded process lifecycle")
-        if has_package_manifest:
-            missing_requirements.append("allowlisted frontend asset build before PHP preview")
     elif runtime_kind == "unavailable":
         missing_requirements.append("static HTML route or supported preview runtime")
+        runtime_supported = False
 
     return {
         "source_shape": shape,
@@ -411,7 +407,7 @@ def source_profile(source_root: Path) -> dict[str, object]:
         "has_package_manifest": has_package_manifest,
         "static_preview_supported": static_preview_supported,
         "preview_runtime_kind": runtime_kind,
-        "runtime_preview_supported": runtime_kind == "static_export" and static_preview_supported,
+        "runtime_preview_supported": runtime_supported,
         "runtime_preview_status": runtime_status,
         "php_docroot": php_docroot,
         "missing_requirements": missing_requirements,

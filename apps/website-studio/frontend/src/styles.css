@@ -1,9 +1,12 @@
 :root {
   color-scheme: dark;
   --maverick-bg: rgba(7, 7, 8, 1);
+  --maverick-bg-strong: #171717;
   --maverick-surface: rgba(255, 255, 255, 0.055);
   --maverick-surface-hover: rgba(255, 255, 255, 0.105);
+  --maverick-surface-active: rgba(255, 255, 255, 0.14);
   --maverick-border: rgba(255, 255, 255, 0.08);
+  --maverick-border-strong: rgba(255, 255, 255, 0.14);
   --maverick-glass-surface: rgba(12, 12, 14, 0.58);
   --maverick-glass-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.052), inset 0 1px 0 rgba(255, 255, 255, 0.09);
   --maverick-inner-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.14);
@@ -11,19 +14,30 @@
   --maverick-text-muted: rgba(236, 236, 236, 0.66);
   --maverick-text-soft: rgba(236, 236, 236, 0.42);
   --maverick-accent: #ffffff;
+  --maverick-accent-soft: rgba(255, 255, 255, 0.18);
   --maverick-text-on-accent: #0a0a0b;
+  --maverick-success: #9ff0ca;
   --maverick-warning: #f6d58f;
   --maverick-danger: #ffb3bf;
+  --maverick-card-radius: 22px;
+  --maverick-control-radius: 18px;
   --maverick-font: "Avenir Next", "Sohne", "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
   --website-studio-bg: var(--maverick-bg);
+  --website-studio-bg-strong: var(--maverick-bg-strong);
   --website-studio-surface: var(--maverick-glass-surface);
   --website-studio-surface-muted: var(--maverick-surface);
   --website-studio-surface-hover: var(--maverick-surface-hover);
+  --website-studio-surface-active: var(--maverick-surface-active);
   --website-studio-border: var(--maverick-border);
+  --website-studio-border-strong: var(--maverick-border-strong);
   --website-studio-text: var(--maverick-text);
   --website-studio-muted: var(--maverick-text-muted);
   --website-studio-soft: var(--maverick-text-soft);
   --website-studio-accent: var(--maverick-accent);
+  --website-studio-accent-soft: var(--maverick-accent-soft);
+  --website-studio-focus: var(--maverick-accent);
+  --website-studio-radius-card: var(--maverick-card-radius);
+  --website-studio-radius-control: var(--maverick-control-radius);
 }
 
 * { box-sizing: border-box; }
@@ -83,7 +97,7 @@ select {
   bottom: 12px;
   z-index: 2;
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr);
+  grid-template-columns: 8px auto auto minmax(0, 1fr);
   align-items: center;
   gap: 8px;
   max-width: min(760px, calc(100% - 24px));
@@ -96,6 +110,26 @@ select {
   padding: 6px 10px;
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
+}
+
+.preview-status i {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--maverick-success);
+  box-shadow: 0 0 0 3px rgba(159, 240, 202, 0.12);
+}
+
+.preview-status[data-runtime-status="blocked"] i,
+.preview-status[data-runtime-status="failed"] i {
+  background: var(--maverick-danger);
+  box-shadow: 0 0 0 3px rgba(255, 179, 191, 0.12);
+}
+
+.preview-status[data-runtime-status="static_fallback"] i,
+.preview-status[data-runtime-status="degraded"] i {
+  background: var(--maverick-warning);
+  box-shadow: 0 0 0 3px rgba(246, 213, 143, 0.12);
 }
 
 .preview-status span,
@@ -149,7 +183,9 @@ select {
 
 .import-button {
   display: inline-grid;
+  grid-template-columns: auto auto;
   place-items: center;
+  gap: 8px;
   min-width: 138px;
   min-height: 44px;
   border: 1px solid var(--website-studio-border);
@@ -159,6 +195,12 @@ select {
   color: var(--website-studio-text);
   padding: 0 16px;
   cursor: pointer;
+}
+
+.import-button-icon {
+  font-family: "Material Symbols Rounded", "Avenir Next", system-ui, sans-serif;
+  font-size: 1.05rem;
+  line-height: 1;
 }
 
 .import-button:hover {

@@ -1,0 +1,590 @@
+"""Bounded preview runtime adapters for Website Studio."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from html.parser import HTMLParser
+import json
+import os
+from pathlib import Path
+import re
+import shlex
+import shutil
+import socket
+import subprocess
+import time
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+
+from safety import copy_tree_snapshot, runtime_diagnostic_html, runtime_srcdoc_html, safe_relative_path
+
+
+MAX_LOG_CHARS = 12000
+BUILD_TIMEOUT_SECONDS = 180
+COMMAND_TIMEOUT_SECONDS = 60
+PHP_STARTUP_TIMEOUT_SECONDS = 5
+PHP_REQUEST_TIMEOUT_SECONDS = 8
+MAX_RENDER_BYTES = 2 * 1024 * 1024
+MAX_RENDERED_ROUTES = 40
+ALLOWED_WORKSPACE_BUILD_BINARIES = {
+    "astro",
+    "cssnano",
+    "gatsby",
+    "next",
+    "node-sass",
+    "postcss",
+    "sass",
+    "vite",
+    "webpack",
+}
+
+
+@dataclass(frozen=True)
+class BuildPlan:
+    package_manager: str
+    commands: list[list[str]]
+    warnings: list[str]
+    missing_requirements: list[str]
+
+
+def build_plan_for_source(source_root: Path) -> BuildPlan:
+    package_json = _read_package_json(source_root)
+    if not package_json:
+        return BuildPlan("", [], [], ["package.json is required for a runtime asset build"])
+    scripts = package_json.get("scripts") if isinstance(package_json.get("scripts"), dict) else {}
+    package_manager = _detect_package_manager(source_root)
+    missing: list[str] = []
+    warnings: list[str] = []
+    if package_manager != "npm":
+        missing.append("only npm lockfile builds are enabled for Website Studio Phase 3A")
+    elif not (source_root / "package-lock.json").exists():
+        missing.append("npm package-lock.json is required for dependency installation")
+    try:
+        commands = _expand_script("build", scripts, stack=[])
+    except ValueError as error:
+        return BuildPlan(package_manager, [], warnings, [str(error)])
+    return BuildPlan(package_manager, commands, warnings, missing)
+
+
+def prepare_runtime_build(
+    data_root: Path,
+    site_id: str,
+    source_root: Path,
+    *,
+    build_id: str,
+    source_profile: dict[str, object],
+) -> dict[str, object]:
+    runtime_kind = str(source_profile.get("preview_runtime_kind") or "unavailable")
+    if runtime_kind not in {"php", "node_build"}:
+        return {
+            "status": "skipped",
+            "runtime_kind": runtime_kind,
+            "warnings": [],
+            "missing_requirements": [],
+            "logs_summary": "No runtime build is needed for this source.",
+            "artifact_ref": {},
+        }
+
+    needs_node_build = runtime_kind == "node_build" or bool(source_profile.get("has_package_manifest"))
+    plan = build_plan_for_source(source_root) if needs_node_build else BuildPlan("", [], [], [])
+    warnings = list(plan.warnings)
+    missing = list(plan.missing_requirements)
+    php_missing = _php_missing_requirement(runtime_kind)
+    if php_missing:
+        missing.append(php_missing)
+    if needs_node_build and not plan.commands:
+        missing.append("package.json does not expose an allowlisted build script")
+    if missing:
+        return {
+            "status": "blocked",
+            "runtime_kind": runtime_kind,
+            "warnings": warnings,
+            "missing_requirements": _dedupe(missing),
+            "logs_summary": "Runtime build blocked before execution: " + "; ".join(_dedupe(missing)[:4]),
+            "artifact_ref": {},
+        }
+
+    temp_root = data_root / ".tmp" / f"runtime_build_{build_id}"
+    build_source = temp_root / "source"
+    artifact_root = data_root / "sites" / site_id / "builds" / build_id / "runtime"
+    try:
+        copy_tree_snapshot(source_root, build_source)
+        command_logs: list[str] = []
+        if needs_node_build:
+            install_result = _run_npm_install(build_source)
+            command_logs.append(install_result)
+            for command in plan.commands:
+                command_logs.append(_run_allowlisted_command(build_source, command))
+        else:
+            command_logs.append("No Node asset build declared; PHP runtime artifact copied without dependency installation.")
+        if artifact_root.exists():
+            shutil.rmtree(artifact_root)
+        artifact_root.parent.mkdir(parents=True, exist_ok=True)
+        _copy_runtime_artifact(build_source, artifact_root)
+        logs_summary = _bounded_log("\n".join(command_logs))
+        return {
+            "status": "passed",
+            "runtime_kind": runtime_kind,
+            "warnings": warnings,
+            "missing_requirements": [],
+            "logs_summary": logs_summary or "Runtime artifact prepared.",
+            "artifact_ref": {
+                "provider": "website-studio",
+                "kind": "runtime_preview_artifact",
+                "build_id": build_id,
+                "runtime_root": artifact_root.relative_to(data_root).as_posix(),
+                "docroot": str(source_profile.get("php_docroot") or ""),
+                "runtime_kind": runtime_kind,
+                "platform_surface": "website_studio_preview_runtime",
+                "isolation": "opaque_origin_iframe",
+            },
+        }
+    except (OSError, subprocess.SubprocessError, ValueError) as error:
+        return {
+            "status": "failed",
+            "runtime_kind": runtime_kind,
+            "warnings": warnings,
+            "missing_requirements": [],
+            "logs_summary": _bounded_log(str(error)),
+            "artifact_ref": {},
+        }
+    finally:
+        if temp_root.exists():
+            shutil.rmtree(temp_root)
+
+
+def render_runtime_preview(
+    data_root: Path,
+    source_root: Path,
+    *,
+    route: str,
+    source_profile: dict[str, object],
+    artifact_ref: dict[str, object] | None = None,
+) -> dict[str, object]:
+    runtime_kind = str(source_profile.get("preview_runtime_kind") or "unavailable")
+    if runtime_kind == "php":
+        return _render_php_preview(data_root, source_root, route=route, source_profile=source_profile, artifact_ref=artifact_ref or {})
+    if runtime_kind == "node_build":
+        return _render_node_build_preview(data_root, source_root, route=route, source_profile=source_profile, artifact_ref=artifact_ref or {})
+    return {
+        "status": "blocked",
+        "runtime_kind": runtime_kind,
+        "html": runtime_diagnostic_html("Preview runtime unavailable", ["unsupported runtime kind"]),
+        "title": "",
+        "source_files": [],
+        "warnings": [],
+        "missing_requirements": ["unsupported runtime kind"],
+        "http_status": 0,
+    }
+
+
+def runtime_capability_status(source_root: Path, source_profile: dict[str, object]) -> dict[str, object]:
+    runtime_kind = str(source_profile.get("preview_runtime_kind") or "unavailable")
+    missing = [str(item) for item in source_profile.get("missing_requirements", []) if str(item).strip()] if isinstance(source_profile.get("missing_requirements"), list) else []
+    if runtime_kind == "php":
+        php_missing = _php_missing_requirement(runtime_kind)
+        if php_missing:
+            missing.append(php_missing)
+    if runtime_kind in {"php", "node_build"} and source_profile.get("has_package_manifest"):
+        plan = build_plan_for_source(source_root)
+        missing.extend(plan.missing_requirements)
+        if not plan.commands:
+            missing.append("package.json does not expose an allowlisted build script")
+    status = "ready" if runtime_kind in {"php", "node_build"} and not _dedupe(missing) else str(source_profile.get("runtime_preview_status") or "blocked")
+    return {
+        "runtime_kind": runtime_kind,
+        "runtime_status": status,
+        "missing_requirements": _dedupe(missing),
+    }
+
+
+def source_files_for_runtime_route(source_root: Path, source_profile: dict[str, object]) -> list[str]:
+    files: list[str] = []
+    docroot = str(source_profile.get("php_docroot") or "").strip()
+    if docroot and docroot != ".":
+        for candidate in ("index.php", "index.html"):
+            path = source_root / docroot / candidate
+            if path.exists():
+                files.append(f"{docroot}/{candidate}")
+    else:
+        for candidate in ("index.php", "index.html"):
+            path = source_root / candidate
+            if path.exists():
+                files.append(candidate)
+    for candidate in ("local/router.php", ".htaccess", "package.json", "webpack.config.js"):
+        if (source_root / candidate).exists():
+            files.append(candidate)
+    return files
+
+
+def rendered_route_warnings(source_root: Path, source_profile: dict[str, object]) -> list[str]:
+    warnings: list[str] = []
+    if (source_root / ".htaccess").exists():
+        warnings.append(".htaccess rules are not fully reproduced by the Website Studio preview runtime")
+    if str(source_profile.get("preview_runtime_kind") or "") == "php":
+        warnings.append("database, SMTP, analytics, payment, and third-party services require explicit preview configuration")
+    return warnings
+
+
+def _render_php_preview(
+    data_root: Path,
+    source_root: Path,
+    *,
+    route: str,
+    source_profile: dict[str, object],
+    artifact_ref: dict[str, object],
+) -> dict[str, object]:
+    php_missing = _php_missing_requirement("php")
+    if php_missing:
+        return _blocked_runtime("php", [php_missing], source_root, source_profile)
+    runtime_root = _artifact_runtime_root(data_root, artifact_ref) or source_root
+    docroot_rel = str(artifact_ref.get("docroot") or source_profile.get("php_docroot") or ".")
+    docroot = (runtime_root / docroot_rel).resolve() if docroot_rel and docroot_rel != "." else runtime_root.resolve()
+    if not docroot.exists():
+        return _blocked_runtime("php", [f"PHP docroot `{docroot_rel}` was not found"], source_root, source_profile)
+    router = _php_router(runtime_root)
+    rendered = _request_php_route(runtime_root, docroot, router, route)
+    warnings = rendered_route_warnings(source_root, source_profile)
+    if rendered["status"] != "ready":
+        details = [str(rendered.get("detail") or "PHP route render failed")]
+        return {
+            "status": "failed",
+            "runtime_kind": "php",
+            "html": runtime_diagnostic_html("Preview route failed", details),
+            "title": "",
+            "source_files": source_files_for_runtime_route(source_root, source_profile),
+            "warnings": warnings + details,
+            "missing_requirements": [],
+            "http_status": rendered.get("http_status", 0),
+        }
+    html = str(rendered["html"])
+    return {
+        "status": "ready",
+        "runtime_kind": "php",
+        "html": runtime_srcdoc_html(html, source_root=docroot, page_path="index.php"),
+        "raw_html": html[:MAX_RENDER_BYTES],
+        "title": _html_title(html),
+        "source_files": source_files_for_runtime_route(source_root, source_profile),
+        "warnings": warnings,
+        "missing_requirements": [],
+        "http_status": rendered.get("http_status", 200),
+    }
+
+
+def _render_node_build_preview(
+    data_root: Path,
+    source_root: Path,
+    *,
+    route: str,
+    source_profile: dict[str, object],
+    artifact_ref: dict[str, object],
+) -> dict[str, object]:
+    runtime_root = _artifact_runtime_root(data_root, artifact_ref)
+    if runtime_root is None:
+        return _blocked_runtime("node_build", ["runtime build artifact is required before preview"], source_root, source_profile)
+    html_path = _static_route_path(runtime_root, route)
+    if html_path is None:
+        return _blocked_runtime("node_build", [f"built artifact does not contain route `{route or '/'}`"], source_root, source_profile)
+    html = html_path.read_text(encoding="utf-8")
+    return {
+        "status": "ready",
+        "runtime_kind": "node_build",
+        "html": runtime_srcdoc_html(html, source_root=runtime_root, page_path=html_path.relative_to(runtime_root).as_posix()),
+        "raw_html": html[:MAX_RENDER_BYTES],
+        "title": _html_title(html),
+        "source_files": [html_path.relative_to(runtime_root).as_posix()],
+        "warnings": [],
+        "missing_requirements": [],
+        "http_status": 200,
+    }
+
+
+def _request_php_route(runtime_root: Path, docroot: Path, router: Path | None, route: str) -> dict[str, object]:
+    port = _free_port()
+    command = [shutil.which("php") or "php", "-d", "variables_order=GPCS", "-S", f"127.0.0.1:{port}", "-t", str(docroot)]
+    if router is not None:
+        command.append(str(router))
+    env = _safe_env()
+    env["WEBSITE_STUDIO_PREVIEW"] = "1"
+    process = subprocess.Popen(command, cwd=runtime_root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+    try:
+        _wait_for_php(port)
+        request_route = route if route.startswith("/") else f"/{route}"
+        request = Request(f"http://127.0.0.1:{port}{request_route}", headers={"User-Agent": "WebsiteStudioPreview/1.0"})
+        try:
+            with urlopen(request, timeout=PHP_REQUEST_TIMEOUT_SECONDS) as response:
+                content = response.read(MAX_RENDER_BYTES + 1)
+                status = int(getattr(response, "status", 200))
+        except HTTPError as error:
+            content = error.read(MAX_RENDER_BYTES + 1)
+            status = error.code
+        if len(content) > MAX_RENDER_BYTES:
+            return {"status": "failed", "detail": "rendered route exceeded preview byte limit", "http_status": status}
+        text = content.decode("utf-8", errors="replace")
+        if status >= 500:
+            return {"status": "failed", "detail": f"PHP route returned HTTP {status}", "http_status": status, "html": text}
+        return {"status": "ready", "html": text, "http_status": status}
+    except (OSError, URLError, TimeoutError, subprocess.SubprocessError) as error:
+        return {"status": "failed", "detail": str(error), "http_status": 0}
+    finally:
+        process.terminate()
+        try:
+            process.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            process.kill()
+
+
+def _run_npm_install(source_root: Path) -> str:
+    if not (source_root / "package-lock.json").exists():
+        raise ValueError("npm package-lock.json is required for dependency installation")
+    npm = shutil.which("npm")
+    if not npm:
+        raise ValueError("npm executable is not available")
+    result = subprocess.run(
+        [npm, "ci", "--ignore-scripts", "--no-audit", "--no-fund"],
+        cwd=source_root,
+        env=_safe_env(),
+        capture_output=True,
+        text=True,
+        timeout=BUILD_TIMEOUT_SECONDS,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise ValueError("npm ci failed:\n" + _bounded_log(result.stdout + "\n" + result.stderr))
+    return _bounded_log("$ npm ci --ignore-scripts --no-audit --no-fund\n" + result.stdout + "\n" + result.stderr)
+
+
+def _run_allowlisted_command(source_root: Path, command: list[str]) -> str:
+    if not command:
+        return ""
+    if command[0] == "rm":
+        _run_safe_rm(source_root, command[1:])
+        return "$ " + " ".join(command) + "\nremoved generated file"
+    executable = _resolve_workspace_binary(source_root, command[0])
+    result = subprocess.run(
+        [str(executable), *command[1:]],
+        cwd=source_root,
+        env=_safe_env(),
+        capture_output=True,
+        text=True,
+        timeout=COMMAND_TIMEOUT_SECONDS,
+        check=False,
+    )
+    log = "$ " + " ".join(command) + "\n" + result.stdout + "\n" + result.stderr
+    if result.returncode != 0:
+        raise ValueError(f"build command `{command[0]}` failed:\n{_bounded_log(log)}")
+    return _bounded_log(log)
+
+
+def _expand_script(name: str, scripts: dict[str, object], *, stack: list[str]) -> list[list[str]]:
+    if name in stack:
+        raise ValueError("recursive npm script expansion is not allowed")
+    raw = str(scripts.get(name) or "").strip()
+    if not raw:
+        raise ValueError(f"npm script `{name}` is required")
+    commands: list[list[str]] = []
+    for segment in _split_shell_and(raw):
+        parts = shlex.split(segment)
+        if len(parts) >= 3 and parts[0] == "npm" and parts[1] == "run":
+            commands.extend(_expand_script(parts[2], scripts, stack=[*stack, name]))
+            continue
+        if not parts:
+            continue
+        if parts[0] not in ALLOWED_WORKSPACE_BUILD_BINARIES and parts[0] != "rm":
+            raise ValueError(f"build command `{parts[0]}` is not allowlisted")
+        if parts[0] == "rm":
+            _validate_rm_command(parts)
+        commands.append(parts)
+    return commands
+
+
+def _split_shell_and(script: str) -> list[str]:
+    return [part.strip() for part in re.split(r"\s+&&\s+", script) if part.strip()]
+
+
+def _validate_rm_command(parts: list[str]) -> None:
+    if len(parts) != 2:
+        raise ValueError("rm build step may remove exactly one generated file")
+    safe_relative_path(parts[1])
+
+
+def _run_safe_rm(source_root: Path, paths: list[str]) -> None:
+    if len(paths) != 1:
+        raise ValueError("rm build step may remove exactly one generated file")
+    rel_path = safe_relative_path(paths[0])
+    target = (source_root / rel_path).resolve()
+    root = source_root.resolve()
+    if target != root and root not in target.parents:
+        raise ValueError("rm build step escaped the source root")
+    if target.exists() and target.is_file():
+        target.unlink()
+
+
+def _copy_runtime_artifact(source_root: Path, artifact_root: Path) -> None:
+    ignored = shutil.ignore_patterns("node_modules", ".git", ".cache", ".npm", ".DS_Store")
+    shutil.copytree(source_root, artifact_root, ignore=ignored)
+
+
+def _resolve_workspace_binary(source_root: Path, name: str) -> Path:
+    local = source_root / "node_modules" / ".bin" / name
+    if local.exists():
+        return local
+    found = shutil.which(name)
+    if found:
+        return Path(found)
+    raise ValueError(f"build command `{name}` is not installed")
+
+
+def _read_package_json(source_root: Path) -> dict[str, object]:
+    path = source_root / "package.json"
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        raise ValueError("package.json is not valid JSON") from error
+    return payload if isinstance(payload, dict) else {}
+
+
+def _detect_package_manager(source_root: Path) -> str:
+    if (source_root / "package-lock.json").exists():
+        return "npm"
+    if (source_root / "pnpm-lock.yaml").exists():
+        return "pnpm"
+    if (source_root / "yarn.lock").exists():
+        return "yarn"
+    if (source_root / "bun.lockb").exists():
+        return "bun"
+    return "npm" if (source_root / "package.json").exists() else ""
+
+
+def _php_missing_requirement(runtime_kind: str) -> str:
+    if runtime_kind == "php" and not shutil.which("php"):
+        return "php executable is not available to the Website Studio preview runtime"
+    return ""
+
+
+def _php_router(runtime_root: Path) -> Path | None:
+    for candidate in ("local/router.php", "router.php"):
+        path = runtime_root / candidate
+        if path.exists():
+            return path
+    return None
+
+
+def _artifact_runtime_root(data_root: Path, artifact_ref: dict[str, object]) -> Path | None:
+    rel = str(artifact_ref.get("runtime_root") or "").strip()
+    if not rel:
+        return None
+    root = (data_root / rel).resolve()
+    allowed = data_root.resolve()
+    if root != allowed and allowed not in root.parents:
+        raise ValueError("runtime artifact root escaped the Website Studio data root")
+    return root if root.exists() else None
+
+
+def _static_route_path(runtime_root: Path, route: str) -> Path | None:
+    clean = route.strip() or "/"
+    if clean == "/":
+        candidates = ["index.html"]
+    else:
+        rel = safe_relative_path(clean.strip("/"))
+        candidates = [rel, f"{rel}.html", f"{rel}/index.html"]
+    for candidate in candidates:
+        path = runtime_root / candidate
+        if path.exists() and path.is_file() and path.suffix.lower() in {".html", ".htm"}:
+            return path
+    return None
+
+
+def _blocked_runtime(runtime_kind: str, missing: list[str], source_root: Path, source_profile: dict[str, object]) -> dict[str, object]:
+    return {
+        "status": "blocked",
+        "runtime_kind": runtime_kind,
+        "html": runtime_diagnostic_html("Preview runtime unavailable", missing),
+        "title": "",
+        "source_files": source_files_for_runtime_route(source_root, source_profile),
+        "warnings": rendered_route_warnings(source_root, source_profile),
+        "missing_requirements": _dedupe(missing),
+        "http_status": 0,
+    }
+
+
+def _free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as handle:
+        handle.bind(("127.0.0.1", 0))
+        return int(handle.getsockname()[1])
+
+
+def _wait_for_php(port: int) -> None:
+    deadline = time.monotonic() + PHP_STARTUP_TIMEOUT_SECONDS
+    while time.monotonic() < deadline:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as handle:
+            handle.settimeout(0.25)
+            if handle.connect_ex(("127.0.0.1", port)) == 0:
+                return
+        time.sleep(0.05)
+    raise TimeoutError("PHP preview server did not start")
+
+
+def _safe_env() -> dict[str, str]:
+    allowed = {
+        "HOME": os.environ.get("HOME", ""),
+        "PATH": os.environ.get("PATH", ""),
+        "LANG": os.environ.get("LANG", "C.UTF-8"),
+        "LC_ALL": os.environ.get("LC_ALL", "C.UTF-8"),
+        "TMPDIR": os.environ.get("TMPDIR", ""),
+        "CI": "true",
+        "NO_COLOR": "1",
+    }
+    return {key: value for key, value in allowed.items() if value}
+
+
+def _bounded_log(value: str) -> str:
+    text = _redact_log(value)
+    if len(text) > MAX_LOG_CHARS:
+        return text[:MAX_LOG_CHARS] + "\n[truncated]"
+    return text
+
+
+def _redact_log(value: str) -> str:
+    text = value
+    text = re.sub(r"(?i)(token|secret|password|api[_-]?key)(=|:)\s*[^\s]+", r"\1\2[redacted]", text)
+    text = re.sub(r"gh[pousr]_[A-Za-z0-9_]{20,}", "github_[redacted]", text)
+    return text
+
+
+def _html_title(html: str) -> str:
+    parser = _TitleParser()
+    parser.feed(html[:200000])
+    return parser.title.strip()
+
+
+class _TitleParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self._in_title = False
+        self.title = ""
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() == "title":
+            self._in_title = True
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() == "title":
+            self._in_title = False
+
+    def handle_data(self, data: str) -> None:
+        if self._in_title:
+            self.title += data
+
+
+def _dedupe(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in items:
+        clean = str(item or "").strip()
+        if clean and clean not in seen:
+            seen.add(clean)
+            result.append(clean)
+    return result

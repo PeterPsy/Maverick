@@ -20,6 +20,12 @@ if payload.raw.get("surface") == "secret_selector":
     raise SystemExit(0)
 arguments["_app_secrets"] = dict(payload.raw.get("app_secrets") or {})
 arguments["_app_secret_errors"] = list(payload.raw.get("app_secret_errors") or [])
+arguments["_app_actor"] = {
+    "user_id": payload.user_id,
+    "workspace_role": payload.workspace_role,
+    "platform_role": payload.platform_role,
+    "effective_mode": payload.effective_mode,
+}
 status_code, result = handle_action(Path(payload.data_root), arguments)
 result["status_code"] = status_code
 if status_code < 400:

@@ -266,6 +266,7 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
                     approved_by=payload.get("approved_by"),
                     approval_note=payload.get("approval_note"),
                     confirm=payload.get("confirm"),
+                    actor=payload.get("_app_actor") if isinstance(payload.get("_app_actor"), dict) else {},
                 )
             }
         if action == "approvals_list":

@@ -15,6 +15,12 @@ payload = read_entrypoint_payload()
 action = str(payload.body.get("action") or "sites_list")
 body = {
     **payload.body,
+    "_app_actor": {
+        "user_id": payload.user_id,
+        "workspace_role": payload.workspace_role,
+        "platform_role": payload.platform_role,
+        "effective_mode": payload.effective_mode,
+    },
     "_app_secrets": dict(payload.raw.get("app_secrets") or {}),
     "_app_secret_errors": list(payload.raw.get("app_secret_errors") or []),
 }

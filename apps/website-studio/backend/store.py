@@ -44,6 +44,14 @@ from safety import (
     validate_source_tree_for_phase1,
     write_text_file,
 )
+from preview_runtime import (
+    MAX_RENDERED_ROUTES,
+    prepare_runtime_build,
+    render_runtime_preview,
+    runtime_capability_status,
+    rendered_route_warnings,
+    source_files_for_runtime_route,
+)
 
 HttpTransport = Callable[[str, str, dict[str, Any]], tuple[int, dict[str, Any] | list[Any] | bytes]]
 GITHUB_API_BASE = "https://api.github.com"
@@ -847,8 +855,12 @@ def diff_site(data_root: Path, site_id: object) -> dict[str, object]:
 
 def build_preview(data_root: Path, site_id: object, route: object = "/") -> dict[str, object]:
     site = get_site(data_root, site_id)
-    pages = sitemap(data_root, site["id"])["items"]
+    source_root = _source_root(data_root, str(site["id"]))
+    profile = source_profile(source_root)
     route_text = str(route or "/")
+    if profile.get("preview_runtime_kind") in {"php", "node_build"}:
+        return _build_runtime_preview(data_root, site, profile, route_text)
+    pages = sitemap(data_root, site["id"])["items"]
     page = next((item for item in pages if item["route"] == route_text), pages[0] if pages else None)
     preview_id = f"preview_{uuid4().hex[:12]}"
     contract = _preview_contract(data_root, site, page=page, route=page["route"] if page else route_text, preview_id=preview_id)
@@ -892,9 +904,95 @@ def build_preview(data_root: Path, site_id: object, route: object = "/") -> dict
     }
 
 
+def _build_runtime_preview(data_root: Path, site: dict[str, object], profile: dict[str, object], route: str) -> dict[str, object]:
+    preview_id = f"preview_{uuid4().hex[:12]}"
+    runtime_kind = str(profile.get("preview_runtime_kind") or "unavailable")
+    build = _latest_passed_runtime_build(data_root, str(site["id"]), runtime_kind)
+    if not build:
+        build = validate_build(data_root, site["id"])
+    artifact_ref = dict(build.get("artifact_ref") or {}) if isinstance(build.get("artifact_ref"), dict) else {}
+    result = render_runtime_preview(
+        data_root,
+        _source_root(data_root, str(site["id"])),
+        route=route,
+        source_profile=profile,
+        artifact_ref=artifact_ref,
+    )
+    route_id = _route_id_for_route(data_root, site["id"], route)
+    if result.get("status") == "ready":
+        rendered = dict(result)
+        rendered["route"] = route
+        _upsert_runtime_route_index(data_root, site, rendered, profile)
+        route_id = _route_id_for_route(data_root, site["id"], route)
+    runtime_status = "ready" if result.get("status") == "ready" else str(result.get("status") or build.get("status") or "blocked")
+    contract = {
+        "preview_id": preview_id,
+        "site_id": str(site["id"]),
+        "environment_id": str(site.get("default_environment_id") or "env_preview"),
+        "runtime_kind": runtime_kind,
+        "preview_url": _preview_runtime_url(preview_id, route),
+        "route": route,
+        "route_id": route_id,
+        "page_id": _page_id_for_route(data_root, site["id"], route),
+        "build_id": str(build.get("id") or ""),
+        "runtime_status": runtime_status,
+        "warnings": [str(item) for item in result.get("warnings", [])][:100],
+        "missing_requirements": [str(item) for item in result.get("missing_requirements", [])][:50],
+        "artifact_ref": artifact_ref,
+    }
+    _record_preview(data_root, site, contract)
+    return {
+        "preview_id": preview_id,
+        "site_id": str(site["id"]),
+        "environment_id": contract["environment_id"],
+        "route": route,
+        "page_id": contract["page_id"],
+        "route_id": contract["route_id"],
+        "runtime_kind": runtime_kind,
+        "runtime_status": runtime_status,
+        "preview_url": contract["preview_url"],
+        "build_id": contract["build_id"],
+        "missing_requirements": contract["missing_requirements"],
+        "asset_refs": [],
+        "warnings": contract["warnings"],
+        "html": str(result.get("html") or ""),
+    }
+
+
+def _latest_passed_runtime_build(data_root: Path, site_id: str, runtime_kind: str) -> dict[str, object]:
+    ensure_schema(data_root)
+    with connect(data_root) as db:
+        row = db.execute(
+            "SELECT * FROM builds WHERE site_id = ? AND runtime_kind = ? AND status = 'passed' ORDER BY created_at DESC LIMIT 1",
+            (site_id, runtime_kind),
+        ).fetchone()
+    return _build_row(row) if row else {}
+
+
+def _route_id_for_route(data_root: Path, site_id: object, route: object) -> str:
+    ensure_schema(data_root)
+    with connect(data_root) as db:
+        row = db.execute(
+            "SELECT id FROM routes WHERE site_id = ? AND route = ? AND deleted_at IS NULL",
+            (str(site_id), str(route or "/")),
+        ).fetchone()
+    return str(row["id"]) if row else ""
+
+
+def _page_id_for_route(data_root: Path, site_id: object, route: object) -> str:
+    ensure_schema(data_root)
+    with connect(data_root) as db:
+        row = db.execute(
+            "SELECT id FROM pages WHERE site_id = ? AND route = ? AND deleted_at IS NULL",
+            (str(site_id), str(route or "/")),
+        ).fetchone()
+    return str(row["id"]) if row else ""
+
+
 def validate_build(data_root: Path, site_id: object) -> dict[str, object]:
     site = get_site(data_root, site_id)
-    profile = source_profile(_source_root(data_root, str(site["id"])))
+    source_root = _source_root(data_root, str(site["id"]))
+    profile = source_profile(source_root)
     map_payload = sitemap(data_root, site["id"])
     warnings: list[str] = []
     for item in map_payload.get("items", []):
@@ -902,13 +1000,30 @@ def validate_build(data_root: Path, site_id: object) -> dict[str, object]:
     for item in map_payload.get("routes", []):
         warnings.extend(str(warning) for warning in item.get("warnings", []))
     runtime_kind = str(profile.get("preview_runtime_kind") or "unavailable")
-    missing_requirements = [str(item) for item in profile.get("missing_requirements", []) if str(item).strip()] if isinstance(profile.get("missing_requirements"), list) else []
-    if profile.get("has_package_manifest") and runtime_kind != "static_export":
-        warnings.append("arbitrary dependency installs and build scripts are not executed in Phase 2 without a platform sandbox")
-    status = "passed" if profile.get("static_preview_supported") else "blocked"
-    logs_summary = "Static preview artifact prepared." if status == "passed" else "No runnable preview artifact is available without a platform runtime sandbox."
     build_id = f"build_{uuid4().hex[:16]}"
-    artifact_ref = _create_static_build_artifact(data_root, site, build_id) if status == "passed" else {}
+    missing_requirements = [str(item) for item in profile.get("missing_requirements", []) if str(item).strip()] if isinstance(profile.get("missing_requirements"), list) else []
+    artifact_ref: dict[str, object] = {}
+    rendered_routes: list[dict[str, object]] = []
+    if runtime_kind == "static_export":
+        status = "passed" if profile.get("static_preview_supported") else "blocked"
+        logs_summary = "Static preview artifact prepared." if status == "passed" else "No runnable preview artifact is available without a supported runtime."
+        artifact_ref = _create_static_build_artifact(data_root, site, build_id) if status == "passed" else {}
+    elif runtime_kind in {"php", "node_build"}:
+        runtime_build = prepare_runtime_build(data_root, str(site["id"]), source_root, build_id=build_id, source_profile=profile)
+        status = str(runtime_build.get("status") or "blocked")
+        artifact_ref = dict(runtime_build.get("artifact_ref") or {})
+        warnings.extend(str(item) for item in runtime_build.get("warnings", []) if str(item).strip())
+        missing_requirements = [str(item) for item in runtime_build.get("missing_requirements", []) if str(item).strip()]
+        logs_summary = str(runtime_build.get("logs_summary") or "")
+        if status == "passed":
+            rendered_routes = _render_known_routes(data_root, site, profile, artifact_ref, map_payload)
+            failed_routes = [item for item in rendered_routes if item.get("status") != "ready"]
+            if rendered_routes and len(failed_routes) == len(rendered_routes):
+                status = "failed"
+                warnings.append("runtime build completed, but no indexed route rendered successfully")
+    else:
+        status = "blocked"
+        logs_summary = "No runnable preview artifact is available without a supported runtime."
     now = now_timestamp()
     with connect(data_root) as db:
         db.execute(
@@ -936,8 +1051,122 @@ def validate_build(data_root: Path, site_id: object) -> dict[str, object]:
                 now,
             ),
         )
+    if rendered_routes:
+        for rendered in rendered_routes:
+            _upsert_runtime_route_index(data_root, site, rendered, profile)
     _audit(data_root, str(site["id"]), "build.validated", logs_summary, {"build_id": build_id, "status": status})
     return get_build(data_root, build_id)
+
+
+def _render_known_routes(
+    data_root: Path,
+    site: dict[str, object],
+    profile: dict[str, object],
+    artifact_ref: dict[str, object],
+    map_payload: dict[str, object],
+) -> list[dict[str, object]]:
+    routes: list[str] = []
+    for item in map_payload.get("items", []):
+        route = str(item.get("route") or "").strip()
+        if route and route not in routes:
+            routes.append(route)
+    for item in map_payload.get("routes", []):
+        route = str(item.get("route") or "").strip()
+        if route and route not in routes:
+            routes.append(route)
+    if not routes:
+        routes.append("/")
+    rendered: list[dict[str, object]] = []
+    for route in routes[:MAX_RENDERED_ROUTES]:
+        result = render_runtime_preview(
+            data_root,
+            _source_root(data_root, str(site["id"])),
+            route=route,
+            source_profile=profile,
+            artifact_ref=artifact_ref,
+        )
+        result["route"] = route
+        rendered.append(result)
+    return rendered
+
+
+def _upsert_runtime_route_index(
+    data_root: Path,
+    site: dict[str, object],
+    rendered: dict[str, object],
+    profile: dict[str, object],
+) -> None:
+    route = str(rendered.get("route") or "/").strip() or "/"
+    status = "rendered" if rendered.get("status") == "ready" else str(rendered.get("status") or "blocked")
+    runtime_kind = str(rendered.get("runtime_kind") or profile.get("preview_runtime_kind") or "runtime")
+    source_files = [str(item) for item in rendered.get("source_files", []) if str(item).strip()]
+    if not source_files:
+        source_files = source_files_for_runtime_route(_source_root(data_root, str(site["id"])), profile)
+    warnings = [str(item) for item in rendered.get("warnings", []) if str(item).strip()]
+    if not warnings:
+        warnings = rendered_route_warnings(_source_root(data_root, str(site["id"])), profile)
+    now = now_timestamp()
+    route_id = f"route_{sha256_text(str(site['id']) + runtime_kind + route)[:16]}"
+    with connect(data_root) as db:
+        page_id = ""
+        raw_html = str(rendered.get("raw_html") or "")
+        if rendered.get("status") == "ready":
+            page_id = f"page_{sha256_text(str(site['id']) + runtime_kind + route)[:16]}"
+            title = str(rendered.get("title") or route)
+            db.execute(
+                """
+                INSERT INTO pages(id, site_id, route, title, kind, status, source_files_json, asset_refs_json, warnings_json, seo_json, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                  route=excluded.route,
+                  title=excluded.title,
+                  kind=excluded.kind,
+                  status=excluded.status,
+                  source_files_json=excluded.source_files_json,
+                  warnings_json=excluded.warnings_json,
+                  seo_json=excluded.seo_json,
+                  updated_at=excluded.updated_at,
+                  deleted_at=NULL
+                """,
+                (
+                    page_id,
+                    site["id"],
+                    route,
+                    title,
+                    runtime_kind,
+                    status,
+                    json.dumps(source_files),
+                    json.dumps(warnings[:100]),
+                    json.dumps(_html_seo(raw_html), sort_keys=True),
+                    now,
+                ),
+            )
+        db.execute(
+            """
+            INSERT INTO routes(id, site_id, route, page_id, kind, status, source_files_json, warnings_json, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(site_id, route) DO UPDATE SET
+              id=excluded.id,
+              page_id=excluded.page_id,
+              kind=excluded.kind,
+              status=excluded.status,
+              source_files_json=excluded.source_files_json,
+              warnings_json=excluded.warnings_json,
+              updated_at=excluded.updated_at,
+              deleted_at=NULL
+            """,
+            (
+                route_id,
+                site["id"],
+                route,
+                page_id,
+                runtime_kind,
+                status,
+                json.dumps(source_files),
+                json.dumps(warnings[:100]),
+                now,
+            ),
+        )
 
 
 def list_builds(data_root: Path, site_id: object) -> list[dict[str, object]]:
@@ -960,19 +1189,27 @@ def get_build(data_root: Path, build_id: object) -> dict[str, object]:
 
 def runtime_status(data_root: Path, site_id: object) -> dict[str, object]:
     site = get_site(data_root, site_id)
-    profile = source_profile(_source_root(data_root, str(site["id"])))
+    source_root = _source_root(data_root, str(site["id"]))
+    profile = source_profile(source_root)
+    capability = runtime_capability_status(source_root, profile)
     ensure_schema(data_root)
     with connect(data_root) as db:
         build_row = db.execute("SELECT * FROM builds WHERE site_id = ? ORDER BY created_at DESC LIMIT 1", (site["id"],)).fetchone()
         preview_row = db.execute("SELECT * FROM previews WHERE site_id = ? ORDER BY created_at DESC LIMIT 1", (site["id"],)).fetchone()
         session_row = db.execute("SELECT * FROM runtime_sessions WHERE site_id = ? ORDER BY created_at DESC LIMIT 1", (site["id"],)).fetchone()
+    latest_build = _build_row(build_row) if build_row else None
+    runtime_status_value = str(capability.get("runtime_status") or profile.get("runtime_preview_status") or "blocked")
+    if latest_build and latest_build.get("status") in {"failed", "blocked"}:
+        runtime_status_value = str(latest_build.get("status"))
+    if latest_build and latest_build.get("status") == "passed" and not capability.get("missing_requirements"):
+        runtime_status_value = "ready"
     return {
         "site_id": site["id"],
         "source_profile": profile,
-        "runtime_kind": profile.get("preview_runtime_kind") or "unavailable",
-        "runtime_status": profile.get("runtime_preview_status") or "blocked",
-        "missing_requirements": profile.get("missing_requirements") if isinstance(profile.get("missing_requirements"), list) else [],
-        "latest_build": _build_row(build_row) if build_row else None,
+        "runtime_kind": capability.get("runtime_kind") or profile.get("preview_runtime_kind") or "unavailable",
+        "runtime_status": runtime_status_value,
+        "missing_requirements": capability.get("missing_requirements") or [],
+        "latest_build": latest_build,
         "latest_preview": _preview_row(preview_row) if preview_row else None,
         "latest_runtime_session": _runtime_session_row(session_row) if session_row else None,
     }
@@ -982,6 +1219,19 @@ def preview_document(data_root: Path, preview_id: object) -> dict[str, object]:
     preview = get_preview(data_root, preview_id)
     site = get_site(data_root, preview["site_id"])
     details = [str(item) for item in preview.get("missing_requirements", []) if str(item).strip()]
+    if preview.get("runtime_kind") in {"php", "node_build"}:
+        profile = source_profile(_source_root(data_root, str(site["id"])))
+        result = render_runtime_preview(
+            data_root,
+            _source_root(data_root, str(site["id"])),
+            route=str(preview.get("route") or "/"),
+            source_profile=profile,
+            artifact_ref=preview.get("artifact_ref") if isinstance(preview.get("artifact_ref"), dict) else {},
+        )
+        if result.get("status") == "ready":
+            return {"preview": preview, "html": str(result.get("html") or "")}
+        detail = [str(item) for item in result.get("missing_requirements", []) if str(item).strip()] or [str(item) for item in result.get("warnings", []) if str(item).strip()]
+        return {"preview": preview, "html": runtime_diagnostic_html("Preview runtime unavailable", detail or details or ["preview route could not be rendered"])}
     if not preview.get("page_id"):
         html = runtime_diagnostic_html("Preview runtime unavailable", details or ["site has no HTML page to preview"])
         return {"preview": preview, "html": html}
@@ -1758,17 +2008,19 @@ def record_approval(
     approved_by: object,
     approval_note: object = "",
     confirm: object = False,
+    actor: dict[str, object] | None = None,
 ) -> dict[str, object]:
     site = get_site(data_root, site_id)
     clean_action = str(action or "").strip()
     if clean_action not in {"publish", "rollback"}:
         raise ValueError("approval action must be publish or rollback")
     clean_target = _required_id(target_id, "target_id")
-    approver = str(approved_by or "").strip()
-    if not approver:
-        raise ValueError("approved_by is required")
     if confirm is not True:
         raise ValueError("confirm=true is required to create an approval event")
+    policy = _approval_actor_policy(actor or {}, approved_by)
+    if not policy["allowed"]:
+        raise ValueError(str(policy["detail"]))
+    approver = str(policy["approved_by"])
     if clean_action == "publish":
         request = get_publish_request(data_root, clean_target)
         if request["site_id"] != site["id"]:
@@ -1788,7 +2040,9 @@ def record_approval(
             (approval_id, site["id"], clean_action, clean_target, approver, str(approval_note or "").strip(), now),
         )
     _audit(data_root, str(site["id"]), "approval.recorded", f"Approved {clean_action} for {clean_target}", {"approval_id": approval_id})
-    return get_approval(data_root, approval_id)
+    approval = get_approval(data_root, approval_id)
+    approval["policy"] = policy
+    return approval
 
 
 def list_approvals(data_root: Path, site_id: object = None) -> list[dict[str, object]]:
@@ -1809,6 +2063,42 @@ def get_approval(data_root: Path, approval_id: object) -> dict[str, object]:
     if row is None:
         raise ValueError(f"approval `{clean_id}` was not found")
     return _approval_row(row)
+
+
+def _approval_actor_policy(actor: dict[str, object], approved_by: object) -> dict[str, object]:
+    user_id = str(actor.get("user_id") or "").strip()
+    workspace_role = str(actor.get("workspace_role") or "").strip().lower()
+    platform_role = str(actor.get("platform_role") or "").strip().lower()
+    effective_mode = str(actor.get("effective_mode") or "").strip()
+    if not user_id:
+        return {"allowed": False, "detail": "approval requires an authenticated Maverick user actor"}
+    allowed_roles = {"owner", "admin"}
+    allowed_platform_roles = {"admin", "operator"}
+    if workspace_role not in allowed_roles and platform_role not in allowed_platform_roles:
+        return {
+            "allowed": False,
+            "detail": "approval requires workspace owner/admin or platform admin/operator role",
+            "user_id": user_id,
+            "workspace_role": workspace_role,
+            "platform_role": platform_role,
+        }
+    explicit_approver = str(approved_by or "").strip()
+    if explicit_approver and explicit_approver != user_id:
+        return {
+            "allowed": False,
+            "detail": "approved_by must match the authenticated Maverick user actor",
+            "user_id": user_id,
+            "approved_by": explicit_approver,
+        }
+    return {
+        "allowed": True,
+        "approved_by": explicit_approver or user_id,
+        "user_id": user_id,
+        "workspace_role": workspace_role,
+        "platform_role": platform_role,
+        "effective_mode": effective_mode,
+        "policy": "workspace_owner_or_admin_required",
+    }
 
 
 def _source_root(data_root: Path, site_id: str) -> Path:

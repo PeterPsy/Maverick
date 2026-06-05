@@ -225,10 +225,14 @@ export function App() {
               onDrop={handleZipDrop}
               aria-disabled={busy}
             >
-              Drop ZIP
+              <span className="import-button-icon" aria-hidden="true">upload_file</span>
+              <span>Drop ZIP</span>
               <input type="file" accept=".zip,application/zip" onChange={(event) => importZip(event.target.files?.[0] || null)} disabled={busy} />
             </label>
-            <button className="import-button" onClick={() => setGitDialogOpen(true)} disabled={busy}>Connect Git</button>
+            <button className="import-button" onClick={() => setGitDialogOpen(true)} disabled={busy}>
+              <span className="import-button-icon" aria-hidden="true">commit</span>
+              <span>Connect Git</span>
+            </button>
           </div>
           {gitDialogOpen ? (
             <form
@@ -296,7 +300,8 @@ function PreviewStatus({ preview }: { preview: PreviewPayload }) {
   const warnings = preview.warnings || [];
   const detail = requirements[0] || warnings[0] || '';
   return (
-    <div className="preview-status" data-runtime-kind={preview.runtime_kind}>
+    <div className="preview-status" data-runtime-kind={preview.runtime_kind} data-runtime-status={preview.runtime_status}>
+      <i aria-hidden="true" />
       <span>{preview.runtime_kind.replace('_', ' ')}</span>
       <strong>{preview.runtime_status.replace('_', ' ')}</strong>
       {detail ? <small>{detail}</small> : null}
@@ -307,6 +312,7 @@ function PreviewStatus({ preview }: { preview: PreviewPayload }) {
 function postSelection(siteId: string, page?: Page, route?: Route, asset?: Asset) {
   if (!siteId) return;
   const appPage = asset ? `assets/${asset.id}` : route ? `routes/${route.id}` : page ? `pages/${page.id}` : `sites/${siteId}`;
+  const activeView = asset ? 'asset' : route && !page ? 'route' : page ? 'page' : 'site';
   window.parent?.postMessage(
     {
       type: 'maverick.app.selection-changed',
@@ -314,10 +320,13 @@ function postSelection(siteId: string, page?: Page, route?: Route, asset?: Asset
       owner_app_id: 'website-studio',
       params: {
         site_id: siteId,
+        active_view: activeView,
         page_id: page?.id || '',
         route_id: route?.id || '',
         asset_id: asset?.id || '',
         route: page?.route || route?.route || '',
+        title: page?.title || route?.route || asset?.path || '',
+        context_tool: 'website_page_context',
         app_page: appPage
       }
     },

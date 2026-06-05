@@ -18,12 +18,13 @@ Website Studio is the authenticated operating layer inside Maverick. It is not t
 5. Modify only the selected site's working source through `website_write_file` or `website_apply_patch`.
 6. Include `expected_hash` for every write or patch; use `expected_hash=new` only when intentionally creating a new file.
 7. Run `website_diff` and, when useful, `website_list_changes` after edits.
-8. Run `website_build_validate`, then use `website_build_preview` for static preview checks when a route can be rendered.
-9. Create a `website_publish_request` only after the working diff contains at least one intended change.
-10. Use `website_approval_record` only when the user has explicitly approved the exact publish request or rollback revision.
-11. Use `website_publish` or `website_rollback` only with a matching single-use approval id.
-12. Use `website_publish_target_configure` for managed static hosting only when the user has selected that target; public domain/CDN/certificate binding is not available until a generic platform hosting surface exists.
-13. Do not attempt destructive sync, external writeback, remote Git push, or external deploy operations until a declared Website Studio surface supports them.
+8. Use `website_sync_source` only for Git-backed sites after reviewing local working changes. If it returns `blocked_local_changes`, inspect the diff and do not rerun with `confirm=true` without explicit user direction.
+9. Run `website_build_validate`, then use `website_build_preview` for static preview checks when a route can be rendered.
+10. Create a `website_publish_request` only after the working diff contains at least one intended change.
+11. Use `website_approval_record` only when the user has explicitly approved the exact publish request or rollback revision.
+12. Use `website_publish` or `website_rollback` only with a matching single-use approval id.
+13. Use `website_publish_target_configure` for managed static hosting only when the user has selected that target; public domain/CDN/certificate binding is not available until a generic platform hosting surface exists.
+14. Do not attempt CMS sync, commerce sync, external writeback, direct production deploy, or undeclared destructive operations.
 
 ## Safety Rules
 
@@ -35,6 +36,7 @@ Website Studio is the authenticated operating layer inside Maverick. It is not t
 - Git imports are limited to public GitHub HTTPS URLs or app-local repository paths managed by Website Studio.
 - GitHub repository connections can be prepared with `website_git_connection_prepare` and activated with `website_git_connection_activate` only by referencing a Vault/Core Secrets grant. Agents must never ask users to paste raw GitHub tokens into chat.
 - Private GitHub import requires a prepared and activated connection plus Core Secrets delivery for `github-token`; the token must stay in backend/CLI/MCP app-secret delivery and must not be embedded in repository URLs.
+- Git source sync uses the retained Website Studio source reference, blocks on local working changes by default, and records a sync run. It does not implement CMS, commerce, or external writeback sync.
 - GitHub publish can push changed files and open or reuse a pull request only when the connection is grant-backed and `github-token` is delivered by Core Secrets to the declared app backend, CLI, or MCP surface. Never request, echo, log, or store the raw token.
 - Managed static publish creates an immutable local deployment artifact and deployment record. Do not claim custom domains, CDN, certificates, or public production binding are configured unless a generic platform hosting surface reports them.
 
@@ -57,6 +59,7 @@ Website Studio is the authenticated operating layer inside Maverick. It is not t
 - `website_publish_target_configure`
 - `website_import_zip`
 - `website_import_git`
+- `website_sync_source`
 - `website_sitemap`
 - `website_search`
 - `website_read_file`

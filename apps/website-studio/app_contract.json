@@ -68,6 +68,7 @@
       "website_publish_target_configure",
       "website_import_git",
       "website_import_zip",
+      "website_sync_source",
       "website_sitemap",
       "website_search",
       "website_read_file",

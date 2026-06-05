@@ -30,6 +30,7 @@ TOOL_ACTIONS = {
     "website_publish_target_configure": "publish_target_configure",
     "website_import_git": "import_git",
     "website_import_zip": "import_zip",
+    "website_sync_source": "sync_source",
     "website_sitemap": "sitemap",
     "website_search": "search",
     "website_read_file": "read_file",

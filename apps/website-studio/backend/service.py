@@ -50,6 +50,7 @@ from store import (
     set_view_filter,
     sitemap,
     site_status,
+    sync_source,
     validate_build,
     write_file,
     _connection_id,
@@ -73,6 +74,7 @@ MUTATING_ACTIONS = {
     "approval_record",
     "import_zip",
     "import_git",
+    "sync_source",
     "write_file",
     "apply_patch",
     "build_validate",
@@ -190,6 +192,16 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
                     app_secret_errors=payload.get("_app_secret_errors") if isinstance(payload.get("_app_secret_errors"), list) else [],
                 )
             }
+        if action == "sync_source":
+            result = sync_source(
+                data_root,
+                payload.get("site_id"),
+                branch=payload.get("branch") or payload.get("base_branch"),
+                confirm=payload.get("confirm"),
+                app_secrets=payload.get("_app_secrets") if isinstance(payload.get("_app_secrets"), dict) else {},
+                app_secret_errors=payload.get("_app_secret_errors") if isinstance(payload.get("_app_secret_errors"), list) else [],
+            )
+            return (409 if result.get("blocked") else 200), result
         if action == "sitemap":
             return 200, sitemap(data_root, payload.get("site_id"))
         if action == "index":
@@ -310,7 +322,7 @@ def resolve_secret_resource(data_root: Path, payload: dict[str, object]) -> dict
         if "github-token" not in _selector_logical_names(payload):
             return {"requires_secrets": False}
         action = str(payload.get("action") or "").strip()
-        if action == "import_git":
+        if action in {"import_git", "sync_source"}:
             return _resolve_git_import_secret_resource(data_root, payload)
         if action == "publish":
             return _resolve_publish_secret_resource(data_root, payload)
@@ -321,6 +333,24 @@ def resolve_secret_resource(data_root: Path, payload: dict[str, object]) -> dict
 
 def _resolve_git_import_secret_resource(data_root: Path, payload: dict[str, object]) -> dict[str, object]:
     source = payload.get("repository_url")
+    if not source and str(payload.get("action") or "").strip() == "sync_source":
+        site_id = str(payload.get("site_id") or "").strip()
+        if not site_id:
+            return {"requires_secrets": False}
+        site = get_site(data_root, site_id)
+        ref = site.get("source_artifact_ref") if isinstance(site.get("source_artifact_ref"), dict) else {}
+        if ref.get("provider") != "github":
+            return {"requires_secrets": False, "provider": str(ref.get("provider") or site.get("source_provider") or "manual")}
+        connection_id = str(ref.get("connection_id") or "").strip()
+        if not connection_id:
+            return {"requires_secrets": False, "provider": "github", "status": "missing_connection"}
+        connection = get_git_connection(data_root, connection_id)
+        return {
+            "requires_secrets": connection.get("auth_mode") == "fine_grained_token",
+            "provider": "github",
+            "connection_id": connection.get("id"),
+            "status": connection.get("status"),
+        }
     if not source:
         return {"requires_secrets": False}
     try:

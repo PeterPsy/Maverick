@@ -191,6 +191,20 @@ def ensure_schema(data_root: Path) -> None:
               updated_at TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_builds_site_created ON builds(site_id, created_at);
+            CREATE TABLE IF NOT EXISTS sync_runs (
+              id TEXT PRIMARY KEY,
+              site_id TEXT NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+              source_provider TEXT NOT NULL,
+              status TEXT NOT NULL,
+              branch TEXT NOT NULL DEFAULT '',
+              files_changed_count INTEGER NOT NULL DEFAULT 0,
+              conflicts_json TEXT NOT NULL DEFAULT '[]',
+              source_profile_json TEXT NOT NULL DEFAULT '{}',
+              logs_summary TEXT NOT NULL DEFAULT '',
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_sync_runs_site_created ON sync_runs(site_id, created_at);
             CREATE TABLE IF NOT EXISTS previews (
               id TEXT PRIMARY KEY,
               site_id TEXT NOT NULL REFERENCES sites(id) ON DELETE CASCADE,

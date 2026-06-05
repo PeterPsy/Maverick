@@ -322,6 +322,108 @@ def import_git(
     }
 
 
+def sync_source(
+    data_root: Path,
+    site_id: object,
+    *,
+    branch: object = None,
+    confirm: object = False,
+    app_secrets: dict[str, object] | None = None,
+    app_secret_errors: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
+    site = get_site(data_root, site_id)
+    source, clean_branch = _sync_source_locator(site, branch)
+    temp_root = data_root / ".tmp" / f"git_sync_{uuid4().hex}"
+    clone_root = temp_root / "repo"
+    try:
+        auth_context = _git_import_auth_context(
+            data_root,
+            site,
+            source,
+            app_secrets=app_secrets or {},
+            app_secret_errors=app_secret_errors or [],
+        )
+        _run_git_clone(source, clean_branch, clone_root, token=auth_context.get("token"))
+        if isinstance(auth_context.get("connection"), dict):
+            _mark_git_connection_runtime_grant(data_root, auth_context["connection"])
+        _normalize_git_import_file_modes(clone_root)
+        clone_git = clone_root / ".git"
+        if clone_git.exists():
+            shutil.rmtree(clone_git)
+        validate_source_tree_for_phase1(clone_root)
+        profile = source_profile(clone_root)
+        source_shape = str(profile.get("source_shape") or classify_source_tree(clone_root))
+        with _site_mutation_lock(data_root, str(site["id"])):
+            current_diff = diff_site(data_root, site["id"])
+            if current_diff["files"] and confirm is not True:
+                conflicts = [{"path": item["path"], "status": item["status"]} for item in current_diff["files"][:100]]
+                sync_run = _record_sync_run(
+                    data_root,
+                    site["id"],
+                    source_provider="git",
+                    status="blocked_local_changes",
+                    branch=clean_branch,
+                    files_changed_count=len(current_diff["files"]),
+                    conflicts=conflicts,
+                    source_profile=profile,
+                    logs_summary="Sync blocked because the working tree has unpublished local changes.",
+                )
+                _audit(data_root, str(site["id"]), "source.sync_blocked", "Sync blocked by local working changes", {"sync_run_id": sync_run["id"]})
+                return {
+                    "blocked": True,
+                    "status": "blocked_local_changes",
+                    "detail": "sync_source detected local working changes; rerun with confirm=true only after reviewing or publishing the diff.",
+                    "site": get_site(data_root, site["id"]),
+                    "sync_run": sync_run,
+                    "conflicts": conflicts,
+                }
+            source_root = _source_root(data_root, str(site["id"]))
+            if source_root.exists():
+                shutil.rmtree(source_root)
+            source_root.parent.mkdir(parents=True, exist_ok=True)
+            clone_root.rename(source_root)
+            rebuild_index(data_root, site["id"])
+            revision = create_revision(data_root, site["id"], label="Git sync", source="git_sync")
+            _set_active_revision(data_root, site["id"], revision["id"])
+            _update_site(
+                data_root,
+                site["id"],
+                source_provider="git",
+                source_label=_redacted_git_source_label(source, clean_branch),
+                source_shape=source_shape,
+                source_artifact_ref_json=json.dumps(_git_import_source_ref(data_root, site, source, clean_branch), sort_keys=True),
+            )
+            sync_run = _record_sync_run(
+                data_root,
+                site["id"],
+                source_provider="git",
+                status="synced",
+                branch=clean_branch,
+                files_changed_count=0,
+                conflicts=[],
+                source_profile=profile,
+                logs_summary="Git source synced into the Website Studio working copy.",
+            )
+        _audit(data_root, str(site["id"]), "source.synced", "Synced Git source", {"sync_run_id": sync_run["id"], "branch": clean_branch})
+    finally:
+        if temp_root.exists():
+            shutil.rmtree(temp_root)
+    return {
+        "blocked": False,
+        "status": "synced",
+        "site": get_site(data_root, site["id"]),
+        "sync_run": sync_run,
+        "revision": revision,
+        "sync": {
+            "source_provider": "git",
+            "branch": clean_branch or "",
+            "source_label": _redacted_git_source_label(source, clean_branch),
+            "source_shape": source_shape,
+            "source_profile": profile,
+        },
+    }
+
+
 def list_git_connections(data_root: Path, site_id: object = None) -> list[dict[str, object]]:
     ensure_schema(data_root)
     with connect(data_root) as db:
@@ -884,6 +986,10 @@ def list_changes(data_root: Path, site_id: object, status: object = None) -> dic
             "SELECT * FROM builds WHERE site_id = ? ORDER BY created_at DESC",
             (site["id"],),
         ).fetchall()
+        sync_rows = db.execute(
+            "SELECT * FROM sync_runs WHERE site_id = ? ORDER BY created_at DESC",
+            (site["id"],),
+        ).fetchall()
         deployment_rows = db.execute(
             "SELECT * FROM deployments WHERE site_id = ? ORDER BY created_at DESC",
             (site["id"],),
@@ -899,6 +1005,7 @@ def list_changes(data_root: Path, site_id: object, status: object = None) -> dic
         "revisions": [dict(row) for row in revision_rows],
         "approval_events": [_approval_row(row) for row in approval_rows],
         "builds": [_build_row(row) for row in build_rows],
+        "sync_runs": [_sync_run_row(row) for row in sync_rows],
         "deployments": [_deployment_row(row) for row in deployment_rows],
     }
 
@@ -1566,6 +1673,13 @@ def _deployment_row(row) -> dict[str, object]:
     return payload
 
 
+def _sync_run_row(row) -> dict[str, object]:
+    payload = dict(row)
+    payload["conflicts"] = json.loads(payload.pop("conflicts_json") or "[]")
+    payload["source_profile"] = json.loads(payload.pop("source_profile_json") or "{}")
+    return payload
+
+
 def _ensure_default_environment(data_root: Path, site_id: str) -> None:
     ensure_schema(data_root)
     now = now_timestamp()
@@ -2059,7 +2173,7 @@ def _source_artifact_ref(value: object) -> dict[str, str]:
 
 def _git_import_source_ref(data_root: Path, site: dict[str, object], source: str, branch: str) -> dict[str, object]:
     label = _redacted_git_source_label(source, branch)
-    fallback = {"provider": "git", "source_label": label, "branch": branch or ""}
+    fallback = {"provider": "git", "source": source, "source_label": label, "branch": branch or ""}
     try:
         owner, repo, _normalized_url = _parse_github_repository(source)
     except ValueError:
@@ -2075,11 +2189,74 @@ def _git_import_source_ref(data_root: Path, site: dict[str, object], source: str
         "provider": "github",
         "owner": owner,
         "repo": repo,
+        "repository_url": f"https://github.com/{owner}/{repo}.git",
         "connection_id": connection_id,
         "base_branch": branch or str(connection.get("base_branch") or "main"),
         "auth_mode": str(connection.get("auth_mode") or "fine_grained_token"),
         "source_label": label,
     }
+
+
+def _sync_source_locator(site: dict[str, object], branch: object = None) -> tuple[str, str]:
+    if site.get("source_provider") != "git":
+        raise ValueError("sync_source is currently supported only for Git-backed sites; CMS and commerce sync are later phases")
+    ref = site.get("source_artifact_ref") if isinstance(site.get("source_artifact_ref"), dict) else {}
+    provider = str(ref.get("provider") or "").strip()
+    branch_value = str(branch or ref.get("base_branch") or ref.get("branch") or "").strip()
+    clean_branch = _clean_git_branch(branch_value) if branch_value else ""
+    if provider == "github":
+        owner = str(ref.get("owner") or "").strip()
+        repo = str(ref.get("repo") or "").strip()
+        if not owner or not repo:
+            raise ValueError("GitHub sync requires owner and repo in the site's source reference")
+        return f"https://github.com/{owner}/{repo}.git", clean_branch
+    if provider == "git":
+        source = str(ref.get("source") or "").strip()
+        if not source:
+            raise ValueError("Git sync requires a retained source reference; re-import the repository to enable sync")
+        return source, clean_branch
+    raise ValueError("sync_source requires a Git source reference")
+
+
+def _record_sync_run(
+    data_root: Path,
+    site_id: object,
+    *,
+    source_provider: str,
+    status: str,
+    branch: str,
+    files_changed_count: int,
+    conflicts: list[dict[str, object]],
+    source_profile: dict[str, object],
+    logs_summary: str,
+) -> dict[str, object]:
+    sync_id = f"sync_{uuid4().hex[:16]}"
+    now = now_timestamp()
+    with connect(data_root) as db:
+        db.execute(
+            """
+            INSERT INTO sync_runs(
+              id, site_id, source_provider, status, branch, files_changed_count,
+              conflicts_json, source_profile_json, logs_summary, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                sync_id,
+                str(site_id),
+                source_provider,
+                status,
+                branch,
+                files_changed_count,
+                json.dumps(conflicts[:100]),
+                json.dumps(source_profile, sort_keys=True),
+                logs_summary,
+                now,
+                now,
+            ),
+        )
+        row = db.execute("SELECT * FROM sync_runs WHERE id = ?", (sync_id,)).fetchone()
+    return _sync_run_row(row)
 
 
 def _git_import_auth_context(

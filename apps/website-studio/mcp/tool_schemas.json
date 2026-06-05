@@ -186,6 +186,25 @@
         "additionalProperties": false
       }
     },
+    "website_sync_source": {
+      "description": "Sync a Git-backed site from its retained source reference. Blocks when unpublished local changes exist unless confirm=true is supplied after review.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id"],
+        "properties": {
+          "site_id": {"type": "string"},
+          "branch": {"type": "string"},
+          "confirm": {"type": "boolean"}
+        },
+        "additionalProperties": false
+      },
+      "secret_selectors": [
+        {
+          "required_secrets": ["github-token"],
+          "resource_lookup": { "kind": "website_git_connection_from_arguments" }
+        }
+      ]
+    },
     "website_sitemap": {
       "description": "Return the indexed static HTML sitemap for one site.",
       "input_schema": {"type": "object", "required": ["site_id"], "properties": {"site_id": {"type": "string"}}, "additionalProperties": false}

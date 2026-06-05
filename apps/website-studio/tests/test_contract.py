@@ -36,10 +36,12 @@ class GeneratedAppContractTest(unittest.TestCase):
         self.assertIn("website_git_connections_list", mcp_tools)
         self.assertIn("website_git_connection_prepare", mcp_tools)
         self.assertIn("website_git_connection_activate", mcp_tools)
+        self.assertIn("website_sync_source", mcp_tools)
 
         schemas = json.loads((APP_ROOT / "mcp" / "tool_schemas.json").read_text(encoding="utf-8"))
         self.assertIn("website_git_connection_prepare", schemas["tools"])
         self.assertIn("website_git_connection_activate", schemas["tools"])
+        self.assertIn("website_sync_source", schemas["tools"])
 
     def test_git_secret_consumers_are_declared_for_cli_and_mcp(self) -> None:
         mcp_schemas = json.loads((APP_ROOT / "mcp" / "tool_schemas.json").read_text(encoding="utf-8"))
@@ -61,6 +63,14 @@ class GeneratedAppContractTest(unittest.TestCase):
                 "required_secrets": ["github-token"],
                 "resource_lookup": {"kind": "website_git_connection_from_arguments"},
                 "when": {"action": "import_git"},
+            },
+            cli_selectors,
+        )
+        self.assertIn(
+            {
+                "required_secrets": ["github-token"],
+                "resource_lookup": {"kind": "website_git_connection_from_arguments"},
+                "when": {"action": "sync_source"},
             },
             cli_selectors,
         )

@@ -402,6 +402,72 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(status, 200)
             self.assertEqual(map_payload["items"][0]["route"], "/")
 
+    def test_git_sync_updates_clean_working_copy_and_records_sync_run(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            repo_root = data_root / "fixtures" / "repo"
+            repo_root.mkdir(parents=True)
+            (repo_root / "index.html").write_text("<title>Git Site</title><main>Initial</main>", encoding="utf-8")
+            subprocess.run(["git", "init"], cwd=repo_root, check=True, capture_output=True, text=True)
+            subprocess.run(["git", "config", "user.email", "agent@example.com"], cwd=repo_root, check=True)
+            subprocess.run(["git", "config", "user.name", "Agent"], cwd=repo_root, check=True)
+            subprocess.run(["git", "add", "."], cwd=repo_root, check=True)
+            subprocess.run(["git", "commit", "-m", "initial"], cwd=repo_root, check=True, capture_output=True, text=True)
+            status, imported = handle_action(data_root, {"action": "import_git", "repository_url": str(repo_root), "display_name": "Git Site"})
+            self.assertEqual(status, 201)
+            site_id = imported["site"]["id"]
+
+            (repo_root / "index.html").write_text("<title>Git Site</title><main>Remote update</main>", encoding="utf-8")
+            (repo_root / "about.html").write_text("<title>About</title>", encoding="utf-8")
+            subprocess.run(["git", "add", "."], cwd=repo_root, check=True)
+            subprocess.run(["git", "commit", "-m", "remote update"], cwd=repo_root, check=True, capture_output=True, text=True)
+
+            status, synced = handle_action(data_root, {"action": "sync_source", "site_id": site_id})
+
+            self.assertEqual(status, 200)
+            self.assertFalse(synced["blocked"])
+            self.assertEqual(synced["sync_run"]["status"], "synced")
+            self.assertEqual(synced["revision"]["source"], "git_sync")
+            status, read_payload = handle_action(data_root, {"action": "read_file", "site_id": site_id, "path": "index.html"})
+            self.assertEqual(status, 200)
+            self.assertIn("Remote update", read_payload["file"]["content"])
+            status, map_payload = handle_action(data_root, {"action": "sitemap", "site_id": site_id})
+            self.assertEqual(status, 200)
+            self.assertIn("/about", {item["route"] for item in map_payload["items"]})
+            status, changes = handle_action(data_root, {"action": "list_changes", "site_id": site_id})
+            self.assertEqual(status, 200)
+            self.assertEqual(changes["sync_runs"][0]["id"], synced["sync_run"]["id"])
+
+    def test_git_sync_blocks_when_local_working_changes_exist(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            repo_root = data_root / "fixtures" / "repo"
+            repo_root.mkdir(parents=True)
+            (repo_root / "index.html").write_text("<title>Git Site</title><main>Initial</main>", encoding="utf-8")
+            subprocess.run(["git", "init"], cwd=repo_root, check=True, capture_output=True, text=True)
+            subprocess.run(["git", "config", "user.email", "agent@example.com"], cwd=repo_root, check=True)
+            subprocess.run(["git", "config", "user.name", "Agent"], cwd=repo_root, check=True)
+            subprocess.run(["git", "add", "."], cwd=repo_root, check=True)
+            subprocess.run(["git", "commit", "-m", "initial"], cwd=repo_root, check=True, capture_output=True, text=True)
+            status, imported = handle_action(data_root, {"action": "import_git", "repository_url": str(repo_root), "display_name": "Git Site"})
+            self.assertEqual(status, 201)
+            site_id = imported["site"]["id"]
+            _edit_index(data_root, site_id, marker="Local change")
+
+            (repo_root / "index.html").write_text("<title>Git Site</title><main>Remote update</main>", encoding="utf-8")
+            subprocess.run(["git", "add", "."], cwd=repo_root, check=True)
+            subprocess.run(["git", "commit", "-m", "remote update"], cwd=repo_root, check=True, capture_output=True, text=True)
+
+            status, blocked = handle_action(data_root, {"action": "sync_source", "site_id": site_id})
+
+            self.assertEqual(status, 409)
+            self.assertTrue(blocked["blocked"])
+            self.assertEqual(blocked["sync_run"]["status"], "blocked_local_changes")
+            self.assertEqual(blocked["conflicts"][0]["path"], "index.html")
+            status, read_payload = handle_action(data_root, {"action": "read_file", "site_id": site_id, "path": "index.html"})
+            self.assertEqual(status, 200)
+            self.assertIn("Local change", read_payload["file"]["content"])
+
     def test_git_import_rejects_inline_credentials(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             status, result = handle_action(

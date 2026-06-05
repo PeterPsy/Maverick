@@ -529,6 +529,7 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual(document["workspace_relative_path"], "")
             self.assertEqual(ingested["storage_identity"]["entity_id"], "file_drive_legacy")
             self.assertEqual({version["source_document_id"] for version in versions}, {document["id"]})
+            self.assertEqual({version["hash_kind"] for version in versions}, {"remote_storage_preview"})
 
     def test_schema_current_shape_requires_v3_source_tables_and_indexes(self) -> None:
         database = self.import_backend_module("database")
@@ -1038,6 +1039,46 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual({version["metadata"]["hash_kind"] for version in versions}, {"file_bytes"})
             self.assertTrue(all(not version["extracted_text"] for version in versions))
 
+    def test_source_snapshot_rejects_legacy_corrupt_workspace_paths_before_filesystem(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            workspace_root = Path(temp)
+            data_root = workspace_root / "data" / "memory"
+            outside_path = workspace_root / "outside.md"
+            outside_path.write_text("outside source bytes", encoding="utf-8")
+            database = self.import_backend_module("database")
+            sources = self.import_backend_module("sources")
+            node = self.run_backend(
+                data_root,
+                {"action": "remember", "title": "Legacy corrupt source", "body": "Corrupt legacy source.", "type": "fact"},
+            )["json"]["node"]
+            database.ensure_schema(data_root)
+            with database.transaction(data_root, immediate=True) as db:
+                timestamp = database.now_timestamp()
+                db.execute(
+                    """
+                    INSERT INTO external_refs(
+                      id, node_id, ref_kind, owning_app_id, entity_type, entity_id, file_id,
+                      workspace_relative_path, uri, title, metadata_json, created_at, updated_at
+                    )
+                    VALUES (
+                      'ref_corrupt_path', ?, 'local_storage_file', 'storage', 'file', 'file_corrupt',
+                      'file_corrupt', '../outside.md', '', 'Corrupt path', '{}', ?, ?
+                    )
+                    """,
+                    (node["id"], timestamp, timestamp),
+                )
+                ref = db.execute("SELECT * FROM external_refs WHERE id = 'ref_corrupt_path'").fetchone()
+
+                original_file_hash = sources.file_hash
+                try:
+                    sources.file_hash = lambda _path: (_ for _ in ()).throw(AssertionError("invalid legacy path reached filesystem hash"))
+                    snapshot = sources.source_snapshot(ref, data_root)
+                finally:
+                    sources.file_hash = original_file_hash
+
+            self.assertEqual(snapshot["hash_kind"], "reference_snapshot")
+            self.assertEqual(snapshot["extracted_text"], "")
+
     def test_compile_input_hash_is_stable_for_unchanged_source_refs(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             workspace_root = Path(temp)
@@ -1316,6 +1357,44 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertIn("launch date is July 15", citation["quote"])
             self.assertTrue(citation["source_chunk_id"])
             self.assertTrue(citation["quote_sha256"])
+
+    def test_compile_maps_whitespace_normalized_quote_range_to_chunk_body(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            service = self.import_backend_module("service")
+            _node_status, node_payload = service.handle_action(
+                data_root,
+                {
+                    "action": "remember",
+                    "title": "Acme renewal owner",
+                    "body": "Acme renewal owner is Dana.",
+                    "type": "fact",
+                },
+            )
+
+            status, ingested = service.handle_action(
+                data_root,
+                {
+                    "action": "ingest_source",
+                    "adapter_id": "inline_markdown",
+                    "node_id": node_payload["node"]["id"],
+                    "source_key": "notes:whitespace-range",
+                    "title": "Whitespace range source",
+                    "body_markdown": "Acme renewal\n\nowner is Dana.",
+                    "compile_after_ingest": True,
+                },
+            )
+
+            self.assertEqual(status, 200)
+            self.assertTrue(ingested["compiled"]["citations"])
+            citation = ingested["compiled"]["citations"][0]
+            fetched = service.handle_action(data_root, {"action": "fetch_chunks", "chunk_ids": [citation["source_chunk_id"]]})[1]
+            chunk_body = fetched["chunks"][0]["body"]
+            cited_body = chunk_body[citation["char_start"] : citation["char_end"]]
+            self.assertEqual(citation["quote"], "Acme renewal owner is Dana.")
+            self.assertEqual(" ".join(cited_body.split()), citation["quote"])
+            self.assertIn("\n\n", cited_body)
+            self.assertGreater(citation["char_end"], citation["char_start"])
 
     def test_ingest_source_storage_file_creates_new_versions_for_local_text_changes(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -1641,6 +1720,30 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual(manual["job"]["source_version_id"], source_version["id"])
             self.assertEqual(inspect_status, 200)
             self.assertTrue(any(job["dedupe_key"] == "manual:unit-source" for job in inspected["ingest_jobs"]))
+
+            run_status, run = service.handle_action(
+                data_root,
+                {
+                    "action": "jobs_list",
+                    "operation": "run",
+                    "job_types": ["ingest_source"],
+                },
+            )
+            inspected_after_run = service.handle_action(
+                data_root,
+                {"action": "inspect_source", "source_document_id": source_document["id"]},
+            )[1]
+            completed_job = next(job for job in inspected_after_run["ingest_jobs"] if job["dedupe_key"] == "manual:unit-source")
+            new_source_version = run["result"]["source_version"]
+
+            self.assertEqual(run_status, 200)
+            self.assertTrue(run["ok"])
+            self.assertEqual(run["job"]["status"], "done")
+            self.assertNotEqual(new_source_version["id"], source_version["id"])
+            self.assertEqual(run["job"]["source_document_id"], source_document["id"])
+            self.assertEqual(run["job"]["source_version_id"], new_source_version["id"])
+            self.assertEqual(run["job"]["node_id"], run["result"]["node"]["id"])
+            self.assertEqual(completed_job["source_version_id"], new_source_version["id"])
 
     def test_ingest_job_backfill_resolves_source_identity_payloads(self) -> None:
         service = self.import_backend_module("service")

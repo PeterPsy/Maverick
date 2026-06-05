@@ -446,10 +446,30 @@ def reference_snapshot_text(ref: sqlite3.Row) -> str:
 def workspace_file_path(data_root: Path | None, workspace_relative_path: str) -> Path | None:
     if data_root is None or not workspace_relative_path:
         return None
+    normalized = safe_storage_workspace_relative_path(workspace_relative_path)
+    if not normalized:
+        return None
     workspace_root = workspace_root_for_data_root(data_root)
     if workspace_root is None:
         return None
-    return workspace_root / workspace_relative_path
+    candidate = (workspace_root / normalized).resolve(strict=False)
+    storage_roots = [
+        (workspace_root / "storage" / "uploaded").resolve(strict=False),
+        (workspace_root / "storage" / "generated").resolve(strict=False),
+    ]
+    if any(candidate == root or root in candidate.parents for root in storage_roots):
+        return candidate
+    return None
+
+
+def safe_storage_workspace_relative_path(workspace_relative_path: str) -> Path | None:
+    raw_path = Path(str(workspace_relative_path or "").strip())
+    if raw_path.is_absolute() or ".." in raw_path.parts:
+        return None
+    parts = raw_path.parts
+    if len(parts) < 3 or parts[0] != "storage" or parts[1] not in {"uploaded", "generated"}:
+        return None
+    return raw_path
 
 
 def workspace_root_for_data_root(data_root: Path) -> Path | None:

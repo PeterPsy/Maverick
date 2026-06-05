@@ -430,10 +430,37 @@ def quote_range(body: str, quote: str) -> tuple[int, int]:
     if not quote:
         return (0, 0)
     start = body.find(quote)
-    if start == -1:
-        collapsed_body = " ".join(body.split())
-        collapsed_start = collapsed_body.find(quote)
-        if collapsed_start == -1:
-            return (0, min(len(body), len(quote)))
-        return (collapsed_start, collapsed_start + len(quote))
-    return (start, start + len(quote))
+    if start != -1:
+        return (start, start + len(quote))
+    collapsed_quote = " ".join(quote.split()).strip()
+    if not collapsed_quote:
+        return (0, 0)
+    collapsed_body, original_offsets = collapsed_text_with_offsets(body)
+    collapsed_start = collapsed_body.find(collapsed_quote)
+    if collapsed_start == -1:
+        return (0, 0)
+    collapsed_end = collapsed_start + len(collapsed_quote) - 1
+    return (original_offsets[collapsed_start], original_offsets[collapsed_end] + 1)
+
+
+def collapsed_text_with_offsets(body: str) -> tuple[str, list[int]]:
+    characters: list[str] = []
+    offsets: list[int] = []
+    in_whitespace = False
+    for index, character in enumerate(body):
+        if character.isspace():
+            if not in_whitespace:
+                characters.append(" ")
+                offsets.append(index)
+                in_whitespace = True
+            continue
+        characters.append(character)
+        offsets.append(index)
+        in_whitespace = False
+    if characters and characters[0] == " ":
+        characters.pop(0)
+        offsets.pop(0)
+    if characters and characters[-1] == " ":
+        characters.pop()
+        offsets.pop()
+    return ("".join(characters), offsets)

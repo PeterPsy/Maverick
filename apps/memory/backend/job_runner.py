@@ -5,9 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from database import normalize_limit, now_timestamp, transaction
+from database import connect, normalize_limit, now_timestamp, transaction
 from errors import MemoryValidationError
-from ingest_jobs import claim_job, complete_job, fail_job
+from ingest_jobs import claim_job, complete_job, fail_job, update_job_provenance
+from job_provenance import resolve_job_provenance
 from lint import lint_memory, mark_wiki_stale
 from source_ingestion import ingest_source
 from storage_ingestion import ingest_storage_source
@@ -39,6 +40,16 @@ def run_next_job(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
         )
         return {"job": failed["job"], "ran": True, "ok": False, "error": str(error)}
 
+    provenance = job_result_provenance(data_root, result)
+    if any(provenance.values()):
+        update_job_provenance(
+            data_root,
+            {
+                "job_id": job["id"],
+                "lease_token": job["lease_token"],
+                **provenance,
+            },
+        )
     completed = complete_job(
         data_root,
         {
@@ -91,6 +102,27 @@ def execute_job(data_root: Path, job: dict[str, Any]) -> dict[str, Any]:
     if job_type == "requires_storage_reindex":
         return requires_storage_reindex(payload)
     raise MemoryValidationError("unsupported job_type.")
+
+
+def job_result_provenance(data_root: Path, result: dict[str, Any]) -> dict[str, str]:
+    payload = result if isinstance(result, dict) else {}
+    node = payload.get("node") if isinstance(payload.get("node"), dict) else {}
+    with connect(data_root) as db:
+        node_id, source_document_id, source_version_id = resolve_job_provenance(db, payload)
+        if not (source_document_id and source_version_id):
+            for source in payload.get("sources") if isinstance(payload.get("sources"), list) else []:
+                if not isinstance(source, dict):
+                    continue
+                node_id = node_id or str(node.get("id") or "").strip()
+                source_document_id = source_document_id or str(source.get("source_document_id") or "").strip()
+                source_version_id = source_version_id or str(source.get("source_version_id") or "").strip()
+                if source_document_id and source_version_id:
+                    break
+    return {
+        "node_id": node_id,
+        "source_document_id": source_document_id,
+        "source_version_id": source_version_id,
+    }
 
 
 def mark_stale(data_root: Path, payload: dict[str, Any]) -> dict[str, Any]:

@@ -304,7 +304,7 @@ def backfill_source_version_content(
                 "migration": "v3_source_foundation",
             },
         )
-        hash_kind = str(version.get("hash_kind") or "").strip() or "canonical_body"
+        hash_kind = migrated_source_version_hash_kind(version, document)
         extraction_status = str(version.get("extraction_status") or "").strip() or "available"
         db.execute(
             """
@@ -327,6 +327,24 @@ def backfill_source_version_content(
         )
     if not source_chunks_exist(db, str(version["id"])):
         write_migrated_source_chunks(db, data_root=data_root, version=version, body=body, timestamp=timestamp)
+
+
+def migrated_source_version_hash_kind(version: dict[str, Any], document: dict[str, Any]) -> str:
+    metadata = version.get("metadata") if isinstance(version.get("metadata"), dict) else {}
+    explicit = first_text(
+        version.get("hash_kind"),
+        metadata.get("hash_kind"),
+        metadata.get("content_hash_kind"),
+    )
+    if explicit:
+        return explicit
+    adapter_id = str(document.get("adapter_id") or "").strip()
+    source_kind = str(document.get("source_kind") or "").strip()
+    if adapter_id == "remote_storage_file" or source_kind == "remote_storage_file":
+        return "remote_storage_preview" if str(version.get("extracted_text") or "").strip() else "reference_snapshot"
+    if adapter_id == "app_entity":
+        return "reference_snapshot"
+    return "canonical_body"
 
 
 def source_chunks_exist(db: sqlite3.Connection, source_version_id: str) -> bool:

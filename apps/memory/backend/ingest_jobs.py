@@ -159,6 +159,29 @@ def complete_job(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
         return {"job": row_payload(db.execute("SELECT * FROM ingest_jobs WHERE id = ?", (job_id,)).fetchone())}
 
 
+def update_job_provenance(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
+    ensure_schema(data_root)
+    job_id, lease_token = require_job_lease(body)
+    node_id = str(body.get("node_id") or "").strip()
+    source_document_id = str(body.get("source_document_id") or "").strip()
+    source_version_id = str(body.get("source_version_id") or "").strip()
+    with transaction(data_root, immediate=True) as db:
+        running_job_for_lease(db, job_id, lease_token)
+        timestamp = now_timestamp()
+        db.execute(
+            """
+            UPDATE ingest_jobs
+            SET node_id = COALESCE(NULLIF(?, ''), node_id),
+                source_document_id = COALESCE(NULLIF(?, ''), source_document_id),
+                source_version_id = COALESCE(NULLIF(?, ''), source_version_id),
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (node_id, source_document_id, source_version_id, timestamp, job_id),
+        )
+        return {"job": row_payload(db.execute("SELECT * FROM ingest_jobs WHERE id = ?", (job_id,)).fetchone())}
+
+
 def fail_job(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
     ensure_schema(data_root)
     job_id, lease_token = require_job_lease(body)

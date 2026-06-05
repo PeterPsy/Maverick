@@ -104,9 +104,27 @@ describe("WidgetSlot overlay widget messages", () => {
       window.location.origin,
     );
   });
+
+  it("reports active chat thread changes back to the shell", async () => {
+    const onActiveThreadChange = vi.fn();
+    await renderOverlay(root, { onActiveThreadChange });
+
+    await dispatchActiveThreadChanged(window, " selected-thread ", " floating-window ");
+
+    expect(onActiveThreadChange).toHaveBeenCalledWith({
+      navigationScope: "floating-window",
+      ownerAppId,
+      threadId: "selected-thread",
+    });
+  });
 });
 
-async function renderOverlay(root: Root) {
+async function renderOverlay(
+  root: Root,
+  props: {
+    onActiveThreadChange?: (event: { navigationScope: string; ownerAppId: string; threadId: string }) => void;
+  } = {},
+) {
   await act(async () => {
     root.render(
       <WidgetSlot
@@ -115,6 +133,7 @@ async function renderOverlay(root: Root) {
         contentKind="shell.overlay.bottomright"
         hostAppId="base-shell"
         label="Floating shell widget"
+        onActiveThreadChange={props.onActiveThreadChange}
         onOpenApp={vi.fn()}
         size="overlay"
       />,
@@ -188,6 +207,24 @@ async function dispatchResize(source: MessageEventSource, width: string, height:
           type: "maverick.widget.resize",
           widget_id: widgetId,
           width,
+        },
+        origin: window.location.origin,
+        source,
+      }),
+    );
+    await Promise.resolve();
+  });
+}
+
+async function dispatchActiveThreadChanged(source: MessageEventSource, activeThreadId: string, navigationScope: string) {
+  await act(async () => {
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        data: {
+          active_thread_id: activeThreadId,
+          navigation_scope: navigationScope,
+          owner_app_id: ownerAppId,
+          type: "maverick.chat.active-thread-changed",
         },
         origin: window.location.origin,
         source,

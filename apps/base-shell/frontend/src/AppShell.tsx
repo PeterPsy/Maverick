@@ -453,6 +453,18 @@ export function AppShell() {
     setFloatingChatMode("overlay");
   }
 
+  function updateFloatingChatActiveThread(event: { navigationScope: string | null; threadId: string }) {
+    const nextThreadId = event.threadId.trim();
+    if (!nextThreadId) {
+      return;
+    }
+    const nextNavigationScope = event.navigationScope?.trim() || null;
+    setFloatingChatThreadId(nextThreadId);
+    if (nextNavigationScope) {
+      setFloatingChatNavigationScope(nextNavigationScope);
+    }
+  }
+
   async function handleLogout() {
     await logout();
     await loadShellState();
@@ -631,6 +643,7 @@ export function AppShell() {
         isMobileChatOpen={isMobileChatOpen}
         isMobileLayout={isMobileLayout}
         navigationScope={floatingChatNavigationScope}
+        onActiveThreadChange={updateFloatingChatActiveThread}
         onCloseDock={closeFloatingChatDock}
         onCloseMobileChat={closeMobileChatPanel}
         onOpenApp={openApp}

@@ -110,6 +110,28 @@ describe("floating chat widget state", () => {
     ]);
   });
 
+  it("trusts a scoped active thread before the runtime catalog catches up", () => {
+    const windows = [windowItem({ id: "window-a", threadId: "previous-thread" })];
+
+    expect(reconcileWindowsWithThreads(windows, [{ thread_id: "previous-thread" }], "selected-thread", "window-a")).toEqual([
+      windowItem({ id: "window-a", isDraft: false, threadId: "selected-thread" }),
+    ]);
+  });
+
+  it("moves a single floating window to an unscoped active thread", () => {
+    const windows = [windowItem({ id: "window-a", isCollapsed: true, threadId: "previous-thread" })];
+
+    expect(reconcileWindowsWithThreads(windows, [{ thread_id: "previous-thread" }], "selected-thread")).toEqual([
+      windowItem({ id: "window-a", isCollapsed: false, isDraft: false, threadId: "selected-thread" }),
+    ]);
+  });
+
+  it("does not replace a multi-window stack from an unscoped active thread", () => {
+    const windows = [windowItem({ id: "window-a", threadId: "thread-a" }), windowItem({ id: "window-b", threadId: "thread-b" })];
+
+    expect(reconcileWindowsWithThreads(windows, [{ thread_id: "thread-a" }, { thread_id: "thread-b" }], "selected-thread")).toEqual(windows);
+  });
+
   it("switches the visible single-window chat in place", () => {
     const selection = selectSingleFloatingWindowThread(
       [

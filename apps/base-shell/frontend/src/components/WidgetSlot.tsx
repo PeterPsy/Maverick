@@ -58,6 +58,7 @@ export function WidgetSlot({
   hostAppId,
   label,
   onCloseSidebar,
+  onActiveThreadChange,
   onCloseDock,
   onOpenDock,
   onOpenApp,
@@ -75,6 +76,7 @@ export function WidgetSlot({
   label: string;
   onCloseDock?: () => void;
   onCloseSidebar?: () => void;
+  onActiveThreadChange?: (event: { navigationScope: string; ownerAppId: string; threadId: string }) => void;
   onOpenDock?: (request: {
     navigationScope: string | null;
     ownerAppId: string;
@@ -293,14 +295,24 @@ export function WidgetSlot({
           setOverlaySize(nextOverlaySize);
         }
       }
-      if (payload.type === "maverick.chat.active-thread-changed" && payload.owner_app_id === widget?.owner_app_id) {
+      if (payload.type === "maverick.chat.active-thread-changed" && widget && payload.owner_app_id === widget.owner_app_id) {
+        const ownerAppId = widget.owner_app_id;
+        const activeThreadId = typeof payload.active_thread_id === "string" ? payload.active_thread_id.trim() : "";
+        const navigationScope = typeof payload.navigation_scope === "string" ? payload.navigation_scope.trim() : "";
+        if (activeThreadId) {
+          onActiveThreadChange?.({
+            navigationScope,
+            ownerAppId,
+            threadId: activeThreadId,
+          });
+        }
         postToMaverickFrame(
           widgetFrameRef.current,
           {
             type: "maverick.chat.active-thread-changed",
-            active_thread_id: typeof payload.active_thread_id === "string" ? payload.active_thread_id : "",
-            navigation_scope: typeof payload.navigation_scope === "string" ? payload.navigation_scope : "",
-            owner_app_id: payload.owner_app_id,
+            active_thread_id: activeThreadId,
+            navigation_scope: navigationScope,
+            owner_app_id: ownerAppId,
           },
         );
       }
@@ -328,6 +340,7 @@ export function WidgetSlot({
   }, [
     onCloseDock,
     onCloseSidebar,
+    onActiveThreadChange,
     onOpenApp,
     onOpenDock,
     onPrimaryActionStateChange,

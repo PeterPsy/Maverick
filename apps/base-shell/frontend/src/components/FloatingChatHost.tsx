@@ -15,6 +15,7 @@ export function FloatingChatHost({
   isMobileChatOpen,
   isMobileLayout,
   navigationScope,
+  onActiveThreadChange,
   onCloseDock,
   onCloseMobileChat,
   onOpenApp,
@@ -33,6 +34,7 @@ export function FloatingChatHost({
   isMobileChatOpen: boolean;
   isMobileLayout: boolean;
   navigationScope: string | null;
+  onActiveThreadChange: (event: { navigationScope: string | null; threadId: string }) => void;
   onCloseDock: () => void;
   onCloseMobileChat: () => void;
   onOpenApp: (appId: string, params?: Record<string, string | boolean | null>) => void;
@@ -174,6 +176,12 @@ export function FloatingChatHost({
           contentKind={contentKind}
           hostAppId="base-shell"
           label={widgetLabel}
+          onActiveThreadChange={({ navigationScope: nextNavigationScope, threadId: nextThreadId }) =>
+            onActiveThreadChange({
+              navigationScope: nextNavigationScope || navigationScope,
+              threadId: nextThreadId,
+            })
+          }
           onCloseDock={handleCloseWidget}
           onOpenApp={onOpenApp}
           onOpenDock={onOpenDock}

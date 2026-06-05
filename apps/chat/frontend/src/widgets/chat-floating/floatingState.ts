@@ -123,39 +123,65 @@ export function reconcileWindowsWithThreads(
   preferredThreadId = "",
   navigationScope = "",
 ) {
+  const selectedThreadId = preferredThreadId.trim();
+  const selectedNavigationScope = navigationScope.trim();
   const firstThreadId = threads[0]?.thread_id || "";
   const threadIds = new Set(threads.map((thread) => thread.thread_id));
+  if (selectedThreadId && !selectedNavigationScope) {
+    return reconcileUnscopedSelectedThread(windows, selectedThreadId);
+  }
   return windows.map((windowItem) => {
     const hasValidThread = Boolean(windowItem.threadId && threadIds.has(windowItem.threadId));
     if (hasValidThread && (windowItem.isDraft || windowItem.draftProjectId)) {
       return { ...windowItem, draftProjectId: null, isDraft: false };
     }
-    if (windowItem.isDraft && (!navigationScope || windowItem.id !== navigationScope)) {
+    if (windowItem.isDraft && (!selectedNavigationScope || windowItem.id !== selectedNavigationScope)) {
       return windowItem;
     }
-    if (windowItem.isDraft && navigationScope === windowItem.id && !preferredThreadId) {
+    if (windowItem.isDraft && selectedNavigationScope === windowItem.id && !selectedThreadId) {
       return windowItem;
     }
-    if (!navigationScope) {
+    if (!selectedNavigationScope) {
       if (!windowItem.threadId && firstThreadId) {
         return { ...windowItem, threadId: firstThreadId };
       }
       return !windowItem.threadId || threadIds.has(windowItem.threadId) ? windowItem : { ...windowItem, isDraft: true };
     }
-    if (navigationScope && windowItem.id !== navigationScope) {
+    if (selectedNavigationScope && windowItem.id !== selectedNavigationScope) {
       if (!windowItem.threadId && firstThreadId) {
         return { ...windowItem, threadId: firstThreadId };
       }
       return !windowItem.threadId || threadIds.has(windowItem.threadId) ? windowItem : { ...windowItem, isDraft: true };
     }
     const nextThreadId =
-      preferredThreadId && threadIds.has(preferredThreadId)
-        ? preferredThreadId
+      selectedThreadId
+        ? selectedThreadId
         : windowItem.threadId && threadIds.has(windowItem.threadId)
           ? windowItem.threadId
           : firstThreadId;
     return nextThreadId ? { ...windowItem, draftProjectId: null, isDraft: false, threadId: nextThreadId } : { ...windowItem, isDraft: true };
   });
+}
+
+function reconcileUnscopedSelectedThread(windows: FloatingChatWindow[], threadId: string): FloatingChatWindow[] {
+  const existingIndex = windows.findIndex((windowItem) => !windowItem.isDraft && windowItem.threadId === threadId);
+  if (existingIndex >= 0) {
+    return windows.map((windowItem, index) =>
+      index === existingIndex ? { ...windowItem, draftProjectId: null, isCollapsed: false, isDraft: false, threadId } : windowItem,
+    );
+  }
+  if (windows.length !== 1) {
+    return windows;
+  }
+  return [
+    {
+      ...windows[0],
+      draftProjectId: null,
+      isCollapsed: false,
+      isDraft: false,
+      threadId,
+    },
+  ];
 }
 
 export function selectSingleFloatingWindowThread(windows: FloatingChatWindow[], windowId: string, threadId: string) {

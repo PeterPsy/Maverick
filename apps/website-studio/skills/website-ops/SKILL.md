@@ -41,7 +41,7 @@ Website Studio is the authenticated operating layer inside Maverick. It is not t
 - Managed static publish creates an immutable local deployment artifact and deployment record. Do not claim custom domains, CDN, certificates, or public production binding are configured unless a generic platform hosting surface reports them.
 - `website_build_preview` returns a `preview_url` for the app-owned isolated preview runtime when a preview record is created. Do not fetch source files directly to approximate preview output.
 - PHP preview requires a host `php` executable and runs through a bounded loopback request with short process lifetime. If `website_runtime_status` reports the PHP executable as missing, treat that as a runtime environment gap unless the user explicitly asks to change the site source.
-- Node-build preview requires `package-lock.json` and an npm `build` script that expands only to allowlisted build commands. Do not rewrite build scripts, switch package managers, or add lockfiles just to satisfy the preview adapter without user direction.
+- Node-build preview requires `package-lock.json` and an npm `build` script that expands only to allowlisted build commands. Dart Sass `sass` is supported; native-binary `node-sass` is blocked because Website Studio installs dependencies with `npm ci --ignore-scripts`. Do not rewrite build scripts, switch package managers, or add lockfiles just to satisfy the preview adapter without user direction.
 
 ## Useful MCP Tools
 

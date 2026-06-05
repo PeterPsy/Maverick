@@ -269,7 +269,7 @@
       }
     },
     "website_build_validate": {
-      "description": "Record a deterministic static build validation without running arbitrary imported code.",
+      "description": "Record a deterministic build validation, preparing bounded static/PHP/Node preview artifacts and rendered route records when supported.",
       "input_schema": {
         "type": "object",
         "required": ["site_id"],

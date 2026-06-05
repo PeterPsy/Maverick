@@ -23,8 +23,8 @@ sys.path.insert(0, str(APP_ROOT))
 sys.path.insert(0, str(APP_ROOT / "backend"))
 
 from backend.service import app_events_for_action, handle_action, resolve_secret_resource
-from backend.store import _git_import_source_ref, _github_error_detail, _redact_secret_text, _site_mutation_lock
-from preview_runtime import build_plan_for_source, prepare_runtime_build, runtime_capability_status
+from backend.store import _git_import_source_ref, _github_error_detail, _redact_secret_text, _site_mutation_lock, rebuild_index
+from preview_runtime import _resolve_workspace_binary, build_plan_for_source, prepare_runtime_build, runtime_capability_status
 from safety import MAX_SOURCE_TREE_FILES, validate_source_tree_for_phase1
 
 
@@ -268,11 +268,13 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
                 encoding="utf-8",
             )
 
+            rebuild_index(data_root, site_id)
             status, sitemap_payload = handle_action(data_root, {"action": "sitemap", "site_id": site_id})
             self.assertEqual(status, 200)
             self.assertIn("/about", {route["route"] for route in sitemap_payload["routes"]})
 
             (source_root / "about.html").write_text("<html><title>About</title></html>", encoding="utf-8")
+            rebuild_index(data_root, site_id)
             status, status_payload = handle_action(data_root, {"action": "site_status", "site_id": site_id})
 
             self.assertEqual(status, 200)
@@ -1220,7 +1222,8 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(profile["missing_requirements"], [])
             self.assertTrue(profile["runtime_preview_supported"])
 
-            status, preview = handle_action(data_root, {"action": "build_preview", "site_id": imported["site"]["id"]})
+            with patch("preview_runtime.shutil.which", return_value=None):
+                status, preview = handle_action(data_root, {"action": "build_preview", "site_id": imported["site"]["id"]})
             self.assertEqual(status, 200)
             self.assertEqual(preview["runtime_kind"], "php")
             self.assertEqual(preview["runtime_status"], "blocked")
@@ -1248,7 +1251,8 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(profile["missing_requirements"], [])
             self.assertTrue(profile["runtime_preview_supported"])
 
-            status, preview = handle_action(data_root, {"action": "build_preview", "site_id": imported["site"]["id"]})
+            with patch("preview_runtime.shutil.which", return_value=None):
+                status, preview = handle_action(data_root, {"action": "build_preview", "site_id": imported["site"]["id"]})
             self.assertEqual(status, 200)
             self.assertEqual(preview["runtime_kind"], "php")
             self.assertEqual(preview["runtime_status"], "blocked")
@@ -1257,7 +1261,20 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertIn("Preview runtime unavailable", preview["html"])
             self.assertIn("php executable", preview["missing_requirements"][0])
 
-            status, document = handle_action(data_root, {"action": "preview_document", "preview_id": preview["preview_id"]})
+            with patch(
+                "store.render_runtime_preview",
+                return_value={
+                    "status": "blocked",
+                    "runtime_kind": "php",
+                    "html": "",
+                    "title": "",
+                    "source_files": [],
+                    "warnings": [],
+                    "missing_requirements": ["php executable is not available to the Website Studio preview runtime"],
+                    "http_status": 0,
+                },
+            ):
+                status, document = handle_action(data_root, {"action": "preview_document", "preview_id": preview["preview_id"]})
             self.assertEqual(status, 200)
             self.assertEqual(document["preview"]["status"], "blocked")
             self.assertIn("Preview runtime unavailable", document["html"])
@@ -2072,7 +2089,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
                             "build": "npm run build:css && npm run build:js",
                             "build:css": "npm run css:compile && npm run css:prefix && npm run css:minify",
                             "build:js": "webpack --mode production --config webpack.config.js",
-                            "css:compile": "node-sass frontend-website/src/css/main.scss frontend-website/dist/css/style.css --output-style expanded",
+                            "css:compile": "sass frontend-website/src/css/main.scss frontend-website/dist/css/style.css --style=expanded",
                             "css:prefix": "postcss frontend-website/dist/css/style.css --use autoprefixer -o frontend-website/dist/css/style.prefixed.css",
                             "css:minify": "cssnano frontend-website/dist/css/style.prefixed.css frontend-website/dist/css/style.min.css && rm frontend-website/dist/css/style.prefixed.css",
                         }
@@ -2084,7 +2101,90 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             plan = build_plan_for_source(source_root)
 
             self.assertFalse(plan.missing_requirements)
-            self.assertEqual([command[0] for command in plan.commands], ["node-sass", "postcss", "cssnano", "rm", "webpack"])
+            self.assertEqual([command[0] for command in plan.commands], ["sass", "postcss", "cssnano", "rm", "webpack"])
+
+    def test_phase3a_build_plan_rejects_node_sass_native_binary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            source_root = Path(tmp)
+            (source_root / "package-lock.json").write_text("{}", encoding="utf-8")
+            (source_root / "package.json").write_text(
+                json.dumps({"scripts": {"build": "node-sass input.scss output.css --output-style expanded"}}),
+                encoding="utf-8",
+            )
+
+            plan = build_plan_for_source(source_root)
+
+            self.assertFalse(plan.commands)
+            self.assertIn("Dart Sass", " ".join(plan.missing_requirements))
+
+    def test_phase3a_workspace_binary_resolution_returns_absolute_path(self) -> None:
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp:
+            source_root = Path(tmp).relative_to(Path.cwd())
+            bin_dir = source_root / "node_modules" / ".bin"
+            bin_dir.mkdir(parents=True)
+            sass_bin = bin_dir / "sass"
+            sass_bin.write_text("#!/usr/bin/env node\n", encoding="utf-8")
+
+            resolved = _resolve_workspace_binary(source_root, "sass")
+
+            self.assertTrue(resolved.is_absolute())
+            self.assertEqual(resolved, sass_bin.resolve())
+
+    def test_phase3a_build_validate_updates_existing_sitemap_route_from_runtime_render(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            archive = BytesIO()
+            with ZipFile(archive, "w") as zip_file:
+                zip_file.writestr("index.php", "<?php echo '<title>Runtime</title>';")
+                zip_file.writestr(
+                    "sitemap.xml",
+                    """<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://example.com/camp</loc></url>
+</urlset>
+""",
+                )
+            encoded = base64.b64encode(archive.getvalue()).decode("ascii")
+            status, imported = handle_action(data_root, {"action": "import_zip", "display_name": "Runtime Routes", "archive_base64": encoded})
+            self.assertEqual(status, 201)
+            site_id = imported["site"]["id"]
+            status, map_payload = handle_action(data_root, {"action": "sitemap", "site_id": site_id})
+            self.assertEqual(status, 200)
+            self.assertEqual(map_payload["routes"][0]["status"], "unmatched")
+
+            with patch(
+                "store.prepare_runtime_build",
+                return_value={
+                    "status": "passed",
+                    "artifact_ref": {"runtime_root": "sites/site_test/builds/build_test/runtime"},
+                    "warnings": [],
+                    "missing_requirements": [],
+                    "logs_summary": "Runtime artifact prepared.",
+                },
+            ), patch(
+                "store.render_runtime_preview",
+                return_value={
+                    "status": "ready",
+                    "runtime_kind": "php",
+                    "raw_html": "<title>Camp</title>",
+                    "title": "Camp",
+                    "source_files": ["index.php"],
+                    "warnings": [],
+                    "missing_requirements": [],
+                    "http_status": 200,
+                },
+            ):
+                status, build_payload = handle_action(data_root, {"action": "build_validate", "site_id": site_id})
+
+            self.assertEqual(status, 201)
+            self.assertEqual(build_payload["build"]["status"], "passed")
+            status, refreshed_map = handle_action(data_root, {"action": "sitemap", "site_id": site_id})
+            self.assertEqual(status, 200)
+            routes = {item["route"]: item for item in refreshed_map["routes"]}
+            self.assertEqual(routes["/camp"]["status"], "rendered")
+            self.assertEqual(routes["/camp"]["kind"], "php")
+            self.assertTrue(routes["/camp"]["page_id"])
+            self.assertEqual([item["route"] for item in refreshed_map["items"]], ["/camp"])
 
     def test_phase3a_build_plan_rejects_unallowlisted_shell_commands(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

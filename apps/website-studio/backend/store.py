@@ -709,7 +709,7 @@ def rebuild_index(data_root: Path, site_id: object) -> dict[str, object]:
 
 
 def sitemap(data_root: Path, site_id: object) -> dict[str, object]:
-    rebuild_index(data_root, site_id)
+    ensure_schema(data_root)
     with connect(data_root) as db:
         page_rows = db.execute(
             "SELECT * FROM pages WHERE site_id = ? AND deleted_at IS NULL ORDER BY route",
@@ -1111,14 +1111,17 @@ def _upsert_runtime_route_index(
         page_id = ""
         raw_html = str(rendered.get("raw_html") or "")
         if rendered.get("status") == "ready":
-            page_id = f"page_{sha256_text(str(site['id']) + runtime_kind + route)[:16]}"
+            existing_page = db.execute(
+                "SELECT id FROM pages WHERE site_id = ? AND route = ?",
+                (site["id"], route),
+            ).fetchone()
+            page_id = str(existing_page["id"]) if existing_page else f"page_{sha256_text(str(site['id']) + runtime_kind + route)[:16]}"
             title = str(rendered.get("title") or route)
             db.execute(
                 """
                 INSERT INTO pages(id, site_id, route, title, kind, status, source_files_json, asset_refs_json, warnings_json, seo_json, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET
-                  route=excluded.route,
+                ON CONFLICT(site_id, route) DO UPDATE SET
                   title=excluded.title,
                   kind=excluded.kind,
                   status=excluded.status,

@@ -31,11 +31,13 @@ ALLOWED_WORKSPACE_BUILD_BINARIES = {
     "cssnano",
     "gatsby",
     "next",
-    "node-sass",
     "postcss",
     "sass",
     "vite",
     "webpack",
+}
+UNSUPPORTED_WORKSPACE_BUILD_BINARIES = {
+    "node-sass": "node-sass requires npm install scripts/native bindings and is not supported by the Website Studio preview runtime; use Dart Sass `sass` instead",
 }
 
 
@@ -329,9 +331,10 @@ def _request_php_route(runtime_root: Path, docroot: Path, router: Path | None, r
     finally:
         process.terminate()
         try:
-            process.wait(timeout=2)
+            process.communicate(timeout=2)
         except subprocess.TimeoutExpired:
             process.kill()
+            process.communicate()
 
 
 def _run_npm_install(source_root: Path) -> str:
@@ -390,6 +393,8 @@ def _expand_script(name: str, scripts: dict[str, object], *, stack: list[str]) -
             continue
         if not parts:
             continue
+        if parts[0] in UNSUPPORTED_WORKSPACE_BUILD_BINARIES:
+            raise ValueError(UNSUPPORTED_WORKSPACE_BUILD_BINARIES[parts[0]])
         if parts[0] not in ALLOWED_WORKSPACE_BUILD_BINARIES and parts[0] != "rm":
             raise ValueError(f"build command `{parts[0]}` is not allowlisted")
         if parts[0] == "rm":
@@ -428,10 +433,10 @@ def _copy_runtime_artifact(source_root: Path, artifact_root: Path) -> None:
 def _resolve_workspace_binary(source_root: Path, name: str) -> Path:
     local = source_root / "node_modules" / ".bin" / name
     if local.exists():
-        return local
+        return local.resolve()
     found = shutil.which(name)
     if found:
-        return Path(found)
+        return Path(found).resolve()
     raise ValueError(f"build command `{name}` is not installed")
 
 

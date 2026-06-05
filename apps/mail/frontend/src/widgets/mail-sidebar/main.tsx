@@ -1,12 +1,24 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { CircleUserRound, LogOut, RefreshCw, Square, SquareCheck } from 'lucide-react';
+import { LogOut, Mail, RefreshCw, Square, SquareCheck } from 'lucide-react';
 import {
   callBackend,
   MAIL_BACKEND_ACTIONS,
   MAIL_INTERACTIVE_SYNC_THREADS,
   type MailConnection,
 } from '../../api';
+import {
+  DEFAULT_MAILBOX_SCOPE_IDS,
+  MAILBOXES,
+  aggregateMailboxScopeId,
+  connectionMailboxScopeId,
+  mailboxScopeIdsFromParams,
+  normalizeMailboxScopeIds,
+  parseMailboxScopeId,
+  primaryMailboxScope,
+  serializeMailboxScopeIds,
+  type Mailbox,
+} from '../../mailboxScopes';
 import {
   TreeExpander,
   TreeIcon,
@@ -19,7 +31,6 @@ import {
 } from '../../components/ui/tree';
 import './styles.css';
 
-const MAILBOXES = ['inbox', 'sent', 'drafts', 'starred', 'trash'];
 const MAILBOX_LABELS: Record<string, string> = {
   inbox: 'Inbox',
   sent: 'Sent',
@@ -130,14 +141,8 @@ async function loadWidgetContext(): Promise<WidgetContext> {
   return (await response.json()).context as WidgetContext;
 }
 
-function mailboxFromContext(context: WidgetContext) {
-  const mailbox = context.content?.payload?.active_app_params?.mailbox;
-  return typeof mailbox === 'string' && MAILBOXES.includes(mailbox) ? mailbox : null;
-}
-
-function connectionIdFromContext(context: WidgetContext) {
-  const connectionId = context.content?.payload?.active_app_params?.connection_id;
-  return typeof connectionId === 'string' && connectionId.trim() ? connectionId : null;
+function mailboxScopeIdsFromContext(context: WidgetContext, fallback = DEFAULT_MAILBOX_SCOPE_IDS) {
+  return mailboxScopeIdsFromParams(context.content?.payload?.active_app_params, fallback);
 }
 
 function isMobileFromContext(context: WidgetContext) {
@@ -162,8 +167,7 @@ function closeShellSidebar() {
 function MailSidebarWidget() {
   const [connections, setConnections] = useState<MailConnection[]>([]);
   const [mailboxCounts, setMailboxCounts] = useState<Record<string, Record<string, MailboxCount>>>({});
-  const [mailbox, setMailbox] = useState('inbox');
-  const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null);
+  const [mailboxScopeIds, setMailboxScopeIds] = useState<string[]>(DEFAULT_MAILBOX_SCOPE_IDS);
   const [notice, setNotice] = useState('');
   const [activeOperation, setActiveOperation] = useState('');
   const [isMobileLayout, setIsMobileLayout] = useState(false);
@@ -190,12 +194,7 @@ function MailSidebarWidget() {
 
   useEffect(() => {
     loadWidgetContext().then((context) => {
-      const nextMailbox = mailboxFromContext(context);
-      if (nextMailbox) {
-        setMailbox(nextMailbox);
-      }
-      const nextConnectionId = connectionIdFromContext(context);
-      setSelectedConnectionId(nextConnectionId);
+      setMailboxScopeIds(mailboxScopeIdsFromContext(context));
       setIsMobileLayout(isMobileFromContext(context));
     });
   }, []);
@@ -217,25 +216,12 @@ function MailSidebarWidget() {
         type?: string;
       };
       if (payload.type === 'maverick.widget.context-changed' && payload.context) {
-        const nextMailbox = mailboxFromContext(payload.context);
-        if (nextMailbox) {
-          setMailbox(nextMailbox);
-        }
-        const nextConnectionId = connectionIdFromContext(payload.context);
-        setSelectedConnectionId(nextConnectionId);
+        setMailboxScopeIds(mailboxScopeIdsFromContext(payload.context, mailboxScopeIds));
         setIsMobileLayout(isMobileFromContext(payload.context));
         return;
       }
       if (payload.type === 'maverick.app.selection-changed' && payload.owner_app_id === 'mail') {
-        const nextMailbox = payload.selection?.mailbox;
-        if (typeof nextMailbox === 'string' && MAILBOXES.includes(nextMailbox)) {
-          setMailbox(nextMailbox);
-        }
-        const hasConnectionIdSelection = Object.prototype.hasOwnProperty.call(payload.selection || {}, 'connection_id');
-        const nextConnectionId = payload.selection?.connection_id;
-        if (hasConnectionIdSelection) {
-          setSelectedConnectionId(typeof nextConnectionId === 'string' && nextConnectionId.trim() ? nextConnectionId : null);
-        }
+        setMailboxScopeIds(mailboxScopeIdsFromParams(payload.selection, mailboxScopeIds));
         return;
       }
       if (
@@ -249,15 +235,15 @@ function MailSidebarWidget() {
     }
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [refresh]);
+  }, [mailboxScopeIds, refresh]);
 
   const accountTreeNodes = useMemo(
-    () => buildMailTree(connections, mailboxCounts, selectedConnectionId, mailbox),
-    [connections, mailboxCounts, selectedConnectionId, mailbox],
+    () => buildMailTree(connections, mailboxCounts, mailboxScopeIds),
+    [connections, mailboxCounts, mailboxScopeIds],
   );
   const selectedNodeIds = useMemo(
-    () => [selectedConnectionId ? mailboxIdentity(selectedConnectionId, mailbox) : aggregateMailboxIdentity(mailbox)],
-    [selectedConnectionId, mailbox],
+    () => selectedMailboxNodeIds(mailboxScopeIds, connections),
+    [connections, mailboxScopeIds],
   );
   const treeProviderKey = useMemo(
     () => connections.map((connection) => connection.id).sort().join('|'),
@@ -308,10 +294,16 @@ function MailSidebarWidget() {
     }
   }
 
-  function selectMailbox(nextMailbox: string, nextConnectionId: string | null = selectedConnectionId) {
-    setMailbox(nextMailbox);
-    setSelectedConnectionId(nextConnectionId);
-    openMail({ mailbox: nextMailbox, connection_id: nextConnectionId });
+  function applyMailboxScopeSelection(nextScopeIds: string[]) {
+    const normalizedScopeIds = compactMailboxScopeIds(nextScopeIds, connections);
+    const primaryScope = primaryMailboxScope(normalizedScopeIds);
+    const nextSerializedMailboxScopes = serializeMailboxScopeIds(normalizedScopeIds);
+    setMailboxScopeIds(normalizedScopeIds);
+    openMail({
+      mailbox: primaryScope.mailbox,
+      mailbox_scopes: nextSerializedMailboxScopes,
+      connection_id: primaryScope.connectionId,
+    });
     if (isMobileLayout) {
       closeShellSidebar();
     }
@@ -323,7 +315,7 @@ function MailSidebarWidget() {
 
   function selectTreeNode(node: MailTreeNode) {
     if (node.type === 'mailbox' && node.mailbox) {
-      selectMailbox(node.mailbox, node.account?.id || null);
+      applyMailboxScopeSelection(toggleMailboxScope(mailboxScopeIds, node, connections));
     }
   }
 
@@ -382,7 +374,7 @@ function MailTreeNodeView({ node, level, isLast, onSelect, onSyncConnection, onD
   const displayCount = node.mailbox === 'inbox' ? node.count?.unread || 0 : node.count?.total || 0;
   const label = node.type === 'account' && node.status && node.status !== 'connected' ? `${node.label} (${node.status})` : node.label;
   const icon = node.type === 'account'
-    ? <CircleUserRound className="h-4 w-4" />
+    ? accountProviderIcon(node.account)
     : isMailboxActive
       ? <SquareCheck className="mail-folder-tree-filter-icon is-active h-4 w-4" />
       : <Square className="mail-folder-tree-filter-icon h-4 w-4" />;
@@ -390,10 +382,12 @@ function MailTreeNodeView({ node, level, isLast, onSelect, onSyncConnection, onD
   return (
     <TreeNode isLast={isLast} level={level} nodeId={node.id}>
       <TreeNodeTrigger
+        aria-checked={node.type === 'mailbox' ? isMailboxActive : undefined}
         className={isDisconnected ? 'mail-folder-tree-muted' : ''}
         onClick={() => {
           onSelect(node);
         }}
+        role={node.type === 'mailbox' ? 'checkbox' : undefined}
       >
         <TreeExpander hasChildren={hasChildren} />
         <TreeIcon hasChildren={hasChildren} icon={icon} />
@@ -450,21 +444,41 @@ function MailTreeNodeView({ node, level, isLast, onSelect, onSyncConnection, onD
   );
 }
 
+function accountProviderIcon(account?: MailConnection) {
+  if (account?.provider === 'gmail') {
+    return <GmailIcon className="mail-folder-tree-provider-icon h-4 w-4" />;
+  }
+  return <Mail className="mail-folder-tree-provider-icon h-4 w-4" />;
+}
+
+function GmailIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path fill="#F2F2F2" d="M5.2 5h13.6A2.2 2.2 0 0 1 21 7.2v9.6a2.2 2.2 0 0 1-2.2 2.2H5.2A2.2 2.2 0 0 1 3 16.8V7.2A2.2 2.2 0 0 1 5.2 5Z" />
+      <path fill="#EA4335" d="M5.2 5h1.35L12 9.12 17.45 5h1.35A2.2 2.2 0 0 1 21 7.2v.62l-9 6.76-9-6.76V7.2A2.2 2.2 0 0 1 5.2 5Z" />
+      <path fill="#34A853" d="M3 7.82 7.5 11.2V19H5.2A2.2 2.2 0 0 1 3 16.8Z" />
+      <path fill="#FBBC04" d="M21 7.82V16.8a2.2 2.2 0 0 1-2.2 2.2h-2.3v-7.8Z" />
+      <path fill="#4285F4" d="M7.5 19v-7.8L12 14.58l4.5-3.38V19Z" />
+      <path fill="#C5221F" d="M3 7.82 12 14.58l9-6.76V10.4l-9 6.76-9-6.76Z" opacity="0.62" />
+    </svg>
+  );
+}
+
 function buildMailTree(
   connections: MailConnection[],
   mailboxCounts: Record<string, Record<string, MailboxCount>>,
-  selectedConnectionId: string | null,
-  selectedMailbox: string,
+  mailboxScopeIds: string[],
 ): MailTreeNode[] {
   const aggregateNodes = MAILBOXES.map((folder) => {
     const count = aggregateMailboxCount(mailboxCounts, folder);
+    const selected = isAggregateMailboxSelected(mailboxScopeIds, folder, connections);
     return {
       children: [],
       count,
       id: aggregateMailboxIdentity(folder),
       label: `All ${MAILBOX_LABELS[folder].toLowerCase()}`,
       mailbox: folder,
-      status: !selectedConnectionId && folder === selectedMailbox ? 'active' : 'mailbox',
+      status: selected ? 'active' : 'mailbox',
       title: folder === 'inbox' ? `${count.unread} unread across all accounts` : `${count.total} threads across all accounts`,
       type: 'mailbox' as const,
     };
@@ -477,6 +491,7 @@ function buildMailTree(
       account,
       children: MAILBOXES.map((folder) => {
         const count = mailboxCounts[account.id]?.[folder] || { total: 0, unread: 0 };
+        const selected = isConnectionMailboxSelected(mailboxScopeIds, account.id, folder);
         return {
           account,
           children: [],
@@ -484,7 +499,7 @@ function buildMailTree(
           id: mailboxIdentity(account.id, folder),
           label: MAILBOX_LABELS[folder] || folder,
           mailbox: folder,
-          status: account.id === selectedConnectionId && folder === selectedMailbox ? 'active' : 'mailbox',
+          status: selected ? 'active' : 'mailbox',
           title: folder === 'inbox' ? `${count.unread} unread` : `${count.total} threads`,
           type: 'mailbox' as const,
         };
@@ -497,6 +512,109 @@ function buildMailTree(
     }));
 
   return [...aggregateNodes, ...accountNodes];
+}
+
+function toggleMailboxScope(currentScopeIds: string[], node: MailTreeNode, connections: MailConnection[]) {
+  if (!node.mailbox) {
+    return currentScopeIds;
+  }
+  return node.account
+    ? toggleConnectionMailboxScope(currentScopeIds, node.account.id, node.mailbox as Mailbox, connections)
+    : toggleAggregateMailboxScope(currentScopeIds, node.mailbox as Mailbox, connections);
+}
+
+function toggleAggregateMailboxScope(currentScopeIds: string[], mailbox: Mailbox, connections: MailConnection[]) {
+  const selected = isAggregateMailboxSelected(currentScopeIds, mailbox, connections);
+  const withoutMailbox = scopeIdsExceptMailbox(currentScopeIds, mailbox);
+  return selected ? withoutMailbox : [...withoutMailbox, aggregateMailboxScopeId(mailbox)];
+}
+
+function toggleConnectionMailboxScope(
+  currentScopeIds: string[],
+  connectionId: string,
+  mailbox: Mailbox,
+  connections: MailConnection[],
+) {
+  const aggregateScopeId = aggregateMailboxScopeId(mailbox);
+  const connectionScopeId = connectionMailboxScopeId(connectionId, mailbox);
+  const selected = isConnectionMailboxSelected(currentScopeIds, connectionId, mailbox);
+  const normalizedScopeIds = normalizeMailboxScopeIds(currentScopeIds);
+  if (selected) {
+    const nextScopeIds = normalizedScopeIds.filter((scopeId) => scopeId !== aggregateScopeId && scopeId !== connectionScopeId);
+    if (normalizedScopeIds.includes(aggregateScopeId)) {
+      const siblingScopeIds = connections
+        .filter((connection) => connection.id !== connectionId)
+        .map((connection) => connectionMailboxScopeId(connection.id, mailbox));
+      return compactMailboxScopeIds([...nextScopeIds, ...siblingScopeIds], connections);
+    }
+    return compactMailboxScopeIds(nextScopeIds, connections);
+  }
+  return compactMailboxScopeIds(
+    [...normalizedScopeIds.filter((scopeId) => scopeId !== aggregateScopeId), connectionScopeId],
+    connections,
+  );
+}
+
+function scopeIdsExceptMailbox(scopeIds: string[], mailbox: Mailbox) {
+  return normalizeMailboxScopeIds(scopeIds).filter((scopeId) => parseMailboxScopeId(scopeId)?.mailbox !== mailbox);
+}
+
+function compactMailboxScopeIds(scopeIds: string[], connections: MailConnection[]) {
+  const normalizedScopeIds = normalizeMailboxScopeIds(scopeIds);
+  const normalizedSet = new Set(normalizedScopeIds);
+  const compacted: string[] = [];
+  for (const scopeId of normalizedScopeIds) {
+    const scope = parseMailboxScopeId(scopeId);
+    if (!scope) {
+      continue;
+    }
+    if (scope.connectionId && normalizedSet.has(aggregateMailboxScopeId(scope.mailbox))) {
+      continue;
+    }
+    if (
+      scope.connectionId &&
+      connections.length > 0 &&
+      connections.every((connection) => normalizedSet.has(connectionMailboxScopeId(connection.id, scope.mailbox)))
+    ) {
+      const aggregateScopeId = aggregateMailboxScopeId(scope.mailbox);
+      if (!compacted.includes(aggregateScopeId)) {
+        compacted.push(aggregateScopeId);
+      }
+      continue;
+    }
+    if (!compacted.includes(scopeId)) {
+      compacted.push(scopeId);
+    }
+  }
+  return compacted;
+}
+
+function isAggregateMailboxSelected(scopeIds: string[], mailbox: Mailbox, connections: MailConnection[]) {
+  const normalizedSet = new Set(normalizeMailboxScopeIds(scopeIds));
+  if (normalizedSet.has(aggregateMailboxScopeId(mailbox))) {
+    return true;
+  }
+  return connections.length > 0 && connections.every((connection) => normalizedSet.has(connectionMailboxScopeId(connection.id, mailbox)));
+}
+
+function isConnectionMailboxSelected(scopeIds: string[], connectionId: string, mailbox: Mailbox) {
+  const normalizedSet = new Set(normalizeMailboxScopeIds(scopeIds));
+  return normalizedSet.has(aggregateMailboxScopeId(mailbox)) || normalizedSet.has(connectionMailboxScopeId(connectionId, mailbox));
+}
+
+function selectedMailboxNodeIds(scopeIds: string[], connections: MailConnection[]) {
+  const selectedIds: string[] = [];
+  for (const mailbox of MAILBOXES) {
+    if (isAggregateMailboxSelected(scopeIds, mailbox, connections)) {
+      selectedIds.push(aggregateMailboxIdentity(mailbox));
+    }
+    for (const connection of connections) {
+      if (isConnectionMailboxSelected(scopeIds, connection.id, mailbox)) {
+        selectedIds.push(mailboxIdentity(connection.id, mailbox));
+      }
+    }
+  }
+  return selectedIds;
 }
 
 function accountIdentity(connectionId: string) {

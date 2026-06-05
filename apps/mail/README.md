@@ -15,6 +15,11 @@ This implementation has real app surfaces with Gmail and Private Email providers
 - Lifecycle hooks: install, migrate, and health check.
 - Reference entities: `mail_connection`, `email_thread`, `email_message`, `mail_attachment`, and `mail_draft`.
 
+The `mail-sidebar` widget owns mailbox filtering. It sends cumulative `mailbox_scopes`
+such as `all:inbox` and `connection:<connection_id>:sent`; `threads.list` treats
+those scopes as a union so sidebar checkbox selections add together instead of
+replacing each other.
+
 ## Storage
 
 The app owns `workspaces/<workspace_id>/data/mail/`.

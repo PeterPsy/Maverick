@@ -654,8 +654,20 @@ class MailServiceTest(unittest.TestCase):
                     VALUES (?, 'gmail', ?, ?, 'connected', '[]', ?, ?)
                     """,
                     [
-                        ("mail_connection_gmail_a-example.com", "a@example.com", "a@example.com", "2026-01-02T00:00:00+00:00", "2026-01-02T00:00:00+00:00"),
-                        ("mail_connection_gmail_b-example.com", "b@example.com", "b@example.com", "2026-01-01T00:00:00+00:00", "2026-01-01T00:00:00+00:00"),
+                        (
+                            "mail_connection_gmail_a-example.com",
+                            "a@example.com",
+                            "a@example.com",
+                            "2026-01-02T00:00:00+00:00",
+                            "2026-01-02T00:00:00+00:00",
+                        ),
+                        (
+                            "mail_connection_gmail_b-example.com",
+                            "b@example.com",
+                            "b@example.com",
+                            "2026-01-01T00:00:00+00:00",
+                            "2026-01-01T00:00:00+00:00",
+                        ),
                     ],
                 )
                 db.executemany(
@@ -684,6 +696,88 @@ class MailServiceTest(unittest.TestCase):
             self.assertEqual(provider.payload["connection_id"], "mail_connection_gmail_a-example.com")
             self.assertEqual([item["connection_id"] for item in payload["items"]], ["mail_connection_gmail_a-example.com"])
             self.assertEqual(payload["total_count"], 1)
+
+    def test_threads_list_filters_multiple_mailbox_scopes_as_union(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            ensure_schema(data_root)
+            with connect(data_root) as db:
+                db.executemany(
+                    """
+                    INSERT INTO connections(id, provider, email_address, display_name, status, scopes_json, created_at, updated_at)
+                    VALUES (?, 'gmail', ?, ?, 'connected', '[]', ?, ?)
+                    """,
+                    [
+                        ("mail_connection_gmail_a-example.com", "a@example.com", "a@example.com", "2026-01-02T00:00:00+00:00", "2026-01-02T00:00:00+00:00"),
+                        ("mail_connection_gmail_b-example.com", "b@example.com", "b@example.com", "2026-01-01T00:00:00+00:00", "2026-01-01T00:00:00+00:00"),
+                    ],
+                )
+                db.executemany(
+                    """
+                    INSERT INTO threads(id, connection_id, provider_thread_id, subject, participants_json, last_message_at, snippet, unread, starred, labels_json, updated_at)
+                    VALUES (?, ?, ?, ?, '[]', ?, '', 0, 0, ?, ?)
+                    """,
+                    [
+                        (
+                            "email_thread_gmail_a_inbox",
+                            "mail_connection_gmail_a-example.com",
+                            "thread-a-inbox",
+                            "A inbox",
+                            "2026-01-04T00:00:00+00:00",
+                            '["inbox"]',
+                            "2026-01-04T00:00:00+00:00",
+                        ),
+                        (
+                            "email_thread_gmail_a_sent",
+                            "mail_connection_gmail_a-example.com",
+                            "thread-a-sent",
+                            "A sent",
+                            "2026-01-03T00:00:00+00:00",
+                            '["sent"]',
+                            "2026-01-03T00:00:00+00:00",
+                        ),
+                        (
+                            "email_thread_gmail_b_inbox",
+                            "mail_connection_gmail_b-example.com",
+                            "thread-b-inbox",
+                            "B inbox",
+                            "2026-01-02T00:00:00+00:00",
+                            '["inbox"]',
+                            "2026-01-02T00:00:00+00:00",
+                        ),
+                        (
+                            "email_thread_gmail_b_trash",
+                            "mail_connection_gmail_b-example.com",
+                            "thread-b-trash",
+                            "B trash",
+                            "2026-01-01T00:00:00+00:00",
+                            '["trash"]',
+                            "2026-01-01T00:00:00+00:00",
+                        ),
+                    ],
+                )
+
+            status, payload = handle_action(
+                data_root,
+                {
+                    "action": "threads.list",
+                    "mailbox": "trash",
+                    "connection_id": "mail_connection_gmail_b-example.com",
+                    "mailbox_scopes": "all:inbox,connection:mail_connection_gmail_a-example.com:sent",
+                },
+            )
+
+            self.assertEqual(status, 200)
+            self.assertEqual({item["subject"] for item in payload["items"]}, {"A inbox", "A sent", "B inbox"})
+            self.assertEqual(payload["total_count"], 3)
+
+            status, empty_payload = handle_action(
+                data_root,
+                {"action": "threads.list", "mailbox": "inbox", "mailbox_scopes": ""},
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(empty_payload["items"], [])
+            self.assertEqual(empty_payload["total_count"], 0)
 
     def test_legacy_demo_connection_is_removed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

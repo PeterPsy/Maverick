@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import re
+from urllib.parse import unquote
 from uuid import uuid4
 
 from database import connect, ensure_schema, now_timestamp
@@ -13,6 +14,9 @@ from email_rendering import BODY_SOURCE_LIMIT, truncate_sanitized_html
 
 DEFAULT_BODY_TEXT_CHARS = 8_000
 DEFAULT_BODY_HTML_CHARS = BODY_SOURCE_LIMIT
+MAILBOX_SCOPE_PREFIX = "connection:"
+AGGREGATE_MAILBOX_SCOPE_PREFIX = "all:"
+MAILBOX_SCOPE_LABELS = {"inbox", "sent", "drafts", "starred", "trash"}
 
 
 def status(data_root: Path) -> dict[str, object]:
@@ -172,16 +176,24 @@ def mailbox_counts(data_root: Path) -> dict[str, dict[str, dict[str, int]]]:
 def _thread_filter(payload: dict[str, object]) -> tuple[list[str], list[object]]:
     clauses = ["1 = 1"]
     params: list[object] = []
-    connection_id = _optional_string(payload.get("connection_id"))
-    label = _optional_string(payload.get("label") or payload.get("mailbox"))
+    if "mailbox_scopes" in payload:
+        scope_clauses, scope_params = _mailbox_scope_clauses(payload.get("mailbox_scopes"))
+        if scope_clauses:
+            clauses.append(f"({' OR '.join(scope_clauses)})")
+            params.extend(scope_params)
+        else:
+            clauses.append("0 = 1")
+    else:
+        connection_id = _optional_string(payload.get("connection_id"))
+        label = _optional_string(payload.get("label") or payload.get("mailbox"))
+        if connection_id:
+            clauses.append("connection_id = ?")
+            params.append(connection_id)
+        if label:
+            clauses.append("labels_json LIKE ?")
+            params.append(f'%"{label}"%')
     query = _optional_string(payload.get("query"))
     unread = payload.get("unread")
-    if connection_id:
-        clauses.append("connection_id = ?")
-        params.append(connection_id)
-    if label:
-        clauses.append("labels_json LIKE ?")
-        params.append(f'%"{label}"%')
     if query:
         clauses.append(
             """
@@ -212,6 +224,65 @@ def _thread_filter(payload: dict[str, object]) -> tuple[list[str], list[object]]
         clauses.append("unread = ?")
         params.append(1 if unread else 0)
     return clauses, params
+
+
+def _mailbox_scope_clauses(value: object) -> tuple[list[str], list[object]]:
+    scopes = _mailbox_scopes(value)
+    aggregate_mailboxes = {mailbox for connection_id, mailbox in scopes if connection_id is None}
+    clauses: list[str] = []
+    params: list[object] = []
+    for connection_id, mailbox in scopes:
+        if connection_id and mailbox in aggregate_mailboxes:
+            continue
+        label_pattern = f'%"{mailbox}"%'
+        if connection_id:
+            clauses.append("(connection_id = ? AND labels_json LIKE ?)")
+            params.extend([connection_id, label_pattern])
+        else:
+            clauses.append("labels_json LIKE ?")
+            params.append(label_pattern)
+    return clauses, params
+
+
+def _mailbox_scopes(value: object) -> list[tuple[str | None, str]]:
+    raw_scopes: list[object]
+    if isinstance(value, list):
+        raw_scopes = value
+    else:
+        raw_scopes = [scope.strip() for scope in str(value or "").split(",") if scope.strip()]
+    scopes: list[tuple[str | None, str]] = []
+    seen: set[tuple[str | None, str]] = set()
+    for raw_scope in raw_scopes:
+        scope = _mailbox_scope(raw_scope)
+        if scope is None or scope in seen:
+            continue
+        seen.add(scope)
+        scopes.append(scope)
+    return scopes
+
+
+def _mailbox_scope(value: object) -> tuple[str | None, str] | None:
+    if isinstance(value, dict):
+        mailbox = _optional_string(value.get("mailbox"))
+        connection_id = _optional_string(value.get("connection_id"))
+        return (connection_id, mailbox) if mailbox in MAILBOX_SCOPE_LABELS else None
+    scope_id = _optional_string(value)
+    if not scope_id:
+        return None
+    if scope_id.startswith(AGGREGATE_MAILBOX_SCOPE_PREFIX):
+        mailbox = scope_id.removeprefix(AGGREGATE_MAILBOX_SCOPE_PREFIX)
+        return (None, mailbox) if mailbox in MAILBOX_SCOPE_LABELS else None
+    if not scope_id.startswith(MAILBOX_SCOPE_PREFIX):
+        return None
+    scoped = scope_id.removeprefix(MAILBOX_SCOPE_PREFIX)
+    mailbox_separator = scoped.rfind(":")
+    if mailbox_separator <= 0:
+        return None
+    mailbox = scoped[mailbox_separator + 1 :]
+    if mailbox not in MAILBOX_SCOPE_LABELS:
+        return None
+    connection_id = unquote(scoped[:mailbox_separator]).strip()
+    return (connection_id, mailbox) if connection_id else None
 
 
 def get_thread(

@@ -269,6 +269,11 @@ button {
   color: var(--maverick-text);
 }
 
+.mail-folder-tree-provider-icon {
+  display: block;
+  flex: 0 0 auto;
+}
+
 .mail-folder-tree-actions {
   display: inline-flex;
   align-items: center;

@@ -19,8 +19,14 @@ import {
   type MailThread
 } from './api';
 import SlidingPagination from './components/ui/sliding-pagination';
+import {
+  DEFAULT_MAILBOX_SCOPE_IDS,
+  isMailbox,
+  mailboxScopeIdsFromParams,
+  primaryMailboxScope,
+  serializeMailboxScopeIds
+} from './mailboxScopes';
 
-const MAILBOXES = ['inbox', 'sent', 'drafts', 'starred', 'trash'];
 const MAIL_DATA_RESOURCES = new Set(['connections', 'drafts', 'threads', 'view-state']);
 const GMAIL_OAUTH_SECRETS = ['gmail-oauth-client-id', 'gmail-oauth-client-secret'];
 const GMAIL_REFRESH_SECRET = 'gmail-refresh-token';
@@ -44,6 +50,7 @@ type MailNavigateParams = {
   add_account?: boolean;
   add_account_request_id?: string;
   mailbox?: string;
+  mailbox_scopes?: string;
   connection_id?: string | null;
   query?: string;
   thread?: string;
@@ -144,7 +151,7 @@ function openVaultIssues() {
   );
 }
 
-function notifySelection(selection: Record<string, string | boolean | null>) {
+function notifySelection(selection: Record<string, string | boolean | null | undefined>) {
   window.parent?.postMessage(
     {
       type: 'maverick.app.selection-changed',
@@ -740,6 +747,7 @@ export function App() {
   const [threads, setThreads] = useState<MailThread[]>([]);
   const [totalThreads, setTotalThreads] = useState(0);
   const [selectedThread, setSelectedThread] = useState<MailThread | null>(null);
+  const [mailboxScopeIds, setMailboxScopeIds] = useState<string[]>(DEFAULT_MAILBOX_SCOPE_IDS);
   const [mailbox, setMailbox] = useState('inbox');
   const [connectionId, setConnectionId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -750,6 +758,8 @@ export function App() {
   const [accountModalOpen, setAccountModalOpen] = useState(false);
   const [readerPlain, setReaderPlain] = useState(false);
   const [readerShowImages, setReaderShowImages] = useState(false);
+  const serializedMailboxScopes = useMemo(() => serializeMailboxScopeIds(mailboxScopeIds), [mailboxScopeIds]);
+  const primaryScope = useMemo(() => primaryMailboxScope(mailboxScopeIds), [mailboxScopeIds]);
 
   const secretRequestForConnectionId = useCallback((id?: string) => {
     if (!id) {
@@ -770,11 +780,16 @@ export function App() {
       });
       setSelectedThread(payload.thread);
       setConnectionId(payload.thread.connection_id);
-      notifySelection({ thread: payload.thread.id, mailbox, connection_id: payload.thread.connection_id });
+      notifySelection({
+        thread: payload.thread.id,
+        mailbox,
+        mailbox_scopes: serializedMailboxScopes,
+        connection_id: payload.thread.connection_id
+      });
     } finally {
       setBusy(false);
     }
-  }, [mailbox, secretRequestForConnectionId]);
+  }, [mailbox, secretRequestForConnectionId, serializedMailboxScopes]);
 
   const loadThreads = useCallback(async () => {
     const offset = (page - 1) * THREADS_PAGE_SIZE;
@@ -783,7 +798,8 @@ export function App() {
       callBackend<ThreadListPayload>({
         action: MAIL_BACKEND_ACTIONS.threadsList,
         mailbox,
-        ...(connectionId ? { connection_id: connectionId } : {}),
+        mailbox_scopes: serializedMailboxScopes,
+        ...(primaryScope.connectionId ? { connection_id: primaryScope.connectionId } : {}),
         query,
         max_threads: THREADS_PAGE_SIZE,
         offset,
@@ -793,11 +809,11 @@ export function App() {
     setConnections(connectionPayload.items);
     setThreads(threadPayload.items);
     setTotalThreads(threadPayload.total_count ?? threadPayload.items.length);
-  }, [connectionId, mailbox, page, query]);
+  }, [mailbox, page, primaryScope.connectionId, query, serializedMailboxScopes]);
 
   useEffect(() => {
     setPage(1);
-  }, [mailbox, query]);
+  }, [query, serializedMailboxScopes]);
 
   useEffect(() => {
     if (!notice) {
@@ -862,23 +878,33 @@ export function App() {
           setAccountModalOpen(true);
         }
         const nextMailbox = params.mailbox;
+        const hasMailboxScopesParam = Object.prototype.hasOwnProperty.call(params, 'mailbox_scopes');
         const hasConnectionIdParam = Object.prototype.hasOwnProperty.call(params, 'connection_id');
         const nextConnectionId = typeof params.connection_id === 'string' && params.connection_id.trim()
           ? params.connection_id.trim()
           : null;
-        const resolvedMailbox = nextMailbox && MAILBOXES.includes(nextMailbox) ? nextMailbox : mailbox;
-        if (nextMailbox && MAILBOXES.includes(nextMailbox)) {
+        const resolvedMailbox = isMailbox(nextMailbox) ? nextMailbox : mailbox;
+        const shouldApplyMailboxScopes = hasMailboxScopesParam || isMailbox(nextMailbox) || hasConnectionIdParam;
+        if (shouldApplyMailboxScopes) {
+          const nextMailboxScopeIds = hasMailboxScopesParam
+            ? mailboxScopeIdsFromParams(params as Record<string, unknown>, [])
+            : mailboxScopeIdsFromParams(
+              { mailbox: resolvedMailbox, connection_id: hasConnectionIdParam ? nextConnectionId : connectionId },
+              mailboxScopeIds
+            );
+          const nextPrimaryScope = primaryMailboxScope(nextMailboxScopeIds);
+          const nextSerializedScopes = serializeMailboxScopeIds(nextMailboxScopeIds);
           setPage(1);
-          setMailbox(nextMailbox);
+          setMailboxScopeIds(nextMailboxScopeIds);
+          setMailbox(nextPrimaryScope.mailbox);
+          setConnectionId(nextPrimaryScope.connectionId);
           setSelectedThread(null);
-        }
-        if (hasConnectionIdParam) {
-          setPage(1);
-          setConnectionId(nextConnectionId);
-          setSelectedThread(null);
-        }
-        if ((nextMailbox && MAILBOXES.includes(nextMailbox)) || (hasConnectionIdParam && nextConnectionId !== connectionId)) {
-          notifySelection({ mailbox: resolvedMailbox, thread: null, connection_id: nextConnectionId });
+          notifySelection({
+            mailbox: nextPrimaryScope.mailbox,
+            mailbox_scopes: nextSerializedScopes,
+            thread: null,
+            connection_id: nextPrimaryScope.connectionId
+          });
         }
         if (typeof params.query === 'string') {
           setQuery(params.query);
@@ -899,7 +925,7 @@ export function App() {
     };
     window.addEventListener('message', listener);
     return () => window.removeEventListener('message', listener);
-  }, [connectionId, loadThreads, mailbox, openThread]);
+  }, [connectionId, loadThreads, mailbox, mailboxScopeIds, openThread]);
 
   const connection = (connectionId ? connections.find((item) => item.id === connectionId) : null) || connections.find((item) => item.status !== 'disconnected') || connections[0];
   const connectionById = useMemo(() => new Map(connections.map((item) => [item.id, item])), [connections]);
@@ -940,7 +966,12 @@ export function App() {
 
   function closeThread() {
     setSelectedThread(null);
-    notifySelection({ mailbox, thread: null });
+    notifySelection({
+      mailbox: primaryScope.mailbox,
+      mailbox_scopes: serializedMailboxScopes,
+      thread: null,
+      connection_id: primaryScope.connectionId
+    });
   }
 
   async function startGmailOAuth() {

@@ -151,6 +151,8 @@ describe("Sidebar desktop layout contract", () => {
     const hostSource = readSource("components/FloatingChatHost.tsx");
     const widgetSlotSource = readSource("components/WidgetSlot.tsx");
     const layoutStyles = readStyle("layout.css");
+    const overlayHostRule = layoutStyles.match(/\.bs-floating-chat-host\.is-overlay \{[\s\S]*?\n\}/)?.[0] ?? "";
+    const overlaySlotRule = layoutStyles.match(/\.bs-floating-chat-host\.is-overlay \.bs-widget-slot--overlay \{[\s\S]*?\n\}/)?.[0] ?? "";
 
     expect(appShellSource).toContain("<FloatingChatHost");
     expect(hostSource).toContain('const contentKind = isDockMode');
@@ -159,6 +161,13 @@ describe("Sidebar desktop layout contract", () => {
     expect(hostSource).toContain("mode: placement");
     expect(hostSource).toContain("size={widgetSize}");
     expect(layoutStyles).toContain(".bs-floating-chat-host__resize-handle");
+    expect(overlayHostRule).toContain("inset: 0;");
+    expect(overlayHostRule).toContain("width: auto;");
+    expect(overlayHostRule).toContain("height: auto;");
+    expect(overlaySlotRule).toContain("position: fixed;");
+    expect(overlaySlotRule).toContain("right: 0;");
+    expect(overlaySlotRule).toContain("bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);");
+    expect(layoutStyles).toContain(".bs-shell.is-sidebar-mode-fixed:not(.is-mobile-layout) .bs-floating-chat-host.is-overlay");
     expect(layoutStyles).toContain("pointer-events: auto;");
     expect(widgetSlotSource).toContain(
       "[activeWorkspaceId, contentKind, hostAppId, onPrimaryActionStateChange, preferredOwnerAppId, supportsPrimaryActionSlot]",

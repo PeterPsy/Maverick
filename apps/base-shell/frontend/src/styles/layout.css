@@ -116,10 +116,9 @@
 }
 
 .bs-floating-chat-host.is-overlay {
-  right: 0;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);
-  width: 100vw;
-  height: min(38rem, calc(100dvh - 2rem));
+  inset: 0;
+  width: auto;
+  height: auto;
 }
 
 .bs-floating-chat-host.is-fixed-right {
@@ -648,6 +647,7 @@
   }
 }
 
+.bs-shell.is-sidebar-mode-fixed:not(.is-mobile-layout) .bs-floating-chat-host.is-overlay,
 .bs-shell.is-sidebar-mode-fixed:not(.is-mobile-layout) .bs-shell-overlay-widgets {
   z-index: 70;
 }
@@ -669,6 +669,12 @@
   transition:
     width 160ms ease,
     height 160ms ease;
+}
+
+.bs-floating-chat-host.is-overlay .bs-widget-slot--overlay {
+  position: fixed;
+  right: 0;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);
 }
 
 .bs-capture-overlay {

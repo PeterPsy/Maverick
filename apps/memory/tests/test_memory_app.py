@@ -184,6 +184,28 @@ class MemoryAppTestCase(unittest.TestCase):
         self.assertTrue((MEMORY_ROOT / "frontend" / "dist" / "widgets" / "memory-sidebar" / "index.html").is_file())
         self.assertTrue((MEMORY_ROOT / "frontend" / "dist" / "widgets" / "memory-sidebar-footer" / "index.html").is_file())
 
+    def test_real_reference_surface_contracts_match_app_entity_discovery(self) -> None:
+        app_roots = [
+            ("storage", REPO_ROOT / "apps" / "storage"),
+            ("crm", REPO_ROOT / "workspaces" / "default" / "apps" / "crm"),
+        ]
+        checked = 0
+        for app_id, app_root in app_roots:
+            if not app_root.exists():
+                continue
+            parsed = parse_app_contract_file(app_root)
+            tool_schemas = json.loads((app_root / "mcp" / "tool_schemas.json").read_text(encoding="utf-8"))
+            declared_tools = tool_schemas.get("tools") if isinstance(tool_schemas.get("tools"), dict) else {}
+            expected = {
+                f"{app_id.replace('-', '_')}_reference_manifest",
+                f"{app_id.replace('-', '_')}_reference_resolve",
+                f"{app_id.replace('-', '_')}_reference_summarize",
+            }
+            self.assertTrue(expected.issubset(set(parsed.contract.capabilities.mcp_tools)))
+            self.assertTrue(expected.issubset(set(declared_tools)))
+            checked += 1
+        self.assertGreaterEqual(checked, 1)
+
     def test_cli_and_mcp_descriptors_cover_declared_agent_surfaces(self) -> None:
         parsed = parse_app_contract_file(MEMORY_ROOT)
         cli_descriptor = json.loads((MEMORY_ROOT / "cli" / "command_schemas.json").read_text(encoding="utf-8"))
@@ -878,6 +900,11 @@ class MemoryAppTestCase(unittest.TestCase):
                 self.assertEqual(item["kind"], "memory_node")
                 self.assertEqual(item["id"], node["id"])
                 self.assertEqual(item["node_id"], node["id"])
+                self.assertEqual(item["source_version_id"], "")
+                self.assertEqual(item["chunk_id"], "")
+                self.assertEqual(item["freshness"], "unknown")
+                self.assertEqual(item["citations"], [])
+                self.assertEqual(item["locator"], {"kind": "memory_node", "value": node["id"]})
                 self.assertEqual(item["entity"], {"entity_type": "node", "entity_id": node["id"]})
                 self.assertEqual(item["node"]["id"], node["id"])
                 self.assertEqual(item["node"]["node_id"], node["id"])
@@ -1589,6 +1616,138 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual(job["source_version_id"], source_version["id"])
             self.assertEqual(inspected["ingest_jobs"][0]["source_document_id"], source_document["id"])
             self.assertEqual(inspected["ingest_jobs"][0]["source_version_id"], source_version["id"])
+
+            manual_status, manual = service.handle_action(
+                data_root,
+                {
+                    "action": "jobs_list",
+                    "operation": "enqueue",
+                    "job_type": "ingest_source",
+                    "dedupe_key": "manual:unit-source",
+                    "payload": {
+                        "adapter_id": "inline_markdown",
+                        "source_key": "unit-source",
+                        "body_markdown": "Unit source changed.",
+                    },
+                },
+            )
+            inspect_status, inspected = service.handle_action(
+                data_root,
+                {"action": "inspect_source", "source_document_id": source_document["id"]},
+            )
+
+            self.assertEqual(manual_status, 200)
+            self.assertEqual(manual["job"]["source_document_id"], source_document["id"])
+            self.assertEqual(manual["job"]["source_version_id"], source_version["id"])
+            self.assertEqual(inspect_status, 200)
+            self.assertTrue(any(job["dedupe_key"] == "manual:unit-source" for job in inspected["ingest_jobs"]))
+
+    def test_ingest_job_backfill_resolves_source_identity_payloads(self) -> None:
+        service = self.import_backend_module("service")
+        database = self.import_backend_module("database")
+        schema_migrations = self.import_backend_module("schema_migrations")
+
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            status, ingested = service.handle_action(
+                data_root,
+                {
+                    "action": "ingest_source",
+                    "adapter_id": "inline_markdown",
+                    "source_key": "unit-source",
+                    "title": "Unit source",
+                    "body_markdown": "Unit source says the owner is Dana.",
+                    "compile_after_ingest": True,
+                },
+            )
+            source_document = ingested["source_document"]
+            source_version = ingested["source_version"]
+            with database.transaction(data_root, immediate=True) as db:
+                timestamp = database.now_timestamp()
+                db.execute(
+                    """
+                    INSERT INTO ingest_jobs(
+                      id, job_type, dedupe_key, status, attempt_count, max_attempts, available_at,
+                      locked_until, lease_token, last_error, payload_json, node_id, source_document_id,
+                      source_version_id, created_at, updated_at
+                    )
+                    VALUES (
+                      'job_legacy_source_key', 'ingest_source', 'legacy:unit-source', 'ready', 0, 3, ?,
+                      NULL, '', '', ?, '', '', '', ?, ?
+                    )
+                    """,
+                    (
+                        timestamp,
+                        database.json_text(
+                            {
+                                "adapter_id": "inline_markdown",
+                                "source_key": "unit-source",
+                                "body_markdown": "Unit source changed.",
+                            }
+                        ),
+                        timestamp,
+                        timestamp,
+                    ),
+                )
+                schema_migrations.backfill_ingest_job_provenance(db)
+                job = database.row_payload(
+                    db.execute("SELECT * FROM ingest_jobs WHERE id = 'job_legacy_source_key'").fetchone()
+                ) or {}
+
+            inspected = service.handle_action(data_root, {"action": "inspect_source", "source_document_id": source_document["id"]})[1]
+            self.assertEqual(status, 200)
+            self.assertEqual(job["source_document_id"], source_document["id"])
+            self.assertEqual(job["source_version_id"], source_version["id"])
+            self.assertTrue(any(item["id"] == "job_legacy_source_key" for item in inspected["ingest_jobs"]))
+
+    def test_ingest_job_provenance_resolves_remote_storage_identity_payloads(self) -> None:
+        service = self.import_backend_module("service")
+        database = self.import_backend_module("database")
+        storage_file_id = "file_drive_job_payload"
+
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            status, _ingested = service.handle_action(
+                data_root,
+                {
+                    "action": "ingest_storage_source",
+                    "title": "Drive job payload",
+                    "memory_source": self.drive_memory_source(storage_file_id=storage_file_id, drive_file_id="drive_job_payload"),
+                    "preview_text": "Drive job payload says the owner is Dana.",
+                    "compile_after_ingest": True,
+                },
+            )
+            with database.connect(data_root) as db:
+                source_document = database.row_payload(
+                    db.execute("SELECT * FROM source_documents WHERE source_key = ?", (f"remote_storage_file:{storage_file_id}",)).fetchone()
+                ) or {}
+                source_version = database.row_payload(
+                    db.execute("SELECT * FROM source_versions WHERE source_document_id = ?", (source_document["id"],)).fetchone()
+                ) or {}
+
+            manual_status, manual = service.handle_action(
+                data_root,
+                {
+                    "action": "jobs_list",
+                    "operation": "enqueue",
+                    "job_type": "ingest_source",
+                    "dedupe_key": "manual:drive-job-payload",
+                    "payload": {
+                        "memory_source": self.drive_memory_source(
+                            storage_file_id=storage_file_id,
+                            drive_file_id="drive_job_payload",
+                        ),
+                        "preview_text": "Drive job payload changed.",
+                    },
+                },
+            )
+            inspected = service.handle_action(data_root, {"action": "inspect_source", "source_document_id": source_document["id"]})[1]
+
+            self.assertEqual(status, 200)
+            self.assertEqual(manual_status, 200)
+            self.assertEqual(manual["job"]["source_document_id"], source_document["id"])
+            self.assertEqual(manual["job"]["source_version_id"], source_version["id"])
+            self.assertTrue(any(job["dedupe_key"] == "manual:drive-job-payload" for job in inspected["ingest_jobs"]))
 
     def test_fetch_app_entity_source_discovers_reference_tools_and_passes_entity_type(self) -> None:
         app_entity_sources = self.import_backend_module("app_entity_sources")

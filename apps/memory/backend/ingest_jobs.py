@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from database import connect, ensure_schema, json_text, new_id, normalize_limit, now_timestamp, record_event, row_payload, transaction
 from errors import MemoryValidationError
+from job_provenance import resolve_job_provenance
 
 
 JOB_TYPES = {"ingest_source", "compile_node", "lint_node", "mark_stale", "requires_storage_reindex"}
@@ -43,7 +44,7 @@ def enqueue_job_in_db(
     timestamp = now_timestamp()
     available = normalize_timestamp(available_at, default=timestamp)
     attempts = normalize_limit(max_attempts, default=3, minimum=1, maximum=20, field_name="max_attempts")
-    node_id, source_document_id, source_version_id = job_provenance(payload)
+    node_id, source_document_id, source_version_id = resolve_job_provenance(db, payload)
     if normalized_dedupe:
         existing = db.execute(
             """
@@ -297,25 +298,6 @@ def normalize_job_types(raw_job_types: object) -> list[str]:
         if job_type not in normalized:
             normalized.append(job_type)
     return normalized
-
-
-def job_provenance(payload: dict[str, Any] | None) -> tuple[str, str, str]:
-    data = payload if isinstance(payload, dict) else {}
-    source_document = data.get("source_document") if isinstance(data.get("source_document"), dict) else {}
-    source_version = data.get("source_version") if isinstance(data.get("source_version"), dict) else {}
-    node = data.get("node") if isinstance(data.get("node"), dict) else {}
-    node_id = first_text(data.get("node_id"), data.get("target_node_id"), node.get("id"), node.get("node_id"))
-    source_document_id = first_text(data.get("source_document_id"), source_document.get("id"), source_version.get("source_document_id"))
-    source_version_id = first_text(data.get("source_version_id"), source_version.get("id"))
-    return node_id, source_document_id, source_version_id
-
-
-def first_text(*values: Any) -> str:
-    for value in values:
-        normalized = str(value or "").strip()
-        if normalized:
-            return normalized
-    return ""
 
 
 def normalize_timestamp(value: str, *, default: str) -> str:

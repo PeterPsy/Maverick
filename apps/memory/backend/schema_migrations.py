@@ -12,6 +12,7 @@ from uuid import uuid4
 
 from chunking import chunk_source_body
 from content_store import write_body
+from job_provenance import resolve_job_provenance
 from source_chunk_index import rebuild_source_chunk_fts, upsert_source_chunk_fts
 
 REMOTE_STORAGE_PROVIDERS = {"google_drive"}
@@ -99,7 +100,7 @@ def backfill_ingest_job_provenance(db: sqlite3.Connection) -> None:
         """
     ):
         job = row_payload(row) or {}
-        node_id, source_document_id, source_version_id = ingest_job_provenance(job.get("payload"))
+        node_id, source_document_id, source_version_id = resolve_job_provenance(db, job.get("payload"))
         if not any((node_id, source_document_id, source_version_id)):
             continue
         db.execute(
@@ -112,17 +113,6 @@ def backfill_ingest_job_provenance(db: sqlite3.Connection) -> None:
             """,
             (node_id, source_document_id, source_version_id, job["id"]),
         )
-
-
-def ingest_job_provenance(payload: Any) -> tuple[str, str, str]:
-    data = payload if isinstance(payload, dict) else {}
-    source_document = data.get("source_document") if isinstance(data.get("source_document"), dict) else {}
-    source_version = data.get("source_version") if isinstance(data.get("source_version"), dict) else {}
-    node = data.get("node") if isinstance(data.get("node"), dict) else {}
-    node_id = first_text(data.get("node_id"), data.get("target_node_id"), node.get("id"), node.get("node_id"))
-    source_document_id = first_text(data.get("source_document_id"), source_document.get("id"), source_version.get("source_document_id"))
-    source_version_id = first_text(data.get("source_version_id"), source_version.get("id"))
-    return node_id, source_document_id, source_version_id
 
 
 def first_text(*values: Any) -> str:

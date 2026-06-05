@@ -356,9 +356,16 @@ def memory_node_result(
     node_id = str(node.get("id") or node.get("node_id") or "").strip()
     summary = str(node.get("summary") or str(node.get("body_text") or "")[:280])
     sources = list(match_sources if match_sources is not None else node.get("match_sources") or ["node"])
+    compiled = compact_compiled_payload(db, node_id, data_root=data_root) or {}
+    compiled_citations = compiled.get("citations") if isinstance(compiled.get("citations"), list) else []
     item = {
         "kind": "memory_node",
         "entity": {"entity_type": "node", "entity_id": node_id},
+        "source_version_id": "",
+        "chunk_id": "",
+        "freshness": compiled.get("freshness") or "unknown",
+        "citations": compiled_citations,
+        "locator": {"kind": "memory_node", "value": node_id},
         "node": {
             "id": node_id,
             "node_id": node_id,
@@ -390,7 +397,7 @@ def memory_node_result(
             for row in db.execute("SELECT * FROM external_refs WHERE node_id = ? ORDER BY created_at", (node_id,))
         ],
         "storage_references": storage_references_for_node(db, node_id),
-        "compiled": compact_compiled_payload(db, node_id, data_root=data_root),
+        "compiled": compiled,
     }
     if reason:
         item["reason"] = reason

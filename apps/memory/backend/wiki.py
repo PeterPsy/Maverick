@@ -12,7 +12,7 @@ from content_store import read_body
 from database import ensure_schema, json_text, new_id, now_timestamp, row_payload, transaction
 from errors import MemoryValidationError
 from lint import refresh_node_lint
-from sources import sync_sources
+from sources import prepare_source_snapshots, sync_sources
 from wiki_content import claim_texts, compile_input_hash, compiled_markdown
 from wiki_queries import compiled_payload_for_node
 
@@ -22,12 +22,20 @@ def compile_node(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
     node_id = str(body.get("node_id") or body.get("id") or "").strip()
     if not node_id:
         raise MemoryValidationError("node_id is required.")
+    prepared_snapshots = prepare_source_snapshots(data_root, node_id)
     with transaction(data_root, immediate=True) as db:
         node = _active_node(db, node_id)
         refs = _external_refs(db, node_id)
         relationships = _relationships(db, node_id)
         timestamp = now_timestamp()
-        sources = sync_sources(db, data_root=data_root, node_id=node_id, refs=refs, timestamp=timestamp)
+        sources = sync_sources(
+            db,
+            data_root=data_root,
+            node_id=node_id,
+            refs=refs,
+            timestamp=timestamp,
+            prepared_snapshots=prepared_snapshots,
+        )
         sources = merged_source_candidates(db, node_id=node_id, synced_sources=sources)
         input_hash = compile_source_aware_input_hash(
             node,

@@ -32,6 +32,16 @@ def apply_additive_migrations(db: sqlite3.Connection, *, data_root: Path) -> Non
     add_column_if_missing(db, "citations", "char_end", "INTEGER")
     add_column_if_missing(db, "citations", "quote_sha256", "TEXT NOT NULL DEFAULT ''")
     add_column_if_missing(db, "ingest_jobs", "lease_token", "TEXT NOT NULL DEFAULT ''")
+    add_column_if_missing(db, "ingest_jobs", "node_id", "TEXT NOT NULL DEFAULT ''")
+    add_column_if_missing(db, "ingest_jobs", "source_document_id", "TEXT NOT NULL DEFAULT ''")
+    add_column_if_missing(db, "ingest_jobs", "source_version_id", "TEXT NOT NULL DEFAULT ''")
+    db.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_ingest_jobs_source_provenance
+        ON ingest_jobs(source_document_id, source_version_id, node_id, updated_at)
+        """
+    )
+    backfill_ingest_job_provenance(db)
     backfill_source_version_foundation(db, data_root=data_root)
     rebuild_source_chunk_fts(db, data_root=data_root)
 
@@ -69,6 +79,54 @@ def add_column_if_missing(db: sqlite3.Connection, table_name: str, column_name: 
     columns = {row["name"] for row in db.execute(f"PRAGMA table_info({table_name})")}
     if column_name not in columns:
         db.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_definition}")
+
+
+def backfill_ingest_job_provenance(db: sqlite3.Connection) -> None:
+    columns = {row["name"] for row in db.execute("PRAGMA table_info(ingest_jobs)")}
+    if not {"node_id", "source_document_id", "source_version_id", "payload_json"}.issubset(columns):
+        return
+    for row in db.execute(
+        """
+        SELECT *
+        FROM ingest_jobs
+        WHERE COALESCE(node_id, '') = ''
+           OR COALESCE(source_document_id, '') = ''
+           OR COALESCE(source_version_id, '') = ''
+        """
+    ):
+        job = row_payload(row) or {}
+        node_id, source_document_id, source_version_id = ingest_job_provenance(job.get("payload"))
+        if not any((node_id, source_document_id, source_version_id)):
+            continue
+        db.execute(
+            """
+            UPDATE ingest_jobs
+            SET node_id = COALESCE(NULLIF(node_id, ''), ?),
+                source_document_id = COALESCE(NULLIF(source_document_id, ''), ?),
+                source_version_id = COALESCE(NULLIF(source_version_id, ''), ?)
+            WHERE id = ?
+            """,
+            (node_id, source_document_id, source_version_id, job["id"]),
+        )
+
+
+def ingest_job_provenance(payload: Any) -> tuple[str, str, str]:
+    data = payload if isinstance(payload, dict) else {}
+    source_document = data.get("source_document") if isinstance(data.get("source_document"), dict) else {}
+    source_version = data.get("source_version") if isinstance(data.get("source_version"), dict) else {}
+    node = data.get("node") if isinstance(data.get("node"), dict) else {}
+    node_id = first_text(data.get("node_id"), data.get("target_node_id"), node.get("id"), node.get("node_id"))
+    source_document_id = first_text(data.get("source_document_id"), source_document.get("id"), source_version.get("source_document_id"))
+    source_version_id = first_text(data.get("source_version_id"), source_version.get("id"))
+    return node_id, source_document_id, source_version_id
+
+
+def first_text(*values: Any) -> str:
+    for value in values:
+        normalized = str(value or "").strip()
+        if normalized:
+            return normalized
+    return ""
 
 
 def backfill_source_version_foundation(db: sqlite3.Connection, *, data_root: Path) -> None:

@@ -3,7 +3,7 @@
 from database import ensure_schema, health_payload
 from edges import create_edge, soft_delete_edge
 from ingest_jobs import cancel_job, claim_job, complete_job, enqueue_job, fail_job, list_jobs
-from job_runner import run_next_job
+from job_runner import run_jobs_until_idle, run_next_job
 from nodes import create_node, inspect_node, update_node, soft_delete_node
 from references import add_external_ref
 from retrieval import audit_events, context_payload, graph_payload, search_nodes
@@ -38,6 +38,7 @@ __all__ = [
     "lint_memory",
     "load_view_state",
     "search_nodes",
+    "run_jobs_until_idle",
     "run_next_job",
     "source_query",
     "set_custom_view_payload",

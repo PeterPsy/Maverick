@@ -134,6 +134,9 @@ SCHEMA_STATEMENTS: tuple[str, ...] = (
       lease_token TEXT NOT NULL DEFAULT '',
       last_error TEXT NOT NULL DEFAULT '',
       payload_json TEXT NOT NULL DEFAULT '{}',
+      node_id TEXT NOT NULL DEFAULT '',
+      source_document_id TEXT NOT NULL DEFAULT '',
+      source_version_id TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     )

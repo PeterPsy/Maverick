@@ -9,7 +9,7 @@ from typing import Any
 
 from chunking import chunk_source_body
 from content_store import canonical_body, write_body
-from database import json_text, new_id, row_payload
+from database import connect, json_text, new_id, row_payload
 from source_chunk_index import delete_source_chunk_fts_for_version, upsert_source_chunk_fts
 from storage_sources import (
     INGEST_PREVIEW_METADATA_KEYS,
@@ -28,11 +28,12 @@ def sync_sources(
     node_id: str,
     refs: list[sqlite3.Row],
     timestamp: str,
+    prepared_snapshots: dict[str, dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     sources: list[dict[str, Any]] = []
     for ref in refs:
         source_id = _source_id_for_ref(db, ref)
-        snapshot = source_snapshot(ref, data_root, include_remote_preview=True)
+        snapshot = (prepared_snapshots or {}).get(str(ref["id"])) or source_snapshot(ref, data_root, include_remote_preview=True)
         update_remote_ref_metadata(db, ref, snapshot, timestamp=timestamp)
         source = {
             "id": source_id or new_id("src"),
@@ -88,8 +89,20 @@ def sync_sources(
         version = ensure_source_version(db, data_root=data_root, source=saved, ref=ref, snapshot=snapshot, timestamp=timestamp)
         ensure_node_source_link(db, node_id=node_id, source_id=saved["id"], external_ref_id=ref["id"], timestamp=timestamp)
         saved["source_version_id"] = version["id"]
+        saved["source_document_id"] = version.get("source_document_id") or ""
         sources.append(saved)
     return sources
+
+
+def prepare_source_snapshots(data_root: Path, node_id: str) -> dict[str, dict[str, Any]]:
+    """Fetch source snapshots outside a write transaction when remote previews may be needed."""
+
+    snapshots: dict[str, dict[str, Any]] = {}
+    with connect(data_root) as db:
+        refs = list(db.execute("SELECT * FROM external_refs WHERE node_id = ? ORDER BY created_at", (node_id,)))
+    for ref in refs:
+        snapshots[str(ref["id"])] = source_snapshot(ref, data_root, include_remote_preview=True)
+    return snapshots
 
 
 def ensure_source_version(

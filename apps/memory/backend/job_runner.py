@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from database import now_timestamp, transaction
+from database import normalize_limit, now_timestamp, transaction
 from errors import MemoryValidationError
 from ingest_jobs import claim_job, complete_job, fail_job
 from lint import lint_memory, mark_wiki_stale
@@ -47,6 +47,30 @@ def run_next_job(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
         },
     )
     return {"job": completed["job"], "ran": True, "ok": True, "result": result}
+
+
+def run_jobs_until_idle(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
+    max_jobs = normalize_limit(body.get("max_jobs"), default=50, minimum=1, maximum=500, field_name="max_jobs")
+    stop_on_error = bool(body.get("stop_on_error", True))
+    runs: list[dict[str, Any]] = []
+    for _index in range(max_jobs):
+        run = run_next_job(data_root, body)
+        runs.append(run)
+        if not run.get("ran"):
+            break
+        if run.get("ok") is False and stop_on_error:
+            break
+    executed = [run for run in runs if run.get("ran")]
+    failed = [run for run in executed if run.get("ok") is False]
+    idle = bool(runs and not runs[-1].get("ran"))
+    return {
+        "ran": bool(executed),
+        "ok": not failed,
+        "idle": idle,
+        "jobs_run": len(executed),
+        "max_jobs": max_jobs,
+        "runs": runs,
+    }
 
 
 def execute_job(data_root: Path, job: dict[str, Any]) -> dict[str, Any]:

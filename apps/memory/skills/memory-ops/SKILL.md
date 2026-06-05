@@ -42,6 +42,7 @@ When Memory returns queued ingest or compile work, inspect the app-owned job que
 ```bash
 maverick app memory cli run memory --action jobs_list --status ready --limit 20
 maverick app memory mcp call memory_jobs --json --operation claim --job-types '["compile_node"]'
+maverick app memory mcp call memory_jobs --json --operation run_until_idle --max-jobs 50
 ```
 
 Storage staleness can enqueue `requires_storage_reindex` jobs. Treat those jobs as action-required markers: run Storage `drive_index`, pass the returned Memory source to `memory_ingest_source` with `adapter_id=remote_storage_file`, and then acknowledge Storage indexing after Memory succeeds.
@@ -87,6 +88,14 @@ maverick app memory mcp call memory_ingest_source --json --adapter-id storage_fi
 ```
 
 Memory accepts only UTF-8 text-like files under `storage/uploaded/` or `storage/generated/`. Memory resolves local file metadata, previewability, and bounded content through Storage-owned `file_info`, `preview_text`, and `read_file` surfaces; Storage remains the owner of file identity and file operations.
+
+For records owned by another app, ingest through `app_entity` so Memory snapshots the official reference summary instead of reading the owner app's private data:
+
+```bash
+maverick app memory mcp call memory_ingest_source --json --adapter-id app_entity --owning-app-id crm --entity-type account --entity-id <account_id> --compile-after-ingest true
+```
+
+Memory uses the owning app's reference summarize/resolve surface and stores the app id, entity type, entity id, and deep link as the source locator.
 
 ## Ingesting Drive Sources
 

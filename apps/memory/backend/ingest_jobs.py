@@ -43,6 +43,7 @@ def enqueue_job_in_db(
     timestamp = now_timestamp()
     available = normalize_timestamp(available_at, default=timestamp)
     attempts = normalize_limit(max_attempts, default=3, minimum=1, maximum=20, field_name="max_attempts")
+    node_id, source_document_id, source_version_id = job_provenance(payload)
     if normalized_dedupe:
         existing = db.execute(
             """
@@ -55,17 +56,21 @@ def enqueue_job_in_db(
             (normalized_dedupe,),
         ).fetchone()
         if existing is not None:
-            db.execute(
-                """
-                UPDATE ingest_jobs
-                SET payload_json = ?,
-                    available_at = CASE WHEN status = 'ready' THEN ? ELSE available_at END,
-                    max_attempts = ?,
-                    updated_at = ?
-                WHERE id = ?
-                """,
-                (json_text(payload), available, attempts, timestamp, existing["id"]),
-            )
+            if existing["status"] == "ready":
+                db.execute(
+                    """
+                    UPDATE ingest_jobs
+                    SET payload_json = ?,
+                        node_id = ?,
+                        source_document_id = ?,
+                        source_version_id = ?,
+                        available_at = ?,
+                        max_attempts = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (json_text(payload), node_id, source_document_id, source_version_id, available, attempts, timestamp, existing["id"]),
+                )
             job = row_payload(db.execute("SELECT * FROM ingest_jobs WHERE id = ?", (existing["id"],)).fetchone()) or {}
             job["enqueued"] = False
             return job
@@ -81,6 +86,9 @@ def enqueue_job_in_db(
         "lease_token": "",
         "last_error": "",
         "payload_json": json_text(payload),
+        "node_id": node_id,
+        "source_document_id": source_document_id,
+        "source_version_id": source_version_id,
         "created_at": timestamp,
         "updated_at": timestamp,
     }
@@ -88,11 +96,13 @@ def enqueue_job_in_db(
         """
         INSERT INTO ingest_jobs(
           id, job_type, dedupe_key, status, attempt_count, max_attempts, available_at,
-          locked_until, lease_token, last_error, payload_json, created_at, updated_at
+          locked_until, lease_token, last_error, payload_json, node_id, source_document_id,
+          source_version_id, created_at, updated_at
         )
         VALUES (
           :id, :job_type, :dedupe_key, :status, :attempt_count, :max_attempts, :available_at,
-          :locked_until, :lease_token, :last_error, :payload_json, :created_at, :updated_at
+          :locked_until, :lease_token, :last_error, :payload_json, :node_id, :source_document_id,
+          :source_version_id, :created_at, :updated_at
         )
         """,
         job,
@@ -287,6 +297,25 @@ def normalize_job_types(raw_job_types: object) -> list[str]:
         if job_type not in normalized:
             normalized.append(job_type)
     return normalized
+
+
+def job_provenance(payload: dict[str, Any] | None) -> tuple[str, str, str]:
+    data = payload if isinstance(payload, dict) else {}
+    source_document = data.get("source_document") if isinstance(data.get("source_document"), dict) else {}
+    source_version = data.get("source_version") if isinstance(data.get("source_version"), dict) else {}
+    node = data.get("node") if isinstance(data.get("node"), dict) else {}
+    node_id = first_text(data.get("node_id"), data.get("target_node_id"), node.get("id"), node.get("node_id"))
+    source_document_id = first_text(data.get("source_document_id"), source_document.get("id"), source_version.get("source_document_id"))
+    source_version_id = first_text(data.get("source_version_id"), source_version.get("id"))
+    return node_id, source_document_id, source_version_id
+
+
+def first_text(*values: Any) -> str:
+    for value in values:
+        normalized = str(value or "").strip()
+        if normalized:
+            return normalized
+    return ""
 
 
 def normalize_timestamp(value: str, *, default: str) -> str:

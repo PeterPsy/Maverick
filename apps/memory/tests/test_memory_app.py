@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import shutil
 import sqlite3
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -219,23 +220,57 @@ class MemoryAppTestCase(unittest.TestCase):
         self.assertIn("memory_staleness", staleness_schema["properties"])
         self.assertIn("entity_id", staleness_schema["properties"])
         jobs_schema = mcp_descriptor["tools"]["memory_jobs"]["input_schema"]
-        self.assertEqual(jobs_schema["properties"]["operation"]["enum"], ["list", "enqueue", "claim", "complete", "fail", "cancel", "run_next"])
+        self.assertEqual(
+            jobs_schema["properties"]["operation"]["enum"],
+            ["list", "enqueue", "claim", "complete", "fail", "cancel", "run_next", "run_until_idle"],
+        )
         self.assertIn("lease_token", jobs_schema["properties"])
+        self.assertIn("max_jobs", jobs_schema["properties"])
         self.assertIn("requires_storage_reindex", jobs_schema["properties"]["job_type"]["enum"])
         self.assertEqual(
             mcp_descriptor["tools"]["memory_ingest_source"]["input_schema"]["properties"]["adapter_id"]["enum"],
-            ["inline_markdown", "storage_file", "remote_storage_file"],
+            ["inline_markdown", "storage_file", "remote_storage_file", "app_entity"],
         )
+        self.assertIn(
+            {"required": ["adapter_id", "owning_app_id", "entity_type", "entity_id"]},
+            mcp_descriptor["tools"]["memory_ingest_source"]["input_schema"]["anyOf"],
+        )
+        self.assertEqual(
+            cli_descriptor["commands"]["memory"]["argument_schema"]["properties"]["adapter_id"]["enum"],
+            ["inline_markdown", "storage_file", "remote_storage_file", "app_entity"],
+        )
+        self.assertIn(
+            "Workspace Storage path",
+            cli_descriptor["commands"]["memory"]["argument_schema"]["properties"]["workspace_relative_path"]["description"],
+        )
+        self.assertIn(
+            "Stable Storage file id",
+            cli_descriptor["commands"]["memory"]["argument_schema"]["properties"]["file_id"]["description"],
+        )
+        self.assert_no_duplicate_json_keys(MEMORY_ROOT / "cli" / "command_schemas.json")
 
     def test_memory_skill_documents_drive_ingest_workflow(self) -> None:
         skill = (MEMORY_ROOT / "skills" / "memory-ops" / "SKILL.md").read_text(encoding="utf-8")
 
         self.assertIn("storage_drive_index", skill)
         self.assertIn("adapter-id remote_storage_file", skill)
+        self.assertIn("adapter-id app_entity", skill)
         self.assertIn("memory_ingest_storage_source", skill)
         self.assertIn("storage_drive_mark_indexed", skill)
         self.assertIn("memory_apply_storage_staleness", skill)
         self.assertIn("Memory never scans Drive itself", skill)
+
+    def assert_no_duplicate_json_keys(self, path: Path) -> None:
+        def no_duplicates(pairs):
+            seen = set()
+            payload = {}
+            for key, value in pairs:
+                self.assertNotIn(key, seen, f"Duplicate JSON key `{key}` in {path}")
+                seen.add(key)
+                payload[key] = value
+            return payload
+
+        json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=no_duplicates)
 
     def test_install_hook_is_idempotent_and_creates_schema(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -338,6 +373,9 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertIn("source_chunk_id", citation_columns)
             self.assertIn("quote_sha256", citation_columns)
             self.assertIn("lease_token", ingest_job_columns)
+            self.assertIn("node_id", ingest_job_columns)
+            self.assertIn("source_document_id", ingest_job_columns)
+            self.assertIn("source_version_id", ingest_job_columns)
             self.assertEqual(migrated_version["version_hash"], "hash-old")
             self.assertEqual(migrated_version["source_document_id"], migrated_document["id"])
             self.assertEqual(migrated_document["source_key"], "legacy:src_old")
@@ -466,6 +504,19 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual(job["status"], "running")
             self.assertEqual(job["attempt_count"], 1)
             self.assertTrue(job["lease_token"].startswith("lease_"))
+            running_duplicate_status, running_duplicate = service.handle_action(
+                data_root,
+                {
+                    "action": "jobs_enqueue",
+                    "job_type": "compile_node",
+                    "dedupe_key": "compile:node_demo",
+                    "payload": {"node_id": "node_demo", "reason": "must_not_replace_running_payload"},
+                },
+            )
+            self.assertEqual(running_duplicate_status, 200)
+            self.assertFalse(running_duplicate["job"]["enqueued"])
+            self.assertEqual(running_duplicate["job"]["status"], "running")
+            self.assertEqual(running_duplicate["job"]["payload"], {"node_id": "node_demo", "reason": "updated"})
             with self.assertRaisesRegex(Exception, "running job lease"):
                 service.handle_action(data_root, {"action": "jobs_complete", "job_id": job["id"], "lease_token": "wrong"})
 
@@ -532,6 +583,52 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertTrue(run["ok"])
             self.assertEqual(run["job"]["status"], "done")
             self.assertEqual(inspected["node"]["compiled_page"]["freshness"], "fresh")
+
+    def test_ingest_jobs_run_until_idle_drains_ready_jobs(self) -> None:
+        service = self.import_backend_module("service")
+
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            first = service.handle_action(
+                data_root,
+                {"action": "remember", "title": "First queued compile", "body": "First queued compile claim.", "type": "fact"},
+            )[1]["node"]
+            second = service.handle_action(
+                data_root,
+                {"action": "remember", "title": "Second queued compile", "body": "Second queued compile claim.", "type": "fact"},
+            )[1]["node"]
+            for node in (first, second):
+                service.handle_action(
+                    data_root,
+                    {
+                        "action": "jobs_enqueue",
+                        "job_type": "compile_node",
+                        "dedupe_key": f"compile:{node['id']}",
+                        "payload": {"node_id": node["id"]},
+                    },
+                )
+
+            run_status, run = service.handle_action(
+                data_root,
+                {
+                    "action": "jobs_list",
+                    "operation": "run_until_idle",
+                    "job_types": ["compile_node"],
+                    "max_jobs": 10,
+                },
+            )
+            done_jobs = service.handle_action(data_root, {"action": "jobs_list", "status": "done"})[1]["jobs"]
+            first_inspect = service.handle_action(data_root, {"action": "inspect", "node_id": first["id"]})[1]
+            second_inspect = service.handle_action(data_root, {"action": "inspect", "node_id": second["id"]})[1]
+
+            self.assertEqual(run_status, 200)
+            self.assertTrue(run["ran"])
+            self.assertTrue(run["ok"])
+            self.assertTrue(run["idle"])
+            self.assertEqual(run["jobs_run"], 2)
+            self.assertEqual(len(done_jobs), 2)
+            self.assertEqual(first_inspect["node"]["compiled_page"]["freshness"], "fresh")
+            self.assertEqual(second_inspect["node"]["compiled_page"]["freshness"], "fresh")
 
     def test_sqlite_wal_cache_tracks_recreated_database_file(self) -> None:
         database = self.import_backend_module("database")
@@ -642,6 +739,38 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual(len(graph["nodes"]), 2)
             self.assertEqual(len(graph["edges"]), 1)
             self.assertEqual(graph["edges"][0]["kind"], "mentions")
+
+    def test_search_and_context_share_memory_node_envelope(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            node = self.run_backend(
+                data_root,
+                {
+                    "action": "remember",
+                    "title": "Acme renewal owner",
+                    "body": "Acme renewal owner is Dana.",
+                    "type": "fact",
+                },
+            )["json"]["node"]
+
+            search = self.run_backend(data_root, {"action": "search", "query": "renewal owner"})["json"]
+            context = self.run_backend(data_root, {"action": "context", "query": "renewal owner"})["json"]
+
+            for item in (search["results"][0], context["items"][0]):
+                self.assertEqual(item["kind"], "memory_node")
+                self.assertEqual(item["id"], node["id"])
+                self.assertEqual(item["node_id"], node["id"])
+                self.assertEqual(item["entity"], {"entity_type": "node", "entity_id": node["id"]})
+                self.assertEqual(item["node"]["id"], node["id"])
+                self.assertEqual(item["node"]["node_id"], node["id"])
+                self.assertEqual(item["title"], "Acme renewal owner")
+                self.assertEqual(item["type"], "fact")
+                self.assertIn("match_sources", item)
+                self.assertIn("source_chunk_matches", item)
+                self.assertIn("storage_references", item)
+                self.assertIn("compiled", item)
+                self.assertIsInstance(item["relevance"], float)
+                self.assertNotIn("score", item)
 
     def test_compile_builds_internal_wiki_context_sources_and_search_matches(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -1250,6 +1379,276 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual(rejected["status_code"], 400)
             self.assertIn("workspace_relative_path", rejected["json"]["detail"])
 
+    def test_ingest_app_entity_snapshots_reference_surface_and_compiles_chunks(self) -> None:
+        source_ingestion = self.import_backend_module("source_ingestion")
+        service = self.import_backend_module("service")
+        database = self.import_backend_module("database")
+        original_fetch = source_ingestion.fetch_app_entity_source
+        try:
+            source_ingestion.fetch_app_entity_source = lambda _data_root, request: {
+                "exists": True,
+                "app_id": request["owning_app_id"],
+                "entity_type": request["entity_type"],
+                "entity_id": request["entity_id"],
+                "title": "Acme CRM account",
+                "summary": "Acme CRM account says the renewal owner is Dana.",
+                "deep_link": "/app/crm/accounts/acct_acme",
+            }
+            with tempfile.TemporaryDirectory() as temp:
+                data_root = Path(temp) / "data" / "memory"
+                status, result = service.handle_action(
+                    data_root,
+                    {
+                        "action": "ingest_source",
+                        "adapter_id": "app_entity",
+                        "owning_app_id": "crm",
+                        "entity_type": "account",
+                        "entity_id": "acct_acme",
+                        "compile_after_ingest": True,
+                    },
+                )
+                with database.connect(data_root) as db:
+                    document = database.row_payload(db.execute("SELECT * FROM source_documents").fetchone()) or {}
+                    version = database.row_payload(db.execute("SELECT * FROM source_versions").fetchone()) or {}
+                    chunk = database.row_payload(db.execute("SELECT * FROM source_chunks").fetchone()) or {}
+
+                self.assertEqual(status, 200)
+                self.assertEqual(result["adapter_id"], "app_entity")
+                self.assertEqual(document["source_key"], "app_entity:crm:account:acct_acme")
+                self.assertEqual(version["hash_kind"], "reference_snapshot")
+                self.assertEqual(version["extraction_status"], "available")
+                self.assertEqual(version["source_document_id"], document["id"])
+                self.assertEqual(chunk["source_version_id"], version["id"])
+                self.assertEqual(chunk["locator"], "/app/crm/accounts/acct_acme")
+                self.assertTrue(result["compiled"]["citations"])
+                self.assertEqual(result["compiled"]["citations"][0]["source_chunk_id"], chunk["id"])
+        finally:
+            source_ingestion.fetch_app_entity_source = original_fetch
+
+    def test_inspect_source_reports_freshness_and_column_backed_job_provenance(self) -> None:
+        service = self.import_backend_module("service")
+        database = self.import_backend_module("database")
+
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            status, ingested = service.handle_action(
+                data_root,
+                {
+                    "action": "ingest_source",
+                    "adapter_id": "inline_markdown",
+                    "source_key": "unit-source",
+                    "title": "Unit source",
+                    "body_markdown": "Unit source says the owner is Dana.",
+                    "compile_after_ingest": False,
+                },
+            )
+            source_document = ingested["source_document"]
+            source_version = ingested["source_version"]
+            inspect_status, inspected = service.handle_action(
+                data_root,
+                {"action": "inspect_source", "source_document_id": source_document["id"]},
+            )
+
+            with database.connect(data_root) as db:
+                job = database.row_payload(db.execute("SELECT * FROM ingest_jobs").fetchone()) or {}
+
+            self.assertEqual(status, 200)
+            self.assertEqual(inspect_status, 200)
+            self.assertEqual(inspected["source_document"]["kind"], "source_document")
+            self.assertEqual(inspected["freshness"]["state"], "fresh")
+            self.assertEqual(inspected["freshness"]["latest_source_version_id"], source_version["id"])
+            self.assertEqual(inspected["versions"][0]["kind"], "source_version")
+            self.assertEqual(inspected["versions"][0]["freshness"], "fresh")
+            self.assertEqual(inspected["chunks"][0]["kind"], "source_chunk")
+            self.assertEqual(inspected["chunks"][0]["freshness"], "fresh")
+            self.assertEqual(inspected["chunks"][0]["citations"], [])
+            self.assertEqual(job["source_document_id"], source_document["id"])
+            self.assertEqual(job["source_version_id"], source_version["id"])
+            self.assertEqual(inspected["ingest_jobs"][0]["source_document_id"], source_document["id"])
+            self.assertEqual(inspected["ingest_jobs"][0]["source_version_id"], source_version["id"])
+
+    def test_fetch_app_entity_source_discovers_reference_tools_and_passes_entity_type(self) -> None:
+        app_entity_sources = self.import_backend_module("app_entity_sources")
+        original_run = app_entity_sources.subprocess.run
+        original_which = app_entity_sources.shutil.which
+        calls: list[list[str]] = []
+
+        def fake_run(args, **_kwargs):
+            calls.append(list(args))
+            if args[:5] == ["maverick", "app", "crm", "mcp", "list"]:
+                return subprocess.CompletedProcess(
+                    args,
+                    0,
+                    stdout=json.dumps(
+                        {
+                            "tools": [
+                                {"name": "crm_reference_manifest"},
+                                {"name": "crm_reference_resolve"},
+                                {"name": "crm_reference_summarize"},
+                            ]
+                        }
+                    ),
+                    stderr="",
+                )
+            if "crm_reference_manifest" in args:
+                return subprocess.CompletedProcess(
+                    args,
+                    0,
+                    stdout=json.dumps({"status_code": 200, "entity_types": [{"entity_type": "account"}]}),
+                    stderr="",
+                )
+            if "crm_reference_summarize" in args:
+                return subprocess.CompletedProcess(
+                    args,
+                    0,
+                    stdout=json.dumps(
+                        {
+                            "status_code": 200,
+                            "exists": True,
+                            "title": "Acme account",
+                            "summary": "Acme account summary.",
+                        }
+                    ),
+                    stderr="",
+                )
+            if "crm_reference_resolve" in args:
+                return subprocess.CompletedProcess(
+                    args,
+                    0,
+                    stdout=json.dumps(
+                        {
+                            "status_code": 200,
+                            "exists": True,
+                            "app_id": "crm",
+                            "entity_type": "account",
+                            "entity_id": "account:acct_acme",
+                            "title": "Acme account",
+                            "deep_link": "/app/crm/accounts/acct_acme",
+                        }
+                    ),
+                    stderr="",
+                )
+            return subprocess.CompletedProcess(args, 1, stdout=json.dumps({"status_code": 404}), stderr="")
+
+        try:
+            app_entity_sources.shutil.which = lambda _name: "/usr/bin/maverick"
+            app_entity_sources.subprocess.run = fake_run
+            with tempfile.TemporaryDirectory() as temp:
+                data_root = Path(temp) / "data" / "memory"
+                snapshot = app_entity_sources.fetch_app_entity_source(
+                    data_root,
+                    {"owning_app_id": "crm", "entity_type": "account", "entity_id": "acct_acme"},
+                )
+        finally:
+            app_entity_sources.subprocess.run = original_run
+            app_entity_sources.shutil.which = original_which
+
+        summarize_call = next(call for call in calls if "crm_reference_summarize" in call)
+        resolve_call = next(call for call in calls if "crm_reference_resolve" in call)
+        self.assertEqual(snapshot["summary"], "Acme account summary.")
+        self.assertEqual(snapshot["deep_link"], "/app/crm/accounts/acct_acme")
+        self.assertIn("--entity-type", summarize_call)
+        self.assertIn("--entity-id", summarize_call)
+        self.assertEqual(summarize_call[summarize_call.index("--entity-type") + 1], "account")
+        self.assertEqual(summarize_call[summarize_call.index("--entity-id") + 1], "acct_acme")
+        self.assertEqual(resolve_call[resolve_call.index("--entity-type") + 1], "account")
+        self.assertEqual(resolve_call[resolve_call.index("--entity-id") + 1], "acct_acme")
+
+    def test_remote_storage_ingest_prepares_preview_before_source_sync(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            storage_sources = self.import_backend_module("storage_sources")
+            storage_ingestion = self.import_backend_module("storage_ingestion")
+            service = self.import_backend_module("service")
+            original_preview = storage_sources._storage_preview_surface
+            original_sync = storage_ingestion.sync_sources
+            try:
+                storage_sources._storage_preview_surface = lambda _data_root, _request: {
+                    "status_code": 200,
+                    "preview_text": "Prepared Drive preview says the owner is Dana.",
+                    "source_version": "rev-prepared",
+                    "file": {"display_path": "/Drive/Prepared.md"},
+                }
+
+                def guarded_sync(db, *, data_root, node_id, refs, timestamp, prepared_snapshots=None):
+                    ref_payload = database.row_payload(refs[0]) if refs else {}
+                    metadata = ref_payload.get("metadata") if isinstance(ref_payload.get("metadata"), dict) else {}
+                    self.assertIn("ingest_preview_text", metadata)
+                    return original_sync(db, data_root=data_root, node_id=node_id, refs=refs, timestamp=timestamp, prepared_snapshots=prepared_snapshots)
+
+                database = self.import_backend_module("database")
+                storage_ingestion.sync_sources = guarded_sync
+                status, result = service.handle_action(
+                    data_root,
+                    {
+                        "action": "ingest_storage_source",
+                        "memory_source": self.drive_memory_source(source_version="rev-prepared"),
+                    },
+                )
+            finally:
+                storage_sources._storage_preview_surface = original_preview
+                storage_ingestion.sync_sources = original_sync
+
+            self.assertEqual(status, 200)
+            self.assertEqual(result["sources"][0]["metadata"]["source_version"], "rev-prepared")
+
+    def test_compile_uses_prepared_source_snapshots_for_remote_refs(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            storage_sources = self.import_backend_module("storage_sources")
+            wiki = self.import_backend_module("wiki")
+            service = self.import_backend_module("service")
+            original_preview = storage_sources._storage_preview_surface
+            original_sync = wiki.sync_sources
+            try:
+                storage_sources._storage_preview_surface = lambda _data_root, _request: {
+                    "status_code": 200,
+                    "preview_text": "Prepared compile preview says the owner is Dana.",
+                    "source_version": "rev-compile",
+                    "file": {"display_path": "/Drive/Compile.md"},
+                }
+
+                def guarded_sync(db, *, data_root, node_id, refs, timestamp, prepared_snapshots=None):
+                    self.assertIsInstance(prepared_snapshots, dict)
+                    self.assertTrue(refs)
+                    self.assertIn(refs[0]["id"], prepared_snapshots)
+                    return original_sync(db, data_root=data_root, node_id=node_id, refs=refs, timestamp=timestamp, prepared_snapshots=prepared_snapshots)
+
+                wiki.sync_sources = guarded_sync
+                _node_status, node_payload = service.handle_action(
+                    data_root,
+                    {
+                        "action": "remember",
+                        "title": "Remote ref compile",
+                        "body": "Remote ref compile says the owner is Dana.",
+                    },
+                )
+                node_id = node_payload["node"]["id"]
+                service.handle_action(
+                    data_root,
+                    {
+                        "action": "attach_file",
+                        "node_id": node_id,
+                        "owning_app_id": "storage",
+                        "entity_type": "file",
+                        "entity_id": "file_drive_compile",
+                        "provider": "google_drive",
+                        "metadata": {
+                            "provider": "google_drive",
+                            "connection_id": "drive_conn_acme",
+                            "drive_file_id": "drive_compile",
+                            "source_version": "rev-compile",
+                        },
+                    },
+                )
+                status, compiled = service.handle_action(data_root, {"action": "compile", "node_id": node_id})
+            finally:
+                storage_sources._storage_preview_surface = original_preview
+                wiki.sync_sources = original_sync
+
+            self.assertEqual(status, 200)
+            self.assertEqual(compiled["compiled_page"]["freshness"], "fresh")
+
     def test_ingest_storage_source_creates_node_compiles_preview_and_is_idempotent(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             data_root = Path(temp) / "data" / "memory"
@@ -1283,7 +1682,7 @@ class MemoryAppTestCase(unittest.TestCase):
                 context_status, context = service.handle_action(data_root, {"action": "context", "query": "renewal owner"})
                 search_status, search = service.handle_action(data_root, {"action": "search", "query": "Dana"})
                 wiki_status, wiki_result = service.handle_action(data_root, {"action": "wiki_query", "query": "Dana"})
-                source_query_status, source_query = service.handle_action(data_root, {"action": "source_query", "query": "Dana"})
+                source_query_status, source_query = service.handle_action(data_root, {"action": "source_query", "query": "Dana owner"})
             finally:
                 storage_sources._storage_preview_surface = original_surface
 
@@ -1346,8 +1745,10 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual(job_count, 0)
             self.assertIn("source_chunk", search["results"][0]["match_sources"])
             self.assertEqual(search["results"][0]["source_chunk_matches"][0]["chunk_id"], source_chunk["id"])
+            self.assertEqual(search["results"][0]["source_chunk_matches"][0]["citations"][0]["source_chunk_id"], source_chunk["id"])
             self.assertIn("source_chunk", context["items"][0]["match_sources"])
             self.assertEqual(context["items"][0]["source_chunk_matches"][0]["source_version_id"], version["id"])
+            self.assertEqual(context["items"][0]["source_chunk_matches"][0]["citations"][0]["source_chunk_id"], source_chunk["id"])
             self.assertEqual(fetch_status, 200)
             self.assertEqual(fetched["chunks"][0]["id"], source_chunk["id"])
             self.assertEqual(fetched["chunks"][0]["kind"], "source_chunk")

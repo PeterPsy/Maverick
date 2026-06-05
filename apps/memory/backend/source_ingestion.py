@@ -7,6 +7,7 @@ from pathlib import Path
 import sqlite3
 from typing import Any
 
+from app_entity_sources import app_entity_body, app_entity_version_hash, fetch_app_entity_source
 from content_store import body_hash, canonical_body, write_body
 from database import (
     ensure_schema,
@@ -29,7 +30,7 @@ from sources import ensure_node_source_link, ensure_source_chunks, replace_sourc
 from wiki import compile_node
 
 
-SUPPORTED_ADAPTERS = {"inline_markdown", "storage_file", "remote_storage_file"}
+SUPPORTED_ADAPTERS = {"inline_markdown", "storage_file", "remote_storage_file", "app_entity"}
 
 
 def ingest_source(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
@@ -79,7 +80,12 @@ def ingest_source(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
                 db,
                 job_type="compile_node",
                 dedupe_key=f"compile:{target_node_id}",
-                payload={"node_id": target_node_id, "reason": "source_ingested"},
+                payload={
+                    "node_id": target_node_id,
+                    "source_document_id": source_document["id"],
+                    "source_version_id": source_version["id"],
+                    "reason": "source_ingested",
+                },
             )
         node = get_node_with_details(db, target_node_id, data_root=data_root)
 
@@ -108,9 +114,11 @@ def normalized_ingest_request(data_root: Path, body: dict[str, Any]) -> dict[str
     source = body.get("source") if isinstance(body.get("source"), dict) else body
     adapter_id = str(source.get("adapter_id") or body.get("adapter_id") or "").strip()
     if adapter_id not in SUPPORTED_ADAPTERS:
-        raise MemoryValidationError("memory_ingest_source supports adapter_id=inline_markdown, storage_file, or remote_storage_file.")
+        raise MemoryValidationError("memory_ingest_source supports adapter_id=inline_markdown, storage_file, remote_storage_file, or app_entity.")
     if adapter_id == "storage_file":
         return normalized_storage_file_request(data_root, body, source)
+    if adapter_id == "app_entity":
+        return normalized_app_entity_request(data_root, body, source)
     if adapter_id == "remote_storage_file":
         raise MemoryValidationError("remote_storage_file ingest requires source_kind=remote_storage_file.")
     return normalized_inline_markdown_request(body, source, adapter_id=adapter_id)
@@ -227,6 +235,75 @@ def normalized_storage_file_request(data_root: Path, body: dict[str, Any], sourc
             "storage_preview_truncated": bool(storage_snapshot.get("preview_truncated")),
             **dict(metadata),
             "storage_sha256": version_hash if hash_kind == "file_bytes" else "",
+        },
+    }
+
+
+def normalized_app_entity_request(data_root: Path, body: dict[str, Any], source: dict[str, Any]) -> dict[str, Any]:
+    owning_app_id = str(source.get("owning_app_id") or body.get("owning_app_id") or source.get("app_id") or body.get("app_id") or "").strip()
+    entity_type = str(source.get("entity_type") or body.get("entity_type") or "").strip()
+    entity_id = str(source.get("entity_id") or body.get("entity_id") or "").strip()
+    if not owning_app_id or not entity_type or not entity_id:
+        raise MemoryValidationError("app_entity ingest requires owning_app_id, entity_type, and entity_id.")
+    if owning_app_id == "memory":
+        raise MemoryValidationError("app_entity ingest cannot snapshot Memory's own private records.")
+    metadata = source.get("metadata") if isinstance(source.get("metadata"), dict) else {}
+    snapshot = fetch_app_entity_source(
+        data_root,
+        {"owning_app_id": owning_app_id, "entity_type": entity_type, "entity_id": entity_id},
+    )
+    title = " ".join(str(body.get("title") or source.get("title") or snapshot.get("title") or snapshot.get("label") or entity_id).split()).strip()
+    summary = str(body.get("summary") or source.get("summary") or snapshot.get("summary") or "").strip()
+    explicit_body = source.get("body_markdown", source.get("body", body.get("body_markdown", body.get("body", ""))))
+    body_markdown = canonical_body(str(explicit_body or "")) if explicit_body else app_entity_body(
+        snapshot,
+        fallback_title=title,
+        fallback_summary=summary,
+    )
+    if not body_markdown.strip():
+        raise MemoryValidationError("app_entity reference surface returned no summarizable content.")
+    deep_link = str(snapshot.get("deep_link") or snapshot.get("app_page") or "").strip()
+    version_hash = app_entity_version_hash(
+        owning_app_id=owning_app_id,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        body_markdown=body_markdown,
+        snapshot=snapshot,
+    )
+    return {
+        "adapter_id": "app_entity",
+        "source_key": f"app_entity:{owning_app_id}:{entity_type}:{entity_id}",
+        "source_kind": "app_entity",
+        "owning_app_id": owning_app_id,
+        "entity_type": entity_type,
+        "entity_id": entity_id,
+        "file_id": "",
+        "workspace_relative_path": "",
+        "uri": deep_link,
+        "title": title[:240],
+        "summary": summary,
+        "body_markdown": body_markdown,
+        "version_hash": version_hash,
+        "extracted_ref": deep_link or f"maverick://app/{owning_app_id}/{entity_type}/{entity_id}",
+        "hash_kind": "reference_snapshot",
+        "extraction_status": "available",
+        "source_modified_at": str(source.get("modified_at") or body.get("modified_at") or ""),
+        "content_type": "text/markdown",
+        "node_id": str(body.get("node_id") or "").strip(),
+        "node_type": str(body.get("type") or body.get("node_type") or "app_entity_ref").strip(),
+        "importance": body.get("importance", 0.5),
+        "confidence": body.get("confidence", 1.0),
+        "compile_after_ingest": bool(body.get("compile_after_ingest")),
+        "metadata": {
+            **dict(metadata),
+            "reference_snapshot": {
+                "app_id": owning_app_id,
+                "entity_type": entity_type,
+                "entity_id": entity_id,
+                "deep_link": deep_link,
+                "title": snapshot.get("title") or snapshot.get("label") or "",
+                "summary": snapshot.get("summary") or "",
+            },
         },
     }
 

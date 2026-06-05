@@ -153,11 +153,11 @@
       "output_schema": {"type": "object"}
     },
     "memory_ingest_source": {
-      "description": "Ingest one generic app-owned source into Memory. Supports inline_markdown, local workspace storage_file text sources, and remote_storage_file Storage memory_source payloads. Storage-backed adapters use official Storage surfaces before Memory creates verified source document, source version, and source chunk rows.",
+      "description": "Ingest one generic app-owned source into Memory. Supports inline_markdown, local workspace storage_file text sources, remote_storage_file Storage memory_source payloads, and app_entity snapshots through official reference surfaces. Storage-backed adapters use official Storage surfaces before Memory creates verified source document, source version, and source chunk rows.",
       "input_schema": {
         "type": "object",
         "properties": {
-          "adapter_id": {"type": "string", "enum": ["inline_markdown", "storage_file", "remote_storage_file"]},
+          "adapter_id": {"type": "string", "enum": ["inline_markdown", "storage_file", "remote_storage_file", "app_entity"]},
           "source_key": {"type": "string", "description": "Stable caller-owned source key. If omitted, Memory derives one from the canonical body hash."},
           "node_id": {"type": "string"},
           "title": {"type": "string"},
@@ -166,6 +166,9 @@
           "body_markdown": {"type": "string"},
           "workspace_relative_path": {"type": "string", "pattern": "^storage/(uploaded|generated)/.+$"},
           "file_id": {"type": "string"},
+          "owning_app_id": {"type": "string"},
+          "entity_type": {"type": "string"},
+          "entity_id": {"type": "string"},
           "content_type": {"type": "string"},
           "modified_at": {"type": "string"},
           "type": {"type": "string"},
@@ -196,8 +199,8 @@
           "source": {
             "type": "object",
             "properties": {
-              "adapter_id": {"type": "string", "enum": ["inline_markdown", "storage_file", "remote_storage_file"]},
-              "source_kind": {"type": "string", "enum": ["remote_storage_file"]},
+              "adapter_id": {"type": "string", "enum": ["inline_markdown", "storage_file", "remote_storage_file", "app_entity"]},
+              "source_kind": {"type": "string", "enum": ["remote_storage_file", "app_entity"]},
               "source_key": {"type": "string"},
               "stable_source_id": {"type": "string"},
               "owning_app_id": {"type": "string"},
@@ -221,6 +224,7 @@
           {"required": ["adapter_id", "body_markdown"]},
           {"required": ["adapter_id", "body"]},
           {"required": ["adapter_id", "workspace_relative_path"]},
+          {"required": ["adapter_id", "owning_app_id", "entity_type", "entity_id"]},
           {"required": ["adapter_id", "memory_source"]},
           {"required": ["source"]}
         ],
@@ -460,13 +464,13 @@
       "output_schema": {"type": "object"}
     },
     "memory_jobs": {
-      "description": "Manage the app-owned Memory ingest job queue: list, enqueue, claim, complete, fail, cancel, or run the next job with dedupe and lease protection.",
+      "description": "Manage the app-owned Memory ingest job queue: list, enqueue, claim, complete, fail, cancel, run the next job, or drain ready jobs with a bounded runner.",
       "input_schema": {
         "type": "object",
         "properties": {
           "operation": {
             "type": "string",
-            "enum": ["list", "enqueue", "claim", "complete", "fail", "cancel", "run_next"],
+            "enum": ["list", "enqueue", "claim", "complete", "fail", "cancel", "run_next", "run_until_idle"],
             "default": "list"
           },
           "job_id": {"type": "string"},
@@ -488,6 +492,8 @@
           "lease_token": {"type": "string"},
           "error": {"type": "string"},
           "status": {"type": "string", "enum": ["ready", "running", "done", "failed", "cancelled"]},
+          "max_jobs": {"type": "integer", "minimum": 1, "maximum": 500, "default": 50},
+          "stop_on_error": {"type": "boolean", "default": true},
           "limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 50}
         },
         "additionalProperties": false

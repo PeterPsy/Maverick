@@ -30,6 +30,7 @@ from store import (
     lint_memory,
     list_jobs,
     load_view_state,
+    run_jobs_until_idle,
     run_next_job,
     search_nodes,
     set_custom_view_payload,
@@ -87,10 +88,11 @@ DATA_CHANGED_RESOURCES = {
     "jobs_fail",
     "jobs_cancel",
     "jobs_run",
+    "jobs_run_loop",
 }
 VIEW_STATE_ACTIONS = {"set_view_filter", "set_custom_view", "clear_custom_view"}
 WIKI_ACTIONS = {"compile", "lint"}
-GRAPH_AND_WIKI_ACTIONS = {"ingest_source", "ingest_storage_source", "jobs_run"}
+GRAPH_AND_WIKI_ACTIONS = {"ingest_source", "ingest_storage_source", "jobs_run", "jobs_run_loop"}
 MCP_TOOL_ACTIONS = {
     "memory_context": "context",
     "memory_search": "search",
@@ -240,6 +242,8 @@ def _handle_action(data_root: Path, body: dict[str, Any], *, app_id: str = "memo
         return 200, cancel_job(data_root, body)
     if action == "jobs_run":
         return 200, run_next_job(data_root, body)
+    if action == "jobs_run_loop":
+        return 200, run_jobs_until_idle(data_root, body)
     if action == "jobs_list":
         operation = str(body.get("operation") or "list").strip()
         if operation == "enqueue":
@@ -262,6 +266,10 @@ def _handle_action(data_root: Path, body: dict[str, Any], *, app_id: str = "memo
             return 200, result
         if operation in {"run", "run_next"}:
             result = run_next_job(data_root, body)
+            result["_event_action"] = "jobs_run" if result.get("ran") else "jobs_list"
+            return 200, result
+        if operation in {"run_until_idle", "run_loop", "worker"}:
+            result = run_jobs_until_idle(data_root, body)
             result["_event_action"] = "jobs_run" if result.get("ran") else "jobs_list"
             return 200, result
         if operation != "list":

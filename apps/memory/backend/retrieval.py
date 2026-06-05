@@ -11,6 +11,7 @@ from content_store import read_body
 from database import connect, ensure_schema, normalize_limit, record_event, row_payload
 from errors import MemoryValidationError
 from source_chunk_index import source_chunk_fts_query
+from source_retrieval import citations_for_chunk
 from storage_reference_payloads import storage_references_for_node
 from wiki_queries import compact_compiled_payload, search_compiled_node_ids
 
@@ -104,8 +105,10 @@ def search_nodes(data_root: Path, query: str, *, limit: int = 10) -> list[dict[s
             results = [row_payload(row) or {} for row in rows]
             for result in results:
                 result["match_sources"] = ["node"]
-                result["storage_references"] = storage_references_for_node(db, result["id"])
-        return results[:normalized_limit]
+        return [
+            memory_node_result(db, data_root, result, index=index)
+            for index, result in enumerate(results[:normalized_limit])
+        ]
 
 
 def context_payload(data_root: Path, query: str, *, limit: int = 8, record_access_event: bool = False) -> dict[str, Any]:
@@ -118,25 +121,7 @@ def context_payload(data_root: Path, query: str, *, limit: int = 8, record_acces
             if node["id"] in seen:
                 continue
             seen.add(node["id"])
-            refs = [
-                row_payload(row) or {}
-                for row in db.execute("SELECT * FROM external_refs WHERE node_id = ? ORDER BY created_at", (node["id"],))
-            ]
-            storage_references = storage_references_for_node(db, node["id"])
-            items.append(
-                {
-                    "node_id": node["id"],
-                    "type": node["type"],
-                    "title": node["title"],
-                    "summary": node["summary"] or node["body_text"][:280],
-                    "relevance": round(max(0.1, 1.0 - (index * 0.08)), 3),
-                    "provenance": refs,
-                    "match_sources": node.get("match_sources", []),
-                    "source_chunk_matches": node.get("source_chunk_matches", []),
-                    "storage_references": storage_references,
-                    "compiled": compact_compiled_payload(db, node["id"], data_root=data_root),
-                }
-            )
+            items.append({**node, "relevance": round(max(0.1, 1.0 - (index * 0.08)), 3)})
             related = db.execute(
                 """
                 SELECT n.*, e.kind, e.weight, e.confidence, e.reason
@@ -153,19 +138,17 @@ def context_payload(data_root: Path, query: str, *, limit: int = 8, record_acces
                     continue
                 seen.add(related_payload["id"])
                 items.append(
-                    {
-                        "node_id": related_payload["id"],
-                        "type": related_payload["type"],
-                        "title": related_payload["title"],
-                        "summary": related_payload["summary"] or related_payload["body_text"][:280],
-                        "relevance": round(float(related_payload.get("weight") or 0.5) * float(related_payload.get("confidence") or 1.0), 3),
-                        "reason": related_payload.get("reason") or f"Related through {related_payload.get('kind')}",
-                        "match_sources": ["related_node"],
-                        "source_chunk_matches": [],
-                        "provenance": [],
-                        "storage_references": storage_references_for_node(db, related_payload["id"]),
-                        "compiled": compact_compiled_payload(db, related_payload["id"], data_root=data_root),
-                    }
+                    memory_node_result(
+                        db,
+                        data_root,
+                        related_payload,
+                        relevance=round(
+                            float(related_payload.get("weight") or 0.5) * float(related_payload.get("confidence") or 1.0),
+                            3,
+                        ),
+                        match_sources=["related_node"],
+                        reason=related_payload.get("reason") or f"Related through {related_payload.get('kind')}",
+                    )
                 )
             if len(items) >= normalized_limit:
                 break
@@ -315,6 +298,7 @@ def source_chunk_matches_by_node(
                     "hash_kind": row["hash_kind"] or "",
                     "extraction_status": row["extraction_status"] or "",
                 },
+                "citations": citations_for_chunk(db, str(row["chunk_id"] or "")),
             }
         )
     return matches
@@ -352,7 +336,65 @@ def source_chunk_match_matches_query(payload: dict[str, Any], chunk_body: str, q
         str(payload.get("entity_id") or ""),
         str(payload.get("workspace_relative_path") or ""),
     )
-    return any(normalized in value.casefold() for value in haystacks)
+    haystack = " ".join(value for value in haystacks if value).casefold()
+    if normalized in haystack:
+        return True
+    tokens = [token.casefold() for token in TOKEN_PATTERN.findall(query)[:12]]
+    return bool(tokens) and all(token in haystack for token in tokens)
+
+
+def memory_node_result(
+    db: sqlite3.Connection,
+    data_root: Path,
+    node: dict[str, Any],
+    *,
+    index: int = 0,
+    relevance: float | None = None,
+    match_sources: list[str] | None = None,
+    reason: str = "",
+) -> dict[str, Any]:
+    node_id = str(node.get("id") or node.get("node_id") or "").strip()
+    summary = str(node.get("summary") or str(node.get("body_text") or "")[:280])
+    sources = list(match_sources if match_sources is not None else node.get("match_sources") or ["node"])
+    item = {
+        "kind": "memory_node",
+        "entity": {"entity_type": "node", "entity_id": node_id},
+        "node": {
+            "id": node_id,
+            "node_id": node_id,
+            "type": node.get("type") or "",
+            "title": node.get("title") or node_id,
+            "summary": summary,
+            "body_text": node.get("body_text") or "",
+            "status": node.get("status") or "active",
+            "importance": node.get("importance"),
+            "confidence": node.get("confidence"),
+            "created_at": node.get("created_at") or "",
+            "updated_at": node.get("updated_at") or "",
+            "metadata": node.get("metadata") if isinstance(node.get("metadata"), dict) else {},
+        },
+        "id": node_id,
+        "node_id": node_id,
+        "type": node.get("type") or "",
+        "title": node.get("title") or node_id,
+        "summary": summary,
+        "body_text": node.get("body_text") or "",
+        "status": node.get("status") or "active",
+        "importance": node.get("importance"),
+        "confidence": node.get("confidence"),
+        "relevance": round(relevance if relevance is not None else max(0.1, 1.0 - (index * 0.08)), 3),
+        "match_sources": sources,
+        "source_chunk_matches": list(node.get("source_chunk_matches") or []),
+        "provenance": [
+            row_payload(row) or {}
+            for row in db.execute("SELECT * FROM external_refs WHERE node_id = ? ORDER BY created_at", (node_id,))
+        ],
+        "storage_references": storage_references_for_node(db, node_id),
+        "compiled": compact_compiled_payload(db, node_id, data_root=data_root),
+    }
+    if reason:
+        item["reason"] = reason
+    return item
 
 
 def chunk_marked_stale(chunk: dict[str, Any]) -> bool:

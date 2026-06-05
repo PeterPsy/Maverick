@@ -228,6 +228,9 @@ def schema_has_current_shape(db: sqlite3.Connection) -> bool:
             "lease_token",
             "last_error",
             "payload_json",
+            "node_id",
+            "source_document_id",
+            "source_version_id",
             "created_at",
             "updated_at",
         },
@@ -245,7 +248,11 @@ def schema_has_current_shape(db: sqlite3.Connection) -> bool:
         },
         "source_versions": {"idx_source_versions_hash"},
         "source_chunks": {"idx_source_chunks_version_index", "idx_source_chunks_hash"},
-        "ingest_jobs": {"idx_ingest_jobs_ready_dedupe", "idx_ingest_jobs_status_available"},
+        "ingest_jobs": {
+            "idx_ingest_jobs_ready_dedupe",
+            "idx_ingest_jobs_status_available",
+            "idx_ingest_jobs_source_provenance",
+        },
     }
     for table_name, required in required_indexes.items():
         indexes = {row["name"] for row in db.execute(f"PRAGMA index_list({table_name})")}

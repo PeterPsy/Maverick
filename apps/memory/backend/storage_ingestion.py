@@ -61,7 +61,7 @@ def ingest_storage_source(data_root: Path, body: dict[str, Any]) -> dict[str, An
 
     ensure_schema(data_root)
     request = normalized_ingest_request(body)
-    if request["compile_after_ingest"] and INGEST_PREVIEW_TEXT_KEY not in request["metadata"]:
+    if INGEST_PREVIEW_TEXT_KEY not in request["metadata"]:
         attach_preview_from_storage(data_root, request)
     require_source_version(request)
     with transaction(data_root, immediate=True) as db:
@@ -102,11 +102,17 @@ def ingest_storage_source(data_root: Path, body: dict[str, Any]) -> dict[str, An
         source_version_changed = bool(new_source_version and old_source_version != new_source_version)
         work_changed = ref_created or node_created or source_version_changed or (old_node_id and old_node_id != target_node_id)
         if not request["compile_after_ingest"] and work_changed:
+            source_provenance = first_source_provenance(ingested_sources)
             enqueue_job_in_db(
                 db,
                 job_type="compile_node",
                 dedupe_key=f"compile:{target_node_id}",
-                payload={"node_id": target_node_id, "reason": "storage_source_ingested"},
+                payload={
+                    "node_id": target_node_id,
+                    "source_document_id": source_provenance["source_document_id"],
+                    "source_version_id": source_provenance["source_version_id"],
+                    "reason": "storage_source_ingested",
+                },
             )
         node = get_node_with_details(db, target_node_id, data_root=data_root)
 
@@ -138,6 +144,15 @@ def source_version_for_ref(ref: sqlite3.Row | None) -> str:
     payload = row_payload(ref) or {}
     metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
     return str(metadata.get("source_version") or "").strip()
+
+
+def first_source_provenance(ingested_sources: list[dict[str, Any]]) -> dict[str, str]:
+    for source in ingested_sources:
+        source_document_id = str(source.get("source_document_id") or "").strip()
+        source_version_id = str(source.get("source_version_id") or "").strip()
+        if source_document_id or source_version_id:
+            return {"source_document_id": source_document_id, "source_version_id": source_version_id}
+    return {"source_document_id": "", "source_version_id": ""}
 
 
 def normalized_ingest_request(body: dict[str, Any]) -> dict[str, Any]:

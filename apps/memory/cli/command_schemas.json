@@ -40,6 +40,7 @@
               "jobs_fail",
               "jobs_cancel",
               "jobs_run",
+              "jobs_run_loop",
               "jobs_list",
               "audit",
               "view_filter",
@@ -108,9 +109,10 @@
             "enum": [
               "inline_markdown",
               "storage_file",
-              "remote_storage_file"
+              "remote_storage_file",
+              "app_entity"
             ],
-            "description": "Generic source adapter for ingest_source. Supports inline_markdown, local workspace storage_file text sources, and remote_storage_file Storage memory_source payloads."
+            "description": "Generic source adapter for ingest_source. Supports inline_markdown, local workspace storage_file text sources, remote_storage_file Storage memory_source payloads, and app_entity snapshots through official reference surfaces."
           },
           "source_key": {
             "type": "string",
@@ -168,7 +170,11 @@
             "type": "string"
           },
           "source": {
-            "type": "string"
+            "type": [
+              "string",
+              "object"
+            ],
+            "description": "Source node id for link actions, or a nested ingest_source object."
           },
           "target": {
             "type": "string"
@@ -187,21 +193,17 @@
           "reason": {
             "type": "string"
           },
-          "workspace_relative_path": {
-            "type": "string",
-            "pattern": "^storage/(uploaded|generated)/.+$"
-          },
           "owning_app_id": {
-            "type": "string"
+            "type": "string",
+            "description": "Owning app id for attach_entity or ingest_source with adapter_id=app_entity."
           },
           "entity_type": {
-            "type": "string"
+            "type": "string",
+            "description": "Owning app entity type for attach_entity or ingest_source with adapter_id=app_entity."
           },
           "entity_id": {
-            "type": "string"
-          },
-          "file_id": {
-            "type": "string"
+            "type": "string",
+            "description": "Stable entity id for attach_entity, attach_file, or ingest_source with adapter_id=app_entity."
           },
           "provider": {
             "type": "string",
@@ -249,7 +251,8 @@
               "complete",
               "fail",
               "cancel",
-              "run_next"
+              "run_next",
+              "run_until_idle"
             ]
           },
           "job_type": {
@@ -297,6 +300,16 @@
           },
           "lease_token": {
             "type": "string"
+          },
+          "max_jobs": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500,
+            "description": "Maximum jobs to execute when operation=run_until_idle or action=jobs_run_loop."
+          },
+          "stop_on_error": {
+            "type": "boolean",
+            "default": true
           },
           "status": {
             "type": "string",

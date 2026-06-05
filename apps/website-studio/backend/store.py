@@ -853,13 +853,22 @@ def build_preview(data_root: Path, site_id: object, route: object = "/") -> dict
     rel_path = page["source_files"][0]
     html = read_file(data_root, site_id=site_id, path=rel_path)["content"]
     preview_id = f"preview_{uuid4().hex[:12]}"
+    contract = _preview_contract(data_root, site, page=page, route=page["route"], preview_id=preview_id)
+    _record_preview(data_root, site, contract)
     return {
         "preview_id": preview_id,
         "site_id": str(site["id"]),
+        "environment_id": contract["environment_id"],
         "route": page["route"],
         "page_id": page["id"],
+        "route_id": contract["route_id"],
+        "runtime_kind": contract["runtime_kind"],
+        "runtime_status": contract["runtime_status"],
+        "preview_url": contract["preview_url"],
+        "build_id": contract["build_id"],
+        "missing_requirements": contract["missing_requirements"],
         "asset_refs": page.get("asset_refs", []),
-        "warnings": page.get("warnings", []),
+        "warnings": contract["warnings"],
         "html": preview_srcdoc_html(html, source_root=_source_root(data_root, str(site["id"])), page_path=rel_path),
     }
 
@@ -1214,6 +1223,8 @@ def _context_payload(
     diff_payload: dict[str, object],
 ) -> dict[str, object]:
     active_view = "asset" if asset else "route" if route and not page else "page" if page else "site"
+    preview_route = page["route"] if page else route.get("route") if route else "/"
+    preview = _preview_contract(data_root, site, page=page, route=preview_route)
     return {
         "active_view": active_view,
         "site_id": site["id"],
@@ -1225,6 +1236,12 @@ def _context_payload(
         "route_id": route["id"] if route else None,
         "asset_id": asset["id"] if asset else None,
         "route": page["route"] if page else route.get("route") if route else None,
+        "preview_id": preview["preview_id"],
+        "preview_url": preview["preview_url"],
+        "runtime_kind": preview["runtime_kind"],
+        "runtime_status": preview["runtime_status"],
+        "missing_requirements": preview["missing_requirements"],
+        "preview": preview,
         "source_files": page["source_files"] if page else [],
         "route_source_files": route.get("source_files", []) if route else [],
         "asset_path": asset.get("path") if asset else None,
@@ -1239,6 +1256,65 @@ def _context_payload(
         "current_revision_id": site.get("published_revision_id"),
         "working_revision_id": site.get("active_revision_id"),
     }
+
+
+def _preview_contract(
+    data_root: Path,
+    site: dict[str, object],
+    *,
+    page: dict[str, object] | None = None,
+    route: object = "/",
+    preview_id: str = "",
+) -> dict[str, object]:
+    profile = source_profile(_source_root(data_root, str(site["id"])))
+    route_text = str(route or "/")
+    route_id = ""
+    if route_text:
+        map_payload = sitemap(data_root, site["id"])
+        route_item = next((item for item in map_payload.get("routes", []) if item.get("route") == route_text), None)
+        route_id = str(route_item.get("id") or "") if route_item else ""
+    runtime_kind = str(profile.get("preview_runtime_kind") or "unavailable")
+    runtime_status = str(profile.get("runtime_preview_status") or "blocked")
+    warnings = list(page.get("warnings", [])) if page else []
+    missing_requirements = [str(item) for item in profile.get("missing_requirements", []) if str(item).strip()] if isinstance(profile.get("missing_requirements"), list) else []
+    if runtime_kind != "static_export" and profile.get("static_preview_supported"):
+        warnings.append(f"{runtime_kind} runtime is not available yet; serving sanitized static HTML fallback")
+    if runtime_kind == "static_export":
+        warnings.append("serving sanitized static HTML fallback with imported JavaScript disabled")
+    return {
+        "preview_id": preview_id,
+        "site_id": str(site["id"]),
+        "environment_id": str(site.get("default_environment_id") or "env_preview"),
+        "runtime_kind": runtime_kind,
+        "preview_url": "",
+        "route": route_text,
+        "route_id": route_id,
+        "page_id": page["id"] if page else "",
+        "build_id": "",
+        "runtime_status": runtime_status,
+        "warnings": warnings[:100],
+        "missing_requirements": missing_requirements[:50],
+    }
+
+
+def _record_preview(data_root: Path, site: dict[str, object], contract: dict[str, object]) -> None:
+    preview_id = str(contract.get("preview_id") or "").strip()
+    if not preview_id:
+        return
+    now = now_timestamp()
+    with connect(data_root) as db:
+        db.execute(
+            "INSERT INTO previews(id, site_id, route, page_id, build_id, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                preview_id,
+                str(site["id"]),
+                str(contract.get("route") or "/"),
+                str(contract.get("page_id") or ""),
+                str(contract.get("build_id") or ""),
+                str(contract.get("runtime_status") or "blocked"),
+                now,
+            ),
+        )
 
 
 def reference_manifest() -> dict[str, object]:

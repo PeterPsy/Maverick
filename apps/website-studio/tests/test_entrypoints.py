@@ -1087,6 +1087,9 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             status, preview = handle_action(data_root, {"action": "build_preview", "site_id": zip_site_id, "route": "/"})
             self.assertEqual(status, 200)
             self.assertIn("Content-Security-Policy", preview["html"])
+            self.assertEqual(preview["runtime_kind"], "static_export")
+            self.assertEqual(preview["runtime_status"], "static_fallback")
+            self.assertEqual(preview["missing_requirements"], [])
 
             page_id = map_payload["items"][0]["id"]
             route_id = map_payload["routes"][0]["id"]
@@ -1124,6 +1127,9 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             status, preview = handle_action(data_root, {"action": "build_preview", "site_id": site_id})
 
             self.assertEqual(status, 200)
+            self.assertEqual(preview["runtime_kind"], "static_export")
+            self.assertEqual(preview["runtime_status"], "static_fallback")
+            self.assertEqual(preview["preview_url"], "")
             self.assertIn("Content-Security-Policy", preview["html"])
             self.assertNotIn("<script", preview["html"].lower())
             self.assertNotIn("onclick", preview["html"].lower())
@@ -1146,6 +1152,35 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertIn("<style>body { color: #111; }</style>", preview["html"])
             self.assertIn("data:image/png;base64,", preview["html"])
 
+    def test_preview_contract_reports_missing_runtime_requirements_for_build_and_php_sites(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            archive = BytesIO()
+            with ZipFile(archive, "w") as zip_file:
+                zip_file.writestr("frontend-website/index.php", "<?php echo 'Home';")
+                zip_file.writestr("frontend-website/index.html", "<title>PHP fallback</title>")
+                zip_file.writestr("package.json", '{"scripts":{"build":"vite build"}}')
+                zip_file.writestr("package-lock.json", "{}")
+            encoded = base64.b64encode(archive.getvalue()).decode("ascii")
+
+            status, imported = handle_action(data_root, {"action": "import_zip", "display_name": "Runtime", "archive_base64": encoded})
+            self.assertEqual(status, 201)
+            profile = imported["import"]["source_profile"]
+            self.assertEqual(profile["preview_runtime_kind"], "php")
+            self.assertEqual(profile["php_docroot"], "frontend-website")
+            self.assertIn("platform PHP preview runtime", profile["missing_requirements"][0])
+
+            status, preview = handle_action(data_root, {"action": "build_preview", "site_id": imported["site"]["id"]})
+            self.assertEqual(status, 200)
+            self.assertEqual(preview["runtime_kind"], "php")
+            self.assertEqual(preview["runtime_status"], "static_fallback")
+            self.assertIn("platform PHP preview runtime", preview["missing_requirements"][0])
+            self.assertIn("sanitized static HTML fallback", " ".join(preview["warnings"]))
+
+            with sqlite3.connect(data_root / "app.sqlite") as db:
+                row = db.execute("SELECT status, route FROM previews WHERE id = ?", (preview["preview_id"],)).fetchone()
+            self.assertEqual(row, ("static_fallback", preview["route"]))
+
     def test_active_context_includes_route_assets_and_change_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
@@ -1162,6 +1197,9 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertIn("changed_files_count", context)
             self.assertIn("source_profile", context)
             self.assertTrue(context["source_profile"]["static_preview_supported"])
+            self.assertEqual(context["runtime_kind"], "static_export")
+            self.assertEqual(context["runtime_status"], "static_fallback")
+            self.assertIn("preview", context)
 
     def test_page_context_accepts_route_and_asset_selection(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1184,6 +1222,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(route_context["active_view"], "page")
             self.assertEqual(route_context["route_id"], route_id)
             self.assertEqual(route_context["route"], "/")
+            self.assertEqual(route_context["preview"]["route_id"], route_id)
 
             status, asset_context = handle_action(data_root, {"action": "page_context", "site_id": site_id, "asset_id": asset_id})
             self.assertEqual(status, 200)
@@ -1287,6 +1326,9 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("maverick.app.selection-changed", app_source)
         self.assertIn("selectedRoute && !selectedRoute.page_id ? undefined : map.items[0]", app_source)
         self.assertIn("selectedRoute?.page_id ? selectedRoute.route : ''", app_source)
+        self.assertIn("PreviewStatus", app_source)
+        self.assertIn("runtime_status", app_source)
+        self.assertIn("missing_requirements", app_source)
 
     def test_frontend_connect_git_prepares_and_imports_source(self) -> None:
         app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")

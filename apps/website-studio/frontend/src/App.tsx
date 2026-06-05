@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent } from 'react';
-import { callBackend, callStorageProvider, type Asset, type Page, type Route, type SitemapPayload, type Site, type StorageFile } from './api';
+import { callBackend, callStorageProvider, type Asset, type Page, type PreviewPayload, type Route, type SitemapPayload, type Site, type StorageFile } from './api';
 
 type Notice = { tone: 'ok' | 'warn' | 'error'; text: string } | null;
 
@@ -12,6 +12,7 @@ export function App() {
   const [activeRouteId, setActiveRouteId] = useState('');
   const [activeAssetId, setActiveAssetId] = useState('');
   const [previewHtml, setPreviewHtml] = useState('');
+  const [previewState, setPreviewState] = useState<PreviewPayload | null>(null);
   const [showNewWebsite, setShowNewWebsite] = useState(false);
   const [gitDialogOpen, setGitDialogOpen] = useState(false);
   const [gitUrl, setGitUrl] = useState('');
@@ -48,6 +49,7 @@ export function App() {
       setActiveRouteId('');
       setActiveAssetId('');
       setPreviewHtml('');
+      setPreviewState(null);
       setShowNewWebsite(true);
       return;
     }
@@ -73,11 +75,13 @@ export function App() {
       await renderSite(selectedSite, previewRoute);
     } else {
       setPreviewHtml('');
+      setPreviewState(null);
     }
   }
 
   async function renderSite(siteId: string, route = '/') {
-    const payload = await callBackend<{ html: string }>({ action: 'build_preview', site_id: siteId, route });
+    const payload = await callBackend<PreviewPayload>({ action: 'build_preview', site_id: siteId, route });
+    setPreviewState(payload);
     setPreviewHtml(payload.html || '');
   }
 
@@ -262,13 +266,29 @@ export function App() {
       ) : (
         <section className="site-canvas" aria-label={activeSite?.display_name || 'Website'}>
           {previewHtml ? (
-            <iframe title={activePage?.title || activeSite?.display_name || 'Website preview'} data-route-id={activeRouteId} data-asset-id={activeAssetId} sandbox="" srcDoc={previewHtml} />
+            <>
+              <iframe title={activePage?.title || activeSite?.display_name || 'Website preview'} data-route-id={activeRouteId} data-asset-id={activeAssetId} sandbox="" srcDoc={previewHtml} />
+              {previewState ? <PreviewStatus preview={previewState} /> : null}
+            </>
           ) : (
             <div className="site-empty">No renderable page in this site.</div>
           )}
         </section>
       )}
     </main>
+  );
+}
+
+function PreviewStatus({ preview }: { preview: PreviewPayload }) {
+  const requirements = preview.missing_requirements || [];
+  const warnings = preview.warnings || [];
+  const detail = requirements[0] || warnings[0] || '';
+  return (
+    <div className="preview-status" data-runtime-kind={preview.runtime_kind}>
+      <span>{preview.runtime_kind.replace('_', ' ')}</span>
+      <strong>{preview.runtime_status.replace('_', ' ')}</strong>
+      {detail ? <small>{detail}</small> : null}
+    </div>
   );
 }
 

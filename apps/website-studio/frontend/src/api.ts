@@ -65,6 +65,22 @@ export type DiffFile = {
   patch: string;
 };
 
+export type PreviewPayload = {
+  preview_id: string;
+  site_id: string;
+  environment_id: string;
+  route: string;
+  page_id?: string;
+  route_id?: string;
+  runtime_kind: string;
+  runtime_status: string;
+  preview_url: string;
+  build_id: string;
+  missing_requirements: string[];
+  warnings: string[];
+  html: string;
+};
+
 export type StorageFile = {
   id?: string;
   file_id?: string;

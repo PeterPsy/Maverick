@@ -1,7 +1,7 @@
 {
   "commands": {
     "website-studio": {
-      "description": "Run a Website Studio action against the workspace data root. Defaults to listing sites. File writes require expected_hash; new files use expected_hash=new.",
+      "description": "Run a Website Studio action against the workspace data root. Defaults to listing sites. File writes require expected_hash; new files use expected_hash=new. build_preview returns static fallback HTML plus runtime status and missing runtime requirements.",
       "argument_schema": {
         "type": "object",
         "properties": {

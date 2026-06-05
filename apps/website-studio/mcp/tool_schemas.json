@@ -287,7 +287,7 @@
       }
     },
     "website_build_preview": {
-      "description": "Return static HTML preview payload for one indexed route.",
+      "description": "Return the preview contract for one indexed route, including current static fallback HTML, runtime status, warnings, and missing runtime requirements.",
       "input_schema": {
         "type": "object",
         "required": ["site_id"],

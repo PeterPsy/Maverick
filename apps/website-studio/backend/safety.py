@@ -320,7 +320,8 @@ def classify_source_tree(source_root: Path) -> str:
 
 def source_profile(source_root: Path) -> dict[str, object]:
     shape = classify_source_tree(source_root)
-    files = {path.name for path in source_root.rglob("*") if path.is_file()} if source_root.exists() else set()
+    paths = [path.relative_to(source_root).as_posix() for path in source_root.rglob("*") if path.is_file()] if source_root.exists() else []
+    files = {Path(path).name for path in paths}
     framework = "static"
     if any(name.startswith("next.config.") for name in files):
         framework = "next"
@@ -344,17 +345,54 @@ def source_profile(source_root: Path) -> dict[str, object]:
     if not package_manager and "package.json" in files:
         package_manager = "npm"
 
+    static_preview_supported = any(Path(path).suffix.lower() in {".html", ".htm"} for path in paths)
+    php_paths = [path for path in paths if Path(path).suffix.lower() == ".php"]
+    php_docroot = _detect_php_docroot(php_paths)
+    has_package_manifest = "package.json" in files
+    if php_paths:
+        runtime_kind = "php"
+    elif has_package_manifest:
+        runtime_kind = "node_build"
+    elif static_preview_supported:
+        runtime_kind = "static_export"
+    else:
+        runtime_kind = "unavailable"
+
+    missing_requirements: list[str] = []
+    runtime_status = "static_fallback" if static_preview_supported else "blocked"
+    if runtime_kind == "static_export" and static_preview_supported:
+        runtime_status = "static_fallback"
+    elif runtime_kind == "node_build":
+        missing_requirements.append("platform preview sandbox for allowlisted package install/build commands")
+    elif runtime_kind == "php":
+        missing_requirements.append("platform PHP preview runtime with isolated origin and bounded process lifecycle")
+        if has_package_manifest:
+            missing_requirements.append("allowlisted frontend asset build before PHP preview")
+    elif runtime_kind == "unavailable":
+        missing_requirements.append("static HTML route or supported preview runtime")
+
     return {
         "source_shape": shape,
         "framework": framework,
         "package_manager": package_manager,
-        "has_package_manifest": "package.json" in files,
-        "static_preview_supported": any(
-            path.suffix.lower() in {".html", ".htm"} for path in source_root.rglob("*") if path.is_file()
-        )
-        if source_root.exists()
-        else False,
+        "has_package_manifest": has_package_manifest,
+        "static_preview_supported": static_preview_supported,
+        "preview_runtime_kind": runtime_kind,
+        "runtime_preview_supported": runtime_kind == "static_export" and static_preview_supported,
+        "runtime_preview_status": runtime_status,
+        "php_docroot": php_docroot,
+        "missing_requirements": missing_requirements,
     }
+
+
+def _detect_php_docroot(php_paths: list[str]) -> str:
+    if not php_paths:
+        return ""
+    candidates = ("frontend-website", "public", "www", "htdocs", "web")
+    for candidate in candidates:
+        if any(path == f"{candidate}/index.php" or path.startswith(f"{candidate}/") for path in php_paths):
+            return candidate
+    return "."
 
 
 def detect_content_type(path: Path) -> str:

@@ -390,6 +390,124 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual(migrated_citation["locator"], "old locator")
             self.assertEqual(migrated_citation["quote_sha256"], "")
 
+    def test_schema_v2_remote_storage_source_migrates_to_remote_storage_document(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            data_root.mkdir(parents=True, exist_ok=True)
+            db_file = data_root / "memory.sqlite"
+            with sqlite3.connect(db_file) as db:
+                db.execute("CREATE TABLE schema_metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+                db.execute("INSERT INTO schema_metadata(key, value) VALUES ('schema_version', '2')")
+                db.execute(
+                    """
+                    CREATE TABLE sources (
+                      id TEXT PRIMARY KEY,
+                      source_kind TEXT NOT NULL,
+                      external_ref_id TEXT,
+                      owning_app_id TEXT NOT NULL DEFAULT '',
+                      entity_type TEXT NOT NULL DEFAULT '',
+                      entity_id TEXT NOT NULL DEFAULT '',
+                      file_id TEXT NOT NULL DEFAULT '',
+                      workspace_relative_path TEXT NOT NULL DEFAULT '',
+                      uri TEXT NOT NULL DEFAULT '',
+                      title TEXT NOT NULL DEFAULT '',
+                      content_hash TEXT NOT NULL DEFAULT '',
+                      status TEXT NOT NULL DEFAULT 'active',
+                      created_at TEXT NOT NULL,
+                      updated_at TEXT NOT NULL,
+                      metadata_json TEXT NOT NULL DEFAULT '{}'
+                    )
+                    """
+                )
+                db.execute(
+                    """
+                    INSERT INTO sources(
+                      id, source_kind, owning_app_id, entity_type, entity_id, file_id,
+                      workspace_relative_path, title, content_hash, created_at, updated_at, metadata_json
+                    )
+                    VALUES (
+                      'src_drive_legacy',
+                      'remote_storage_file',
+                      'storage',
+                      'file',
+                      'file_drive_legacy',
+                      'file_drive_legacy',
+                      '',
+                      'Legacy Drive plan',
+                      'hash-drive-old',
+                      '2026-01-01T00:00:00+00:00',
+                      '2026-01-01T00:00:00+00:00',
+                      '{"provider":"google_drive","drive_file_id":"drive_legacy","source_version":"rev-old"}'
+                    )
+                    """
+                )
+                db.execute(
+                    """
+                    CREATE TABLE source_versions (
+                      id TEXT PRIMARY KEY,
+                      source_id TEXT NOT NULL,
+                      version_hash TEXT NOT NULL,
+                      extracted_text TEXT NOT NULL DEFAULT '',
+                      extracted_ref TEXT NOT NULL DEFAULT '',
+                      observed_at TEXT NOT NULL,
+                      created_at TEXT NOT NULL,
+                      metadata_json TEXT NOT NULL DEFAULT '{}'
+                    )
+                    """
+                )
+                db.execute(
+                    """
+                    INSERT INTO source_versions(id, source_id, version_hash, extracted_text, extracted_ref, observed_at, created_at)
+                    VALUES (
+                      'srcv_drive_legacy',
+                      'src_drive_legacy',
+                      'hash-drive-old',
+                      'Legacy Drive plan says the owner is Dana.',
+                      '/Drive/Plans/Legacy.md',
+                      '2026-01-01T00:00:00+00:00',
+                      '2026-01-01T00:00:00+00:00'
+                    )
+                    """
+                )
+
+            migrated = run_json_entrypoint(MEMORY_ROOT / "hooks" / "migrate.py", payload={"data_root": str(data_root)}, cwd=MEMORY_ROOT)
+            service = self.import_backend_module("service")
+            database = self.import_backend_module("database")
+            status, ingested = service.handle_action(
+                data_root,
+                {
+                    "action": "ingest_storage_source",
+                    "title": "Legacy Drive plan",
+                    "memory_source": self.drive_memory_source(
+                        storage_file_id="file_drive_legacy",
+                        drive_file_id="drive_legacy",
+                        source_version="rev-new",
+                    ),
+                    "preview_text": "Legacy Drive plan says the owner is Dana and the reviewer is Lee.",
+                    "compile_after_ingest": True,
+                },
+            )
+
+            with database.connect(data_root) as db:
+                document_count = db.execute("SELECT COUNT(*) AS count FROM source_documents").fetchone()["count"]
+                document = database.row_payload(db.execute("SELECT * FROM source_documents").fetchone()) or {}
+                versions = [
+                    database.row_payload(row) or {}
+                    for row in db.execute("SELECT * FROM source_versions ORDER BY created_at")
+                ]
+
+            self.assertEqual(migrated["schema_version"], "3")
+            self.assertEqual(status, 200)
+            self.assertEqual(document_count, 1)
+            self.assertEqual(document["adapter_id"], "remote_storage_file")
+            self.assertEqual(document["source_key"], "remote_storage_file:file_drive_legacy")
+            self.assertEqual(document["owning_app_id"], "storage")
+            self.assertEqual(document["entity_type"], "file")
+            self.assertEqual(document["entity_id"], "file_drive_legacy")
+            self.assertEqual(document["workspace_relative_path"], "")
+            self.assertEqual(ingested["storage_identity"]["entity_id"], "file_drive_legacy")
+            self.assertEqual({version["source_document_id"] for version in versions}, {document["id"]})
+
     def test_schema_current_shape_requires_v3_source_tables_and_indexes(self) -> None:
         database = self.import_backend_module("database")
 
@@ -1059,8 +1177,9 @@ class MemoryAppTestCase(unittest.TestCase):
 
             citation = ingested["compiled"]["citations"][0]
             cited_chunk = next(chunk for chunk in chunks if chunk["id"] == citation["source_chunk_id"])
-            source_query_status, source_query = service.handle_action(data_root, {"action": "source_query", "query": "Priya"})
-            search_status, search = service.handle_action(data_root, {"action": "search", "query": "Priya"})
+            source_query_status, source_query = service.handle_action(data_root, {"action": "source_query", "query": "Priya owner"})
+            search_status, search = service.handle_action(data_root, {"action": "search", "query": "Priya owner"})
+            context_status, context = service.handle_action(data_root, {"action": "context", "query": "Priya owner"})
             self.assertEqual(status, 200)
             self.assertGreater(len(chunks), 1)
             self.assertGreater(cited_chunk["chunk_index"], 0)
@@ -1070,6 +1189,10 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertIn("verified shipping owner is Priya", source_query["results"][0]["summary"])
             self.assertEqual(search_status, 200)
             self.assertEqual(search["results"][0]["source_chunk_matches"][0]["chunk_id"], cited_chunk["id"])
+            self.assertEqual(search["results"][0]["source_chunk_matches"][0]["citations"][0]["source_chunk_id"], cited_chunk["id"])
+            self.assertEqual(context_status, 200)
+            self.assertEqual(context["items"][0]["source_chunk_matches"][0]["chunk_id"], cited_chunk["id"])
+            self.assertEqual(context["items"][0]["source_chunk_matches"][0]["citations"][0]["source_chunk_id"], cited_chunk["id"])
 
     def test_compile_does_not_cite_unrelated_source_chunk(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

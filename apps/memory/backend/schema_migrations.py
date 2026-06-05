@@ -14,6 +14,10 @@ from chunking import chunk_source_body
 from content_store import write_body
 from source_chunk_index import rebuild_source_chunk_fts, upsert_source_chunk_fts
 
+REMOTE_STORAGE_PROVIDERS = {"google_drive"}
+STORAGE_APP_ID = "storage"
+STORAGE_FILE_ENTITY_TYPE = "file"
+
 
 def apply_additive_migrations(db: sqlite3.Connection, *, data_root: Path) -> None:
     """Bring existing Memory databases up to the current additive schema."""
@@ -193,15 +197,17 @@ def ensure_migrated_source_document(
 ) -> dict[str, Any]:
     source_key = migrated_source_key(source, version)
     existing = db.execute("SELECT * FROM source_documents WHERE source_key = ?", (source_key,)).fetchone()
+    adapter_id = migrated_adapter_id(source)
+    remote_storage_file_id = migrated_remote_storage_file_id(source) if adapter_id == "remote_storage_file" else ""
     document = {
         "id": existing["id"] if existing is not None else new_id("srcdoc"),
         "source_key": source_key,
-        "adapter_id": migrated_adapter_id(source),
+        "adapter_id": adapter_id,
         "source_kind": str(source.get("source_kind") or "legacy_source_version"),
-        "owning_app_id": str(source.get("owning_app_id") or ""),
-        "entity_type": str(source.get("entity_type") or ""),
-        "entity_id": str(source.get("entity_id") or ""),
-        "file_id": str(source.get("file_id") or ""),
+        "owning_app_id": str(source.get("owning_app_id") or (STORAGE_APP_ID if remote_storage_file_id else "")),
+        "entity_type": str(source.get("entity_type") or (STORAGE_FILE_ENTITY_TYPE if remote_storage_file_id else "")),
+        "entity_id": str(source.get("entity_id") or remote_storage_file_id),
+        "file_id": str(source.get("file_id") or remote_storage_file_id),
         "workspace_relative_path": str(source.get("workspace_relative_path") or ""),
         "uri": str(source.get("uri") or ""),
         "title": str(source.get("title") or version.get("extracted_ref") or source.get("id") or "Legacy Memory source"),
@@ -245,20 +251,43 @@ def ensure_migrated_source_document(
 def migrated_adapter_id(source: dict[str, Any]) -> str:
     if str(source.get("workspace_relative_path") or "").strip():
         return "storage_file"
+    if migrated_remote_storage_file_id(source):
+        return "remote_storage_file"
     if str(source.get("owning_app_id") or "").strip() or str(source.get("entity_id") or "").strip():
         return "app_entity"
     return "legacy"
 
 
+def migrated_remote_storage_file_id(source: dict[str, Any]) -> str:
+    if str(source.get("workspace_relative_path") or "").strip():
+        return ""
+    stable_id = first_text(source.get("entity_id"), source.get("file_id"))
+    if not stable_id:
+        return ""
+    metadata = source.get("metadata") if isinstance(source.get("metadata"), dict) else {}
+    source_kind = str(source.get("source_kind") or source.get("ref_kind") or "").strip()
+    provider = str(metadata.get("provider") or "").strip()
+    owning_app_id = str(source.get("owning_app_id") or "").strip()
+    entity_type = str(source.get("entity_type") or "").strip()
+    if source_kind == "remote_storage_file" or provider in REMOTE_STORAGE_PROVIDERS:
+        return stable_id
+    if owning_app_id == STORAGE_APP_ID and (entity_type == STORAGE_FILE_ENTITY_TYPE or stable_id.startswith("file_")):
+        return stable_id
+    return ""
+
+
 def migrated_source_key(source: dict[str, Any], version: dict[str, Any]) -> str:
     adapter_id = migrated_adapter_id(source)
-    stable_id = (
-        str(source.get("entity_id") or "").strip()
-        or str(source.get("file_id") or "").strip()
-        or str(source.get("workspace_relative_path") or "").strip()
-        or str(source.get("uri") or "").strip()
-        or str(source.get("id") or "").strip()
-        or str(version.get("source_id") or "").strip()
+    stable_id = migrated_remote_storage_file_id(source) if adapter_id == "remote_storage_file" else ""
+    stable_id = stable_id or (
+        first_text(
+            source.get("entity_id"),
+            source.get("file_id"),
+            source.get("workspace_relative_path"),
+            source.get("uri"),
+            source.get("id"),
+            version.get("source_id"),
+        )
     )
     return f"{adapter_id}:{stable_id or version['id']}"
 

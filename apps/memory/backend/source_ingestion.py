@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from hashlib import sha256
+import json
 from pathlib import Path
 import sqlite3
 from typing import Any
@@ -22,7 +23,7 @@ from database import (
     transaction,
 )
 from errors import MemoryValidationError
-from ingest_jobs import enqueue_job_in_db
+from ingest_jobs import complete_ready_job, enqueue_compile_job_in_db
 from lint import mark_wiki_stale
 from nodes import get_node_with_details, inspect_node
 from storage_file_sources import fetch_local_storage_file_source
@@ -42,6 +43,7 @@ def ingest_source(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
 
         return ingest_storage_source(data_root, remote_storage_ingest_payload(body))
     request = normalized_ingest_request(data_root, body)
+    compile_recovery_job: dict[str, Any] | None = None
     with transaction(data_root, immediate=True) as db:
         timestamp = now_timestamp()
         source_document, document_created = upsert_source_document(db, request, timestamp=timestamp)
@@ -75,23 +77,22 @@ def ingest_source(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
             },
         )
         work_changed = document_created or source_created or version_created or node_created
-        if not request["compile_after_ingest"] and work_changed:
-            enqueue_job_in_db(
+        if work_changed:
+            compile_recovery_job = enqueue_compile_job_in_db(
                 db,
-                job_type="compile_node",
-                dedupe_key=f"compile:{target_node_id}",
-                payload={
-                    "node_id": target_node_id,
-                    "source_document_id": source_document["id"],
-                    "source_version_id": source_version["id"],
-                    "reason": "source_ingested",
-                },
+                node_id=target_node_id,
+                source_document_id=source_document["id"],
+                source_version_id=source_version["id"],
+                source_version_hash=source_version.get("version_hash") or request["version_hash"],
+                reason="source_ingested",
             )
         node = get_node_with_details(db, target_node_id, data_root=data_root)
 
     compiled = None
     if request["compile_after_ingest"]:
         compiled = compile_node(data_root, {"node_id": target_node_id})
+        if compile_recovery_job is not None:
+            complete_ready_job(data_root, str(compile_recovery_job.get("id") or ""), reason="inline_compile_succeeded")
         node = inspect_node(data_root, target_node_id)
 
     return {
@@ -188,13 +189,17 @@ def normalized_storage_file_request(data_root: Path, body: dict[str, Any], sourc
     workspace_relative_path = validate_storage_workspace_relative_path(
         str(source.get("workspace_relative_path") or body.get("workspace_relative_path") or "")
     )
-    file_id = str(source.get("file_id") or body.get("file_id") or source.get("entity_id") or body.get("entity_id") or "").strip()
+    requested_file_id = str(source.get("file_id") or body.get("file_id") or "").strip()
+    requested_entity_id = str(source.get("entity_id") or body.get("entity_id") or "").strip()
+    if requested_file_id and requested_entity_id and requested_file_id != requested_entity_id:
+        raise MemoryValidationError("storage_file entity_id must match file_id when both are provided.")
+    file_id = requested_file_id or requested_entity_id
     if not workspace_relative_path and not file_id:
         raise MemoryValidationError("storage_file ingest requires file_id or workspace_relative_path.")
     metadata = source.get("metadata") if isinstance(source.get("metadata"), dict) else {}
     storage_snapshot = fetch_local_storage_file_source(data_root, workspace_relative_path, file_id=file_id)
     file_payload = storage_snapshot["file"]
-    file_id = file_id or str(file_payload.get("file_id") or file_payload.get("id") or "").strip()
+    file_id = str(file_payload.get("file_id") or file_payload.get("id") or file_id).strip()
     resolved_workspace_relative_path = str(file_payload.get("workspace_relative_path") or workspace_relative_path).strip()
     body_markdown = str(storage_snapshot["body_markdown"])
     version_hash, hash_kind = storage_file_version_identity(file_payload, body_markdown)
@@ -219,7 +224,7 @@ def normalized_storage_file_request(data_root: Path, body: dict[str, Any], sourc
         "version_hash": version_hash,
         "extracted_ref": resolved_workspace_relative_path,
         "hash_kind": hash_kind,
-        "extraction_status": "available",
+        "extraction_status": str(storage_snapshot.get("extraction_status") or ("available" if body_markdown else "unavailable")),
         "source_modified_at": modified_at,
         "content_type": content_type,
         "node_id": str(body.get("node_id") or "").strip(),
@@ -233,6 +238,8 @@ def normalized_storage_file_request(data_root: Path, body: dict[str, Any], sourc
             "content_type": content_type,
             "source_modified_at": modified_at,
             "storage_preview_truncated": bool(storage_snapshot.get("preview_truncated")),
+            "storage_extraction_status": str(storage_snapshot.get("extraction_status") or ""),
+            "storage_extraction_error": str(storage_snapshot.get("extraction_error") or ""),
             **dict(metadata),
             "storage_sha256": version_hash if hash_kind == "file_bytes" else "",
         },
@@ -364,11 +371,30 @@ def storage_file_version_identity(file_payload: dict[str, Any], body_markdown: s
         observed_hash = str(file_payload.get(key) or "").strip().lower()
         if is_sha256_hex(observed_hash):
             return observed_hash, "file_bytes"
+    if not str(body_markdown or "").strip():
+        return storage_file_reference_snapshot_hash(file_payload), "reference_snapshot"
     return body_hash(body_markdown), "canonical_body"
 
 
 def is_sha256_hex(value: str) -> bool:
     return len(value) == 64 and all(character in "0123456789abcdef" for character in value)
+
+
+def storage_file_reference_snapshot_hash(file_payload: dict[str, Any]) -> str:
+    payload = {
+        key: str(file_payload.get(key) or "")
+        for key in (
+            "file_id",
+            "id",
+            "path_id",
+            "workspace_relative_path",
+            "content_type",
+            "size_bytes",
+            "modified_at",
+            "sha256",
+        )
+    }
+    return sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
 
 
 def upsert_source(
@@ -465,27 +491,30 @@ def upsert_source_version(
             timestamp=timestamp,
         )
         return version, False
-    body_record = write_body(
-        data_root,
-        kind="sources",
-        body_markdown=request["body_markdown"],
-        metadata={
-            "source_id": source["id"],
-            "source_document_id": source_document["id"],
-            "version_hash": request["version_hash"],
-            "hash_kind": request["hash_kind"],
-        },
-    )
+    body = str(request["body_markdown"] or "")
+    body_record = None
+    if body.strip():
+        body_record = write_body(
+            data_root,
+            kind="sources",
+            body_markdown=body,
+            metadata={
+                "source_id": source["id"],
+                "source_document_id": source_document["id"],
+                "version_hash": request["version_hash"],
+                "hash_kind": request["hash_kind"],
+            },
+        )
     version = {
         "id": new_id("srcv"),
         "source_id": source["id"],
         "source_document_id": source_document["id"],
         "version_hash": request["version_hash"],
-        "extracted_text": request["body_markdown"],
+        "extracted_text": "",
         "extracted_ref": request["extracted_ref"],
-        "body_path": body_record.relative_path,
-        "body_sha256": body_record.body_sha256,
-        "body_bytes": body_record.body_bytes,
+        "body_path": body_record.relative_path if body_record is not None else "",
+        "body_sha256": body_record.body_sha256 if body_record is not None else "",
+        "body_bytes": body_record.body_bytes if body_record is not None else 0,
         "hash_kind": request["hash_kind"],
         "extraction_status": request["extraction_status"],
         "source_modified_at": request["source_modified_at"],
@@ -509,16 +538,17 @@ def upsert_source_version(
         """,
         version,
     )
-    replace_source_chunks(
-        db,
-        data_root=data_root,
-        version=version,
-        body=request["body_markdown"],
-        base_locator=request["extracted_ref"],
-        locator_kind=locator_kind_for_version(version),
-        hash_kind=request["hash_kind"],
-        timestamp=timestamp,
-    )
+    if body.strip():
+        replace_source_chunks(
+            db,
+            data_root=data_root,
+            version=version,
+            body=body,
+            base_locator=request["extracted_ref"],
+            locator_kind=locator_kind_for_version(version),
+            hash_kind=request["hash_kind"],
+            timestamp=timestamp,
+        )
     return row_payload(db.execute("SELECT * FROM source_versions WHERE id = ?", (version["id"],)).fetchone()) or version, True
 
 

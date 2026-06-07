@@ -42,6 +42,7 @@ type WidgetMessagePayload = {
   resource?: string;
   selection?: Record<string, string | boolean | null>;
   type?: string;
+  url?: string;
   widget_id?: string;
   width?: string;
   workspace_id?: string;
@@ -275,6 +276,16 @@ export function WidgetSlot({
           label: typeof payload.label === "string" ? payload.label : "",
           preferredSurface: payload.preferred_surface === "sidebar" ? "sidebar" : "app",
         });
+      }
+      if (
+        payload.type === "maverick.app.external-url" &&
+        isMountedWidgetFrameMessage(event, payload, widget, widgetFrameRef.current)
+      ) {
+        const url = externalHttpUrlFromMessage(payload.url);
+        if (url) {
+          openExternalUrl(url);
+        }
+        return;
       }
       if (
         payload.type === "maverick.shell.capture-area.start" &&
@@ -612,6 +623,35 @@ function overlayWidgetSizeFromMessage(payload: WidgetMessagePayload): { height: 
     return null;
   }
   return { height, width };
+}
+
+function externalHttpUrlFromMessage(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim()) {
+    return null;
+  }
+  try {
+    const url = new URL(value, window.location.origin);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return null;
+    }
+    return url.href;
+  } catch {
+    return null;
+  }
+}
+
+function openExternalUrl(url: string): void {
+  const opened = window.open(url, "_blank", "noopener,noreferrer");
+  if (opened) {
+    try {
+      opened.opener = null;
+      opened.focus();
+    } catch {
+      // Some browsers expose a restricted WindowProxy for cross-origin popups.
+    }
+    return;
+  }
+  window.location.assign(url);
 }
 
 function boundedPixelSize(value: unknown, maxPx: number): string | null {

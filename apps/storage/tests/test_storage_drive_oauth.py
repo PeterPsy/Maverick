@@ -93,6 +93,43 @@ class StorageDriveOAuthTest(unittest.TestCase):
         self.assertNotIn("authorization_url", payload)
         self.assertEqual(state_payload["connections"], [])
 
+    def test_list_connections_does_not_report_unrequested_oauth_secrets_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            _status, started = _handle(
+                root,
+                {
+                    "action": "drive_connections.start_oauth",
+                    "_app_secrets": {
+                        "google-drive-oauth-client-id": "client-id",
+                        "google-drive-oauth-client-secret": "client-secret",
+                    },
+                },
+            )
+            _status, completed = _handle(
+                root,
+                {
+                    "action": "drive_connections.complete_oauth",
+                    "state": started["state"],
+                    "code": "oauth-code",
+                    "_app_secrets": {
+                        "google-drive-oauth-client-id": "client-id",
+                        "google-drive-oauth-client-secret": "client-secret",
+                    },
+                },
+                allow_platform_secret_writes=True,
+                oauth_transport=_successful_transport,
+            )
+            status, listed = _handle(root, {"action": "drive_connections.list", "_app_secret_request": {}})
+
+        self.assertEqual(status, 200)
+        self.assertEqual(listed["connections"][0]["id"], completed["connection_id"])
+        self.assertEqual(listed["missing_secrets"], [])
+        self.assertEqual(listed["secret_status"], "not_requested")
+        self.assertEqual(listed["providers"][0]["status"], "connected")
+        self.assertEqual(listed["providers"][0]["secret_status"], "not_requested")
+        self.assertTrue(listed["providers"][0]["configured"])
+
     def test_invalid_access_mode_is_rejected_before_oauth_state(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

@@ -19,7 +19,7 @@ from database import (
     transaction,
 )
 from errors import MemoryValidationError
-from ingest_jobs import enqueue_job_in_db
+from ingest_jobs import complete_ready_job, enqueue_compile_job_in_db
 from lint import mark_wiki_stale
 from nodes import get_node_with_details, inspect_node
 from references import validate_storage_ref
@@ -64,11 +64,13 @@ def ingest_storage_source(data_root: Path, body: dict[str, Any]) -> dict[str, An
     if INGEST_PREVIEW_TEXT_KEY not in request["metadata"]:
         attach_preview_from_storage(data_root, request)
     require_source_version(request)
+    compile_recovery_job: dict[str, Any] | None = None
     with transaction(data_root, immediate=True) as db:
         target_node_id, node_created = ensure_target_node(db, request)
         existing_ref = find_existing_storage_ref_for_node(db, request["storage_file_id"], target_node_id)
         old_node_id = str(existing_ref["node_id"] or "") if existing_ref is not None else ""
         old_source_version = source_version_for_ref(existing_ref)
+        old_materialized_source_version_id = latest_source_version_id_for_ref(db, str(existing_ref["id"] or "")) if existing_ref is not None else ""
         external_ref, ref_created = upsert_storage_ref(
             db,
             request=request,
@@ -100,25 +102,33 @@ def ingest_storage_source(data_root: Path, body: dict[str, Any]) -> dict[str, An
         )
         new_source_version = str(request["metadata"].get("source_version") or "").strip()
         source_version_changed = bool(new_source_version and old_source_version != new_source_version)
-        work_changed = ref_created or node_created or source_version_changed or (old_node_id and old_node_id != target_node_id)
-        if not request["compile_after_ingest"] and work_changed:
-            source_provenance = first_source_provenance(ingested_sources)
-            enqueue_job_in_db(
+        source_provenance = first_source_provenance(ingested_sources)
+        materialized_source_version_changed = bool(
+            source_provenance["source_version_id"] and source_provenance["source_version_id"] != old_materialized_source_version_id
+        )
+        work_changed = (
+            ref_created
+            or node_created
+            or source_version_changed
+            or materialized_source_version_changed
+            or (old_node_id and old_node_id != target_node_id)
+        )
+        if work_changed:
+            compile_recovery_job = enqueue_compile_job_in_db(
                 db,
-                job_type="compile_node",
-                dedupe_key=f"compile:{target_node_id}",
-                payload={
-                    "node_id": target_node_id,
-                    "source_document_id": source_provenance["source_document_id"],
-                    "source_version_id": source_provenance["source_version_id"],
-                    "reason": "storage_source_ingested",
-                },
+                node_id=target_node_id,
+                source_document_id=source_provenance["source_document_id"],
+                source_version_id=source_provenance["source_version_id"],
+                source_version_hash=str(request["metadata"].get("source_version") or ""),
+                reason="storage_source_ingested",
             )
         node = get_node_with_details(db, target_node_id, data_root=data_root)
 
     compiled = None
     if request["compile_after_ingest"]:
         compiled = compile_node(data_root, {"node_id": target_node_id})
+        if compile_recovery_job is not None:
+            complete_ready_job(data_root, str(compile_recovery_job.get("id") or ""), reason="inline_compile_succeeded")
         node = inspect_node(data_root, target_node_id)
 
     return {
@@ -155,6 +165,23 @@ def first_source_provenance(ingested_sources: list[dict[str, Any]]) -> dict[str,
     return {"source_document_id": "", "source_version_id": ""}
 
 
+def latest_source_version_id_for_ref(db: sqlite3.Connection, external_ref_id: str) -> str:
+    if not external_ref_id:
+        return ""
+    row = db.execute(
+        """
+        SELECT sv.id
+        FROM sources s
+        JOIN source_versions sv ON sv.source_id = s.id
+        WHERE s.external_ref_id = ?
+        ORDER BY sv.observed_at DESC, sv.created_at DESC
+        LIMIT 1
+        """,
+        (external_ref_id,),
+    ).fetchone()
+    return str(row["id"] or "") if row is not None else ""
+
+
 def normalized_ingest_request(body: dict[str, Any]) -> dict[str, Any]:
     source = body.get("memory_source")
     if not isinstance(source, dict):
@@ -167,7 +194,11 @@ def normalized_ingest_request(body: dict[str, Any]) -> dict[str, Any]:
     provider = str(source.get("provider") or metadata.get("provider") or "").strip()
     if provider not in REMOTE_STORAGE_PROVIDERS:
         raise MemoryValidationError("remote_storage_file requires a supported remote provider.")
-    storage_file_id = str(source.get("entity_id") or source.get("file_id") or "").strip()
+    source_entity_id = str(source.get("entity_id") or "").strip()
+    source_file_id = str(source.get("file_id") or "").strip()
+    if source_entity_id and source_file_id and source_entity_id != source_file_id:
+        raise MemoryValidationError("remote_storage_file entity_id must match file_id when both are provided.")
+    storage_file_id = source_entity_id or source_file_id
     source_version = str(body.get("source_version") or metadata.get("source_version") or "").strip()
     if source_version:
         metadata["source_version"] = source_version
@@ -261,6 +292,7 @@ def attach_preview_from_storage(data_root: Path, request: dict[str, Any]) -> Non
     metadata[INGEST_PREVIEW_TEXT_KEY] = preview_text
     metadata[INGEST_PREVIEW_TRUNCATED_KEY] = bool(preview.get("truncated"))
     file_payload = preview.get("file") if isinstance(preview.get("file"), dict) else {}
+    validate_remote_storage_preview_identity(file_payload, request["storage_file_id"])
     source_version = str(
         preview.get("source_version")
         or file_payload.get("source_version")
@@ -274,6 +306,23 @@ def attach_preview_from_storage(data_root: Path, request: dict[str, Any]) -> Non
     display_path = str(file_payload.get("display_path") or metadata.get("display_path") or "")
     if display_path:
         metadata["display_path"] = display_path
+
+
+def validate_remote_storage_preview_identity(file_payload: dict[str, Any], storage_file_id: str) -> None:
+    if not file_payload:
+        return
+    returned_ids = {
+        value
+        for value in (
+            str(file_payload.get("stable_storage_file_id") or "").strip(),
+            str(file_payload.get("file_id") or "").strip(),
+            str(file_payload.get("entity_id") or "").strip(),
+            str(file_payload.get("id") or "").strip(),
+        )
+        if value
+    }
+    if returned_ids and str(storage_file_id or "").strip() not in returned_ids:
+        raise MemoryValidationError("remote_storage_file Storage preview returned a different file identity.")
 
 
 def ensure_target_node(db: sqlite3.Connection, request: dict[str, Any]) -> tuple[str, bool]:

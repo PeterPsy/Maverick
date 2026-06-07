@@ -153,7 +153,7 @@
       "output_schema": {"type": "object"}
     },
     "memory_ingest_source": {
-      "description": "Ingest one generic app-owned source into Memory. Supports inline_markdown, local workspace storage_file text sources, remote_storage_file Storage memory_source payloads, and app_entity snapshots through official reference surfaces. Storage-backed adapters use official Storage surfaces before Memory creates verified source document, source version, and source chunk rows.",
+      "description": "Ingest one generic app-owned source into Memory. Supports inline_markdown, local workspace storage_file sources, remote_storage_file Storage memory_source payloads, and app_entity snapshots through official reference surfaces. Storage-backed adapters use official Storage surfaces before Memory creates verified source document, source version, and source chunk rows; non-extractable Storage files are recorded as reference snapshots.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -220,13 +220,52 @@
             "additionalProperties": false
           }
         },
-        "anyOf": [
-          {"required": ["adapter_id", "body_markdown"]},
-          {"required": ["adapter_id", "body"]},
-          {"required": ["adapter_id", "workspace_relative_path"]},
-          {"required": ["adapter_id", "owning_app_id", "entity_type", "entity_id"]},
-          {"required": ["adapter_id", "memory_source"]},
-          {"required": ["source"]}
+        "oneOf": [
+          {
+            "properties": {"adapter_id": {"const": "inline_markdown"}},
+            "required": ["adapter_id"],
+            "anyOf": [{"required": ["body_markdown"]}, {"required": ["body"]}]
+          },
+          {
+            "properties": {"adapter_id": {"const": "storage_file"}},
+            "required": ["adapter_id"],
+            "anyOf": [{"required": ["workspace_relative_path"]}, {"required": ["file_id"]}, {"required": ["entity_id"]}]
+          },
+          {
+            "properties": {"adapter_id": {"const": "remote_storage_file"}},
+            "required": ["adapter_id", "memory_source"]
+          },
+          {
+            "properties": {"adapter_id": {"const": "app_entity"}},
+            "required": ["adapter_id", "owning_app_id", "entity_type", "entity_id"]
+          },
+          {
+            "required": ["source"],
+            "not": {"required": ["adapter_id"]},
+            "properties": {
+              "source": {
+                "required": ["adapter_id"],
+                "oneOf": [
+                  {
+                    "properties": {"adapter_id": {"const": "inline_markdown"}},
+                    "anyOf": [{"required": ["body_markdown"]}, {"required": ["body"]}]
+                  },
+                  {
+                    "properties": {"adapter_id": {"const": "storage_file"}},
+                    "anyOf": [{"required": ["workspace_relative_path"]}, {"required": ["file_id"]}, {"required": ["entity_id"]}]
+                  },
+                  {
+                    "properties": {"adapter_id": {"const": "remote_storage_file"}},
+                    "required": ["adapter_id"]
+                  },
+                  {
+                    "properties": {"adapter_id": {"const": "app_entity"}},
+                    "required": ["owning_app_id", "entity_type", "entity_id"]
+                  }
+                ]
+              }
+            }
+          }
         ],
         "additionalProperties": false
       },

@@ -46,22 +46,48 @@ ACCESS_MODE_SCOPES = {
 HttpTransport = Callable[[str, str, dict[str, Any]], tuple[int, dict[str, Any] | bytes]]
 
 
-def provider_status(app_secrets: object | None = None, connections: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+def provider_status(
+    app_secrets: object | None = None,
+    connections: list[dict[str, Any]] | None = None,
+    *,
+    secrets_requested: bool = True,
+) -> dict[str, Any]:
     secrets_map = _secret_map(app_secrets)
-    missing = [name for name in [GOOGLE_DRIVE_CLIENT_ID_SECRET, GOOGLE_DRIVE_CLIENT_SECRET_SECRET] if not str(secrets_map.get(name) or "").strip()]
-    connected = any(item.get("provider") == GOOGLE_DRIVE_PROVIDER and item.get("status") == "connected" for item in connections or [])
+    missing = [
+        name
+        for name in [GOOGLE_DRIVE_CLIENT_ID_SECRET, GOOGLE_DRIVE_CLIENT_SECRET_SECRET]
+        if not str(secrets_map.get(name) or "").strip()
+    ]
+    public_missing = missing if secrets_requested else []
+    connected = any(
+        item.get("provider") == GOOGLE_DRIVE_PROVIDER and item.get("status") == "connected"
+        for item in connections or []
+    )
+    if connected:
+        provider_state = "connected"
+    elif secrets_requested and missing:
+        provider_state = "needs_secret_grant"
+    else:
+        provider_state = "ready_for_oauth"
+    secret_status = (
+        "missing"
+        if secrets_requested and missing
+        else ("available" if secrets_requested else "not_requested")
+    )
     return {
         "provider": GOOGLE_DRIVE_PROVIDER,
         "providers": [
             {
                 "provider": GOOGLE_DRIVE_PROVIDER,
                 "connected": connected,
-                "configured": not missing,
-                "status": "connected" if connected else ("needs_secret_grant" if missing else "ready_for_oauth"),
+                "configured": not missing if secrets_requested else connected,
+                "status": provider_state,
+                "secret_status": secret_status,
             }
         ],
         "required_secrets": [GOOGLE_DRIVE_CLIENT_ID_SECRET, GOOGLE_DRIVE_CLIENT_SECRET_SECRET],
-        "missing_secrets": missing,
+        "missing_secrets": public_missing,
+        "secret_status": secret_status,
         "callback_path": DEFAULT_REDIRECT_PATH,
         "access_modes": sorted(ACCESS_MODE_SCOPES),
         "default_access_mode": "full_rw",
@@ -70,7 +96,14 @@ def provider_status(app_secrets: object | None = None, connections: list[dict[st
 
 def list_drive_connections(data_root: Path, payload: dict[str, Any]) -> dict[str, Any]:
     connections = list_connections(data_root)
-    return {"connections": connections, **provider_status(payload.get("_app_secrets"), connections)}
+    return {
+        "connections": connections,
+        **provider_status(
+            payload.get("_app_secrets"),
+            connections,
+            secrets_requested=_oauth_client_secrets_requested(payload.get("_app_secret_request")),
+        ),
+    }
 
 
 def start_oauth(data_root: Path, payload: dict[str, Any]) -> dict[str, Any]:
@@ -483,6 +516,22 @@ def _connected_external_refs(profile: dict[str, Any]) -> dict[str, Any]:
 
 def _secret_map(app_secrets: object | None) -> dict[str, object]:
     return app_secrets if isinstance(app_secrets, dict) else {}
+
+
+def _oauth_client_secrets_requested(secret_request: object) -> bool:
+    if not isinstance(secret_request, dict):
+        return False
+    names = set(_logical_names(secret_request.get("logical_names")))
+    for selector in secret_request.get("selectors") or []:
+        if isinstance(selector, dict):
+            names.update(_logical_names(selector.get("logical_names")))
+    return bool({GOOGLE_DRIVE_CLIENT_ID_SECRET, GOOGLE_DRIVE_CLIENT_SECRET_SECRET} & names)
+
+
+def _logical_names(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
 
 
 def _scoped_secret_ref(*, workspace_id: str, connection_id: str) -> str:

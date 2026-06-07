@@ -285,8 +285,6 @@ def citation_sources(
             continue
         version_row = db.execute("SELECT * FROM source_versions WHERE id = ?", (version_id,)).fetchone()
         version = row_payload(version_row) or {}
-        if not str(version.get("extracted_text") or "").strip():
-            continue
         chunk_rows = db.execute(
             "SELECT * FROM source_chunks WHERE source_version_id = ? ORDER BY chunk_index",
             (version_id,),

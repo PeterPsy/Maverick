@@ -84,6 +84,7 @@ describe("WidgetSlot primary action protocol", () => {
     act(() => root.unmount());
     container.remove();
     clearHappyDomFetchInterceptor();
+    vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 
@@ -193,6 +194,40 @@ describe("WidgetSlot primary action protocol", () => {
 
     expect(openSidebar).toHaveBeenCalledTimes(1);
   });
+
+  it("opens external URLs only when requested by the mounted widget frame", async () => {
+    const openedWindow = { focus: vi.fn(), opener: window } as unknown as Window;
+    const openSpy = vi.spyOn(window, "open").mockReturnValue(openedWindow);
+    await act(async () => {
+      root.render(
+        <WidgetSlot
+          activeWorkspaceId="default"
+          content={{ is_mobile_layout: true }}
+          contentKind="shell.sidebar.footer"
+          hostAppId="base-shell"
+          label="App sidebar footer"
+          onOpenApp={vi.fn()}
+          preferredOwnerAppId={ownerAppId}
+          size="compact"
+        />,
+      );
+    });
+    const iframe = await waitForIframe(container);
+    const frameWindow = iframe.contentWindow;
+    if (!frameWindow) {
+      throw new Error("Expected iframe contentWindow.");
+    }
+    const authorizationUrl = "https://accounts.google.com/o/oauth2/v2/auth?client_id=client-id";
+
+    await dispatchExternalUrl(window, authorizationUrl);
+    await dispatchExternalUrl(frameWindow, "javascript:alert(1)");
+    expect(openSpy).not.toHaveBeenCalled();
+
+    await dispatchExternalUrl(frameWindow, authorizationUrl);
+
+    expect(openSpy).toHaveBeenCalledWith(authorizationUrl, "_blank", "noopener,noreferrer");
+    expect(openedWindow.focus).toHaveBeenCalledTimes(1);
+  });
 });
 
 function interceptHappyDomIframeFetch() {
@@ -284,5 +319,23 @@ async function dispatchSidebarOpen() {
         source: window,
       }),
     );
+  });
+}
+
+async function dispatchExternalUrl(source: MessageEventSource, url: string) {
+  await act(async () => {
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        data: {
+          owner_app_id: ownerAppId,
+          type: "maverick.app.external-url",
+          url,
+          widget_id: widgetId,
+        },
+        origin: window.location.origin,
+        source,
+      }),
+    );
+    await Promise.resolve();
   });
 }

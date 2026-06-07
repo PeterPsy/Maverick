@@ -253,9 +253,21 @@ class MemoryAppTestCase(unittest.TestCase):
             mcp_descriptor["tools"]["memory_ingest_source"]["input_schema"]["properties"]["adapter_id"]["enum"],
             ["inline_markdown", "storage_file", "remote_storage_file", "app_entity"],
         )
-        self.assertIn(
-            {"required": ["adapter_id", "owning_app_id", "entity_type", "entity_id"]},
-            mcp_descriptor["tools"]["memory_ingest_source"]["input_schema"]["anyOf"],
+        ingest_source_schema = mcp_descriptor["tools"]["memory_ingest_source"]["input_schema"]
+        self.assertIn("oneOf", ingest_source_schema)
+        self.assertTrue(
+            any(
+                option.get("properties", {}).get("adapter_id", {}).get("const") == "storage_file"
+                and {"required": ["file_id"]} in option.get("anyOf", [])
+                for option in ingest_source_schema["oneOf"]
+            )
+        )
+        self.assertTrue(
+            any(
+                option.get("properties", {}).get("adapter_id", {}).get("const") == "app_entity"
+                and option.get("required") == ["adapter_id", "owning_app_id", "entity_type", "entity_id"]
+                for option in ingest_source_schema["oneOf"]
+            )
         )
         self.assertEqual(
             cli_descriptor["commands"]["memory"]["argument_schema"]["properties"]["adapter_id"]["enum"],
@@ -1411,8 +1423,9 @@ class MemoryAppTestCase(unittest.TestCase):
             def file_payload() -> dict:
                 stat = source_path.stat()
                 return {
-                    "file_id": "generated:notes/handoff.md",
-                    "id": "generated:notes/handoff.md",
+                    "file_id": "file_handoff",
+                    "id": "file_handoff",
+                    "path_id": "generated:notes/handoff.md",
                     "name": "handoff.md",
                     "role": "generated",
                     "relative_path": "notes/handoff.md",
@@ -1515,7 +1528,7 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual(changed_status, 200)
             self.assertEqual(
                 [tool_name for tool_name, _arguments in calls[:4]],
-                ["storage_reference_resolve", "storage_file_info", "storage_preview_text", "storage_read_file"],
+                ["storage_reference_resolve", "storage_file_info", "storage_preview_text", "storage_file_info"],
             )
             self.assertEqual(calls[0][1]["entity_id"], "file_handoff")
             self.assertTrue(
@@ -1525,6 +1538,7 @@ class MemoryAppTestCase(unittest.TestCase):
                     if tool_name in {"storage_file_info", "storage_preview_text", "storage_read_file"}
                 )
             )
+            self.assertNotIn("storage_read_file", [tool_name for tool_name, _arguments in calls])
             self.assertTrue(first["source_version_created"])
             self.assertFalse(second["source_version_created"])
             self.assertTrue(byte_changed["source_version_created"])
@@ -1553,6 +1567,179 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual(stale_query["results"][0]["freshness"], "stale")
             self.assertEqual(fetch_status, 200)
             self.assertIn("owned by Marta", fetched["chunks"][0]["body"])
+
+    def test_ingest_source_storage_file_uses_preview_for_previewable_non_text_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            service = self.import_backend_module("service")
+            storage_file_sources = sys.modules["storage_file_sources"]
+            database = self.import_backend_module("database")
+            calls: list[str] = []
+            preview_text = "PDF preview says the renewal owner is Nia."
+            file_payload = {
+                "file_id": "file_pdf_source",
+                "id": "file_pdf_source",
+                "path_id": "generated/docs/source.pdf",
+                "name": "source.pdf",
+                "workspace_relative_path": "storage/generated/docs/source.pdf",
+                "extension": ".pdf",
+                "size_bytes": 2048,
+                "sha256": sha256(b"fake pdf bytes").hexdigest(),
+                "content_type": "application/pdf",
+                "preview_kind": "document",
+            }
+
+            def fake_storage_surface(_data_root: Path, tool_name: str, _arguments: dict) -> dict:
+                calls.append(tool_name)
+                if tool_name == "storage_file_info":
+                    return {"status_code": 200, "file": file_payload}
+                if tool_name == "storage_preview_text":
+                    return {"status_code": 200, "file": file_payload, "preview_text": preview_text}
+                if tool_name == "storage_read_file":
+                    raise AssertionError("previewable files should not require raw UTF-8 reads")
+                raise AssertionError(f"unexpected Storage tool {tool_name}")
+
+            original_surface = storage_file_sources._storage_file_surface
+            try:
+                storage_file_sources._storage_file_surface = fake_storage_surface
+                status, ingested = service.handle_action(
+                    data_root,
+                    {
+                        "action": "ingest_source",
+                        "adapter_id": "storage_file",
+                        "file_id": "file_pdf_source",
+                        "workspace_relative_path": "storage/generated/docs/source.pdf",
+                        "title": "PDF source",
+                    },
+                )
+                source_query = service.handle_action(data_root, {"action": "source_query", "query": "Nia renewal"})[1]
+            finally:
+                storage_file_sources._storage_file_surface = original_surface
+
+            with database.connect(data_root) as db:
+                version = database.row_payload(db.execute("SELECT * FROM source_versions").fetchone()) or {}
+                chunk = database.row_payload(db.execute("SELECT * FROM source_chunks").fetchone()) or {}
+
+            self.assertEqual(status, 200)
+            self.assertTrue(ingested["source_version_created"])
+            self.assertEqual(calls, ["storage_file_info", "storage_preview_text"])
+            self.assertEqual(version["hash_kind"], "file_bytes")
+            self.assertEqual(version["extraction_status"], "available")
+            self.assertEqual(version["extracted_text"], "")
+            self.assertTrue(version["body_path"].startswith("content/sources/"))
+            self.assertTrue(chunk["body_path"].startswith("content/chunks/"))
+            self.assertEqual(source_query["results"][0]["chunk_id"], chunk["id"])
+
+    def test_ingest_source_storage_file_falls_back_to_reference_snapshot_when_preview_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            service = self.import_backend_module("service")
+            storage_file_sources = self.import_backend_module("storage_file_sources")
+            database = self.import_backend_module("database")
+            file_payload = {
+                "file_id": "file_binary_source",
+                "id": "file_binary_source",
+                "path_id": "generated/assets/source.bin",
+                "name": "source.bin",
+                "workspace_relative_path": "storage/generated/assets/source.bin",
+                "extension": ".bin",
+                "size_bytes": 512,
+                "content_type": "application/octet-stream",
+                "preview_kind": "file",
+            }
+
+            def fake_storage_surface(_data_root: Path, tool_name: str, _arguments: dict) -> dict:
+                if tool_name == "storage_file_info":
+                    return {"status_code": 200, "file": file_payload}
+                if tool_name == "storage_preview_text":
+                    raise storage_file_sources.MemoryValidationError("Storage preview unavailable.")
+                if tool_name == "storage_read_file":
+                    raise AssertionError("non-previewable binary fallback should not read raw bytes")
+                raise AssertionError(f"unexpected Storage tool {tool_name}")
+
+            original_surface = storage_file_sources._storage_file_surface
+            try:
+                storage_file_sources._storage_file_surface = fake_storage_surface
+                status, ingested = service.handle_action(
+                    data_root,
+                    {
+                        "action": "ingest_source",
+                        "adapter_id": "storage_file",
+                        "file_id": "file_binary_source",
+                        "workspace_relative_path": "storage/generated/assets/source.bin",
+                    },
+                )
+            finally:
+                storage_file_sources._storage_file_surface = original_surface
+
+            with database.connect(data_root) as db:
+                version = database.row_payload(db.execute("SELECT * FROM source_versions").fetchone()) or {}
+                chunk_count = db.execute("SELECT COUNT(*) AS count FROM source_chunks").fetchone()["count"]
+
+            self.assertEqual(status, 200)
+            self.assertTrue(ingested["source_version_created"])
+            self.assertEqual(version["hash_kind"], "reference_snapshot")
+            self.assertEqual(version["extraction_status"], "unavailable")
+            self.assertEqual(version["body_path"], "")
+            self.assertEqual(version["extracted_text"], "")
+            self.assertEqual(chunk_count, 0)
+
+    def test_storage_file_ingest_rejects_file_id_path_identity_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            service = self.import_backend_module("service")
+            storage_file_sources = sys.modules["storage_file_sources"]
+            file_payload = {
+                "file_id": "file_actual",
+                "id": "file_actual",
+                "path_id": "generated/actual.md",
+                "name": "actual.md",
+                "workspace_relative_path": "storage/generated/actual.md",
+                "extension": ".md",
+                "size_bytes": 12,
+                "content_type": "text/markdown",
+            }
+
+            def fake_storage_surface(_data_root: Path, tool_name: str, _arguments: dict) -> dict:
+                if tool_name == "storage_file_info":
+                    return {"status_code": 200, "file": file_payload}
+                raise AssertionError(f"unexpected Storage tool {tool_name}")
+
+            original_surface = storage_file_sources._storage_file_surface
+            try:
+                storage_file_sources._storage_file_surface = fake_storage_surface
+                with self.assertRaises(storage_file_sources.MemoryValidationError) as raised:
+                    service.handle_action(
+                        data_root,
+                        {
+                            "action": "ingest_source",
+                            "adapter_id": "storage_file",
+                            "file_id": "file_wrong",
+                            "workspace_relative_path": "storage/generated/actual.md",
+                        },
+                    )
+            finally:
+                storage_file_sources._storage_file_surface = original_surface
+
+            self.assertIn("file_id", str(raised.exception))
+
+    def test_remote_storage_ingest_rejects_entity_id_file_id_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            source = self.drive_memory_source(storage_file_id="file_drive_real", drive_file_id="drive_real")
+            source["file_id"] = "file_drive_other"
+
+            rejected = self.run_backend(
+                data_root,
+                {
+                    "action": "ingest_storage_source",
+                    "memory_source": source,
+                    "preview_text": "This should not ingest.",
+                },
+            )
+
+            self.assertEqual(rejected["status_code"], 400)
+            self.assertIn("entity_id", rejected["json"]["detail"])
 
     def test_attach_file_accepts_remote_storage_ref_without_workspace_path(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -1693,6 +1880,8 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual(inspected["chunks"][0]["citations"], [])
             self.assertEqual(job["source_document_id"], source_document["id"])
             self.assertEqual(job["source_version_id"], source_version["id"])
+            self.assertTrue(job["dedupe_key"].startswith(f"compile:{ingested['node']['id']}:"))
+            self.assertEqual(job["payload"]["source_version_hash"], source_version["version_hash"])
             self.assertEqual(inspected["ingest_jobs"][0]["source_document_id"], source_document["id"])
             self.assertEqual(inspected["ingest_jobs"][0]["source_version_id"], source_version["id"])
 
@@ -1854,7 +2043,8 @@ class MemoryAppTestCase(unittest.TestCase):
 
     def test_fetch_app_entity_source_discovers_reference_tools_and_passes_entity_type(self) -> None:
         app_entity_sources = self.import_backend_module("app_entity_sources")
-        original_run = app_entity_sources.subprocess.run
+        app_surface_transport = self.import_backend_module("app_surface_transport")
+        original_run = app_surface_transport.subprocess.run
         original_which = app_entity_sources.shutil.which
         calls: list[list[str]] = []
 
@@ -1917,7 +2107,7 @@ class MemoryAppTestCase(unittest.TestCase):
 
         try:
             app_entity_sources.shutil.which = lambda _name: "/usr/bin/maverick"
-            app_entity_sources.subprocess.run = fake_run
+            app_surface_transport.subprocess.run = fake_run
             with tempfile.TemporaryDirectory() as temp:
                 data_root = Path(temp) / "data" / "memory"
                 snapshot = app_entity_sources.fetch_app_entity_source(
@@ -1925,7 +2115,7 @@ class MemoryAppTestCase(unittest.TestCase):
                     {"owning_app_id": "crm", "entity_type": "account", "entity_id": "acct_acme"},
                 )
         finally:
-            app_entity_sources.subprocess.run = original_run
+            app_surface_transport.subprocess.run = original_run
             app_entity_sources.shutil.which = original_which
 
         summarize_call = next(call for call in calls if "crm_reference_summarize" in call)
@@ -2077,7 +2267,7 @@ class MemoryAppTestCase(unittest.TestCase):
                 source = database.row_payload(db.execute("SELECT * FROM sources").fetchone()) or {}
                 source_document = database.row_payload(db.execute("SELECT * FROM source_documents").fetchone()) or {}
                 source_chunk = database.row_payload(db.execute("SELECT * FROM source_chunks").fetchone()) or {}
-                job_count = db.execute("SELECT COUNT(*) AS count FROM ingest_jobs").fetchone()["count"]
+                jobs = [database.row_payload(row) or {} for row in db.execute("SELECT * FROM ingest_jobs ORDER BY created_at")]
             fetch_status, fetched = service.handle_action(data_root, {"action": "fetch_chunks", "chunk_ids": [source_chunk["id"]]})
             inspect_source_status, inspected_source = service.handle_action(
                 data_root,
@@ -2108,7 +2298,7 @@ class MemoryAppTestCase(unittest.TestCase):
                 first["compiled"]["citations"][0]["storage_reference"]["preview_request"]["tool"],
                 "storage_drive_preview",
             )
-            self.assertIn("renewal owner is Dana", version["extracted_text"])
+            self.assertEqual(version["extracted_text"], "")
             self.assertEqual(version["source_document_id"], source_document["id"])
             self.assertTrue(version["body_path"].startswith("content/sources/"))
             self.assertTrue(version["body_sha256"])
@@ -2127,7 +2317,9 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual(source_query["results"][0]["kind"], "source_chunk")
             self.assertEqual(source_query["results"][0]["chunk_id"], source_chunk["id"])
             self.assertEqual(source_query["results"][0]["citations"][0]["source_chunk_id"], source_chunk["id"])
-            self.assertEqual(job_count, 0)
+            self.assertEqual(len(jobs), 1)
+            self.assertEqual(jobs[0]["job_type"], "compile_node")
+            self.assertEqual(jobs[0]["status"], "done")
             self.assertIn("source_chunk", search["results"][0]["match_sources"])
             self.assertEqual(search["results"][0]["source_chunk_matches"][0]["chunk_id"], source_chunk["id"])
             self.assertEqual(search["results"][0]["source_chunk_matches"][0]["citations"][0]["source_chunk_id"], source_chunk["id"])
@@ -2178,7 +2370,7 @@ class MemoryAppTestCase(unittest.TestCase):
 
             with database.connect(data_root) as db:
                 source_document = database.row_payload(db.execute("SELECT * FROM source_documents").fetchone()) or {}
-                job_count = db.execute("SELECT COUNT(*) AS count FROM ingest_jobs").fetchone()["count"]
+                jobs = [database.row_payload(row) or {} for row in db.execute("SELECT * FROM ingest_jobs ORDER BY created_at")]
                 db.execute("UPDATE source_versions SET extracted_text = ''")
                 db.commit()
             fts_only_status, fts_only_query = service.handle_action(data_root, {"action": "source_query", "query": "Lee"})
@@ -2194,7 +2386,9 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual(fts_only_status, 200)
             self.assertEqual(fts_only_query["results"][0]["kind"], "source_chunk")
             self.assertEqual(fts_only_query["results"][0]["chunk_id"], source_query["results"][0]["chunk_id"])
-            self.assertEqual(job_count, 0)
+            self.assertEqual(len(jobs), 1)
+            self.assertEqual(jobs[0]["job_type"], "compile_node")
+            self.assertEqual(jobs[0]["status"], "done")
 
     def test_ingest_storage_source_without_compile_materializes_source_chunks(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -2587,8 +2781,9 @@ class MemoryAppTestCase(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             data_root = Path(temp) / "data" / "memory"
             storage_sources = self.import_backend_module("storage_sources")
+            app_surface_transport = self.import_backend_module("app_surface_transport")
             calls: list[list[str]] = []
-            original_run = storage_sources.subprocess.run
+            original_run = app_surface_transport.subprocess.run
             original_which = storage_sources.shutil.which
 
             class Completed:
@@ -2601,7 +2796,7 @@ class MemoryAppTestCase(unittest.TestCase):
 
             try:
                 storage_sources.shutil.which = lambda _name: "/usr/bin/maverick"
-                storage_sources.subprocess.run = fake_run
+                app_surface_transport.subprocess.run = fake_run
                 result = storage_sources.default_storage_preview_surface(
                     data_root,
                     {
@@ -2613,7 +2808,7 @@ class MemoryAppTestCase(unittest.TestCase):
                     },
                 )
             finally:
-                storage_sources.subprocess.run = original_run
+                app_surface_transport.subprocess.run = original_run
                 storage_sources.shutil.which = original_which
 
             self.assertEqual(result["preview_text"], "Drive preview text.")
@@ -2625,12 +2820,40 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertIn("--drive-file-id", calls[0])
             self.assertIn("--max-chars", calls[0])
 
+    def test_app_surface_transport_does_not_retry_by_default(self) -> None:
+        app_surface_transport = self.import_backend_module("app_surface_transport")
+        original_run = app_surface_transport.subprocess.run
+        original_retry_env = os.environ.pop("MAVERICK_MEMORY_APP_SURFACE_RETRIES", None)
+        calls: list[list[str]] = []
+
+        def fake_run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            calls.append(args)
+            return subprocess.CompletedProcess(args, 1, stdout="", stderr="transient")
+
+        try:
+            app_surface_transport.subprocess.run = fake_run
+            completed = app_surface_transport.run_json_subprocess(
+                ["maverick", "app", "storage", "mcp", "list", "--json"],
+                cwd=REPO_ROOT,
+                label="storage MCP list",
+            )
+        finally:
+            app_surface_transport.subprocess.run = original_run
+            if original_retry_env is None:
+                os.environ.pop("MAVERICK_MEMORY_APP_SURFACE_RETRIES", None)
+            else:
+                os.environ["MAVERICK_MEMORY_APP_SURFACE_RETRIES"] = original_retry_env
+
+        self.assertEqual(completed.returncode, 1)
+        self.assertEqual(len(calls), 1)
+
     def test_platform_storage_file_source_uses_storage_mcp_tools(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             data_root = Path(temp) / "data" / "memory"
             storage_file_sources = self.import_backend_module("storage_file_sources")
+            app_surface_transport = self.import_backend_module("app_surface_transport")
             calls: list[list[str]] = []
-            original_run = storage_file_sources.subprocess.run
+            original_run = app_surface_transport.subprocess.run
             original_which = storage_file_sources.shutil.which
 
             class Completed:
@@ -2643,14 +2866,14 @@ class MemoryAppTestCase(unittest.TestCase):
 
             try:
                 storage_file_sources.shutil.which = lambda _name: "/usr/bin/maverick"
-                storage_file_sources.subprocess.run = fake_run
+                app_surface_transport.subprocess.run = fake_run
                 result = storage_file_sources.default_storage_file_surface(
                     data_root,
                     "storage_file_info",
                     {"workspace_relative_path": "storage/generated/notes/handoff.md"},
                 )
             finally:
-                storage_file_sources.subprocess.run = original_run
+                app_surface_transport.subprocess.run = original_run
                 storage_file_sources.shutil.which = original_which
 
             self.assertEqual(result["file"]["workspace_relative_path"], "storage/generated/notes/handoff.md")

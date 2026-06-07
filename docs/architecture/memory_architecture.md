@@ -44,7 +44,7 @@ The internal wiki model is app-owned and should include:
 
 - `source_documents`: logical source identities from inline markdown, Storage files, remote Storage references, app entities, URLs, or future adapters
 - `sources`: stable references to Storage files, generated artifacts, chat/app entities, URLs, or other workspace-owned material
-- `source_versions`: observed source versions with hash kind, extraction status, optional content-store body path, observed source metadata, and extracted text or extracted-reference pointers
+- `source_versions`: observed source versions with hash kind, extraction status, content-store body path/hash when text is available, observed source metadata, and extracted-reference pointers; `extracted_text` is retained only as a legacy migration fallback
 - `source_chunks`: verified source body slices with chunk hash, range, locator, and content-store path
 - `node_source_links`: explicit node-to-source relationships
 - `wiki_pages`: compiled markdown for a node or topic
@@ -77,7 +77,7 @@ Memory ingestion is app-owned and separate from compile:
 The first implemented generic adapters stay narrow:
 
 - `inline_markdown` for tests, imports, and generated notes
-- `storage_file` for workspace Storage files by stable Storage file id or workspace-relative Storage path, using official Storage `reference_resolve`, `file_info`, `preview_text`, and `read_file` surfaces before Memory stores verified source/chunk content
+- `storage_file` for workspace Storage files by stable Storage file id or workspace-relative Storage path, using official Storage `reference_resolve`, `file_info`, `preview_text`, and bounded text `read_file` surfaces before Memory stores verified source/chunk content; previewable PDFs and Office documents use Storage preview text, while files without extractable text are recorded as `reference_snapshot` versions without chunks
 - `remote_storage_file` for Storage-owned Drive indexing payloads by stable Storage file id, provider metadata, source version, and bounded preview text
 - `app_entity` for redaction-safe snapshots from another enabled app's official reference summarize/resolve surfaces, without reading that app's private database
 
@@ -96,7 +96,7 @@ Memory exposes agent-facing surfaces through the app contract:
 - `memory_search` searches graph nodes plus compiled page and claim text and returns the same normalized `memory_node` retrieval envelope as `memory_context`
 - `memory_compile` compiles one node into the internal wiki layer
 - `memory_lint` refreshes quality findings
-- `memory_ingest_source` ingests generic app-owned sources. The implemented adapters are `inline_markdown` for generated Markdown evidence, `storage_file` for bounded UTF-8 local workspace Storage files under `storage/uploaded/` or `storage/generated/`, `remote_storage_file` for Storage-owned Drive indexing payloads, and `app_entity` snapshots through official app reference surfaces; Storage-backed adapters ask Storage for file metadata, previewability, and bounded bytes or preview text through official surfaces before writing Memory-owned verified source bodies and chunks
+- `memory_ingest_source` ingests generic app-owned sources. The implemented adapters are `inline_markdown` for generated Markdown evidence, `storage_file` for workspace Storage files under `storage/uploaded/` or `storage/generated/`, `remote_storage_file` for Storage-owned Drive indexing payloads, and `app_entity` snapshots through official app reference surfaces; Storage-backed adapters ask Storage for file metadata, previewability, bounded preview text, and only then bounded UTF-8 text bytes as fallback before writing Memory-owned verified source bodies and chunks, or a `reference_snapshot` when extraction is unavailable
 - `memory_wiki_query` searches compiled wiki pages and claims directly
 - `memory_source_query` searches verified source chunks through Memory's app-owned source chunk FTS and returns normalized source-chunk results
 - `memory_fetch_chunks` hydrates up to 20 source chunks from the content store with SHA verification; chunk retrieval surfaces should expose normalized chunk identity, freshness, locator, and citations when available

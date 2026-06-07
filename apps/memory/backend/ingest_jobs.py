@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from hashlib import sha256
+import json
 from pathlib import Path
 import sqlite3
 from typing import Any
@@ -112,6 +114,77 @@ def enqueue_job_in_db(
     payload_job = row_payload(db.execute("SELECT * FROM ingest_jobs WHERE id = ?", (job["id"],)).fetchone()) or {}
     payload_job["enqueued"] = True
     return payload_job
+
+
+def enqueue_compile_job_in_db(
+    db: sqlite3.Connection,
+    *,
+    node_id: str,
+    source_document_id: str = "",
+    source_version_id: str = "",
+    reason: str,
+    source_version_hash: str = "",
+) -> dict[str, Any]:
+    payload = {
+        "node_id": str(node_id or "").strip(),
+        "source_document_id": str(source_document_id or "").strip(),
+        "source_version_id": str(source_version_id or "").strip(),
+        "source_version_hash": str(source_version_hash or "").strip(),
+        "reason": str(reason or "source_ingested").strip(),
+    }
+    return enqueue_job_in_db(
+        db,
+        job_type="compile_node",
+        dedupe_key=compile_job_dedupe_key(payload),
+        payload=payload,
+    )
+
+
+def compile_job_dedupe_key(payload: dict[str, Any]) -> str:
+    node_id = str(payload.get("node_id") or "").strip()
+    digest_payload = {
+        "node_id": node_id,
+        "source_document_id": str(payload.get("source_document_id") or "").strip(),
+        "source_version_id": str(payload.get("source_version_id") or "").strip(),
+        "source_version_hash": str(payload.get("source_version_hash") or "").strip(),
+        "reason": str(payload.get("reason") or "").strip(),
+    }
+    digest = sha256(json.dumps(digest_payload, sort_keys=True, ensure_ascii=True).encode("utf-8")).hexdigest()[:24]
+    return f"compile:{node_id}:{digest}"
+
+
+def complete_ready_job(data_root: Path, job_id: str, *, reason: str = "completed") -> dict[str, Any] | None:
+    ensure_schema(data_root)
+    normalized_job_id = str(job_id or "").strip()
+    if not normalized_job_id:
+        return None
+    with transaction(data_root, immediate=True) as db:
+        row = db.execute("SELECT * FROM ingest_jobs WHERE id = ?", (normalized_job_id,)).fetchone()
+        if row is None:
+            return None
+        if row["status"] in TERMINAL_STATUSES:
+            return row_payload(row)
+        if row["status"] != "ready":
+            return row_payload(row)
+        timestamp = now_timestamp()
+        db.execute(
+            """
+            UPDATE ingest_jobs
+            SET status = 'done',
+                locked_until = NULL,
+                lease_token = '',
+                last_error = '',
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (timestamp, normalized_job_id),
+        )
+        record_event(
+            db,
+            event_type="ingest_job_completed",
+            payload={"job_id": normalized_job_id, "job_type": row["job_type"], "reason": reason},
+        )
+        return row_payload(db.execute("SELECT * FROM ingest_jobs WHERE id = ?", (normalized_job_id,)).fetchone())
 
 
 def claim_job(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:

@@ -8,10 +8,10 @@ import os
 from pathlib import Path
 import shutil
 import sqlite3
-import subprocess
 import sys
 from typing import Any
 
+from app_surface_transport import json_response, run_json_subprocess, run_maverick_app_mcp
 from content_store import body_hash
 from database import json_text
 from errors import MemoryValidationError
@@ -42,43 +42,20 @@ def platform_storage_preview(workspace_root: Path, request: dict[str, Any]) -> d
         for key, value in request.items()
         if key in {"connection_id", "drive_file_id", "stable_storage_file_id", "max_chars", "max_bytes"}
     }
-    cli_args = [
-        "maverick",
-        "app",
-        "storage",
-        "mcp",
-        "call",
-        "storage_drive_preview",
-        "--json",
-        *_mcp_cli_argument_flags(arguments),
-    ]
-    completed = subprocess.run(
-        cli_args,
-        cwd=workspace_root,
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=30,
+    completed = run_maverick_app_mcp(
+        workspace_root,
+        app_id="storage",
+        operation="call",
+        tool_name="storage_drive_preview",
+        arguments=arguments,
     )
-    try:
-        response = json.loads(completed.stdout or "{}")
-    except json.JSONDecodeError as error:
-        raise MemoryValidationError("Storage preview surface returned invalid JSON.") from error
+    response = json_response(completed, invalid_json_message="Storage preview surface returned invalid JSON.")
     if completed.returncode != 0:
         raise MemoryValidationError(str(response.get("detail") or response.get("error") or "Storage preview surface failed."))
     status_code = int(response.get("status_code") or 200)
     if status_code >= 400:
         raise MemoryValidationError(str(response.get("detail") or response.get("error") or "Storage preview failed."))
     return response
-
-
-def _mcp_cli_argument_flags(arguments: dict[str, Any]) -> list[str]:
-    cli_args: list[str] = []
-    for key, value in arguments.items():
-        if value is None or value == "":
-            continue
-        cli_args.extend([f"--{key.replace('_', '-')}", str(value)])
-    return cli_args
 
 
 def local_storage_preview(workspace_root: Path, request: dict[str, Any]) -> dict[str, Any]:
@@ -91,21 +68,15 @@ def local_storage_preview(workspace_root: Path, request: dict[str, Any]) -> dict
         "generated_storage_root": str(workspace_root / "storage" / "generated"),
         "body": request,
     }
-    completed = subprocess.run(
+    completed = run_json_subprocess(
         [sys.executable, str(storage_root / "backend" / "app_backend.py")],
         cwd=storage_root,
-        input=json.dumps(payload),
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=30,
+        input_text=json.dumps(payload),
+        label="local Storage preview fallback",
     )
     if completed.returncode != 0:
         raise MemoryValidationError("Storage preview surface failed.")
-    try:
-        response = json.loads(completed.stdout or "{}")
-    except json.JSONDecodeError as error:
-        raise MemoryValidationError("Storage preview surface returned invalid JSON.") from error
+    response = json_response(completed, invalid_json_message="Storage preview surface returned invalid JSON.")
     status_code = int(response.get("status_code") or 500)
     result = response.get("json") if isinstance(response.get("json"), dict) else {}
     if status_code >= 400:
@@ -164,6 +135,7 @@ def remote_storage_snapshot(
             preview_payload = _storage_preview_surface(data_root, remote_preview_request(ref, metadata))
             preview_text = str(preview_payload.get("preview_text") or "")
             file_payload = preview_payload.get("file") if isinstance(preview_payload.get("file"), dict) else {}
+            validate_remote_preview_identity(file_payload, str(ref["entity_id"] or ref["file_id"] or ""))
             source_version = str(
                 preview_payload.get("source_version")
                 or file_payload.get("source_version")
@@ -205,6 +177,23 @@ def remote_storage_snapshot(
             "preview_truncated": bool(preview_payload.get("truncated")) if include_preview else False,
         },
     }
+
+
+def validate_remote_preview_identity(file_payload: dict[str, Any], stable_storage_file_id: str) -> None:
+    if not file_payload:
+        return
+    returned_ids = {
+        value
+        for value in (
+            str(file_payload.get("stable_storage_file_id") or "").strip(),
+            str(file_payload.get("file_id") or "").strip(),
+            str(file_payload.get("entity_id") or "").strip(),
+            str(file_payload.get("id") or "").strip(),
+        )
+        if value
+    }
+    if returned_ids and str(stable_storage_file_id or "").strip() not in returned_ids:
+        raise MemoryValidationError("Storage preview returned a different file identity.")
 
 
 def remote_preview_request(ref: sqlite3.Row, metadata: dict[str, Any]) -> dict[str, Any]:

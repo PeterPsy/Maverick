@@ -8,7 +8,7 @@ import sqlite3
 from typing import Any
 
 from chunking import chunk_source_body
-from content_store import canonical_body, write_body
+from content_store import canonical_body, read_body, write_body
 from database import connect, json_text, new_id, row_payload
 from source_chunk_index import delete_source_chunk_fts_for_version, upsert_source_chunk_fts
 from storage_sources import (
@@ -145,7 +145,7 @@ def ensure_source_version(
         "source_id": source["id"],
         "source_document_id": source_document["id"],
         "version_hash": version_hash,
-        "extracted_text": snapshot["extracted_text"],
+        "extracted_text": "",
         "extracted_ref": snapshot.get("extracted_ref")
         or source.get("workspace_relative_path")
         or source.get("entity_id")
@@ -250,7 +250,7 @@ def ensure_source_chunks(
     snapshot: dict[str, Any],
     timestamp: str,
 ) -> list[dict[str, Any]]:
-    body = str(snapshot.get("extracted_text") or version.get("extracted_text") or "")
+    body = str(snapshot.get("extracted_text") or source_version_body(data_root, version) or "")
     if not body:
         return []
     normalized_body = canonical_body(body)
@@ -264,6 +264,17 @@ def ensure_source_chunks(
         hash_kind=str(snapshot.get("hash_kind") or version.get("hash_kind") or ""),
         timestamp=timestamp,
     )
+
+
+def source_version_body(data_root: Path, version: dict[str, Any]) -> str:
+    body_path = str(version.get("body_path") or "").strip()
+    if body_path:
+        return read_body(
+            data_root,
+            relative_path=body_path,
+            expected_sha256=str(version.get("body_sha256") or ""),
+        )
+    return str(version.get("extracted_text") or "")
 
 
 def replace_source_chunks(

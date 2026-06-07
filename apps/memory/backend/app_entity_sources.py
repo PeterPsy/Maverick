@@ -9,6 +9,7 @@ import shutil
 import subprocess
 from typing import Any
 
+from app_surface_transport import run_maverick_app_mcp
 from content_store import body_hash, canonical_body
 from errors import MemoryValidationError
 
@@ -110,14 +111,7 @@ def merge_reference_snapshots(resolved: dict[str, Any], summary: dict[str, Any])
 
 
 def discover_reference_tools(workspace_root: Path, owning_app_id: str) -> dict[str, str]:
-    completed = subprocess.run(
-        ["maverick", "app", owning_app_id, "mcp", "list", "--json"],
-        cwd=workspace_root,
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=30,
-    )
+    completed = run_maverick_app_mcp(workspace_root, app_id=owning_app_id, operation="list")
     if completed.returncode != 0:
         raise MemoryValidationError("app_entity ingest could not discover the app reference surface.")
     try:
@@ -149,14 +143,7 @@ def preferred_reference_tool_name(names: list[str], *, owning_app_id: str, actio
 def validate_reference_manifest(workspace_root: Path, owning_app_id: str, tool_name: str, entity_type: str) -> None:
     if not tool_name:
         return
-    completed = subprocess.run(
-        ["maverick", "app", owning_app_id, "mcp", "call", tool_name, "--json"],
-        cwd=workspace_root,
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=30,
-    )
+    completed = run_maverick_app_mcp(workspace_root, app_id=owning_app_id, operation="call", tool_name=tool_name)
     response = _reference_response(completed)
     if response is None:
         return
@@ -174,25 +161,12 @@ def run_reference_tool(
     entity_type: str,
     entity_id: str,
 ) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [
-            "maverick",
-            "app",
-            owning_app_id,
-            "mcp",
-            "call",
-            tool_name,
-            "--json",
-            "--entity-type",
-            entity_type,
-            "--entity-id",
-            entity_id,
-        ],
-        cwd=workspace_root,
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=30,
+    return run_maverick_app_mcp(
+        workspace_root,
+        app_id=owning_app_id,
+        operation="call",
+        tool_name=tool_name,
+        arguments={"entity_type": entity_type, "entity_id": entity_id},
     )
 
 

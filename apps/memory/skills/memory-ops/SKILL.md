@@ -81,13 +81,13 @@ maverick app memory mcp call memory_ingest_source --json --adapter-id inline_mar
 
 Use a stable `source_key` when the same generated source may be updated later. Re-ingesting identical content should not create duplicate source versions; changed content creates a new version and marks compiled Memory evidence stale.
 
-For local workspace Storage text or Markdown files, ingest through `storage_file` instead of reading Memory's database or content store directly:
+For local workspace Storage files, ingest through `storage_file` instead of reading Memory's database or content store directly:
 
 ```bash
 maverick app memory mcp call memory_ingest_source --json --adapter-id storage_file --file-id <stable_file_id> --workspace-relative-path storage/generated/example.md --title "<source title>" --compile-after-ingest true
 ```
 
-Memory accepts only UTF-8 text-like files under `storage/uploaded/` or `storage/generated/`. Memory resolves local file metadata, previewability, and bounded content through Storage-owned `file_info`, `preview_text`, and `read_file` surfaces; Storage remains the owner of file identity and file operations.
+Memory accepts stable Storage file ids or workspace paths under `storage/uploaded/` or `storage/generated/`, and rejects mismatches when both point at different files. Memory resolves local file metadata, previewability, and bounded extracted content through Storage-owned `reference_resolve`, `file_info`, `preview_text`, and text `read_file` surfaces; previewable PDFs and Office files use Storage preview text, and non-extractable files are stored as `reference_snapshot` versions without chunks.
 
 For records owned by another app, ingest through `app_entity` so Memory snapshots the official reference summary instead of reading the owner app's private data:
 

@@ -12,6 +12,7 @@ import subprocess
 import sys
 from typing import Any
 
+from app_surface_transport import json_response, run_json_subprocess, run_maverick_app_mcp
 from content_store import canonical_body
 from errors import MemoryValidationError
 
@@ -40,34 +41,53 @@ def fetch_local_storage_file_source(data_root: Path, workspace_relative_path: st
         workspace_relative_path = resolve_storage_file_path(data_root, file_id)
     if not workspace_relative_path:
         raise MemoryValidationError("storage_file ingest requires file_id or workspace_relative_path.")
-    suffix = Path(workspace_relative_path).suffix.lower()
-    if suffix not in TEXT_STORAGE_EXTENSIONS:
-        raise MemoryValidationError("storage_file ingest currently supports text and Markdown-like files.")
     info = _storage_file_surface(
         data_root,
         "storage_file_info",
         {"workspace_relative_path": workspace_relative_path},
     )
     file_payload = _file_payload(info)
+    validate_storage_file_identity(
+        file_payload,
+        requested_file_id=file_id,
+        requested_workspace_relative_path=workspace_relative_path,
+    )
+    resolved_workspace_relative_path = str(file_payload.get("workspace_relative_path") or workspace_relative_path).strip()
     size_bytes = _positive_int(file_payload.get("size_bytes"))
-    if size_bytes > MAX_LOCAL_SOURCE_BYTES:
-        raise MemoryValidationError(f"storage_file ingest supports local text files up to {MAX_LOCAL_SOURCE_BYTES} bytes.")
-    preview = _storage_file_surface(
-        data_root,
-        "storage_preview_text",
-        {"workspace_relative_path": workspace_relative_path, "max_chars": STORAGE_PREVIEW_MAX_CHARS},
-    )
-    read = _storage_file_surface(
-        data_root,
-        "storage_read_file",
-        {"workspace_relative_path": workspace_relative_path, "max_bytes": MAX_LOCAL_SOURCE_BYTES},
-    )
-    body_markdown = canonical_body(_decode_storage_content(read))
+    preview = _preview_storage_text(data_root, resolved_workspace_relative_path, file_id=file_id)
     preview_text = str(preview.get("preview_text") or "")
+    preview_file = preview.get("file") if isinstance(preview.get("file"), dict) else {}
+    if preview_file:
+        validate_storage_file_identity(
+            preview_file,
+            requested_file_id=file_id,
+            requested_workspace_relative_path=resolved_workspace_relative_path,
+        )
+    body_markdown = canonical_body(preview_text) if preview_text else ""
+    extraction_status = "truncated" if bool(preview.get("truncated") or preview.get("preview_truncated")) else "available"
+    extraction_error = str(preview.get("error") or "")
+    if not body_markdown and Path(resolved_workspace_relative_path).suffix.lower() in TEXT_STORAGE_EXTENSIONS:
+        if size_bytes > MAX_LOCAL_SOURCE_BYTES:
+            extraction_status = "unavailable"
+            extraction_error = f"local text file exceeds {MAX_LOCAL_SOURCE_BYTES} bytes."
+        else:
+            read = _read_storage_text(data_root, resolved_workspace_relative_path, file_id=file_id)
+            if read.get("body"):
+                body_markdown = canonical_body(str(read["body"]))
+                extraction_status = "available"
+            else:
+                extraction_status = "unavailable"
+                extraction_error = str(read.get("error") or extraction_error or "Storage text extraction was unavailable.")
+    elif not body_markdown:
+        extraction_status = "unavailable"
+        extraction_error = extraction_error or "Storage preview text was unavailable."
     return {
         "body_markdown": body_markdown,
         "preview_text": preview_text,
-        "preview_truncated": len(preview_text) >= STORAGE_PREVIEW_MAX_CHARS and preview_text != body_markdown,
+        "preview_truncated": bool(preview.get("truncated") or preview.get("preview_truncated"))
+        or (len(preview_text) >= STORAGE_PREVIEW_MAX_CHARS and preview_text != body_markdown),
+        "extraction_status": extraction_status,
+        "extraction_error": extraction_error,
         "file": file_payload,
     }
 
@@ -84,23 +104,7 @@ def default_storage_file_surface(data_root: Path, tool_name: str, arguments: dic
 
 
 def platform_storage_file_surface(workspace_root: Path, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-    completed = subprocess.run(
-        [
-            "maverick",
-            "app",
-            "storage",
-            "mcp",
-            "call",
-            tool_name,
-            "--json",
-            *_mcp_cli_argument_flags(arguments),
-        ],
-        cwd=workspace_root,
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=30,
-    )
+    completed = run_maverick_app_mcp(workspace_root, app_id="storage", operation="call", tool_name=tool_name, arguments=arguments)
     return _checked_storage_response(completed)
 
 
@@ -115,14 +119,11 @@ def local_storage_file_surface(workspace_root: Path, tool_name: str, arguments: 
         "tool_name": tool_name,
         "arguments": arguments,
     }
-    completed = subprocess.run(
+    completed = run_json_subprocess(
         [sys.executable, str(storage_root / "mcp" / "server.py")],
         cwd=storage_root,
-        input=json.dumps(payload),
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=30,
+        input_text=json.dumps(payload),
+        label="local Storage MCP fallback",
     )
     return _checked_storage_response(completed)
 
@@ -137,6 +138,7 @@ def resolve_storage_file_path(data_root: Path, file_id: str) -> str:
         {"entity_type": "file", "entity_id": file_id},
     )
     file_payload = _file_payload(response)
+    validate_storage_file_identity(file_payload, requested_file_id=file_id, requested_workspace_relative_path="")
     workspace_relative_path = str(file_payload.get("workspace_relative_path") or "").strip()
     if not workspace_relative_path.startswith(("storage/uploaded/", "storage/generated/")):
         raise MemoryValidationError("storage_file ingest requires a local workspace Storage file.")
@@ -149,20 +151,38 @@ def workspace_root_for_data_root(data_root: Path) -> Path | None:
     return data_root.parent.parent
 
 
-def _mcp_cli_argument_flags(arguments: dict[str, Any]) -> list[str]:
-    cli_args: list[str] = []
-    for key, value in arguments.items():
-        if value is None or value == "":
-            continue
-        cli_args.extend([f"--{key.replace('_', '-')}", str(value)])
-    return cli_args
+def _preview_storage_text(data_root: Path, workspace_relative_path: str, *, file_id: str) -> dict[str, Any]:
+    try:
+        return _storage_file_surface(
+            data_root,
+            "storage_preview_text",
+            {"workspace_relative_path": workspace_relative_path, "max_chars": STORAGE_PREVIEW_MAX_CHARS},
+        )
+    except MemoryValidationError as error:
+        return {"preview_text": "", "error": str(error)}
+
+
+def _read_storage_text(data_root: Path, workspace_relative_path: str, *, file_id: str) -> dict[str, Any]:
+    try:
+        read = _storage_file_surface(
+            data_root,
+            "storage_read_file",
+            {"workspace_relative_path": workspace_relative_path, "max_bytes": MAX_LOCAL_SOURCE_BYTES},
+        )
+        read_file = read.get("file") if isinstance(read.get("file"), dict) else {}
+        if read_file:
+            validate_storage_file_identity(
+                read_file,
+                requested_file_id=file_id,
+                requested_workspace_relative_path=workspace_relative_path,
+            )
+        return {"body": _decode_storage_content(read)}
+    except MemoryValidationError as error:
+        return {"body": "", "error": str(error)}
 
 
 def _checked_storage_response(completed: subprocess.CompletedProcess[str]) -> dict[str, Any]:
-    try:
-        response = json.loads(completed.stdout or "{}")
-    except json.JSONDecodeError as error:
-        raise MemoryValidationError("Storage file surface returned invalid JSON.") from error
+    response = json_response(completed, invalid_json_message="Storage file surface returned invalid JSON.")
     if completed.returncode != 0:
         raise MemoryValidationError(str(response.get("detail") or response.get("error") or "Storage file surface failed."))
     status_code = int(response.get("status_code") or 200)
@@ -176,6 +196,37 @@ def _file_payload(response: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(file_payload, dict):
         raise MemoryValidationError("Storage file surface did not return file metadata.")
     return file_payload
+
+
+def validate_storage_file_identity(
+    file_payload: dict[str, Any],
+    *,
+    requested_file_id: str,
+    requested_workspace_relative_path: str,
+) -> None:
+    requested_id = str(requested_file_id or "").strip()
+    returned_ids = storage_file_identity_values(file_payload)
+    if requested_id and returned_ids and requested_id not in returned_ids:
+        raise MemoryValidationError("storage_file file_id does not match the file returned by Storage.")
+    requested_path = str(requested_workspace_relative_path or "").strip()
+    returned_path = str(file_payload.get("workspace_relative_path") or "").strip()
+    if requested_path and returned_path and requested_path != returned_path:
+        raise MemoryValidationError("storage_file workspace_relative_path does not match the file returned by Storage.")
+
+
+def storage_file_identity_values(file_payload: dict[str, Any]) -> set[str]:
+    primary_ids = {
+        value
+        for value in (
+            str(file_payload.get("file_id") or "").strip(),
+            str(file_payload.get("id") or "").strip(),
+        )
+        if value
+    }
+    if primary_ids:
+        return primary_ids
+    path_id = str(file_payload.get("path_id") or "").strip()
+    return {path_id} if path_id else set()
 
 
 def _decode_storage_content(response: dict[str, Any]) -> str:

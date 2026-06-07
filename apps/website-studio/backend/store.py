@@ -46,12 +46,15 @@ from safety import (
 )
 from preview_runtime import (
     MAX_RENDERED_ROUTES,
+    internal_routes_from_html,
     prepare_runtime_build,
+    redact_runtime_log,
     render_runtime_preview,
     runtime_capability_status,
     rendered_route_warnings,
     source_files_for_runtime_route,
 )
+from publish_workflow import managed_static_platform_binding, working_branch_for_site
 
 HttpTransport = Callable[[str, str, dict[str, Any]], tuple[int, dict[str, Any] | list[Any] | bytes]]
 GITHUB_API_BASE = "https://api.github.com"
@@ -115,6 +118,7 @@ def site_status(data_root: Path, site_id: object) -> dict[str, object]:
     pages = sitemap(data_root, site["id"])
     diff_payload = diff_site(data_root, site["id"])
     profile = source_profile(_source_root(data_root, str(site["id"])))
+    runtime = runtime_status(data_root, site["id"])
     return {
         "site": site,
         "page_count": len(pages["items"]),
@@ -124,6 +128,12 @@ def site_status(data_root: Path, site_id: object) -> dict[str, object]:
         "active_revision_id": site.get("active_revision_id"),
         "published_revision_id": site.get("published_revision_id"),
         "source_profile": profile,
+        "runtime": runtime,
+        "runtime_kind": runtime.get("runtime_kind") or profile.get("preview_runtime_kind") or "unavailable",
+        "runtime_status": runtime.get("runtime_status") or profile.get("runtime_preview_status") or "blocked",
+        "missing_requirements": runtime.get("missing_requirements") or [],
+        "latest_build_id": (runtime.get("latest_build") or {}).get("id") if isinstance(runtime.get("latest_build"), dict) else "",
+        "latest_preview_id": (runtime.get("latest_preview") or {}).get("id") if isinstance(runtime.get("latest_preview"), dict) else "",
         "is_active": bool(site.get("is_active")),
     }
 
@@ -1077,7 +1087,12 @@ def _render_known_routes(
     if not routes:
         routes.append("/")
     rendered: list[dict[str, object]] = []
-    for route in routes[:MAX_RENDERED_ROUTES]:
+    seen: set[str] = set()
+    while routes and len(rendered) < MAX_RENDERED_ROUTES:
+        route = routes.pop(0)
+        if route in seen:
+            continue
+        seen.add(route)
         result = render_runtime_preview(
             data_root,
             _source_root(data_root, str(site["id"])),
@@ -1087,6 +1102,11 @@ def _render_known_routes(
         )
         result["route"] = route
         rendered.append(result)
+        raw_html = str(result.get("raw_html") or result.get("html") or "")
+        if result.get("status") == "ready" and raw_html:
+            for discovered in internal_routes_from_html(raw_html, base_route=route):
+                if discovered not in seen and discovered not in routes and len(routes) + len(rendered) < MAX_RENDERED_ROUTES:
+                    routes.append(discovered)
     return rendered
 
 
@@ -2176,6 +2196,7 @@ def _build_row(row) -> dict[str, object]:
     payload["artifact_ref"] = json.loads(payload.pop("artifact_ref_json", "{}") or "{}")
     payload["warnings"] = json.loads(payload.pop("warnings_json") or "[]")
     payload["missing_requirements"] = json.loads(payload.pop("missing_requirements_json", "[]") or "[]")
+    payload["logs_summary"] = redact_runtime_log(str(payload.get("logs_summary") or ""))
     return payload
 
 
@@ -2208,6 +2229,7 @@ def _sync_run_row(row) -> dict[str, object]:
     payload = dict(row)
     payload["conflicts"] = json.loads(payload.pop("conflicts_json") or "[]")
     payload["source_profile"] = json.loads(payload.pop("source_profile_json") or "{}")
+    payload["logs_summary"] = redact_runtime_log(str(payload.get("logs_summary") or ""))
     return payload
 
 
@@ -2291,13 +2313,11 @@ def _publish_mode(source_ref: dict[str, object]) -> str:
 def _publish_source_ref(site: dict[str, object], request: dict[str, object], *, publish_target: dict[str, object] | None = None) -> dict[str, object]:
     ref = site.get("source_artifact_ref") if isinstance(site.get("source_artifact_ref"), dict) else {}
     if ref.get("provider") == "github" and not (publish_target and publish_target.get("kind") == "managed_static"):
-        site_id = str(site.get("id") or "site")
-        slug = str(site.get("slug") or site_id)
         return {
             "provider": "github",
             "connection_id": str(ref.get("connection_id") or ""),
             "base_branch": str(ref.get("base_branch") or "main"),
-            "working_branch": f"maverick/{site_id}/{slug}",
+            "working_branch": working_branch_for_site(site, request),
             "publish_request_id": str(request.get("id") or ""),
             "note": "Remote push and PR creation require Vault/Core Secrets delivery in a trusted runtime.",
         }
@@ -2350,6 +2370,7 @@ def _publish_to_managed_static_artifact(
     relative_root = artifact_root.relative_to(data_root).as_posix()
     index_path = artifact_root / "index.html"
     artifact_url = f"/app/website-studio/sites/{site['id']}/deployments/{artifact_id}/"
+    platform_binding_status = str((target.get("config") or {}).get("platform_binding_status") or "pending_generic_surface")
     return {
         "provider": "maverick-managed-static",
         "status": "artifact_ready",
@@ -2362,7 +2383,8 @@ def _publish_to_managed_static_artifact(
         "entrypoint": "index.html" if index_path.exists() else "",
         "artifact_url": artifact_url,
         "platform_surface": "generic_static_hosting",
-        "platform_binding_status": str((target.get("config") or {}).get("platform_binding_status") or "pending_generic_surface"),
+        "platform_binding_status": platform_binding_status,
+        "platform_binding": managed_static_platform_binding(status=platform_binding_status, artifact_url=artifact_url),
     }
 
 
@@ -2409,7 +2431,7 @@ def _publish_to_github_pull_request(
     base_branch = str(connection.get("base_branch") or "main").strip()
     source_root = _source_root(data_root, str(site["id"]))
     diff_files = diff_site(data_root, site["id"]).get("files", [])
-    branch = _working_branch_for_site(site)
+    branch = working_branch_for_site(site, request)
     http = transport or _default_github_transport
 
     base_ref = _github_request(http, "GET", f"/repos/{owner}/{repo}/git/ref/heads/{_quote_ref(base_branch)}", token=token)
@@ -2595,12 +2617,6 @@ def _redact_secret_text(value: str) -> str:
 
 def _quote_ref(value: str) -> str:
     return quote(value, safe="")
-
-
-def _working_branch_for_site(site: dict[str, object]) -> str:
-    site_id = str(site.get("id") or "site")
-    slug = str(site.get("slug") or site_id)
-    return f"maverick/{site_id}/{slug}"
 
 
 def _secret_error_names(app_secret_errors: list[dict[str, object]] | None) -> set[str]:

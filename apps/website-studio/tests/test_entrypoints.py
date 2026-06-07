@@ -6,6 +6,7 @@ import base64
 import json
 import multiprocessing
 import os
+from contextlib import closing
 from io import BytesIO
 from pathlib import Path
 import sqlite3
@@ -24,7 +25,14 @@ sys.path.insert(0, str(APP_ROOT / "backend"))
 
 from backend.service import app_events_for_action, handle_action, resolve_secret_resource
 from backend.store import _git_import_source_ref, _github_error_detail, _redact_secret_text, _site_mutation_lock, rebuild_index
-from preview_runtime import _resolve_workspace_binary, build_plan_for_source, prepare_runtime_build, runtime_capability_status
+from preview_runtime import (
+    _bounded_log,
+    _resolve_workspace_binary,
+    build_plan_for_source,
+    internal_routes_from_html,
+    prepare_runtime_build,
+    runtime_capability_status,
+)
 from safety import MAX_SOURCE_TREE_FILES, validate_source_tree_for_phase1
 
 
@@ -1230,7 +1238,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertIn("php executable", preview["missing_requirements"][0])
             self.assertIn("Preview runtime unavailable", preview["html"])
 
-            with sqlite3.connect(data_root / "app.sqlite") as db:
+            with closing(sqlite3.connect(data_root / "app.sqlite")) as db, db:
                 row = db.execute("SELECT status, route FROM previews WHERE id = ?", (preview["preview_id"],)).fetchone()
             self.assertEqual(row, ("blocked", preview["route"]))
 
@@ -1280,7 +1288,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertIn("Preview runtime unavailable", document["html"])
             self.assertIn("php executable", document["html"])
 
-            with sqlite3.connect(data_root / "app.sqlite") as db:
+            with closing(sqlite3.connect(data_root / "app.sqlite")) as db, db:
                 preview_row = db.execute("SELECT status, page_id FROM previews WHERE id = ?", (preview["preview_id"],)).fetchone()
                 session_row = db.execute("SELECT status, runtime_kind FROM runtime_sessions WHERE preview_id = ?", (preview["preview_id"],)).fetchone()
             self.assertEqual(preview_row, ("blocked", ""))
@@ -1438,8 +1446,13 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("asset_id", widget_source)
         self.assertIn("maverick.widget.data-changed", widget_source)
         self.assertIn("function buildTree()", widget_source)
+        self.assertIn("action: 'site_status'", widget_source)
+        self.assertIn("action: 'list_changes'", widget_source)
+        self.assertIn("changedPaths", widget_source)
+        self.assertIn("modified", widget_source)
         self.assertIn("groupNode('group:pages'", widget_source)
         self.assertIn("groupNode('group:components'", widget_source)
+        self.assertIn("groupNode('group:status'", widget_source)
         self.assertIn("toggleNode", widget_source)
         self.assertIn("No static HTML pages", widget_source)
 
@@ -1454,8 +1467,11 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("selectedRoute && !selectedRoute.page_id ? undefined : map.items[0]", app_source)
         self.assertIn("selectedPage?.route || selectedRoute?.route || '/'", app_source)
         self.assertIn("PreviewStatus", app_source)
+        self.assertIn("SiteStatusPanel", app_source)
         self.assertIn("runtime_status", app_source)
         self.assertIn("missing_requirements", app_source)
+        self.assertIn("action: 'site_status'", app_source)
+        self.assertIn("action: 'list_changes'", app_source)
         self.assertIn("active_view: activeView", app_source)
         self.assertIn("context_tool: 'website_page_context'", app_source)
         self.assertIn("previewState?.preview_url || ''", app_source)
@@ -1472,6 +1488,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn('sandbox="allow-scripts allow-forms"', runtime_source)
         self.assertNotIn("allow-popups", runtime_source)
         self.assertNotIn("allow-same-origin", runtime_source)
+        self.assertIn("frame.srcdoc", runtime_source)
 
     def test_frontend_connect_git_prepares_and_imports_source(self) -> None:
         app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
@@ -1538,6 +1555,8 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("class=\"tree\"", sitemap_widget)
         self.assertIn("Components", sitemap_widget)
         self.assertIn("Backend and config", sitemap_widget)
+        self.assertIn("Status", sitemap_widget)
+        self.assertIn("badge changed", sitemap_widget)
         self.assertIn("params.page_id", sitemap_widget)
         self.assertIn("params.route_id", sitemap_widget)
         self.assertIn("params.asset_id", sitemap_widget)
@@ -1739,7 +1758,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             data_root.mkdir(parents=True, exist_ok=True)
             db_path = data_root / "app.sqlite"
             now = "2026-06-04T00:00:00+00:00"
-            with sqlite3.connect(db_path) as db:
+            with closing(sqlite3.connect(db_path)) as db, db:
                 db.executescript(
                     """
                     CREATE TABLE schema_metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -1799,7 +1818,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
 
             self.assertEqual(status, 200)
             self.assertEqual(target_payload["publish_target"]["kind"], "managed_static")
-            with sqlite3.connect(db_path) as db:
+            with closing(sqlite3.connect(db_path)) as db, db:
                 columns = {row[1] for row in db.execute("PRAGMA table_info(environments)").fetchall()}
             self.assertIn("publish_target_id", columns)
             self.assertIn("last_deployment_id", columns)
@@ -2006,6 +2025,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(source_ref["provider"], "github")
             self.assertEqual(source_ref["status"], "pull_request_open")
             self.assertEqual(source_ref["pull_request_url"], "https://github.com/example-org/site-web/pull/42")
+            self.assertEqual(source_ref["working_branch"], f"maverick/{site_id}/{request_id.replace('_', '-')}")
             self.assertNotIn("test-github-token", json.dumps(published))
             auth_headers = [call[2]["headers"]["Authorization"] for call in transport.calls]
             self.assertTrue(all(header == "Bearer test-github-token" for header in auth_headers))
@@ -2185,6 +2205,106 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(routes["/camp"]["kind"], "php")
             self.assertTrue(routes["/camp"]["page_id"])
             self.assertEqual([item["route"] for item in refreshed_map["items"]], ["/camp"])
+            status, status_payload = handle_action(data_root, {"action": "site_status", "site_id": site_id})
+            self.assertEqual(status, 200)
+            self.assertEqual(status_payload["runtime_status"], "ready")
+            self.assertEqual(status_payload["runtime"]["runtime_status"], "ready")
+
+    def test_phase3a_runtime_crawler_adds_internal_rendered_links(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            archive = BytesIO()
+            with ZipFile(archive, "w") as zip_file:
+                zip_file.writestr("frontend-website/index.php", "<?php echo 'Home';")
+            encoded = base64.b64encode(archive.getvalue()).decode("ascii")
+            status, imported = handle_action(data_root, {"action": "import_zip", "display_name": "Runtime Crawl", "archive_base64": encoded})
+            self.assertEqual(status, 201)
+            site_id = imported["site"]["id"]
+
+            def fake_render(_data_root: Path, _source_root: Path, *, route: str, source_profile: dict[str, object], artifact_ref: dict[str, object]) -> dict[str, object]:
+                html = "<title>Home</title><a href=\"/camp\">Camp</a>" if route == "/" else "<title>Camp</title>"
+                return {
+                    "status": "ready",
+                    "runtime_kind": "php",
+                    "raw_html": html,
+                    "title": "Home" if route == "/" else "Camp",
+                    "source_files": ["frontend-website/index.php"],
+                    "warnings": [],
+                    "missing_requirements": [],
+                    "http_status": 200,
+                }
+
+            with patch(
+                "store.prepare_runtime_build",
+                return_value={
+                    "status": "passed",
+                    "artifact_ref": {"runtime_root": "sites/site_test/builds/build_test/runtime"},
+                    "warnings": [],
+                    "missing_requirements": [],
+                    "logs_summary": "Runtime artifact prepared.",
+                },
+            ), patch("store.render_runtime_preview", side_effect=fake_render):
+                status, build_payload = handle_action(data_root, {"action": "build_validate", "site_id": site_id})
+
+            self.assertEqual(status, 201)
+            self.assertEqual(build_payload["build"]["status"], "passed")
+            status, refreshed_map = handle_action(data_root, {"action": "sitemap", "site_id": site_id})
+            self.assertEqual(status, 200)
+            routes = {item["route"]: item for item in refreshed_map["routes"]}
+            self.assertEqual(routes["/camp"]["status"], "rendered")
+            self.assertTrue(routes["/camp"]["page_id"])
+
+    def test_phase3a_internal_route_parser_keeps_only_local_routes(self) -> None:
+        routes = internal_routes_from_html(
+            '<a href="/about/index.html">About</a><a href="team.html">Team</a><a href="https://example.com/offsite">External</a><a href="mailto:a@example.com">Mail</a>',
+            base_route="/company/",
+        )
+
+        self.assertEqual(routes, ["/about", "/company/team"])
+
+    def test_phase3a_workspace_binary_resolution_does_not_use_host_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch("preview_runtime.shutil.which", return_value="/usr/bin/vite"):
+                with self.assertRaisesRegex(ValueError, "local npm dependencies"):
+                    _resolve_workspace_binary(Path(tmp), "vite")
+
+    def test_phase3a_runtime_logs_redact_host_paths_and_secrets(self) -> None:
+        summary = _bounded_log(
+            "failed at /home/ubuntu/projects/maverick-v3/workspaces/default/data/website-studio/.tmp/runtime_build_x token=abc ghp_123456789012345678901234"
+        )
+
+        self.assertNotIn("/home/ubuntu", summary)
+        self.assertNotIn("token=abc", summary)
+        self.assertNotIn("ghp_123456789012345678901234", summary)
+
+    def test_phase3a_list_changes_redacts_historical_build_logs_on_read(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            status, created = handle_action(data_root, {"action": "site_create", "display_name": "Logs"})
+            self.assertEqual(status, 201)
+            site_id = created["site"]["id"]
+            with closing(sqlite3.connect(data_root / "app.sqlite")) as db, db:
+                db.execute(
+                    """
+                    INSERT INTO builds(
+                      id, site_id, status, runtime_kind, preview_url, artifact_ref_json,
+                      source_profile_json, route_count, asset_count, warnings_json,
+                      missing_requirements_json, logs_summary, created_at, updated_at
+                    )
+                    VALUES (?, ?, 'failed', 'php', '', '{}', '{}', 0, 0, '[]', '[]', ?, '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
+                    """,
+                    (
+                        "build_redact",
+                        site_id,
+                        "Error: /home/ubuntu/projects/maverick-v3/workspaces/default/data/website-studio/.tmp/build token=abc",
+                    ),
+                )
+
+            status, changes = handle_action(data_root, {"action": "list_changes", "site_id": site_id})
+            self.assertEqual(status, 200)
+            build = next(item for item in changes["builds"] if item["id"] == "build_redact")
+            self.assertNotIn("/home/ubuntu", build["logs_summary"])
+            self.assertNotIn("token=abc", build["logs_summary"])
 
     def test_phase3a_build_plan_rejects_unallowlisted_shell_commands(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

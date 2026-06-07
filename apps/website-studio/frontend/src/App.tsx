@@ -1,6 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent } from 'react';
-import { callBackend, callStorageProvider, type Asset, type Page, type PreviewPayload, type Route, type SitemapPayload, type Site, type StorageFile } from './api';
+import {
+  callBackend,
+  callStorageProvider,
+  type Asset,
+  type ChangeHistoryPayload,
+  type ChangeRecord,
+  type Page,
+  type PreviewPayload,
+  type Route,
+  type SitemapPayload,
+  type Site,
+  type SiteStatusPayload,
+  type StorageFile
+} from './api';
 
 type Notice = { tone: 'ok' | 'warn' | 'error'; text: string } | null;
 
@@ -13,6 +26,8 @@ export function App() {
   const [activeAssetId, setActiveAssetId] = useState('');
   const [previewHtml, setPreviewHtml] = useState('');
   const [previewState, setPreviewState] = useState<PreviewPayload | null>(null);
+  const [siteStatus, setSiteStatus] = useState<SiteStatusPayload | null>(null);
+  const [changeHistory, setChangeHistory] = useState<ChangeHistoryPayload | null>(null);
   const [showNewWebsite, setShowNewWebsite] = useState(false);
   const [gitDialogOpen, setGitDialogOpen] = useState(false);
   const [gitUrl, setGitUrl] = useState('');
@@ -51,6 +66,8 @@ export function App() {
       setActiveAssetId('');
       setPreviewHtml('');
       setPreviewState(null);
+      setSiteStatus(null);
+      setChangeHistory(null);
       setShowNewWebsite(true);
       return;
     }
@@ -59,6 +76,12 @@ export function App() {
     }
 
     const map = await callBackend<SitemapPayload>({ action: 'sitemap', site_id: selectedSite });
+    const [statusPayload, changesPayload] = await Promise.all([
+      callBackend<SiteStatusPayload>({ action: 'site_status', site_id: selectedSite }),
+      callBackend<ChangeHistoryPayload>({ action: 'list_changes', site_id: selectedSite })
+    ]);
+    setSiteStatus(statusPayload);
+    setChangeHistory(changesPayload);
     setPages(map.items);
     const selectedRoute = (map.routes || []).find((route) => route.id === nextRouteId) || (map.routes || []).find((route) => route.route === nextRoute);
     const selectedAsset = (map.assets || []).find((asset) => asset.id === nextAssetId);
@@ -285,6 +308,7 @@ export function App() {
                 />
               )}
               {previewState ? <PreviewStatus preview={previewState} /> : null}
+              {siteStatus ? <SiteStatusPanel status={siteStatus} changes={changeHistory} site={activeSite} /> : null}
             </>
           ) : (
             <div className="site-empty">No renderable page in this site.</div>
@@ -293,6 +317,57 @@ export function App() {
       )}
     </main>
   );
+}
+
+function SiteStatusPanel({ status, changes, site }: { status: SiteStatusPayload; changes: ChangeHistoryPayload | null; site?: Site }) {
+  const latestBuild = latest(changes?.builds) || status.runtime?.latest_build || null;
+  const latestRequest = latest(changes?.publish_requests);
+  const latestDeploy = latest(changes?.deployments);
+  const pendingRequests = (changes?.publish_requests || []).filter((item) => item.status === 'pending').length;
+  const deployed = latestDeploy?.status || (site?.published_revision_id ? 'published' : 'not published');
+  return (
+    <aside className="site-status-panel" aria-label="Site status">
+      <div className="site-status-row">
+        <span>site</span>
+        <strong>{site?.display_name || status.site.display_name}</strong>
+      </div>
+      <div className="site-status-grid">
+        <Metric label="pages" value={status.page_count} />
+        <Metric label="routes" value={status.route_count} />
+        <Metric label="assets" value={status.asset_count} />
+        <Metric label="changed" value={status.changed_files_count} tone={status.changed_files_count ? 'warn' : 'ok'} />
+      </div>
+      <div className="site-status-line">
+        <span>runtime</span>
+        <strong>{String(status.runtime_status || status.runtime?.runtime_status || 'unknown').replace('_', ' ')}</strong>
+      </div>
+      <div className="site-status-line">
+        <span>build</span>
+        <strong>{String(latestBuild?.status || 'none').replace('_', ' ')}</strong>
+      </div>
+      <div className="site-status-line">
+        <span>requests</span>
+        <strong>{pendingRequests ? `${pendingRequests} pending` : String(latestRequest?.status || 'none').replace('_', ' ')}</strong>
+      </div>
+      <div className="site-status-line">
+        <span>deploys</span>
+        <strong>{String(deployed).replace('_', ' ')}</strong>
+      </div>
+    </aside>
+  );
+}
+
+function Metric({ label, value, tone = 'neutral' }: { label: string; value: number; tone?: 'neutral' | 'ok' | 'warn' }) {
+  return (
+    <div className="site-status-metric" data-tone={tone}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function latest(records?: ChangeRecord[] | null): ChangeRecord | null {
+  return records && records.length ? records[0] : null;
 }
 
 function PreviewStatus({ preview }: { preview: PreviewPayload }) {

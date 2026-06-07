@@ -51,6 +51,54 @@ export type SitemapPayload = {
   assets: Asset[];
 };
 
+export type RuntimeSummary = {
+  runtime_kind?: string;
+  runtime_status?: string;
+  missing_requirements?: string[];
+  latest_build?: { id?: string; status?: string; logs_summary?: string; [key: string]: unknown } | null;
+  latest_preview?: { id?: string; status?: string; [key: string]: unknown } | null;
+};
+
+export type SiteStatusPayload = {
+  site: Site;
+  page_count: number;
+  route_count: number;
+  asset_count: number;
+  changed_files_count: number;
+  active_revision_id?: string | null;
+  published_revision_id?: string | null;
+  runtime?: RuntimeSummary;
+  runtime_kind?: string;
+  runtime_status?: string;
+  missing_requirements?: string[];
+  latest_build_id?: string;
+  latest_preview_id?: string;
+};
+
+export type ChangeRecord = {
+  id?: string;
+  status?: string;
+  mode?: string;
+  diff_summary?: string;
+  environment_id?: string;
+  build_id?: string;
+  source_ref?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+  path?: string;
+};
+
+export type ChangeHistoryPayload = {
+  site_id: string;
+  base_revision_id?: string | null;
+  published_revision_id?: string | null;
+  working_diff: ChangeRecord[];
+  publish_requests: ChangeRecord[];
+  approval_events: ChangeRecord[];
+  builds: ChangeRecord[];
+  deployments: ChangeRecord[];
+};
+
 export type WebsiteFile = {
   site_id: string;
   path: string;

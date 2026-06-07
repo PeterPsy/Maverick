@@ -157,6 +157,84 @@ select {
   font-size: 0.72rem;
 }
 
+.site-status-panel {
+  position: absolute;
+  top: calc(12px + var(--maverick-shell-mobile-content-top-offset, 0px));
+  right: 12px;
+  z-index: 2;
+  display: grid;
+  gap: 8px;
+  width: min(292px, calc(100% - 24px));
+  border: 1px solid var(--website-studio-border);
+  border-radius: 8px;
+  background: rgba(7, 7, 8, 0.76);
+  box-shadow: var(--maverick-inner-edge);
+  color: var(--website-studio-muted);
+  padding: 10px;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.site-status-row,
+.site-status-line {
+  display: grid;
+  grid-template-columns: minmax(4.8rem, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.site-status-row span,
+.site-status-line span,
+.site-status-metric span {
+  color: var(--website-studio-soft);
+  font-size: 0.68rem;
+}
+
+.site-status-row strong,
+.site-status-line strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--website-studio-text);
+  font-size: 0.74rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.site-status-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.site-status-metric {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  border: 1px solid var(--website-studio-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 6px;
+}
+
+.site-status-metric strong {
+  overflow: hidden;
+  color: var(--website-studio-text);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.site-status-metric[data-tone="ok"] strong {
+  color: var(--maverick-success);
+}
+
+.site-status-metric[data-tone="warn"] strong {
+  color: var(--maverick-warning);
+}
+
 .site-empty {
   display: grid;
   place-items: center;
@@ -293,4 +371,23 @@ select {
 .git-import-actions button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+@media (max-width: 700px) {
+  .site-status-panel {
+    top: auto;
+    right: 10px;
+    bottom: 56px;
+    width: min(330px, calc(100% - 20px));
+  }
+
+  .preview-status {
+    left: 10px;
+    bottom: 10px;
+    grid-template-columns: 8px auto auto;
+  }
+
+  .preview-status small {
+    grid-column: 2 / -1;
+  }
 }

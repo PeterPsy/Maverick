@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from html.parser import HTMLParser
 import json
 import os
+import posixpath
 from pathlib import Path
 import re
 import shlex
@@ -14,6 +15,7 @@ import socket
 import subprocess
 import time
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 from safety import copy_tree_snapshot, runtime_diagnostic_html, runtime_srcdoc_html, safe_relative_path
@@ -434,10 +436,7 @@ def _resolve_workspace_binary(source_root: Path, name: str) -> Path:
     local = source_root / "node_modules" / ".bin" / name
     if local.exists():
         return local.resolve()
-    found = shutil.which(name)
-    if found:
-        return Path(found).resolve()
-    raise ValueError(f"build command `{name}` is not installed")
+    raise ValueError(f"build command `{name}` is not installed in this site's local npm dependencies")
 
 
 def _read_package_json(source_root: Path) -> dict[str, object]:
@@ -552,11 +551,57 @@ def _bounded_log(value: str) -> str:
     return text
 
 
+def redact_runtime_log(value: str) -> str:
+    return _redact_log(value)
+
+
 def _redact_log(value: str) -> str:
     text = value
     text = re.sub(r"(?i)(token|secret|password|api[_-]?key)(=|:)\s*[^\s]+", r"\1\2[redacted]", text)
     text = re.sub(r"gh[pousr]_[A-Za-z0-9_]{20,}", "github_[redacted]", text)
+    text = re.sub(r"(?<!:)/(?:home|tmp|var/tmp|private/tmp)/[^\s'\"<>]+", "[host-path]", text)
     return text
+
+
+def internal_routes_from_html(html: str, *, base_route: str = "/") -> list[str]:
+    parser = _InternalLinkParser()
+    parser.feed(html[:MAX_RENDER_BYTES])
+    routes: list[str] = []
+    for href in parser.hrefs:
+        route = _normalize_internal_route(href, base_route=base_route)
+        if route and route not in routes:
+            routes.append(route)
+    return routes
+
+
+def _normalize_internal_route(href: str, *, base_route: str) -> str:
+    value = str(href or "").strip()
+    if not value or value.startswith("#"):
+        return ""
+    parsed = urlsplit(value)
+    if parsed.scheme or parsed.netloc:
+        return ""
+    path = parsed.path.strip()
+    if not path:
+        return ""
+    if path.startswith("/"):
+        route = posixpath.normpath(path)
+    else:
+        base = str(base_route or "/").strip() or "/"
+        if not base.startswith("/"):
+            base = f"/{base}"
+        if not base.endswith("/"):
+            base = base.rsplit("/", 1)[0] + "/"
+        route = posixpath.normpath(posixpath.join(base, path))
+    if route in {"", "."}:
+        route = "/"
+    if not route.startswith("/"):
+        route = f"/{route}"
+    if route.endswith("/index.html"):
+        route = route[: -len("index.html")] or "/"
+    elif route.endswith(".html") and route != "/index.html":
+        route = route[: -len(".html")] or "/"
+    return route.rstrip("/") or "/"
 
 
 def _html_title(html: str) -> str:
@@ -582,6 +627,19 @@ class _TitleParser(HTMLParser):
     def handle_data(self, data: str) -> None:
         if self._in_title:
             self.title += data
+
+
+class _InternalLinkParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.hrefs: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() not in {"a", "area"}:
+            return
+        for name, value in attrs:
+            if name.lower() == "href" and value:
+                self.hrefs.append(value)
 
 
 def _dedupe(items: list[str]) -> list[str]:

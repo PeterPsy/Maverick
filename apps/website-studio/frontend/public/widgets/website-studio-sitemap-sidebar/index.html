@@ -49,6 +49,7 @@
       .copy small { color: var(--soft); font-size: .69rem; }
       .badge { max-width: 6.75rem; border: 1px solid rgba(255,255,255,.08); border-radius: 999px; color: var(--muted); font-size: .64rem; padding: 2px 6px; }
       .badge.warn { color: var(--warning); border-color: rgba(246,213,143,.28); }
+      .badge.changed { color: #9ff0ca; border-color: rgba(159,240,202,.28); }
       .badge.empty { color: var(--soft); }
       .children { position: relative; margin: 0 0 .25rem; }
       .children::before { content: ""; position: absolute; top: 0; bottom: .22rem; left: .68rem; width: 1px; background: rgba(255,255,255,.08); }
@@ -72,6 +73,9 @@
       let pages = [];
       let routes = [];
       let assets = [];
+      let siteStatus = null;
+      let changeHistory = null;
+      let changedPaths = new Set();
       let activeSiteId = '';
       let expanded = new Set(['group:pages', 'group:routes', 'group:components']);
 
@@ -103,10 +107,17 @@
         if (!site) { renderEmpty('No websites yet.'); return; }
         activeSiteId = site.id;
         siteSelect.value = activeSiteId;
-        const map = await backend({ action: 'sitemap', site_id: site.id });
+        const [map, statusPayload, changesPayload] = await Promise.all([
+          backend({ action: 'sitemap', site_id: site.id }),
+          backend({ action: 'site_status', site_id: site.id }),
+          backend({ action: 'list_changes', site_id: site.id })
+        ]);
         pages = map.items || [];
         routes = map.routes || [];
         assets = map.assets || [];
+        siteStatus = statusPayload || null;
+        changeHistory = changesPayload || null;
+        changedPaths = new Set((changeHistory?.working_diff || []).map(item => String(item.path || '')).filter(Boolean));
         render();
       }
 
@@ -135,18 +146,22 @@
         const pageNodes = pages
           .slice()
           .sort((left, right) => String(left.route || '').localeCompare(String(right.route || '')))
-          .map(page => ({
-            id: `page:${page.id}`,
-            kind: 'page',
-            entityId: String(page.id),
-            pageId: String(page.id),
-            route: String(page.route || ''),
-            label: String(page.route || page.title || page.id),
-            subtitle: String(page.title || 'static page'),
-            status: page.warnings?.length ? 'warning' : 'preview',
-            warning: Boolean(page.warnings?.length),
-            icon: 'P'
-          }));
+          .map(page => {
+            const changed = itemChanged(page);
+            return {
+              id: `page:${page.id}`,
+              kind: 'page',
+              entityId: String(page.id),
+              pageId: String(page.id),
+              route: String(page.route || ''),
+              label: String(page.route || page.title || page.id),
+              subtitle: String(page.title || 'static page'),
+              status: changed ? 'modified' : page.warnings?.length ? 'warning' : 'preview',
+              warning: Boolean(page.warnings?.length),
+              changed,
+              icon: 'P'
+            };
+          });
         if (!pageNodes.length) {
           pageNodes.push(emptyNode('No static HTML pages', 'source tree has no .html files'));
         }
@@ -156,18 +171,22 @@
           .filter(route => !route.page_id || !pageRouteIds.has(String(route.page_id)))
           .slice()
           .sort((left, right) => String(left.route || '').localeCompare(String(right.route || '')))
-          .map(route => ({
-            id: `route:${route.id}`,
-            kind: 'route',
-            entityId: String(route.id),
-            routeId: String(route.id),
-            route: String(route.route || ''),
-            label: String(route.route || route.id),
-            subtitle: String(route.kind || 'route'),
-            status: route.page_id ? String(route.status || 'route') : 'no html',
-            warning: Boolean(!route.page_id || route.warnings?.length || route.status === 'broken' || route.status === 'unmatched'),
-            icon: 'R'
-          }));
+          .map(route => {
+            const changed = itemChanged(route);
+            return {
+              id: `route:${route.id}`,
+              kind: 'route',
+              entityId: String(route.id),
+              routeId: String(route.id),
+              route: String(route.route || ''),
+              label: String(route.route || route.id),
+              subtitle: String(route.kind || 'route'),
+              status: changed ? 'modified' : route.page_id ? String(route.status || 'route') : 'no html',
+              warning: Boolean(!route.page_id || route.warnings?.length || route.status === 'broken' || route.status === 'unmatched'),
+              changed,
+              icon: 'R'
+            };
+          });
         if (!routeNodes.length) {
           routeNodes.push(emptyNode('No sitemap-only routes', 'all routes map to pages'));
         }
@@ -178,7 +197,8 @@
           groupNode('group:routes', 'Sitemap routes', `${routeNodes.filter(node => !node.empty).length} checked`, routeNodes, 'R'),
           groupNode('group:components', 'Components', `${assetBuckets.components.count} files`, assetBuckets.components.children, 'C'),
           groupNode('group:assets', 'Assets', `${assetBuckets.assets.count} files`, assetBuckets.assets.children, 'A'),
-          groupNode('group:backend', 'Backend and config', `${assetBuckets.backend.count} files`, assetBuckets.backend.children, 'B')
+          groupNode('group:backend', 'Backend and config', `${assetBuckets.backend.count} files`, assetBuckets.backend.children, 'B'),
+          groupNode('group:status', 'Status', `${siteStatus?.runtime_status || 'unknown'} | ${changedPaths.size} changed`, [statusNode()], 'S')
         ];
       }
 
@@ -200,6 +220,7 @@
           const path = String(asset.path || '');
           const category = assetCategory(path, String(asset.kind || 'file'));
           buckets[category].count += 1;
+          const changed = itemChanged(asset);
           addPathNode(buckets[category].children, path, {
             id: `asset:${asset.id}`,
             kind: 'asset',
@@ -207,8 +228,9 @@
             assetId: String(asset.id),
             label: basename(path),
             subtitle: dirname(path) || String(asset.kind || 'file'),
-            status: String(asset.kind || 'file'),
+            status: changed ? 'modified' : String(asset.kind || 'file'),
             warning: Boolean(asset.warnings?.length),
+            changed,
             icon: assetIcon(asset)
           });
         }
@@ -217,6 +239,28 @@
           sortNodes(bucket.children);
         }
         return buckets;
+      }
+
+      function statusNode() {
+        const latestBuild = (changeHistory?.builds || [])[0] || {};
+        const latestRequest = (changeHistory?.publish_requests || [])[0] || {};
+        return {
+          id: 'status:summary',
+          kind: 'status',
+          entityId: '',
+          label: String(siteStatus?.runtime_status || 'unknown').replace('_', ' '),
+          subtitle: `build ${String(latestBuild.status || 'none')} | requests ${String(latestRequest.status || 'none')}`,
+          status: changedPaths.size ? `${changedPaths.size} modified` : 'clean',
+          changed: Boolean(changedPaths.size),
+          icon: 'S'
+        };
+      }
+
+      function itemChanged(item) {
+        if (!item || !changedPaths.size) return false;
+        const directPath = String(item.path || '');
+        if (directPath && changedPaths.has(directPath)) return true;
+        return (item.source_files || []).some(path => changedPaths.has(String(path || '')));
       }
 
       function assetCategory(path, kind) {
@@ -301,7 +345,7 @@
         subtitle.textContent = node.subtitle || '';
         copy.append(title, subtitle);
         const badge = document.createElement('span');
-        badge.className = node.warning ? 'badge warn' : node.empty ? 'badge empty' : 'badge';
+        badge.className = node.warning ? 'badge warn' : node.changed ? 'badge changed' : node.empty ? 'badge empty' : 'badge';
         badge.textContent = node.status || '';
         row.append(expander, icon, copy, badge);
         row.addEventListener('click', () => hasChildren ? toggleNode(node.id) : openNode(node));

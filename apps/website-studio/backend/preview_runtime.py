@@ -248,7 +248,15 @@ def _render_php_preview(
         return _blocked_runtime("php", [f"PHP docroot `{docroot_rel}` was not found"], source_root, source_profile)
     router = _php_router(runtime_root)
     rendered = _request_php_route(runtime_root, docroot, router, route)
+    fallback_warning = ""
+    if router is not None and _php_ready_without_body(rendered):
+        direct_rendered = _request_php_route(runtime_root, docroot, None, route)
+        if _php_ready_with_body(direct_rendered):
+            rendered = direct_rendered
+            fallback_warning = "PHP router returned an empty response; preview used the configured PHP docroot directly"
     warnings = rendered_route_warnings(source_root, source_profile)
+    if fallback_warning:
+        warnings.append(fallback_warning)
     if rendered["status"] != "ready":
         details = [str(rendered.get("detail") or "PHP route render failed")]
         return {
@@ -262,6 +270,18 @@ def _render_php_preview(
             "http_status": rendered.get("http_status", 0),
         }
     html = str(rendered["html"])
+    if not html.strip():
+        details = ["PHP route returned an empty response; check the configured docroot and router"]
+        return {
+            "status": "failed",
+            "runtime_kind": "php",
+            "html": runtime_diagnostic_html("Preview route failed", details),
+            "title": "",
+            "source_files": source_files_for_runtime_route(source_root, source_profile),
+            "warnings": warnings + details,
+            "missing_requirements": [],
+            "http_status": rendered.get("http_status", 0),
+        }
     return {
         "status": "ready",
         "runtime_kind": "php",
@@ -301,6 +321,22 @@ def _render_node_build_preview(
         "missing_requirements": [],
         "http_status": 200,
     }
+
+
+def _php_ready_without_body(rendered: dict[str, object]) -> bool:
+    return str(rendered.get("status") or "") == "ready" and not str(rendered.get("html") or "").strip()
+
+
+def _php_ready_with_body(rendered: dict[str, object]) -> bool:
+    try:
+        http_status = int(rendered.get("http_status") or 0)
+    except (TypeError, ValueError):
+        http_status = 0
+    return (
+        str(rendered.get("status") or "") == "ready"
+        and 200 <= http_status < 400
+        and bool(str(rendered.get("html") or "").strip())
+    )
 
 
 def _request_php_route(runtime_root: Path, docroot: Path, router: Path | None, route: str) -> dict[str, object]:

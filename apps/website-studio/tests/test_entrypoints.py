@@ -6,6 +6,7 @@ import base64
 import json
 import multiprocessing
 import os
+import shutil
 from contextlib import closing
 from io import BytesIO
 from pathlib import Path
@@ -1241,6 +1242,43 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             with closing(sqlite3.connect(data_root / "app.sqlite")) as db, db:
                 row = db.execute("SELECT status, route FROM previews WHERE id = ?", (preview["preview_id"],)).fetchone()
             self.assertEqual(row, ("blocked", preview["route"]))
+
+    @unittest.skipUnless(shutil.which("php"), "php executable is required for PHP runtime preview integration")
+    def test_php_preview_falls_back_to_docroot_when_local_router_returns_empty_body(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            archive = BytesIO()
+            with ZipFile(archive, "w") as zip_file:
+                zip_file.writestr(
+                    "frontend-website/index.php",
+                    "<?php echo '<!doctype html><html><head><title>Docroot Home</title></head><body><main>PHP Docroot Home</main></body></html>';",
+                )
+                zip_file.writestr(
+                    "local/router.php",
+                    (
+                        "<?php\n"
+                        "if ($_SERVER['REQUEST_URI'] === '/' || $_SERVER['REQUEST_URI'] === '') {\n"
+                        "    @include __DIR__ . '/frontend-website/index.php';\n"
+                        "    return;\n"
+                        "}\n"
+                        "http_response_code(404);\n"
+                    ),
+                )
+            encoded = base64.b64encode(archive.getvalue()).decode("ascii")
+
+            status, imported = handle_action(data_root, {"action": "import_zip", "display_name": "PHP Router", "archive_base64": encoded})
+            self.assertEqual(status, 201)
+            self.assertEqual(imported["import"]["source_profile"]["preview_runtime_kind"], "php")
+            self.assertEqual(imported["import"]["source_profile"]["php_docroot"], "frontend-website")
+
+            status, preview = handle_action(data_root, {"action": "build_preview", "site_id": imported["site"]["id"], "route": "/"})
+
+            self.assertEqual(status, 200)
+            self.assertEqual(preview["runtime_kind"], "php")
+            self.assertEqual(preview["runtime_status"], "ready")
+            self.assertIn("Docroot Home", preview["html"])
+            self.assertIn("PHP Docroot Home", preview["html"])
+            self.assertIn("PHP router returned an empty response", " ".join(preview["warnings"]))
 
     def test_php_site_without_static_html_returns_runtime_diagnostic_preview(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

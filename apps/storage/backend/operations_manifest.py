@@ -17,6 +17,8 @@ STORAGE_ACTIONS = [
     "read_file",
     "write_file",
     "file.content.read",
+    "read_text",
+    "file.text.read",
     "file.content.write",
     "upload_file",
     "preview_text",
@@ -63,6 +65,7 @@ STORAGE_ACTION_ALIASES = {
     "write-file": "file.content.write",
     "write-content": "file.content.write",
     "read_file": "file.content.read",
+    "read_text": "file.text.read",
 }
 
 
@@ -88,6 +91,7 @@ def operations_manifest_payload() -> dict[str, Any]:
             {"surface": "mcp", "name": "storage_list_files", "operation": "catalog"},
             {"surface": "mcp", "name": "storage_file_info", "operation": "file_info"},
             {"surface": "mcp", "name": "storage_read_file", "operation": "file.content.read"},
+            {"surface": "mcp", "name": "storage_read_text", "operation": "file.text.read"},
             {"surface": "mcp", "name": "storage_preview_text", "operation": "file.preview.text"},
             {"surface": "mcp", "name": "storage_preview_table", "operation": "file.preview.table"},
             {"surface": "mcp", "name": "storage_write_file", "operation": "file.content.write"},
@@ -119,6 +123,12 @@ def operations_manifest_payload() -> dict[str, Any]:
                 "operation": "file.content.read",
                 "calls_required": 1,
                 "example": {"action": "file.content.read", "workspace_relative_path": "storage/generated/report.md"},
+            },
+            {
+                "task": "read_one_text_document",
+                "operation": "file.text.read",
+                "calls_required": 1,
+                "example": {"action": "file.text.read", "workspace_relative_path": "storage/generated/report.md"},
             },
             {
                 "task": "create_or_overwrite_generated_file",
@@ -162,6 +172,14 @@ def operations_manifest_payload() -> dict[str, Any]:
                 "required_any": ["workspace_relative_path", "role + relative_path"],
                 "optional": ["max_bytes"],
                 "payload_profile": "explicit_content",
+            },
+            {
+                "action": "file.text.read",
+                "aliases": ["read_text"],
+                "description": "Extract complete text for a supported Storage document, optionally windowed with offset and max_chars.",
+                "required_any": ["workspace_relative_path", "role + relative_path"],
+                "optional": ["offset", "max_chars"],
+                "payload_profile": "explicit_text_content",
             },
             {
                 "action": "file.content.write",
@@ -301,6 +319,7 @@ def operations_manifest_payload() -> dict[str, Any]:
             "file.catalog.list": "explicit_action_paginated",
             "file_info": "metadata_only",
             "file.content.read": "explicit_file_content_only",
+            "file.text.read": "explicit_text_content",
             "preview_text": "bounded_preview_only",
             "file.preview.text": "bounded_preview_only",
             "preview_table": "bounded_table_preview_only",
@@ -322,6 +341,18 @@ def operations_manifest_payload() -> dict[str, Any]:
             "drive_trash": "remote_delete_result",
         },
         "payload_profile_details": {
+            "explicit_text_content": {
+                "returns": [
+                    "text",
+                    "text_char_count",
+                    "offset",
+                    "range_end",
+                    "has_more",
+                    "next_offset",
+                    "complete",
+                    "no preview character cap",
+                ],
+            },
             "remote_memory_source": {
                 "returns": [
                     "status=ready_for_memory",

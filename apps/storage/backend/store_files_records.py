@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 import shutil
 import zipfile
+from xml.etree import ElementTree
 
 from core.app_sdk.storage import read_json_state, write_json_state
 from errors import StorageValidationError
@@ -27,7 +28,15 @@ from store_files_paths import (
 )
 from storage_reference_resolver import StorageReferenceResolver
 from store_files_view import text_preview_cache_path
-from text_preview import MAX_TABLE_PREVIEW_COLUMNS, MAX_TABLE_PREVIEW_ROWS, MAX_TEXT_PREVIEW_CHARS, extract_table_preview, extract_text_preview
+from text_preview import (
+    MAX_TABLE_PREVIEW_COLUMNS,
+    MAX_TABLE_PREVIEW_ROWS,
+    MAX_TEXT_PREVIEW_CHARS,
+    extract_table_preview,
+    extract_text_content,
+    extract_text_preview,
+    text_content_supported,
+)
 
 
 SCHEMA_VERSION = "1"
@@ -99,6 +108,50 @@ def preview_text_payload(*, role: str, relative_path: str, uploaded_root: Path, 
     _write_text_preview_cache(data_root, cache)
     return {"file": record, "preview_text": preview_text, "cache_hit": False}
 
+
+
+def read_text_payload(
+    *,
+    role: str,
+    relative_path: str,
+    uploaded_root: Path,
+    generated_root: Path,
+    data_root: Path,
+    offset: int,
+    max_chars: int | None,
+) -> dict:
+    if offset < 0:
+        raise StorageValidationError("offset must not be negative.")
+    if max_chars is not None and max_chars <= 0:
+        raise StorageValidationError("max_chars must be positive.")
+    path = resolve_storage_file(
+        role=role,
+        relative_path=relative_path,
+        uploaded_root=uploaded_root,
+        generated_root=generated_root,
+    )
+    root = storage_root_for_role(role=role, uploaded_root=uploaded_root, generated_root=generated_root).resolve()
+    record = upsert_file_record(data_root=data_root, role=role, root=root, path=path.resolve())
+    if not text_content_supported(path, record["preview_kind"]):
+        raise StorageValidationError("Text read is only available for text, Markdown, DOCX, PPTX, and XLSX files.")
+    try:
+        text = extract_text_content(path, record["preview_kind"])
+    except (ValueError, KeyError, ElementTree.ParseError, zipfile.BadZipFile, OSError, UnicodeDecodeError) as error:
+        raise StorageValidationError(f"Text could not be extracted: {error}") from error
+    text_char_count = len(text)
+    start = min(offset, text_char_count)
+    range_end = text_char_count if max_chars is None else min(text_char_count, start + max_chars)
+    return {
+        "file": record,
+        "text": text[start:range_end],
+        "text_char_count": text_char_count,
+        "offset": start,
+        "max_chars": max_chars,
+        "range_end": range_end,
+        "has_more": range_end < text_char_count,
+        "next_offset": range_end if range_end < text_char_count else None,
+        "complete": start == 0 and range_end == text_char_count,
+    }
 
 
 def preview_table_payload(*, role: str, relative_path: str, data_root: Path, uploaded_root: Path, generated_root: Path, max_rows: int | None, max_columns: int | None) -> dict:

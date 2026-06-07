@@ -147,6 +147,7 @@ class StorageAppTestCase(unittest.TestCase):
         self.assertIn("maverick_storage", parsed.contract.capabilities.mcp_tools)
         self.assertIn("storage_list_files", parsed.contract.capabilities.mcp_tools)
         self.assertIn("storage_read_file", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("storage_read_text", parsed.contract.capabilities.mcp_tools)
         self.assertIn("storage_preview_text", parsed.contract.capabilities.mcp_tools)
         self.assertIn("storage_set_view_filter", parsed.contract.capabilities.mcp_tools)
         self.assertIn("storage_reference_manifest", parsed.contract.capabilities.mcp_tools)
@@ -157,6 +158,7 @@ class StorageAppTestCase(unittest.TestCase):
         self.assertEqual(parsed.contract.capabilities.cli_commands, ["storage"])
         self.assertEqual(parsed.contract.capabilities.skills, ["storage-ops"])
         provided_interfaces = {item.interface for item in parsed.contract.provides}
+        self.assertIn("file.text.read", provided_interfaces)
         self.assertIn("file.content.write", provided_interfaces)
         reference_entity_types = {item.entity_type for item in parsed.contract.capabilities.reference_entities}
         self.assertIn("file", reference_entity_types)
@@ -1471,13 +1473,26 @@ class StorageAppTestCase(unittest.TestCase):
             generated_root.mkdir(parents=True)
             body = "\n".join(f"Line {index:04d} " + ("content " * 8) for index in range(260))
             markdown = generated_root / "long.md"
-            markdown.write_text(f"# Long report\n\n{body}\n\nFINAL-MARKER", encoding="utf-8")
+            markdown_content = f"# Long report\n\n{body}\n\nFINAL-MARKER"
+            markdown.write_text(markdown_content, encoding="utf-8")
 
             full_preview = self.run_backend(
                 data_root=root / "data" / "storage",
                 uploaded_root=root / "storage" / "uploaded",
                 generated_root=generated_root,
                 body={"action": "preview_text", "workspace_relative_path": "storage/generated/long.md"},
+            )
+            text_read = self.run_backend(
+                data_root=root / "data" / "storage",
+                uploaded_root=root / "storage" / "uploaded",
+                generated_root=generated_root,
+                body={"action": "file.text.read", "workspace_relative_path": "storage/generated/long.md"},
+            )
+            text_window = self.run_backend(
+                data_root=root / "data" / "storage",
+                uploaded_root=root / "storage" / "uploaded",
+                generated_root=generated_root,
+                body={"action": "read_text", "workspace_relative_path": "storage/generated/long.md", "offset": 2, "max_chars": 8},
             )
             limited_preview = self.run_backend(
                 data_root=root / "data" / "storage",
@@ -1489,6 +1504,15 @@ class StorageAppTestCase(unittest.TestCase):
             self.assertEqual(full_preview["status_code"], 200)
             self.assertNotIn("FINAL-MARKER", full_preview["json"]["preview_text"])
             self.assertTrue(full_preview["json"]["preview_text"].endswith("…"))
+            self.assertEqual(text_read["status_code"], 200)
+            self.assertIn("FINAL-MARKER", text_read["json"]["text"])
+            self.assertEqual(text_read["json"]["text_char_count"], len(markdown_content))
+            self.assertTrue(text_read["json"]["complete"])
+            self.assertFalse(text_read["json"]["has_more"])
+            self.assertEqual(text_window["status_code"], 200)
+            self.assertEqual(text_window["json"]["text"], markdown_content[2:10])
+            self.assertEqual(text_window["json"]["next_offset"], 10)
+            self.assertFalse(text_window["json"]["complete"])
             self.assertEqual(limited_preview["status_code"], 200)
             self.assertNotIn("FINAL-MARKER", limited_preview["json"]["preview_text"])
             self.assertTrue(limited_preview["json"]["preview_text"].endswith("…"))
@@ -1598,6 +1622,7 @@ class StorageAppTestCase(unittest.TestCase):
             {"action": "catalog", "role": "all"},
             {"action": "file_info", "role": "generated", "relative_path": "report.md"},
             {"action": "read_file", "role": "uploaded", "relative_path": "source.txt"},
+            {"action": "read_text", "role": "generated", "relative_path": "report.md"},
             {"action": "preview_table", "workspace_relative_path": "storage/generated/leads.csv"},
             {"action": "read_folder", "role": "generated"},
             {"action": "download_folder", "role": "uploaded"},
@@ -1613,6 +1638,7 @@ class StorageAppTestCase(unittest.TestCase):
         invalid_payloads = [
             {"action": "file_info", "role": "all", "relative_path": "report.md"},
             {"action": "read_file", "role": "all", "relative_path": "report.md"},
+            {"action": "read_text", "role": "all", "relative_path": "report.md"},
             {"action": "preview_text", "role": "all", "relative_path": "report.md"},
             {"action": "create_folder", "role": "all", "folder_name": "Reports"},
             {"action": "move_items", "role": "all", "target_folder_relative_path": "", "files": []},
@@ -1784,6 +1810,7 @@ class StorageAppTestCase(unittest.TestCase):
         self.assertIn("app.storage.maverick_storage", [tool.tool_name for tool in tools])
         self.assertIn("app.storage.storage_list_files", [tool.tool_name for tool in tools])
         self.assertIn("app.storage.storage_read_file", [tool.tool_name for tool in tools])
+        self.assertIn("app.storage.storage_read_text", [tool.tool_name for tool in tools])
         self.assertIn("app.storage.storage_write_file", [tool.tool_name for tool in tools])
         self.assertIn("app.storage.storage", [command.command_id for command in commands])
         storage_command = next(command for command in commands if command.command_id == "app.storage.storage")
@@ -1870,6 +1897,7 @@ class StorageAppTestCase(unittest.TestCase):
         self.assertEqual(cli_payload["default_action"], "operations.manifest")
         operation_by_action = {operation["action"]: operation for operation in mcp_payload["operations"]}
         self.assertEqual(operation_by_action["catalog"]["aliases"], ["file.catalog.list"])
+        self.assertEqual(operation_by_action["file.text.read"]["aliases"], ["read_text"])
         self.assertEqual(operation_by_action["preview_text"]["aliases"], ["file.preview.text"])
         self.assertEqual(operation_by_action["preview_table"]["aliases"], ["file.preview.table"])
         self.assertIn("file.catalog.list", mcp_payload["payload_profiles"])
@@ -1963,6 +1991,14 @@ class StorageAppTestCase(unittest.TestCase):
             workspace_id="default",
             start_path=repo_root,
         )
+        text_read = call_mcp_tool(
+            tool_name="app.storage.storage_read_text",
+            context=context,
+            arguments={"workspace_relative_path": "storage/generated/report.md"},
+            app_store=state.app_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
         text_preview = call_mcp_tool(
             tool_name="app.storage.storage_preview_text",
             context=context,
@@ -1984,6 +2020,9 @@ class StorageAppTestCase(unittest.TestCase):
         self.assertEqual(info_payload["file"]["workspace_relative_path"], "storage/generated/report.md")
         self.assertEqual(read_payload["status_code"], 200)
         self.assertIn("# Report", b64decode(read_payload["content_base64"]).decode("utf-8"))
+        self.assertEqual(text_read["status_code"], 200)
+        self.assertIn("hello from storage", text_read["text"])
+        self.assertTrue(text_read["complete"])
         self.assertEqual(text_preview["status_code"], 200)
         self.assertIn("hello from storage", text_preview["preview_text"])
         self.assertEqual(table_preview["status_code"], 200)

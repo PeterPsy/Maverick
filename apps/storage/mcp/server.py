@@ -19,6 +19,7 @@ tool_actions = {
     "storage_list_files": "catalog",
     "storage_file_info": "file_info",
     "storage_read_file": "file.content.read",
+    "storage_read_text": "file.text.read",
     "storage_preview_text": "file.preview.text",
     "storage_preview_table": "file.preview.table",
     "storage_reference_manifest": "references.manifest",

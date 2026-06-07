@@ -14,6 +14,8 @@
               "file_info",
               "read_file",
               "file.content.read",
+              "read_text",
+              "file.text.read",
               "write",
               "write-file",
               "write-content",
@@ -74,6 +76,7 @@
           "relative_path": {"type": "string"},
           "offset": {"type": "integer", "minimum": 0},
           "limit": {"type": "integer", "minimum": 1, "maximum": 2000},
+          "max_chars": {"type": "integer", "minimum": 1},
           "content": {"type": "string"},
           "content_base64": {"type": "string"},
           "mode": {"type": "string", "enum": ["create", "overwrite"]},
@@ -165,6 +168,38 @@
         "additionalProperties": false
       },
       "output_schema": {"type": "object", "properties": {"file": {"type": "object"}, "content_base64": {"type": "string"}}}
+    },
+    "storage_read_text": {
+      "description": "Extract complete text for a supported Storage text, Markdown, DOCX, PPTX, or XLSX file. Use offset and max_chars to page very large documents.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workspace_relative_path": {"type": "string", "pattern": "^storage/(uploaded|generated)/.+$"},
+          "role": {"type": "string", "enum": ["uploaded", "generated"]},
+          "relative_path": {"type": "string"},
+          "offset": {"type": "integer", "minimum": 0},
+          "max_chars": {"type": "integer", "minimum": 1}
+        },
+        "anyOf": [
+          {"required": ["workspace_relative_path"]},
+          {"required": ["role", "relative_path"]}
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "text": {"type": "string"},
+          "text_char_count": {"type": "integer"},
+          "offset": {"type": "integer"},
+          "max_chars": {"type": ["integer", "null"]},
+          "range_end": {"type": "integer"},
+          "has_more": {"type": "boolean"},
+          "next_offset": {"type": ["integer", "null"]},
+          "complete": {"type": "boolean"},
+          "file": {"type": "object"}
+        }
+      }
     },
     "storage_preview_text": {
       "description": "Extract a bounded text preview for a text, Markdown, DOCX, PPTX, or XLSX Storage file.",

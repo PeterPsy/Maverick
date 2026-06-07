@@ -38,6 +38,7 @@ from store import (
     preview_text_payload,
     read_file_payload,
     read_folder_payload,
+    read_text_payload,
     reference_from_payload,
     rename_file_payload,
     seed_state,
@@ -436,6 +437,21 @@ def handle_action(
             uploaded_root=uploaded_root,
             generated_root=generated_root,
             max_bytes=max_bytes,
+        )
+    if action in {"read_text", "file.text.read"}:
+        role, relative_path = reference_from_payload(
+            role=str(body.get("role") or ""),
+            relative_path=str(body.get("relative_path") or ""),
+            workspace_relative_path=str(body.get("workspace_relative_path") or ""),
+        )
+        return 200, read_text_payload(
+            role=role,
+            relative_path=relative_path,
+            uploaded_root=uploaded_root,
+            generated_root=generated_root,
+            data_root=data_root,
+            offset=_optional_nonnegative_int(body, "offset") or 0,
+            max_chars=_optional_positive_int(body, "max_chars"),
         )
     if action in {"write_file", "file.content.write"}:
         role, relative_path = reference_from_payload(

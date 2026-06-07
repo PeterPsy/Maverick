@@ -19,6 +19,8 @@
               "file_info",
               "read_file",
               "file.content.read",
+              "read_text",
+              "file.text.read",
               "write",
               "write-file",
               "write-content",
@@ -89,7 +91,7 @@
           "max_chars": {
             "type": "integer",
             "minimum": 1,
-            "description": "Text preview character budget. drive_index caps this at 20000 for Memory ingest compatibility."
+            "description": "Character budget for text windows and previews. preview_text caps this at 12000; drive_index caps this at 20000 for Memory ingest compatibility."
           },
           "max_rows": {"type": "integer", "minimum": 1},
           "max_columns": {"type": "integer", "minimum": 1},
@@ -157,6 +159,17 @@
           {
             "properties": {
               "action": {"enum": ["read_file", "file.content.read"]},
+              "role": {"enum": ["uploaded", "generated"]}
+            },
+            "required": ["action"],
+            "anyOf": [
+              {"required": ["workspace_relative_path"]},
+              {"required": ["role", "relative_path"]}
+            ]
+          },
+          {
+            "properties": {
+              "action": {"enum": ["read_text", "file.text.read"]},
               "role": {"enum": ["uploaded", "generated"]}
             },
             "required": ["action"],
@@ -367,6 +380,7 @@
           {"action": "operations.manifest"},
           {"action": "catalog", "limit": 20},
           {"action": "file.content.read", "workspace_relative_path": "storage/generated/report.md"},
+          {"action": "file.text.read", "workspace_relative_path": "storage/generated/report.md"},
           {"action": "file.content.write", "workspace_relative_path": "storage/generated/report.md", "mode": "overwrite", "content": "# Report"},
           {"action": "drive_search", "connection_id": "drive_conn_example", "query": "mimeType='application/pdf'", "limit": 20},
           {"action": "drive_export", "connection_id": "drive_conn_example", "drive_file_id": "1AbC", "export_mime_type": "application/pdf"}

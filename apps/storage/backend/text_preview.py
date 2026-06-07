@@ -1,4 +1,4 @@
-"""Text extraction helpers for Storage file previews."""
+"""Text extraction helpers for Storage file previews and document reads."""
 
 from __future__ import annotations
 
@@ -16,6 +16,9 @@ MAX_PREVIEW_FILE_BYTES = 25 * 1024 * 1024
 MAX_TEXT_PREVIEW_BYTES = 256 * 1024
 MAX_ARCHIVE_ENTRIES = 256
 MAX_ARCHIVE_DECOMPRESSED_BYTES = 8 * 1024 * 1024
+MAX_TEXT_READ_FILE_BYTES = 100 * 1024 * 1024
+MAX_TEXT_READ_ARCHIVE_ENTRIES = 2048
+MAX_TEXT_READ_ARCHIVE_DECOMPRESSED_BYTES = 64 * 1024 * 1024
 
 
 def _local_name(tag: str) -> str:
@@ -51,24 +54,44 @@ def _xml_text(payload: bytes) -> str:
     return " ".join(values)
 
 
-def _docx_text(path: Path) -> str:
-    _validate_file_budget(path)
+def _docx_text(
+    path: Path,
+    *,
+    max_file_bytes: int = MAX_PREVIEW_FILE_BYTES,
+    max_archive_entries: int = MAX_ARCHIVE_ENTRIES,
+    max_decompressed_bytes: int = MAX_ARCHIVE_DECOMPRESSED_BYTES,
+) -> str:
+    _validate_file_budget(path, max_file_bytes=max_file_bytes)
     with zipfile.ZipFile(path) as archive:
-        _validate_archive_budget(archive)
-        return _xml_text(_read_archive_member(archive, "word/document.xml"))
+        _validate_archive_budget(
+            archive,
+            max_entries=max_archive_entries,
+            max_decompressed_bytes=max_decompressed_bytes,
+        )
+        return _xml_text(_read_archive_member(archive, "word/document.xml", max_decompressed_bytes=max_decompressed_bytes))
 
 
-def _pptx_text(path: Path) -> str:
-    _validate_file_budget(path)
+def _pptx_text(
+    path: Path,
+    *,
+    max_file_bytes: int = MAX_PREVIEW_FILE_BYTES,
+    max_archive_entries: int = MAX_ARCHIVE_ENTRIES,
+    max_decompressed_bytes: int = MAX_ARCHIVE_DECOMPRESSED_BYTES,
+) -> str:
+    _validate_file_budget(path, max_file_bytes=max_file_bytes)
     with zipfile.ZipFile(path) as archive:
-        _validate_archive_budget(archive)
+        _validate_archive_budget(
+            archive,
+            max_entries=max_archive_entries,
+            max_decompressed_bytes=max_decompressed_bytes,
+        )
         slide_names = sorted(name for name in archive.namelist() if name.startswith("ppt/slides/slide") and name.endswith(".xml"))
-        return "\n".join(_xml_text(_read_archive_member(archive, name)) for name in slide_names)
+        return "\n".join(_xml_text(_read_archive_member(archive, name, max_decompressed_bytes=max_decompressed_bytes)) for name in slide_names)
 
 
-def _xlsx_shared_strings(archive: zipfile.ZipFile) -> list[str]:
+def _xlsx_shared_strings(archive: zipfile.ZipFile, *, max_decompressed_bytes: int = MAX_ARCHIVE_DECOMPRESSED_BYTES) -> list[str]:
     try:
-        payload = _read_archive_member(archive, "xl/sharedStrings.xml")
+        payload = _read_archive_member(archive, "xl/sharedStrings.xml", max_decompressed_bytes=max_decompressed_bytes)
     except KeyError:
         return []
     root = ElementTree.fromstring(payload)
@@ -104,15 +127,25 @@ def _xlsx_column_index(reference: str) -> int:
     return max(index - 1, 0)
 
 
-def _xlsx_text(path: Path) -> str:
-    _validate_file_budget(path)
+def _xlsx_text(
+    path: Path,
+    *,
+    max_file_bytes: int = MAX_PREVIEW_FILE_BYTES,
+    max_archive_entries: int = MAX_ARCHIVE_ENTRIES,
+    max_decompressed_bytes: int = MAX_ARCHIVE_DECOMPRESSED_BYTES,
+) -> str:
+    _validate_file_budget(path, max_file_bytes=max_file_bytes)
     with zipfile.ZipFile(path) as archive:
-        _validate_archive_budget(archive)
-        shared_strings = _xlsx_shared_strings(archive)
+        _validate_archive_budget(
+            archive,
+            max_entries=max_archive_entries,
+            max_decompressed_bytes=max_decompressed_bytes,
+        )
+        shared_strings = _xlsx_shared_strings(archive, max_decompressed_bytes=max_decompressed_bytes)
         sheet_names = sorted(name for name in archive.namelist() if name.startswith("xl/worksheets/sheet") and name.endswith(".xml"))
         rows: list[str] = []
         for name in sheet_names:
-            root = ElementTree.fromstring(_read_archive_member(archive, name))
+            root = ElementTree.fromstring(_read_archive_member(archive, name, max_decompressed_bytes=max_decompressed_bytes))
             for row in root.iter():
                 if not (row.tag.endswith("}row") or row.tag == "row"):
                     continue
@@ -127,26 +160,36 @@ def _xlsx_text(path: Path) -> str:
         return "\n".join(rows)
 
 
-def _validate_file_budget(path: Path) -> None:
-    if path.stat().st_size > MAX_PREVIEW_FILE_BYTES:
-        raise ValueError("file is too large for preview extraction.")
+def _validate_file_budget(path: Path, *, max_file_bytes: int = MAX_PREVIEW_FILE_BYTES) -> None:
+    if path.stat().st_size > max_file_bytes:
+        raise ValueError("file is too large for text extraction.")
 
 
-def _validate_archive_budget(archive: zipfile.ZipFile) -> None:
+def _validate_archive_budget(
+    archive: zipfile.ZipFile,
+    *,
+    max_entries: int = MAX_ARCHIVE_ENTRIES,
+    max_decompressed_bytes: int = MAX_ARCHIVE_DECOMPRESSED_BYTES,
+) -> None:
     entries = archive.infolist()
-    if len(entries) > MAX_ARCHIVE_ENTRIES:
-        raise ValueError("archive contains too many entries for preview extraction.")
+    if len(entries) > max_entries:
+        raise ValueError("archive contains too many entries for text extraction.")
     total = 0
     for entry in entries:
         total += int(entry.file_size or 0)
-        if total > MAX_ARCHIVE_DECOMPRESSED_BYTES:
-            raise ValueError("archive exceeds decompressed preview budget.")
+        if total > max_decompressed_bytes:
+            raise ValueError("archive exceeds decompressed text extraction budget.")
 
 
-def _read_archive_member(archive: zipfile.ZipFile, name: str) -> bytes:
+def _read_archive_member(
+    archive: zipfile.ZipFile,
+    name: str,
+    *,
+    max_decompressed_bytes: int = MAX_ARCHIVE_DECOMPRESSED_BYTES,
+) -> bytes:
     info = archive.getinfo(name)
-    if info.file_size > MAX_ARCHIVE_DECOMPRESSED_BYTES:
-        raise ValueError("archive member exceeds preview budget.")
+    if info.file_size > max_decompressed_bytes:
+        raise ValueError("archive member exceeds text extraction budget.")
     return archive.read(name)
 
 
@@ -254,4 +297,38 @@ def extract_text_preview(path: Path, preview_kind: str, max_chars: int | None = 
             return _trim_preview(_xlsx_text(path), max_chars)
     except (ValueError, KeyError, ElementTree.ParseError, zipfile.BadZipFile, OSError, UnicodeDecodeError):
         return ""
+    return ""
+
+
+def text_content_supported(path: Path, preview_kind: str) -> bool:
+    suffix = path.suffix.lower()
+    return preview_kind in {"text", "markdown"} or suffix in {".docx", ".pptx", ".xlsx"}
+
+
+def extract_text_content(path: Path, preview_kind: str) -> str:
+    suffix = path.suffix.lower()
+    if preview_kind in {"text", "markdown"}:
+        _validate_file_budget(path, max_file_bytes=MAX_TEXT_READ_FILE_BYTES)
+        return path.read_text(encoding="utf-8", errors="replace")
+    if suffix == ".docx":
+        return _docx_text(
+            path,
+            max_file_bytes=MAX_TEXT_READ_FILE_BYTES,
+            max_archive_entries=MAX_TEXT_READ_ARCHIVE_ENTRIES,
+            max_decompressed_bytes=MAX_TEXT_READ_ARCHIVE_DECOMPRESSED_BYTES,
+        )
+    if suffix == ".pptx":
+        return _pptx_text(
+            path,
+            max_file_bytes=MAX_TEXT_READ_FILE_BYTES,
+            max_archive_entries=MAX_TEXT_READ_ARCHIVE_ENTRIES,
+            max_decompressed_bytes=MAX_TEXT_READ_ARCHIVE_DECOMPRESSED_BYTES,
+        )
+    if suffix == ".xlsx":
+        return _xlsx_text(
+            path,
+            max_file_bytes=MAX_TEXT_READ_FILE_BYTES,
+            max_archive_entries=MAX_TEXT_READ_ARCHIVE_ENTRIES,
+            max_decompressed_bytes=MAX_TEXT_READ_ARCHIVE_DECOMPRESSED_BYTES,
+        )
     return ""

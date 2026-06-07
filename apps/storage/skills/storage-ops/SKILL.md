@@ -24,9 +24,10 @@ Common actions:
 - `move_file`: move a file into a folder or back to the storage root while keeping it inside its current storage role.
 - `move_folder`: move a non-root folder into another folder or back to the storage root while keeping it inside its current storage role; Storage rejects path escapes, collisions, and moves into the same folder subtree.
 - `view_filter`: read the shared Storage UI filter without scanning workspace storage.
-- `read_file`: read a specific file by `role` and `relative_path` for preview or download workflows.
+- `read_file`: read a specific file by `role` and `relative_path` for binary/download workflows.
+- `read_text` / `file.text.read`: extract document text from text, Markdown, DOCX, PPTX, and XLSX files without the preview character cap; use `offset` and `max_chars` only when you intentionally want a window.
 - `write_file` / `file.content.write`: create or overwrite a file by `role` and `relative_path` or `workspace_relative_path`, with UTF-8 `content` or `content_base64`.
-- `preview_text`: extract a text preview for text, Markdown, DOCX, PPTX, and XLSX files.
+- `preview_text`: extract a bounded text preview for UI-style preview workflows, not for complete document reading.
 - `preview_table`: extract structured sheet rows for CSV and spreadsheet files so Storage can render a table preview.
 - `update_markdown_file`: replace the UTF-8 contents of a validated `.md` file in workspace storage.
 - `set_view_filter`: update the shared Storage UI filter with `query`, `role`, and `kind` so the frontend can show the filtered view.

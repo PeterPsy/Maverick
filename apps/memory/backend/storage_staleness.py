@@ -272,8 +272,12 @@ def reindex_suggestion(request: dict[str, Any]) -> dict[str, Any]:
     return {
         "reason": request["reason"],
         "storage_action": "drive_index",
-        "memory_action": "ingest_storage_source",
+        "memory_action": "memory_ingest_source",
+        "memory_adapter_id": "remote_storage_file",
         "mcp_tool": "storage_drive_index",
         "arguments": arguments,
-        "next_step": "Run Storage drive_index for this file, then pass memory_source to Memory ingest_storage_source with compile_after_ingest=true.",
+        "next_step": (
+            "Run Storage drive_index for this file, then call Memory memory_ingest_source "
+            "with adapter_id=remote_storage_file and compile_after_ingest=true."
+        ),
     }

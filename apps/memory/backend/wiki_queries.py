@@ -156,6 +156,7 @@ def compact_compiled_payload(
         "freshness": page["freshness"],
         "compiled_at": page["compiled_at"],
         "claims": payload["claims"],
+        "citations": payload["citations"],
         "storage_references": payload["storage_references"],
         "lint_findings": payload["lint_findings"],
     }

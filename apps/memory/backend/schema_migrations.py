@@ -129,9 +129,10 @@ def backfill_source_version_foundation(db: sqlite3.Connection, *, data_root: Pat
     timestamp = now_timestamp()
     for row in db.execute("SELECT * FROM source_versions ORDER BY created_at, id"):
         version = row_payload(row) or {}
-        source = ensure_migrated_source(db, version=version, timestamp=timestamp)
-        document = ensure_migrated_source_document(db, source=source, version=version, timestamp=timestamp)
-        if not str(version.get("source_document_id") or "").strip():
+        document = existing_source_document_for_version(db, version)
+        if document is None:
+            source = ensure_migrated_source(db, version=version, timestamp=timestamp)
+            document = ensure_migrated_source_document(db, source=source, version=version, timestamp=timestamp)
             db.execute(
                 "UPDATE source_versions SET source_document_id = ? WHERE id = ?",
                 (document["id"], version["id"]),
@@ -139,6 +140,14 @@ def backfill_source_version_foundation(db: sqlite3.Connection, *, data_root: Pat
             version["source_document_id"] = document["id"]
         if str(version.get("extracted_text") or "").strip():
             backfill_source_version_content(db, data_root=data_root, version=version, document=document, timestamp=timestamp)
+
+
+def existing_source_document_for_version(db: sqlite3.Connection, version: dict[str, Any]) -> dict[str, Any] | None:
+    source_document_id = str(version.get("source_document_id") or "").strip()
+    if not source_document_id:
+        return None
+    row = db.execute("SELECT * FROM source_documents WHERE id = ?", (source_document_id,)).fetchone()
+    return row_payload(row) if row is not None else None
 
 
 def ensure_migrated_source(db: sqlite3.Connection, *, version: dict[str, Any], timestamp: str) -> dict[str, Any]:

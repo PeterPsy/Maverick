@@ -123,12 +123,12 @@ def schema_is_current(data_root: Path) -> bool:
             row = db.execute("SELECT value FROM schema_metadata WHERE key = 'schema_version'").fetchone()
             if row is None or row["value"] != SCHEMA_VERSION:
                 return False
-            return schema_has_current_shape(db)
+            return schema_has_current_shape(db, data_root=data_root)
     except sqlite3.Error:
         return False
 
 
-def schema_has_current_shape(db: sqlite3.Connection) -> bool:
+def schema_has_current_shape(db: sqlite3.Connection, *, data_root: Path) -> bool:
     required_tables = {
         "source_documents",
         "source_versions",
@@ -260,7 +260,7 @@ def schema_has_current_shape(db: sqlite3.Connection) -> bool:
             return False
     if source_version_foundation_needs_backfill(db):
         return False
-    if source_chunk_fts_needs_rebuild(db):
+    if source_chunk_fts_needs_rebuild(db, data_root=data_root):
         return False
     return True
 

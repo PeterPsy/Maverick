@@ -91,7 +91,7 @@ Storage remains the owner of local files, Drive OAuth, Drive bytes, preview/expo
 
 Memory exposes agent-facing surfaces through the app contract:
 
-- `memory_context` returns normalized `memory_node` context packs with compiled page data when available
+- `memory_context` returns normalized `memory_node` context packs with compiled page data and top-level compiled citations when available
 - `memory_inspect_node` returns node details plus compiled page, claims, citations, sources, and lint findings
 - `memory_search` searches graph nodes plus compiled page and claim text and returns the same normalized `memory_node` retrieval envelope as `memory_context`
 - `memory_compile` compiles one node into the internal wiki layer
@@ -101,7 +101,7 @@ Memory exposes agent-facing surfaces through the app contract:
 - `memory_source_query` searches verified source chunks through Memory's app-owned source chunk FTS and returns normalized source-chunk results
 - `memory_fetch_chunks` hydrates up to 20 source chunks from the content store with SHA verification; chunk retrieval surfaces should expose normalized chunk identity, freshness, locator, and citations when available
 - `memory_inspect_source` inspects one source document with normalized freshness, versions, chunks, linked nodes, citations, and recent ingest jobs linked through indexed job provenance fields
-- `memory_jobs` manages Memory's app-owned ingest job queue with dedupe, claim leases, retry backoff, cancellation, inspection, `run_next` execution, and bounded `run_until_idle` queue draining for the first app-owned job types. `run_next` updates the job's indexed node/source provenance from the execution result before completing the lease, so source-ingest jobs remain auditable when they create a new observed source version. Storage staleness uses an explicit `requires_storage_reindex` job marker so Memory can report the required Storage `drive_index` step without attempting to re-ingest stale Drive content before Storage provides a fresh `memory_source`.
+- `memory_jobs` manages Memory's app-owned ingest job queue with dedupe, claim leases, expired-lease recovery, retry backoff, cancellation, inspection, `run_next` execution, and bounded `run_until_idle` queue draining for the first app-owned job types. The first phase stays independent of the core scheduler: agents and operators explicitly drain ready work when they need queued ingest, compile, or staleness jobs reflected immediately. `run_next` updates the job's indexed node/source provenance from the execution result before completing the lease, so source-ingest jobs remain auditable when they create a new observed source version. Storage staleness uses an explicit `requires_storage_reindex` job marker so Memory can report the required Storage `drive_index` step without attempting to re-ingest stale Drive content before Storage provides a fresh `memory_source`.
 
 Future ingestion and execution surfaces should expand source primitives without changing core ownership:
 

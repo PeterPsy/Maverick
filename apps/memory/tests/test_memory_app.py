@@ -622,6 +622,45 @@ class MemoryAppTestCase(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "hash mismatch"):
                 content_store.read_body(data_root, relative_path=record.relative_path, expected_sha256=record.body_sha256)
 
+    def test_source_chunk_fts_repair_rebuilds_stale_same_count_rows(self) -> None:
+        service = self.import_backend_module("service")
+        database = self.import_backend_module("database")
+
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            ingest_status, ingested = service.handle_action(
+                data_root,
+                {
+                    "action": "ingest_source",
+                    "adapter_id": "inline_markdown",
+                    "source_key": "notes:fts-repair",
+                    "title": "FTS repair evidence",
+                    "body_markdown": "Verified source says Sofia owns the FTS repair.",
+                },
+            )
+            with database.connect(data_root) as db:
+                chunk = database.row_payload(db.execute("SELECT * FROM source_chunks").fetchone()) or {}
+                db.execute(
+                    "UPDATE source_chunk_fts SET body_text = ? WHERE chunk_id = ?",
+                    ("stale text without the search token", chunk["id"]),
+                )
+                db.commit()
+
+            query_status, query = service.handle_action(data_root, {"action": "source_query", "query": "Sofia"})
+
+            with database.connect(data_root) as db:
+                repaired_body = db.execute(
+                    "SELECT body_text FROM source_chunk_fts WHERE chunk_id = ?",
+                    (chunk["id"],),
+                ).fetchone()["body_text"]
+
+            self.assertEqual(ingest_status, 200)
+            self.assertTrue(ingested["source_version_created"])
+            self.assertEqual(query_status, 200)
+            self.assertEqual(query["results"][0]["chunk_id"], chunk["id"])
+            self.assertIn("Sofia owns the FTS repair", query["results"][0]["summary"])
+            self.assertIn("Sofia owns the FTS repair", repaired_body)
+
     def test_ingest_jobs_dedupe_claim_retry_and_complete_with_lease(self) -> None:
         service = self.import_backend_module("service")
 
@@ -702,6 +741,44 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual(completed["job"]["lease_token"], "")
             self.assertEqual(list_status, 200)
             self.assertEqual(listed["jobs"][0]["id"], completed["job"]["id"])
+
+    def test_ingest_jobs_claim_recovers_expired_running_lease(self) -> None:
+        service = self.import_backend_module("service")
+        database = self.import_backend_module("database")
+
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            service.handle_action(
+                data_root,
+                {
+                    "action": "jobs_enqueue",
+                    "job_type": "compile_node",
+                    "dedupe_key": "compile:expired-lease",
+                    "payload": {"node_id": "node_expired"},
+                },
+            )
+            first_claim = service.handle_action(
+                data_root,
+                {"action": "jobs_claim", "job_types": ["compile_node"], "lease_seconds": 30},
+            )[1]["job"]
+            with database.connect(data_root) as db:
+                db.execute(
+                    "UPDATE ingest_jobs SET locked_until = ?, updated_at = ? WHERE id = ?",
+                    ("2000-01-01T00:00:00+00:00", "2000-01-01T00:00:00+00:00", first_claim["id"]),
+                )
+                db.commit()
+
+            reclaim_status, reclaimed = service.handle_action(
+                data_root,
+                {"action": "jobs_claim", "job_types": ["compile_node"], "lease_seconds": 30},
+            )
+            job = reclaimed["job"]
+
+            self.assertEqual(reclaim_status, 200)
+            self.assertEqual(job["id"], first_claim["id"])
+            self.assertEqual(job["status"], "running")
+            self.assertEqual(job["attempt_count"], 2)
+            self.assertNotEqual(job["lease_token"], first_claim["lease_token"])
 
     def test_ingest_jobs_run_next_executes_compile_job(self) -> None:
         service = self.import_backend_module("service")
@@ -929,6 +1006,31 @@ class MemoryAppTestCase(unittest.TestCase):
                 self.assertIn("compiled", item)
                 self.assertIsInstance(item["relevance"], float)
                 self.assertNotIn("score", item)
+
+    def test_search_and_context_include_compiled_citations_in_memory_node_envelope(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            ingested = self.run_backend(
+                data_root,
+                {
+                    "action": "ingest_source",
+                    "adapter_id": "inline_markdown",
+                    "source_key": "notes:atlas-owner",
+                    "title": "Atlas owner evidence",
+                    "body_markdown": "Atlas onboarding owner is Rina.",
+                    "compile_after_ingest": True,
+                },
+            )["json"]
+            citation = ingested["compiled"]["citations"][0]
+
+            search = self.run_backend(data_root, {"action": "search", "query": "Atlas onboarding owner"})["json"]
+            context = self.run_backend(data_root, {"action": "context", "query": "Atlas onboarding owner"})["json"]
+
+            for item in (search["results"][0], context["items"][0]):
+                self.assertEqual(item["kind"], "memory_node")
+                self.assertEqual(item["id"], ingested["node"]["id"])
+                self.assertEqual(item["citations"][0]["source_chunk_id"], citation["source_chunk_id"])
+                self.assertEqual(item["compiled"]["citations"][0]["source_chunk_id"], citation["source_chunk_id"])
 
     def test_compile_builds_internal_wiki_context_sources_and_search_matches(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -3117,6 +3219,9 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual(applied["storage_identity"]["entity_id"], storage_file_id)
             self.assertEqual(len(applied["impacted_nodes"]), 2)
             self.assertEqual(applied["reindex_suggestion"]["mcp_tool"], "storage_drive_index")
+            self.assertEqual(applied["reindex_suggestion"]["memory_action"], "memory_ingest_source")
+            self.assertEqual(applied["reindex_suggestion"]["memory_adapter_id"], "remote_storage_file")
+            self.assertIn("memory_ingest_source", applied["reindex_suggestion"]["next_step"])
             self.assertEqual(applied["reindex_suggestion"]["arguments"]["stable_storage_file_id"], storage_file_id)
             self.assertTrue(all(node["compiled_wiki_stale"] for node in applied["impacted_nodes"]))
             self.assertEqual(len(refs), 2)
@@ -3136,6 +3241,7 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertTrue(reindex_run["result"]["action_required"])
             self.assertEqual(reindex_run["result"]["storage_identity"]["entity_id"], storage_file_id)
             self.assertEqual(reindex_run["result"]["reindex_suggestion"]["mcp_tool"], "storage_drive_index")
+            self.assertEqual(reindex_run["result"]["reindex_suggestion"]["memory_action"], "memory_ingest_source")
             self.assertEqual(failed_jobs["jobs"], [])
             self.assertGreaterEqual(stale_claim_count, 2)
             self.assertGreaterEqual(stale_chunk_count, 1)

@@ -88,10 +88,80 @@ def rebuild_source_chunk_fts(db: sqlite3.Connection, *, data_root: Path) -> None
         upsert_source_chunk_fts(db, chunk_id=str(row["id"]), body_text=body)
 
 
-def source_chunk_fts_needs_rebuild(db: sqlite3.Connection) -> bool:
+def source_chunk_fts_needs_rebuild(db: sqlite3.Connection, *, data_root: Path) -> bool:
     table = db.execute("SELECT 1 FROM sqlite_master WHERE name = 'source_chunk_fts' LIMIT 1").fetchone()
     if table is None:
         return True
-    chunk_count = db.execute("SELECT COUNT(*) AS count FROM source_chunks WHERE body_path != ''").fetchone()["count"]
-    indexed_count = db.execute("SELECT COUNT(*) AS count FROM source_chunk_fts").fetchone()["count"]
-    return indexed_count < chunk_count
+    chunks = list(
+        db.execute(
+            """
+            SELECT
+              sc.id AS chunk_id,
+              sc.source_version_id,
+              sc.body_path,
+              sc.body_sha256,
+              sv.source_id,
+              sv.source_document_id,
+              s.title,
+              s.file_id,
+              s.workspace_relative_path,
+              s.entity_id
+            FROM source_chunks sc
+            JOIN source_versions sv ON sv.id = sc.source_version_id
+            JOIN sources s ON s.id = sv.source_id
+            WHERE sc.body_path != ''
+            ORDER BY sc.id
+            """
+        )
+    )
+    indexed = {
+        str(row["chunk_id"] or ""): row
+        for row in db.execute(
+            """
+            SELECT
+              chunk_id,
+              source_version_id,
+              source_id,
+              source_document_id,
+              title,
+              body_text,
+              file_id,
+              workspace_relative_path,
+              entity_id
+            FROM source_chunk_fts
+            """
+        )
+    }
+    if len(indexed) != len(chunks):
+        return True
+    for chunk in chunks:
+        chunk_id = str(chunk["chunk_id"] or "")
+        row = indexed.get(chunk_id)
+        if row is None:
+            return True
+        if not fts_row_matches_chunk(row, chunk):
+            return True
+        try:
+            body = read_body(
+                data_root,
+                relative_path=str(chunk["body_path"] or ""),
+                expected_sha256=str(chunk["body_sha256"] or ""),
+            )
+        except MemoryValidationError:
+            return True
+        if str(row["body_text"] or "") != body:
+            return True
+    return False
+
+
+def fts_row_matches_chunk(fts_row: sqlite3.Row, chunk_row: sqlite3.Row) -> bool:
+    expected = {
+        "source_version_id": chunk_row["source_version_id"],
+        "source_id": chunk_row["source_id"],
+        "source_document_id": chunk_row["source_document_id"] or "",
+        "title": chunk_row["title"] or "",
+        "file_id": chunk_row["file_id"] or "",
+        "workspace_relative_path": chunk_row["workspace_relative_path"] or "",
+        "entity_id": chunk_row["entity_id"] or "",
+    }
+    return all(str(fts_row[key] or "") == str(value or "") for key, value in expected.items())

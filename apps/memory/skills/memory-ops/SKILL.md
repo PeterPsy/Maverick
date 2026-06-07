@@ -45,6 +45,8 @@ maverick app memory mcp call memory_jobs --json --operation claim --job-types '[
 maverick app memory mcp call memory_jobs --json --operation run_until_idle --max-jobs 50
 ```
 
+If an ingest, staleness, or compile request enqueues work and the current answer depends on it, drain a bounded batch with `run_until_idle` before answering. Do not assume a background worker has already processed queued Memory jobs.
+
 Storage staleness can enqueue `requires_storage_reindex` jobs. Treat those jobs as action-required markers: run Storage `drive_index`, pass the returned Memory source to `memory_ingest_source` with `adapter_id=remote_storage_file`, and then acknowledge Storage indexing after Memory succeeds.
 
 ## Memory Views
@@ -152,11 +154,13 @@ If multiple plausible nodes match, ask the user to choose before deleting. If th
 
 ## Linking Evidence
 
-Attach files when they are relevant evidence:
+Attach files only when the Memory node needs a link back to a Storage item:
 
 ```bash
 maverick app memory cli run memory --action attach_file --node-id <node_id> --file-id <file_id> --workspace-relative-path storage/uploaded/example.pdf --reason "<why it matters>"
 ```
+
+If the file text should support citations or source-chunk retrieval, ingest it through `memory_ingest_source` with `adapter_id=storage_file` or `adapter_id=remote_storage_file` instead of relying on `attach_file`.
 
 Attach app entities when they clarify people, companies, deals, emails, or records:
 

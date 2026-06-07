@@ -37,7 +37,8 @@
     "network": {
       "outbound": [
         "github.com",
-        "api.github.com"
+        "api.github.com",
+        "registry.npmjs.org"
       ]
     },
     "runtime": {

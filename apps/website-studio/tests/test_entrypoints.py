@@ -1354,6 +1354,97 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(runtime["latest_runtime_session"]["preview_id"], preview["preview_id"])
             self.assertEqual(runtime["latest_runtime_session"]["status"], "ready")
 
+            status, active = handle_action(data_root, {"action": "active_context", "site_id": site_id})
+            self.assertEqual(status, 200)
+            self.assertEqual(active["runtime_status"], "ready")
+            self.assertEqual(active["preview_id"], preview["preview_id"])
+            self.assertEqual(active["preview_url"], preview["preview_url"])
+            self.assertEqual(active["preview"]["preview_id"], preview["preview_id"])
+            self.assertEqual(active["runtime"]["latest_preview"]["id"], preview["preview_id"])
+
+            status, page_payload = handle_action(data_root, {"action": "page_context", "site_id": site_id, "route": "/"})
+            self.assertEqual(status, 200)
+            self.assertEqual(page_payload["runtime_status"], "ready")
+            self.assertEqual(page_payload["preview_url"], preview["preview_url"])
+
+    def test_build_preview_reuses_ready_static_preview_until_revision_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            status, created = handle_action(data_root, {"action": "site_create", "display_name": "Preview Cache"})
+            self.assertEqual(status, 201)
+            site_id = created["site"]["id"]
+
+            status, first = handle_action(data_root, {"action": "build_preview", "site_id": site_id, "route": "/"})
+            self.assertEqual(status, 200)
+            status, second = handle_action(data_root, {"action": "build_preview", "site_id": site_id, "route": "/"})
+            self.assertEqual(status, 200)
+            self.assertEqual(second["preview_id"], first["preview_id"])
+            with closing(sqlite3.connect(data_root / "app.sqlite")) as db:
+                preview_count = db.execute("SELECT COUNT(*) FROM previews WHERE site_id = ?", (site_id,)).fetchone()[0]
+            self.assertEqual(preview_count, 1)
+
+            _edit_index(data_root, site_id, marker="Cache Bust")
+            status, third = handle_action(data_root, {"action": "build_preview", "site_id": site_id, "route": "/"})
+            self.assertEqual(status, 200)
+            self.assertNotEqual(third["preview_id"], first["preview_id"])
+            with closing(sqlite3.connect(data_root / "app.sqlite")) as db:
+                preview_count = db.execute("SELECT COUNT(*) FROM previews WHERE site_id = ?", (site_id,)).fetchone()[0]
+            self.assertEqual(preview_count, 2)
+
+    def test_active_context_uses_runtime_status_when_source_profile_is_stale(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            status, created = handle_action(data_root, {"action": "site_create", "display_name": "Runtime Context"})
+            self.assertEqual(status, 201)
+            site_id = created["site"]["id"]
+            preview_url = "/apps/website-studio/preview-runtime/?preview_id=preview_ready&route=%2F"
+            with closing(sqlite3.connect(data_root / "app.sqlite")) as db, db:
+                db.execute(
+                    """
+                    INSERT INTO builds(
+                      id, site_id, status, runtime_kind, preview_url, artifact_ref_json,
+                      source_profile_json, route_count, asset_count, warnings_json,
+                      missing_requirements_json, logs_summary, created_at, updated_at
+                    )
+                    VALUES ('build_ready', ?, 'passed', 'php', ?, '{}', '{}', 1, 0, '[]', '[]', '', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
+                    """,
+                    (site_id, preview_url),
+                )
+                db.execute(
+                    """
+                    INSERT INTO previews(
+                      id, site_id, route, page_id, build_id, runtime_kind, preview_url,
+                      warnings_json, missing_requirements_json, artifact_ref_json, status, created_at
+                    )
+                    VALUES ('preview_ready', ?, '/', '', 'build_ready', 'php', ?, '[]', '[]', '{}', 'ready', '2026-01-01T00:00:01+00:00')
+                    """,
+                    (site_id, preview_url),
+                )
+                db.execute(
+                    """
+                    INSERT INTO runtime_sessions(
+                      id, site_id, preview_id, build_id, runtime_kind, status, preview_url,
+                      route, health_json, missing_requirements_json, created_at, updated_at
+                    )
+                    VALUES ('runtime_ready', ?, 'preview_ready', 'build_ready', 'php', 'ready', ?, '/', '{}', '[]', '2026-01-01T00:00:01+00:00', '2026-01-01T00:00:01+00:00')
+                    """,
+                    (site_id, preview_url),
+                )
+
+            stale_profile = {"preview_runtime_kind": "php", "runtime_preview_status": "blocked", "missing_requirements": []}
+            with patch("store.source_profile", return_value=stale_profile), patch(
+                "store.runtime_capability_status",
+                return_value={"runtime_kind": "php", "runtime_status": "ready", "missing_requirements": []},
+            ):
+                status, context = handle_action(data_root, {"action": "active_context", "site_id": site_id})
+
+            self.assertEqual(status, 200)
+            self.assertEqual(context["runtime_status"], "ready")
+            self.assertEqual(context["runtime_kind"], "php")
+            self.assertEqual(context["preview_id"], "preview_ready")
+            self.assertEqual(context["preview_url"], preview_url)
+            self.assertEqual(context["preview"]["runtime_status"], "ready")
+
     def test_active_context_includes_route_assets_and_change_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
@@ -1509,7 +1600,9 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("runtime_status", app_source)
         self.assertIn("missing_requirements", app_source)
         self.assertIn("action: 'site_status'", app_source)
+        self.assertIn("action: 'preview_document'", app_source)
         self.assertIn("action: 'list_changes'", app_source)
+        self.assertIn("previewPayloadFromDocument", app_source)
         self.assertIn("active_view: activeView", app_source)
         self.assertIn("context_tool: 'website_page_context'", app_source)
         self.assertIn("previewState?.preview_url || ''", app_source)

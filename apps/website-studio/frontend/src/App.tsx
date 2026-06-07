@@ -95,10 +95,22 @@ export function App() {
     setActiveAssetId(selectedAsset?.id || '');
     const previewRoute = selectedPage?.route || selectedRoute?.route || '/';
     postSelection(selectedSite, selectedPage, selectedRoute, selectedAsset);
-    await renderSite(selectedSite, previewRoute);
+    await renderSite(selectedSite, previewRoute, statusPayload);
   }
 
-  async function renderSite(siteId: string, route = '/') {
+  async function renderSite(siteId: string, route = '/', status?: SiteStatusPayload) {
+    const latestPreview = status?.runtime?.latest_preview || null;
+    if (latestPreview?.id && latestPreview.route === route && latestPreview.preview_url) {
+      try {
+        const document = await callBackend<PreviewDocumentPayload>({ action: 'preview_document', preview_id: latestPreview.id });
+        const payload = previewPayloadFromDocument(siteId, route, document);
+        setPreviewState(payload);
+        setPreviewHtml(payload.html || ' ');
+        return;
+      } catch {
+        // Fall through to creating a fresh preview when the cached document is stale.
+      }
+    }
     const payload = await callBackend<PreviewPayload>({ action: 'build_preview', site_id: siteId, route });
     setPreviewState(payload);
     setPreviewHtml(payload.html || '');
@@ -382,6 +394,35 @@ function PreviewStatus({ preview }: { preview: PreviewPayload }) {
       {detail ? <small>{detail}</small> : null}
     </div>
   );
+}
+
+type PreviewDocumentPayload = {
+  preview?: Partial<PreviewPayload> & {
+    id?: string;
+    status?: string;
+    warnings?: string[];
+    missing_requirements?: string[];
+  };
+  html?: string;
+};
+
+function previewPayloadFromDocument(siteId: string, route: string, document: PreviewDocumentPayload): PreviewPayload {
+  const preview = document.preview || {};
+  return {
+    preview_id: String(preview.preview_id || preview.id || ''),
+    site_id: String(preview.site_id || siteId),
+    environment_id: String(preview.environment_id || 'env_preview'),
+    route: String(preview.route || route || '/'),
+    page_id: String(preview.page_id || ''),
+    route_id: String(preview.route_id || ''),
+    runtime_kind: String(preview.runtime_kind || 'unavailable'),
+    runtime_status: String(preview.runtime_status || preview.status || 'unknown'),
+    preview_url: String(preview.preview_url || ''),
+    build_id: String(preview.build_id || ''),
+    missing_requirements: Array.isArray(preview.missing_requirements) ? preview.missing_requirements : [],
+    warnings: Array.isArray(preview.warnings) ? preview.warnings : [],
+    html: String(document.html || '')
+  };
 }
 
 function postSelection(siteId: string, page?: Page, route?: Route, asset?: Asset) {

@@ -56,7 +56,19 @@ export type RuntimeSummary = {
   runtime_status?: string;
   missing_requirements?: string[];
   latest_build?: { id?: string; status?: string; logs_summary?: string; [key: string]: unknown } | null;
-  latest_preview?: { id?: string; status?: string; [key: string]: unknown } | null;
+  latest_preview?: {
+    id?: string;
+    site_id?: string;
+    route?: string;
+    page_id?: string;
+    build_id?: string;
+    runtime_kind?: string;
+    status?: string;
+    preview_url?: string;
+    warnings?: string[];
+    missing_requirements?: string[];
+    [key: string]: unknown;
+  } | null;
 };
 
 export type SiteStatusPayload = {

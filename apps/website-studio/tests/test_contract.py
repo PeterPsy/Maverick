@@ -30,6 +30,14 @@ class GeneratedAppContractTest(unittest.TestCase):
         self.assertIn("github-token", secret_reads)
         self.assertNotIn("github-app-private-key", secret_reads)
 
+    def test_contract_declares_runtime_build_network_hosts(self) -> None:
+        contract = json.loads((APP_ROOT / "app_contract.json").read_text(encoding="utf-8"))
+        outbound = set(contract.get("permissions", {}).get("network", {}).get("outbound", []))
+
+        self.assertIn("github.com", outbound)
+        self.assertIn("api.github.com", outbound)
+        self.assertIn("registry.npmjs.org", outbound)
+
     def test_contract_declares_git_connection_setup_tools(self) -> None:
         contract = json.loads((APP_ROOT / "app_contract.json").read_text(encoding="utf-8"))
         mcp_tools = set(contract.get("capabilities", {}).get("mcp_tools", []))

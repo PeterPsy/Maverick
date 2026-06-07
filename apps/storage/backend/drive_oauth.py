@@ -234,6 +234,30 @@ def complete_oauth(
             "Google profile did not include an account email.",
             operation="drive_connections.complete_oauth",
         )
+    duplicate = _connected_account_duplicate(
+        data_root,
+        state_record=state_record,
+        profile=profile,
+        account_email=account_email,
+    )
+    if duplicate is not None:
+        append_audit(
+            data_root,
+            "drive.oauth.complete_duplicate_account",
+            "drive_connection",
+            state_record["id"],
+            {
+                "provider": GOOGLE_DRIVE_PROVIDER,
+                "account_email": account_email,
+                "duplicate_connection_id": duplicate["id"],
+            },
+        )
+        raise StorageValidationError(
+            f"Google Drive account `{account_email}` is already connected as `{duplicate['id']}`. "
+            "Disconnect that connection before connecting the same account again.",
+            operation="drive_connections.complete_oauth",
+            example={"action": "drive_connections.disconnect", "connection_id": duplicate["id"]},
+        )
     workspace_id = str(payload.get("_workspace_id") or "default").strip() or "default"
     secret_ref = _scoped_secret_ref(workspace_id=workspace_id, connection_id=state_record["id"])
     grant_id = _scoped_grant_id(workspace_id=workspace_id, connection_id=state_record["id"])
@@ -512,6 +536,30 @@ def _oauth_metadata(token_payload: dict[str, Any]) -> dict[str, Any]:
 def _connected_external_refs(profile: dict[str, Any]) -> dict[str, Any]:
     subject = str(profile.get("id") or profile.get("sub") or "").strip()
     return {"google_subject": subject} if subject else {}
+
+
+def _connected_account_duplicate(
+    data_root: Path,
+    *,
+    state_record: dict[str, Any],
+    profile: dict[str, Any],
+    account_email: str,
+) -> dict[str, Any] | None:
+    subject = str(profile.get("id") or profile.get("sub") or "").strip()
+    email_key = account_email.casefold()
+    for connection in read_state(data_root).get("connections", []):
+        if str(connection.get("id") or "") == str(state_record.get("id") or ""):
+            continue
+        if connection.get("status") != "connected":
+            continue
+        external_refs = connection.get("external_refs") if isinstance(connection.get("external_refs"), dict) else {}
+        existing_subject = str(external_refs.get("google_subject") or "").strip()
+        existing_email = str(connection.get("account_email") or "").strip().casefold()
+        if subject and existing_subject == subject:
+            return connection
+        if email_key and existing_email == email_key:
+            return connection
+    return None
 
 
 def _secret_map(app_secrets: object | None) -> dict[str, object]:

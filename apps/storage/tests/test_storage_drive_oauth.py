@@ -218,6 +218,80 @@ class StorageDriveOAuthTest(unittest.TestCase):
         self.assertNotIn("refresh-token-raw", persisted_text)
         self.assertEqual([call[0] for call in calls], ["POST", "GET"])
 
+    def test_complete_flow_rejects_duplicate_connected_google_account(self) -> None:
+        def transport(method: str, url: str, _request: dict[str, object]) -> tuple[int, dict[str, object]]:
+            if url == "https://oauth2.googleapis.com/token":
+                return 200, {
+                    "access_token": "access-token-raw",
+                    "refresh_token": "refresh-token-raw",
+                    "scope": "https://www.googleapis.com/auth/drive openid email",
+                }
+            if url == "https://www.googleapis.com/oauth2/v2/userinfo":
+                return 200, {"email": "ana@example.com", "name": "Ana Example", "id": "google-subject"}
+            raise AssertionError(f"Unexpected OAuth request: {method} {url}")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            _status, first_started = _handle(
+                root,
+                {
+                    "action": "drive_connections.start_oauth",
+                    "_app_secrets": {
+                        "google-drive-oauth-client-id": "client-id",
+                        "google-drive-oauth-client-secret": "client-secret",
+                    },
+                },
+            )
+            _status, first_completed = _handle(
+                root,
+                {
+                    "action": "drive_connections.complete_oauth",
+                    "state": first_started["state"],
+                    "code": "first-oauth-code",
+                    "_app_secrets": {
+                        "google-drive-oauth-client-id": "client-id",
+                        "google-drive-oauth-client-secret": "client-secret",
+                    },
+                },
+                allow_platform_secret_writes=True,
+                oauth_transport=transport,
+            )
+            _status, second_started = _handle(
+                root,
+                {
+                    "action": "drive_connections.start_oauth",
+                    "_app_secrets": {
+                        "google-drive-oauth-client-id": "client-id",
+                        "google-drive-oauth-client-secret": "client-secret",
+                    },
+                },
+            )
+            with self.assertRaises(StorageValidationError) as captured:
+                _handle(
+                    root,
+                    {
+                        "action": "drive_connections.complete_oauth",
+                        "state": second_started["state"],
+                        "code": "second-oauth-code",
+                        "_app_secrets": {
+                            "google-drive-oauth-client-id": "client-id",
+                            "google-drive-oauth-client-secret": "client-secret",
+                        },
+                    },
+                    allow_platform_secret_writes=True,
+                    oauth_transport=transport,
+                )
+            persisted = json.loads((root / "data" / "drive_connections.json").read_text(encoding="utf-8"))
+
+        self.assertIn("already connected", captured.exception.detail)
+        self.assertIn(first_completed["connection_id"], captured.exception.detail)
+        connected = [item for item in persisted["connections"] if item["status"] == "connected"]
+        self.assertEqual([item["id"] for item in connected], [first_completed["connection_id"]])
+        self.assertEqual(connected[0]["external_refs"]["google_subject"], "google-subject")
+        self.assertTrue(
+            any(item["action"] == "drive.oauth.complete_duplicate_account" for item in persisted["audit_log"])
+        )
+
     def test_complete_flow_validates_granted_scope(self) -> None:
         def transport(method: str, url: str, _request: dict[str, object]) -> tuple[int, dict[str, object]]:
             if url == "https://oauth2.googleapis.com/token":

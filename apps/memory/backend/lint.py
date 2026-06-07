@@ -7,7 +7,7 @@ from pathlib import Path
 import sqlite3
 from typing import Any
 
-from database import ensure_schema, json_text, new_id, normalize_limit, now_timestamp, row_payload, transaction
+from database import ensure_schema, json_text, new_id, normalize_limit, now_timestamp, record_event, row_payload, transaction
 from errors import MemoryValidationError
 from sources import source_snapshot, storage_ref_staleness
 
@@ -23,6 +23,7 @@ def lint_memory(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
         for current_node_id in node_ids:
             refresh_node_lint(db, current_node_id, data_root=data_root)
         findings = active_lint_findings(db, node_ids=node_ids, limit=limit)
+        record_lint_refreshed_event(db, node_ids=node_ids, findings=findings)
     return {
         "findings": findings,
         "summary": {
@@ -31,6 +32,26 @@ def lint_memory(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
             "has_errors": any(finding.get("severity") == "error" for finding in findings),
         },
     }
+
+
+def record_lint_refreshed_event(db: sqlite3.Connection, *, node_ids: list[str], findings: list[dict[str, Any]]) -> None:
+    severity_counts = {"error": 0, "warning": 0, "info": 0}
+    for finding in findings:
+        severity = str(finding.get("severity") or "info").strip()
+        severity_counts[severity if severity in severity_counts else "info"] += 1
+    record_event(
+        db,
+        event_type="memory_lint_refreshed",
+        node_id=node_ids[0] if len(node_ids) == 1 else None,
+        payload={
+            "node_count": len(node_ids),
+            "node_ids": node_ids,
+            "finding_count": len(findings),
+            "error_count": severity_counts["error"],
+            "warning_count": severity_counts["warning"],
+            "info_count": severity_counts["info"],
+        },
+    )
 
 
 def refresh_node_lint(

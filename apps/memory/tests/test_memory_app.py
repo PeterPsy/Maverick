@@ -3388,6 +3388,44 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertIn("node_created", event_types)
             self.assertNotIn("retrieval_context_generated", event_types)
 
+    def test_compile_and_lint_write_redacted_app_owned_events(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            node = self.run_backend(
+                data_root,
+                {
+                    "action": "remember",
+                    "title": "Audit launch",
+                    "body": "Launch audit should not leak this body text.",
+                    "type": "fact",
+                },
+            )["json"]["node"]
+
+            compiled = self.run_backend(data_root, {"action": "compile", "node_id": node["id"]})
+            lint = self.run_backend(data_root, {"action": "lint", "node_id": node["id"]})
+            audit = self.run_backend(data_root, {"action": "audit", "limit": 20})
+
+            self.assertEqual(compiled["status_code"], 200)
+            self.assertEqual(lint["status_code"], 200)
+            events = {event["event_type"]: event for event in audit["json"]["events"]}
+            compile_event = events["memory_compile_completed"]
+            lint_event = events["memory_lint_refreshed"]
+            compile_payload = compile_event["payload"]
+            lint_payload = lint_event["payload"]
+            self.assertEqual(compile_event["node_id"], node["id"])
+            self.assertEqual(compile_payload["compile_run_id"], compiled["json"]["compile_run"]["id"])
+            self.assertEqual(compile_payload["wiki_page_id"], compiled["json"]["compiled_page"]["id"])
+            self.assertEqual(compile_payload["status"], "completed")
+            self.assertEqual(compile_payload["citation_count"], len(compiled["json"]["citations"]))
+            self.assertEqual(lint_event["node_id"], node["id"])
+            self.assertEqual(lint_payload["node_count"], 1)
+            self.assertEqual(lint_payload["node_ids"], [node["id"]])
+            self.assertEqual(lint_payload["finding_count"], len(lint["json"]["findings"]))
+            self.assertNotIn("body", compile_payload)
+            self.assertNotIn("quote", compile_payload)
+            self.assertNotIn("body", lint_payload)
+            self.assertNotIn("quote", lint_payload)
+
     def test_reference_deep_links_use_local_app_id(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             data_root = Path(temp) / "data" / "memory"

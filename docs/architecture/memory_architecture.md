@@ -94,8 +94,8 @@ Memory exposes agent-facing surfaces through the app contract:
 - `memory_context` returns normalized `memory_node` context packs with compiled page data and top-level compiled citations when available
 - `memory_inspect_node` returns node details plus compiled page, claims, citations, sources, and lint findings
 - `memory_search` searches graph nodes plus compiled page and claim text and returns the same normalized `memory_node` retrieval envelope as `memory_context`
-- `memory_compile` compiles one node into the internal wiki layer
-- `memory_lint` refreshes quality findings
+- `memory_compile` compiles one node into the internal wiki layer and emits a redaction-safe `memory_compile_completed` event with compile/run counts, not source text
+- `memory_lint` refreshes quality findings and emits a redaction-safe `memory_lint_refreshed` event with node and severity counts
 - `memory_ingest_source` ingests generic app-owned sources. The implemented adapters are `inline_markdown` for generated Markdown evidence, `storage_file` for workspace Storage files under `storage/uploaded/` or `storage/generated/`, `remote_storage_file` for Storage-owned Drive indexing payloads, and `app_entity` snapshots through official app reference surfaces; Storage-backed adapters ask Storage for file metadata, previewability, bounded preview text, and only then bounded UTF-8 text bytes as fallback before writing Memory-owned verified source bodies and chunks, or a `reference_snapshot` when extraction is unavailable
 - `memory_wiki_query` searches compiled wiki pages and claims directly
 - `memory_source_query` searches verified source chunks through Memory's app-owned source chunk FTS and returns normalized source-chunk results

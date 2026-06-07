@@ -9,7 +9,7 @@ from typing import Any
 
 from citation_matching import citation_quote
 from content_store import read_body
-from database import ensure_schema, json_text, new_id, now_timestamp, row_payload, transaction
+from database import ensure_schema, json_text, new_id, now_timestamp, record_event, row_payload, transaction
 from errors import MemoryValidationError
 from lint import refresh_node_lint
 from sources import prepare_source_snapshots, sync_sources
@@ -62,9 +62,17 @@ def compile_node(data_root: Path, body: dict[str, Any]) -> dict[str, Any]:
         )
         _replace_claims(db, data_root=data_root, page_id=page["id"], node=node, sources=sources, timestamp=timestamp)
         _complete_compile_run(db, run_id=run["id"], page_id=page["id"], timestamp=timestamp, provenance=provenance)
-        refresh_node_lint(db, node_id, data_root=data_root)
+        lint_findings = refresh_node_lint(db, node_id, data_root=data_root)
+        compile_run = row_payload(db.execute("SELECT * FROM compile_runs WHERE id = ?", (run["id"],)).fetchone()) or {}
+        record_compile_completed_event(
+            db,
+            node_id=node_id,
+            page_id=page["id"],
+            compile_run=compile_run,
+            lint_findings=lint_findings,
+        )
         return {
-            "compile_run": row_payload(db.execute("SELECT * FROM compile_runs WHERE id = ?", (run["id"],)).fetchone()),
+            "compile_run": compile_run,
             **compiled_payload_for_node(db, node_id, data_root=data_root),
         }
 
@@ -152,6 +160,40 @@ def _complete_compile_run(
     db.execute(
         "UPDATE compile_runs SET status = 'completed', completed_at = ?, metadata_json = ? WHERE id = ?",
         (timestamp, json_text(metadata), run_id),
+    )
+
+
+def record_compile_completed_event(
+    db: sqlite3.Connection,
+    *,
+    node_id: str,
+    page_id: str,
+    compile_run: dict[str, Any],
+    lint_findings: list[dict[str, Any]],
+) -> None:
+    metadata = compile_run.get("metadata") if isinstance(compile_run.get("metadata"), dict) else {}
+    source_version_ids = metadata.get("source_version_ids") if isinstance(metadata.get("source_version_ids"), list) else []
+    source_chunk_ids = metadata.get("source_chunk_ids") if isinstance(metadata.get("source_chunk_ids"), list) else []
+    cited_source_version_ids = (
+        metadata.get("cited_source_version_ids") if isinstance(metadata.get("cited_source_version_ids"), list) else []
+    )
+    cited_source_chunk_ids = metadata.get("cited_source_chunk_ids") if isinstance(metadata.get("cited_source_chunk_ids"), list) else []
+    record_event(
+        db,
+        event_type="memory_compile_completed",
+        node_id=node_id,
+        payload={
+            "compile_run_id": compile_run.get("id") or "",
+            "wiki_page_id": page_id,
+            "status": compile_run.get("status") or "completed",
+            "compiler": compile_run.get("compiler") or "deterministic",
+            "source_version_count": len(source_version_ids),
+            "source_chunk_count": len(source_chunk_ids),
+            "cited_source_version_count": len(cited_source_version_ids),
+            "cited_source_chunk_count": len(cited_source_chunk_ids),
+            "citation_count": int(metadata.get("citation_count") or 0),
+            "lint_finding_count": len(lint_findings),
+        },
     )
 
 

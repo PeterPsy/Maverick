@@ -82,6 +82,14 @@
         "view",
         "widget"
       ]
+    },
+    {
+      "interface": "file.local.path",
+      "version": "1",
+      "description": "Governed backend-only local path handoff for trusted app-to-app processing.",
+      "surfaces": [
+        "backend"
+      ]
     }
   ],
   "requires": [],
@@ -146,6 +154,10 @@
       "storage_drive_preview",
       "storage_drive_export",
       "storage_file_localize",
+      "storage_file_localize_status",
+      "storage_file_localize_retry",
+      "storage_file_localize_cancel",
+      "storage_file_reconcile",
       "storage_drive_index",
       "storage_drive_mark_indexed",
       "storage_drive_write",

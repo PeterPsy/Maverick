@@ -29,6 +29,10 @@ DRIVE_MEDIA_RANGE_TTL_SECONDS = 60 * 60
 STREAMABLE_PREVIEW_KINDS = {"image", "video", "audio", "pdf"}
 
 
+class DriveLocalizationCanceled(Exception):
+    """Raised internally when a localization transfer is canceled through Storage state."""
+
+
 def localize_drive_file_payload(
     *,
     data_root: Path,
@@ -39,11 +43,12 @@ def localize_drive_file_payload(
     app_id: str,
     max_bytes: int | None = None,
     force: bool = False,
+    allow_non_streamable: bool = False,
 ) -> dict[str, Any]:
     """Ensure one Drive binary file is present in Storage's workspace-governed local cache."""
     operation = "file.localize"
     resolved_record = _active_drive_record(provider, drive_file_id=drive_file_id, file_record=file_record, operation=operation)
-    if str(resolved_record.get("preview_kind") or "") not in STREAMABLE_PREVIEW_KINDS:
+    if not allow_non_streamable and str(resolved_record.get("preview_kind") or "") not in STREAMABLE_PREVIEW_KINDS:
         raise StorageValidationError(
             "Only browser-streamable Drive image, video, audio, and PDF files can be localized for media playback.",
             operation=operation,
@@ -95,6 +100,19 @@ def localize_drive_file_payload(
         )
         _atomic_write_json(target.metadata_path, ready)
         cleanup_drive_local_cache(data_root=data_root, current_file_record=resolved_record, keep_localization_id=target.localization_id)
+    except DriveLocalizationCanceled:
+        try:
+            temporary_path.unlink()
+        except FileNotFoundError:
+            pass
+        canceled = _canceled_metadata(metadata)
+        _atomic_write_json(target.metadata_path, canceled)
+        return _localization_payload(
+            app_id=app_id,
+            target=target,
+            file_record=resolved_record,
+            metadata=canceled,
+        )
     except Exception as error:
         try:
             temporary_path.unlink()
@@ -110,6 +128,110 @@ def localize_drive_file_payload(
         file_record=resolved_record,
         metadata={**ready, "cache_hit": False},
     )
+
+
+def drive_localization_status_payload(
+    *,
+    data_root: Path,
+    provider: GoogleDriveProvider,
+    connection_id: str,
+    drive_file_id: str,
+    file_record: dict[str, Any] | None,
+    app_id: str,
+) -> dict[str, Any]:
+    """Return current localization state without forcing a download."""
+    operation = "file.localize_status"
+    resolved_record = _active_drive_record(provider, drive_file_id=drive_file_id, file_record=file_record, operation=operation)
+    if connection_id and str(resolved_record.get("connection_id") or "") != connection_id:
+        raise StorageValidationError("Google Drive Storage reference does not belong to the requested connection.", operation=operation)
+    target = _target_for_record(data_root=data_root, file_record=resolved_record)
+    metadata = _read_localization_metadata(target)
+    if metadata and _cache_file_is_ready(target, metadata, file_record=resolved_record):
+        payload = _localization_payload(app_id=app_id, target=target, file_record=resolved_record, metadata={**metadata, "cache_hit": True})
+    else:
+        payload = _localization_payload(
+            app_id=app_id,
+            target=target,
+            file_record=resolved_record,
+            metadata=metadata or _not_started_metadata(file_record=resolved_record, localization_id=target.localization_id),
+        )
+    status = str(payload["localization"].get("status") or "not_started")
+    payload["can_retry"] = status in {"error", "canceled", "not_started"}
+    payload["can_cancel"] = status in {"localizing", "cancel_requested"}
+    payload["local_path_ready"] = bool(status == "ready" and target.content_path.is_file())
+    return payload
+
+
+def cancel_drive_localization_payload(
+    *,
+    data_root: Path,
+    provider: GoogleDriveProvider,
+    connection_id: str,
+    drive_file_id: str,
+    file_record: dict[str, Any] | None,
+    app_id: str,
+) -> dict[str, Any]:
+    """Mark an in-progress localization as canceled and remove incomplete bytes."""
+    operation = "file.localize_cancel"
+    resolved_record = _active_drive_record(provider, drive_file_id=drive_file_id, file_record=file_record, operation=operation)
+    if connection_id and str(resolved_record.get("connection_id") or "") != connection_id:
+        raise StorageValidationError("Google Drive Storage reference does not belong to the requested connection.", operation=operation)
+    target = _target_for_record(data_root=data_root, file_record=resolved_record)
+    metadata = _read_localization_metadata(target) or _not_started_metadata(file_record=resolved_record, localization_id=target.localization_id)
+    if metadata.get("status") == "ready" and _cache_file_is_ready(target, metadata, file_record=resolved_record):
+        return _localization_payload(app_id=app_id, target=target, file_record=resolved_record, metadata={**metadata, "cache_hit": True})
+    canceled = _canceled_metadata(metadata)
+    if target.directory.exists():
+        for path in target.directory.glob(f".{target.content_path.name}.*.tmp"):
+            path.unlink(missing_ok=True)
+    target.content_path.unlink(missing_ok=True)
+    _atomic_write_json(target.metadata_path, canceled)
+    return _localization_payload(app_id=app_id, target=target, file_record=resolved_record, metadata=canceled)
+
+
+def resolve_drive_local_path_payload(
+    *,
+    data_root: Path,
+    provider: GoogleDriveProvider,
+    connection_id: str,
+    drive_file_id: str,
+    file_record: dict[str, Any] | None,
+    app_id: str,
+    localize: bool,
+    max_bytes: int | None = None,
+) -> dict[str, Any]:
+    """Resolve a Drive file to a Storage-controlled local cache path for backend consumers."""
+    operation = "file.local_path.resolve"
+    resolved_record = _active_drive_record(provider, drive_file_id=drive_file_id, file_record=file_record, operation=operation)
+    if connection_id and str(resolved_record.get("connection_id") or "") != connection_id:
+        raise StorageValidationError("Google Drive Storage reference does not belong to the requested connection.", operation=operation)
+    target = _target_for_record(data_root=data_root, file_record=resolved_record)
+    metadata = _read_localization_metadata(target)
+    if not (metadata and _cache_file_is_ready(target, metadata, file_record=resolved_record)):
+        if not localize:
+            raise StorageValidationError(
+                "Drive file is not localized yet; call file.localize or pass localize=true to file.local_path.resolve.",
+                operation=operation,
+                expected_fields=["stable_storage_file_id"],
+            )
+        localized = localize_drive_file_payload(
+            data_root=data_root,
+            provider=provider,
+            connection_id=connection_id,
+            drive_file_id=drive_file_id,
+            file_record=resolved_record,
+            app_id=app_id,
+            max_bytes=max_bytes,
+            force=False,
+            allow_non_streamable=True,
+        )
+        metadata = localized["localization"]
+    if not target.content_path.is_file():
+        raise StorageValidationError("Drive localization did not produce a local file path.", operation=operation)
+    payload = _localization_payload(app_id=app_id, target=target, file_record=resolved_record, metadata={**(metadata or {}), "status": "ready", "cache_hit": True})
+    payload["local_path"] = str(target.content_path)
+    payload["path_scope"] = "storage_drive_local_cache"
+    return payload
 
 
 def drive_media_stream_response(
@@ -203,7 +325,7 @@ def _drive_proxy_media_response(
     streaming_response_supported: bool,
 ) -> dict[str, Any]:
     operation = "file.media_stream"
-    if str(file_record.get("preview_kind") or "") not in STREAMABLE_PREVIEW_KINDS:
+    if not download and str(file_record.get("preview_kind") or "") not in STREAMABLE_PREVIEW_KINDS:
         raise StorageValidationError(
             "Only browser-streamable Drive image, video, audio, and PDF files can be proxied through the media route.",
             operation=operation,
@@ -321,6 +443,11 @@ def _drive_proxy_media_response(
         )
         _atomic_write_json(target.metadata_path, ready)
         cleanup_drive_local_cache(data_root=data_root, current_file_record=file_record, keep_localization_id=target.localization_id)
+    except DriveLocalizationCanceled:
+        temporary_path.unlink(missing_ok=True)
+        canceled = _canceled_metadata(metadata)
+        _atomic_write_json(target.metadata_path, canceled)
+        raise StorageValidationError("Drive localization was canceled.", operation=operation)
     except DriveProviderError as error:
         temporary_path.unlink(missing_ok=True)
         failed = {**metadata, "status": "error", "error": _safe_error(error), "updated_at": _timestamp()}
@@ -395,6 +522,11 @@ def prepare_drive_media_response_body(
             metadata=metadata,
             provider_stream=provider_stream,
         )
+    except DriveLocalizationCanceled:
+        temporary_path.unlink(missing_ok=True)
+        canceled = _canceled_metadata(metadata)
+        _atomic_write_json(target.metadata_path, canceled)
+        raise StorageValidationError("Drive localization was canceled.", operation=operation)
     except DriveProviderError as error:
         temporary_path.unlink(missing_ok=True)
         failed = {**metadata, "status": "error", "error": _safe_error(error), "updated_at": _timestamp()}
@@ -428,6 +560,11 @@ def stream_prepared_drive_media_response_body(*, prepared: "PreparedDriveMediaSt
         )
         _atomic_write_json(prepared.target.metadata_path, ready)
         cleanup_drive_local_cache(data_root=prepared.data_root, current_file_record=file_record, keep_localization_id=prepared.target.localization_id)
+    except DriveLocalizationCanceled:
+        prepared.temporary_path.unlink(missing_ok=True)
+        canceled = _canceled_metadata(prepared.metadata)
+        _atomic_write_json(prepared.target.metadata_path, canceled)
+        raise StorageValidationError("Drive localization was canceled.", operation=operation)
     except DriveProviderError as error:
         prepared.temporary_path.unlink(missing_ok=True)
         failed = {**prepared.metadata, "status": "error", "error": _safe_error(error), "updated_at": _timestamp()}
@@ -724,6 +861,29 @@ def _pending_metadata(*, file_record: dict[str, Any], localization_id: str) -> d
     }
 
 
+def _not_started_metadata(*, file_record: dict[str, Any], localization_id: str) -> dict[str, Any]:
+    metadata = _pending_metadata(file_record=file_record, localization_id=localization_id)
+    return {
+        **metadata,
+        "status": "not_started",
+        "progress": {"state": "idle", "bytes_completed": 0, "bytes_total": int(file_record.get("size_bytes") or 0)},
+    }
+
+
+def _canceled_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    now = _timestamp()
+    return {
+        **metadata,
+        "status": "canceled",
+        "error": "",
+        "progress": {
+            **(metadata.get("progress") if isinstance(metadata.get("progress"), dict) else {}),
+            "state": "canceled",
+        },
+        "updated_at": now,
+    }
+
+
 def _ready_metadata(
     *,
     file_record: dict[str, Any],
@@ -757,7 +917,7 @@ def _localization_payload(
     stream_url = stream_url_for_localization(app_id=app_id, file_record=file_record, localization_id=target.localization_id)
     download_url = stream_url_for_localization(app_id=app_id, file_record=file_record, localization_id=target.localization_id, download=True)
     payload = {
-        "status": "ready",
+        "status": metadata.get("status") or "ready",
         "provider": GOOGLE_DRIVE_PROVIDER,
         "connection_id": str(file_record.get("connection_id") or ""),
         "drive_file_id": str(file_record.get("drive_file_id") or ""),
@@ -1021,6 +1181,9 @@ def _progress_metadata_writer(*, metadata_path: Path, base_metadata: dict[str, A
         if bytes_completed < bytes_total and now - last_update["at"] < 1.0:
             return
         last_update["at"] = now
+        current = _read_json_file(metadata_path)
+        if str(current.get("status") or "") in {"cancel_requested", "canceled"}:
+            raise DriveLocalizationCanceled()
         _atomic_write_json(
             metadata_path,
             {

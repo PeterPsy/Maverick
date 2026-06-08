@@ -5,6 +5,7 @@ import { iconForKind, kindLabels } from '../../storageMeta';
 import { Icon } from '../../Icon';
 import { MarkdownPreview } from '../../markdownPreview';
 import { canRequestFullscreen, elementIsFullscreen, exitDocumentFullscreen, requestElementFullscreen } from '../../lib/browserFullscreen';
+import { VideoPreview } from '../../videoPreview';
 import type { StorageFile } from '../../types';
 import './styles.css';
 
@@ -100,7 +101,7 @@ function postWidgetResize(element: HTMLElement, scrollElement?: HTMLElement | nu
 
 function Preview({ file, previewUrl, previewText }: { file: StorageFile; previewUrl: string; previewText: string }) {
   if (file.preview_kind === 'image' && previewUrl) return <img src={previewUrl} alt={file.name} />;
-  if (file.preview_kind === 'video' && previewUrl) return <video src={previewUrl} controls />;
+  if (file.preview_kind === 'video' && previewUrl) return <VideoPreview file={file} src={previewUrl} />;
   if (file.preview_kind === 'audio' && previewUrl) return <audio src={previewUrl} controls />;
   if (file.preview_kind === 'pdf' && previewUrl) return <iframe src={previewUrl} title={file.name} />;
   if (file.preview_kind === 'markdown') return <MarkdownPreview text={previewText} compact />;

@@ -41,6 +41,7 @@ DRIVE_TEMP_CACHE_MAX_ITEM_BYTES = GOOGLE_EXPORT_LIMIT_BYTES
 DRIVE_ACCESS_TOKEN_CACHE_TTL_SECONDS = 5 * 60
 DRIVE_ACCESS_TOKEN_EXPIRY_SKEW_SECONDS = 30
 DRIVE_STREAM_CHUNK_BYTES = 1024 * 1024
+DRIVE_RESUMABLE_CHUNK_BYTES = 8 * 1024 * 1024
 
 GOOGLE_NATIVE_PREVIEW_KINDS = {
     "application/vnd.google-apps.document": "document",
@@ -665,6 +666,139 @@ class GoogleDriveProvider:
         file_record = self._normalize_item(response, display_path=_join_display_path(parent_record.get("display_path", ""), name))
         return {"status": "uploaded", "provider": GOOGLE_DRIVE_PROVIDER, "connection_id": self.connection_id, "file": file_record}
 
+    def start_resumable_upload(
+        self,
+        *,
+        parent_drive_file_id: str,
+        file_name: str,
+        content_type: str,
+        size_bytes: int,
+    ) -> dict[str, Any]:
+        """Create a Drive resumable upload session after validating the target folder."""
+        parent_id = _required_drive_file_id(parent_drive_file_id, operation="drive_upload_session.start")
+        name = _required_file_name(file_name, operation="drive_upload_session.start")
+        if size_bytes < 0:
+            raise StorageValidationError("size_bytes must not be negative.", operation="drive_upload_session.start")
+        normalized_content_type = _content_type(content_type)
+        parent_record = self._active_metadata(drive_file_id=parent_id, operation="drive_upload_session.start")
+        if parent_record.get("content_type") != DRIVE_FOLDER_MIME_TYPE:
+            raise StorageValidationError("Google Drive uploads require a target Drive folder.", operation="drive_upload_session.start")
+        self._require_capability(
+            parent_record,
+            capability="can_write",
+            operation="drive_upload_session.start",
+            detail="Google Drive did not grant permission to add files to the target folder.",
+        )
+        metadata = {"name": name, "parents": [parent_id]}
+        session_uri = self._start_drive_resumable_session(
+            metadata=metadata,
+            content_type=normalized_content_type,
+            size_bytes=size_bytes,
+        )
+        return {
+            "status": "uploading",
+            "provider": GOOGLE_DRIVE_PROVIDER,
+            "connection_id": self.connection_id,
+            "session_uri": session_uri,
+            "parent_drive_file_id": parent_id,
+            "parent_display_path": str(parent_record.get("display_path") or ""),
+            "file_name": name,
+            "content_type": normalized_content_type,
+            "size_bytes": size_bytes,
+        }
+
+    def upload_resumable_chunk(
+        self,
+        *,
+        session_uri: str,
+        file_name: str,
+        content_type: str,
+        parent_display_path: str,
+        chunk: bytes,
+        start: int,
+        total_size: int,
+    ) -> dict[str, Any]:
+        """Forward one chunk to a Storage-owned Drive resumable upload session."""
+        if start < 0:
+            raise StorageValidationError("chunk_offset must not be negative.", operation="drive_upload_session.chunk")
+        if total_size <= 0:
+            raise StorageValidationError("size_bytes must be positive for chunked Drive uploads.", operation="drive_upload_session.chunk")
+        if not chunk:
+            raise StorageValidationError("content_base64 chunk must not be empty.", operation="drive_upload_session.chunk")
+        if len(chunk) > DRIVE_RESUMABLE_CHUNK_BYTES:
+            raise StorageValidationError(
+                f"Drive upload chunks are limited to {DRIVE_RESUMABLE_CHUNK_BYTES} bytes.",
+                operation="drive_upload_session.chunk",
+            )
+        if start + len(chunk) > total_size:
+            raise StorageValidationError("Drive upload chunk exceeds the declared file size.", operation="drive_upload_session.chunk")
+        if start + len(chunk) < total_size and len(chunk) % (256 * 1024) != 0:
+            raise StorageValidationError(
+                "Non-final Drive upload chunks must be a multiple of 256 KiB.",
+                operation="drive_upload_session.chunk",
+            )
+        response = self._drive_resumable_chunk_request(
+            session_uri=session_uri,
+            content_type=_content_type(content_type),
+            chunk=chunk,
+            start=start,
+            total_size=total_size,
+        )
+        if response["status"] == "uploading":
+            return {
+                "status": "uploading",
+                "provider": GOOGLE_DRIVE_PROVIDER,
+                "connection_id": self.connection_id,
+                "bytes_uploaded": response["bytes_uploaded"],
+            }
+        file_record = self._normalize_item(response["file"], display_path=_join_display_path(parent_display_path, file_name))
+        return {
+            "status": "uploaded",
+            "provider": GOOGLE_DRIVE_PROVIDER,
+            "connection_id": self.connection_id,
+            "bytes_uploaded": total_size,
+            "file": file_record,
+        }
+
+    def query_resumable_upload(
+        self,
+        *,
+        session_uri: str,
+        file_name: str,
+        content_type: str,
+        parent_display_path: str,
+        total_size: int,
+    ) -> dict[str, Any]:
+        """Ask Google Drive which bytes are committed for a resumable upload session."""
+        if total_size <= 0:
+            raise StorageValidationError("size_bytes must be positive for chunked Drive uploads.", operation="drive_upload_session.status")
+        response = self._drive_resumable_query_request(session_uri=session_uri, total_size=total_size)
+        if response["status"] == "uploading":
+            uploaded = min(max(0, int(response.get("bytes_uploaded") or 0)), total_size)
+            return {
+                "status": "uploading",
+                "provider": GOOGLE_DRIVE_PROVIDER,
+                "connection_id": self.connection_id,
+                "bytes_uploaded": uploaded,
+            }
+        file_record = self._normalize_item(response["file"], display_path=_join_display_path(parent_display_path, file_name))
+        return {
+            "status": "uploaded",
+            "provider": GOOGLE_DRIVE_PROVIDER,
+            "connection_id": self.connection_id,
+            "bytes_uploaded": total_size,
+            "file": file_record,
+        }
+
+    def cancel_resumable_upload(self, *, session_uri: str) -> None:
+        """Best-effort cancellation of a Google Drive resumable upload session."""
+        if not str(session_uri or "").strip():
+            return
+        try:
+            self._drive_resumable_cancel_request(session_uri=session_uri)
+        except (DriveProviderError, StorageValidationError):
+            return
+
     def update_content(self, *, drive_file_id: str, content: bytes, content_type: str) -> dict[str, Any]:
         """Replace binary Drive file content where the Drive API supports media updates."""
         file_record = self._active_metadata(drive_file_id=drive_file_id, operation="drive_write")
@@ -1053,6 +1187,141 @@ class GoogleDriveProvider:
         if not isinstance(payload, dict) or not str(payload.get("id") or "").strip():
             raise StorageValidationError("Google Drive write request did not return file metadata.", operation=operation)
         return payload
+
+    def _start_drive_resumable_session(self, *, metadata: dict[str, Any], content_type: str, size_bytes: int) -> str:
+        query = urlencode({"uploadType": "resumable", "fields": DRIVE_FILE_FIELDS, "supportsAllDrives": "true"})
+        url = f"{DRIVE_UPLOAD_API_BASE}/files?{query}"
+        headers = {
+            "Authorization": f"Bearer {self._token()}",
+            "Accept": "application/json",
+            "Content-Type": "application/json; charset=UTF-8",
+            "X-Upload-Content-Type": content_type,
+            "X-Upload-Content-Length": str(size_bytes),
+        }
+        data = json.dumps(metadata, ensure_ascii=True).encode("utf-8")
+        if self.transport is not default_transport:
+            status, payload = self.transport("POST", url, {"headers": headers, "data": data})
+            if status >= 400:
+                detail = _provider_error_detail(payload, fallback="Drive resumable upload session request failed")
+                raise StorageValidationError(f"Google Drive upload session request failed: {detail}", operation="drive_upload_session.start")
+            session_uri = ""
+            if isinstance(payload, dict):
+                session_uri = str(payload.get("session_uri") or payload.get("upload_url") or payload.get("location") or "").strip()
+            if not session_uri:
+                raise StorageValidationError("Google Drive upload session did not return a resumable session URI.", operation="drive_upload_session.start")
+            return session_uri
+        try:
+            request = Request(url, data=data, headers=headers, method="POST")
+            with urlopen(request, timeout=60) as response:
+                session_uri = str(response.headers.get("Location") or "").strip()
+                if not session_uri:
+                    raise StorageValidationError(
+                        "Google Drive upload session did not return a resumable session URI.",
+                        operation="drive_upload_session.start",
+                    )
+                return session_uri
+        except HTTPError as error:
+            raise StorageValidationError(
+                f"Google Drive upload session request failed: {_http_error_detail(error)}",
+                operation="drive_upload_session.start",
+            ) from error
+        except URLError as error:
+            raise DriveProviderError(503, "Google Drive upload session is currently unavailable.") from error
+
+    def _drive_resumable_chunk_request(
+        self,
+        *,
+        session_uri: str,
+        content_type: str,
+        chunk: bytes,
+        start: int,
+        total_size: int,
+    ) -> dict[str, Any]:
+        end = start + len(chunk) - 1
+        headers = {
+            "Authorization": f"Bearer {self._token()}",
+            "Accept": "application/json",
+            "Content-Type": content_type,
+            "Content-Length": str(len(chunk)),
+            "Content-Range": f"bytes {start}-{end}/{total_size}",
+        }
+        if self.transport is not default_transport:
+            status, payload = self.transport("PUT", session_uri, {"headers": headers, "data": chunk})
+            if status == 308:
+                return {"status": "uploading", "bytes_uploaded": _next_offset_from_range_payload(payload, fallback=end + 1)}
+            if status >= 400:
+                detail = _provider_error_detail(payload, fallback="Drive resumable upload chunk failed")
+                raise StorageValidationError(f"Google Drive upload chunk failed: {detail}", operation="drive_upload_session.chunk")
+            if not isinstance(payload, dict) or not str(payload.get("id") or "").strip():
+                raise StorageValidationError("Google Drive upload chunk did not return file metadata.", operation="drive_upload_session.chunk")
+            return {"status": "uploaded", "file": payload}
+        try:
+            request = Request(session_uri, data=chunk, headers=headers, method="PUT")
+            with urlopen(request, timeout=120) as response:
+                payload = json.loads(response.read().decode("utf-8") or "{}")
+                if not isinstance(payload, dict) or not str(payload.get("id") or "").strip():
+                    raise StorageValidationError("Google Drive upload chunk did not return file metadata.", operation="drive_upload_session.chunk")
+                return {"status": "uploaded", "file": payload}
+        except HTTPError as error:
+            if int(error.code) == 308:
+                return {"status": "uploading", "bytes_uploaded": _next_offset_from_range_header(error.headers.get("Range"), fallback=end + 1)}
+            raise StorageValidationError(
+                f"Google Drive upload chunk failed: {_http_error_detail(error)}",
+                operation="drive_upload_session.chunk",
+            ) from error
+        except URLError as error:
+            raise DriveProviderError(503, "Google Drive upload is currently unavailable.") from error
+
+    def _drive_resumable_query_request(self, *, session_uri: str, total_size: int) -> dict[str, Any]:
+        headers = {
+            "Authorization": f"Bearer {self._token()}",
+            "Accept": "application/json",
+            "Content-Length": "0",
+            "Content-Range": f"bytes */{total_size}",
+        }
+        if self.transport is not default_transport:
+            status, payload = self.transport("PUT", session_uri, {"headers": headers, "data": b""})
+            if status == 308:
+                return {"status": "uploading", "bytes_uploaded": _next_offset_from_range_payload(payload, fallback=0)}
+            if status >= 400:
+                detail = _provider_error_detail(payload, fallback="Drive resumable upload status check failed")
+                raise StorageValidationError(f"Google Drive upload status check failed: {detail}", operation="drive_upload_session.status")
+            if not isinstance(payload, dict) or not str(payload.get("id") or "").strip():
+                raise StorageValidationError("Google Drive upload status check did not return file metadata.", operation="drive_upload_session.status")
+            return {"status": "uploaded", "file": payload}
+        try:
+            request = Request(session_uri, data=b"", headers=headers, method="PUT")
+            with urlopen(request, timeout=60) as response:
+                payload = json.loads(response.read().decode("utf-8") or "{}")
+                if not isinstance(payload, dict) or not str(payload.get("id") or "").strip():
+                    raise StorageValidationError("Google Drive upload status check did not return file metadata.", operation="drive_upload_session.status")
+                return {"status": "uploaded", "file": payload}
+        except HTTPError as error:
+            if int(error.code) == 308:
+                return {"status": "uploading", "bytes_uploaded": _next_offset_from_range_header(error.headers.get("Range"), fallback=0)}
+            raise StorageValidationError(
+                f"Google Drive upload status check failed: {_http_error_detail(error)}",
+                operation="drive_upload_session.status",
+            ) from error
+        except URLError as error:
+            raise DriveProviderError(503, "Google Drive upload status check is currently unavailable.") from error
+
+    def _drive_resumable_cancel_request(self, *, session_uri: str) -> None:
+        headers = {"Authorization": f"Bearer {self._token()}"}
+        if self.transport is not default_transport:
+            status, payload = self.transport("DELETE", session_uri, {"headers": headers})
+            if status not in {200, 204, 404, 410} and status >= 400:
+                raise DriveProviderError(status, _provider_error_detail(payload, fallback="Drive resumable upload cancel failed"))
+            return
+        try:
+            with urlopen(Request(session_uri, headers=headers, method="DELETE"), timeout=30):
+                return
+        except HTTPError as error:
+            if int(error.code) in {404, 410}:
+                return
+            raise DriveProviderError(int(error.code), _http_error_detail(error)) from error
+        except URLError as error:
+            raise DriveProviderError(503, "Google Drive upload cancel is currently unavailable.") from error
 
     def _drive_bytes_request(self, method: str, path: str, *, params: dict[str, Any] | None = None, max_bytes: int, operation: str) -> bytes:
         query = urlencode({key: value for key, value in (params or {}).items() if value is not None})
@@ -1828,6 +2097,38 @@ def _parse_drive_content_range(value: str) -> tuple[int, int, int] | None:
     if end < start:
         return None
     return start, end, total
+
+
+def _next_offset_from_range_payload(payload: object, *, fallback: int) -> int:
+    range_value = ""
+    if isinstance(payload, dict):
+        range_value = str(payload.get("range") or payload.get("Range") or "").strip()
+    return _next_offset_from_range_header(range_value, fallback=fallback)
+
+
+def _next_offset_from_range_header(value: object, *, fallback: int) -> int:
+    normalized = str(value or "").strip()
+    match = re.fullmatch(r"bytes=(\d+)-(\d+)", normalized)
+    if match is None:
+        return fallback
+    return int(match.group(2)) + 1
+
+
+def _provider_error_detail(payload: object, *, fallback: str) -> str:
+    if not isinstance(payload, dict):
+        return fallback
+    error = payload.get("error")
+    if isinstance(error, dict):
+        return str(error.get("message") or fallback)
+    return str(error or payload.get("detail") or fallback)
+
+
+def _http_error_detail(error: HTTPError) -> str:
+    try:
+        payload = json.loads(error.read().decode("utf-8") or "{}")
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        payload = {}
+    return _provider_error_detail(payload, fallback="Drive request failed")
 
 
 def _required_drive_file_id(value: object, *, operation: str) -> str:

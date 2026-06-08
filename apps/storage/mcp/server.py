@@ -42,6 +42,10 @@ tool_actions = {
     "storage_drive_preview": "drive_preview",
     "storage_drive_export": "drive_export",
     "storage_file_localize": "file.localize",
+    "storage_file_localize_status": "file.localize_status",
+    "storage_file_localize_retry": "file.localize_retry",
+    "storage_file_localize_cancel": "file.localize_cancel",
+    "storage_file_reconcile": "file.reconcile",
     "storage_drive_index": "drive_index",
     "storage_drive_mark_indexed": "drive_mark_indexed",
     "storage_drive_write": "drive_write",
@@ -52,7 +56,13 @@ tool_actions = {
 tool_name = str(payload.get("tool_name") or "")
 raw_action = tool_actions.get(tool_name) or str(arguments.get("action") or "operations.manifest")
 requested_action = STORAGE_ACTION_ALIASES.get(raw_action, raw_action)
-body = {**arguments, "_app_secrets": payload.get("app_secrets", {}), "action": requested_action}
+body = {
+    **arguments,
+    "_app_secrets": payload.get("app_secrets", {}),
+    "_surface": str(payload.get("surface") or "mcp"),
+    "_effective_mode": str(payload.get("effective_mode") or "sandbox"),
+    "action": requested_action,
+}
 if payload.get("surface") == "secret_selector":
     print(
         json.dumps(

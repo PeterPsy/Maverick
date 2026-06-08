@@ -9,7 +9,12 @@ export type StorageApiOptions = {
   signal?: AbortSignal;
 };
 
-export type UploadProgressPhase = 'reading' | 'uploading' | 'complete';
+export type DriveUploadSessionStatusOptions = StorageApiOptions & {
+  connectionId?: string;
+  refreshRemote?: boolean;
+};
+
+export type UploadProgressPhase = 'starting' | 'reading' | 'uploading' | 'complete';
 
 export type UploadProgress = {
   loaded: number;
@@ -49,6 +54,35 @@ export type DriveSyncPayload = {
   sync_mode?: string;
   sync_state?: unknown;
   synced_files?: number;
+};
+
+export type DriveUploadSession = {
+  id: string;
+  status: 'uploading' | 'complete' | 'canceled' | 'error';
+  provider: 'google_drive';
+  connection_id: string;
+  parent_drive_file_id: string;
+  file_name: string;
+  content_type: string;
+  size_bytes: number;
+  bytes_uploaded: number;
+  retry_count?: number;
+  error?: string;
+  progress?: {
+    state?: string;
+    bytes_completed?: number;
+    bytes_total?: number;
+  };
+  file?: StorageFile | null;
+};
+
+export type DriveUploadSessionPayload = {
+  status: 'uploading' | 'uploaded' | 'complete' | 'canceled' | 'error';
+  provider: 'google_drive';
+  connection_id: string;
+  upload_session: DriveUploadSession;
+  expected_offset?: number;
+  file?: StorageFile;
 };
 
 export type StorageMoveReference = {
@@ -121,6 +155,7 @@ export type CatalogRequest = Partial<Pick<StorageViewFilter, 'query' | 'role' | 
 export const CATALOG_PAGE_LIMIT = 500;
 export const DRIVE_PAGE_LIMIT = 50;
 export const MAX_BASE64_WRITE_BYTES = 25 * 1024 * 1024;
+export const DRIVE_RESUMABLE_CHUNK_BYTES = 8 * 1024 * 1024;
 
 export function loadCatalog(params: CatalogRequest = {}) {
   return callBackend<CatalogPayload>({ action: 'catalog', ...params });
@@ -248,6 +283,49 @@ export function localizeDriveFile(file: StorageFile, options: StorageApiOptions 
   }, options);
 }
 
+export function driveLocalizationStatus(file: StorageFile, options: StorageApiOptions = {}) {
+  const locator = driveFileLocator(file);
+  return callBackend<DriveLocalizePayload>({
+    action: 'file.localize_status',
+    ...locator,
+    _app_secret_request: driveConnectionSecretRequest(locator.connection_id)
+  }, options);
+}
+
+export function retryDriveLocalization(file: StorageFile, options: StorageApiOptions = {}) {
+  const locator = driveFileLocator(file);
+  return callBackend<DriveLocalizePayload>({
+    action: 'file.localize_retry',
+    ...locator,
+    _app_secret_request: driveConnectionSecretRequest(locator.connection_id)
+  }, options);
+}
+
+export function cancelDriveLocalization(file: StorageFile, options: StorageApiOptions = {}) {
+  const locator = driveFileLocator(file);
+  return callBackend<DriveLocalizePayload>({
+    action: 'file.localize_cancel',
+    ...locator,
+    _app_secret_request: driveConnectionSecretRequest(locator.connection_id)
+  }, options);
+}
+
+export function reconcileFile(file?: StorageFile, options: StorageApiOptions = {}) {
+  if (file?.provider === 'google_drive') {
+    const locator = driveFileLocator(file);
+    return callBackend<{ status: 'reconciled'; file?: StorageFile; files?: StorageFile[] }>({
+      action: 'file.reconcile',
+      ...locator,
+      _app_secret_request: driveConnectionSecretRequest(locator.connection_id)
+    }, options);
+  }
+  return callBackend<{ status: 'reconciled'; file?: StorageFile; files?: StorageFile[] }>({
+    action: 'file.reconcile',
+    ...(file?.file_id ? { file_id: file.file_id } : {}),
+    _app_secret_request: {}
+  }, options);
+}
+
 export function driveMediaDownloadUrl(payload: Pick<DriveLocalizePayload, 'download_url' | 'stream_url'>) {
   if (payload.download_url) return payload.download_url;
   return `${payload.stream_url}${payload.stream_url.includes('?') ? '&' : '?'}download=1`;
@@ -326,6 +404,9 @@ export async function uploadDriveFile(file: File, target: DriveUploadTarget, opt
   if (!connectionId || !parentDriveFileId) {
     throw new Error('Choose a Google Drive folder before uploading a file.');
   }
+  if (file.size > MAX_BASE64_WRITE_BYTES) {
+    return uploadDriveFileResumable(file, { connectionId, driveFileId: parentDriveFileId }, options);
+  }
   assertBase64WriteSize(file);
   const contentBase64 = await fileToBase64(file, (loaded, total) => {
     const percent = total > 0 ? Math.round((loaded / total) * 35) : 0;
@@ -347,6 +428,133 @@ export async function uploadDriveFile(file: File, target: DriveUploadTarget, opt
     : await callBackend<DriveWritePayload>(body, options);
   options.onProgress?.({ loaded: file.size, percent: 100, phase: 'complete', total: file.size });
   return payload;
+}
+
+async function uploadDriveFileResumable(file: File, target: DriveUploadTarget, options: UploadFileOptions): Promise<DriveWritePayload> {
+  const connectionId = target.connectionId.trim();
+  const parentDriveFileId = target.driveFileId.trim();
+  assertNotAborted(options.signal);
+  options.onProgress?.({ loaded: 0, percent: 0, phase: 'starting', total: file.size });
+  const started = await startDriveUploadSession(file, { connectionId, driveFileId: parentDriveFileId }, options);
+  let session = started.upload_session;
+  let offset = Math.max(0, session.bytes_uploaded || 0);
+  try {
+    while (offset < file.size) {
+      assertNotAborted(options.signal);
+      const nextOffset = Math.min(file.size, offset + DRIVE_RESUMABLE_CHUNK_BYTES);
+      const contentBase64 = await blobToBase64(file.slice(offset, nextOffset));
+      let attempt = 0;
+      while (true) {
+        try {
+          const payload = await uploadDriveSessionChunk(session.id, offset, contentBase64, connectionId, options);
+          session = payload.upload_session;
+          offset = payload.expected_offset ?? session.bytes_uploaded ?? nextOffset;
+          options.onProgress?.({
+            loaded: offset,
+            percent: file.size > 0 ? Math.min(99, Math.round((offset / file.size) * 100)) : 99,
+            phase: 'uploading',
+            total: file.size
+          });
+          if (payload.file || session.file) {
+            options.onProgress?.({ loaded: file.size, percent: 100, phase: 'complete', total: file.size });
+            return {
+              connection_id: connectionId,
+              file: (payload.file || session.file) as StorageFile,
+              provider: 'google_drive',
+              status: 'uploaded'
+            };
+          }
+          break;
+        } catch (error) {
+          assertNotAborted(options.signal);
+          attempt += 1;
+          if (attempt > 3) throw error;
+          await delay(250 * (2 ** (attempt - 1)));
+          const refreshed = await driveUploadSessionStatus(session.id, { ...options, connectionId, refreshRemote: true });
+          session = refreshed.upload_session;
+          const completedFile = refreshed.file || session.file;
+          if (completedFile) {
+            options.onProgress?.({ loaded: file.size, percent: 100, phase: 'complete', total: file.size });
+            return {
+              connection_id: connectionId,
+              file: completedFile as StorageFile,
+              provider: 'google_drive',
+              status: 'uploaded'
+            };
+          }
+          const refreshedOffset = Math.max(offset, session.bytes_uploaded || 0);
+          if (refreshedOffset > offset) {
+            offset = refreshedOffset;
+            options.onProgress?.({
+              loaded: offset,
+              percent: file.size > 0 ? Math.min(99, Math.round((offset / file.size) * 100)) : 99,
+              phase: 'uploading',
+              total: file.size
+            });
+            break;
+          }
+          offset = refreshedOffset;
+        }
+      }
+    }
+  } catch (error) {
+    if (options.signal?.aborted && session?.id) {
+      await cancelDriveUploadSession(session.id, { ...options, connectionId, signal: undefined }).catch(() => undefined);
+    }
+    throw error;
+  }
+  const refreshed = await driveUploadSessionStatus(session.id, { ...options, connectionId, refreshRemote: true });
+  const completedFile = refreshed.file || refreshed.upload_session.file;
+  if (!completedFile) {
+    throw new Error('Google Drive upload did not return the uploaded file metadata.');
+  }
+  options.onProgress?.({ loaded: file.size, percent: 100, phase: 'complete', total: file.size });
+  return { connection_id: connectionId, file: completedFile, provider: 'google_drive', status: 'uploaded' };
+}
+
+function startDriveUploadSession(file: File, target: DriveUploadTarget, options: StorageApiOptions = {}) {
+  return callBackend<DriveUploadSessionPayload>({
+    action: 'drive_upload_session.start',
+    connection_id: target.connectionId,
+    parent_drive_file_id: target.driveFileId,
+    file_name: file.name,
+    content_type: file.type || 'application/octet-stream',
+    size_bytes: file.size,
+    _app_secret_request: driveConnectionSecretRequest(target.connectionId)
+  }, options);
+}
+
+function uploadDriveSessionChunk(sessionId: string, offset: number, contentBase64: string, connectionId: string, options: StorageApiOptions = {}) {
+  return callBackend<DriveUploadSessionPayload>({
+    action: 'drive_upload_session.chunk',
+    drive_upload_session_id: sessionId,
+    chunk_offset: offset,
+    content_base64: contentBase64,
+    _app_secret_request: driveConnectionSecretRequest(connectionId)
+  }, options);
+}
+
+export function driveUploadSessionStatus(sessionId: string, options: DriveUploadSessionStatusOptions = {}) {
+  const { connectionId, refreshRemote, ...apiOptions } = options;
+  const body: Record<string, unknown> = {
+    action: 'drive_upload_session.status',
+    drive_upload_session_id: sessionId,
+    refresh_remote: Boolean(refreshRemote),
+    _app_secret_request: connectionId ? driveConnectionSecretRequest(connectionId) : {}
+  };
+  if (connectionId) {
+    body.connection_id = connectionId;
+  }
+  return callBackend<DriveUploadSessionPayload>(body, apiOptions);
+}
+
+export function cancelDriveUploadSession(sessionId: string, options: StorageApiOptions & { connectionId?: string } = {}) {
+  const { connectionId, ...apiOptions } = options;
+  return callBackend<DriveUploadSessionPayload>({
+    action: 'drive_upload_session.cancel',
+    drive_upload_session_id: sessionId,
+    _app_secret_request: connectionId ? driveConnectionSecretRequest(connectionId) : {}
+  }, apiOptions);
 }
 
 export async function readFile(file: StorageFile, maxBytes: number) {
@@ -491,8 +699,16 @@ function callBackendWithUploadProgress<T>(body: Record<string, unknown>, options
   const serializedBody = JSON.stringify(withDefaultSecretRequest(body));
   return new Promise<T>((resolve, reject) => {
     const request = new XMLHttpRequest();
+    const abortRequest = () => request.abort();
     request.open('POST', endpoint);
     request.setRequestHeader('Content-Type', 'application/json');
+    if (options.signal) {
+      if (options.signal.aborted) {
+        reject(new DOMException('Upload canceled.', 'AbortError'));
+        return;
+      }
+      options.signal.addEventListener('abort', abortRequest, { once: true });
+    }
     request.upload.onprogress = (event) => {
       if (!event.lengthComputable) {
         return;
@@ -506,7 +722,9 @@ function callBackendWithUploadProgress<T>(body: Record<string, unknown>, options
       });
     };
     request.onerror = () => reject(new Error('Storage request failed'));
+    request.onabort = () => reject(new DOMException('Upload canceled.', 'AbortError'));
     request.onload = () => {
+      options.signal?.removeEventListener('abort', abortRequest);
       let payload: unknown = {};
       try {
         payload = request.responseText ? JSON.parse(request.responseText) : {};
@@ -584,4 +802,23 @@ function fileToBase64(file: File, onProgress?: (loaded: number, total: number) =
     };
     reader.readAsDataURL(file);
   });
+}
+
+async function blobToBase64(blob: Blob): Promise<string> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = '';
+  const batchSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += batchSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + batchSize));
+  }
+  return btoa(binary);
+}
+
+function assertNotAborted(signal?: AbortSignal) {
+  if (!signal?.aborted) return;
+  throw new DOMException('Upload canceled.', 'AbortError');
+}
+
+function delay(milliseconds: number) {
+  return new Promise((resolve) => globalThis.setTimeout(resolve, milliseconds));
 }

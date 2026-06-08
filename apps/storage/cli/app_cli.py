@@ -19,6 +19,8 @@ requested_action = str(arguments.get("action") or "operations.manifest")
 body = {
     **arguments,
     "_app_secrets": payload.get("app_secrets", {}),
+    "_surface": str(payload.get("surface") or "cli"),
+    "_effective_mode": str(payload.get("effective_mode") or "sandbox"),
     "action": STORAGE_ACTION_ALIASES.get(requested_action, requested_action),
 }
 if payload.get("surface") == "secret_selector":

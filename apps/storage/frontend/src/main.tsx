@@ -128,8 +128,12 @@ function isDriveItem(item: Pick<StorageFile | StorageFolder, 'provider'>) {
   return item.provider === 'google_drive';
 }
 
-function isDriveStreamableFile(file: StorageFile) {
-  return isDriveItem(file) && ['image', 'video', 'audio', 'pdf'].includes(file.preview_kind);
+function isGoogleNativeDriveFile(file: StorageFile) {
+  return isDriveItem(file) && file.content_type.startsWith('application/vnd.google-apps.');
+}
+
+function isDriveBinaryDownloadFile(file: StorageFile) {
+  return isDriveItem(file) && !isGoogleNativeDriveFile(file);
 }
 
 function itemCan(item: Pick<StorageFile | StorageFolder, 'capabilities'>, capability: keyof NonNullable<StorageFile['capabilities']>, fallback = true) {
@@ -1645,7 +1649,7 @@ function App() {
   const previewBackdropClassName = previewFullscreenActive ? 'preview-modal-backdrop is-fullscreen-preview' : 'preview-modal-backdrop';
 
   async function download(file: StorageFile) {
-    if (isDriveStreamableFile(file)) {
+    if (isDriveBinaryDownloadFile(file)) {
       const anchor = document.createElement('a');
       anchor.href = driveMediaStreamUrl(file, { download: true });
       anchor.download = file.name;
@@ -1661,6 +1665,11 @@ function App() {
     anchor.download = payload.file_name || payload.file.name;
     anchor.click();
     URL.revokeObjectURL(url);
+  }
+
+  function openDriveFile(file: StorageFile) {
+    if (!file.web_url) return;
+    window.open(file.web_url, '_blank', 'noopener,noreferrer');
   }
 
   async function downloadFolderArchive(folder: StorageFolder) {
@@ -2518,6 +2527,12 @@ function App() {
                 <div><dt>Modified</dt><dd>{new Date(selectedFile.modified_at).toLocaleString()}</dd></div>
                 <div><dt>Type</dt><dd>{selectedFile.content_type}</dd></div>
               </dl>
+              {isDriveItem(selectedFile) && selectedFile.web_url ? (
+                <button className="secondary-action" type="button" onClick={() => openDriveFile(selectedFile)}>
+                  <Icon name="open_in_new" />
+                  Open in Drive
+                </button>
+              ) : null}
             </section>
             <section className="file-details-section">
               <h3>Rename</h3>
@@ -2617,6 +2632,11 @@ function App() {
                 <button className="icon-button" disabled={isDriveItem(selectedFile) && !itemCan(selectedFile, 'can_read', false)} type="button" onClick={() => download(selectedFile).catch((err: Error) => setError(err.message))} aria-label="Download file" title="Download">
                   <Icon name="download" />
                 </button>
+                {isDriveItem(selectedFile) && selectedFile.web_url ? (
+                  <button className="icon-button" type="button" onClick={() => openDriveFile(selectedFile)} aria-label="Open in Drive" title="Open in Drive">
+                    <Icon name="open_in_new" />
+                  </button>
+                ) : null}
                 <button className="icon-button danger" disabled={isDriveItem(selectedFile) && !itemCan(selectedFile, 'can_delete', false)} type="button" onClick={() => { exitPreviewFullscreenIfNeeded(); requestFileDelete(selectedFile); }} aria-label="Delete file" title="Delete">
                   <Icon name="delete" />
                 </button>

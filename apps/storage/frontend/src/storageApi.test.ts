@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { callBackend, completeDriveOAuth, currentStorageAppId, driveConnectionSecretRequest, driveMediaDownloadUrl, driveMediaStreamUrl, listDriveChildren, listDriveConnections, listDriveRoots, localizeDriveFile, moveItemsReferences, previewDriveFile, startDriveOAuth, storageBackendEndpoint, syncDriveConnection, trashDriveFile, uploadDriveFile } from './storageApi';
+import { callBackend, completeDriveOAuth, currentStorageAppId, driveConnectionSecretRequest, driveMediaDownloadUrl, driveMediaStreamUrl, listDriveChildren, listDriveConnections, listDriveRoots, localizeDriveFile, MAX_BASE64_WRITE_BYTES, moveItemsReferences, previewDriveFile, startDriveOAuth, storageBackendEndpoint, syncDriveConnection, trashDriveFile, uploadDriveFile } from './storageApi';
 
 class FakeFileReader {
   onerror: ((this: FileReader, ev: ProgressEvent<FileReader>) => unknown) | null = null;
@@ -435,6 +435,184 @@ describe('storage api client', () => {
         method: 'POST'
       })
     );
+  });
+
+  it('uses Drive resumable upload sessions for files above the base64 write limit', async () => {
+    const fileSize = MAX_BASE64_WRITE_BYTES + 3;
+    const driveChunkBytes = 8 * 1024 * 1024;
+    const largeFile = {
+      name: 'large.bin',
+      type: 'application/octet-stream',
+      size: fileSize,
+      slice: (start: number, end: number) => new Blob([new Uint8Array(Math.min(16, Math.max(0, end - start))).fill(97)])
+    } as unknown as File;
+    const expectedSecretRequest = driveConnectionSecretRequest('drive_conn_1');
+    const fetchImpl = vi.fn(async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body || '{}'));
+      if (body.action === 'drive_upload_session.start') {
+        return new Response(JSON.stringify({
+          status: 'uploading',
+          provider: 'google_drive',
+          connection_id: 'drive_conn_1',
+          upload_session: {
+            id: 'drive_upload_1',
+            status: 'uploading',
+            provider: 'google_drive',
+            connection_id: 'drive_conn_1',
+            parent_drive_file_id: 'folder-1',
+            file_name: 'large.bin',
+            content_type: 'application/octet-stream',
+            size_bytes: fileSize,
+            bytes_uploaded: 0
+          }
+        }), { status: 200 });
+      }
+      if (body.action === 'drive_upload_session.chunk') {
+        const nextOffset = Math.min(fileSize, Number(body.chunk_offset) + driveChunkBytes);
+        const complete = nextOffset >= fileSize;
+        return new Response(JSON.stringify({
+          status: complete ? 'uploaded' : 'uploading',
+          provider: 'google_drive',
+          connection_id: 'drive_conn_1',
+          expected_offset: nextOffset,
+          upload_session: {
+            id: 'drive_upload_1',
+            status: complete ? 'complete' : 'uploading',
+            provider: 'google_drive',
+            connection_id: 'drive_conn_1',
+            parent_drive_file_id: 'folder-1',
+            file_name: 'large.bin',
+            content_type: 'application/octet-stream',
+            size_bytes: fileSize,
+            bytes_uploaded: nextOffset,
+            file: complete ? { id: 'file_large', file_id: 'file_large', name: 'large.bin' } : null
+          },
+          ...(complete ? { file: { id: 'file_large', file_id: 'file_large', name: 'large.bin' } } : {})
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ detail: `Unexpected action ${body.action}` }), { status: 400 });
+    });
+
+    const payload = await uploadDriveFile(
+      largeFile,
+      { connectionId: 'drive_conn_1', driveFileId: 'folder-1' },
+      { fetchImpl }
+    );
+    const bodies = fetchImpl.mock.calls.map((call) => JSON.parse(String(call[1]?.body || '{}')));
+
+    expect(payload.file.id).toBe('file_large');
+    expect(bodies[0]).toMatchObject({
+      action: 'drive_upload_session.start',
+      connection_id: 'drive_conn_1',
+      parent_drive_file_id: 'folder-1',
+      file_name: 'large.bin',
+      size_bytes: fileSize,
+      _app_secret_request: expectedSecretRequest
+    });
+    expect(bodies.slice(1).every((body) => body.action === 'drive_upload_session.chunk')).toBe(true);
+    expect(bodies.slice(1).every((body) => body._app_secret_request.selectors[1].resource_id === 'drive_conn_1')).toBe(true);
+    expect(bodies.some((body) => body.action === 'drive_write')).toBe(false);
+  });
+
+  it('refreshes the remote Drive resumable offset after an ambiguous chunk failure', async () => {
+    const fileSize = MAX_BASE64_WRITE_BYTES + 3;
+    const driveChunkBytes = 8 * 1024 * 1024;
+    const largeFile = {
+      name: 'large.bin',
+      type: 'application/octet-stream',
+      size: fileSize,
+      slice: (start: number, end: number) => new Blob([new Uint8Array(Math.min(16, Math.max(0, end - start))).fill(97)])
+    } as unknown as File;
+    let failedFirstChunk = false;
+    const expectedSecretRequest = driveConnectionSecretRequest('drive_conn_1');
+    const fetchImpl = vi.fn(async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body || '{}'));
+      if (body.action === 'drive_upload_session.start') {
+        return new Response(JSON.stringify({
+          status: 'uploading',
+          provider: 'google_drive',
+          connection_id: 'drive_conn_1',
+          upload_session: {
+            id: 'drive_upload_1',
+            status: 'uploading',
+            provider: 'google_drive',
+            connection_id: 'drive_conn_1',
+            parent_drive_file_id: 'folder-1',
+            file_name: 'large.bin',
+            content_type: 'application/octet-stream',
+            size_bytes: fileSize,
+            bytes_uploaded: 0
+          }
+        }), { status: 200 });
+      }
+      if (body.action === 'drive_upload_session.status') {
+        return new Response(JSON.stringify({
+          status: 'uploading',
+          provider: 'google_drive',
+          connection_id: 'drive_conn_1',
+          expected_offset: driveChunkBytes,
+          upload_session: {
+            id: 'drive_upload_1',
+            status: 'uploading',
+            provider: 'google_drive',
+            connection_id: 'drive_conn_1',
+            parent_drive_file_id: 'folder-1',
+            file_name: 'large.bin',
+            content_type: 'application/octet-stream',
+            size_bytes: fileSize,
+            bytes_uploaded: driveChunkBytes
+          }
+        }), { status: 200 });
+      }
+      if (body.action === 'drive_upload_session.chunk') {
+        if (body.chunk_offset === 0 && !failedFirstChunk) {
+          failedFirstChunk = true;
+          return new Response(JSON.stringify({ detail: 'timeout after Drive accepted chunk' }), { status: 503 });
+        }
+        const nextOffset = Math.min(fileSize, Number(body.chunk_offset) + driveChunkBytes);
+        const complete = nextOffset >= fileSize;
+        return new Response(JSON.stringify({
+          status: complete ? 'uploaded' : 'uploading',
+          provider: 'google_drive',
+          connection_id: 'drive_conn_1',
+          expected_offset: nextOffset,
+          upload_session: {
+            id: 'drive_upload_1',
+            status: complete ? 'complete' : 'uploading',
+            provider: 'google_drive',
+            connection_id: 'drive_conn_1',
+            parent_drive_file_id: 'folder-1',
+            file_name: 'large.bin',
+            content_type: 'application/octet-stream',
+            size_bytes: fileSize,
+            bytes_uploaded: nextOffset,
+            file: complete ? { id: 'file_large', file_id: 'file_large', name: 'large.bin' } : null
+          },
+          ...(complete ? { file: { id: 'file_large', file_id: 'file_large', name: 'large.bin' } } : {})
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ detail: `Unexpected action ${body.action}` }), { status: 400 });
+    });
+
+    const payload = await uploadDriveFile(
+      largeFile,
+      { connectionId: 'drive_conn_1', driveFileId: 'folder-1' },
+      { fetchImpl }
+    );
+    const bodies = fetchImpl.mock.calls.map((call) => JSON.parse(String(call[1]?.body || '{}')));
+    const statusBody = bodies.find((body) => body.action === 'drive_upload_session.status');
+    const chunkOffsets = bodies.filter((body) => body.action === 'drive_upload_session.chunk').map((body) => body.chunk_offset);
+
+    expect(payload.file.id).toBe('file_large');
+    expect(statusBody).toMatchObject({
+      action: 'drive_upload_session.status',
+      drive_upload_session_id: 'drive_upload_1',
+      connection_id: 'drive_conn_1',
+      refresh_remote: true,
+      _app_secret_request: expectedSecretRequest
+    });
+    expect(chunkOffsets.filter((offset) => offset === 0)).toHaveLength(1);
+    expect(chunkOffsets[1]).toBe(driveChunkBytes);
   });
 
   it('sends selected file and folder moves as one backend action', async () => {

@@ -7,6 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 from core.api.app_event_publication import declared_data_event_resources, publish_declared_app_events
+from core.apps.dependencies import resolve_app_dependencies
 from core.apps.errors import AppHostingError, WorkspaceAppBindingNotFoundError
 from core.apps.models import ParsedAppContract
 from core.apps.runtime_event_hooks import dispatch_source_app_runtime_event
@@ -18,12 +19,16 @@ from core.runtime.runtime_threads import create_runtime_thread
 from core.runtime.service import create_runtime_session, record_runtime_event, transition_runtime_session, transition_runtime_turn
 from core.runtime.thread_catalog_events import set_thread_availability
 from core.runtime.turn_submission import interrupt_runtime_provider_turn, release_idle_runtime_processes, submit_runtime_turn_async
+from core.secrets.app_delivery import AppSecretRequest, resolve_app_secret_payload_requests
+from core.secrets.errors import SecretError
 from core.skills.runtime_catalog import runtime_skill_catalog_app_id_for_request
 from core.shared.entrypoints import run_json_entrypoint
+from core.workspaces.paths import workspace_paths
 
 
 RUNTIME_REQUEST_KEYS = ("runtime_session_requests", "runtime_launch_requests")
 RUNTIME_INTERRUPT_REQUEST_KEYS = ("runtime_turn_interrupt_requests", "runtime_interrupt_requests")
+DEPENDENCY_BACKEND_REQUEST_KEYS = ("dependency_backend_requests",)
 
 
 def apply_app_runtime_requests(
@@ -38,15 +43,35 @@ def apply_app_runtime_requests(
     parsed: ParsedAppContract,
     start_path: Path,
 ) -> list[dict[str, Any]]:
-    """Create runtime sessions/turns requested by an app through a generic result envelope."""
+    """Apply platform-owned requests returned by an app through a generic result envelope."""
     requests = _pop_runtime_requests(result)
     interrupt_requests = _pop_runtime_interrupt_requests(result)
-    if not requests and not interrupt_requests:
+    dependency_backend_requests = _pop_dependency_backend_requests(result)
+    if not requests and not interrupt_requests and not dependency_backend_requests:
         return []
     if requests and not parsed.contract.permissions.runtime.create_sessions:
         raise AppHostingError(f"App `{app_id}` requested runtime session creation without declaring runtime.create_sessions.")
     if not isinstance(requests, list):
         raise AppHostingError("App runtime launch requests must be a list.")
+    if not isinstance(dependency_backend_requests, list):
+        raise AppHostingError("App dependency backend requests must be a list.")
+    dependency_results: list[dict[str, Any]] = []
+    for request in dependency_backend_requests:
+        if isinstance(request, dict):
+            dependency_results.append(
+                _apply_one_dependency_backend_request(
+                    state,
+                    request=request,
+                    workspace_id=workspace_id,
+                    app_id=app_id,
+                    source_root=source_root,
+                    backend_entrypoint=backend_entrypoint,
+                    data_root=data_root,
+                    parsed=parsed,
+                    start_path=start_path,
+                )
+            )
+    _attach_dependency_backend_request_results(result, dependency_results)
     results: list[dict[str, Any]] = []
     for request in requests:
         if not isinstance(request, dict):
@@ -93,6 +118,16 @@ def _pop_runtime_interrupt_requests(result: dict[str, Any]) -> object:
     return []
 
 
+def _pop_dependency_backend_requests(result: dict[str, Any]) -> object:
+    response_json = result.get("json") if isinstance(result.get("json"), dict) else None
+    for key in DEPENDENCY_BACKEND_REQUEST_KEYS:
+        if key in result:
+            return result.pop(key)
+        if response_json is not None and key in response_json:
+            return response_json.pop(key)
+    return []
+
+
 def _attach_runtime_request_results(result: dict[str, Any], results: list[dict[str, Any]]) -> None:
     if not results:
         return
@@ -101,6 +136,94 @@ def _attach_runtime_request_results(result: dict[str, Any], results: list[dict[s
         response_json["runtime_request_results"] = results
         return
     result["runtime_request_results"] = results
+
+
+def _attach_dependency_backend_request_results(result: dict[str, Any], results: list[dict[str, Any]]) -> None:
+    if not results:
+        return
+    response_json = result.get("json") if isinstance(result.get("json"), dict) else None
+    if response_json is not None:
+        response_json["dependency_backend_request_results"] = results
+        return
+    result["dependency_backend_request_results"] = results
+
+
+def _apply_one_dependency_backend_request(
+    state,
+    *,
+    request: dict[str, Any],
+    workspace_id: str,
+    app_id: str,
+    source_root: Path,
+    backend_entrypoint: str | None,
+    data_root: str,
+    parsed: ParsedAppContract,
+    start_path: Path,
+) -> dict[str, Any]:
+    request_id = _text(request.get("request_id")) or str(uuid4())
+    dependency_alias = _text(request.get("dependency_alias") or request.get("alias"))
+    body = request.get("body") if isinstance(request.get("body"), dict) else {}
+    callback = request.get("callback") if isinstance(request.get("callback"), dict) else {}
+    try:
+        result = _invoke_dependency_backend(
+            state,
+            workspace_id=workspace_id,
+            app_id=app_id,
+            dependency_alias=dependency_alias,
+            body=body,
+            start_path=start_path,
+        )
+        callback_result = _safe_dependency_backend_request_callback(
+            state,
+            callback=callback,
+            workspace_id=workspace_id,
+            app_id=app_id,
+            source_root=source_root,
+            backend_entrypoint=backend_entrypoint,
+            data_root=data_root,
+            parsed=parsed,
+            request=request,
+            request_id=request_id,
+            dependency_alias=dependency_alias,
+            status="completed",
+            provider_result=result,
+            error="",
+            start_path=start_path,
+        )
+    except Exception as exc:
+        callback_result = _safe_dependency_backend_request_callback(
+            state,
+            callback=callback,
+            workspace_id=workspace_id,
+            app_id=app_id,
+            source_root=source_root,
+            backend_entrypoint=backend_entrypoint,
+            data_root=data_root,
+            parsed=parsed,
+            request=request,
+            request_id=request_id,
+            dependency_alias=dependency_alias,
+            status="failed",
+            provider_result={},
+            error=str(exc),
+            start_path=start_path,
+        )
+        return {
+            "request_id": request_id,
+            "dependency_alias": dependency_alias,
+            "status": "failed",
+            "status_code": 500,
+            "error": str(exc),
+            "callback_status_code": int(callback_result.get("status_code", 0)) if isinstance(callback_result, dict) else 0,
+        }
+    return {
+        "request_id": request_id,
+        "dependency_alias": dependency_alias,
+        "provider_app_id": _text(result.get("dependency_provider_app_id")),
+        "status": "completed",
+        "status_code": int(result.get("status_code", 200)),
+        "callback_status_code": int(callback_result.get("status_code", 0)) if isinstance(callback_result, dict) else 0,
+    }
 
 
 def _apply_one_runtime_request(
@@ -391,10 +514,19 @@ def _invoke_dependency_backend(
         start_path=start_path,
     )
     dependency = next((item for item in dependencies.get("dependencies", []) if item.get("alias") == dependency_alias), None)
+    if not isinstance(dependency, dict):
+        raise AppHostingError(f"Dependency alias `{dependency_alias}` is not declared by app `{app_id}`.")
+    dependency_status = str(dependency.get("status") or "").strip()
+    if dependency_status and dependency_status != "resolved":
+        blocked_reason = str(dependency.get("blocked_reason") or dependency_status).strip()
+        raise AppHostingError(f"Dependency alias `{dependency_alias}` is not resolved: {blocked_reason}.")
     provider_ids = dependency.get("selected_provider_app_ids") if isinstance(dependency, dict) else []
     provider_id = str(provider_ids[0]).strip() if isinstance(provider_ids, list) and provider_ids else ""
     if not provider_id:
         raise AppHostingError(f"Dependency alias `{dependency_alias}` has no selected provider app.")
+    candidate = _dependency_candidate_for_provider(dependency, provider_id)
+    if candidate is None or "backend" not in _dependency_candidate_surfaces(candidate):
+        raise AppHostingError(f"Dependency provider `{provider_id}` does not declare backend surface for alias `{dependency_alias}`.")
     try:
         binding = state.app_store.get_workspace_app_binding(workspace_id=workspace_id, app_id=provider_id)
         provider_source_root, provider_parsed = resolve_workspace_app_surface(state.app_store, binding=binding, start_path=start_path)
@@ -403,19 +535,295 @@ def _invoke_dependency_backend(
     backend = provider_parsed.contract.entrypoints.backend
     if backend is None:
         raise AppHostingError(f"Dependency provider `{provider_id}` does not expose a backend.")
+    paths = workspace_paths(workspace_id, start_path=start_path)
+    provider_secret_requests = _dependency_backend_provider_secret_requests(
+        provider_source_root=provider_source_root,
+        provider_backend=backend,
+        workspace_id=workspace_id,
+        provider_id=provider_id,
+        consumer_app_id=app_id,
+        dependency_alias=dependency_alias,
+        data_root=binding.data_root,
+        workspace_root=str(paths.root),
+        uploaded_storage_root=str(paths.uploaded_storage),
+        generated_storage_root=str(paths.generated_storage),
+        declared_logical_names=provider_parsed.contract.permissions.secrets.read,
+        body=body,
+    )
+    secret_requests = _dedupe_secret_requests(
+        [
+            *provider_secret_requests,
+            *_dependency_backend_secret_requests(
+                declared_logical_names=provider_parsed.contract.permissions.secrets.read,
+                body=body,
+            ),
+        ]
+    )
+    try:
+        app_secret_result = resolve_app_secret_payload_requests(
+            getattr(state, "secret_store", None),
+            workspace_id=workspace_id,
+            app_id=provider_id,
+            requests=secret_requests,
+            surface="backend",
+            runtime_session_id="",
+            actor_user_id=None,
+            observability_store=getattr(state, "observability_store", None),
+            request_context={
+                "surface": "dependency_backend",
+                "consumer_app_id": app_id,
+                "provider_app_id": provider_id,
+                "dependency_alias": dependency_alias,
+            },
+            fail_closed=_dependency_backend_secrets_fail_closed(body, secret_requests=provider_secret_requests),
+        )
+    except SecretError as exc:
+        raise AppHostingError(f"Dependency provider `{provider_id}` secret delivery failed: {exc}") from exc
     result = run_json_entrypoint(
         provider_source_root / backend,
         payload={
             "surface": "dependency_backend",
             "workspace_id": workspace_id,
             "app_id": provider_id,
+            "consumer_app_id": app_id,
+            "dependency_alias": dependency_alias,
+            "workspace_root": str(paths.root),
             "data_root": binding.data_root,
+            "uploaded_storage_root": str(paths.uploaded_storage),
+            "generated_storage_root": str(paths.generated_storage),
+            "app_secrets": app_secret_result.secrets,
+            "app_secret_errors": app_secret_result.errors,
+            "effective_mode": "full-access",
             "body": body,
             "runtime_session_id": "",
             "turn_id": "",
         },
         cwd=provider_source_root,
         timeout_seconds=30,
+    )
+    status_code = int(result.get("status_code", 200))
+    if status_code >= 400:
+        raise AppHostingError(str(result.get("json") or result))
+    result["dependency_provider_app_id"] = provider_id
+    return result
+
+
+def _dependency_candidate_for_provider(dependency: dict[str, Any], provider_id: str) -> dict[str, Any] | None:
+    candidates = dependency.get("candidates")
+    if not isinstance(candidates, list):
+        return None
+    for candidate in candidates:
+        if isinstance(candidate, dict) and str(candidate.get("app_id") or "").strip() == provider_id:
+            return candidate
+    return None
+
+
+def _dependency_candidate_surfaces(candidate: dict[str, Any]) -> set[str]:
+    raw_surfaces = candidate.get("surfaces")
+    if not isinstance(raw_surfaces, list):
+        return set()
+    return {str(item).strip() for item in raw_surfaces if str(item).strip()}
+
+
+def _dependency_backend_provider_secret_requests(
+    *,
+    provider_source_root: Path,
+    provider_backend: str,
+    workspace_id: str,
+    provider_id: str,
+    consumer_app_id: str,
+    dependency_alias: str,
+    data_root: str,
+    workspace_root: str,
+    uploaded_storage_root: str,
+    generated_storage_root: str,
+    declared_logical_names: list[str],
+    body: dict[str, Any],
+) -> list[AppSecretRequest]:
+    if not any(str(item).strip() for item in declared_logical_names):
+        return []
+    result = run_json_entrypoint(
+        provider_source_root / provider_backend,
+        payload={
+            "surface": "secret_selector",
+            "workspace_id": workspace_id,
+            "app_id": provider_id,
+            "consumer_app_id": consumer_app_id,
+            "dependency_alias": dependency_alias,
+            "workspace_root": workspace_root,
+            "data_root": data_root,
+            "uploaded_storage_root": uploaded_storage_root,
+            "generated_storage_root": generated_storage_root,
+            "app_secrets": {},
+            "app_secret_errors": [],
+            "effective_mode": "full-access",
+            "body": body,
+            "runtime_session_id": "",
+            "turn_id": "",
+        },
+        cwd=provider_source_root,
+        timeout_seconds=30,
+    )
+    status_code = int(result.get("status_code", 200)) if isinstance(result, dict) else 200
+    if status_code >= 400:
+        raise AppHostingError(f"Dependency provider `{provider_id}` secret selector failed.")
+    selector_result = result.get("json") if isinstance(result.get("json"), dict) else result
+    if not isinstance(selector_result, dict) or not bool(selector_result.get("requires_secrets")):
+        return []
+    declared = {str(item).strip().lower() for item in declared_logical_names if str(item).strip()}
+    requests = _secret_requests_from_selector_result(selector_result, declared=declared)
+    if not requests:
+        raise AppHostingError(f"Dependency provider `{provider_id}` secret selector did not declare required logical names.")
+    return requests
+
+
+def _secret_requests_from_selector_result(result: dict[str, Any], *, declared: set[str]) -> list[AppSecretRequest]:
+    raw_requests = result.get("secret_requests")
+    if isinstance(raw_requests, list):
+        requests: list[AppSecretRequest] = []
+        for item in raw_requests:
+            if not isinstance(item, dict):
+                continue
+            logical_names = _dependency_secret_names(item.get("logical_names", []), declared=declared)
+            if not logical_names:
+                continue
+            resource_type, resource_id = _dependency_secret_resource(item)
+            requests.append(AppSecretRequest(logical_names=logical_names, resource_type=resource_type, resource_id=resource_id))
+        return requests
+    logical_names = _dependency_secret_names(result.get("logical_names", []), declared=declared)
+    if not logical_names:
+        return []
+    resource_type, resource_id = _dependency_secret_resource(result)
+    return [AppSecretRequest(logical_names=logical_names, resource_type=resource_type, resource_id=resource_id)]
+
+
+def _dependency_backend_secret_requests(*, declared_logical_names: list[str], body: dict[str, Any]) -> list[AppSecretRequest]:
+    request = body.get("_app_secret_request")
+    declared = {str(item).strip().lower() for item in declared_logical_names if str(item).strip()}
+    if not isinstance(request, dict):
+        return []
+    raw_selectors = request.get("selectors")
+    if isinstance(raw_selectors, list):
+        selectors: list[AppSecretRequest] = []
+        for item in raw_selectors:
+            if not isinstance(item, dict):
+                continue
+            logical_names = _dependency_secret_names(item.get("logical_names", []), declared=declared)
+            if not logical_names:
+                continue
+            resource_type, resource_id = _dependency_secret_resource(item)
+            selectors.append(AppSecretRequest(logical_names=logical_names, resource_type=resource_type, resource_id=resource_id))
+        return selectors
+    logical_names = _dependency_secret_names(request.get("logical_names", []), declared=declared)
+    if not logical_names:
+        return []
+    resource_type, resource_id = _dependency_secret_resource(request)
+    return [AppSecretRequest(logical_names=logical_names, resource_type=resource_type, resource_id=resource_id)]
+
+
+def _dependency_secret_names(raw_names: object, *, declared: set[str]) -> list[str]:
+    if not isinstance(raw_names, list):
+        return []
+    names: list[str] = []
+    for item in raw_names:
+        logical_name = str(item).strip().lower()
+        if logical_name in declared and logical_name not in names:
+            names.append(logical_name)
+    return names
+
+
+def _dependency_secret_resource(request: dict[str, Any]) -> tuple[str | None, str | None]:
+    resource_type = str(request.get("resource_type") or "").strip().lower()
+    resource_id = str(request.get("resource_id") or "").strip().lower()
+    if not resource_type or not resource_id:
+        return None, None
+    return resource_type, resource_id
+
+
+def _dedupe_secret_requests(requests: list[AppSecretRequest]) -> list[AppSecretRequest]:
+    deduped: list[AppSecretRequest] = []
+    seen: set[tuple[tuple[str, ...], str | None, str | None]] = set()
+    for request in requests:
+        key = (tuple(request.logical_names), request.resource_type, request.resource_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(request)
+    return deduped
+
+
+def _dependency_backend_secrets_fail_closed(body: dict[str, Any], *, secret_requests: list[AppSecretRequest]) -> bool:
+    request = body.get("_app_secret_request")
+    if secret_requests:
+        return True
+    if not isinstance(request, dict):
+        return False
+    return bool(request.get("required"))
+
+
+def _safe_dependency_backend_request_callback(*args, **kwargs) -> dict[str, Any]:
+    try:
+        return _invoke_dependency_backend_request_callback(*args, **kwargs)
+    except Exception:
+        return {"status_code": 0}
+
+
+def _invoke_dependency_backend_request_callback(
+    state,
+    *,
+    callback: dict[str, Any],
+    workspace_id: str,
+    app_id: str,
+    source_root: Path,
+    backend_entrypoint: str | None,
+    data_root: str,
+    parsed: ParsedAppContract,
+    request: dict[str, Any],
+    request_id: str,
+    dependency_alias: str,
+    status: str,
+    provider_result: dict[str, Any],
+    error: str,
+    start_path: Path,
+) -> dict[str, Any]:
+    action = _text(callback.get("action"))
+    if not action or backend_entrypoint is None:
+        return {}
+    payload = callback.get("payload") if isinstance(callback.get("payload"), dict) else {}
+    paths = workspace_paths(workspace_id, start_path=start_path)
+    result = run_json_entrypoint(
+        source_root / backend_entrypoint,
+        payload={
+            "surface": "dependency_backend_request_callback",
+            "workspace_id": workspace_id,
+            "app_id": app_id,
+            "workspace_root": str(paths.root),
+            "data_root": data_root,
+            "uploaded_storage_root": str(paths.uploaded_storage),
+            "generated_storage_root": str(paths.generated_storage),
+            "body": {
+                **payload,
+                "action": action,
+                "request_id": request_id,
+                "dependency_alias": dependency_alias,
+                "dependency_backend_status": status,
+                "dependency_backend_result": provider_result,
+                "error": error,
+                "request": request,
+            },
+            "runtime_session_id": "",
+            "turn_id": "",
+        },
+        cwd=source_root,
+        timeout_seconds=30,
+    )
+    publish_declared_app_events(
+        state.app_event_bus,
+        result,
+        workspace_id=workspace_id,
+        app_id=app_id,
+        declared_resources=declared_data_event_resources(parsed.contract.capabilities.data_events),
+        remove_from_result=True,
     )
     status_code = int(result.get("status_code", 200))
     if status_code >= 400:

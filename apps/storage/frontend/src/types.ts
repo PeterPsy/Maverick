@@ -194,7 +194,7 @@ export type DrivePreviewPayload = {
 
 export type DriveLocalization = {
   id: string;
-  status: 'ready' | 'localizing' | 'error';
+  status: 'not_started' | 'ready' | 'localizing' | 'cancel_requested' | 'canceled' | 'error';
   source_version: string;
   content_type: string;
   file_name: string;
@@ -213,7 +213,7 @@ export type DriveLocalization = {
 };
 
 export type DriveLocalizePayload = {
-  status: 'ready';
+  status: 'not_started' | 'ready' | 'localizing' | 'cancel_requested' | 'canceled' | 'error';
   provider: 'google_drive';
   connection_id: string;
   drive_file_id: string;
@@ -222,6 +222,9 @@ export type DriveLocalizePayload = {
   localization: DriveLocalization;
   stream_url: string;
   download_url: string;
+  can_retry?: boolean;
+  can_cancel?: boolean;
+  local_path_ready?: boolean;
 };
 
 export type DeleteFilePayload = {

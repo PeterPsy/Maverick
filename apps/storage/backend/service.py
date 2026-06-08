@@ -10,13 +10,30 @@ from typing import Any, BinaryIO
 
 from errors import StorageValidationError
 from drive_connection_store import append_audit, get_connection, now_timestamp, sync_state_for_connection, update_connection_sync_state
-from drive_oauth import complete_oauth, disconnect_connection, list_drive_connections, start_oauth
+from drive_oauth import (
+    GOOGLE_DRIVE_CLIENT_ID_SECRET,
+    GOOGLE_DRIVE_CLIENT_SECRET_SECRET,
+    GOOGLE_DRIVE_REFRESH_TOKEN_SECRET,
+    complete_oauth,
+    disconnect_connection,
+    list_drive_connections,
+    start_oauth,
+)
+from drive_upload_sessions import (
+    create_drive_upload_session,
+    get_drive_upload_session,
+    public_drive_upload_session,
+    update_drive_upload_session,
+)
 from drive_localization import (
     DRIVE_LOCALIZE_MAX_BYTES,
+    cancel_drive_localization_payload,
     cleanup_drive_local_cache,
     drive_media_stream_response,
+    drive_localization_status_payload,
     localize_drive_file_payload,
     prepare_drive_media_response_body,
+    resolve_drive_local_path_payload,
     stream_prepared_drive_media_response_body,
 )
 from google_drive_provider import DriveProviderError, GoogleDriveProvider
@@ -96,9 +113,11 @@ DATA_CHANGED_RESOURCES = {
     "drive_connections.complete_oauth": "drive-connections",
     "drive_connections.disconnect": "drive-connections",
     "drive_sync": ["files", "drive-connections"],
+    "file.reconcile": "files",
     "drive_index": "files",
     "drive_mark_indexed": "files",
     "drive_write": "files",
+    "drive_upload_session.chunk": "files",
     "drive_rename": "files",
     "drive_move": "files",
     "drive_trash": "files",
@@ -108,14 +127,23 @@ DRIVE_SECRET_ACTIONS = {
     "drive_list_roots",
     "drive_list_children",
     "drive_sync",
+    "file.reconcile",
     "drive_search",
     "drive_read",
     "drive_preview",
     "drive_export",
     "file.localize",
+    "file.localize_status",
+    "file.localize_retry",
+    "file.localize_cancel",
+    "file.local_path.resolve",
     "drive_index",
     "drive_mark_indexed",
     "drive_write",
+    "drive_upload_session.start",
+    "drive_upload_session.status",
+    "drive_upload_session.chunk",
+    "drive_upload_session.cancel",
     "drive_rename",
     "drive_move",
     "drive_trash",
@@ -141,7 +169,17 @@ def secret_lookup_for_drive_action(
     action = STORAGE_ACTION_ALIASES.get(str(body.get("action") or ""), str(body.get("action") or ""))
     if action not in DRIVE_SECRET_ACTIONS:
         return {"requires_secrets": False}
+    if action == "drive_upload_session.status" and not _bool_value(body.get("refresh_remote")):
+        return {"requires_secrets": False}
     connection_id = str(body.get("connection_id") or "").strip()
+    if not connection_id and action.startswith("drive_upload_session."):
+        session_id = str(body.get("drive_upload_session_id") or body.get("upload_session_id") or body.get("session_id") or "").strip()
+        if session_id:
+            try:
+                session = get_drive_upload_session(data_root=data_root, session_id=session_id)
+                connection_id = str(session.get("connection_id") or "").strip()
+            except StorageValidationError:
+                connection_id = ""
     if not connection_id:
         stable_id = str(body.get("stable_storage_file_id") or body.get("file_id") or body.get("id") or body.get("entity_id") or "").strip()
         if stable_id:
@@ -153,7 +191,19 @@ def secret_lookup_for_drive_action(
                 connection_id = str(record.get("connection_id") or "").strip()
     if not connection_id:
         return {"requires_secrets": False}
-    return {"requires_secrets": True, "resource_type": "drive_connection", "resource_id": connection_id}
+    return {
+        "requires_secrets": True,
+        "resource_type": "drive_connection",
+        "resource_id": connection_id,
+        "secret_requests": [
+            {"logical_names": [GOOGLE_DRIVE_CLIENT_ID_SECRET, GOOGLE_DRIVE_CLIENT_SECRET_SECRET]},
+            {
+                "logical_names": [GOOGLE_DRIVE_REFRESH_TOKEN_SECRET],
+                "resource_type": "drive_connection",
+                "resource_id": connection_id,
+            },
+        ],
+    }
 
 
 def _optional_int(body: dict[str, Any], key: str) -> int | None:
@@ -339,6 +389,77 @@ def handle_action(
         )
         _persist_drive_files(data_root, {"files": [result["file"]]})
         return 200, result
+    if action == "file.localize_status":
+        connection_id, drive_file_id = _drive_locator_from_body(data_root, uploaded_root, generated_root, body)
+        provider = _google_drive_provider(data_root, {**body, "connection_id": connection_id}, transport=drive_transport)
+        return 200, drive_localization_status_payload(
+            data_root=data_root,
+            provider=provider,
+            connection_id=connection_id,
+            drive_file_id=drive_file_id,
+            file_record=_drive_cached_file_record_from_body(data_root, uploaded_root, generated_root, body, connection_id, drive_file_id),
+            app_id=str(body.get("_app_id") or "storage"),
+        )
+    if action == "file.localize_retry":
+        connection_id, drive_file_id = _drive_locator_from_body(data_root, uploaded_root, generated_root, body)
+        provider = _google_drive_provider(data_root, {**body, "connection_id": connection_id}, transport=drive_transport)
+        result = localize_drive_file_payload(
+            data_root=data_root,
+            provider=provider,
+            connection_id=connection_id,
+            drive_file_id=drive_file_id,
+            file_record=_drive_cached_file_record_from_body(data_root, uploaded_root, generated_root, body, connection_id, drive_file_id),
+            app_id=str(body.get("_app_id") or "storage"),
+            max_bytes=_optional_positive_int(body, "max_bytes", maximum=DRIVE_LOCALIZE_MAX_BYTES),
+            force=True,
+        )
+        _persist_drive_files(data_root, {"files": [result["file"]]})
+        return 200, result
+    if action == "file.localize_cancel":
+        connection_id, drive_file_id = _drive_locator_from_body(data_root, uploaded_root, generated_root, body)
+        provider = _google_drive_provider(data_root, {**body, "connection_id": connection_id}, transport=drive_transport)
+        return 200, cancel_drive_localization_payload(
+            data_root=data_root,
+            provider=provider,
+            connection_id=connection_id,
+            drive_file_id=drive_file_id,
+            file_record=_drive_cached_file_record_from_body(data_root, uploaded_root, generated_root, body, connection_id, drive_file_id),
+            app_id=str(body.get("_app_id") or "storage"),
+        )
+    if action == "file.local_path.resolve":
+        _require_trusted_local_path_resolution(body)
+        if _body_has_explicit_drive_locator(body):
+            connection_id, drive_file_id = _drive_locator_from_body(data_root, uploaded_root, generated_root, body)
+            provider = _google_drive_provider(data_root, {**body, "connection_id": connection_id}, transport=drive_transport)
+            result = resolve_drive_local_path_payload(
+                data_root=data_root,
+                provider=provider,
+                connection_id=connection_id,
+                drive_file_id=drive_file_id,
+                file_record=_drive_cached_file_record_from_body(data_root, uploaded_root, generated_root, body, connection_id, drive_file_id),
+                app_id=str(body.get("_app_id") or "storage"),
+                localize=_bool_value(body.get("localize", True)),
+                max_bytes=_optional_positive_int(body, "max_bytes", maximum=DRIVE_LOCALIZE_MAX_BYTES),
+            )
+            _persist_drive_files(data_root, {"files": [result["file"]]})
+            return 200, result
+        record = _file_record_for_path_action(data_root=data_root, uploaded_root=uploaded_root, generated_root=generated_root, body=body)
+        if record.get("provider") == GOOGLE_DRIVE_PROVIDER:
+            connection_id, drive_file_id = _drive_locator_from_body(data_root, uploaded_root, generated_root, {**body, "stable_storage_file_id": record.get("file_id") or record.get("id")})
+            provider = _google_drive_provider(data_root, {**body, "connection_id": connection_id}, transport=drive_transport)
+            result = resolve_drive_local_path_payload(
+                data_root=data_root,
+                provider=provider,
+                connection_id=connection_id,
+                drive_file_id=drive_file_id,
+                file_record=record,
+                app_id=str(body.get("_app_id") or "storage"),
+                localize=_bool_value(body.get("localize", True)),
+                max_bytes=_optional_positive_int(body, "max_bytes", maximum=DRIVE_LOCALIZE_MAX_BYTES),
+            )
+            _persist_drive_files(data_root, {"files": [result["file"]]})
+            return 200, result
+        return 200, _local_file_path_payload(record=record, uploaded_root=uploaded_root, generated_root=generated_root)
     if action == "file.media_stream":
         if not media_route:
             raise StorageValidationError(
@@ -353,6 +474,14 @@ def handle_action(
             drive_transport=drive_transport,
             request_method=media_request_method,
             streaming_response_supported=streaming_response_supported,
+        )
+    if action == "file.reconcile":
+        return 200, _reconcile_payload(
+            data_root=data_root,
+            uploaded_root=uploaded_root,
+            generated_root=generated_root,
+            body=body,
+            drive_transport=drive_transport,
         )
     if action == "drive_index":
         connection_id, drive_file_id = _drive_locator_from_body(data_root, uploaded_root, generated_root, body)
@@ -373,6 +502,151 @@ def handle_action(
             generated_root=generated_root,
             body=body,
         )
+    if action == "drive_upload_session.start":
+        connection_id = str(body.get("connection_id") or "").strip()
+        provider = _google_drive_provider(data_root, body, transport=drive_transport)
+        started = provider.start_resumable_upload(
+            parent_drive_file_id=str(body.get("parent_drive_file_id") or body.get("drive_file_id") or ""),
+            file_name=str(body.get("file_name") or ""),
+            content_type=str(body.get("content_type") or "application/octet-stream"),
+            size_bytes=_optional_nonnegative_int(body, "size_bytes") or 0,
+        )
+        session = create_drive_upload_session(
+            data_root=data_root,
+            connection_id=connection_id,
+            parent_drive_file_id=str(started["parent_drive_file_id"]),
+            file_name=str(started["file_name"]),
+            content_type=str(started["content_type"]),
+            size_bytes=int(started["size_bytes"]),
+            session_uri=str(started["session_uri"]),
+            parent_display_path=str(started.get("parent_display_path") or ""),
+        )
+        return 200, {"status": "uploading", "provider": GOOGLE_DRIVE_PROVIDER, "connection_id": connection_id, "upload_session": session}
+    if action == "drive_upload_session.status":
+        session = get_drive_upload_session(data_root=data_root, session_id=_drive_upload_session_id(body))
+        if _bool_value(body.get("refresh_remote")) and str(session.get("status") or "") not in {"complete", "canceled"}:
+            connection_id = str(session.get("connection_id") or body.get("connection_id") or "").strip()
+            provider = _google_drive_provider(data_root, {**body, "connection_id": connection_id}, transport=drive_transport)
+            try:
+                result = provider.query_resumable_upload(
+                    session_uri=str(session.get("session_uri") or ""),
+                    file_name=str(session.get("file_name") or ""),
+                    content_type=str(session.get("content_type") or "application/octet-stream"),
+                    parent_display_path=str(session.get("parent_display_path") or ""),
+                    total_size=int(session.get("size_bytes") or 0),
+                )
+            except Exception as error:
+                update_drive_upload_session(
+                    data_root=data_root,
+                    session_id=str(session["id"]),
+                    updates={
+                        "status": "error",
+                        "error": _redacted_provider_error(error) if isinstance(error, DriveProviderError) else str(error)[:300],
+                        "retry_count": int(session.get("retry_count") or 0) + 1,
+                    },
+                )
+                raise
+            if result["status"] == "uploaded":
+                _persist_drive_write_result(data_root, result)
+                _audit_drive_write(data_root, "drive.file.upload", connection_id, result)
+                completed = update_drive_upload_session(
+                    data_root=data_root,
+                    session_id=str(session["id"]),
+                    updates={"status": "complete", "bytes_uploaded": int(session.get("size_bytes") or 0), "error": "", "file": result["file"]},
+                )
+                return 200, {**result, "upload_session": completed}
+            remote_uploaded = int(result.get("bytes_uploaded") or 0)
+            uploaded = max(int(session.get("bytes_uploaded") or 0), min(remote_uploaded, int(session.get("size_bytes") or 0)))
+            refreshed = update_drive_upload_session(
+                data_root=data_root,
+                session_id=str(session["id"]),
+                updates={"status": "uploading", "bytes_uploaded": uploaded, "error": ""},
+            )
+            return 200, {
+                "status": "uploading",
+                "provider": GOOGLE_DRIVE_PROVIDER,
+                "connection_id": connection_id,
+                "upload_session": refreshed,
+                "expected_offset": uploaded,
+            }
+        return 200, {
+            "status": str(session.get("status") or "uploading"),
+            "provider": GOOGLE_DRIVE_PROVIDER,
+            "connection_id": str(session.get("connection_id") or ""),
+            "upload_session": public_drive_upload_session(session),
+        }
+    if action == "drive_upload_session.cancel":
+        session = get_drive_upload_session(data_root=data_root, session_id=_drive_upload_session_id(body))
+        connection_id = str(session.get("connection_id") or "").strip()
+        provider = _google_drive_provider(data_root, {**body, "connection_id": connection_id}, transport=drive_transport)
+        provider.cancel_resumable_upload(session_uri=str(session.get("session_uri") or ""))
+        canceled = update_drive_upload_session(
+            data_root=data_root,
+            session_id=str(session["id"]),
+            updates={"status": "canceled", "error": "", "bytes_uploaded": int(session.get("bytes_uploaded") or 0)},
+        )
+        return 200, {"status": "canceled", "provider": GOOGLE_DRIVE_PROVIDER, "connection_id": connection_id, "upload_session": canceled}
+    if action == "drive_upload_session.chunk":
+        session = get_drive_upload_session(data_root=data_root, session_id=_drive_upload_session_id(body))
+        connection_id = str(session.get("connection_id") or "").strip()
+        chunk, chunk_offset = _drive_upload_chunk_from_body(body)
+        expected_offset = int(session.get("bytes_uploaded") or 0)
+        if str(session.get("status") or "") == "complete":
+            return 200, {"status": "uploaded", "provider": GOOGLE_DRIVE_PROVIDER, "connection_id": connection_id, "upload_session": public_drive_upload_session(session), "file": session.get("file")}
+        if str(session.get("status") or "") == "canceled":
+            raise StorageValidationError("Drive upload session was canceled.", operation=action)
+        if chunk_offset < expected_offset:
+            return 200, {
+                "status": "uploading",
+                "provider": GOOGLE_DRIVE_PROVIDER,
+                "connection_id": connection_id,
+                "upload_session": public_drive_upload_session(session),
+                "expected_offset": expected_offset,
+            }
+        if chunk_offset > expected_offset:
+            raise StorageValidationError(
+                "Drive upload chunk offset is ahead of the current resumable session offset.",
+                operation=action,
+                expected_fields=["drive_upload_session_id", "chunk_offset", "content_base64"],
+            )
+        provider = _google_drive_provider(data_root, {**body, "connection_id": connection_id}, transport=drive_transport)
+        try:
+            result = provider.upload_resumable_chunk(
+                session_uri=str(session.get("session_uri") or ""),
+                file_name=str(session.get("file_name") or ""),
+                content_type=str(session.get("content_type") or "application/octet-stream"),
+                parent_display_path=str(session.get("parent_display_path") or ""),
+                chunk=chunk,
+                start=chunk_offset,
+                total_size=int(session.get("size_bytes") or 0),
+            )
+        except Exception as error:
+            update_drive_upload_session(
+                data_root=data_root,
+                session_id=str(session["id"]),
+                updates={
+                    "status": "error",
+                    "error": _redacted_provider_error(error) if isinstance(error, DriveProviderError) else str(error)[:300],
+                    "retry_count": int(session.get("retry_count") or 0) + 1,
+                },
+            )
+            raise
+        if result["status"] == "uploaded":
+            _persist_drive_write_result(data_root, result)
+            _audit_drive_write(data_root, "drive.file.upload", connection_id, result)
+            completed = update_drive_upload_session(
+                data_root=data_root,
+                session_id=str(session["id"]),
+                updates={"status": "complete", "bytes_uploaded": int(session.get("size_bytes") or 0), "error": "", "file": result["file"]},
+            )
+            return 200, {**result, "upload_session": completed}
+        uploaded = int(result.get("bytes_uploaded") or chunk_offset + len(chunk))
+        updated = update_drive_upload_session(
+            data_root=data_root,
+            session_id=str(session["id"]),
+            updates={"status": "uploading", "bytes_uploaded": uploaded, "error": ""},
+        )
+        return 200, {"status": "uploading", "provider": GOOGLE_DRIVE_PROVIDER, "connection_id": connection_id, "upload_session": updated, "expected_offset": uploaded}
     if action == "drive_write":
         content, content_type = _drive_content_from_body(body)
         if str(body.get("drive_file_id") or body.get("stable_storage_file_id") or body.get("file_id") or body.get("id") or body.get("entity_id") or "").strip():
@@ -784,6 +1058,23 @@ def _drive_locator_from_body(data_root: Path, uploaded_root: Path, generated_roo
     return resolved_connection_id, resolved_drive_file_id
 
 
+def _body_has_explicit_drive_locator(body: dict[str, Any]) -> bool:
+    return bool(str(body.get("connection_id") or "").strip() and str(body.get("drive_file_id") or "").strip())
+
+
+def _require_trusted_local_path_resolution(body: dict[str, Any]) -> None:
+    surface = str(body.get("_surface") or "").strip()
+    effective_mode = str(body.get("_effective_mode") or "").strip()
+    if surface == "backend" and effective_mode == "full-access":
+        return
+    if surface == "dependency_backend" and effective_mode == "full-access" and str(body.get("_consumer_app_id") or "").strip():
+        return
+    raise StorageValidationError(
+        "file.local_path.resolve is available only to trusted Storage backend consumers.",
+        operation="file.local_path.resolve",
+    )
+
+
 def _drive_cached_file_record_from_body(
     data_root: Path,
     uploaded_root: Path,
@@ -1035,6 +1326,101 @@ def _file_record_for_path_action(
     )["file"]
 
 
+def _local_file_path_payload(*, record: dict[str, Any], uploaded_root: Path, generated_root: Path) -> dict[str, Any]:
+    role = str(record.get("role") or "")
+    relative_path = str(record.get("relative_path") or "")
+    if role == "uploaded":
+        root = uploaded_root.resolve()
+    elif role == "generated":
+        root = generated_root.resolve()
+    else:
+        raise StorageValidationError("Local path resolution requires a local uploaded or generated Storage file.", operation="file.local_path.resolve")
+    path = (root / relative_path).resolve()
+    if root not in path.parents or not path.is_file():
+        raise StorageValidationError("File path escapes the selected storage root or does not exist.", operation="file.local_path.resolve")
+    return {
+        "status": "ready",
+        "provider": record.get("provider") or "local",
+        "file": record,
+        "local_path": str(path),
+        "path_scope": f"storage_{role}",
+    }
+
+
+def _reconcile_payload(
+    *,
+    data_root: Path,
+    uploaded_root: Path,
+    generated_root: Path,
+    body: dict[str, Any],
+    drive_transport=None,
+) -> dict[str, Any]:
+    stable_id = str(body.get("stable_storage_file_id") or body.get("file_id") or body.get("id") or body.get("entity_id") or "").strip()
+    connection_id = str(body.get("connection_id") or "").strip()
+    drive_file_id = str(body.get("drive_file_id") or "").strip()
+    if stable_id:
+        try:
+            record = StorageReferenceResolver(data_root=data_root, uploaded_root=uploaded_root, generated_root=generated_root).require_file(stable_id)
+        except StorageValidationError:
+            record = {}
+        if record.get("provider") == GOOGLE_DRIVE_PROVIDER:
+            connection_id = str(record.get("connection_id") or connection_id).strip()
+            remote_locator = record.get("remote_locator") if isinstance(record.get("remote_locator"), dict) else {}
+            drive_file_id = str(record.get("drive_file_id") or remote_locator.get("drive_file_id") or drive_file_id).strip()
+    if connection_id and drive_file_id:
+        provider = _google_drive_provider(data_root, {**body, "connection_id": connection_id}, transport=drive_transport)
+        file_record = provider.metadata(drive_file_id=drive_file_id)
+        persisted = upsert_remote_file_records(data_root=data_root, records=[file_record])
+        public_file = persisted[0] if persisted else file_record
+        cleanup_drive_local_cache(data_root=data_root, current_file_record=public_file)
+        return {
+            "status": "reconciled",
+            "provider": GOOGLE_DRIVE_PROVIDER,
+            "connection_id": connection_id,
+            "drive_file_id": drive_file_id,
+            "file": public_file,
+        }
+    catalog = catalog_files_payload(
+        data_root=data_root,
+        uploaded_root=uploaded_root,
+        generated_root=generated_root,
+        sync=True,
+        query=str(body.get("query") or ""),
+        role=_catalog_filter_value(body, "role", CATALOG_ROLES, "all"),
+        kind=_catalog_filter_value(body, "kind", CATALOG_KINDS, "all"),
+        offset=_optional_nonnegative_int(body, "offset") or 0,
+        limit=_optional_positive_int(body, "limit", maximum=2000),
+        sort_by=str(body.get("sort_by") or "modified_at"),
+        sort_direction=str(body.get("sort_direction") or "desc"),
+        folder_path=_catalog_folder_path(body),
+        file_ids=_optional_string_list(body, "file_ids"),
+        workspace_relative_paths=_optional_string_list(body, "workspace_relative_paths"),
+    )
+    if stable_id:
+        try:
+            return {
+                "status": "reconciled",
+                "provider": "local",
+                "file": file_info_by_id_payload(
+                    file_id=stable_id,
+                    data_root=data_root,
+                    uploaded_root=uploaded_root,
+                    generated_root=generated_root,
+                )["file"],
+                "inventory": catalog["inventory"],
+            }
+        except StorageValidationError:
+            pass
+    return {
+        "status": "reconciled",
+        "provider": "local",
+        "files": catalog["files"],
+        "folders": catalog["folders"],
+        "pagination": catalog["pagination"],
+        "inventory": catalog["inventory"],
+    }
+
+
 def _drive_index_payload(
     *,
     data_root: Path,
@@ -1277,6 +1663,26 @@ def _drive_content_from_body(body: dict[str, Any]) -> tuple[bytes, str]:
     )
 
 
+def _drive_upload_session_id(body: dict[str, Any]) -> str:
+    return str(body.get("drive_upload_session_id") or body.get("upload_session_id") or body.get("session_id") or "").strip()
+
+
+def _drive_upload_chunk_from_body(body: dict[str, Any]) -> tuple[bytes, int]:
+    try:
+        chunk_offset = int(body.get("chunk_offset") or body.get("offset") or 0)
+    except (TypeError, ValueError) as error:
+        raise StorageValidationError("chunk_offset must be an integer.", operation="drive_upload_session.chunk") from error
+    if chunk_offset < 0:
+        raise StorageValidationError("chunk_offset must not be negative.", operation="drive_upload_session.chunk")
+    try:
+        chunk = b64decode(str(body.get("content_base64") or ""), validate=True)
+    except (binascii.Error, ValueError) as error:
+        raise StorageValidationError("content_base64 must be valid base64.", operation="drive_upload_session.chunk") from error
+    if not chunk:
+        raise StorageValidationError("content_base64 chunk must not be empty.", operation="drive_upload_session.chunk")
+    return chunk, chunk_offset
+
+
 def _require_delete_confirmation(body: dict[str, Any]) -> None:
     policy = str(body.get("delete_policy") or "").strip().lower()
     if _bool_value(body.get("confirm")) or policy in {"user_confirmed", "workspace_policy", "explicit_policy"}:
@@ -1290,4 +1696,4 @@ def _require_delete_confirmation(body: dict[str, Any]) -> None:
 
 
 def _redacted_provider_error(error: DriveProviderError) -> str:
-    return f"Google Drive change feed request failed with provider status {error.status_code}."
+    return f"Google Drive request failed with provider status {error.status_code}."

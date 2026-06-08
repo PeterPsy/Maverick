@@ -8,7 +8,7 @@ import sys
 
 from errors import StorageValidationError, validation_error_payload
 from operations_manifest import STORAGE_ACTION_ALIASES
-from service import app_events_for_action, handle_action, prepare_media_response_body, stream_prepared_media_response_body
+from service import app_events_for_action, handle_action, prepare_media_response_body, secret_lookup_for_drive_action, stream_prepared_media_response_body
 
 
 def _response(status_code: int, payload: dict) -> None:
@@ -23,10 +23,27 @@ def main() -> None:
         "_app_secrets": payload.get("app_secrets", {}),
         "_workspace_id": payload.get("workspace_id") or "default",
         "_app_id": payload.get("app_id") or "storage",
+        "_consumer_app_id": str(payload.get("consumer_app_id") or ""),
+        "_dependency_alias": str(payload.get("dependency_alias") or ""),
+        "_surface": str(payload.get("surface") or "backend"),
+        "_effective_mode": str(payload.get("effective_mode") or "sandbox"),
     }
     requested_action = str(body.get("action") or "catalog")
     action = STORAGE_ACTION_ALIASES.get(requested_action, requested_action)
     body = {**body, "action": action}
+    if payload.get("surface") == "secret_selector":
+        print(
+            json.dumps(
+                secret_lookup_for_drive_action(
+                    Path(payload["data_root"]),
+                    Path(payload["uploaded_storage_root"]),
+                    Path(payload["generated_storage_root"]),
+                    body,
+                ),
+                ensure_ascii=False,
+            )
+        )
+        return
     try:
         status_code, result = handle_action(
             Path(payload["data_root"]),

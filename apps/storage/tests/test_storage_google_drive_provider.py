@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import base64
 import hashlib
 from pathlib import Path
 import sys
@@ -40,6 +41,7 @@ evict_foreign_backend_modules()
 sys.path.insert(0, str(BACKEND_ROOT))
 
 from drive_connection_store import replace_connection  # noqa: E402
+from drive_upload_sessions import create_drive_upload_session  # noqa: E402
 from errors import StorageValidationError  # noqa: E402
 import app_backend  # noqa: E402
 import drive_localization  # noqa: E402
@@ -454,6 +456,15 @@ class GoogleDriveProviderTest(unittest.TestCase):
                             "capabilities": {"canDownload": True},
                         },
                         content,
+                        {
+                            "id": "video-1",
+                            "name": "Clip.mp4",
+                            "mimeType": "video/mp4",
+                            "size": str(len(content)),
+                            "modifiedTime": "2026-05-28T11:00:00Z",
+                            "version": "8",
+                            "capabilities": {"canDownload": True},
+                        },
                     ]
                 }
             )
@@ -494,10 +505,82 @@ class GoogleDriveProviderTest(unittest.TestCase):
                 },
                 media_route=True,
             )
+            status_status, status_payload = handle_action(
+                data_root,
+                root / "storage" / "uploaded",
+                root / "storage" / "generated",
+                {
+                    "action": "file.localize_status",
+                    "stable_storage_file_id": file_id,
+                    "_app_secrets": SECRETS,
+                },
+                drive_transport=transport,
+            )
+            with self.assertRaises(StorageValidationError):
+                handle_action(
+                    data_root,
+                    root / "storage" / "uploaded",
+                    root / "storage" / "generated",
+                    {
+                        "action": "file.local_path.resolve",
+                        "stable_storage_file_id": file_id,
+                        "localize": False,
+                        "_app_secrets": SECRETS,
+                    },
+                    drive_transport=transport,
+                )
+            path_status, path_payload = handle_action(
+                data_root,
+                root / "storage" / "uploaded",
+                root / "storage" / "generated",
+                {
+                    "action": "file.local_path.resolve",
+                    "stable_storage_file_id": file_id,
+                    "localize": False,
+                    "_app_secrets": SECRETS,
+                    "_surface": "backend",
+                    "_effective_mode": "full-access",
+                },
+                drive_transport=transport,
+            )
+            dependency_path_status, dependency_path_payload = handle_action(
+                data_root,
+                root / "storage" / "uploaded",
+                root / "storage" / "generated",
+                {
+                    "action": "file.local_path.resolve",
+                    "stable_storage_file_id": file_id,
+                    "localize": False,
+                    "_app_secrets": SECRETS,
+                    "_surface": "dependency_backend",
+                    "_effective_mode": "full-access",
+                    "_consumer_app_id": "video-studio",
+                },
+                drive_transport=transport,
+            )
+            locator_path_status, locator_path_payload = handle_action(
+                data_root,
+                root / "storage" / "uploaded",
+                root / "storage" / "generated",
+                {
+                    "action": "file.local_path.resolve",
+                    "connection_id": "drive_conn_abc",
+                    "drive_file_id": "video-1",
+                    "localize": False,
+                    "_app_secrets": SECRETS,
+                    "_surface": "backend",
+                    "_effective_mode": "full-access",
+                },
+                drive_transport=transport,
+            )
             media_calls = [call for call in transport.calls if parse_qs(urlparse(call[1]).query).get("alt") == ["media"]]
             local_path = Path(media["file_response"]["path"])
             local_path_bytes = local_path.read_bytes()
             local_path_is_under_cache = local_path.is_relative_to(data_root / "drive_local_cache")
+            resolved_local_path = Path(path_payload["local_path"])
+            resolved_local_path_bytes = resolved_local_path.read_bytes()
+            resolved_local_path_is_under_cache = resolved_local_path.is_relative_to(data_root / "drive_local_cache")
+            locator_resolved_local_path = Path(locator_path_payload["local_path"])
             stream_query = parse_qs(urlparse(localized["stream_url"]).query)
         self.assertEqual(status, 200)
         self.assertEqual(localized["status"], "ready")
@@ -514,10 +597,88 @@ class GoogleDriveProviderTest(unittest.TestCase):
         self.assertEqual(media_status, 200)
         self.assertEqual(media["file_response"]["content_type"], "video/mp4")
         self.assertTrue(media["file_response"]["download"])
+        self.assertEqual(status_status, 200)
+        self.assertTrue(status_payload["local_path_ready"])
+        self.assertEqual(path_status, 200)
+        self.assertEqual(resolved_local_path_bytes, content)
+        self.assertTrue(resolved_local_path_is_under_cache)
+        self.assertEqual(dependency_path_status, 200)
+        self.assertEqual(Path(dependency_path_payload["local_path"]), resolved_local_path)
+        self.assertEqual(locator_path_status, 200)
+        self.assertEqual(locator_resolved_local_path, resolved_local_path)
+        self.assertNotIn("local_path", status_payload)
         self.assertEqual(stream_query["localization_id"], [localized["localization"]["id"]])
         self.assertEqual(stream_query["source_version"], ["8"])
         self.assertIn("_app_secret_request", stream_query)
         self.assertEqual(len(media_calls), 1)
+
+    def test_drive_localization_cancel_marks_incomplete_cache_canceled(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data" / "storage"
+            file_id = stable_storage_file_id("drive_conn_abc", "video-1")
+            record = {
+                "id": file_id,
+                "file_id": file_id,
+                "stable_storage_file_id": file_id,
+                "provider": "google_drive",
+                "connection_id": "drive_conn_abc",
+                "drive_file_id": "video-1",
+                "remote_locator": {"drive_file_id": "video-1"},
+                "role": "",
+                "relative_path": "",
+                "workspace_relative_path": "",
+                "name": "Clip.mp4",
+                "extension": ".mp4",
+                "size_bytes": 10,
+                "modified_at": "2026-05-28T11:00:00Z",
+                "content_type": "video/mp4",
+                "preview_kind": "video",
+                "sha256": "",
+                "etag_or_version": "8",
+                "capabilities": {"can_read": True, "can_preview": True},
+                "status": "active",
+            }
+            replace_connection(data_root, {**CONNECTION, "created_at": "2026-05-28T00:00:00+00:00"})
+            upsert_remote_file_records(data_root=data_root, records=[record])
+            target = drive_localization._target_for_record(data_root=data_root, file_record=record)
+            target.directory.mkdir(parents=True)
+            target.content_path.write_bytes(b"partial")
+            target.metadata_path.write_text(
+                json.dumps({
+                    "schema_version": "1",
+                    "id": target.localization_id,
+                    "status": "localizing",
+                    "provider": "google_drive",
+                    "connection_id": "drive_conn_abc",
+                    "drive_file_id": "video-1",
+                    "stable_storage_file_id": file_id,
+                    "source_version": "8",
+                    "content_type": "video/mp4",
+                    "file_name": "Clip.mp4",
+                    "size_bytes": 10,
+                    "progress": {"state": "localizing", "bytes_completed": 7, "bytes_total": 10},
+                }),
+                encoding="utf-8",
+            )
+            transport = FakeDriveTransport({})
+
+            cancel_status, canceled = handle_action(
+                data_root,
+                root / "storage" / "uploaded",
+                root / "storage" / "generated",
+                {
+                    "action": "file.localize_cancel",
+                    "stable_storage_file_id": file_id,
+                    "_app_secrets": SECRETS,
+                },
+                drive_transport=transport,
+            )
+
+        self.assertEqual(cancel_status, 200)
+        self.assertEqual(canceled["status"], "canceled")
+        self.assertEqual(canceled["localization"]["progress"]["state"], "canceled")
+        self.assertFalse(target.content_path.exists())
 
     def test_drive_media_stream_proxies_requested_range_when_full_cache_is_missing(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -661,6 +822,64 @@ class GoogleDriveProviderTest(unittest.TestCase):
         self.assertEqual(media["stream_response"]["content_type"], "video/mp4")
         self.assertFalse(full_cache_exists)
         self.assertEqual(media_calls, [])
+
+    def test_drive_media_stream_downloads_non_streamable_binary_without_base64(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data" / "storage"
+            file_id = stable_storage_file_id("drive_conn_abc", "archive-1")
+            content = b"zip-bytes"
+            replace_connection(data_root, {**CONNECTION, "created_at": "2026-05-28T00:00:00+00:00"})
+            upsert_remote_file_records(
+                data_root=data_root,
+                records=[
+                    {
+                        "id": file_id,
+                        "file_id": file_id,
+                        "stable_storage_file_id": file_id,
+                        "provider": "google_drive",
+                        "connection_id": "drive_conn_abc",
+                        "drive_file_id": "archive-1",
+                        "remote_locator": {"drive_file_id": "archive-1"},
+                        "role": "",
+                        "relative_path": "",
+                        "workspace_relative_path": "",
+                        "name": "Archive.zip",
+                        "extension": ".zip",
+                        "size_bytes": len(content),
+                        "modified_at": "2026-05-28T11:00:00Z",
+                        "content_type": "application/zip",
+                        "preview_kind": "file",
+                        "sha256": "",
+                        "etag_or_version": "8",
+                        "capabilities": {"can_read": True, "can_preview": True},
+                        "status": "active",
+                    }
+                ],
+            )
+            transport = FakeDriveTransport({("GET", "/drive/v3/files/archive-1"): content})
+
+            status, media = handle_action(
+                data_root,
+                root / "storage" / "uploaded",
+                root / "storage" / "generated",
+                {
+                    "action": "file.media_stream",
+                    "stable_storage_file_id": file_id,
+                    "source_version": "8",
+                    "download": True,
+                    "_app_secrets": SECRETS,
+                },
+                drive_transport=transport,
+                media_route=True,
+            )
+            local_path = Path(media["file_response"]["path"])
+            local_path_bytes = local_path.read_bytes()
+
+        self.assertEqual(status, 200)
+        self.assertEqual(local_path_bytes, content)
+        self.assertEqual(media["file_response"]["content_type"], "application/zip")
+        self.assertTrue(media["file_response"]["download"])
 
     def test_drive_media_stream_no_range_can_stream_while_populating_cache(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1638,6 +1857,73 @@ class GoogleDriveProviderTest(unittest.TestCase):
                     drive_transport=transport,
                 )
 
+    def test_file_reconcile_refreshes_one_drive_record(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data" / "storage"
+            file_id = stable_storage_file_id("drive_conn_abc", "file-1")
+            replace_connection(data_root, {**CONNECTION, "created_at": "2026-05-28T00:00:00+00:00"})
+            upsert_remote_file_records(
+                data_root=data_root,
+                records=[
+                    {
+                        "id": file_id,
+                        "file_id": file_id,
+                        "provider": "google_drive",
+                        "connection_id": "drive_conn_abc",
+                        "drive_file_id": "file-1",
+                        "remote_locator": {"drive_file_id": "file-1"},
+                        "status": "active",
+                        "role": "",
+                        "relative_path": "",
+                        "workspace_relative_path": "",
+                        "display_path": "/My Drive/Old.txt",
+                        "name": "Old.txt",
+                        "extension": ".txt",
+                        "size_bytes": 3,
+                        "modified_at": "2026-05-28T11:00:00Z",
+                        "content_type": "text/plain",
+                        "preview_kind": "text",
+                        "sha256": "",
+                        "etag_or_version": "1",
+                        "capabilities": {"can_read": True, "can_preview": True},
+                    }
+                ],
+            )
+            transport = FakeDriveTransport(
+                {
+                    ("GET", "/drive/v3/files/file-1"): {
+                        "id": "file-1",
+                        "name": "New.txt",
+                        "mimeType": "text/plain",
+                        "parents": ["root"],
+                        "size": "7",
+                        "modifiedTime": "2026-05-29T11:00:00Z",
+                        "version": "2",
+                        "capabilities": {"canDownload": True},
+                    }
+                }
+            )
+
+            status, reconciled = handle_action(
+                data_root,
+                root / "storage" / "uploaded",
+                root / "storage" / "generated",
+                {
+                    "action": "file.reconcile",
+                    "stable_storage_file_id": file_id,
+                    "_app_secrets": SECRETS,
+                },
+                drive_transport=transport,
+            )
+            persisted = load_inventory(data_root)["files"][0]
+
+        self.assertEqual(status, 200)
+        self.assertEqual(reconciled["status"], "reconciled")
+        self.assertEqual(reconciled["file"]["name"], "New.txt")
+        self.assertEqual(reconciled["file"]["etag_or_version"], "2")
+        self.assertEqual(persisted["name"], "New.txt")
+
     def test_drive_write_without_capability_fails_closed_before_upload(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -1785,6 +2071,156 @@ class GoogleDriveProviderTest(unittest.TestCase):
         self.assertNotIn("refresh-token", json.dumps(persisted, sort_keys=True))
         upload_request = [call for call in transport.calls if call[0] == "POST" and "/upload/drive/v3/files" in call[1]][0]
         self.assertIn(b"notes.txt", upload_request[2]["data"])
+
+    def test_drive_resumable_upload_chunks_are_persisted_after_final_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data" / "storage"
+            replace_connection(data_root, {**CONNECTION, "created_at": "2026-05-28T00:00:00+00:00"})
+            first_chunk = b"a" * (256 * 1024)
+            final_chunk = b"end"
+            total_size = len(first_chunk) + len(final_chunk)
+            session_uri = "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=session-1"
+            transport = FakeDriveTransport(
+                {
+                    ("GET", "/drive/v3/files/folder-1"): {
+                        "id": "folder-1",
+                        "name": "Docs",
+                        "mimeType": "application/vnd.google-apps.folder",
+                        "parents": ["root"],
+                        "capabilities": {"canAddChildren": True},
+                    },
+                    ("POST", "/upload/drive/v3/files"): {"session_uri": session_uri},
+                    ("PUT", "/upload/drive/v3/files"): [
+                        (308, {"range": f"bytes=0-{len(first_chunk) - 1}"}),
+                        {
+                            "id": "new-large-file",
+                            "name": "large.bin",
+                            "mimeType": "application/octet-stream",
+                            "parents": ["folder-1"],
+                            "size": str(total_size),
+                            "version": "4",
+                            "capabilities": {"canDownload": True, "canModifyContent": True},
+                        },
+                    ],
+                }
+            )
+
+            start_status, started = handle_action(
+                data_root,
+                root / "storage" / "uploaded",
+                root / "storage" / "generated",
+                {
+                    "action": "drive_upload_session.start",
+                    "connection_id": "drive_conn_abc",
+                    "parent_drive_file_id": "folder-1",
+                    "file_name": "large.bin",
+                    "content_type": "application/octet-stream",
+                    "size_bytes": total_size,
+                    "_app_secrets": SECRETS,
+                },
+                drive_transport=transport,
+            )
+            upload_session_id = started["upload_session"]["id"]
+            first_status, first = handle_action(
+                data_root,
+                root / "storage" / "uploaded",
+                root / "storage" / "generated",
+                {
+                    "action": "drive_upload_session.chunk",
+                    "drive_upload_session_id": upload_session_id,
+                    "chunk_offset": 0,
+                    "content_base64": base64.b64encode(first_chunk).decode("ascii"),
+                    "_app_secrets": SECRETS,
+                },
+                drive_transport=transport,
+            )
+            final_status, final = handle_action(
+                data_root,
+                root / "storage" / "uploaded",
+                root / "storage" / "generated",
+                {
+                    "action": "drive_upload_session.chunk",
+                    "drive_upload_session_id": upload_session_id,
+                    "chunk_offset": len(first_chunk),
+                    "content_base64": base64.b64encode(final_chunk).decode("ascii"),
+                    "_app_secrets": SECRETS,
+                },
+                drive_transport=transport,
+            )
+            persisted = json.loads((data_root / "files.json").read_text(encoding="utf-8"))
+            put_calls = [call for call in transport.calls if call[0] == "PUT" and "/upload/drive/v3/files" in call[1]]
+
+        self.assertEqual(start_status, 200)
+        self.assertNotIn("session_uri", started["upload_session"])
+        self.assertEqual(first_status, 200)
+        self.assertEqual(first["status"], "uploading")
+        self.assertEqual(first["expected_offset"], len(first_chunk))
+        self.assertEqual(final_status, 200)
+        self.assertEqual(final["status"], "uploaded")
+        self.assertEqual(final["upload_session"]["status"], "complete")
+        self.assertEqual(final["file"]["drive_file_id"], "new-large-file")
+        self.assertTrue(any(item["drive_file_id"] == "new-large-file" for item in persisted["files"]))
+        self.assertEqual(put_calls[0][2]["headers"]["Content-Range"], f"bytes 0-{len(first_chunk) - 1}/{total_size}")
+        self.assertEqual(put_calls[1][2]["headers"]["Content-Range"], f"bytes {len(first_chunk)}-{total_size - 1}/{total_size}")
+
+    def test_drive_resumable_upload_status_refreshes_remote_offset(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data" / "storage"
+            replace_connection(data_root, {**CONNECTION, "created_at": "2026-05-28T00:00:00+00:00"})
+            first_chunk_size = 256 * 1024
+            total_size = first_chunk_size * 2
+            session_uri = "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=session-remote"
+            transport = FakeDriveTransport(
+                {
+                    ("GET", "/drive/v3/files/folder-1"): {
+                        "id": "folder-1",
+                        "name": "Docs",
+                        "mimeType": "application/vnd.google-apps.folder",
+                        "parents": ["root"],
+                        "capabilities": {"canAddChildren": True},
+                    },
+                    ("POST", "/upload/drive/v3/files"): {"session_uri": session_uri},
+                    ("PUT", "/upload/drive/v3/files"): (308, {"range": f"bytes=0-{first_chunk_size - 1}"}),
+                }
+            )
+
+            _, started = handle_action(
+                data_root,
+                root / "storage" / "uploaded",
+                root / "storage" / "generated",
+                {
+                    "action": "drive_upload_session.start",
+                    "connection_id": "drive_conn_abc",
+                    "parent_drive_file_id": "folder-1",
+                    "file_name": "remote.bin",
+                    "content_type": "application/octet-stream",
+                    "size_bytes": total_size,
+                    "_app_secrets": SECRETS,
+                },
+                drive_transport=transport,
+            )
+            status, refreshed = handle_action(
+                data_root,
+                root / "storage" / "uploaded",
+                root / "storage" / "generated",
+                {
+                    "action": "drive_upload_session.status",
+                    "drive_upload_session_id": started["upload_session"]["id"],
+                    "refresh_remote": True,
+                    "_app_secrets": SECRETS,
+                },
+                drive_transport=transport,
+            )
+            put_calls = [call for call in transport.calls if call[0] == "PUT" and "/upload/drive/v3/files" in call[1]]
+
+        self.assertEqual(status, 200)
+        self.assertEqual(refreshed["status"], "uploading")
+        self.assertEqual(refreshed["expected_offset"], first_chunk_size)
+        self.assertEqual(refreshed["upload_session"]["bytes_uploaded"], first_chunk_size)
+        self.assertEqual(put_calls[0][2]["data"], b"")
+        self.assertEqual(put_calls[0][2]["headers"]["Content-Range"], f"bytes */{total_size}")
 
     def test_drive_rename_and_move_are_audited(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -2010,9 +2446,71 @@ class GoogleDriveProviderTest(unittest.TestCase):
                 {"action": "drive_rename", "stable_storage_file_id": file_id, "new_name": "Plan 2.txt"},
             )
 
+        self.assertEqual(result["requires_secrets"], True)
+        self.assertEqual(result["resource_type"], "drive_connection")
+        self.assertEqual(result["resource_id"], "drive_conn_abc")
         self.assertEqual(
-            result,
-            {"requires_secrets": True, "resource_type": "drive_connection", "resource_id": "drive_conn_abc"},
+            result["secret_requests"],
+            [
+                {"logical_names": ["google-drive-oauth-client-id", "google-drive-oauth-client-secret"]},
+                {
+                    "logical_names": ["google-drive-refresh-token"],
+                    "resource_type": "drive_connection",
+                    "resource_id": "drive_conn_abc",
+                },
+            ],
+        )
+
+    def test_secret_lookup_resolves_upload_session_id_to_drive_connection(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data" / "storage"
+            session = create_drive_upload_session(
+                data_root=data_root,
+                connection_id="drive_conn_abc",
+                parent_drive_file_id="folder-1",
+                file_name="large.bin",
+                content_type="application/octet-stream",
+                size_bytes=1024,
+                session_uri="https://upload.example/session",
+                parent_display_path="Docs",
+            )
+
+            result = secret_lookup_for_drive_action(
+                data_root,
+                root / "storage" / "uploaded",
+                root / "storage" / "generated",
+                {
+                    "action": "drive_upload_session.status",
+                    "drive_upload_session_id": session["id"],
+                    "refresh_remote": True,
+                },
+            )
+            local_result = secret_lookup_for_drive_action(
+                data_root,
+                root / "storage" / "uploaded",
+                root / "storage" / "generated",
+                {
+                    "action": "drive_upload_session.status",
+                    "drive_upload_session_id": session["id"],
+                    "refresh_remote": False,
+                },
+            )
+
+        self.assertEqual(result["requires_secrets"], True)
+        self.assertEqual(local_result, {"requires_secrets": False})
+        self.assertEqual(result["resource_type"], "drive_connection")
+        self.assertEqual(result["resource_id"], "drive_conn_abc")
+        self.assertEqual(
+            result["secret_requests"],
+            [
+                {"logical_names": ["google-drive-oauth-client-id", "google-drive-oauth-client-secret"]},
+                {
+                    "logical_names": ["google-drive-refresh-token"],
+                    "resource_type": "drive_connection",
+                    "resource_id": "drive_conn_abc",
+                },
+            ],
         )
 
     def test_drive_sync_initializes_start_page_token_without_full_scan(self) -> None:

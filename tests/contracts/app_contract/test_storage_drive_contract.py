@@ -87,6 +87,62 @@ class StorageDriveContractTest(unittest.TestCase):
             request_scopes,
         )
 
+    def test_drive_upload_session_selectors_resolve_refresh_token_from_session_id(self) -> None:
+        parsed = parse_app_contract_file(STORAGE_ROOT)
+
+        for selector_loader, surface_name in (
+            (app_cli_command_secret_selectors, "cli"),
+            (app_mcp_tool_secret_selectors, "mcp"),
+        ):
+            with self.subTest(surface=surface_name):
+                selectors = selector_loader(
+                    STORAGE_ROOT,
+                    "storage" if surface_name == "cli" else "maverick_storage",
+                    declared_secret_names=parsed.contract.permissions.secrets.read,
+                )
+                self.assertTrue(
+                    any(
+                        selector.logical_names == ["google-drive-refresh-token"]
+                        and selector.resource_type == "drive_connection"
+                        and selector.resource_lookup == {"kind": "storage_drive_upload_session"}
+                        and selector.when == {"action": "drive_upload_session.status", "refresh_remote": True}
+                        for selector in selectors
+                    )
+                )
+                local_status_requests = app_secret_requests_for_arguments(
+                    selectors,
+                    {"action": "drive_upload_session.status", "drive_upload_session_id": "drive_upload_1", "refresh_remote": False},
+                    resource_lookup=lambda _selector: {
+                        "requires_secrets": True,
+                        "resource_type": "drive_connection",
+                        "resource_id": "drive_conn_abc",
+                    },
+                )
+                self.assertEqual(local_status_requests, [])
+                requests = app_secret_requests_for_arguments(
+                    selectors,
+                    {"action": "drive_upload_session.status", "drive_upload_session_id": "drive_upload_1", "refresh_remote": True},
+                    resource_lookup=lambda selector: {
+                        "requires_secrets": True,
+                        "resource_type": "drive_connection",
+                        "resource_id": "drive_conn_abc",
+                    }
+                    if selector.resource_lookup
+                    else None,
+                )
+                request_scopes = {
+                    (tuple(request.logical_names), request.resource_type, request.resource_id)
+                    for request in requests
+                }
+                self.assertIn(
+                    (("google-drive-oauth-client-id", "google-drive-oauth-client-secret"), None, None),
+                    request_scopes,
+                )
+                self.assertIn(
+                    (("google-drive-refresh-token",), "drive_connection", "drive_conn_abc"),
+                    request_scopes,
+                )
+
     def test_drive_oauth_completion_is_backend_only(self) -> None:
         parsed = parse_app_contract_file(STORAGE_ROOT)
         self.assertNotIn("storage_drive_connections_complete_oauth", parsed.contract.capabilities.mcp_tools)

@@ -34,6 +34,7 @@ Common actions:
 - `set_custom_view`: update the shared Storage UI with a curated file set using `title`, `file_ids`, and/or `workspace_relative_paths`.
 - `clear_custom_view`: return Storage to normal search mode.
 - `file_info`: resolve metadata for a file by `role`/`relative_path` or `workspace_relative_path`.
+- `file.reconcile`: refresh Storage inventory after external workspace writes, or refresh one known Drive file record.
 - `rename_file`: rename a file inside its current storage directory.
 - `delete_file`: delete a file from the active workspace storage root after Storage path validation.
 - `download_folder` / `read_folder`: read a validated folder as a ZIP archive.
@@ -67,3 +68,5 @@ maverick app storage mcp call storage_drive_mark_indexed --json --stable-storage
 Only call `drive_mark_indexed` after Memory returns success. Without that acknowledgement, later `drive_sync` cannot reliably emit Memory staleness for the file.
 
 When `drive_sync` returns `memory_staleness`, pass each item to Memory `memory_apply_storage_staleness`; Storage does not write Memory data directly.
+
+For Drive playback, use `storage_file_localize`, `storage_file_localize_status`, `storage_file_localize_retry`, and `storage_file_localize_cancel` instead of treating Drive as a mounted filesystem. Storage does not expose local host paths through CLI or MCP; trusted backend consumers must use the governed `file.local.path` dependency backend integration.

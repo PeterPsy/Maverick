@@ -58,9 +58,17 @@
               "drive_preview",
               "drive_export",
               "file.localize",
+              "file.localize_status",
+              "file.localize_retry",
+              "file.localize_cancel",
+              "file.reconcile",
               "drive_index",
               "drive_mark_indexed",
               "drive_write",
+              "drive_upload_session.start",
+              "drive_upload_session.status",
+              "drive_upload_session.chunk",
+              "drive_upload_session.cancel",
               "drive_rename",
               "drive_move",
               "drive_trash",
@@ -99,6 +107,10 @@
           "content": {"type": "string"},
           "content_base64": {"type": "string"},
           "content_type": {"type": "string"},
+          "size_bytes": {"type": "integer", "minimum": 0},
+          "drive_upload_session_id": {"type": "string"},
+          "refresh_remote": {"type": "boolean", "default": false},
+          "chunk_offset": {"type": "integer", "minimum": 0},
           "mode": {"type": "string", "enum": ["create", "overwrite"]},
           "new_name": {"type": "string"},
           "target_folder_relative_path": {"type": "string"},
@@ -338,12 +350,16 @@
             ]
           },
           {
-            "properties": {"action": {"enum": ["drive_read", "drive_preview", "drive_export", "file.localize", "drive_index", "drive_trash"]}},
+            "properties": {"action": {"enum": ["drive_read", "drive_preview", "drive_export", "file.localize", "file.localize_status", "file.localize_retry", "file.localize_cancel", "drive_index", "drive_trash"]}},
             "required": ["action"],
             "anyOf": [
               {"required": ["connection_id", "drive_file_id"]},
               {"required": ["stable_storage_file_id"]}
             ]
+          },
+          {
+            "properties": {"action": {"enum": ["file.reconcile"]}},
+            "required": ["action"]
           },
           {
             "properties": {"action": {"enum": ["drive_mark_indexed"]}},
@@ -361,6 +377,22 @@
               {"required": ["content"]},
               {"required": ["content_base64"]}
             ]
+          },
+          {
+            "properties": {"action": {"enum": ["drive_upload_session.start"]}},
+            "required": ["action", "connection_id", "parent_drive_file_id", "file_name", "size_bytes"]
+          },
+          {
+            "properties": {"action": {"enum": ["drive_upload_session.status"]}},
+            "required": ["action", "drive_upload_session_id"]
+          },
+          {
+            "properties": {"action": {"enum": ["drive_upload_session.chunk"]}},
+            "required": ["action", "drive_upload_session_id", "chunk_offset", "content_base64"]
+          },
+          {
+            "properties": {"action": {"enum": ["drive_upload_session.cancel"]}},
+            "required": ["action", "drive_upload_session_id"]
           },
           {
             "properties": {"action": {"enum": ["drive_rename"]}},
@@ -408,13 +440,24 @@
               "drive_preview",
               "drive_export",
               "file.localize",
+              "file.localize_status",
+              "file.localize_retry",
+              "file.localize_cancel",
+              "file.reconcile",
               "drive_index",
               "drive_write",
+              "drive_upload_session.start",
+              "drive_upload_session.chunk",
+              "drive_upload_session.cancel",
               "drive_rename",
               "drive_move",
               "drive_trash"
             ]
           }
+        },
+        {
+          "required_secrets": ["google-drive-oauth-client-id", "google-drive-oauth-client-secret"],
+          "when": {"action": "drive_upload_session.status", "refresh_remote": true}
         },
         {
           "required_secrets": ["google-drive-refresh-token"],
@@ -430,13 +473,38 @@
               "drive_preview",
               "drive_export",
               "file.localize",
+              "file.localize_status",
+              "file.localize_retry",
+              "file.localize_cancel",
+              "file.reconcile",
               "drive_index",
               "drive_write",
+              "drive_upload_session.start",
+              "drive_upload_session.chunk",
+              "drive_upload_session.cancel",
               "drive_rename",
               "drive_move",
               "drive_trash"
             ]
           }
+        },
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_id_argument": "connection_id",
+          "when": {"action": "drive_upload_session.status", "refresh_remote": true}
+        },
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_lookup": {"kind": "storage_drive_upload_session"},
+          "when": {"action": "drive_upload_session.status", "refresh_remote": true}
+        },
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_lookup": {"kind": "storage_drive_upload_session"},
+          "when": {"action": ["drive_upload_session.chunk", "drive_upload_session.cancel"]}
         },
         {
           "required_secrets": ["google-drive-refresh-token"],
@@ -448,6 +516,10 @@
               "drive_preview",
               "drive_export",
               "file.localize",
+              "file.localize_status",
+              "file.localize_retry",
+              "file.localize_cancel",
+              "file.reconcile",
               "drive_index",
               "drive_write",
               "drive_rename",

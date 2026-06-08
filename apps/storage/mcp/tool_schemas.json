@@ -57,9 +57,17 @@
               "drive_preview",
               "drive_export",
               "file.localize",
+              "file.localize_status",
+              "file.localize_retry",
+              "file.localize_cancel",
+              "file.reconcile",
               "drive_index",
               "drive_mark_indexed",
               "drive_write",
+              "drive_upload_session.start",
+              "drive_upload_session.status",
+              "drive_upload_session.chunk",
+              "drive_upload_session.cancel",
               "drive_rename",
               "drive_move",
               "drive_trash",
@@ -83,6 +91,10 @@
           "content": {"type": "string"},
           "content_base64": {"type": "string"},
           "file_name": {"type": "string"},
+          "size_bytes": {"type": "integer", "minimum": 0},
+          "drive_upload_session_id": {"type": "string"},
+          "refresh_remote": {"type": "boolean", "default": false},
+          "chunk_offset": {"type": "integer", "minimum": 0},
           "mode": {"type": "string", "enum": ["create", "overwrite"]},
           "entity_type": {"type": "string", "enum": ["file", "folder"]},
           "entity_id": {"type": "string"},
@@ -125,13 +137,24 @@
               "drive_preview",
               "drive_export",
               "file.localize",
+              "file.localize_status",
+              "file.localize_retry",
+              "file.localize_cancel",
+              "file.reconcile",
               "drive_index",
               "drive_write",
+              "drive_upload_session.start",
+              "drive_upload_session.chunk",
+              "drive_upload_session.cancel",
               "drive_rename",
               "drive_move",
               "drive_trash"
             ]
           }
+        },
+        {
+          "required_secrets": ["google-drive-oauth-client-id", "google-drive-oauth-client-secret"],
+          "when": {"action": "drive_upload_session.status", "refresh_remote": true}
         },
         {
           "required_secrets": ["google-drive-refresh-token"],
@@ -147,13 +170,38 @@
               "drive_preview",
               "drive_export",
               "file.localize",
+              "file.localize_status",
+              "file.localize_retry",
+              "file.localize_cancel",
+              "file.reconcile",
               "drive_index",
               "drive_write",
+              "drive_upload_session.start",
+              "drive_upload_session.chunk",
+              "drive_upload_session.cancel",
               "drive_rename",
               "drive_move",
               "drive_trash"
             ]
           }
+        },
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_id_argument": "connection_id",
+          "when": {"action": "drive_upload_session.status", "refresh_remote": true}
+        },
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_lookup": {"kind": "storage_drive_upload_session"},
+          "when": {"action": "drive_upload_session.status", "refresh_remote": true}
+        },
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_lookup": {"kind": "storage_drive_upload_session"},
+          "when": {"action": ["drive_upload_session.chunk", "drive_upload_session.cancel"]}
         },
         {
           "required_secrets": ["google-drive-refresh-token"],
@@ -165,6 +213,10 @@
               "drive_preview",
               "drive_export",
               "file.localize",
+              "file.localize_status",
+              "file.localize_retry",
+              "file.localize_cancel",
+              "file.reconcile",
               "drive_index",
               "drive_write",
               "drive_rename",
@@ -653,6 +705,126 @@
         },
         "additionalProperties": true
       },
+      "secret_selectors": [
+        {"required_secrets": ["google-drive-oauth-client-id", "google-drive-oauth-client-secret"]},
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_id_argument": "connection_id"
+        },
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_lookup": {"kind": "storage_drive_file"}
+        }
+      ]
+    },
+    "storage_file_localize_status": {
+      "description": "Return current Google Drive localization status, progress, and retry/cancel availability.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "connection_id": {"type": "string"},
+          "drive_file_id": {"type": "string"},
+          "stable_storage_file_id": {"type": "string"}
+        },
+        "anyOf": [
+          {"required": ["connection_id", "drive_file_id"]},
+          {"required": ["stable_storage_file_id"]}
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"},
+      "secret_selectors": [
+        {"required_secrets": ["google-drive-oauth-client-id", "google-drive-oauth-client-secret"]},
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_id_argument": "connection_id"
+        },
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_lookup": {"kind": "storage_drive_file"}
+        }
+      ]
+    },
+    "storage_file_localize_retry": {
+      "description": "Retry localization for a failed or canceled Google Drive media file.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "connection_id": {"type": "string"},
+          "drive_file_id": {"type": "string"},
+          "stable_storage_file_id": {"type": "string"},
+          "max_bytes": {"type": "integer", "minimum": 1}
+        },
+        "anyOf": [
+          {"required": ["connection_id", "drive_file_id"]},
+          {"required": ["stable_storage_file_id"]}
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"},
+      "secret_selectors": [
+        {"required_secrets": ["google-drive-oauth-client-id", "google-drive-oauth-client-secret"]},
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_id_argument": "connection_id"
+        },
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_lookup": {"kind": "storage_drive_file"}
+        }
+      ]
+    },
+    "storage_file_localize_cancel": {
+      "description": "Cancel an in-progress Google Drive localization and remove incomplete cache bytes.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "connection_id": {"type": "string"},
+          "drive_file_id": {"type": "string"},
+          "stable_storage_file_id": {"type": "string"}
+        },
+        "anyOf": [
+          {"required": ["connection_id", "drive_file_id"]},
+          {"required": ["stable_storage_file_id"]}
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"},
+      "secret_selectors": [
+        {"required_secrets": ["google-drive-oauth-client-id", "google-drive-oauth-client-secret"]},
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_id_argument": "connection_id"
+        },
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_lookup": {"kind": "storage_drive_file"}
+        }
+      ]
+    },
+    "storage_file_reconcile": {
+      "description": "Reconcile Storage inventory with local filesystem state or refresh one Drive metadata record.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "stable_storage_file_id": {"type": "string"},
+          "file_id": {"type": "string"},
+          "connection_id": {"type": "string"},
+          "drive_file_id": {"type": "string"},
+          "folder_path": {"type": "string"},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 2000}
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"},
       "secret_selectors": [
         {"required_secrets": ["google-drive-oauth-client-id", "google-drive-oauth-client-secret"]},
         {

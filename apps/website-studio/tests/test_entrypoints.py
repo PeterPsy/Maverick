@@ -828,6 +828,149 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(changes["changesets"][0]["files_changed_count"], 1)
             self.assertEqual(changes["publish_requests"][0]["id"], request_payload["publish_request"]["id"])
             self.assertEqual(changes["revisions"][0]["id"], created["site"]["active_revision_id"])
+            self.assertIn("pagination", changes)
+
+    def test_history_lists_are_paginated_and_compact_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            status, created = handle_action(data_root, {"action": "site_create", "display_name": "Acme"})
+            self.assertEqual(status, 201)
+            site_id = created["site"]["id"]
+            long_log = "line\n" + ("x" * 3000)
+            with sqlite3.connect(data_root / "app.sqlite") as db:
+                for index in range(3):
+                    db.execute(
+                        """
+                        INSERT INTO builds(
+                          id, site_id, status, runtime_kind, preview_url, artifact_ref_json, source_profile_json,
+                          route_count, asset_count, warnings_json, missing_requirements_json, logs_summary, created_at, updated_at
+                        )
+                        VALUES (?, ?, 'passed', 'static_export', '', '{}', '{}', 1, 0, ?, '[]', ?, ?, ?)
+                        """,
+                        (
+                            f"build_{index}",
+                            site_id,
+                            json.dumps(["duplicate warning", "duplicate warning"]),
+                            long_log,
+                            f"2026-06-08T10:00:0{index}+00:00",
+                            f"2026-06-08T10:00:0{index}+00:00",
+                        ),
+                    )
+
+            status, builds = handle_action(data_root, {"action": "builds_list", "site_id": site_id, "limit": 2})
+
+            self.assertEqual(status, 200)
+            self.assertEqual(len(builds["items"]), 2)
+            self.assertTrue(builds["pagination"]["has_more"])
+            self.assertTrue(builds["items"][0]["logs_summary_truncated"])
+            self.assertEqual(builds["items"][0]["warnings"], ["duplicate warning"])
+
+            status, full_builds = handle_action(
+                data_root,
+                {"action": "builds_list", "site_id": site_id, "limit": 1, "include_logs": True},
+            )
+
+            self.assertEqual(status, 200)
+            self.assertFalse(full_builds["items"][0]["logs_summary_truncated"])
+            self.assertIn("xxx", full_builds["items"][0]["logs_summary"])
+
+            status, changes = handle_action(data_root, {"action": "list_changes", "site_id": site_id, "limit": 2})
+
+            self.assertEqual(status, 200)
+            self.assertEqual(len(changes["builds"]), 2)
+            self.assertTrue(changes["pagination"]["sections"]["builds"]["has_more"])
+            self.assertTrue(changes["builds"][0]["logs_summary_truncated"])
+
+    def test_maintenance_prune_removes_old_operational_history_and_build_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            status, created = handle_action(data_root, {"action": "site_create", "display_name": "Acme"})
+            self.assertEqual(status, 201)
+            site_id = created["site"]["id"]
+            with sqlite3.connect(data_root / "app.sqlite") as db:
+                for index in range(5):
+                    build_id = f"build_{index}"
+                    created_at = f"2026-06-08T10:00:0{index}+00:00"
+                    artifact_dir = data_root / "sites" / site_id / "builds" / build_id / "runtime"
+                    artifact_dir.mkdir(parents=True)
+                    (artifact_dir / "index.html").write_text(str(index), encoding="utf-8")
+                    db.execute(
+                        """
+                        INSERT INTO builds(
+                          id, site_id, status, runtime_kind, preview_url, artifact_ref_json, source_profile_json,
+                          route_count, asset_count, warnings_json, missing_requirements_json, logs_summary, created_at, updated_at
+                        )
+                        VALUES (?, ?, 'passed', 'php', '', ?, '{}', 1, 0, '[]', '[]', 'ok', ?, ?)
+                        """,
+                        (
+                            build_id,
+                            site_id,
+                            json.dumps({"runtime_root": f"sites/{site_id}/builds/{build_id}/runtime"}),
+                            created_at,
+                            created_at,
+                        ),
+                    )
+                    db.execute(
+                        """
+                        INSERT INTO previews(
+                          id, site_id, route, page_id, build_id, runtime_kind, preview_url,
+                          warnings_json, missing_requirements_json, artifact_ref_json, status, created_at
+                        )
+                        VALUES (?, ?, '/', '', ?, 'php', ?, '[]', '[]', '{}', 'ready', ?)
+                        """,
+                        (f"preview_{index}", site_id, build_id, f"/preview/{index}", created_at),
+                    )
+                    db.execute(
+                        """
+                        INSERT INTO runtime_sessions(
+                          id, site_id, preview_id, build_id, runtime_kind, status, preview_url,
+                          route, health_json, missing_requirements_json, created_at, updated_at
+                        )
+                        VALUES (?, ?, ?, ?, 'php', 'ready', ?, '/', '{}', '[]', ?, ?)
+                        """,
+                        (f"runtime_{index}", site_id, f"preview_{index}", build_id, f"/preview/{index}", created_at, created_at),
+                    )
+
+            status, dry_run = handle_action(
+                data_root,
+                {
+                    "action": "maintenance_prune",
+                    "site_id": site_id,
+                    "keep_builds": 2,
+                    "keep_previews_per_route": 1,
+                    "keep_runtime_sessions": 2,
+                    "dry_run": True,
+                },
+            )
+
+            self.assertEqual(status, 200)
+            self.assertTrue(dry_run["dry_run"])
+            self.assertEqual(dry_run["totals"]["builds"], 3)
+            self.assertTrue((data_root / "sites" / site_id / "builds" / "build_0").exists())
+
+            status, pruned = handle_action(
+                data_root,
+                {
+                    "action": "maintenance_prune",
+                    "site_id": site_id,
+                    "keep_builds": 2,
+                    "keep_previews_per_route": 1,
+                    "keep_runtime_sessions": 2,
+                },
+            )
+
+            self.assertEqual(status, 200)
+            self.assertFalse(pruned["dry_run"])
+            self.assertEqual(pruned["totals"]["builds"], 3)
+            self.assertFalse((data_root / "sites" / site_id / "builds" / "build_0").exists())
+            self.assertTrue((data_root / "sites" / site_id / "builds" / "build_4").exists())
+            with sqlite3.connect(data_root / "app.sqlite") as db:
+                build_count = db.execute("SELECT COUNT(*) FROM builds WHERE site_id = ?", (site_id,)).fetchone()[0]
+                preview_count = db.execute("SELECT COUNT(*) FROM previews WHERE site_id = ?", (site_id,)).fetchone()[0]
+                session_count = db.execute("SELECT COUNT(*) FROM runtime_sessions WHERE site_id = ?", (site_id,)).fetchone()[0]
+            self.assertEqual(build_count, 2)
+            self.assertEqual(preview_count, 1)
+            self.assertEqual(session_count, 2)
 
     def test_rollback_with_unverified_approval_stays_blocked(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1875,6 +2018,8 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(source_ref["provider"], "maverick-managed-static")
             self.assertEqual(source_ref["status"], "artifact_ready")
             self.assertEqual(source_ref["platform_binding_status"], "pending_generic_surface")
+            self.assertFalse(source_ref["platform_binding"]["public_binding_ready"])
+            self.assertIn("stable public URL", source_ref["platform_binding"]["missing_requirements"])
             artifact_index = data_root / source_ref["artifact_root"] / "index.html"
             self.assertTrue(artifact_index.exists())
             self.assertIn("Hosted", artifact_index.read_text(encoding="utf-8"))
@@ -1882,6 +2027,71 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             status, targets = handle_action(data_root, {"action": "publish_targets_list", "site_id": site_id})
             self.assertEqual(status, 200)
             self.assertEqual([item["id"] for item in targets["items"]], [target_payload["publish_target"]["id"]])
+
+    def test_phase3_managed_static_publish_target_records_public_binding_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            status, created = handle_action(data_root, {"action": "site_create", "display_name": "Bound Hosted"})
+            self.assertEqual(status, 201)
+            site_id = created["site"]["id"]
+            status, target_payload = handle_action(
+                data_root,
+                {
+                    "action": "publish_target_configure",
+                    "site_id": site_id,
+                    "kind": "managed_static",
+                    "config": {
+                        "platform_binding_status": "bound",
+                        "public_url": "https://bound.example.test/",
+                        "custom_domain": "bound.example.test",
+                        "certificate_status": "issued",
+                        "cache_policy": "static-assets",
+                        "cdn_status": "ready",
+                        "verification_status": "verified",
+                    },
+                },
+            )
+            self.assertEqual(status, 200)
+            config = target_payload["publish_target"]["config"]
+            self.assertEqual(config["platform_binding_status"], "bound")
+            self.assertEqual(config["public_url"], "https://bound.example.test/")
+            _edit_index(data_root, site_id, marker="Public")
+
+            status, request_payload = handle_action(data_root, {"action": "publish_request", "site_id": site_id, "requested_by": "agent"})
+            self.assertEqual(status, 201)
+            status, approval_payload = handle_action(
+                data_root,
+                {
+                    "action": "approval_record",
+                    "site_id": site_id,
+                    "approval_action": "publish",
+                    "target_id": request_payload["publish_request"]["id"],
+                    "approved_by": "user:owner",
+                    "_app_actor": _approval_actor(),
+                    "confirm": True,
+                },
+            )
+            self.assertEqual(status, 201)
+            status, published = handle_action(
+                data_root,
+                {
+                    "action": "publish",
+                    "site_id": site_id,
+                    "publish_request_id": request_payload["publish_request"]["id"],
+                    "approval_id": approval_payload["approval"]["id"],
+                },
+            )
+
+            self.assertEqual(status, 200)
+            source_ref = published["deployment"]["source_ref"]
+            self.assertEqual(published["deployment"]["mode"], "maverick_managed_static")
+            self.assertEqual(source_ref["public_url"], "https://bound.example.test/")
+            self.assertEqual(source_ref["custom_domain"], "bound.example.test")
+            self.assertEqual(source_ref["platform_binding_status"], "bound")
+            self.assertTrue(source_ref["platform_binding"]["public_binding_ready"])
+            self.assertEqual(source_ref["platform_binding"]["missing_requirements"], [])
+            self.assertEqual(source_ref["platform_binding"]["certificate_status"], "issued")
+            self.assertEqual(source_ref["platform_binding"]["cdn_status"], "ready")
 
     def test_phase3_publish_target_migrates_existing_environment_rows(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -59,6 +59,14 @@ from publish_workflow import managed_static_platform_binding, working_branch_for
 HttpTransport = Callable[[str, str, dict[str, Any]], tuple[int, dict[str, Any] | list[Any] | bytes]]
 GITHUB_API_BASE = "https://api.github.com"
 IMPLEMENTED_SOURCE_PROVIDERS = {"manual", "zip", "git"}
+DEFAULT_HISTORY_LIMIT = 20
+MAX_HISTORY_LIMIT = 100
+DEFAULT_WORKING_DIFF_LIMIT = 100
+MAX_WORKING_DIFF_LIMIT = 250
+COMPACT_LOG_CHARS = 1200
+DEFAULT_RETAIN_BUILDS = 10
+DEFAULT_RETAIN_PREVIEWS_PER_ROUTE = 3
+DEFAULT_RETAIN_RUNTIME_SESSIONS = 20
 
 
 def list_sites(data_root: Path) -> list[dict[str, object]]:
@@ -1308,12 +1316,71 @@ def _upsert_runtime_route_index(
         )
 
 
-def list_builds(data_root: Path, site_id: object) -> list[dict[str, object]]:
+def list_builds(
+    data_root: Path,
+    site_id: object,
+    *,
+    limit: object = None,
+    offset: object = 0,
+    include_logs: object = False,
+) -> dict[str, object]:
     site = get_site(data_root, site_id)
+    clean_limit = _bounded_int(limit, default=DEFAULT_HISTORY_LIMIT, minimum=1, maximum=MAX_HISTORY_LIMIT)
+    clean_offset = _bounded_int(offset, default=0, minimum=0, maximum=1_000_000)
     ensure_schema(data_root)
     with connect(data_root) as db:
-        rows = db.execute("SELECT * FROM builds WHERE site_id = ? ORDER BY created_at DESC", (site["id"],)).fetchall()
-    return [_build_row(row) for row in rows]
+        rows = db.execute(
+            "SELECT * FROM builds WHERE site_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            (site["id"], clean_limit + 1, clean_offset),
+        ).fetchall()
+    page_rows = rows[:clean_limit]
+    return {
+        "site_id": site["id"],
+        "items": [_build_row(row, include_logs=_truthy(include_logs)) for row in page_rows],
+        "pagination": _pagination(limit=clean_limit, offset=clean_offset, returned=len(page_rows), has_more=len(rows) > clean_limit),
+    }
+
+
+def maintenance_prune(
+    data_root: Path,
+    site_id: object = None,
+    *,
+    keep_builds: object = None,
+    keep_previews_per_route: object = None,
+    keep_runtime_sessions: object = None,
+    dry_run: object = False,
+) -> dict[str, object]:
+    ensure_schema(data_root)
+    clean_keep_builds = _bounded_int(keep_builds, default=DEFAULT_RETAIN_BUILDS, minimum=1, maximum=500)
+    clean_keep_previews = _bounded_int(keep_previews_per_route, default=DEFAULT_RETAIN_PREVIEWS_PER_ROUTE, minimum=1, maximum=50)
+    clean_keep_sessions = _bounded_int(keep_runtime_sessions, default=DEFAULT_RETAIN_RUNTIME_SESSIONS, minimum=1, maximum=500)
+    is_dry_run = _truthy(dry_run)
+    sites = [get_site(data_root, site_id)] if site_id else list_sites(data_root)
+    summaries: list[dict[str, object]] = []
+    totals = {"builds": 0, "previews": 0, "runtime_sessions": 0, "artifact_dirs": 0}
+    for site in sites:
+        summary = _prune_site_operational_history(
+            data_root,
+            str(site["id"]),
+            keep_builds=clean_keep_builds,
+            keep_previews_per_route=clean_keep_previews,
+            keep_runtime_sessions=clean_keep_sessions,
+            dry_run=is_dry_run,
+        )
+        summaries.append(summary)
+        for key in totals:
+            totals[key] += int(summary.get(f"pruned_{key}", 0) or 0)
+    return {
+        "status": "dry_run" if is_dry_run else "pruned",
+        "dry_run": is_dry_run,
+        "policy": {
+            "keep_builds": clean_keep_builds,
+            "keep_previews_per_route": clean_keep_previews,
+            "keep_runtime_sessions": clean_keep_sessions,
+        },
+        "totals": totals,
+        "sites": summaries,
+    }
 
 
 def get_build(data_root: Path, build_id: object) -> dict[str, object]:
@@ -1336,7 +1403,7 @@ def runtime_status(data_root: Path, site_id: object) -> dict[str, object]:
         build_row = db.execute("SELECT * FROM builds WHERE site_id = ? ORDER BY created_at DESC LIMIT 1", (site["id"],)).fetchone()
         preview_row = db.execute("SELECT * FROM previews WHERE site_id = ? ORDER BY created_at DESC LIMIT 1", (site["id"],)).fetchone()
         session_row = db.execute("SELECT * FROM runtime_sessions WHERE site_id = ? ORDER BY created_at DESC LIMIT 1", (site["id"],)).fetchone()
-    latest_build = _build_row(build_row) if build_row else None
+    latest_build = _build_row(build_row, include_logs=False) if build_row else None
     runtime_status_value = str(capability.get("runtime_status") or profile.get("runtime_preview_status") or "blocked")
     if latest_build and latest_build.get("status") in {"failed", "blocked"}:
         runtime_status_value = str(latest_build.get("status"))
@@ -1430,62 +1497,119 @@ def create_publish_request(
     return get_publish_request(data_root, request_id)
 
 
-def list_changes(data_root: Path, site_id: object, status: object = None) -> dict[str, object]:
+def list_changes(
+    data_root: Path,
+    site_id: object,
+    status: object = None,
+    *,
+    limit: object = None,
+    offset: object = 0,
+    include_logs: object = False,
+    diff_limit: object = None,
+) -> dict[str, object]:
     site = get_site(data_root, site_id)
     status_filter = str(status or "").strip()
+    clean_limit = _bounded_int(limit, default=DEFAULT_HISTORY_LIMIT, minimum=1, maximum=MAX_HISTORY_LIMIT)
+    clean_offset = _bounded_int(offset, default=0, minimum=0, maximum=1_000_000)
+    clean_diff_limit = _bounded_int(diff_limit, default=DEFAULT_WORKING_DIFF_LIMIT, minimum=1, maximum=MAX_WORKING_DIFF_LIMIT)
+    include_full_logs = _truthy(include_logs)
     ensure_schema(data_root)
     with connect(data_root) as db:
         if status_filter:
-            changeset_rows = db.execute(
+            changeset_rows = _paged_rows(
+                db,
                 "SELECT * FROM changesets WHERE site_id = ? AND status = ? ORDER BY updated_at DESC",
                 (site["id"], status_filter),
-            ).fetchall()
-            request_rows = db.execute(
+                limit=clean_limit,
+                offset=clean_offset,
+            )
+            request_rows = _paged_rows(
+                db,
                 "SELECT * FROM publish_requests WHERE site_id = ? AND status = ? ORDER BY updated_at DESC",
                 (site["id"], status_filter),
-            ).fetchall()
+                limit=clean_limit,
+                offset=clean_offset,
+            )
         else:
-            changeset_rows = db.execute(
+            changeset_rows = _paged_rows(
+                db,
                 "SELECT * FROM changesets WHERE site_id = ? ORDER BY updated_at DESC",
                 (site["id"],),
-            ).fetchall()
-            request_rows = db.execute(
+                limit=clean_limit,
+                offset=clean_offset,
+            )
+            request_rows = _paged_rows(
+                db,
                 "SELECT * FROM publish_requests WHERE site_id = ? ORDER BY updated_at DESC",
                 (site["id"],),
-            ).fetchall()
-        revision_rows = db.execute(
+                limit=clean_limit,
+                offset=clean_offset,
+            )
+        revision_rows = _paged_rows(
+            db,
             "SELECT id, site_id, label, source, summary, created_at FROM revisions WHERE site_id = ? ORDER BY created_at DESC",
             (site["id"],),
-        ).fetchall()
-        approval_rows = db.execute(
+            limit=clean_limit,
+            offset=clean_offset,
+        )
+        approval_rows = _paged_rows(
+            db,
             "SELECT * FROM approval_events WHERE site_id = ? ORDER BY created_at DESC",
             (site["id"],),
-        ).fetchall()
-        build_rows = db.execute(
+            limit=clean_limit,
+            offset=clean_offset,
+        )
+        build_rows = _paged_rows(
+            db,
             "SELECT * FROM builds WHERE site_id = ? ORDER BY created_at DESC",
             (site["id"],),
-        ).fetchall()
-        sync_rows = db.execute(
+            limit=clean_limit,
+            offset=clean_offset,
+        )
+        sync_rows = _paged_rows(
+            db,
             "SELECT * FROM sync_runs WHERE site_id = ? ORDER BY created_at DESC",
             (site["id"],),
-        ).fetchall()
-        deployment_rows = db.execute(
+            limit=clean_limit,
+            offset=clean_offset,
+        )
+        deployment_rows = _paged_rows(
+            db,
             "SELECT * FROM deployments WHERE site_id = ? ORDER BY created_at DESC",
             (site["id"],),
-        ).fetchall()
+            limit=clean_limit,
+            offset=clean_offset,
+        )
     diff_payload = diff_site(data_root, site["id"])
+    diff_files = diff_payload["files"][:clean_diff_limit]
     return {
         "site_id": site["id"],
         "base_revision_id": site.get("active_revision_id"),
         "published_revision_id": site.get("published_revision_id"),
-        "working_diff": [{"path": item["path"], "status": item["status"]} for item in diff_payload["files"]],
-        "changesets": [dict(row) for row in changeset_rows],
-        "publish_requests": [dict(row) for row in request_rows],
-        "revisions": [dict(row) for row in revision_rows],
-        "approval_events": [_approval_row(row) for row in approval_rows],
-        "builds": [_build_row(row) for row in build_rows],
-        "sync_runs": [_sync_run_row(row) for row in sync_rows],
-        "deployments": [_deployment_row(row) for row in deployment_rows],
+        "working_diff": [{"path": item["path"], "status": item["status"]} for item in diff_files],
+        "working_diff_count": len(diff_payload["files"]),
+        "working_diff_truncated": len(diff_payload["files"]) > len(diff_files),
+        "changesets": [dict(row) for row in changeset_rows["rows"]],
+        "publish_requests": [dict(row) for row in request_rows["rows"]],
+        "revisions": [dict(row) for row in revision_rows["rows"]],
+        "approval_events": [_approval_row(row) for row in approval_rows["rows"]],
+        "builds": [_build_row(row, include_logs=include_full_logs) for row in build_rows["rows"]],
+        "sync_runs": [_sync_run_row(row, include_logs=include_full_logs) for row in sync_rows["rows"]],
+        "deployments": [_deployment_row(row) for row in deployment_rows["rows"]],
+        "pagination": {
+            "limit": clean_limit,
+            "offset": clean_offset,
+            "include_logs": include_full_logs,
+            "sections": {
+                "changesets": changeset_rows["pagination"],
+                "publish_requests": request_rows["pagination"],
+                "revisions": revision_rows["pagination"],
+                "approval_events": approval_rows["pagination"],
+                "builds": build_rows["pagination"],
+                "sync_runs": sync_rows["pagination"],
+                "deployments": deployment_rows["pagination"],
+            },
+        },
     }
 
 
@@ -1890,6 +2014,165 @@ def _preview_runtime_url(preview_id: str, route: str) -> str:
     return f"/apps/website-studio/preview-runtime/?{urlencode({'preview_id': preview_id, 'route': route or '/'})}"
 
 
+def _prune_site_operational_history(
+    data_root: Path,
+    site_id: str,
+    *,
+    keep_builds: int,
+    keep_previews_per_route: int,
+    keep_runtime_sessions: int,
+    dry_run: bool,
+) -> dict[str, object]:
+    ensure_schema(data_root)
+    with connect(data_root) as db:
+        build_rows = db.execute("SELECT id FROM builds WHERE site_id = ? ORDER BY created_at DESC", (site_id,)).fetchall()
+        preview_rows = db.execute(
+            "SELECT id, route, runtime_kind, build_id FROM previews WHERE site_id = ? ORDER BY created_at DESC",
+            (site_id,),
+        ).fetchall()
+        session_rows = db.execute(
+            "SELECT id, preview_id FROM runtime_sessions WHERE site_id = ? ORDER BY created_at DESC",
+            (site_id,),
+        ).fetchall()
+        publish_build_rows = db.execute(
+            "SELECT DISTINCT build_id FROM publish_requests WHERE site_id = ? AND build_id != ''",
+            (site_id,),
+        ).fetchall()
+    keep_build_ids = {str(row["id"]) for row in build_rows[:keep_builds]}
+    keep_build_ids.update(str(row["build_id"]) for row in publish_build_rows if str(row["build_id"] or "").strip())
+
+    keep_preview_ids: set[str] = set()
+    preview_counts: dict[tuple[str, str], int] = {}
+    preview_build_ids: set[str] = set()
+    for row in preview_rows:
+        key = (str(row["route"] or "/"), str(row["runtime_kind"] or ""))
+        count = preview_counts.get(key, 0)
+        preview_id = str(row["id"])
+        build_id = str(row["build_id"] or "").strip()
+        if count < keep_previews_per_route:
+            keep_preview_ids.add(preview_id)
+            preview_counts[key] = count + 1
+            if build_id:
+                preview_build_ids.add(build_id)
+    keep_build_ids.update(preview_build_ids)
+
+    keep_session_ids = {str(row["id"]) for row in session_rows[:keep_runtime_sessions]}
+    keep_session_ids.update(str(row["id"]) for row in session_rows if str(row["preview_id"] or "") in keep_preview_ids)
+
+    stale_preview_ids = [str(row["id"]) for row in preview_rows if str(row["id"]) not in keep_preview_ids]
+    stale_session_ids = [str(row["id"]) for row in session_rows if str(row["id"]) not in keep_session_ids]
+    stale_build_ids = [str(row["id"]) for row in build_rows if str(row["id"]) not in keep_build_ids]
+    artifact_dirs = [_build_artifact_dir(data_root, site_id, build_id) for build_id in stale_build_ids]
+    removable_artifact_dirs = [path for path in artifact_dirs if path.exists()]
+
+    if not dry_run:
+        with connect(data_root) as db:
+            _delete_by_ids(db, "runtime_sessions", stale_session_ids)
+            _delete_by_ids(db, "previews", stale_preview_ids)
+            _delete_by_ids(db, "builds", stale_build_ids)
+        for artifact_dir in removable_artifact_dirs:
+            if _is_site_build_artifact_dir(data_root, site_id, artifact_dir):
+                shutil.rmtree(artifact_dir)
+        if stale_build_ids or stale_preview_ids or stale_session_ids:
+            _audit(
+                data_root,
+                site_id,
+                "maintenance.pruned",
+                "Pruned Website Studio operational history",
+                {
+                    "builds": len(stale_build_ids),
+                    "previews": len(stale_preview_ids),
+                    "runtime_sessions": len(stale_session_ids),
+                    "artifact_dirs": len(removable_artifact_dirs),
+                },
+            )
+
+    return {
+        "site_id": site_id,
+        "kept_builds": len(build_rows) - len(stale_build_ids),
+        "kept_previews": len(preview_rows) - len(stale_preview_ids),
+        "kept_runtime_sessions": len(session_rows) - len(stale_session_ids),
+        "pruned_builds": len(stale_build_ids),
+        "pruned_previews": len(stale_preview_ids),
+        "pruned_runtime_sessions": len(stale_session_ids),
+        "pruned_artifact_dirs": len(removable_artifact_dirs),
+        "protected_build_ids": sorted(keep_build_ids),
+    }
+
+
+def _build_artifact_dir(data_root: Path, site_id: str, build_id: str) -> Path:
+    if not build_id or "/" in build_id or "\\" in build_id or build_id in {".", ".."}:
+        raise ValueError(f"Invalid build_id `{build_id}`")
+    return data_root / "sites" / site_id / "builds" / build_id
+
+
+def _is_site_build_artifact_dir(data_root: Path, site_id: str, path: Path) -> bool:
+    try:
+        path.resolve().relative_to((data_root / "sites" / site_id / "builds").resolve())
+    except ValueError:
+        return False
+    return path.name not in {"", ".", ".."}
+
+
+def _delete_by_ids(db, table: str, ids: list[str]) -> None:
+    for item_id in ids:
+        db.execute(f"DELETE FROM {table} WHERE id = ?", (item_id,))
+
+
+def _paged_rows(db, query: str, params: tuple[object, ...], *, limit: int, offset: int) -> dict[str, object]:
+    rows = db.execute(f"{query} LIMIT ? OFFSET ?", (*params, limit + 1, offset)).fetchall()
+    page_rows = rows[:limit]
+    return {
+        "rows": page_rows,
+        "pagination": _pagination(limit=limit, offset=offset, returned=len(page_rows), has_more=len(rows) > limit),
+    }
+
+
+def _pagination(*, limit: int, offset: int, returned: int, has_more: bool) -> dict[str, object]:
+    return {
+        "limit": limit,
+        "offset": offset,
+        "returned": returned,
+        "has_more": has_more,
+        "next_offset": offset + returned if has_more else None,
+    }
+
+
+def _bounded_int(value: object, *, default: int, minimum: int, maximum: int) -> int:
+    if value is None or value == "":
+        return default
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(maximum, number))
+
+
+def _truthy(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _compact_log(value: str, *, include_logs: bool) -> tuple[str, bool, int]:
+    redacted = redact_runtime_log(value)
+    if include_logs or len(redacted) <= COMPACT_LOG_CHARS:
+        return redacted, False, len(redacted)
+    return redacted[:COMPACT_LOG_CHARS].rstrip() + "\n...", True, len(redacted)
+
+
+def _dedupe_strings(items: list[object]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in items:
+        text = str(item or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        result.append(text)
+    return result
+
+
 def reference_manifest() -> dict[str, object]:
     metadata = {
         "site": {"display_name": "Website Site", "searchable": True},
@@ -2126,6 +2409,12 @@ def configure_publish_target(
             "runtime": "local_static_artifact",
             "platform_surface": "generic_static_hosting",
             "platform_binding_status": "pending_generic_surface",
+            "public_url": "",
+            "custom_domain": "",
+            "certificate_status": "",
+            "cache_policy": "",
+            "cdn_status": "",
+            "verification_status": "",
             **config_payload,
         }
     target_id = f"target_{site['id']}_{clean_kind}_{environment['kind']}"
@@ -2349,15 +2638,18 @@ def _approval_row(row) -> dict[str, object]:
     return dict(row)
 
 
-def _build_row(row) -> dict[str, object]:
+def _build_row(row, *, include_logs: bool = True) -> dict[str, object]:
     if row is None:
         return {}
     payload = dict(row)
     payload["source_profile"] = json.loads(payload.pop("source_profile_json") or "{}")
     payload["artifact_ref"] = json.loads(payload.pop("artifact_ref_json", "{}") or "{}")
-    payload["warnings"] = json.loads(payload.pop("warnings_json") or "[]")
-    payload["missing_requirements"] = json.loads(payload.pop("missing_requirements_json", "[]") or "[]")
-    payload["logs_summary"] = redact_runtime_log(str(payload.get("logs_summary") or ""))
+    payload["warnings"] = _dedupe_strings(json.loads(payload.pop("warnings_json") or "[]"))[:100]
+    payload["missing_requirements"] = _dedupe_strings(json.loads(payload.pop("missing_requirements_json", "[]") or "[]"))[:50]
+    compact_log, truncated, original_chars = _compact_log(str(payload.get("logs_summary") or ""), include_logs=include_logs)
+    payload["logs_summary"] = compact_log
+    payload["logs_summary_truncated"] = truncated
+    payload["logs_summary_chars"] = original_chars
     return payload
 
 
@@ -2365,8 +2657,8 @@ def _preview_row(row) -> dict[str, object]:
     if row is None:
         return {}
     payload = dict(row)
-    payload["warnings"] = json.loads(payload.pop("warnings_json", "[]") or "[]")
-    payload["missing_requirements"] = json.loads(payload.pop("missing_requirements_json", "[]") or "[]")
+    payload["warnings"] = _dedupe_strings(json.loads(payload.pop("warnings_json", "[]") or "[]"))[:100]
+    payload["missing_requirements"] = _dedupe_strings(json.loads(payload.pop("missing_requirements_json", "[]") or "[]"))[:50]
     payload["artifact_ref"] = json.loads(payload.pop("artifact_ref_json", "{}") or "{}")
     return payload
 
@@ -2376,7 +2668,7 @@ def _runtime_session_row(row) -> dict[str, object]:
         return {}
     payload = dict(row)
     payload["health"] = json.loads(payload.pop("health_json", "{}") or "{}")
-    payload["missing_requirements"] = json.loads(payload.pop("missing_requirements_json", "[]") or "[]")
+    payload["missing_requirements"] = _dedupe_strings(json.loads(payload.pop("missing_requirements_json", "[]") or "[]"))[:50]
     return payload
 
 
@@ -2386,11 +2678,14 @@ def _deployment_row(row) -> dict[str, object]:
     return payload
 
 
-def _sync_run_row(row) -> dict[str, object]:
+def _sync_run_row(row, *, include_logs: bool = True) -> dict[str, object]:
     payload = dict(row)
     payload["conflicts"] = json.loads(payload.pop("conflicts_json") or "[]")
     payload["source_profile"] = json.loads(payload.pop("source_profile_json") or "{}")
-    payload["logs_summary"] = redact_runtime_log(str(payload.get("logs_summary") or ""))
+    compact_log, truncated, original_chars = _compact_log(str(payload.get("logs_summary") or ""), include_logs=include_logs)
+    payload["logs_summary"] = compact_log
+    payload["logs_summary_truncated"] = truncated
+    payload["logs_summary_chars"] = original_chars
     return payload
 
 
@@ -2532,6 +2827,17 @@ def _publish_to_managed_static_artifact(
     index_path = artifact_root / "index.html"
     artifact_url = f"/app/website-studio/sites/{site['id']}/deployments/{artifact_id}/"
     platform_binding_status = str((target.get("config") or {}).get("platform_binding_status") or "pending_generic_surface")
+    target_config = target.get("config") if isinstance(target.get("config"), dict) else {}
+    platform_binding = managed_static_platform_binding(
+        status=platform_binding_status,
+        artifact_url=artifact_url,
+        public_url=str(target_config.get("public_url") or ""),
+        custom_domain=str(target_config.get("custom_domain") or ""),
+        certificate_status=str(target_config.get("certificate_status") or ""),
+        cache_policy=str(target_config.get("cache_policy") or ""),
+        cdn_status=str(target_config.get("cdn_status") or ""),
+        verification_status=str(target_config.get("verification_status") or ""),
+    )
     return {
         "provider": "maverick-managed-static",
         "status": "artifact_ready",
@@ -2543,9 +2849,11 @@ def _publish_to_managed_static_artifact(
         "artifact_root": relative_root,
         "entrypoint": "index.html" if index_path.exists() else "",
         "artifact_url": artifact_url,
+        "public_url": platform_binding["public_url"],
+        "custom_domain": platform_binding["custom_domain"],
         "platform_surface": "generic_static_hosting",
         "platform_binding_status": platform_binding_status,
-        "platform_binding": managed_static_platform_binding(status=platform_binding_status, artifact_url=artifact_url),
+        "platform_binding": platform_binding,
     }
 
 

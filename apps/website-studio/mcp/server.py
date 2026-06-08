@@ -40,6 +40,7 @@ TOOL_ACTIONS = {
     "website_list_changes": "list_changes",
     "website_build_validate": "build_validate",
     "website_builds_list": "builds_list",
+    "website_maintenance_prune": "maintenance_prune",
     "website_build_preview": "build_preview",
     "website_preview_document": "preview_document",
     "website_runtime_status": "runtime_status",

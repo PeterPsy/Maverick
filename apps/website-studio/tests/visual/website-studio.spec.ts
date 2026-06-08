@@ -1,10 +1,23 @@
 import { expect, test, type Page } from '@playwright/test';
 
 type Box = { x: number; y: number; width: number; height: number };
+type MockState = { backendActions: string[]; changedFilesCount: number };
+type MockPreview = {
+  id: string;
+  site_id: string;
+  route: string;
+  page_id: string;
+  build_id: string;
+  runtime_kind: string;
+  runtime_status: string;
+  status: string;
+  preview_url: string;
+  warnings: string[];
+  missing_requirements: string[];
+};
 
 const SITE_ID = 'site_giuntitrail';
 const PREVIEW_ID = 'preview_giuntitrail_ready';
-const PREVIEW_URL = `/apps/website-studio/preview-runtime/?preview_id=${PREVIEW_ID}&route=%2F`;
 
 test.describe('Website Studio visual smoke', () => {
   for (const viewport of [
@@ -52,13 +65,64 @@ test.describe('Website Studio visual smoke', () => {
       });
     });
   }
+
+  test('responds to mounted shell navigation and data change events', async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 1180, height: 820 });
+    const mockState = await installWebsiteStudioMocks(page);
+
+    await page.goto('/');
+
+    const iframe = page.locator('.site-canvas iframe');
+    const siteStatus = page.locator('.site-status-panel');
+    await expect(iframe).toBeVisible();
+    await expect(siteStatus).toContainText('Giuntitrail');
+
+    await expect(async () => {
+      await emitShellMessage(page, {
+        type: 'maverick.app.navigate',
+        params: { site_id: SITE_ID, app_page: 'routes/route_about' }
+      });
+      await expect(iframe).toHaveAttribute('data-route-id', 'route_about', { timeout: 750 });
+      await expect(iframe).toHaveAttribute('src', /route=%2Fabout/, { timeout: 750 });
+    }).toPass({ timeout: 6_000 });
+
+    mockState.changedFilesCount = 1;
+    const actionsBeforeRefresh = mockState.backendActions.length;
+    await expect(async () => {
+      await emitShellMessage(page, { type: 'maverick.app.data-changed', owner_app_id: 'website-studio' });
+      await expect.poll(() => mockState.backendActions.length, { timeout: 750 }).toBeGreaterThan(actionsBeforeRefresh);
+    }).toPass({ timeout: 6_000 });
+
+    await expect(siteStatus.locator('.site-status-metric').filter({ hasText: 'changed' }).locator('strong')).toHaveText('1');
+    expect(mockState.backendActions.filter((action) => action === 'list_changes').length).toBeGreaterThanOrEqual(2);
+
+    const canvasBox = await requiredBox(page.locator('.site-canvas'), 'site canvas');
+    const iframeBox = await requiredBox(iframe, 'preview iframe');
+    const previewStatusBox = await requiredBox(page.locator('.preview-status'), 'preview status');
+    const siteStatusBox = await requiredBox(siteStatus, 'site status');
+
+    expect(isInside(iframeBox, canvasBox)).toBe(true);
+    expect(isInside(previewStatusBox, canvasBox)).toBe(true);
+    expect(isInside(siteStatusBox, canvasBox)).toBe(true);
+    expect(intersects(previewStatusBox, siteStatusBox)).toBe(false);
+
+    const screenshot = await page.screenshot({ fullPage: false });
+    expect(screenshot.length).toBeGreaterThan(12_000);
+    await testInfo.attach('website-studio-shell-events.png', {
+      body: screenshot,
+      contentType: 'image/png'
+    });
+  });
 });
 
-async function installWebsiteStudioMocks(page: Page): Promise<void> {
+async function installWebsiteStudioMocks(page: Page): Promise<MockState> {
+  const state: MockState = { backendActions: [], changedFilesCount: 0 };
+
   await page.route('**/api/apps/website-studio/backend', async (route) => {
-    const body = JSON.parse(route.request().postData() || '{}') as { action?: string };
+    const body = JSON.parse(route.request().postData() || '{}') as Record<string, unknown> & { action?: string };
     const action = body.action || 'sites_list';
-    const response = backendResponse(action);
+    state.backendActions.push(action);
+    const response = backendResponse(action, body, state);
     await route.fulfill({
       status: response.status,
       contentType: 'application/json',
@@ -67,6 +131,9 @@ async function installWebsiteStudioMocks(page: Page): Promise<void> {
   });
 
   await page.route('**/apps/website-studio/preview-runtime/**', async (route) => {
+    const requested = new URL(route.request().url());
+    const routePath = requested.searchParams.get('route') || '/';
+    const heading = routePath === '/about' ? 'About Giuntitrail' : 'Giuntitrail';
     await route.fulfill({
       status: 200,
       contentType: 'text/html',
@@ -94,28 +161,38 @@ async function installWebsiteStudioMocks(page: Page): Promise<void> {
           </head>
           <body>
             <main data-testid="runtime-preview">
-              <h1>Giuntitrail</h1>
-              <p>Runtime preview ready for the selected Website Studio site.</p>
+              <h1>${heading}</h1>
+              <p>Runtime preview ready for ${routePath}.</p>
             </main>
           </body>
         </html>`
     });
   });
+
+  return state;
 }
 
-function backendResponse(action: string): { status: number; body: Record<string, unknown> } {
-  const preview = {
-    id: PREVIEW_ID,
-    site_id: SITE_ID,
-    route: '/',
-    page_id: 'page_home',
-    build_id: 'build_ready',
-    runtime_kind: 'php',
-    status: 'ready',
-    preview_url: PREVIEW_URL,
-    warnings: [],
-    missing_requirements: []
-  };
+async function emitShellMessage(page: Page, payload: Record<string, unknown>): Promise<void> {
+  await page.evaluate((message) => {
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        origin: window.location.origin,
+        source: window,
+        data: message
+      })
+    );
+    window.postMessage(message, window.location.origin);
+  }, payload);
+}
+
+function backendResponse(action: string, body: Record<string, unknown>, state: MockState): { status: number; body: Record<string, unknown> } {
+  const requestedRoute = typeof body.route === 'string' && body.route ? body.route : '/';
+  const preview = previewForRoute(requestedRoute);
+  const latestPreview = previewForRoute('/');
+  const workingDiff = state.changedFilesCount
+    ? [{ id: 'diff_about', path: 'about.html', status: 'modified', diff_summary: 'about.html updated' }]
+    : [];
+  const changedTone = state.changedFilesCount ? 'modified' : 'clean';
   const site = {
     id: SITE_ID,
     display_name: 'Giuntitrail',
@@ -127,28 +204,32 @@ function backendResponse(action: string): { status: number; body: Record<string,
     is_active: true
   };
 
+  function sitemapBody() {
+    return {
+      site_id: SITE_ID,
+      items: [{ id: 'page_home', site_id: SITE_ID, route: '/', title: 'Home', kind: 'html', status: 'active', source_files: ['index.php'] }],
+      routes: [
+        { id: 'route_home', site_id: SITE_ID, route: '/', page_id: 'page_home', kind: 'php', status: 'rendered', source_files: ['index.php'] },
+        { id: 'route_about', site_id: SITE_ID, route: '/about', kind: 'php', status: 'rendered', source_files: ['about.php'] }
+      ],
+      assets: [{ id: 'asset_logo', site_id: SITE_ID, path: 'assets/logo.svg', kind: 'image', status: 'active' }]
+    };
+  }
+
   switch (action) {
     case 'sites_list':
       return { status: 200, body: { items: [site] } };
     case 'sitemap':
-      return {
-        status: 200,
-        body: {
-          site_id: SITE_ID,
-          items: [{ id: 'page_home', site_id: SITE_ID, route: '/', title: 'Home', kind: 'html', status: 'active', source_files: ['index.php'] }],
-          routes: [{ id: 'route_home', site_id: SITE_ID, route: '/', page_id: 'page_home', kind: 'php', status: 'rendered', source_files: ['index.php'] }],
-          assets: [{ id: 'asset_logo', site_id: SITE_ID, path: 'assets/logo.svg', kind: 'image', status: 'active' }]
-        }
-      };
+      return { status: 200, body: sitemapBody() };
     case 'site_status':
       return {
         status: 200,
         body: {
           site,
           page_count: 1,
-          route_count: 1,
+          route_count: 2,
           asset_count: 1,
-          changed_files_count: 0,
+          changed_files_count: state.changedFilesCount,
           active_revision_id: 'rev_working',
           published_revision_id: 'rev_published',
           runtime_kind: 'php',
@@ -159,10 +240,10 @@ function backendResponse(action: string): { status: number; body: Record<string,
             runtime_status: 'ready',
             missing_requirements: [],
             latest_build: { id: 'build_ready', status: 'passed' },
-            latest_preview: preview
+            latest_preview: latestPreview
           },
           latest_build_id: 'build_ready',
-          latest_preview_id: PREVIEW_ID
+          latest_preview_id: latestPreview.id
         }
       };
     case 'list_changes':
@@ -170,8 +251,8 @@ function backendResponse(action: string): { status: number; body: Record<string,
         status: 200,
         body: {
           site_id: SITE_ID,
-          working_diff: [],
-          publish_requests: [{ id: 'pub_ready', status: 'published', build_id: 'build_ready' }],
+          working_diff: workingDiff,
+          publish_requests: [{ id: 'pub_ready', status: 'published', build_id: 'build_ready', diff_summary: changedTone }],
           approval_events: [{ id: 'appr_ready', status: 'approved' }],
           builds: [{ id: 'build_ready', status: 'passed' }],
           deployments: [{ id: 'deploy_ready', status: 'published', mode: 'maverick_managed_static' }]
@@ -181,7 +262,7 @@ function backendResponse(action: string): { status: number; body: Record<string,
       return {
         status: 200,
         body: {
-          preview,
+          preview: latestPreview,
           html: '<!doctype html><html><body><main data-testid="runtime-preview"><h1>Giuntitrail</h1><p>Runtime preview ready.</p></main></body></html>'
         }
       };
@@ -189,24 +270,33 @@ function backendResponse(action: string): { status: number; body: Record<string,
       return {
         status: 200,
         body: {
-          preview_id: PREVIEW_ID,
-          site_id: SITE_ID,
+          ...preview,
+          preview_id: preview.id,
           environment_id: 'env_preview',
-          route: '/',
-          page_id: 'page_home',
-          route_id: 'route_home',
-          runtime_kind: 'php',
-          runtime_status: 'ready',
-          preview_url: PREVIEW_URL,
-          build_id: 'build_ready',
-          missing_requirements: [],
-          warnings: [],
-          html: '<!doctype html><html><body><main data-testid="runtime-preview">Giuntitrail</main></body></html>'
+          route_id: requestedRoute === '/about' ? 'route_about' : 'route_home',
+          html: `<!doctype html><html><body><main data-testid="runtime-preview">${requestedRoute === '/about' ? 'About Giuntitrail' : 'Giuntitrail'}</main></body></html>`
         }
       };
     default:
       return { status: 400, body: { error: 'unsupported_action', detail: `Unsupported action ${action}` } };
   }
+}
+
+function previewForRoute(routePath: string): MockPreview {
+  const suffix = routePath === '/about' ? 'about' : 'home';
+  return {
+    id: `${PREVIEW_ID}_${suffix}`,
+    site_id: SITE_ID,
+    route: routePath,
+    page_id: routePath === '/' ? 'page_home' : '',
+    build_id: 'build_ready',
+    runtime_kind: 'php',
+    runtime_status: 'ready',
+    status: 'ready',
+    preview_url: `/apps/website-studio/preview-runtime/?preview_id=${PREVIEW_ID}_${suffix}&route=${encodeURIComponent(routePath)}`,
+    warnings: [],
+    missing_requirements: []
+  };
 }
 
 async function requiredBox(locator: ReturnType<Page['locator']>, label: string): Promise<Box> {

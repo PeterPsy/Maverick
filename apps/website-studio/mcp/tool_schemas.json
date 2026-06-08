@@ -260,11 +260,18 @@
       "input_schema": {"type": "object", "required": ["site_id"], "properties": {"site_id": {"type": "string"}}, "additionalProperties": false}
     },
     "website_list_changes": {
-      "description": "List working diff entries, changesets, publish requests, and revisions for one site.",
+      "description": "List bounded working diff entries, changesets, publish requests, revisions, builds, sync runs, and deployments for one site.",
       "input_schema": {
         "type": "object",
         "required": ["site_id"],
-        "properties": {"site_id": {"type": "string"}, "status": {"type": "string"}},
+        "properties": {
+          "site_id": {"type": "string"},
+          "status": {"type": "string"},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+          "offset": {"type": "integer", "minimum": 0},
+          "include_logs": {"type": "boolean"},
+          "diff_limit": {"type": "integer", "minimum": 1, "maximum": 250}
+        },
         "additionalProperties": false
       }
     },
@@ -278,11 +285,30 @@
       }
     },
     "website_builds_list": {
-      "description": "List recorded build validation attempts for one site.",
+      "description": "List bounded recorded build validation attempts for one site.",
       "input_schema": {
         "type": "object",
         "required": ["site_id"],
-        "properties": {"site_id": {"type": "string"}},
+        "properties": {
+          "site_id": {"type": "string"},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+          "offset": {"type": "integer", "minimum": 0},
+          "include_logs": {"type": "boolean"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "website_maintenance_prune": {
+      "description": "Prune old Website Studio build, preview, runtime session records, and unreferenced build artifacts according to a bounded retention policy.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "site_id": {"type": "string"},
+          "keep_builds": {"type": "integer", "minimum": 1, "maximum": 500},
+          "keep_previews_per_route": {"type": "integer", "minimum": 1, "maximum": 50},
+          "keep_runtime_sessions": {"type": "integer", "minimum": 1, "maximum": 500},
+          "dry_run": {"type": "boolean"}
+        },
         "additionalProperties": false
       }
     },

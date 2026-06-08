@@ -31,6 +31,7 @@ from store import (
     list_publish_targets,
     list_sites,
     load_view_state,
+    maintenance_prune,
     page_context,
     prepare_git_connection,
     preview_document,
@@ -80,6 +81,7 @@ MUTATING_ACTIONS = {
     "write_file",
     "apply_patch",
     "build_validate",
+    "maintenance_prune",
     "publish_request",
     "publish",
     "rollback",
@@ -236,7 +238,15 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
         if action == "diff":
             return 200, diff_site(data_root, payload.get("site_id"))
         if action == "list_changes":
-            return 200, list_changes(data_root, payload.get("site_id"), payload.get("status"))
+            return 200, list_changes(
+                data_root,
+                payload.get("site_id"),
+                payload.get("status"),
+                limit=payload.get("limit"),
+                offset=payload.get("offset"),
+                include_logs=payload.get("include_logs"),
+                diff_limit=payload.get("diff_limit"),
+            )
         if action == "build_preview":
             return 200, build_preview(data_root, payload.get("site_id"), payload.get("route") or "/")
         if action == "preview_document":
@@ -246,7 +256,22 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
         if action == "build_validate":
             return 201, {"build": validate_build(data_root, payload.get("site_id"))}
         if action == "builds_list":
-            return 200, {"items": list_builds(data_root, payload.get("site_id"))}
+            return 200, list_builds(
+                data_root,
+                payload.get("site_id"),
+                limit=payload.get("limit"),
+                offset=payload.get("offset"),
+                include_logs=payload.get("include_logs"),
+            )
+        if action == "maintenance_prune":
+            return 200, maintenance_prune(
+                data_root,
+                payload.get("site_id"),
+                keep_builds=payload.get("keep_builds"),
+                keep_previews_per_route=payload.get("keep_previews_per_route"),
+                keep_runtime_sessions=payload.get("keep_runtime_sessions"),
+                dry_run=payload.get("dry_run"),
+            )
         if action == "publish_request":
             return 201, {
                 "publish_request": create_publish_request(

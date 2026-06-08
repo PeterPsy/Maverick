@@ -4,6 +4,8 @@ import { iconForKind, kindLabels } from './storageMeta';
 import { Icon } from './Icon';
 import { MarkdownPreview } from './markdownPreview';
 import { loadCardPreview } from './previewCache';
+import { fitPreviewMediaToBox, type PreviewMediaSize } from './previewSizing';
+import { VideoPreview } from './videoPreview';
 import type { StorageFile, PreviewTablePayload, TablePreviewSheet } from './types';
 
 export function canTextPreview(file: StorageFile) {
@@ -116,26 +118,11 @@ function FileTypeFallback({ file, loading = false }: { file: StorageFile; loadin
   );
 }
 
-type ImageSize = {
-  width: number;
-  height: number;
-};
-
-function fitImageToBox(image: ImageSize, box: ImageSize) {
-  if (image.width <= 0 || image.height <= 0 || box.width <= 0 || box.height <= 0) return null;
-  const scale = Math.min(box.width / image.width, box.height / image.height);
-  if (!Number.isFinite(scale) || scale <= 0) return null;
-  return {
-    width: Math.max(1, Math.floor(image.width * scale)),
-    height: Math.max(1, Math.floor(image.height * scale))
-  };
-}
-
 function CardImagePreview({ src }: { src: string }) {
   const frameRef = useRef<HTMLSpanElement | null>(null);
-  const [frameSize, setFrameSize] = useState<ImageSize | null>(null);
-  const [imageSize, setImageSize] = useState<ImageSize | null>(null);
-  const fittedSize = imageSize && frameSize ? fitImageToBox(imageSize, frameSize) : null;
+  const [frameSize, setFrameSize] = useState<PreviewMediaSize | null>(null);
+  const [imageSize, setImageSize] = useState<PreviewMediaSize | null>(null);
+  const fittedSize = imageSize && frameSize ? fitPreviewMediaToBox(imageSize, frameSize) : null;
 
   useEffect(() => {
     setImageSize(null);
@@ -184,7 +171,7 @@ export function StoragePreview({ file, loading = false, previewUrl, previewText,
   if (loading) return <FileTypeFallback file={file} loading />;
   if (canTablePreview(file) && previewTable) return <SpreadsheetPreview table={previewTable} />;
   if (file.preview_kind === 'image' && previewUrl) return <img src={previewUrl} alt={file.name} />;
-  if (file.preview_kind === 'video' && previewUrl) return <video src={previewUrl} controls />;
+  if (file.preview_kind === 'video' && previewUrl) return <VideoPreview file={file} src={previewUrl} />;
   if (file.preview_kind === 'audio' && previewUrl) return <audio src={previewUrl} controls />;
   if (['pdf', 'document', 'presentation', 'spreadsheet'].includes(file.preview_kind) && previewUrl) {
     return <iframe className="document-render-frame" src={previewUrl} title={file.name} />;

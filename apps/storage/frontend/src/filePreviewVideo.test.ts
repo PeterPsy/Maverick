@@ -1,0 +1,40 @@
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vitest';
+
+const currentDir = dirname(fileURLToPath(import.meta.url));
+
+function readSource(path: string) {
+  return readFileSync(resolve(currentDir, path), 'utf8');
+}
+
+describe('storage video preview playback', () => {
+  it('autoplays ready video previews and exposes the central playback overlay', () => {
+    const source = readSource('videoPreview.tsx');
+
+    expect(source).toContain('export function VideoPreview');
+    expect(source).toContain('onLoadedData={attemptAutoPlay}');
+    expect(source).toContain('onCanPlay={attemptAutoPlay}');
+    expect(source).toContain('fitPreviewMediaToBox(videoSize, frameSize)');
+    expect(source).toContain(": { width: '100%', height: '100%' };");
+    expect(source).toContain('loop');
+    expect(source).toContain('onLoadedMetadata={(event) => updateVideoSize(event.currentTarget)}');
+    expect(source).toContain('video.play()');
+    expect(source).toContain("setVideoOverlayMode('play')");
+    expect(source).toContain("setVideoOverlayMode('pause')");
+    expect(source).toContain('storage-video-control is-');
+    expect(source).toContain('M29.0019 14.4751L4.54632');
+    expect(source).toContain('M11.1712 0H3.66753');
+  });
+
+  it('styles the video overlay with the Loopino vform play and pause treatment', () => {
+    const styles = readSource('styles/main.css');
+
+    expect(styles).toContain('.storage-video-control.is-showing-play .storage-video-control-icon-play');
+    expect(styles).toContain('.storage-video-control.is-showing-pause .storage-video-control-icon-pause');
+    expect(styles).toContain('.storage-video-preview > video {\n  width: auto;\n  height: auto;\n}');
+    expect(styles).toContain('filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.72));');
+    expect(styles).toContain('@keyframes storage-video-control-pop');
+  });
+});

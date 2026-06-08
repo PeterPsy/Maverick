@@ -94,6 +94,14 @@ button {
   touch-action: pan-y;
 }
 
+.bs-widget-root.has-thread-selection {
+  --chat-sidebar-scroll-under-bottom: 9.8rem;
+}
+
+.bs-widget-root.is-shell-mobile.has-thread-selection {
+  --chat-sidebar-scroll-under-bottom: 6.9rem;
+}
+
 .bs-sidebar__nav-button {
   width: 100%;
   min-height: 3rem;
@@ -513,6 +521,11 @@ button {
   border-color: #fff;
 }
 
+.bs-chat-list__item.is-selected:not(.is-busy) {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: var(--chat-sidebar-soft-surface-active);
+}
+
 .bs-chat-list__glow {
   position: absolute;
   inset: 0;
@@ -638,6 +651,13 @@ button {
   width: 100%;
   min-width: 0;
   overflow: hidden;
+}
+
+.bs-chat-list__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.24rem;
+  flex: none;
 }
 
 .bs-chat-list__copy {
@@ -826,6 +846,70 @@ button {
   line-height: 1.35;
 }
 
+.bs-chat-list__selection-toggle {
+  opacity: 0;
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+  border: 1px solid var(--chat-sidebar-soft-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--chat-sidebar-icon-color);
+  box-shadow: var(--chat-sidebar-inner-edge);
+  transition:
+    opacity 140ms ease,
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
+  touch-action: manipulation;
+}
+
+.bs-chat-list__selection-toggle:hover,
+.bs-chat-list__selection-toggle:focus-visible {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: var(--chat-sidebar-soft-surface-hover);
+  color: var(--maverick-text);
+  outline: none;
+}
+
+.bs-chat-list__selection-ring {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 0.88rem;
+  height: 0.88rem;
+  border: 1.35px solid currentColor;
+  border-radius: 999px;
+}
+
+.bs-chat-list__item.is-selected .bs-chat-list__selection-toggle {
+  opacity: 1;
+  pointer-events: auto;
+  border-color: rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.bs-chat-list__item.is-selected .bs-chat-list__selection-ring {
+  border-color: #fff;
+  background: #fff;
+  color: var(--maverick-text-on-accent);
+}
+
+.bs-chat-list__item.is-selected .bs-chat-list__selection-ring::after {
+  content: "";
+  width: 0.34rem;
+  height: 0.34rem;
+  border-radius: 999px;
+  background: currentColor;
+}
+
 .bs-instance-menu__trigger {
   opacity: 0;
   pointer-events: none;
@@ -851,8 +935,11 @@ button {
 }
 
 .bs-chat-list__item:hover .bs-instance-menu__trigger,
+.bs-chat-list__item:hover .bs-chat-list__selection-toggle,
 .bs-chat-list__item:focus-within .bs-instance-menu__trigger,
+.bs-chat-list__item:focus-within .bs-chat-list__selection-toggle,
 .bs-chat-list__item.is-active .bs-instance-menu__trigger,
+.bs-chat-list__item.is-active .bs-chat-list__selection-toggle,
 .bs-chat-folder:hover .bs-folder-menu__trigger,
 .bs-chat-folder:focus-within .bs-folder-menu__trigger {
   opacity: 1;
@@ -860,6 +947,7 @@ button {
 }
 
 .bs-widget-root.is-shell-mobile .bs-chat-list__item .bs-instance-menu__trigger,
+.bs-widget-root.is-shell-mobile .bs-chat-list__item .bs-chat-list__selection-toggle,
 .bs-widget-root.is-shell-mobile .bs-chat-folder .bs-folder-menu__trigger {
   opacity: 1;
   pointer-events: auto;

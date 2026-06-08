@@ -31,10 +31,12 @@ export function ProjectSection({
   onStartProjectEdit,
   onToggleSection,
   onToggleThreadEdit,
+  onToggleThreadSelection,
   onTrackThreadTouchStart,
   pendingProjectDeletion,
   projects,
   section,
+  selectedThreadIds,
 }: {
   activeThreadId: string | null;
   collapsed: boolean;
@@ -61,10 +63,12 @@ export function ProjectSection({
   onStartProjectEdit: (project: ChatProject) => void;
   onToggleSection: (sectionId: string) => void;
   onToggleThreadEdit: (thread: ChatThread) => void;
+  onToggleThreadSelection: (thread: ChatThread) => void;
   onTrackThreadTouchStart: (event: ReactPointerEvent<HTMLButtonElement>, thread: ChatThread) => void;
   pendingProjectDeletion: PendingProjectDeletion | null;
   projects: ChatProject[];
   section: FolderSection;
+  selectedThreadIds: ReadonlySet<string>;
 }) {
   const isEditingProject = editingProject?.projectId === section.projectId;
   const editingName = isEditingProject ? editingProject.name : section.title;
@@ -196,6 +200,7 @@ export function ProjectSection({
                 activeThreadId={activeThreadId}
                 expandedThreadId={expandedThreadId}
                 expandedThreadTitle={expandedThreadTitle}
+                isSelected={selectedThreadIds.has(thread.thread_id)}
                 key={thread.thread_id}
                 onCloseExpandedThread={onCloseExpandedThread}
                 onMoveThread={onMoveThread}
@@ -205,6 +210,7 @@ export function ProjectSection({
                 onSelectThreadPointer={onSelectThreadPointer}
                 onSetExpandedThreadTitle={onSetExpandedThreadTitle}
                 onToggleThreadEdit={onToggleThreadEdit}
+                onToggleThreadSelection={onToggleThreadSelection}
                 onTrackThreadTouchStart={onTrackThreadTouchStart}
                 projects={projects}
                 sectionProjectId={section.projectId}

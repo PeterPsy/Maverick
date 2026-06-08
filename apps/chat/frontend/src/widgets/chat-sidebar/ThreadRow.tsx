@@ -8,6 +8,7 @@ export function ThreadRow({
   activeThreadId,
   expandedThreadId,
   expandedThreadTitle,
+  isSelected,
   onCloseExpandedThread,
   onMoveThread,
   onRemoveThread,
@@ -16,6 +17,7 @@ export function ThreadRow({
   onSelectThreadPointer,
   onSetExpandedThreadTitle,
   onToggleThreadEdit,
+  onToggleThreadSelection,
   onTrackThreadTouchStart,
   projects,
   sectionProjectId,
@@ -25,6 +27,7 @@ export function ThreadRow({
   activeThreadId: string | null;
   expandedThreadId: string | null;
   expandedThreadTitle: string;
+  isSelected: boolean;
   onCloseExpandedThread: () => void;
   onMoveThread: (thread: ChatThread, projectId: string | null) => Promise<void>;
   onRemoveThread: (threadId: string) => Promise<void>;
@@ -33,6 +36,7 @@ export function ThreadRow({
   onSelectThreadPointer: (event: ReactPointerEvent<HTMLButtonElement>, thread: ChatThread) => void;
   onSetExpandedThreadTitle: (title: string) => void;
   onToggleThreadEdit: (thread: ChatThread) => void;
+  onToggleThreadSelection: (thread: ChatThread) => void;
   onTrackThreadTouchStart: (event: ReactPointerEvent<HTMLButtonElement>, thread: ChatThread) => void;
   projects: ChatProject[];
   sectionProjectId: string | null;
@@ -47,7 +51,7 @@ export function ThreadRow({
     <div
       className={`bs-chat-list__item ${activeThreadId === thread.thread_id ? "is-active" : ""} ${isBusy ? "is-busy" : ""} ${
         isUnread ? "is-unread" : ""
-      } ${isExpanded ? "is-expanded" : ""}`}
+      } ${isExpanded ? "is-expanded" : ""} ${isSelected ? "is-selected" : ""}`}
     >
       {isBusy ? <BusyChatGlow /> : null}
       <div className="bs-chat-list__select">
@@ -85,30 +89,42 @@ export function ThreadRow({
           </button>
         )}
       </div>
-      {sectionProjectId !== thread.project_id ? (
+      <div className="bs-chat-list__actions">
         <button
-          aria-label={`Move ${thread.title} to ${sectionTitle}`}
-          className="bs-instance-menu__trigger"
-          onClick={() => void onMoveThread(thread, sectionProjectId)}
+          aria-label={`${isSelected ? "Deselect" : "Select"} ${thread.title}`}
+          aria-pressed={isSelected}
+          className="bs-chat-list__selection-toggle"
+          onClick={() => onToggleThreadSelection(thread)}
+          title={isSelected ? "Deselect chat" : "Select chat"}
           type="button"
         >
-          <span aria-hidden="true" className="material-symbols-rounded">
-            drive_file_move
-          </span>
+          <span aria-hidden="true" className="bs-chat-list__selection-ring" />
         </button>
-      ) : (
-        <button
-          aria-expanded={isExpanded}
-          aria-label={`Edit ${thread.title}`}
-          className="bs-instance-menu__trigger"
-          onClick={() => onToggleThreadEdit(thread)}
-          type="button"
-        >
-          <span aria-hidden="true" className="material-symbols-rounded">
-            more_horiz
-          </span>
-        </button>
-      )}
+        {sectionProjectId !== thread.project_id ? (
+          <button
+            aria-label={`Move ${thread.title} to ${sectionTitle}`}
+            className="bs-instance-menu__trigger"
+            onClick={() => void onMoveThread(thread, sectionProjectId)}
+            type="button"
+          >
+            <span aria-hidden="true" className="material-symbols-rounded">
+              drive_file_move
+            </span>
+          </button>
+        ) : (
+          <button
+            aria-expanded={isExpanded}
+            aria-label={`Edit ${thread.title}`}
+            className="bs-instance-menu__trigger"
+            onClick={() => onToggleThreadEdit(thread)}
+            type="button"
+          >
+            <span aria-hidden="true" className="material-symbols-rounded">
+              more_horiz
+            </span>
+          </button>
+        )}
+      </div>
       {isExpanded ? (
         <ThreadInlineActions
           onClose={onCloseExpandedThread}

@@ -4,10 +4,13 @@
   --maverick-text-muted: rgba(236, 236, 236, 0.64);
   --maverick-accent: #ffffff;
   --maverick-text-on-accent: #0a0a0b;
+  --maverick-danger: #ffb3bf;
   --chat-sidebar-cell-radius: 22px;
   --chat-sidebar-composer-border: rgba(255, 255, 255, 0.05);
   --chat-sidebar-composer-surface: rgba(12, 12, 14, 0.58);
   --chat-sidebar-soft-surface-hover: rgba(255, 255, 255, 0.105);
+  --chat-sidebar-danger-border: rgba(255, 179, 191, 0.28);
+  --chat-sidebar-danger-surface: rgba(255, 179, 191, 0.12);
   --chat-sidebar-inner-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.14);
 }
 
@@ -40,10 +43,11 @@ button {
 
 .bs-chat-sidebar-footer-widget {
   display: grid;
+  align-content: end;
+  gap: 0.4rem;
   width: 100%;
   height: 100%;
   min-height: 0;
-  place-items: stretch;
 }
 
 .bs-chat-sidebar-footer__new-chat {
@@ -74,6 +78,12 @@ button {
   touch-action: manipulation;
 }
 
+.bs-chat-sidebar-footer__new-chat.is-delete {
+  border-color: var(--chat-sidebar-danger-border);
+  background: var(--chat-sidebar-danger-surface);
+  color: var(--maverick-danger);
+}
+
 .bs-chat-sidebar-footer__new-chat:hover:not(:disabled),
 .bs-chat-sidebar-footer__new-chat:focus-visible {
   border-color: var(--chat-sidebar-composer-border);
@@ -89,6 +99,13 @@ button {
 .bs-chat-sidebar-footer__new-chat:disabled {
   cursor: not-allowed;
   opacity: 0.45;
+}
+
+.bs-chat-sidebar-footer__new-chat.is-delete:hover:not(:disabled),
+.bs-chat-sidebar-footer__new-chat.is-delete:focus-visible {
+  border-color: rgba(255, 179, 191, 0.36);
+  background: rgba(255, 179, 191, 0.18);
+  color: #ffd7dd;
 }
 
 .bs-chat-sidebar-footer__plus {
@@ -114,4 +131,68 @@ button {
 
 .bs-chat-sidebar-footer__plus::after {
   transform: translate(-50%, -50%) rotate(90deg);
+}
+
+.bs-chat-sidebar-footer__trash {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+}
+
+.bs-chat-sidebar-footer__confirm-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.38rem;
+  min-height: 2.1rem;
+}
+
+.bs-chat-sidebar-footer__confirm-button {
+  min-width: 0;
+  min-height: 2.1rem;
+  padding: 0 0.58rem;
+  border: 1px solid var(--chat-sidebar-composer-border);
+  border-radius: 18px;
+  background: var(--chat-sidebar-composer-surface);
+  color: var(--maverick-text);
+  box-shadow: var(--chat-sidebar-inner-edge);
+  font-size: 0.72rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease,
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.bs-chat-sidebar-footer__confirm-button:hover:not(:disabled),
+.bs-chat-sidebar-footer__confirm-button:focus-visible {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: var(--chat-sidebar-soft-surface-hover);
+  outline: none;
+}
+
+.bs-chat-sidebar-footer__confirm-button.is-danger {
+  border-color: var(--chat-sidebar-danger-border);
+  background: var(--chat-sidebar-danger-surface);
+  color: var(--maverick-danger);
+}
+
+.bs-chat-sidebar-footer__confirm-button.is-danger:hover:not(:disabled),
+.bs-chat-sidebar-footer__confirm-button.is-danger:focus-visible {
+  border-color: rgba(255, 179, 191, 0.36);
+  background: rgba(255, 179, 191, 0.18);
+  color: #ffd7dd;
+}
+
+.bs-chat-sidebar-footer__confirm-button:active:not(:disabled) {
+  transform: scale(0.99);
+}
+
+.bs-chat-sidebar-footer__confirm-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }

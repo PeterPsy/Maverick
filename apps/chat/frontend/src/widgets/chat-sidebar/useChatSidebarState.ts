@@ -15,10 +15,20 @@ import {
   notifyShell,
   updateFromSidebarPayload,
 } from "./chatSidebarStateUtils";
+import {
+  CHAT_SIDEBAR_SELECTION_CONFIRM_DELETE,
+  CHAT_SIDEBAR_SELECTION_QUERY,
+  CHAT_SIDEBAR_SELECTION_STATE,
+  createChatSidebarSelectionChannel,
+  isMessageForChatSidebar,
+  type ChatSidebarSelectionChannel,
+} from "../chatSidebarSelectionChannel";
 export type { PendingProjectDeletion } from "./chatSidebarStateUtils";
 import { buildSections } from "./sections";
 import { useSidebarProjectActions } from "./useSidebarProjectActions";
 import { useThreadTouchSelection } from "./useThreadTouchSelection";
+
+const CHAT_APP_ID = "chat";
 
 export function useChatSidebarState() {
   const [projects, setProjects] = useState<ChatProject[]>([]);
@@ -26,14 +36,22 @@ export function useChatSidebarState() {
   const [workspaceId, setWorkspaceId] = useState("");
   const [hasLoadedProjectCatalog, setHasLoadedProjectCatalog] = useState(false);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [selectedThreadIds, setSelectedThreadIds] = useState<Set<string>>(() => new Set());
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
   const [expandedThreadId, setExpandedThreadId] = useState<string | null>(null);
   const [expandedThreadTitle, setExpandedThreadTitle] = useState("");
   const [isShellMobileLayout, setIsShellMobileLayout] = useState(isMobileLayoutViewport);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isPending, setIsPending] = useState(false);
+  const [isBulkDeletePending, setIsBulkDeletePending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const readReceiptInFlightRef = useRef<Set<string>>(new Set());
+  const selectionChannelRef = useRef<ChatSidebarSelectionChannel | null>(null);
+  const selectedThreadIdsRef = useRef(selectedThreadIds);
+  const threadsRef = useRef(threads);
+  const workspaceIdRef = useRef(workspaceId);
+  const isBulkDeletePendingRef = useRef(isBulkDeletePending);
+  const confirmSelectedThreadDeletionRef = useRef<() => Promise<void>>(async () => {});
   const sections = useMemo(() => buildSections(projects, threads), [projects, threads]);
   function applyProjects(nextProjects: ChatProject[]) {
     setProjects(nextProjects);
@@ -87,7 +105,55 @@ export function useChatSidebarState() {
   }, [hasLoadedProjectCatalog, projects, workspaceId]);
 
   useEffect(() => {
+    selectedThreadIdsRef.current = selectedThreadIds;
+  }, [selectedThreadIds]);
+
+  useEffect(() => {
+    threadsRef.current = threads;
+    setSelectedThreadIds((current) => {
+      const availableThreadIds = new Set(threads.map((thread) => thread.thread_id));
+      const next = new Set(Array.from(current).filter((threadId) => availableThreadIds.has(threadId)));
+      return next.size === current.size ? current : next;
+    });
+  }, [threads]);
+
+  useEffect(() => {
+    workspaceIdRef.current = workspaceId;
+  }, [workspaceId]);
+
+  useEffect(() => {
+    isBulkDeletePendingRef.current = isBulkDeletePending;
+  }, [isBulkDeletePending]);
+
+  useEffect(() => {
+    publishSelectionState();
+  }, [isBulkDeletePending, selectedThreadIds, threads, workspaceId]);
+
+  useEffect(() => {
     void refreshProjects();
+  }, []);
+
+  useEffect(() => {
+    const channel = createChatSidebarSelectionChannel((message) => {
+      if (!isMessageForChatSidebar(message, CHAT_APP_ID, workspaceIdRef.current)) {
+        return;
+      }
+      if (message.type === CHAT_SIDEBAR_SELECTION_QUERY) {
+        publishSelectionState();
+        return;
+      }
+      if (message.type === CHAT_SIDEBAR_SELECTION_CONFIRM_DELETE) {
+        void confirmSelectedThreadDeletionRef.current();
+      }
+    });
+    selectionChannelRef.current = channel;
+    publishSelectionState();
+    return () => {
+      channel.close();
+      if (selectionChannelRef.current === channel) {
+        selectionChannelRef.current = null;
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -159,6 +225,85 @@ export function useChatSidebarState() {
     notifyShell(thread);
   }
 
+  function selectedThreadIdsInCurrentCatalog(): string[] {
+    const availableThreadIds = new Set(threadsRef.current.map((thread) => thread.thread_id));
+    return Array.from(selectedThreadIdsRef.current).filter((threadId) => availableThreadIds.has(threadId));
+  }
+
+  function publishSelectionState() {
+    const selectedIds = selectedThreadIdsInCurrentCatalog();
+    selectionChannelRef.current?.post({
+      app_id: CHAT_APP_ID,
+      is_deleting: isBulkDeletePendingRef.current,
+      selected_count: selectedIds.length,
+      selected_thread_ids: selectedIds,
+      type: CHAT_SIDEBAR_SELECTION_STATE,
+      workspace_id: workspaceIdRef.current || "",
+    });
+  }
+
+  function toggleThreadSelection(thread: ChatThread) {
+    projectActions.cancelProjectDeletion();
+    setSelectedThreadIds((current) => {
+      const next = new Set(current);
+      if (next.has(thread.thread_id)) {
+        next.delete(thread.thread_id);
+      } else {
+        next.add(thread.thread_id);
+      }
+      return next;
+    });
+  }
+
+  function clearDeletedThreadState(deletedThreadIds: Set<string>) {
+    if (!deletedThreadIds.size) {
+      return;
+    }
+    setSelectedThreadIds((current) => {
+      const next = new Set(current);
+      deletedThreadIds.forEach((threadId) => next.delete(threadId));
+      return next.size === current.size ? current : next;
+    });
+    if (activeThreadId && deletedThreadIds.has(activeThreadId)) {
+      setActiveThreadId(null);
+    }
+    if (expandedThreadId && deletedThreadIds.has(expandedThreadId)) {
+      setExpandedThreadId(null);
+      setExpandedThreadTitle("");
+    }
+  }
+
+  async function confirmSelectedThreadDeletion() {
+    const threadIds = selectedThreadIdsInCurrentCatalog();
+    if (!threadIds.length || isBulkDeletePendingRef.current) {
+      publishSelectionState();
+      return;
+    }
+    const deletedThreadIds = new Set<string>();
+    setIsBulkDeletePending(true);
+    setIsPending(true);
+    setError(null);
+    projectActions.cancelProjectDeletion();
+    try {
+      for (const threadId of threadIds) {
+        const payload = await deleteThread(threadId);
+        deletedThreadIds.add(threadId);
+        setThreads(payload.threads);
+        updateFromSidebarPayload(payload, applyProjects);
+      }
+      projectActions.clearProjectEditing();
+      setError(null);
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Unable to delete selected chats.");
+    } finally {
+      clearDeletedThreadState(deletedThreadIds);
+      setIsBulkDeletePending(false);
+      setIsPending(false);
+    }
+  }
+
+  confirmSelectedThreadDeletionRef.current = confirmSelectedThreadDeletion;
+
   async function markThreadReadIfNeeded(thread: ChatThread) {
     if (!thread.has_unread_completed_response || readReceiptInFlightRef.current.has(thread.thread_id)) {
       return;
@@ -194,14 +339,9 @@ export function useChatSidebarState() {
 
   async function removeThread(threadId: string) {
     const payload = await deleteThread(threadId);
+    setThreads(payload.threads);
     updateFromSidebarPayload(payload, applyProjects);
-    if (activeThreadId === threadId) {
-      setActiveThreadId(null);
-    }
-    if (expandedThreadId === threadId) {
-      setExpandedThreadId(null);
-      setExpandedThreadTitle("");
-    }
+    clearDeletedThreadState(new Set([threadId]));
     projectActions.clearProjectEditing();
   }
 
@@ -240,6 +380,7 @@ export function useChatSidebarState() {
     error,
     expandedThreadId,
     expandedThreadTitle,
+    hasThreadSelection: selectedThreadIds.size > 0,
     isInitialLoading,
     isPending,
     isShellMobileLayout,
@@ -253,11 +394,13 @@ export function useChatSidebarState() {
     sections,
     selectThreadFromClick,
     selectThreadFromPointer,
+    selectedThreadIds,
     setEditingProjectName: projectActions.setEditingProjectName,
     setExpandedThreadTitle,
     startProjectEdit: projectActions.startProjectEdit,
     toggleSection,
     toggleThreadEdit,
+    toggleThreadSelection,
     trackThreadTouchStart,
   };
 }

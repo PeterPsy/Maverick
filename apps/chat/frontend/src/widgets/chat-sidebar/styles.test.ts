@@ -37,3 +37,16 @@ describe("chat sidebar project delete confirmation", () => {
     expect(styles).toContain(".bs-chat-project-delete-confirm__button.is-danger");
   });
 });
+
+describe("chat sidebar multi-select affordance", () => {
+  it("keeps the circular selection control hidden until row interaction or selection", () => {
+    const styles = readStyle("styles.css");
+
+    expect(styles).toContain(".bs-chat-list__selection-toggle");
+    expect(styles).toContain(".bs-chat-list__selection-ring");
+    expect(styles).toContain(".bs-chat-list__item.is-selected .bs-chat-list__selection-toggle");
+    expect(styles).toContain(".bs-chat-list__item:hover .bs-chat-list__selection-toggle");
+    expect(styles).toContain(".bs-widget-root.has-thread-selection");
+    expect(styles).toContain("--chat-sidebar-scroll-under-bottom: 9.8rem;");
+  });
+});

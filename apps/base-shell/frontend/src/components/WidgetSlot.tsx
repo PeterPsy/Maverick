@@ -18,10 +18,14 @@ const UNAVAILABLE_PRIMARY_ACTION_STATE: WidgetPrimaryActionState = {
   preferredSurface: "app",
 };
 
+const COMPACT_SLOT_DEFAULT_HEIGHT = "2.65rem";
+const MAX_COMPACT_SLOT_HEIGHT_PX = 220;
+const MAX_COMPACT_SLOT_HEIGHT_REM = 12;
 const COLLAPSED_OVERLAY_SIZE = "3rem";
 const MAX_OVERLAY_HEIGHT_PX = 2160;
 const MAX_OVERLAY_WIDTH_PX = 4096;
 const PIXEL_SIZE_PATTERN = /^(\d+(?:\.\d+)?)px$/;
+const COMPACT_SIZE_PATTERN = /^(\d+(?:\.\d+)?)(px|rem)$/;
 
 type CaptureRect = {
   height: number;
@@ -102,6 +106,7 @@ export function WidgetSlot({
   const [captureStart, setCaptureStart] = useState<{ x: number; y: number } | null>(null);
   const [isCaptureActive, setIsCaptureActive] = useState(false);
   const [isCaptureBusy, setIsCaptureBusy] = useState(false);
+  const [compactSlotHeight, setCompactSlotHeight] = useState(COMPACT_SLOT_DEFAULT_HEIGHT);
   const [frameRevision, setFrameRevision] = useState(0);
   const captureStreamRef = useRef<MediaStream | null>(null);
   const captureNavigationScopeRef = useRef("");
@@ -119,6 +124,7 @@ export function WidgetSlot({
     setIsResolvingWidget(true);
     setLoadedFrameKey("");
     setOverlaySize(collapsedOverlaySize());
+    setCompactSlotHeight(COMPACT_SLOT_DEFAULT_HEIGHT);
     if (supportsPrimaryActionSlot) {
       onPrimaryActionStateChange?.(UNAVAILABLE_PRIMARY_ACTION_STATE);
     }
@@ -298,12 +304,20 @@ export function WidgetSlot({
       }
       if (
         payload.type === "maverick.widget.resize" &&
-        size === "overlay" &&
         isMountedWidgetFrameMessage(event, payload, widget, widgetFrameRef.current)
       ) {
-        const nextOverlaySize = overlayWidgetSizeFromMessage(payload);
-        if (nextOverlaySize) {
-          setOverlaySize(nextOverlaySize);
+        if (size === "overlay") {
+          const nextOverlaySize = overlayWidgetSizeFromMessage(payload);
+          if (nextOverlaySize) {
+            setOverlaySize(nextOverlaySize);
+          }
+          return;
+        }
+        if (size === "compact") {
+          const nextCompactHeight = compactWidgetHeightFromMessage(payload);
+          if (nextCompactHeight) {
+            setCompactSlotHeight(nextCompactHeight);
+          }
         }
       }
       if (payload.type === "maverick.chat.active-thread-changed" && widget && payload.owner_app_id === widget.owner_app_id) {
@@ -511,7 +525,7 @@ export function WidgetSlot({
     size === "overlay"
       ? overlaySize
       : size === "compact"
-        ? { height: "2.65rem", maxHeight: "2.65rem", minHeight: "2.65rem" }
+        ? { height: compactSlotHeight, maxHeight: compactSlotHeight, minHeight: compactSlotHeight }
         : undefined;
   const supportsShellPending = contentKind === "shell.sidebar.primary";
 
@@ -625,6 +639,13 @@ function overlayWidgetSizeFromMessage(payload: WidgetMessagePayload): { height: 
   return { height, width };
 }
 
+function compactWidgetHeightFromMessage(payload: WidgetMessagePayload): string | null {
+  if (payload.height === COMPACT_SLOT_DEFAULT_HEIGHT) {
+    return COMPACT_SLOT_DEFAULT_HEIGHT;
+  }
+  return boundedCompactSize(payload.height);
+}
+
 function externalHttpUrlFromMessage(value: unknown): string | null {
   if (typeof value !== "string" || !value.trim()) {
     return null;
@@ -667,6 +688,25 @@ function boundedPixelSize(value: unknown, maxPx: number): string | null {
     return null;
   }
   return `${Math.ceil(parsed)}px`;
+}
+
+function boundedCompactSize(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const match = value.trim().match(COMPACT_SIZE_PATTERN);
+  if (!match) {
+    return null;
+  }
+  const parsed = Number(match[1]);
+  const unit = match[2];
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+  if (unit === "px") {
+    return parsed > MAX_COMPACT_SLOT_HEIGHT_PX ? null : `${Math.ceil(parsed)}px`;
+  }
+  return parsed > MAX_COMPACT_SLOT_HEIGHT_REM ? null : `${parsed}rem`;
 }
 
 export function selectPreferredWidget(

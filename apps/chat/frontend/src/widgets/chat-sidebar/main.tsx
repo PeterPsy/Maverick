@@ -8,7 +8,7 @@ function ChatSidebarWidget() {
   const sidebar = useChatSidebarState();
 
   return (
-    <main className={`bs-widget-root ${sidebar.isShellMobileLayout ? "is-shell-mobile" : ""}`}>
+    <main className={`bs-widget-root ${sidebar.isShellMobileLayout ? "is-shell-mobile" : ""} ${sidebar.hasThreadSelection ? "has-thread-selection" : ""}`}>
       {sidebar.error ? <p className="bs-chat-folder__empty">{sidebar.error}</p> : null}
 
       <div className="bs-chat-list">
@@ -43,10 +43,12 @@ function ChatSidebarWidget() {
               onStartProjectEdit={sidebar.startProjectEdit}
               onToggleSection={sidebar.toggleSection}
               onToggleThreadEdit={sidebar.toggleThreadEdit}
+              onToggleThreadSelection={sidebar.toggleThreadSelection}
               onTrackThreadTouchStart={sidebar.trackThreadTouchStart}
               pendingProjectDeletion={sidebar.pendingProjectDeletion}
               projects={sidebar.projects}
               section={section}
+              selectedThreadIds={sidebar.selectedThreadIds}
             />
           ))
         )}

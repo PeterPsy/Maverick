@@ -38,6 +38,7 @@ logger = logging.getLogger(__name__)
 
 
 _ROOT_SHELL_STATIC_ASSETS = {
+    "/favicon.ico": "favicon.ico",
     "/manifest.webmanifest": "manifest.webmanifest",
     "/sw.js": "sw.js",
 }
@@ -119,9 +120,6 @@ class PlatformHost:
 
             if path == "/health":
                 return json_response(start_response, {"status": "ok", "service": "maverick-core"})
-            if path == "/favicon.ico":
-                start_response("204 No Content", [("Content-Length", "0")])
-                return [b""]
             if path == "/api/status":
                 if context is None:
                     return json_response(start_response, {"error": "authentication_required"}, status="401 Unauthorized")

@@ -389,7 +389,7 @@ class BaseShellAppMountingTests(unittest.TestCase):
         self.assertIn("selectThread(windowId: string, threadId: string)", hook_source)
         self.assertIn('debugThreadSync("create-draft-chat"', hook_source)
         self.assertIn('debugThreadSync("select-thread"', hook_source)
-        self.assertIn("if (!navigationScope) {", widget_state_source)
+        self.assertIn("if (!selectedNavigationScope) {", widget_state_source)
         self.assertIn("threadIds.has(windowItem.threadId) ? windowItem : { ...windowItem, isDraft: true }", widget_state_source)
         self.assertIn("createWindow(\"\", true, projectId)", hook_source)
         self.assertIn('aria-label="Choose chat"', thread_menu_source)

@@ -521,16 +521,22 @@ class BuiltinAppsTestCase(unittest.TestCase):
         state = bootstrap_platform_state(start_path=repo_root)
         app = PlatformHost(state, start_path=repo_root)
 
+        status_favicon, favicon_body, favicon_headers = self.invoke(app, path="/favicon.ico")
         status_manifest, manifest_body, manifest_headers = self.invoke(app, path="/manifest.webmanifest")
         status_worker, worker_body, worker_headers = self.invoke(app, path="/sw.js")
 
+        self.assertEqual(status_favicon, 200)
         self.assertEqual(status_manifest, 200)
         self.assertEqual(status_worker, 200)
+        self.assertEqual(favicon_headers["Cache-Control"], "public, max-age=31536000, immutable")
         self.assertEqual(manifest_headers["Cache-Control"], "public, max-age=31536000, immutable")
         self.assertEqual(worker_headers["Cache-Control"], "public, max-age=31536000, immutable")
+        self.assertEqual(favicon_headers["Access-Control-Allow-Origin"], "*")
         self.assertEqual(manifest_headers["Access-Control-Allow-Origin"], "*")
         self.assertEqual(worker_headers["Access-Control-Allow-Origin"], "*")
+        self.assertGreater(len(favicon_body), 0)
         self.assertIn(b'"name"', manifest_body)
+        self.assertIn(b"pwa-maskable-logo.png", manifest_body)
         self.assertIn(b"maverick-base-shell", worker_body)
 
     def test_app_backend_calls_do_not_create_runtime_turns(self) -> None:

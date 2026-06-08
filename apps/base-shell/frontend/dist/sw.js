@@ -2,10 +2,11 @@ const CACHE_NAME = "maverick-base-shell-v3";
 const SHELL_ASSET_PREFIX = "/apps/base-shell/";
 const SHELL_BUNDLE_PREFIX = `${SHELL_ASSET_PREFIX}assets/`;
 const ROOT_SHELL_ASSETS = [
+  "/favicon.ico",
   "/manifest.webmanifest",
-  "/apps/base-shell/app-icon-lightcolor-192.png",
-  "/apps/base-shell/app-icon-lightcolor.png",
-  "/apps/base-shell/pwa-maskable-light.png",
+  "/apps/base-shell/pwa-logo-192.png",
+  "/apps/base-shell/pwa-logo.png",
+  "/apps/base-shell/pwa-maskable-logo.png",
   "/apps/base-shell/pwa-apple-touch-icon.png",
   "/apps/base-shell/maverick-mark.svg",
   "/apps/base-shell/maverick-logotype.svg",
@@ -36,7 +37,12 @@ function isSafeShellAsset(request, url) {
   if (url.pathname === "/sw.js") {
     return false;
   }
-  return url.pathname === "/manifest.webmanifest" || url.pathname.startsWith(SHELL_BUNDLE_PREFIX) || SAFE_SHELL_FILES.has(url.pathname);
+  return (
+    url.pathname === "/favicon.ico" ||
+    url.pathname === "/manifest.webmanifest" ||
+    url.pathname.startsWith(SHELL_BUNDLE_PREFIX) ||
+    SAFE_SHELL_FILES.has(url.pathname)
+  );
 }
 
 async function networkFirst(request) {

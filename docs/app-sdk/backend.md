@@ -21,6 +21,22 @@ Keep entrypoints thin:
 
 Keep persistence in `store.py` or `database.py`.
 
+## Binary Streaming Responses
+
+Most backend entrypoints should keep returning one JSON object on stdout. Mounted `GET` or `HEAD` media routes may opt in to binary streaming when the core payload includes:
+
+```json
+{"stream_response_protocol": "maverick.backend.stream.v1"}
+```
+
+In that mode the entrypoint emits one UTF-8 JSON header line followed by optional binary stdout bytes:
+
+```json
+{"status_code": 200, "stream_response": {"content_type": "video/mp4", "content_length": 123}}
+```
+
+After the newline, remaining stdout is streamed to the HTTP client. Use this only for backend-approved response bytes; keep secrets in entrypoint input and never put local host paths or bearer tokens in the stream header.
+
 ## Surface Mapping
 
 Backend, CLI, and MCP should share the same service logic whenever possible.

@@ -7,7 +7,7 @@ from threading import Thread
 import time
 import unittest
 
-from core.shared.entrypoints import EntrypointShutdownController, redact_entrypoint_stderr, run_json_entrypoint
+from core.shared.entrypoints import EntrypointShutdownController, redact_entrypoint_stderr, run_json_entrypoint, run_streaming_json_entrypoint
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -70,6 +70,40 @@ class SharedEntrypointTests(unittest.TestCase):
             error = failures.get_nowait()
             self.assertIsInstance(error, RuntimeError)
             self.assertIn("host shutdown", str(error))
+
+    def test_streaming_json_entrypoint_yields_header_then_binary_stdout(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            entrypoint = Path(temp_dir) / "stream_entrypoint.py"
+            entrypoint.write_text(
+                "\n".join(
+                    [
+                        "from __future__ import annotations",
+                        "import json",
+                        "import sys",
+                        "",
+                        "json.loads(sys.stdin.read() or '{}')",
+                        "sys.stdout.buffer.write(json.dumps({'status_code': 200, 'stream_response': {'content_type': 'video/mp4', 'content_length': 6}}).encode('utf-8') + b'\\n')",
+                        "sys.stdout.buffer.flush()",
+                        "sys.stdout.buffer.write(b'abc')",
+                        "sys.stdout.buffer.flush()",
+                        "sys.stdout.buffer.write(b'def')",
+                        "sys.stdout.buffer.flush()",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            result = run_streaming_json_entrypoint(
+                entrypoint,
+                payload={"action": "stream"},
+                cwd=REPO_ROOT,
+                timeout_seconds=5,
+            )
+            body = b"".join(result.iter_stream(chunk_bytes=2))
+
+        self.assertEqual(result.result["status_code"], 200)
+        self.assertEqual(result.result["stream_response"]["content_length"], 6)
+        self.assertEqual(body, b"abcdef")
 
 
 if __name__ == "__main__":

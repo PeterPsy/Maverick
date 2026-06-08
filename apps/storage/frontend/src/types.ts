@@ -24,6 +24,7 @@ export type StorageFile = {
   display_path?: string;
   etag_or_version?: string;
   source_version?: string;
+  localization_id?: string;
   web_url?: string;
   remote_locator?: Record<string, unknown>;
   capabilities?: StorageProviderCapabilities;

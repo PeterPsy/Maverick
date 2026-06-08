@@ -261,6 +261,8 @@ export function driveMediaStreamUrl(file: StorageFile, options: { appId?: string
   params.set('drive_file_id', locator.drive_file_id);
   const sourceVersion = String(file.etag_or_version || file.source_version || file.modified_at || '').trim();
   if (sourceVersion) params.set('source_version', sourceVersion);
+  const localizationId = String(file.localization_id || '').trim();
+  if (localizationId) params.set('localization_id', localizationId);
   if (options.download) params.set('download', '1');
   params.set('_app_secret_request', JSON.stringify(driveConnectionSecretRequest(locator.connection_id)));
   return `/api/apps/${encodeURIComponent(options.appId || currentStorageAppId())}/media?${params.toString()}`;

@@ -11,7 +11,7 @@ import os
 import re
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, BinaryIO
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
@@ -91,6 +91,30 @@ class DriveProviderError(Exception):
 
     status_code: int
     detail: str
+
+
+@dataclass
+class PreparedDriveBinaryStream:
+    """One Drive media response opened before HTTP streaming headers are emitted."""
+
+    file_record: dict[str, Any]
+    target_path: Path
+    declared_size: int
+    max_bytes: int
+    operation: str
+    provider_cache_hit: bool = False
+    payload: bytes | None = None
+    response: Any | None = None
+    handle: BinaryIO | None = None
+    first_chunk: bytes = b""
+
+    def close(self) -> None:
+        if self.response is not None:
+            self.response.close()
+            self.response = None
+        if self.handle is not None:
+            self.handle.close()
+            self.handle = None
 
 
 class GoogleDriveProvider:
@@ -425,12 +449,13 @@ class GoogleDriveProvider:
         cache_key = self._cache_key(file_record=file_record, content_mime_type=file_record["content_type"], purpose="download", max_bytes=max_bytes)
         cached = self._read_cache(cache_key)
         if cached is not None:
+            _validate_declared_stream_size(actual_size=len(cached), declared_size=declared_size, operation=operation)
             sha256 = hashlib.sha256(cached).hexdigest()
             _write_payload_to_path(target_path, cached)
             progress_callback and progress_callback(len(cached), len(cached))
             return file_record, len(cached), sha256, True
         if self.transport is not default_transport:
-            payload, cache_hit = self._download_binary(file_record=file_record, max_bytes=max_bytes, operation=operation)
+            payload, cache_hit = self._download_binary(file_record=file_record, max_bytes=max_bytes, operation=operation, validate_declared_size=True)
             sha256 = hashlib.sha256(payload).hexdigest()
             _write_payload_to_path(target_path, payload)
             progress_callback and progress_callback(len(payload), len(payload))
@@ -446,6 +471,110 @@ class GoogleDriveProvider:
             progress_callback=progress_callback,
         )
         return file_record, size_bytes, sha256, False
+
+    def stream_binary_to_path_and_handle(
+        self,
+        *,
+        drive_file_id: str,
+        max_bytes: int,
+        operation: str,
+        target_path: Path,
+        output_handle: BinaryIO,
+        file_record: dict[str, Any] | None = None,
+        progress_callback: Callable[[int, int], None] | None = None,
+    ) -> tuple[dict[str, Any], int, str, bool]:
+        """Stream one binary Drive file to an output handle while writing the local cache."""
+        prepared = self.prepare_binary_stream_to_path(
+            drive_file_id=drive_file_id,
+            max_bytes=max_bytes,
+            operation=operation,
+            target_path=target_path,
+            file_record=file_record,
+        )
+        return self.finish_binary_stream_to_path_and_handle(
+            prepared,
+            output_handle=output_handle,
+            progress_callback=progress_callback,
+        )
+
+    def prepare_binary_stream_to_path(
+        self,
+        *,
+        drive_file_id: str,
+        max_bytes: int,
+        operation: str,
+        target_path: Path,
+        file_record: dict[str, Any] | None = None,
+    ) -> PreparedDriveBinaryStream:
+        """Open and validate one Drive media response before stream headers are emitted."""
+        file_record = self._active_metadata(drive_file_id=drive_file_id, operation=operation, file_record=file_record)
+        if _is_google_native(file_record["content_type"]):
+            raise StorageValidationError(
+                "Google-native Docs, Sheets, and Slides must be exported through drive_export; they cannot be streamed as original binary media.",
+                operation=operation,
+            )
+        self._require_download_capability(file_record, operation=operation)
+        declared_size = _int_value(file_record.get("size_bytes"))
+        if declared_size and declared_size > max_bytes:
+            raise StorageValidationError(f"Drive file is too large to read through Storage with max_bytes={max_bytes}.", operation=operation)
+        cache_key = self._cache_key(file_record=file_record, content_mime_type=file_record["content_type"], purpose="download", max_bytes=max_bytes)
+        cached = self._read_cache(cache_key)
+        if cached is not None:
+            _validate_declared_stream_size(actual_size=len(cached), declared_size=declared_size, operation=operation)
+            return PreparedDriveBinaryStream(
+                file_record=file_record,
+                target_path=target_path,
+                declared_size=declared_size,
+                max_bytes=max_bytes,
+                operation=operation,
+                provider_cache_hit=True,
+                payload=cached,
+            )
+        if self.transport is not default_transport:
+            payload, cache_hit = self._download_binary(file_record=file_record, max_bytes=max_bytes, operation=operation, validate_declared_size=True)
+            return PreparedDriveBinaryStream(
+                file_record=file_record,
+                target_path=target_path,
+                declared_size=declared_size,
+                max_bytes=max_bytes,
+                operation=operation,
+                provider_cache_hit=cache_hit,
+                payload=payload,
+            )
+        return self._prepare_drive_bytes_to_path(
+            "GET",
+            f"/files/{quote(file_record['drive_file_id'], safe='')}",
+            params={"alt": "media", "supportsAllDrives": "true"},
+            max_bytes=max_bytes,
+            operation=operation,
+            target_path=target_path,
+            declared_size=declared_size,
+            file_record=file_record,
+        )
+
+    def finish_binary_stream_to_path_and_handle(
+        self,
+        prepared: PreparedDriveBinaryStream,
+        *,
+        output_handle: BinaryIO,
+        progress_callback: Callable[[int, int], None] | None = None,
+    ) -> tuple[dict[str, Any], int, str, bool]:
+        """Finish a prepared Drive media stream into the output handle and cache path."""
+        if prepared.payload is not None:
+            sha256 = hashlib.sha256(prepared.payload).hexdigest()
+            _write_payload_to_path_and_handle(
+                prepared.target_path,
+                prepared.payload,
+                output_handle,
+                progress_callback=progress_callback,
+            )
+            return prepared.file_record, len(prepared.payload), sha256, prepared.provider_cache_hit
+        size_bytes, sha256 = self._finish_prepared_drive_bytes_to_path_and_handle(
+            prepared,
+            output_handle=output_handle,
+            progress_callback=progress_callback,
+        )
+        return prepared.file_record, size_bytes, sha256, prepared.provider_cache_hit
 
     def download_binary_range_to_path(
         self,
@@ -992,6 +1121,147 @@ class GoogleDriveProvider:
             raise DriveProviderError(503, "Google Drive media download is currently unavailable.") from error
         if total == 0 and declared_size:
             raise DriveProviderError(502, "Drive returned an empty media response.")
+        _validate_declared_stream_size(actual_size=total, declared_size=declared_size, operation=operation)
+        return total, sha256.hexdigest()
+
+    def _prepare_drive_bytes_to_path(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict[str, Any] | None = None,
+        max_bytes: int,
+        operation: str,
+        target_path: Path,
+        declared_size: int,
+        file_record: dict[str, Any],
+    ) -> PreparedDriveBinaryStream:
+        query = urlencode({key: value for key, value in (params or {}).items() if value is not None})
+        url = f"{DRIVE_API_BASE}{path}" + (f"?{query}" if query else "")
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        request = Request(url, headers={"Authorization": f"Bearer {self._token()}"}, method=method.upper())
+        try:
+            response = urlopen(request, timeout=60)
+            first_chunk = response.read(DRIVE_STREAM_CHUNK_BYTES)
+            if declared_size and not first_chunk:
+                response.close()
+                raise DriveProviderError(502, "Drive returned an empty media response.")
+            return PreparedDriveBinaryStream(
+                file_record=file_record,
+                target_path=target_path,
+                declared_size=declared_size,
+                max_bytes=max_bytes,
+                operation=operation,
+                response=response,
+                first_chunk=first_chunk,
+            )
+        except HTTPError as error:
+            try:
+                payload = json.loads(error.read().decode("utf-8") or "{}")
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                payload = {}
+            detail = str(payload.get("error", {}).get("message") or payload.get("error") or "Drive request failed") if isinstance(payload, dict) else "Drive request failed"
+            raise DriveProviderError(int(error.code), detail) from error
+        except URLError as error:
+            raise DriveProviderError(503, "Google Drive media download is currently unavailable.") from error
+
+    def _finish_prepared_drive_bytes_to_path_and_handle(
+        self,
+        prepared: PreparedDriveBinaryStream,
+        *,
+        output_handle: BinaryIO,
+        progress_callback: Callable[[int, int], None] | None = None,
+    ) -> tuple[int, str]:
+        prepared.target_path.parent.mkdir(parents=True, exist_ok=True)
+        total = 0
+        sha256 = hashlib.sha256()
+        try:
+            with prepared.target_path.open("wb") as handle:
+                prepared.handle = handle
+                if prepared.first_chunk:
+                    total = _write_stream_chunk(
+                        handle=handle,
+                        output_handle=output_handle,
+                        sha256=sha256,
+                        total=total,
+                        chunk=prepared.first_chunk,
+                        max_bytes=prepared.max_bytes,
+                        operation=prepared.operation,
+                        progress_callback=progress_callback,
+                        declared_size=prepared.declared_size,
+                    )
+                while True:
+                    chunk = prepared.response.read(DRIVE_STREAM_CHUNK_BYTES) if prepared.response is not None else b""
+                    if not chunk:
+                        break
+                    total = _write_stream_chunk(
+                        handle=handle,
+                        output_handle=output_handle,
+                        sha256=sha256,
+                        total=total,
+                        chunk=chunk,
+                        max_bytes=prepared.max_bytes,
+                        operation=prepared.operation,
+                        progress_callback=progress_callback,
+                        declared_size=prepared.declared_size,
+                    )
+                handle.flush()
+                os.fsync(handle.fileno())
+        finally:
+            prepared.close()
+        _validate_declared_stream_size(actual_size=total, declared_size=prepared.declared_size, operation=prepared.operation)
+        return total, sha256.hexdigest()
+
+    def _drive_bytes_to_path_and_handle(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict[str, Any] | None = None,
+        max_bytes: int,
+        operation: str,
+        target_path: Path,
+        output_handle: BinaryIO,
+        declared_size: int = 0,
+        progress_callback: Callable[[int, int], None] | None = None,
+    ) -> tuple[int, str]:
+        query = urlencode({key: value for key, value in (params or {}).items() if value is not None})
+        url = f"{DRIVE_API_BASE}{path}" + (f"?{query}" if query else "")
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        total = 0
+        sha256 = hashlib.sha256()
+        try:
+            with urlopen(Request(url, headers={"Authorization": f"Bearer {self._token()}"}, method=method.upper()), timeout=60) as response:
+                with target_path.open("wb") as handle:
+                    while True:
+                        chunk = response.read(DRIVE_STREAM_CHUNK_BYTES)
+                        if not chunk:
+                            break
+                        if total + len(chunk) > max_bytes:
+                            raise StorageValidationError(f"Drive content exceeds the requested max_bytes limit of {max_bytes}.", operation=operation)
+                        handle.write(chunk)
+                        output_handle.write(chunk)
+                        flush = getattr(output_handle, "flush", None)
+                        if callable(flush):
+                            flush()
+                        sha256.update(chunk)
+                        total += len(chunk)
+                        if progress_callback is not None:
+                            progress_callback(total, declared_size or total)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+        except HTTPError as error:
+            try:
+                payload = json.loads(error.read().decode("utf-8") or "{}")
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                payload = {}
+            detail = str(payload.get("error", {}).get("message") or payload.get("error") or "Drive request failed") if isinstance(payload, dict) else "Drive request failed"
+            raise DriveProviderError(int(error.code), detail) from error
+        except URLError as error:
+            raise DriveProviderError(503, "Google Drive media download is currently unavailable.") from error
+        if total == 0 and declared_size:
+            raise DriveProviderError(502, "Drive returned an empty media response.")
+        _validate_declared_stream_size(actual_size=total, declared_size=declared_size, operation=operation)
         return total, sha256.hexdigest()
 
     def _drive_byte_range_to_path(
@@ -1098,13 +1368,22 @@ class GoogleDriveProvider:
         if not _capability(file_record, capability):
             raise StorageValidationError(detail, operation=operation)
 
-    def _download_binary(self, *, file_record: dict[str, Any], max_bytes: int, operation: str) -> tuple[bytes, bool]:
+    def _download_binary(
+        self,
+        *,
+        file_record: dict[str, Any],
+        max_bytes: int,
+        operation: str,
+        validate_declared_size: bool = False,
+    ) -> tuple[bytes, bool]:
         declared_size = _int_value(file_record.get("size_bytes"))
         if declared_size and declared_size > max_bytes:
             raise StorageValidationError(f"Drive file is too large to read through Storage with max_bytes={max_bytes}.", operation=operation)
         cache_key = self._cache_key(file_record=file_record, content_mime_type=file_record["content_type"], purpose="download", max_bytes=max_bytes)
         cached = self._read_cache(cache_key)
         if cached is not None:
+            if validate_declared_size:
+                _validate_declared_stream_size(actual_size=len(cached), declared_size=declared_size, operation=operation)
             return cached, True
         payload = self._drive_bytes_request(
             "GET",
@@ -1113,6 +1392,8 @@ class GoogleDriveProvider:
             max_bytes=max_bytes,
             operation=operation,
         )
+        if validate_declared_size:
+            _validate_declared_stream_size(actual_size=len(payload), declared_size=declared_size, operation=operation)
         self._write_cache(cache_key, payload)
         return payload, False
 
@@ -1478,6 +1759,61 @@ def _write_payload_to_path(path: Path, payload: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("wb") as handle:
         handle.write(payload)
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+def _write_stream_chunk(
+    *,
+    handle: BinaryIO,
+    output_handle: BinaryIO,
+    sha256: Any,
+    total: int,
+    chunk: bytes,
+    max_bytes: int,
+    operation: str,
+    progress_callback: Callable[[int, int], None] | None,
+    declared_size: int,
+) -> int:
+    if total + len(chunk) > max_bytes:
+        raise StorageValidationError(f"Drive content exceeds the requested max_bytes limit of {max_bytes}.", operation=operation)
+    handle.write(chunk)
+    output_handle.write(chunk)
+    flush = getattr(output_handle, "flush", None)
+    if callable(flush):
+        flush()
+    sha256.update(chunk)
+    total += len(chunk)
+    if progress_callback is not None:
+        progress_callback(total, declared_size or total)
+    return total
+
+
+def _validate_declared_stream_size(*, actual_size: int, declared_size: int, operation: str) -> None:
+    if declared_size and actual_size != declared_size:
+        raise DriveProviderError(502, f"Drive media response ended after {actual_size} bytes but metadata declared {declared_size} bytes.")
+
+
+def _write_payload_to_path_and_handle(
+    path: Path,
+    payload: bytes,
+    output_handle: BinaryIO,
+    *,
+    progress_callback: Callable[[int, int], None] | None = None,
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    total = 0
+    with path.open("wb") as handle:
+        for offset in range(0, len(payload), DRIVE_STREAM_CHUNK_BYTES):
+            chunk = payload[offset : offset + DRIVE_STREAM_CHUNK_BYTES]
+            handle.write(chunk)
+            output_handle.write(chunk)
+            flush = getattr(output_handle, "flush", None)
+            if callable(flush):
+                flush()
+            total += len(chunk)
+            if progress_callback is not None:
+                progress_callback(total, len(payload))
         handle.flush()
         os.fsync(handle.fileno())
 

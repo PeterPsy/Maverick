@@ -6,7 +6,7 @@ from base64 import b64decode
 import binascii
 from pathlib import Path
 import tempfile
-from typing import Any
+from typing import Any, BinaryIO
 
 from errors import StorageValidationError
 from drive_connection_store import append_audit, get_connection, now_timestamp, sync_state_for_connection, update_connection_sync_state
@@ -16,6 +16,8 @@ from drive_localization import (
     cleanup_drive_local_cache,
     drive_media_stream_response,
     localize_drive_file_payload,
+    prepare_drive_media_response_body,
+    stream_prepared_drive_media_response_body,
 )
 from google_drive_provider import DriveProviderError, GoogleDriveProvider
 from inventory import preview_kind as inventory_preview_kind, upsert_remote_file_records
@@ -238,6 +240,9 @@ def handle_action(
     allow_platform_secret_writes: bool = False,
     oauth_transport=None,
     drive_transport=None,
+    media_route: bool = False,
+    media_request_method: str = "GET",
+    streaming_response_supported: bool = False,
 ) -> tuple[int, dict[str, Any]]:
     requested_action = str(body.get("action") or "catalog")
     action = STORAGE_ACTION_ALIASES.get(requested_action, requested_action)
@@ -335,7 +340,7 @@ def handle_action(
         _persist_drive_files(data_root, {"files": [result["file"]]})
         return 200, result
     if action == "file.media_stream":
-        if not _bool_value(body.get("_media_route")):
+        if not media_route:
             raise StorageValidationError(
                 "file.media_stream is available only through the authenticated Storage media route.",
                 operation="file.media_stream",
@@ -346,6 +351,8 @@ def handle_action(
             generated_root=generated_root,
             body=body,
             drive_transport=drive_transport,
+            request_method=media_request_method,
+            streaming_response_supported=streaming_response_supported,
         )
     if action == "drive_index":
         connection_id, drive_file_id = _drive_locator_from_body(data_root, uploaded_root, generated_root, body)
@@ -909,6 +916,8 @@ def _media_stream_payload(
     generated_root: Path,
     body: dict[str, Any],
     drive_transport=None,
+    request_method: str = "GET",
+    streaming_response_supported: bool = False,
 ) -> dict[str, Any]:
     record = _file_record_for_path_action(data_root=data_root, uploaded_root=uploaded_root, generated_root=generated_root, body=body)
     download = _bool_value(body.get("download"))
@@ -928,6 +937,8 @@ def _media_stream_payload(
             localization_id=str(body.get("localization_id") or ""),
             source_version=str(body.get("source_version") or ""),
             range_header=str(request_headers.get("range") or body.get("range") or ""),
+            request_method=request_method,
+            streaming_response_supported=streaming_response_supported,
         )
     role = str(record.get("role") or "")
     relative_path = str(record.get("relative_path") or "")
@@ -946,6 +957,58 @@ def _media_stream_payload(
             "cache_control": "private, max-age=60",
         },
     }
+
+
+def stream_media_response_body(
+    *,
+    data_root: Path,
+    uploaded_root: Path,
+    generated_root: Path,
+    body: dict[str, Any],
+    stream_plan: dict[str, Any],
+    output_handle: BinaryIO,
+    drive_transport=None,
+) -> None:
+    prepared = prepare_media_response_body(
+        data_root=data_root,
+        uploaded_root=uploaded_root,
+        generated_root=generated_root,
+        body=body,
+        stream_plan=stream_plan,
+        drive_transport=drive_transport,
+    )
+    stream_prepared_media_response_body(prepared, output_handle=output_handle)
+
+
+def prepare_media_response_body(
+    *,
+    data_root: Path,
+    uploaded_root: Path,
+    generated_root: Path,
+    body: dict[str, Any],
+    stream_plan: dict[str, Any],
+    drive_transport=None,
+) -> Any:
+    file_record = stream_plan.get("file_record") if isinstance(stream_plan.get("file_record"), dict) else None
+    if not file_record or file_record.get("provider") != GOOGLE_DRIVE_PROVIDER:
+        raise StorageValidationError("Media stream response is missing a valid Drive stream plan.", operation="file.media_stream")
+    resolved = _file_record_for_path_action(data_root=data_root, uploaded_root=uploaded_root, generated_root=generated_root, body=body)
+    if str(resolved.get("provider") or "") != GOOGLE_DRIVE_PROVIDER:
+        raise StorageValidationError("The requested file is not a Google Drive file.", operation="file.media_stream")
+    if str(resolved.get("id") or resolved.get("file_id") or "") != str(file_record.get("id") or file_record.get("file_id") or ""):
+        raise StorageValidationError("Media stream plan no longer matches the requested Storage file.", operation="file.media_stream")
+    app_secrets = body.get("_app_secrets") if isinstance(body.get("_app_secrets"), dict) else {}
+    connection_id = str(file_record.get("connection_id") or "").strip()
+    provider = _google_drive_provider(data_root, {**body, "connection_id": connection_id, "_app_secrets": app_secrets}, transport=drive_transport)
+    return prepare_drive_media_response_body(
+        data_root=data_root,
+        provider=provider,
+        file_record=file_record,
+    )
+
+
+def stream_prepared_media_response_body(prepared, *, output_handle: BinaryIO) -> None:
+    stream_prepared_drive_media_response_body(prepared=prepared, output_handle=output_handle)
 
 
 def _file_record_for_path_action(

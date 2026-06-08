@@ -9,12 +9,12 @@ import os
 from pathlib import Path
 import shutil
 import time
-from typing import Any
+from typing import Any, BinaryIO
 from urllib.parse import quote, urlencode
 
 from drive_oauth import GOOGLE_DRIVE_CLIENT_ID_SECRET, GOOGLE_DRIVE_CLIENT_SECRET_SECRET, GOOGLE_DRIVE_REFRESH_TOKEN_SECRET
 from errors import StorageValidationError
-from google_drive_provider import DriveProviderError, GoogleDriveProvider
+from google_drive_provider import DriveProviderError, GoogleDriveProvider, PreparedDriveBinaryStream
 from storage_provider_model import GOOGLE_DRIVE_PROVIDER
 
 
@@ -122,6 +122,8 @@ def drive_media_stream_response(
     localization_id: str = "",
     source_version: str = "",
     range_header: str = "",
+    request_method: str = "GET",
+    streaming_response_supported: bool = False,
 ) -> dict[str, Any]:
     """Return a core-served file response for a localized or proxied Drive file."""
     operation = "file.media_stream"
@@ -170,6 +172,8 @@ def drive_media_stream_response(
         app_id=app_id,
         download=download,
         range_header=range_header,
+        request_method=request_method,
+        streaming_response_supported=streaming_response_supported,
     )
 
 
@@ -195,6 +199,8 @@ def _drive_proxy_media_response(
     app_id: str,
     download: bool,
     range_header: str,
+    request_method: str,
+    streaming_response_supported: bool,
 ) -> dict[str, Any]:
     operation = "file.media_stream"
     if str(file_record.get("preview_kind") or "") not in STREAMABLE_PREVIEW_KINDS:
@@ -204,6 +210,17 @@ def _drive_proxy_media_response(
             allowed_values={"preview_kind": sorted(STREAMABLE_PREVIEW_KINDS)},
         )
     declared_size = int(file_record.get("size_bytes") or 0)
+    if request_method.upper() == "HEAD":
+        metadata = {
+            **_pending_metadata(file_record=file_record, localization_id=target.localization_id),
+            "status": "localizing",
+            "progress": {"state": "metadata", "bytes_completed": 0, "bytes_total": declared_size},
+        }
+        return {
+            "file": file_record,
+            "localization": _streaming_localization(target=target, file_record=file_record, metadata=metadata),
+            "stream_response": _drive_stream_response(file_record=file_record, target=target, download=download, content_length=declared_size),
+        }
     if range_header:
         if not target.metadata_path.exists():
             streaming_metadata = {
@@ -255,7 +272,7 @@ def _drive_proxy_media_response(
                 "path": str(range_path),
                 "content_type": str(file_record.get("content_type") or "application/octet-stream"),
                 "file_name": str(file_record.get("name") or "drive-file"),
-                "etag": _range_etag(target=target, start=start, end=end, source_version=_source_version(file_record)),
+                "etag": _media_etag(target=target, source_version=_source_version(file_record)),
                 "download": download,
                 "cache_control": "private, max-age=60",
                 "served_range": {"start": start, "end": end, "size": total_size},
@@ -265,6 +282,20 @@ def _drive_proxy_media_response(
     max_download_bytes = _max_download_bytes(file_record, max_bytes=None, operation=operation)
     _ensure_cache_write_budget(data_root=data_root, target=target, incoming_bytes=max_download_bytes, operation=operation, replace_target=True)
     _ensure_disk_space(target.directory, incoming_bytes=max_download_bytes, operation=operation)
+    if streaming_response_supported and request_method.upper() == "GET":
+        target.directory.mkdir(parents=True, exist_ok=True)
+        metadata = {
+            **_pending_metadata(file_record=file_record, localization_id=target.localization_id),
+            "status": "localizing",
+            "progress": {"state": "streaming", "bytes_completed": 0, "bytes_total": declared_size},
+        }
+        _atomic_write_json(target.metadata_path, metadata)
+        return {
+            "file": file_record,
+            "localization": _streaming_localization(target=target, file_record=file_record, metadata=metadata),
+            "stream_response": _drive_stream_response(file_record=file_record, target=target, download=download, content_length=None),
+            "drive_stream": {"file_record": file_record},
+        }
     temporary_path = target.content_path.with_name(f".{target.content_path.name}.{os.getpid()}.tmp")
     metadata = _pending_metadata(file_record=file_record, localization_id=target.localization_id)
     _atomic_write_json(target.metadata_path, metadata)
@@ -294,7 +325,7 @@ def _drive_proxy_media_response(
         temporary_path.unlink(missing_ok=True)
         failed = {**metadata, "status": "error", "error": _safe_error(error), "updated_at": _timestamp()}
         _atomic_write_json(target.metadata_path, failed)
-        raise StorageValidationError("Google Drive media stream request failed.", operation=operation) from error
+        raise StorageValidationError(f"Google Drive media stream request failed: {_safe_error(error)}", operation=operation) from error
     except Exception as error:
         temporary_path.unlink(missing_ok=True)
         failed = {**metadata, "status": "error", "error": _safe_error(error), "updated_at": _timestamp()}
@@ -318,6 +349,116 @@ def _drive_proxy_media_response(
             "cache_control": "private, max-age=60",
         },
     }
+
+
+def stream_drive_media_response_body(
+    *,
+    data_root: Path,
+    provider: GoogleDriveProvider,
+    file_record: dict[str, Any],
+    output_handle: BinaryIO,
+) -> None:
+    prepared = prepare_drive_media_response_body(data_root=data_root, provider=provider, file_record=file_record)
+    stream_prepared_drive_media_response_body(prepared=prepared, output_handle=output_handle)
+
+
+def prepare_drive_media_response_body(
+    *,
+    data_root: Path,
+    provider: GoogleDriveProvider,
+    file_record: dict[str, Any],
+) -> "PreparedDriveMediaStream":
+    """Open the Drive response and preflight cache writes before response headers are emitted."""
+    operation = "file.media_stream"
+    target = _target_for_record(data_root=data_root, file_record=file_record)
+    max_download_bytes = _max_download_bytes(file_record, max_bytes=None, operation=operation)
+    _ensure_cache_write_budget(data_root=data_root, target=target, incoming_bytes=max_download_bytes, operation=operation, replace_target=True)
+    _ensure_disk_space(target.directory, incoming_bytes=max_download_bytes, operation=operation)
+    temporary_path = target.content_path.with_name(f".{target.content_path.name}.{os.getpid()}.tmp")
+    metadata = _pending_metadata(file_record=file_record, localization_id=target.localization_id)
+    _atomic_write_json(target.metadata_path, metadata)
+    try:
+        temporary_path.unlink(missing_ok=True)
+        provider_stream = provider.prepare_binary_stream_to_path(
+            drive_file_id=str(file_record.get("drive_file_id") or ""),
+            max_bytes=max_download_bytes,
+            operation=operation,
+            target_path=temporary_path,
+            file_record=file_record,
+        )
+        return PreparedDriveMediaStream(
+            data_root=data_root,
+            provider=provider,
+            file_record=file_record,
+            target=target,
+            temporary_path=temporary_path,
+            metadata=metadata,
+            provider_stream=provider_stream,
+        )
+    except DriveProviderError as error:
+        temporary_path.unlink(missing_ok=True)
+        failed = {**metadata, "status": "error", "error": _safe_error(error), "updated_at": _timestamp()}
+        _atomic_write_json(target.metadata_path, failed)
+        raise StorageValidationError(f"Google Drive media stream request failed: {_safe_error(error)}", operation=operation) from error
+    except Exception as error:
+        temporary_path.unlink(missing_ok=True)
+        failed = {**metadata, "status": "error", "error": _safe_error(error), "updated_at": _timestamp()}
+        _atomic_write_json(target.metadata_path, failed)
+        raise
+
+
+def stream_prepared_drive_media_response_body(*, prepared: "PreparedDriveMediaStream", output_handle: BinaryIO) -> None:
+    """Stream prepared Drive media bytes and complete the durable local cache."""
+    operation = "file.media_stream"
+    try:
+        progress_writer = _progress_metadata_writer(metadata_path=prepared.target.metadata_path, base_metadata=prepared.metadata)
+        downloaded_record, size_bytes, sha256, provider_cache_hit = prepared.provider.finish_binary_stream_to_path_and_handle(
+            prepared.provider_stream,
+            output_handle=output_handle,
+            progress_callback=progress_writer,
+        )
+        file_record = {**prepared.file_record, **downloaded_record}
+        prepared.temporary_path.replace(prepared.target.content_path)
+        ready = _ready_metadata(
+            file_record=file_record,
+            localization_id=prepared.target.localization_id,
+            size_bytes=size_bytes,
+            sha256=sha256,
+            provider_cache_hit=provider_cache_hit,
+        )
+        _atomic_write_json(prepared.target.metadata_path, ready)
+        cleanup_drive_local_cache(data_root=prepared.data_root, current_file_record=file_record, keep_localization_id=prepared.target.localization_id)
+    except DriveProviderError as error:
+        prepared.temporary_path.unlink(missing_ok=True)
+        failed = {**prepared.metadata, "status": "error", "error": _safe_error(error), "updated_at": _timestamp()}
+        _atomic_write_json(prepared.target.metadata_path, failed)
+        raise StorageValidationError(f"Google Drive media stream request failed: {_safe_error(error)}", operation=operation) from error
+    except Exception as error:
+        prepared.temporary_path.unlink(missing_ok=True)
+        failed = {**prepared.metadata, "status": "error", "error": _safe_error(error), "updated_at": _timestamp()}
+        _atomic_write_json(prepared.target.metadata_path, failed)
+        raise
+
+
+class PreparedDriveMediaStream:
+    def __init__(
+        self,
+        *,
+        data_root: Path,
+        provider: GoogleDriveProvider,
+        file_record: dict[str, Any],
+        target: "LocalizedDriveTarget",
+        temporary_path: Path,
+        metadata: dict[str, Any],
+        provider_stream: PreparedDriveBinaryStream,
+    ) -> None:
+        self.data_root = data_root
+        self.provider = provider
+        self.file_record = file_record
+        self.target = target
+        self.temporary_path = temporary_path
+        self.metadata = metadata
+        self.provider_stream = provider_stream
 
 
 class LocalizedDriveTarget:
@@ -384,6 +525,12 @@ def _validate_stream_binding(
             expected_fields=["stable_storage_file_id", "localization_id"],
         )
     current_source_version = _source_version(file_record)
+    if current_source_version and not requested_source_version:
+        raise StorageValidationError(
+            "Media stream URL source_version is required for the current Storage file record.",
+            operation=operation,
+            expected_fields=["stable_storage_file_id", "source_version"],
+        )
     if requested_source_version and requested_source_version != current_source_version:
         raise StorageValidationError(
             "Media stream URL source_version is stale; refresh the Storage file record and retry.",
@@ -429,9 +576,9 @@ def _range_content_path(*, target: LocalizedDriveTarget, start: int, end: int, t
     return target.directory / "ranges" / f"{digest}.bin"
 
 
-def _range_etag(*, target: LocalizedDriveTarget, start: int, end: int, source_version: str) -> str:
-    digest = hashlib.sha256(f"{target.localization_id}\0{start}\0{end}\0{source_version}".encode("utf-8")).hexdigest()
-    return f"drive-range-{digest[:32]}"
+def _media_etag(*, target: LocalizedDriveTarget, source_version: str) -> str:
+    digest = hashlib.sha256(f"{target.localization_id}\0{source_version}".encode("utf-8")).hexdigest()
+    return f"drive-media-{digest[:32]}"
 
 
 def _range_metadata(
@@ -503,18 +650,26 @@ def _streaming_localization(*, target: LocalizedDriveTarget, file_record: dict[s
         "file_name": metadata.get("file_name") or file_record.get("name") or "drive-file",
         "size_bytes": total_size,
         "sha256": metadata.get("sha256") or "",
-        "etag": _range_etag(
-            target=target,
-            start=int(metadata.get("start") or 0),
-            end=int(metadata.get("end") or max(0, size_bytes - 1)),
-            source_version=_source_version(file_record),
-        ),
+        "etag": _media_etag(target=target, source_version=_source_version(file_record)),
         "progress": {"state": "streaming", "bytes_completed": size_bytes, "bytes_total": total_size},
         "retry_count": 0,
         "cache_hit": bool(metadata),
         "created_at": metadata.get("created_at") or "",
         "updated_at": metadata.get("updated_at") or "",
     }
+
+
+def _drive_stream_response(*, file_record: dict[str, Any], target: LocalizedDriveTarget, download: bool, content_length: int | None) -> dict[str, Any]:
+    response = {
+        "content_type": str(file_record.get("content_type") or "application/octet-stream"),
+        "file_name": str(file_record.get("name") or "drive-file"),
+        "etag": _media_etag(target=target, source_version=_source_version(file_record)),
+        "download": download,
+        "cache_control": "private, max-age=60",
+    }
+    if content_length is not None and content_length > 0:
+        response["content_length"] = content_length
+    return response
 
 
 def _drive_media_secret_request(file_record: dict[str, Any]) -> dict[str, Any]:
@@ -640,10 +795,17 @@ def _read_localization_metadata(target: LocalizedDriveTarget) -> dict[str, Any] 
 def _cache_file_is_ready(target: LocalizedDriveTarget, metadata: dict[str, Any], *, file_record: dict[str, Any] | None = None) -> bool:
     if metadata.get("status") != "ready" or metadata.get("id") != target.localization_id or not target.content_path.is_file():
         return False
-    if int(metadata.get("size_bytes") or -1) != target.content_path.stat().st_size:
+    try:
+        content_size = target.content_path.stat().st_size
+    except OSError:
+        return False
+    if int(metadata.get("size_bytes") or -1) != content_size:
         return False
     if file_record is None:
         return True
+    declared_size = _declared_drive_size(file_record)
+    if declared_size and content_size != declared_size:
+        return False
     stable_id = str(file_record.get("file_id") or file_record.get("stable_storage_file_id") or file_record.get("id") or "")
     return (
         str(metadata.get("stable_storage_file_id") or "") == stable_id
@@ -739,11 +901,11 @@ def _cache_entry_should_be_removed(
     now: float,
 ) -> bool:
     localization_id = str(metadata.get("id") or directory.name)
+    content_path = directory / "content.bin"
+    if _ready_cache_entry_is_corrupt(content_path=content_path, metadata=metadata, current_file_record=current_file_record):
+        return True
     if localization_id == keep_localization_id:
         return False
-    content_path = directory / "content.bin"
-    if metadata.get("status") == "ready" and (not content_path.is_file() or int(metadata.get("size_bytes") or -1) != content_path.stat().st_size):
-        return True
     if now - _metadata_sort_time(metadata, directory / "metadata.json") > DRIVE_LOCAL_CACHE_TTL_SECONDS:
         return True
     if current_file_record is None:
@@ -752,6 +914,33 @@ def _cache_entry_should_be_removed(
     if stable_id and str(metadata.get("stable_storage_file_id") or "") == stable_id:
         return str(metadata.get("source_version") or "") != _source_version(current_file_record)
     return False
+
+
+def _ready_cache_entry_is_corrupt(*, content_path: Path, metadata: dict[str, Any], current_file_record: dict[str, Any] | None) -> bool:
+    if metadata.get("status") != "ready":
+        return False
+    if not content_path.is_file():
+        return True
+    try:
+        content_size = content_path.stat().st_size
+    except OSError:
+        return True
+    if int(metadata.get("size_bytes") or -1) != content_size:
+        return True
+    if current_file_record is None:
+        return False
+    stable_id = str(current_file_record.get("file_id") or current_file_record.get("stable_storage_file_id") or current_file_record.get("id") or "")
+    if not stable_id or str(metadata.get("stable_storage_file_id") or "") != stable_id:
+        return False
+    declared_size = _declared_drive_size(current_file_record)
+    return bool(declared_size and content_size != declared_size)
+
+
+def _declared_drive_size(file_record: dict[str, Any]) -> int:
+    try:
+        return int(file_record.get("size_bytes") or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _cleanup_range_files(range_root: Path, *, now: float) -> None:

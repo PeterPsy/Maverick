@@ -45,7 +45,7 @@ from core.secrets.errors import SecretError
 from core.secrets.secret_resolution import parse_secret_ref
 from core.secrets.service import build_secret_ref, create_platform_secret, grant_app_secret_use, rotate_platform_secret
 from core.secrets.target_policy import target_allowed
-from core.shared.entrypoints import EntrypointShutdownController, run_json_entrypoint
+from core.shared.entrypoints import EntrypointShutdownController, run_json_entrypoint, run_streaming_json_entrypoint
 from core.workspaces.paths import workspace_paths
 from core.identity.models import UserRecord
 
@@ -396,51 +396,63 @@ def handle_app_backend(
                 pass
         return json_response(start_response, {"error": "app_secret_unavailable", "detail": str(error)}, status=status_line(500))
     try:
-        result = run_json_entrypoint(
-            source_root / backend,
-            payload={
-                "surface": "backend",
-                "workspace_id": workspace_id,
-                "app_id": app_id,
-                "workspace_root": str(paths.root),
-                "data_root": binding.data_root,
-                "uploaded_storage_root": str(paths.uploaded_storage),
-                "generated_storage_root": str(paths.generated_storage),
-                "route_path": environ.get("PATH_INFO", ""),
-                "method": method,
-                "query": request_query,
-                "headers": {"content_type": environ.get("CONTENT_TYPE", ""), "range": environ.get("HTTP_RANGE", "")},
-                "body": body,
-                "body_file": body_file or {},
-                "provider_id": provider_id,
-                "effective_mode": "full-access" if trusted_platform_invocation else "sandbox",
-                "platform_role": None if user is None else user.platform_role,
-                "user_id": None if user is None else user.user_id,
-                "workspace_role": _workspace_role_for_backend_user(user=user, authorization=authorization),
-                "app_dependencies": _app_dependencies_payload(
+        entrypoint_payload = {
+            "surface": "backend",
+            "workspace_id": workspace_id,
+            "app_id": app_id,
+            "workspace_root": str(paths.root),
+            "data_root": binding.data_root,
+            "uploaded_storage_root": str(paths.uploaded_storage),
+            "generated_storage_root": str(paths.generated_storage),
+            "route_path": environ.get("PATH_INFO", ""),
+            "method": method,
+            "query": request_query,
+            "headers": {"content_type": environ.get("CONTENT_TYPE", ""), "range": environ.get("HTTP_RANGE", "")},
+            "body": body,
+            "body_file": body_file or {},
+            "provider_id": provider_id,
+            "effective_mode": "full-access" if trusted_platform_invocation else "sandbox",
+            "platform_role": None if user is None else user.platform_role,
+            "user_id": None if user is None else user.user_id,
+            "workspace_role": _workspace_role_for_backend_user(user=user, authorization=authorization),
+            "app_dependencies": _app_dependencies_payload(
+                state,
+                workspace_id=workspace_id,
+                app_id=app_id,
+                user=user,
+                start_path=start_path,
+            ),
+            "workspace_apps": {
+                "items": enabled_app_items(
                     state,
                     workspace_id=workspace_id,
-                    app_id=app_id,
-                    user=user,
                     start_path=start_path,
-                ),
-                "workspace_apps": {
-                    "items": enabled_app_items(
-                        state,
-                        workspace_id=workspace_id,
-                        start_path=start_path,
-                        user=user,
-                    )
-                },
-                "runtime_session_id": "",
-                "turn_id": "",
-                "app_secrets": app_secret_result.secrets,
-                "app_secret_errors": app_secret_result.errors,
+                    user=user,
+                )
             },
-            cwd=source_root,
-            timeout_seconds=backend_entrypoint_timeout_seconds(parsed),
-            shutdown_controller=shutdown_controller,
-        )
+            "runtime_session_id": "",
+            "turn_id": "",
+            "app_secrets": app_secret_result.secrets,
+            "app_secret_errors": app_secret_result.errors,
+        }
+        streaming_entrypoint = None
+        if _backend_route_supports_streaming(method=method, route_path=str(environ.get("PATH_INFO") or "")):
+            streaming_entrypoint = run_streaming_json_entrypoint(
+                source_root / backend,
+                payload={**entrypoint_payload, "stream_response_protocol": "maverick.backend.stream.v1"},
+                cwd=source_root,
+                timeout_seconds=backend_entrypoint_timeout_seconds(parsed),
+                shutdown_controller=shutdown_controller,
+            )
+            result = streaming_entrypoint.result
+        else:
+            result = run_json_entrypoint(
+                source_root / backend,
+                payload=entrypoint_payload,
+                cwd=source_root,
+                timeout_seconds=backend_entrypoint_timeout_seconds(parsed),
+                shutdown_controller=shutdown_controller,
+            )
     except Exception as error:
         logger.exception("App `%s` backend entrypoint failed in workspace `%s`.", app_id, workspace_id)
         return json_response(start_response, {"error": "app_backend_failed"}, status=status_line(500))
@@ -480,6 +492,15 @@ def handle_app_backend(
         )
     except SecretError as error:
         return json_response(start_response, {"error": "secret_error", "detail": str(error)}, status=status_line(500))
+    status_code = int(result.get("status_code", 200))
+    if "stream_response" in result and isinstance(result.get("stream_response"), dict):
+        return _serve_app_stream_response(
+            environ=environ,
+            start_response=start_response,
+            stream_response=result["stream_response"],
+            stream=streaming_entrypoint,
+            status_code=status_code,
+        )
     publish_declared_app_events(
         state.app_event_bus,
         result,
@@ -520,7 +541,6 @@ def handle_app_backend(
         return json_response(start_response, {"error": error.reason}, status=status_line(403))
     except AppHostingError as error:
         return json_response(start_response, {"error": "runtime_cleanup_failed", "detail": str(error)}, status=status_line(500))
-    status_code = int(result.get("status_code", 200))
     if "file_response" in result and isinstance(result.get("file_response"), dict):
         return _serve_app_file_response(
             environ=environ,
@@ -623,6 +643,62 @@ def _serve_app_file_response(
     return _file_range_chunks(path, start=0, length=size)
 
 
+def _serve_app_stream_response(
+    *,
+    environ: dict,
+    start_response: StartResponse,
+    stream_response: dict[str, Any],
+    stream: Any | None,
+    status_code: int = 200,
+):
+    """Serve an app-approved binary stream from a live backend entrypoint."""
+    if status_code >= 400:
+        if stream is not None:
+            stream.close()
+        return json_response(start_response, {"error": "stream_response_failed"}, status=status_line(status_code))
+    method = str(environ.get("REQUEST_METHOD") or "GET").upper()
+    if method not in {"GET", "HEAD"}:
+        if stream is not None:
+            stream.close()
+        return json_response(
+            start_response,
+            {"error": "method_not_allowed"},
+            status=status_line(405),
+            headers=[("Allow", "GET, HEAD")],
+        )
+    content_type = str(stream_response.get("content_type") or "application/octet-stream")
+    file_name = _safe_header_filename(str(stream_response.get("file_name") or "download"))
+    disposition = "attachment" if _truthy(stream_response.get("download")) or not _safe_inline_file_response_type(content_type) else "inline"
+    etag = _quoted_etag(str(stream_response.get("etag") or "stream"))
+    headers = [
+        ("Content-Type", content_type),
+        ("Accept-Ranges", "bytes"),
+        ("ETag", etag),
+        ("Cache-Control", str(stream_response.get("cache_control") or "private, max-age=60")),
+        ("X-Content-Type-Options", "nosniff"),
+        ("Content-Disposition", f'{disposition}; filename="{file_name}"'),
+    ]
+    content_length = _optional_non_negative_int(stream_response.get("content_length"))
+    if content_length is not None:
+        headers.append(("Content-Length", str(content_length)))
+    start_response(status_line(status_code), headers)
+    if method == "HEAD" or stream is None:
+        if stream is not None:
+            stream.close()
+        return [b""]
+    return stream.iter_stream(chunk_bytes=FILE_RESPONSE_CHUNK_BYTES)
+
+
+def _optional_non_negative_int(value: object) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed >= 0 else None
+
+
 def _path_is_under_any_root(path: Path, roots: list[Path]) -> bool:
     return any(path == root or root in path.parents for root in roots)
 
@@ -707,6 +783,10 @@ def _truthy(value: object) -> bool:
     if isinstance(value, bool):
         return value
     return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _backend_route_supports_streaming(*, method: str, route_path: str) -> bool:
+    return method.upper() in {"GET", "HEAD"} and route_path.startswith("/api/apps/") and route_path.endswith("/media")
 
 
 def _workspace_role_for_backend_user(*, user: UserRecord | None, authorization: Any | None) -> str | None:

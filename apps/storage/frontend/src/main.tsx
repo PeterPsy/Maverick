@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { Home } from 'lucide-react';
 import { AnimatedFileCollection, CollectionViewToggle, type CollectionViewMode } from './components/ui/animated-collection';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from './components/ui/breadcramb';
-import { CATALOG_PAGE_LIMIT, DRIVE_PAGE_LIMIT, clearCustomView, completeDriveOAuth, currentStorageAppId, decodeBase64, deleteFile, deleteFolder, downloadFolder, listDriveChildren, listDriveRoots, loadCatalog, loadViewFilter, moveFileReference, moveFolderReference, moveItemsReferences, readDriveFile, readFile, renameDriveFile, renameFile, setViewFilter, trashDriveFile, updateMarkdownFile, uploadFile } from './storageApi';
+import { CATALOG_PAGE_LIMIT, DRIVE_PAGE_LIMIT, clearCustomView, completeDriveOAuth, currentStorageAppId, decodeBase64, deleteFile, deleteFolder, downloadFolder, driveMediaStreamUrl, listDriveChildren, listDriveRoots, loadCatalog, loadViewFilter, moveFileReference, moveFolderReference, moveItemsReferences, readDriveFile, readFile, renameDriveFile, renameFile, setViewFilter, trashDriveFile, updateMarkdownFile, uploadDriveFile, uploadFile } from './storageApi';
 import { canInlinePreview, canTextPreview, StoragePreview } from './filePreview';
 import { formatBytes, formatMegabytes, kindLabels, roleLabels } from './storageMeta';
 import { Icon } from './Icon';
@@ -126,6 +126,10 @@ function isFileRole(role: unknown): role is FileRole {
 
 function isDriveItem(item: Pick<StorageFile | StorageFolder, 'provider'>) {
   return item.provider === 'google_drive';
+}
+
+function isDriveStreamableFile(file: StorageFile) {
+  return isDriveItem(file) && ['image', 'video', 'audio', 'pdf'].includes(file.preview_kind);
 }
 
 function itemCan(item: Pick<StorageFile | StorageFolder, 'capabilities'>, capability: keyof NonNullable<StorageFile['capabilities']>, fallback = true) {
@@ -287,6 +291,10 @@ function fittedPreviewImageSize(image: PreviewImageSize, viewport: PreviewImageS
 function uploadTargetLabel(role: FileRole | 'all', folderPath: string) {
   if (role === 'all') return 'Choose Generated or Uploaded first';
   return `${roleLabels[role]}${folderPath ? ` / ${folderPath}` : ''}`;
+}
+
+function driveUploadTargetLabel(target: DriveFolderTarget) {
+  return target.displayPath || 'Google Drive';
 }
 
 function isAbortError(error: unknown) {
@@ -1637,6 +1645,13 @@ function App() {
   const previewBackdropClassName = previewFullscreenActive ? 'preview-modal-backdrop is-fullscreen-preview' : 'preview-modal-backdrop';
 
   async function download(file: StorageFile) {
+    if (isDriveStreamableFile(file)) {
+      const anchor = document.createElement('a');
+      anchor.href = driveMediaStreamUrl(file, { download: true });
+      anchor.download = file.name;
+      anchor.click();
+      return;
+    }
     const payload = isDriveItem(file)
       ? await readDriveFile(file, DOWNLOAD_BYTES)
       : await readFile(file, DOWNLOAD_BYTES);
@@ -1721,10 +1736,38 @@ function App() {
       return;
     }
     if (isDriveView) {
-      setError('Google Drive upload is not supported here yet.');
-      setDropFeedback('error');
-      setDropMessage('Google Drive upload is not supported here yet.');
-      clearDropFeedbackLater();
+      const driveUploadTarget = driveTargetRef.current;
+      if (!driveUploadTarget?.driveFileId) {
+        setError('Choose a Google Drive folder before uploading a file.');
+        setDropFeedback('error');
+        setDropMessage('Choose a Google Drive folder first.');
+        clearDropFeedbackLater();
+        return;
+      }
+      setUploading(true);
+      setDropFeedback('uploading');
+      setDropMessage(`Uploading ${selectedFiles.length === 1 ? selectedFiles[0].name : `${selectedFiles.length} files`} to ${driveUploadTargetLabel(driveUploadTarget)}`);
+      try {
+        let lastUploadedFile: StorageFile | null = null;
+        for (const file of selectedFiles) {
+          const payload = await uploadDriveFile(file, driveUploadTarget);
+          lastUploadedFile = payload.file;
+          applyLocalCatalogDelta({ type: 'upsert_file', file: payload.file });
+        }
+        if (lastUploadedFile) setSelectedFile(lastUploadedFile);
+        setError('');
+        setDropFeedback('success');
+        setDropMessage(`Uploaded ${selectedFiles.length === 1 ? selectedFiles[0].name : `${selectedFiles.length} files`} to ${driveUploadTargetLabel(driveUploadTarget)}`);
+        clearDropFeedbackLater();
+        revalidateCatalog();
+      } catch (err) {
+        setDropFeedback('error');
+        setDropMessage(err instanceof Error ? err.message : 'Upload failed.');
+        clearDropFeedbackLater();
+        throw err;
+      } finally {
+        setUploading(false);
+      }
       return;
     }
     if (activeRole === 'all') {
@@ -1766,9 +1809,13 @@ function App() {
     if (!hasDraggedFiles(event.dataTransfer)) return;
     event.preventDefault();
     setDragDepth((current) => current + 1);
-    setDropFeedback(isDriveView || activeRole === 'all' ? 'blocked' : 'ready');
+    const driveUploadTarget = driveTargetRef.current;
+    const canUploadToDrive = Boolean(isDriveView && driveUploadTarget?.driveFileId);
+    setDropFeedback((isDriveView ? !canUploadToDrive : activeRole === 'all') ? 'blocked' : 'ready');
     setDropMessage(isDriveView
-      ? 'Google Drive upload is not supported here yet.'
+      ? canUploadToDrive && driveUploadTarget
+        ? `Drop to upload to ${driveUploadTargetLabel(driveUploadTarget)}`
+        : 'Choose a Google Drive folder before dropping files.'
       : activeRole === 'all'
       ? 'Choose Generated or Uploaded before dropping files.'
       : `Drop to upload to ${uploadTargetLabel(activeRole, currentFolderPath)}`);
@@ -1777,7 +1824,8 @@ function App() {
   function handleAppDragOver(event: DragEvent<HTMLElement>) {
     if (!hasDraggedFiles(event.dataTransfer)) return;
     event.preventDefault();
-    event.dataTransfer.dropEffect = isDriveView || activeRole === 'all' ? 'none' : 'copy';
+    const canUploadToDrive = Boolean(isDriveView && driveTargetRef.current?.driveFileId);
+    event.dataTransfer.dropEffect = (isDriveView ? !canUploadToDrive : activeRole === 'all') ? 'none' : 'copy';
   }
 
   function handleAppDragLeave(event: DragEvent<HTMLElement>) {
@@ -2118,7 +2166,7 @@ function App() {
               name={dropFeedback === 'success' ? 'check_circle' : dropFeedback === 'blocked' || dropFeedback === 'error' ? 'error' : dropFeedback === 'uploading' ? 'progress_activity' : 'upload_file'}
               className="drop-overlay-icon"
             />
-            <strong>{dropFeedback === 'success' ? 'Upload complete' : dropFeedback === 'blocked' ? 'Storage role required' : dropFeedback === 'error' ? 'Upload failed' : dropFeedback === 'uploading' ? 'Uploading' : 'Drop files to upload'}</strong>
+            <strong>{dropFeedback === 'success' ? 'Upload complete' : dropFeedback === 'blocked' ? 'Upload target required' : dropFeedback === 'error' ? 'Upload failed' : dropFeedback === 'uploading' ? 'Uploading' : 'Drop files to upload'}</strong>
             <span>{dropMessage || `Upload to ${uploadTargetLabel(activeRole, currentFolderPath)}`}</span>
           </div>
         </div>

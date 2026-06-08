@@ -38,6 +38,8 @@ class AsgiApplicationTests(unittest.TestCase):
     def test_app_backend_request_detection_is_limited_to_backend_posts(self) -> None:
         self.assertTrue(_is_app_backend_request({"path": "/api/apps/example/backend", "method": "POST"}))
         self.assertTrue(_is_app_backend_request({"path": "/api/apps/example-fork/backend", "method": "post"}))
+        self.assertTrue(_is_app_backend_request({"path": "/api/apps/example/media", "method": "GET"}))
+        self.assertTrue(_is_app_backend_request({"path": "/api/apps/example/media", "method": "HEAD"}))
         self.assertFalse(_is_app_backend_request({"path": "/api/apps/example/backend", "method": "GET"}))
         self.assertFalse(_is_app_backend_request({"path": "/api/apps/example/frontend/", "method": "POST"}))
         self.assertFalse(_is_app_backend_request({"path": "/api/session", "method": "POST"}))

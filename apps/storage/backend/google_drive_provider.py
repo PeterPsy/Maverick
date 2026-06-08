@@ -7,10 +7,14 @@ from collections.abc import Callable
 from dataclasses import dataclass
 import hashlib
 import json
+import os
+import re
 import time
 from pathlib import Path
 from typing import Any
+from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
+from urllib.request import Request, urlopen
 
 from drive_oauth import (
     GOOGLE_DRIVE_CLIENT_ID_SECRET,
@@ -36,6 +40,7 @@ DRIVE_TEMP_CACHE_MAX_BYTES = 32 * 1024 * 1024
 DRIVE_TEMP_CACHE_MAX_ITEM_BYTES = GOOGLE_EXPORT_LIMIT_BYTES
 DRIVE_ACCESS_TOKEN_CACHE_TTL_SECONDS = 5 * 60
 DRIVE_ACCESS_TOKEN_EXPIRY_SKEW_SECONDS = 30
+DRIVE_STREAM_CHUNK_BYTES = 1024 * 1024
 
 GOOGLE_NATIVE_PREVIEW_KINDS = {
     "application/vnd.google-apps.document": "document",
@@ -376,6 +381,125 @@ class GoogleDriveProvider:
             )
         payload, cache_hit = self._export_native(file_record=file_record, export_mime_type=requested_mime, max_bytes=max_bytes)
         return _content_payload(file_record=file_record, payload=payload, content_type=requested_mime, cache_hit=cache_hit)
+
+    def download_binary_content(
+        self,
+        *,
+        drive_file_id: str,
+        max_bytes: int,
+        operation: str,
+        file_record: dict[str, Any] | None = None,
+    ) -> tuple[dict[str, Any], bytes, bool]:
+        """Download one binary Drive file without converting it to a JSON/base64 payload."""
+        file_record = self._active_metadata(drive_file_id=drive_file_id, operation=operation, file_record=file_record)
+        if _is_google_native(file_record["content_type"]):
+            raise StorageValidationError(
+                "Google-native Docs, Sheets, and Slides must be exported through drive_export; they cannot be localized as original binary media.",
+                operation=operation,
+            )
+        self._require_download_capability(file_record, operation=operation)
+        payload, cache_hit = self._download_binary(file_record=file_record, max_bytes=max_bytes, operation=operation)
+        return file_record, payload, cache_hit
+
+    def download_binary_to_path(
+        self,
+        *,
+        drive_file_id: str,
+        max_bytes: int,
+        operation: str,
+        target_path: Path,
+        file_record: dict[str, Any] | None = None,
+        progress_callback: Callable[[int, int], None] | None = None,
+    ) -> tuple[dict[str, Any], int, str, bool]:
+        """Download one binary Drive file to a local path without base64 or browser token exposure."""
+        file_record = self._active_metadata(drive_file_id=drive_file_id, operation=operation, file_record=file_record)
+        if _is_google_native(file_record["content_type"]):
+            raise StorageValidationError(
+                "Google-native Docs, Sheets, and Slides must be exported through drive_export; they cannot be localized as original binary media.",
+                operation=operation,
+            )
+        self._require_download_capability(file_record, operation=operation)
+        declared_size = _int_value(file_record.get("size_bytes"))
+        if declared_size and declared_size > max_bytes:
+            raise StorageValidationError(f"Drive file is too large to read through Storage with max_bytes={max_bytes}.", operation=operation)
+        cache_key = self._cache_key(file_record=file_record, content_mime_type=file_record["content_type"], purpose="download", max_bytes=max_bytes)
+        cached = self._read_cache(cache_key)
+        if cached is not None:
+            sha256 = hashlib.sha256(cached).hexdigest()
+            _write_payload_to_path(target_path, cached)
+            progress_callback and progress_callback(len(cached), len(cached))
+            return file_record, len(cached), sha256, True
+        if self.transport is not default_transport:
+            payload, cache_hit = self._download_binary(file_record=file_record, max_bytes=max_bytes, operation=operation)
+            sha256 = hashlib.sha256(payload).hexdigest()
+            _write_payload_to_path(target_path, payload)
+            progress_callback and progress_callback(len(payload), len(payload))
+            return file_record, len(payload), sha256, cache_hit
+        size_bytes, sha256 = self._drive_bytes_to_path(
+            "GET",
+            f"/files/{quote(file_record['drive_file_id'], safe='')}",
+            params={"alt": "media", "supportsAllDrives": "true"},
+            max_bytes=max_bytes,
+            operation=operation,
+            target_path=target_path,
+            declared_size=declared_size,
+            progress_callback=progress_callback,
+        )
+        return file_record, size_bytes, sha256, False
+
+    def download_binary_range_to_path(
+        self,
+        *,
+        drive_file_id: str,
+        operation: str,
+        target_path: Path,
+        start: int,
+        end: int,
+        total_size: int,
+        file_record: dict[str, Any] | None = None,
+        progress_callback: Callable[[int, int], None] | None = None,
+    ) -> tuple[dict[str, Any], int, str]:
+        """Download one Drive byte range to a local path without base64 materialization."""
+        file_record = self._active_metadata(drive_file_id=drive_file_id, operation=operation, file_record=file_record)
+        if _is_google_native(file_record["content_type"]):
+            raise StorageValidationError(
+                "Google-native Docs, Sheets, and Slides must be exported through drive_export; they cannot be streamed as original binary media.",
+                operation=operation,
+            )
+        self._require_download_capability(file_record, operation=operation)
+        declared_size = _int_value(file_record.get("size_bytes"))
+        if start < 0 or end < start:
+            raise StorageValidationError("Drive media Range header is invalid.", operation=operation)
+        if declared_size and total_size and declared_size != total_size:
+            raise StorageValidationError("Drive media source size changed; refresh the Storage file record and retry.", operation=operation)
+        if declared_size and end >= declared_size:
+            raise StorageValidationError("Drive media Range header exceeds the file size.", operation=operation)
+        if self.transport is not default_transport:
+            payload = self._drive_bytes_request(
+                "GET",
+                f"/files/{quote(file_record['drive_file_id'], safe='')}",
+                params={"alt": "media", "supportsAllDrives": "true"},
+                max_bytes=max(declared_size, end + 1),
+                operation=operation,
+            )
+            selected = payload[start : end + 1]
+            if len(selected) != end - start + 1:
+                raise StorageValidationError("Drive did not return enough bytes for the requested media range.", operation=operation)
+            _write_payload_to_path(target_path, selected)
+            progress_callback and progress_callback(len(selected), len(selected))
+            return file_record, len(selected), hashlib.sha256(selected).hexdigest()
+        size_bytes, sha256 = self._drive_byte_range_to_path(
+            "GET",
+            f"/files/{quote(file_record['drive_file_id'], safe='')}",
+            params={"alt": "media", "supportsAllDrives": "true"},
+            operation=operation,
+            target_path=target_path,
+            start=start,
+            end=end,
+            total_size=total_size or declared_size,
+            progress_callback=progress_callback,
+        )
+        return file_record, size_bytes, sha256
 
     def upload(
         self,
@@ -824,6 +948,120 @@ class GoogleDriveProvider:
             raise StorageValidationError(f"Drive content exceeds the requested max_bytes limit of {max_bytes}.", operation=operation)
         return payload
 
+    def _drive_bytes_to_path(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict[str, Any] | None = None,
+        max_bytes: int,
+        operation: str,
+        target_path: Path,
+        declared_size: int = 0,
+        progress_callback: Callable[[int, int], None] | None = None,
+    ) -> tuple[int, str]:
+        query = urlencode({key: value for key, value in (params or {}).items() if value is not None})
+        url = f"{DRIVE_API_BASE}{path}" + (f"?{query}" if query else "")
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        total = 0
+        sha256 = hashlib.sha256()
+        try:
+            with urlopen(Request(url, headers={"Authorization": f"Bearer {self._token()}"}, method=method.upper()), timeout=60) as response:
+                with target_path.open("wb") as handle:
+                    while True:
+                        chunk = response.read(DRIVE_STREAM_CHUNK_BYTES)
+                        if not chunk:
+                            break
+                        if total + len(chunk) > max_bytes:
+                            raise StorageValidationError(f"Drive content exceeds the requested max_bytes limit of {max_bytes}.", operation=operation)
+                        handle.write(chunk)
+                        sha256.update(chunk)
+                        total += len(chunk)
+                        if progress_callback is not None:
+                            progress_callback(total, declared_size or total)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+        except HTTPError as error:
+            try:
+                payload = json.loads(error.read().decode("utf-8") or "{}")
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                payload = {}
+            detail = str(payload.get("error", {}).get("message") or payload.get("error") or "Drive request failed") if isinstance(payload, dict) else "Drive request failed"
+            raise DriveProviderError(int(error.code), detail) from error
+        except URLError as error:
+            raise DriveProviderError(503, "Google Drive media download is currently unavailable.") from error
+        if total == 0 and declared_size:
+            raise DriveProviderError(502, "Drive returned an empty media response.")
+        return total, sha256.hexdigest()
+
+    def _drive_byte_range_to_path(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict[str, Any] | None = None,
+        operation: str,
+        target_path: Path,
+        start: int,
+        end: int,
+        total_size: int,
+        progress_callback: Callable[[int, int], None] | None = None,
+    ) -> tuple[int, str]:
+        query = urlencode({key: value for key, value in (params or {}).items() if value is not None})
+        url = f"{DRIVE_API_BASE}{path}" + (f"?{query}" if query else "")
+        expected_length = end - start + 1
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        total = 0
+        sha256 = hashlib.sha256()
+        request = Request(
+            url,
+            headers={"Authorization": f"Bearer {self._token()}", "Range": f"bytes={start}-{end}"},
+            method=method.upper(),
+        )
+        try:
+            with urlopen(request, timeout=60) as response:
+                status = int(getattr(response, "status", 200))
+                content_range = str(response.headers.get("Content-Range") or "")
+                if status == 206:
+                    parsed = _parse_drive_content_range(content_range)
+                    if parsed is None:
+                        raise StorageValidationError("Drive media response did not include a valid Content-Range header.", operation=operation)
+                    range_start, range_end, range_total = parsed
+                    if range_start != start or range_end != end:
+                        raise StorageValidationError("Drive returned a different media range than Storage requested.", operation=operation)
+                    if total_size and range_total and total_size != range_total:
+                        raise StorageValidationError("Drive media source size changed; refresh the Storage file record and retry.", operation=operation)
+                elif status == 200 and start == 0:
+                    pass
+                else:
+                    raise StorageValidationError("Drive media server did not satisfy the requested byte range.", operation=operation)
+                with target_path.open("wb") as handle:
+                    while total < expected_length:
+                        chunk = response.read(min(DRIVE_STREAM_CHUNK_BYTES, expected_length - total))
+                        if not chunk:
+                            break
+                        handle.write(chunk)
+                        sha256.update(chunk)
+                        total += len(chunk)
+                        if progress_callback is not None:
+                            progress_callback(total, expected_length)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+        except HTTPError as error:
+            if int(error.code) == 416:
+                raise StorageValidationError("Drive media Range header is not satisfiable for this file.", operation=operation) from error
+            try:
+                payload = json.loads(error.read().decode("utf-8") or "{}")
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                payload = {}
+            detail = str(payload.get("error", {}).get("message") or payload.get("error") or "Drive request failed") if isinstance(payload, dict) else "Drive request failed"
+            raise DriveProviderError(int(error.code), detail) from error
+        except URLError as error:
+            raise DriveProviderError(503, "Google Drive media range download is currently unavailable.") from error
+        if total != expected_length:
+            raise StorageValidationError("Drive did not return enough bytes for the requested media range.", operation=operation)
+        return total, sha256.hexdigest()
+
     def _active_metadata(self, *, drive_file_id: str, operation: str, file_record: dict[str, Any] | None = None) -> dict[str, Any]:
         file_record = self._usable_cached_file_record(drive_file_id=drive_file_id, file_record=file_record) or self.metadata(drive_file_id=drive_file_id)
         if file_record.get("status") == "removed":
@@ -1234,6 +1472,26 @@ def _required_secret(app_secrets: dict[str, object], name: str) -> str:
     if not value:
         raise StorageValidationError("A Google Drive secret grant is required for this operation.", operation="drive")
     return value
+
+
+def _write_payload_to_path(path: Path, payload: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("wb") as handle:
+        handle.write(payload)
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+def _parse_drive_content_range(value: str) -> tuple[int, int, int] | None:
+    match = re.fullmatch(r"bytes\s+(\d+)-(\d+)/(\d+|\*)", str(value or "").strip())
+    if match is None:
+        return None
+    start = int(match.group(1))
+    end = int(match.group(2))
+    total = 0 if match.group(3) == "*" else int(match.group(3))
+    if end < start:
+        return None
+    return start, end, total
 
 
 def _required_drive_file_id(value: object, *, operation: str) -> str:

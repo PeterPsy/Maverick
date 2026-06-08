@@ -30,12 +30,14 @@ def status_line(status_code: int) -> str:
         200: "OK",
         201: "Created",
         204: "No Content",
+        206: "Partial Content",
         400: "Bad Request",
         401: "Unauthorized",
         403: "Forbidden",
         404: "Not Found",
         405: "Method Not Allowed",
         413: "Payload Too Large",
+        416: "Range Not Satisfiable",
         500: "Internal Server Error",
     }
     return f"{status_code} {reasons.get(status_code, 'OK')}"

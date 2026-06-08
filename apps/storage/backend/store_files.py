@@ -6,6 +6,7 @@ from store_files_content import delete_file_payload
 from store_files_paths import (
     MAX_PREVIEW_BYTES,
     MAX_READ_BYTES,
+    MAX_WRITE_BYTES,
     catalog_files_payload,
     file_record,
     list_files,
@@ -42,6 +43,7 @@ from store_files_view import (
 __all__ = [
     "MAX_PREVIEW_BYTES",
     "MAX_READ_BYTES",
+    "MAX_WRITE_BYTES",
     "catalog_files_payload",
     "clear_custom_view_payload",
     "create_folder_payload",

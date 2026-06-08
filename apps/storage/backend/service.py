@@ -11,6 +11,12 @@ from typing import Any
 from errors import StorageValidationError
 from drive_connection_store import append_audit, get_connection, now_timestamp, sync_state_for_connection, update_connection_sync_state
 from drive_oauth import complete_oauth, disconnect_connection, list_drive_connections, start_oauth
+from drive_localization import (
+    DRIVE_LOCALIZE_MAX_BYTES,
+    cleanup_drive_local_cache,
+    drive_media_stream_response,
+    localize_drive_file_payload,
+)
 from google_drive_provider import DriveProviderError, GoogleDriveProvider
 from inventory import preview_kind as inventory_preview_kind, upsert_remote_file_records
 from operations_manifest import STORAGE_ACTION_ALIASES, STORAGE_ACTIONS, operations_manifest_payload
@@ -24,6 +30,7 @@ from render_preview import rendered_preview_payload, rendered_thumbnail_payload
 from store import (
     MAX_PREVIEW_BYTES,
     MAX_READ_BYTES,
+    MAX_WRITE_BYTES,
     catalog_files_payload,
     create_folder_payload,
     delete_folder_payload,
@@ -103,6 +110,7 @@ DRIVE_SECRET_ACTIONS = {
     "drive_read",
     "drive_preview",
     "drive_export",
+    "file.localize",
     "drive_index",
     "drive_mark_indexed",
     "drive_write",
@@ -310,6 +318,34 @@ def handle_action(
             export_mime_type=str(body.get("export_mime_type") or body.get("format") or "readable_text"),
             max_bytes=_optional_positive_int(body, "max_bytes", maximum=MAX_READ_BYTES) or MAX_PREVIEW_BYTES,
             file_record=_drive_cached_file_record_from_body(data_root, uploaded_root, generated_root, body, connection_id, drive_file_id),
+        )
+    if action == "file.localize":
+        connection_id, drive_file_id = _drive_locator_from_body(data_root, uploaded_root, generated_root, body)
+        provider = _google_drive_provider(data_root, {**body, "connection_id": connection_id}, transport=drive_transport)
+        result = localize_drive_file_payload(
+            data_root=data_root,
+            provider=provider,
+            connection_id=connection_id,
+            drive_file_id=drive_file_id,
+            file_record=_drive_cached_file_record_from_body(data_root, uploaded_root, generated_root, body, connection_id, drive_file_id),
+            app_id=str(body.get("_app_id") or "storage"),
+            max_bytes=_optional_positive_int(body, "max_bytes", maximum=DRIVE_LOCALIZE_MAX_BYTES),
+            force=_bool_value(body.get("force")),
+        )
+        _persist_drive_files(data_root, {"files": [result["file"]]})
+        return 200, result
+    if action == "file.media_stream":
+        if not _bool_value(body.get("_media_route")):
+            raise StorageValidationError(
+                "file.media_stream is available only through the authenticated Storage media route.",
+                operation="file.media_stream",
+            )
+        return 200, _media_stream_payload(
+            data_root=data_root,
+            uploaded_root=uploaded_root,
+            generated_root=generated_root,
+            body=body,
+            drive_transport=drive_transport,
         )
     if action == "drive_index":
         connection_id, drive_file_id = _drive_locator_from_body(data_root, uploaded_root, generated_root, body)
@@ -839,6 +875,8 @@ def _sync_drive_changes(
             "error": "",
         },
     )
+    for record in persisted:
+        cleanup_drive_local_cache(data_root=data_root, current_file_record=record)
     stale_records = [item for item in persisted if bool(item.get("stale")) or str(item.get("status") or "") != "active"]
     stale_ids = [str(item.get("file_id") or item.get("stable_storage_file_id") or item.get("id")) for item in stale_records]
     indexed_stale_ids = [
@@ -862,6 +900,76 @@ def _persist_drive_write_result(data_root: Path, result: dict[str, Any]) -> list
     if file_record is None:
         return []
     return upsert_remote_file_records(data_root=data_root, records=[file_record])
+
+
+def _media_stream_payload(
+    *,
+    data_root: Path,
+    uploaded_root: Path,
+    generated_root: Path,
+    body: dict[str, Any],
+    drive_transport=None,
+) -> dict[str, Any]:
+    record = _file_record_for_path_action(data_root=data_root, uploaded_root=uploaded_root, generated_root=generated_root, body=body)
+    download = _bool_value(body.get("download"))
+    if record.get("provider") == GOOGLE_DRIVE_PROVIDER:
+        provider = None
+        app_secrets = body.get("_app_secrets") if isinstance(body.get("_app_secrets"), dict) else {}
+        if app_secrets:
+            connection_id = str(record.get("connection_id") or "").strip()
+            provider = _google_drive_provider(data_root, {**body, "connection_id": connection_id}, transport=drive_transport)
+        request_headers = body.get("_request_headers") if isinstance(body.get("_request_headers"), dict) else {}
+        return drive_media_stream_response(
+            data_root=data_root,
+            file_record=record,
+            app_id=str(body.get("_app_id") or "storage"),
+            download=download,
+            provider=provider,
+            localization_id=str(body.get("localization_id") or ""),
+            source_version=str(body.get("source_version") or ""),
+            range_header=str(request_headers.get("range") or body.get("range") or ""),
+        )
+    role = str(record.get("role") or "")
+    relative_path = str(record.get("relative_path") or "")
+    root = uploaded_root.resolve() if role == "uploaded" else generated_root.resolve()
+    path = (root / relative_path).resolve()
+    if role not in {"uploaded", "generated"} or root not in path.parents or not path.is_file():
+        raise StorageValidationError("File path escapes the selected storage root or does not exist.", operation="file.media_stream")
+    return {
+        "file": record,
+        "file_response": {
+            "path": str(path),
+            "content_type": str(record.get("content_type") or "application/octet-stream"),
+            "file_name": str(record.get("name") or path.name),
+            "etag": str(record.get("sha256") or record.get("etag_or_version") or record.get("modified_at") or ""),
+            "download": download,
+            "cache_control": "private, max-age=60",
+        },
+    }
+
+
+def _file_record_for_path_action(
+    *,
+    data_root: Path,
+    uploaded_root: Path,
+    generated_root: Path,
+    body: dict[str, Any],
+) -> dict[str, Any]:
+    file_id = _file_id_from_body(body) or str(body.get("stable_storage_file_id") or "").strip()
+    if file_id:
+        return StorageReferenceResolver(data_root=data_root, uploaded_root=uploaded_root, generated_root=generated_root).require_file(file_id)
+    role, relative_path = reference_from_payload(
+        role=str(body.get("role") or ""),
+        relative_path=str(body.get("relative_path") or ""),
+        workspace_relative_path=str(body.get("workspace_relative_path") or ""),
+    )
+    return file_info_payload(
+        role=role,
+        relative_path=relative_path,
+        data_root=data_root,
+        uploaded_root=uploaded_root,
+        generated_root=generated_root,
+    )["file"]
 
 
 def _drive_index_payload(
@@ -1091,9 +1199,14 @@ def _drive_content_from_body(body: dict[str, Any]) -> tuple[bytes, str]:
             content = b64decode(str(body.get("content_base64") or ""), validate=True)
         except (binascii.Error, ValueError) as error:
             raise StorageValidationError("content_base64 must be valid base64.", operation="drive_write") from error
+        if len(content) > MAX_WRITE_BYTES:
+            raise StorageValidationError(f"Drive write content must be at most {MAX_WRITE_BYTES} bytes.", operation="drive_write")
         return content, str(body.get("content_type") or "application/octet-stream")
     if "content" in body and body.get("content") is not None:
-        return str(body.get("content") or "").encode("utf-8"), str(body.get("content_type") or "text/plain; charset=utf-8")
+        content = str(body.get("content") or "").encode("utf-8")
+        if len(content) > MAX_WRITE_BYTES:
+            raise StorageValidationError(f"Drive write content must be at most {MAX_WRITE_BYTES} bytes.", operation="drive_write")
+        return content, str(body.get("content_type") or "text/plain; charset=utf-8")
     raise StorageValidationError(
         "Drive write requires content or content_base64.",
         operation="drive_write",

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import hashlib
 from pathlib import Path
 import sys
 import tempfile
@@ -38,8 +39,10 @@ evict_foreign_backend_modules()
 sys.path.insert(0, str(BACKEND_ROOT))
 
 from drive_connection_store import replace_connection  # noqa: E402
+import drive_localization  # noqa: E402
 from google_drive_provider import GoogleDriveProvider, stable_storage_file_id  # noqa: E402
 from inventory import load_inventory, upsert_remote_file_records  # noqa: E402
+import service as storage_service  # noqa: E402
 from service import app_events_for_action, handle_action, secret_lookup_for_drive_action  # noqa: E402
 
 
@@ -414,6 +417,267 @@ class GoogleDriveProviderTest(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(result["content_base64"], "aGVsbG8gYnl0ZXM=")
         self.assertEqual(metadata_calls, [])
+
+    def test_drive_localize_caches_binary_and_media_stream_uses_local_file_response(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data" / "storage"
+            file_id = stable_storage_file_id("drive_conn_abc", "video-1")
+            content = b"0123456789"
+            replace_connection(data_root, {**CONNECTION, "created_at": "2026-05-28T00:00:00+00:00"})
+            transport = FakeDriveTransport(
+                {
+                    ("GET", "/drive/v3/files/video-1"): [
+                        {
+                            "id": "video-1",
+                            "name": "Clip.mp4",
+                            "mimeType": "video/mp4",
+                            "size": str(len(content)),
+                            "modifiedTime": "2026-05-28T11:00:00Z",
+                            "version": "8",
+                            "capabilities": {"canDownload": True},
+                        },
+                        content,
+                    ]
+                }
+            )
+
+            status, localized = handle_action(
+                data_root,
+                root / "storage" / "uploaded",
+                root / "storage" / "generated",
+                {
+                    "action": "file.localize",
+                    "connection_id": "drive_conn_abc",
+                    "drive_file_id": "video-1",
+                    "_app_secrets": SECRETS,
+                },
+                drive_transport=transport,
+            )
+            second_status, second = handle_action(
+                data_root,
+                root / "storage" / "uploaded",
+                root / "storage" / "generated",
+                {
+                    "action": "file.localize",
+                    "stable_storage_file_id": file_id,
+                    "_app_secrets": SECRETS,
+                },
+                drive_transport=transport,
+            )
+            media_status, media = handle_action(
+                data_root,
+                root / "storage" / "uploaded",
+                root / "storage" / "generated",
+                {"action": "file.media_stream", "stable_storage_file_id": file_id, "download": True, "_media_route": True},
+            )
+            media_calls = [call for call in transport.calls if parse_qs(urlparse(call[1]).query).get("alt") == ["media"]]
+            local_path = Path(media["file_response"]["path"])
+            local_path_bytes = local_path.read_bytes()
+            local_path_is_under_cache = local_path.is_relative_to(data_root / "drive_local_cache")
+            stream_query = parse_qs(urlparse(localized["stream_url"]).query)
+        self.assertEqual(status, 200)
+        self.assertEqual(localized["status"], "ready")
+        self.assertEqual(localized["stable_storage_file_id"], file_id)
+        self.assertEqual(localized["localization"]["sha256"], hashlib.sha256(content).hexdigest())
+        self.assertNotIn("local_path", localized)
+        self.assertEqual(local_path_bytes, content)
+        self.assertTrue(local_path_is_under_cache)
+        self.assertEqual(stream_query["stable_storage_file_id"], [file_id])
+        self.assertIn("/api/apps/storage/media?", localized["stream_url"])
+        self.assertIn("download=1", localized["download_url"])
+        self.assertEqual(second_status, 200)
+        self.assertTrue(second["localization"]["cache_hit"])
+        self.assertEqual(media_status, 200)
+        self.assertEqual(media["file_response"]["content_type"], "video/mp4")
+        self.assertTrue(media["file_response"]["download"])
+        self.assertEqual(stream_query["localization_id"], [localized["localization"]["id"]])
+        self.assertEqual(stream_query["source_version"], ["8"])
+        self.assertIn("_app_secret_request", stream_query)
+        self.assertEqual(len(media_calls), 1)
+
+    def test_drive_media_stream_proxies_requested_range_when_full_cache_is_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data" / "storage"
+            file_id = stable_storage_file_id("drive_conn_abc", "video-1")
+            content = b"0123456789"
+            replace_connection(data_root, {**CONNECTION, "created_at": "2026-05-28T00:00:00+00:00"})
+            upsert_remote_file_records(
+                data_root=data_root,
+                records=[
+                    {
+                        "id": file_id,
+                        "file_id": file_id,
+                        "stable_storage_file_id": file_id,
+                        "provider": "google_drive",
+                        "connection_id": "drive_conn_abc",
+                        "drive_file_id": "video-1",
+                        "remote_locator": {"drive_file_id": "video-1"},
+                        "role": "",
+                        "relative_path": "",
+                        "workspace_relative_path": "",
+                        "name": "Clip.mp4",
+                        "extension": ".mp4",
+                        "size_bytes": len(content),
+                        "modified_at": "2026-05-28T11:00:00Z",
+                        "content_type": "video/mp4",
+                        "preview_kind": "video",
+                        "sha256": "",
+                        "etag_or_version": "8",
+                        "capabilities": {"can_read": True, "can_preview": True},
+                        "status": "active",
+                    }
+                ],
+            )
+            transport = FakeDriveTransport({("GET", "/drive/v3/files/video-1"): content})
+
+            status, media = handle_action(
+                data_root,
+                root / "storage" / "uploaded",
+                root / "storage" / "generated",
+                {
+                    "action": "file.media_stream",
+                    "_media_route": True,
+                    "stable_storage_file_id": file_id,
+                    "source_version": "8",
+                    "_app_secrets": SECRETS,
+                    "_request_headers": {"range": "bytes=2-5"},
+                },
+                drive_transport=transport,
+            )
+            range_path = Path(media["file_response"]["path"])
+            full_cache_path = data_root / "drive_local_cache" / media["localization"]["id"][:2] / media["localization"]["id"] / "content.bin"
+            range_bytes = range_path.read_bytes()
+            full_cache_exists = full_cache_path.exists()
+            media_calls = [call for call in transport.calls if parse_qs(urlparse(call[1]).query).get("alt") == ["media"]]
+
+        self.assertEqual(status, 200)
+        self.assertEqual(range_bytes, b"2345")
+        self.assertEqual(media["file_response"]["served_range"], {"start": 2, "end": 5, "size": len(content)})
+        self.assertEqual(media["file_response"]["content_type"], "video/mp4")
+        self.assertFalse(full_cache_exists)
+        self.assertEqual(len(media_calls), 1)
+
+    def test_drive_media_stream_rejects_stale_source_version(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data" / "storage"
+            file_id = stable_storage_file_id("drive_conn_abc", "video-1")
+            upsert_remote_file_records(
+                data_root=data_root,
+                records=[
+                    {
+                        "id": file_id,
+                        "file_id": file_id,
+                        "stable_storage_file_id": file_id,
+                        "provider": "google_drive",
+                        "connection_id": "drive_conn_abc",
+                        "drive_file_id": "video-1",
+                        "remote_locator": {"drive_file_id": "video-1"},
+                        "role": "",
+                        "relative_path": "",
+                        "workspace_relative_path": "",
+                        "name": "Clip.mp4",
+                        "extension": ".mp4",
+                        "size_bytes": 10,
+                        "modified_at": "2026-05-28T11:00:00Z",
+                        "content_type": "video/mp4",
+                        "preview_kind": "video",
+                        "sha256": "",
+                        "etag_or_version": "8",
+                        "capabilities": {"can_read": True, "can_preview": True},
+                        "status": "active",
+                    }
+                ],
+            )
+
+            with self.assertRaisesRegex(Exception, "source_version is stale"):
+                handle_action(
+                    data_root,
+                    root / "storage" / "uploaded",
+                    root / "storage" / "generated",
+                    {"action": "file.media_stream", "_media_route": True, "stable_storage_file_id": file_id, "source_version": "7"},
+                )
+
+    def test_media_stream_action_requires_internal_media_route_marker(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data" / "storage"
+            uploaded_root = root / "storage" / "uploaded"
+            uploaded_root.mkdir(parents=True)
+            _status, uploaded = handle_action(
+                data_root,
+                uploaded_root,
+                root / "storage" / "generated",
+                {
+                    "action": "upload_file",
+                    "role": "uploaded",
+                    "file_name": "clip.mp4",
+                    "content_base64": "Y2xpcA==",
+                },
+            )
+
+            with self.assertRaisesRegex(Exception, "authenticated Storage media route"):
+                handle_action(
+                    data_root,
+                    uploaded_root,
+                    root / "storage" / "generated",
+                    {"action": "file.media_stream", "stable_storage_file_id": uploaded["file"]["id"]},
+                )
+
+    def test_drive_local_cache_cleanup_prunes_stale_sources_and_lru_over_budget(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir) / "data" / "storage"
+            stale_dir = data_root / "drive_local_cache" / "aa" / "aa-old"
+            keep_dir = data_root / "drive_local_cache" / "bb" / "bb-new"
+            stale_dir.mkdir(parents=True)
+            keep_dir.mkdir(parents=True)
+            (stale_dir / "content.bin").write_bytes(b"stale-source")
+            (keep_dir / "content.bin").write_bytes(b"keep-source")
+            (stale_dir / "metadata.json").write_text(
+                json.dumps(
+                    {
+                        "id": "aa-old",
+                        "status": "ready",
+                        "stable_storage_file_id": "file_drive_1",
+                        "source_version": "1",
+                        "content_type": "video/mp4",
+                        "size_bytes": len(b"stale-source"),
+                        "updated_at": "2026-05-01T00:00:00+00:00",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (keep_dir / "metadata.json").write_text(
+                json.dumps(
+                    {
+                        "id": "bb-new",
+                        "status": "ready",
+                        "stable_storage_file_id": "file_drive_2",
+                        "source_version": "1",
+                        "content_type": "video/mp4",
+                        "size_bytes": len(b"keep-source"),
+                        "updated_at": "2026-05-02T00:00:00+00:00",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            original_budget = drive_localization.DRIVE_LOCAL_CACHE_MAX_BYTES
+            try:
+                drive_localization.DRIVE_LOCAL_CACHE_MAX_BYTES = len(b"keep-source") + 1
+                drive_localization.cleanup_drive_local_cache(
+                    data_root=data_root,
+                    current_file_record={"id": "file_drive_1", "file_id": "file_drive_1", "source_version": "2"},
+                    keep_localization_id="bb-new",
+                )
+            finally:
+                drive_localization.DRIVE_LOCAL_CACHE_MAX_BYTES = original_budget
+            stale_dir_exists = stale_dir.exists()
+            keep_dir_exists = keep_dir.exists()
+
+        self.assertFalse(stale_dir_exists)
+        self.assertTrue(keep_dir_exists)
 
     def test_drive_google_doc_exports_readable_text_centrally(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -990,6 +1254,36 @@ class GoogleDriveProviderTest(unittest.TestCase):
                     },
                     drive_transport=transport,
                 )
+
+        upload_calls = [call for call in transport.calls if "/upload/drive/v3/files" in call[1]]
+        self.assertEqual(upload_calls, [])
+
+    def test_drive_write_rejects_content_above_write_budget_before_upload(self) -> None:
+        original_limit = storage_service.MAX_WRITE_BYTES
+        storage_service.MAX_WRITE_BYTES = 4
+        transport = FakeDriveTransport({})
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                root = Path(temp_dir)
+                data_root = root / "data" / "storage"
+
+                with self.assertRaisesRegex(Exception, "at most 4 bytes"):
+                    handle_action(
+                        data_root,
+                        root / "storage" / "uploaded",
+                        root / "storage" / "generated",
+                        {
+                            "action": "drive_write",
+                            "connection_id": "drive_conn_abc",
+                            "parent_drive_file_id": "folder-1",
+                            "file_name": "notes.txt",
+                            "content_base64": "aGVsbG8=",
+                            "_app_secrets": SECRETS,
+                        },
+                        drive_transport=transport,
+                    )
+        finally:
+            storage_service.MAX_WRITE_BYTES = original_limit
 
         upload_calls = [call for call in transport.calls if "/upload/drive/v3/files" in call[1]]
         self.assertEqual(upload_calls, [])

@@ -201,6 +201,20 @@ class PlatformHost:
                     start_response=start_response,
                     shutdown_controller=self.shutdown_controller,
                 )
+            if path.startswith("/api/apps/") and path.endswith("/media") and method in {"GET", "HEAD"}:
+                if context is None:
+                    return json_response(start_response, {"error": "authentication_required"}, status="401 Unauthorized")
+                app_id = path.removeprefix("/api/apps/").removesuffix("/media").strip("/")
+                return handle_app_backend(
+                    self.state,
+                    environ=environ,
+                    workspace_id=workspace_id,
+                    app_id=app_id,
+                    user=user,
+                    start_path=self.start_path,
+                    start_response=start_response,
+                    shutdown_controller=self.shutdown_controller,
+                )
             return text_response(start_response, "Not found", status="404 Not Found")
         except HttpRequestError as error:
             return json_response(start_response, {"error": error.error}, status=error.status)

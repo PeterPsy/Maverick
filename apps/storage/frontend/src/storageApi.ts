@@ -1,4 +1,4 @@
-import type { CatalogPayload, CreateFolderPayload, DeleteFilePayload, DeleteFolderPayload, DownloadFolderPayload, DriveCompleteOAuthPayload, DriveConnectionsPayload, DriveDisconnectPayload, DriveListPayload, DrivePreviewPayload, DriveStartOAuthPayload, FileRole, StorageFile, StorageFolder, StorageViewFilter, MoveFilePayload, MoveFolderPayload, MoveItemsPayload, PreviewTablePayload, PreviewTextPayload, ReadFilePayload, RenderPreviewPayload, UpdateMarkdownPayload, UploadFilePayload } from './types';
+import type { CatalogPayload, CreateFolderPayload, DeleteFilePayload, DeleteFolderPayload, DownloadFolderPayload, DriveCompleteOAuthPayload, DriveConnectionsPayload, DriveDisconnectPayload, DriveListPayload, DriveLocalizePayload, DrivePreviewPayload, DriveStartOAuthPayload, DriveWritePayload, FileRole, StorageFile, StorageFolder, StorageViewFilter, MoveFilePayload, MoveFolderPayload, MoveItemsPayload, PreviewTablePayload, PreviewTextPayload, ReadFilePayload, RenderPreviewPayload, UpdateMarkdownPayload, UploadFilePayload } from './types';
 
 const DEFAULT_APP_ID = 'storage';
 
@@ -20,6 +20,11 @@ export type UploadProgress = {
 
 export type UploadFileOptions = StorageApiOptions & {
   onProgress?: (progress: UploadProgress) => void;
+};
+
+export type DriveUploadTarget = {
+  connectionId: string;
+  driveFileId: string;
 };
 
 export type DriveListOptions = StorageApiOptions & {
@@ -115,6 +120,7 @@ export type CatalogRequest = Partial<Pick<StorageViewFilter, 'query' | 'role' | 
 
 export const CATALOG_PAGE_LIMIT = 500;
 export const DRIVE_PAGE_LIMIT = 50;
+export const MAX_BASE64_WRITE_BYTES = 25 * 1024 * 1024;
 
 export function loadCatalog(params: CatalogRequest = {}) {
   return callBackend<CatalogPayload>({ action: 'catalog', ...params });
@@ -233,6 +239,33 @@ export function previewDriveFile(file: StorageFile, maxBytes: number, maxChars?:
   }, options);
 }
 
+export function localizeDriveFile(file: StorageFile, options: StorageApiOptions = {}) {
+  const locator = driveFileLocator(file);
+  return callBackend<DriveLocalizePayload>({
+    action: 'file.localize',
+    ...locator,
+    _app_secret_request: driveConnectionSecretRequest(locator.connection_id)
+  }, options);
+}
+
+export function driveMediaDownloadUrl(payload: Pick<DriveLocalizePayload, 'download_url' | 'stream_url'>) {
+  if (payload.download_url) return payload.download_url;
+  return `${payload.stream_url}${payload.stream_url.includes('?') ? '&' : '?'}download=1`;
+}
+
+export function driveMediaStreamUrl(file: StorageFile, options: { appId?: string; download?: boolean } = {}) {
+  const locator = driveFileLocator(file);
+  const params = new URLSearchParams();
+  params.set('stable_storage_file_id', locator.stable_storage_file_id || file.id);
+  params.set('connection_id', locator.connection_id);
+  params.set('drive_file_id', locator.drive_file_id);
+  const sourceVersion = String(file.etag_or_version || file.source_version || file.modified_at || '').trim();
+  if (sourceVersion) params.set('source_version', sourceVersion);
+  if (options.download) params.set('download', '1');
+  params.set('_app_secret_request', JSON.stringify(driveConnectionSecretRequest(locator.connection_id)));
+  return `/api/apps/${encodeURIComponent(options.appId || currentStorageAppId())}/media?${params.toString()}`;
+}
+
 export function renameDriveFile(file: StorageFile, newName: string, options: StorageApiOptions = {}) {
   const locator = driveFileLocator(file);
   return callBackend<{ file: StorageFile }>({
@@ -264,6 +297,7 @@ export async function createFolder(role: FileRole, parentRelativePath: string, f
 }
 
 export async function uploadFile(role: FileRole, folderRelativePath: string, file: File, options: UploadFileOptions = {}) {
+  assertBase64WriteSize(file);
   const contentBase64 = await fileToBase64(file, (loaded, total) => {
     const percent = total > 0 ? Math.round((loaded / total) * 35) : 0;
     options.onProgress?.({ loaded, percent: Math.min(35, percent), phase: 'reading', total });
@@ -280,6 +314,35 @@ export async function uploadFile(role: FileRole, folderRelativePath: string, fil
   const payload = useProgressRequest
     ? await callBackendWithUploadProgress<UploadFilePayload>(body, options)
     : await callBackend<UploadFilePayload>(body, options);
+  options.onProgress?.({ loaded: file.size, percent: 100, phase: 'complete', total: file.size });
+  return payload;
+}
+
+export async function uploadDriveFile(file: File, target: DriveUploadTarget, options: UploadFileOptions = {}) {
+  const connectionId = target.connectionId.trim();
+  const parentDriveFileId = target.driveFileId.trim();
+  if (!connectionId || !parentDriveFileId) {
+    throw new Error('Choose a Google Drive folder before uploading a file.');
+  }
+  assertBase64WriteSize(file);
+  const contentBase64 = await fileToBase64(file, (loaded, total) => {
+    const percent = total > 0 ? Math.round((loaded / total) * 35) : 0;
+    options.onProgress?.({ loaded, percent: Math.min(35, percent), phase: 'reading', total });
+  });
+  const body = {
+    action: 'drive_write',
+    connection_id: connectionId,
+    parent_drive_file_id: parentDriveFileId,
+    file_name: file.name,
+    content_base64: contentBase64,
+    content_type: file.type || 'application/octet-stream',
+    _app_secret_request: driveConnectionSecretRequest(connectionId)
+  };
+  options.onProgress?.({ loaded: 0, percent: 35, phase: 'uploading', total: file.size });
+  const useProgressRequest = Boolean(options.onProgress) && typeof XMLHttpRequest !== 'undefined' && !options.fetchImpl;
+  const payload = useProgressRequest
+    ? await callBackendWithUploadProgress<DriveWritePayload>(body, options)
+    : await callBackend<DriveWritePayload>(body, options);
   options.onProgress?.({ loaded: file.size, percent: 100, phase: 'complete', total: file.size });
   return payload;
 }
@@ -412,6 +475,13 @@ function moveReferencePayload(item: StorageMoveReference) {
     relative_path: item.relative_path,
     ...(item.workspace_relative_path ? { workspace_relative_path: item.workspace_relative_path } : {})
   };
+}
+
+function assertBase64WriteSize(file: File) {
+  if (file.size <= MAX_BASE64_WRITE_BYTES) {
+    return;
+  }
+  throw new Error(`Storage uploads through this path are limited to ${Math.floor(MAX_BASE64_WRITE_BYTES / (1024 * 1024))} MB.`);
 }
 
 function callBackendWithUploadProgress<T>(body: Record<string, unknown>, options: UploadFileOptions): Promise<T> {

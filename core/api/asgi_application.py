@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from io import BytesIO
 import os
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, Iterable, Iterator
 
 from core.api.app_events import APP_EVENTS_WS_PATH, stream_app_events
 from core.api.backend_recovery import start_backend_restart_recovery
@@ -139,15 +139,16 @@ class PlatformAsgiHost:
             status_holder["headers"] = [(name.encode("latin1"), value.encode("latin1")) for name, value in headers]
 
         environ = _wsgi_environ(scope, body)
-        if _is_app_backend_request(scope):
-            loop = asyncio.get_running_loop()
-            response_body = await loop.run_in_executor(
+        use_app_backend_executor = _is_app_backend_request(scope)
+        loop = asyncio.get_running_loop()
+        if use_app_backend_executor:
+            response_iterable = await loop.run_in_executor(
                 self.app_backend_executor,
-                partial(_run_wsgi_http, self.http_host, environ, start_response),
+                partial(_open_wsgi_http, self.http_host, environ, start_response),
             )
         else:
-            response_body = await asyncio.to_thread(
-                _run_wsgi_http,
+            response_iterable = await asyncio.to_thread(
+                _open_wsgi_http,
                 self.http_host,
                 environ,
                 start_response,
@@ -159,7 +160,21 @@ class PlatformAsgiHost:
                 "headers": status_holder.get("headers", []),
             }
         )
-        await send({"type": "http.response.body", "body": response_body, "more_body": False})
+        try:
+            while True:
+                if use_app_backend_executor:
+                    chunk = await loop.run_in_executor(self.app_backend_executor, partial(_next_wsgi_chunk, response_iterable))
+                else:
+                    chunk = await asyncio.to_thread(_next_wsgi_chunk, response_iterable)
+                if chunk is None:
+                    break
+                await send({"type": "http.response.body", "body": chunk, "more_body": True})
+        finally:
+            if use_app_backend_executor:
+                await loop.run_in_executor(self.app_backend_executor, partial(_close_wsgi_iterable, response_iterable))
+            else:
+                await asyncio.to_thread(_close_wsgi_iterable, response_iterable)
+        await send({"type": "http.response.body", "body": b"", "more_body": False})
 
 
 class LazyAsgiApplication:
@@ -206,7 +221,9 @@ def _app_backend_worker_count() -> int:
 def _is_app_backend_request(scope: dict[str, Any]) -> bool:
     path = str(scope.get("path") or "")
     method = str(scope.get("method") or "GET").upper()
-    return method == "POST" and path.startswith("/api/apps/") and path.endswith("/backend")
+    if method == "POST" and path.startswith("/api/apps/") and path.endswith("/backend"):
+        return True
+    return method in {"GET", "HEAD"} and path.startswith("/api/apps/") and path.endswith("/media")
 
 
 def _wsgi_environ(scope: dict[str, Any], body: bytes) -> dict[str, Any]:
@@ -265,6 +282,28 @@ async def _send_direct_json_response(send: AsgiSend, body: bytes, *, status: int
 def _run_wsgi_http(http_host: PlatformHost, environ: dict[str, Any], start_response: Callable[[str, list[tuple[str, str]]], None]) -> bytes:
     """Run the synchronous platform HTTP host outside the ASGI event loop."""
     return b"".join(http_host(environ, start_response))
+
+
+def _open_wsgi_http(
+    http_host: PlatformHost,
+    environ: dict[str, Any],
+    start_response: Callable[[str, list[tuple[str, str]]], None],
+) -> Iterator[bytes]:
+    """Open the synchronous platform HTTP host and return its response iterator."""
+    return iter(http_host(environ, start_response))
+
+
+def _next_wsgi_chunk(iterator: Iterator[bytes]) -> bytes | None:
+    try:
+        return next(iterator)
+    except StopIteration:
+        return None
+
+
+def _close_wsgi_iterable(iterator: Iterable[bytes]) -> None:
+    close = getattr(iterator, "close", None)
+    if callable(close):
+        close()
 
 
 def create_asgi_application() -> PlatformAsgiHost:

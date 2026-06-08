@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, FormEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Check, FolderPlus, HardDrive, Upload, X } from 'lucide-react';
-import { createFolder, currentStorageAppId, loadCatalog, startDriveOAuth, uploadFile } from '../../storageApi';
+import { createFolder, currentStorageAppId, loadCatalog, startDriveOAuth, uploadDriveFile, uploadFile, type UploadProgress } from '../../storageApi';
 import { roleLabels } from '../../storageMeta';
 import { storageSelectionFromMessage, type ActiveStorageSelectionMessage } from '../../lib/activeStorageSelection';
 import { applyStorageFoldersDelta } from '../../lib/storageCatalogDelta';
@@ -14,14 +14,28 @@ import '../../styles/sidebar-widget.css';
 const PRIMARY_ACTION_LABEL = 'New Folder';
 const WIDGET_ID = 'storage-sidebar-footer';
 
-type FolderActionTarget = {
+type LocalFolderActionTarget = {
+  provider: 'local';
   relativePath: string;
   role: FileRole;
   workspaceRelativePath: string;
 };
 
+type DriveFolderActionTarget = {
+  provider: 'google_drive';
+  connectionId: string;
+  displayPath: string;
+  driveFileId: string;
+};
+
+type FolderActionTarget = LocalFolderActionTarget | DriveFolderActionTarget;
+
 function isFileRole(role: unknown): role is FileRole {
   return role === 'uploaded' || role === 'generated';
+}
+
+function isDriveTarget(target: FolderActionTarget): target is DriveFolderActionTarget {
+  return target.provider === 'google_drive';
 }
 
 function parentFolderPath(relativePath: string) {
@@ -30,11 +44,12 @@ function parentFolderPath(relativePath: string) {
   return parts.join('/');
 }
 
-function targetFromFolder(folder: StorageFolder): FolderActionTarget {
+function targetFromFolder(folder: StorageFolder): LocalFolderActionTarget {
   if (!isFileRole(folder.role)) {
     throw new Error('Folder actions require a local Storage folder.');
   }
   return {
+    provider: 'local',
     relativePath: folder.relative_path,
     role: folder.role,
     workspaceRelativePath: folder.workspace_relative_path
@@ -42,11 +57,27 @@ function targetFromFolder(folder: StorageFolder): FolderActionTarget {
 }
 
 function targetFromNavigationTarget(target: StorageNavigationTarget | null): FolderActionTarget | null {
-  if (!target || target.targetType !== 'folder' || !isFileRole(target.role)) {
+  if (!target || target.targetType !== 'folder') {
+    return null;
+  }
+  if (target.provider === 'google_drive') {
+    const connectionId = target.connectionId?.trim() || '';
+    if (!connectionId) {
+      return null;
+    }
+    return {
+      provider: 'google_drive',
+      connectionId,
+      displayPath: target.displayPath?.trim() || 'Google Drive',
+      driveFileId: target.driveFileId?.trim() || ''
+    };
+  }
+  if (!isFileRole(target.role)) {
     return null;
   }
   const relativePath = target.folderRelativePath || '';
   return {
+    provider: 'local',
     relativePath,
     role: target.role,
     workspaceRelativePath: relativePath ? `storage/${target.role}/${relativePath}` : `storage/${target.role}`
@@ -55,12 +86,15 @@ function targetFromNavigationTarget(target: StorageNavigationTarget | null): Fol
 
 function targetLabel(target: FolderActionTarget | null) {
   if (!target) {
-    return 'Choose Uploaded or Generated first';
+    return 'Choose a folder first';
+  }
+  if (isDriveTarget(target)) {
+    return target.displayPath || 'Google Drive';
   }
   return `${roleLabels[target.role]}${target.relativePath ? ` / ${target.relativePath}` : ''}`;
 }
 
-function nextDefaultFolderName(target: FolderActionTarget, folders: StorageFolder[]) {
+function nextDefaultFolderName(target: LocalFolderActionTarget, folders: StorageFolder[]) {
   const siblingNames = new Set(
     folders
       .filter((folder) => folder.role === target.role && parentFolderPath(folder.relative_path) === target.relativePath)
@@ -80,6 +114,10 @@ function nextDefaultFolderName(target: FolderActionTarget, folders: StorageFolde
 }
 
 function openFolderInShell(appId: string, target: FolderActionTarget) {
+  if (isDriveTarget(target)) {
+    openDriveFolderInShell(appId, target);
+    return;
+  }
   window.parent?.postMessage(
     {
       type: 'maverick.widget.open-app',
@@ -87,6 +125,22 @@ function openFolderInShell(appId: string, target: FolderActionTarget) {
       params: {
         folder_relative_path: target.relativePath,
         role: target.role
+      }
+    },
+    window.location.origin
+  );
+}
+
+function openDriveFolderInShell(appId: string, target: DriveFolderActionTarget) {
+  window.parent?.postMessage(
+    {
+      type: 'maverick.widget.open-app',
+      app_id: appId,
+      params: {
+        provider: 'google_drive',
+        connection_id: target.connectionId,
+        drive_file_id: target.driveFileId,
+        display_path: target.displayPath
       }
     },
     window.location.origin
@@ -199,11 +253,21 @@ function StorageSidebarFooterWidget() {
     return () => window.removeEventListener('message', handleShellMessage);
   }, [appId]);
 
+  function requireTarget(action: 'create'): LocalFolderActionTarget | null;
+  function requireTarget(action: 'upload'): FolderActionTarget | null;
   function requireTarget(action: 'create' | 'upload') {
+    if (target && action === 'create' && isDriveTarget(target)) {
+      setStatus('Choose Uploaded or Generated before creating a folder.');
+      return null;
+    }
+    if (target && action === 'upload' && isDriveTarget(target) && !target.driveFileId) {
+      setStatus('Choose a Google Drive folder before uploading a file.');
+      return null;
+    }
     if (target) {
       return target;
     }
-    setStatus(`Choose Uploaded or Generated before ${action === 'create' ? 'creating a folder' : 'uploading a file'}.`);
+    setStatus(action === 'create' ? 'Choose Uploaded or Generated before creating a folder.' : 'Choose a folder before uploading a file.');
     return null;
   }
 
@@ -294,19 +358,24 @@ function StorageSidebarFooterWidget() {
       for (let index = 0; index < selectedFiles.length; index += 1) {
         const file = selectedFiles[index];
         setUploadLabel(file.name);
-        const payload = await uploadFile(nextTarget.role, nextTarget.relativePath, file, {
+        const uploadOptions = {
           onProgress: (progress) => {
             const aggregateProgress = ((index + (progress.percent / 100)) / selectedFiles.length) * 100;
             setUploadProgress(Math.max(1, Math.min(99, Math.round(aggregateProgress))));
           }
-        });
+        } satisfies { onProgress: (progress: UploadProgress) => void };
+        const payload = isDriveTarget(nextTarget)
+          ? await uploadDriveFile(file, nextTarget, uploadOptions)
+          : await uploadFile(nextTarget.role, nextTarget.relativePath, file, uploadOptions);
         uploadedFile = payload.file;
         setUploadProgress(Math.round(((index + 1) / selectedFiles.length) * 100));
       }
-      revalidateCatalog();
+      if (!isDriveTarget(nextTarget)) {
+        revalidateCatalog();
+      }
       setStatus('');
       postStorageFilesChanged(appId);
-      if (uploadedFile) {
+      if (uploadedFile && !isDriveTarget(nextTarget)) {
         openFileInShell(appId, uploadedFile);
       } else {
         openFolderInShell(appId, nextTarget);
@@ -321,9 +390,10 @@ function StorageSidebarFooterWidget() {
   }
 
   const currentTargetLabel = targetLabel(target);
-  const actionDisabled = !target || isCreatingFolder || isUploading;
+  const createDisabled = !target || isDriveTarget(target) || isCreatingFolder || isUploading;
+  const uploadDisabled = !target || (isDriveTarget(target) && !target.driveFileId) || isCreatingFolder || isUploading;
   const driveConnectDisabled = isConnectingDrive || isUploading || isCreatingFolder;
-  const primaryActionAvailable = !actionDisabled && !isNamingFolder;
+  const primaryActionAvailable = !createDisabled && !isNamingFolder;
 
   useEffect(() => {
     postPrimaryActionState(appId, primaryActionAvailable);
@@ -415,7 +485,7 @@ function StorageSidebarFooterWidget() {
           />
           <button
             className="storage-sidebar-footer-button"
-            disabled={actionDisabled}
+            disabled={createDisabled}
             onClick={startNewFolder}
             title={`Create a folder in ${currentTargetLabel}`}
             type="button"
@@ -426,7 +496,7 @@ function StorageSidebarFooterWidget() {
           <button
             aria-label={`Upload files to ${currentTargetLabel}`}
             className="storage-sidebar-footer-button storage-sidebar-footer-button--icon"
-            disabled={actionDisabled}
+            disabled={uploadDisabled}
             onClick={requestUpload}
             title={`Upload files to ${currentTargetLabel}`}
             type="button"

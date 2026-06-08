@@ -88,6 +88,7 @@ class StorageAppTestCase(unittest.TestCase):
         method: str = "GET",
         body: dict | None = None,
         cookie: str | None = None,
+        extra_headers: dict[str, str] | None = None,
         query_string: str = "",
     ) -> tuple[int, dict | bytes, dict[str, str]]:
         payload = b"" if body is None else json.dumps(body).encode("utf-8")
@@ -102,6 +103,8 @@ class StorageAppTestCase(unittest.TestCase):
         }
         if cookie is not None:
             environ["HTTP_COOKIE"] = cookie
+        if extra_headers:
+            environ.update(extra_headers)
 
         def start_response(status: str, response_headers: list[tuple[str, str]]) -> None:
             headers.update(dict(response_headers))
@@ -155,11 +158,16 @@ class StorageAppTestCase(unittest.TestCase):
         self.assertIn("storage_drive_list_roots", parsed.contract.capabilities.mcp_tools)
         self.assertIn("storage_drive_list_children", parsed.contract.capabilities.mcp_tools)
         self.assertIn("storage_drive_search", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("storage_file_localize", parsed.contract.capabilities.mcp_tools)
+        self.assertNotIn("storage_file_media_stream", parsed.contract.capabilities.mcp_tools)
         self.assertEqual(parsed.contract.capabilities.cli_commands, ["storage"])
         self.assertEqual(parsed.contract.capabilities.skills, ["storage-ops"])
         provided_interfaces = {item.interface for item in parsed.contract.provides}
         self.assertIn("file.text.read", provided_interfaces)
         self.assertIn("file.content.write", provided_interfaces)
+        self.assertIn("file.media.stream", provided_interfaces)
+        media_interface = next(item for item in parsed.contract.provides if item.interface == "file.media.stream")
+        self.assertEqual(media_interface.surfaces, ["backend", "view", "widget"])
         reference_entity_types = {item.entity_type for item in parsed.contract.capabilities.reference_entities}
         self.assertIn("file", reference_entity_types)
         self.assertIn("folder", reference_entity_types)
@@ -1812,6 +1820,8 @@ class StorageAppTestCase(unittest.TestCase):
         self.assertIn("app.storage.storage_read_file", [tool.tool_name for tool in tools])
         self.assertIn("app.storage.storage_read_text", [tool.tool_name for tool in tools])
         self.assertIn("app.storage.storage_write_file", [tool.tool_name for tool in tools])
+        self.assertIn("app.storage.storage_file_localize", [tool.tool_name for tool in tools])
+        self.assertNotIn("app.storage.storage_file_media_stream", [tool.tool_name for tool in tools])
         self.assertIn("app.storage.storage", [command.command_id for command in commands])
         storage_command = next(command for command in commands if command.command_id == "app.storage.storage")
         self.assertEqual(storage_command.argument_schema["properties"]["action"]["default"], "operations.manifest")
@@ -1824,9 +1834,13 @@ class StorageAppTestCase(unittest.TestCase):
         flattened_actions = {action for group in action_groups for action in group}
         self.assertIn("file.catalog.list", flattened_actions)
         self.assertIn("file.preview.table", flattened_actions)
+        self.assertIn("file.localize", flattened_actions)
+        self.assertNotIn("file.media_stream", flattened_actions)
         write_tool = next(tool for tool in tools if tool.tool_name == "app.storage.storage_write_file")
         self.assertIn("workspace_relative_path", write_tool.input_schema["properties"])
         self.assertIn("oneOf", write_tool.input_schema)
+        localize_tool = next(tool for tool in tools if tool.tool_name == "app.storage.storage_file_localize")
+        self.assertIn("stable_storage_file_id", localize_tool.input_schema["properties"])
         table_tool = next(tool for tool in tools if tool.tool_name == "app.storage.storage_preview_table")
         self.assertIn("sheets", table_tool.output_schema["properties"])
         self.assertNotIn("rows", table_tool.output_schema["properties"])
@@ -1840,21 +1854,34 @@ class StorageAppTestCase(unittest.TestCase):
         generated = repo_root / "workspaces" / "default" / "storage" / "generated" / "report.txt"
         generated.parent.mkdir(parents=True, exist_ok=True)
         generated.write_text("hello", encoding="utf-8")
+        clip = generated.parent / "clip.mp4"
+        clip.write_bytes(b"0123456789")
 
         backend_status, backend_payload, _backend_headers = self.invoke(
             app,
             path="/api/apps/storage/backend",
             method="POST",
-            body={"action": "catalog"},
+            body={"action": "catalog", "_app_secret_request": {"logical_names": [], "required": False}},
             cookie=cookie,
         )
         frontend_status, frontend_payload, frontend_headers = self.invoke(app, path="/apps/storage/", cookie=cookie)
+        media_status, media_payload, media_headers = self.invoke(
+            app,
+            path="/api/apps/storage/media",
+            cookie=cookie,
+            extra_headers={"HTTP_RANGE": "bytes=2-5"},
+            query_string="role=generated&relative_path=clip.mp4",
+        )
 
         self.assertEqual(backend_status, 200)
-        self.assertEqual(backend_payload["files"][0]["workspace_relative_path"], "storage/generated/report.txt")
+        self.assertIn("storage/generated/report.txt", {item["workspace_relative_path"] for item in backend_payload["files"]})
         self.assertEqual(frontend_status, 200)
         self.assertIn("text/html", frontend_headers["Content-Type"])
         self.assertIn(b"Maverick Storage", frontend_payload)
+        self.assertEqual(media_status, 206)
+        self.assertEqual(media_payload, b"2345")
+        self.assertEqual(media_headers["Accept-Ranges"], "bytes")
+        self.assertEqual(media_headers["Content-Range"], "bytes 2-5/10")
 
     @integration_test("storage platform integration suite; run with scripts/test_suite.py --level integration")
     def test_mcp_and_cli_default_to_compact_operations_manifest(self) -> None:

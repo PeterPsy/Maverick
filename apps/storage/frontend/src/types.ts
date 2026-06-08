@@ -22,6 +22,9 @@ export type StorageFile = {
   connection_id?: string;
   drive_file_id?: string;
   display_path?: string;
+  etag_or_version?: string;
+  source_version?: string;
+  web_url?: string;
   remote_locator?: Record<string, unknown>;
   capabilities?: StorageProviderCapabilities;
   role: StorageItemRole;
@@ -188,6 +191,38 @@ export type DrivePreviewPayload = {
   truncated?: boolean;
 };
 
+export type DriveLocalization = {
+  id: string;
+  status: 'ready' | 'localizing' | 'error';
+  source_version: string;
+  content_type: string;
+  file_name: string;
+  size_bytes: number;
+  sha256: string;
+  etag: string;
+  progress?: {
+    state?: string;
+    bytes_completed?: number;
+    bytes_total?: number;
+  };
+  retry_count?: number;
+  cache_hit?: boolean;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type DriveLocalizePayload = {
+  status: 'ready';
+  provider: 'google_drive';
+  connection_id: string;
+  drive_file_id: string;
+  stable_storage_file_id: string;
+  file: StorageFile;
+  localization: DriveLocalization;
+  stream_url: string;
+  download_url: string;
+};
+
 export type DeleteFilePayload = {
   deleted: boolean;
   file: StorageFile;
@@ -235,6 +270,13 @@ export type MoveItemsPayload = {
 export type UploadFilePayload = {
   file: StorageFile;
   bytes_written: number;
+};
+
+export type DriveWritePayload = {
+  connection_id: string;
+  file: StorageFile;
+  provider: 'google_drive';
+  status: 'uploaded' | 'updated';
 };
 
 export type TablePreviewSheet = {

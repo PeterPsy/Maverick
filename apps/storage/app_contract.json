@@ -72,6 +72,16 @@
         "reference",
         "view"
       ]
+    },
+    {
+      "interface": "file.media.stream",
+      "version": "1",
+      "description": "Authenticated local media stream and Drive localization support with HTTP Range playback.",
+      "surfaces": [
+        "backend",
+        "view",
+        "widget"
+      ]
     }
   ],
   "requires": [],
@@ -135,6 +145,7 @@
       "storage_drive_read",
       "storage_drive_preview",
       "storage_drive_export",
+      "storage_file_localize",
       "storage_drive_index",
       "storage_drive_mark_indexed",
       "storage_drive_write",
@@ -311,6 +322,7 @@
     ]
   },
   "hook_timeouts": {
+    "backend_seconds": 300,
     "install_seconds": 60,
     "upgrade_seconds": 120,
     "migrate_seconds": 300,

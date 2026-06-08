@@ -57,6 +57,7 @@
               "drive_read",
               "drive_preview",
               "drive_export",
+              "file.localize",
               "drive_index",
               "drive_mark_indexed",
               "drive_write",
@@ -125,6 +126,8 @@
           "state": {"type": "string"},
           "code": {"type": "string"},
           "confirm": {"type": "boolean", "default": false},
+          "force": {"type": "boolean", "default": false},
+          "download": {"type": "boolean", "default": false},
           "delete_policy": {"type": "string", "enum": ["user_confirmed", "workspace_policy", "explicit_policy"]}
         },
         "additionalProperties": false,
@@ -335,7 +338,7 @@
             ]
           },
           {
-            "properties": {"action": {"enum": ["drive_read", "drive_preview", "drive_export", "drive_index", "drive_trash"]}},
+            "properties": {"action": {"enum": ["drive_read", "drive_preview", "drive_export", "file.localize", "drive_index", "drive_trash"]}},
             "required": ["action"],
             "anyOf": [
               {"required": ["connection_id", "drive_file_id"]},
@@ -383,7 +386,8 @@
           {"action": "file.text.read", "workspace_relative_path": "storage/generated/report.md"},
           {"action": "file.content.write", "workspace_relative_path": "storage/generated/report.md", "mode": "overwrite", "content": "# Report"},
           {"action": "drive_search", "connection_id": "drive_conn_example", "query": "mimeType='application/pdf'", "limit": 20},
-          {"action": "drive_export", "connection_id": "drive_conn_example", "drive_file_id": "1AbC", "export_mime_type": "application/pdf"}
+          {"action": "drive_export", "connection_id": "drive_conn_example", "drive_file_id": "1AbC", "export_mime_type": "application/pdf"},
+          {"action": "file.localize", "stable_storage_file_id": "file_drive_example"}
         ]
       },
       "required_secrets": [],
@@ -403,6 +407,7 @@
               "drive_read",
               "drive_preview",
               "drive_export",
+              "file.localize",
               "drive_index",
               "drive_write",
               "drive_rename",
@@ -424,6 +429,7 @@
               "drive_read",
               "drive_preview",
               "drive_export",
+              "file.localize",
               "drive_index",
               "drive_write",
               "drive_rename",
@@ -441,6 +447,7 @@
               "drive_read",
               "drive_preview",
               "drive_export",
+              "file.localize",
               "drive_index",
               "drive_write",
               "drive_rename",

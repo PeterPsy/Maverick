@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from datetime import UTC, datetime, timedelta
@@ -7,7 +8,7 @@ from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 
-from core.api.app_mounts import _apply_app_secret_writes, _read_backend_body, _resolve_app_secret_payload, backend_entrypoint_timeout_seconds, serve_frontend
+from core.api.app_mounts import _apply_app_secret_writes, _backend_secret_request_body, _read_backend_body, _resolve_app_secret_payload, _serve_app_file_response, backend_entrypoint_timeout_seconds, serve_frontend
 from core.api.http import HttpRequestError
 from core.apps.contracts import build_app_contract, build_app_hook_timeouts, build_parsed_app_contract
 from core.observability.store import ObservabilityCollections, ObservabilityDocumentStore
@@ -96,6 +97,130 @@ class AppMountsTestCase(unittest.TestCase):
 
             self.assertEqual(raised.exception.error, "request_body_too_large")
             self.assertFalse((root / "run" / "http-body").exists())
+
+    def test_app_file_response_serves_single_byte_range(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            media_path = root / "clip.mp4"
+            media_path.write_bytes(b"0123456789")
+
+            status, headers, body = _serve_file_response(
+                root=root,
+                file_response={"path": str(media_path), "content_type": "video/mp4", "file_name": "clip.mp4", "etag": "clip-etag"},
+                environ={"REQUEST_METHOD": "GET", "HTTP_RANGE": "bytes=2-5"},
+            )
+
+        self.assertEqual(status, "206 Partial Content")
+        self.assertEqual(headers["Accept-Ranges"], "bytes")
+        self.assertEqual(headers["Content-Range"], "bytes 2-5/10")
+        self.assertEqual(headers["Content-Length"], "4")
+        self.assertEqual(headers["ETag"], "\"clip-etag\"")
+        self.assertEqual(headers["Content-Disposition"], 'inline; filename="clip.mp4"')
+        self.assertEqual(body, b"2345")
+
+    def test_app_file_response_handles_invalid_range_and_head(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            media_path = root / "clip.mp4"
+            media_path.write_bytes(b"0123456789")
+
+            invalid_status, invalid_headers, invalid_body = _serve_file_response(
+                root=root,
+                file_response={"path": str(media_path), "content_type": "video/mp4"},
+                environ={"REQUEST_METHOD": "GET", "HTTP_RANGE": "bytes=20-30"},
+            )
+            head_status, head_headers, head_body = _serve_file_response(
+                root=root,
+                file_response={"path": str(media_path), "content_type": "video/mp4"},
+                environ={"REQUEST_METHOD": "HEAD"},
+            )
+
+        self.assertEqual(invalid_status, "416 Range Not Satisfiable")
+        self.assertEqual(invalid_headers["Content-Range"], "bytes */10")
+        self.assertEqual(invalid_body, b"")
+        self.assertEqual(head_status, "200 OK")
+        self.assertEqual(head_headers["Content-Length"], "10")
+        self.assertEqual(head_body, b"")
+
+    def test_app_file_response_forces_attachment_for_scriptable_content_types(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            html_path = root / "report.html"
+            svg_path = root / "logo.svg"
+            html_path.write_text("<script>alert(1)</script>", encoding="utf-8")
+            svg_path.write_text("<svg><script>alert(1)</script></svg>", encoding="utf-8")
+
+            html_status, html_headers, _html_body = _serve_file_response(
+                root=root,
+                file_response={"path": str(html_path), "content_type": "text/html", "file_name": "report.html"},
+                environ={"REQUEST_METHOD": "GET"},
+            )
+            svg_status, svg_headers, _svg_body = _serve_file_response(
+                root=root,
+                file_response={"path": str(svg_path), "content_type": "image/svg+xml", "file_name": "logo.svg"},
+                environ={"REQUEST_METHOD": "GET"},
+            )
+
+        self.assertEqual(html_status, "200 OK")
+        self.assertEqual(svg_status, "200 OK")
+        self.assertEqual(html_headers["Content-Disposition"], 'attachment; filename="report.html"')
+        self.assertEqual(svg_headers["Content-Disposition"], 'attachment; filename="logo.svg"')
+        self.assertEqual(html_headers["X-Content-Type-Options"], "nosniff")
+
+    def test_app_file_response_serves_app_materialized_range_without_reslicing(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            range_path = root / "range.bin"
+            range_path.write_bytes(b"2345")
+
+            status, headers, body = _serve_file_response(
+                root=root,
+                file_response={
+                    "path": str(range_path),
+                    "content_type": "video/mp4",
+                    "file_name": "clip.mp4",
+                    "etag": "range-etag",
+                    "served_range": {"start": 2, "end": 5, "size": 10},
+                },
+                environ={"REQUEST_METHOD": "GET", "HTTP_RANGE": "bytes=2-5"},
+            )
+
+        self.assertEqual(status, "206 Partial Content")
+        self.assertEqual(headers["Content-Range"], "bytes 2-5/10")
+        self.assertEqual(headers["Content-Length"], "4")
+        self.assertEqual(body, b"2345")
+
+    def test_app_file_response_rejects_paths_outside_allowed_roots(self) -> None:
+        with tempfile.TemporaryDirectory() as allowed, tempfile.TemporaryDirectory() as outside:
+            outside_path = Path(outside) / "secret.bin"
+            outside_path.write_bytes(b"nope")
+
+            status, _headers, body = _serve_file_response(
+                root=Path(allowed),
+                file_response={"path": str(outside_path)},
+                environ={"REQUEST_METHOD": "GET"},
+            )
+
+        self.assertEqual(status, "403 Forbidden")
+        self.assertIn(b"file_response_forbidden", body)
+
+    def test_media_route_secret_resolution_requests_no_app_secrets(self) -> None:
+        body = _backend_secret_request_body(body={}, method="GET", route_path="/api/apps/storage/media")
+
+        self.assertEqual(body, {"_app_secret_request": {"logical_names": [], "required": False}})
+
+    def test_media_route_secret_resolution_accepts_encoded_query_request(self) -> None:
+        secret_request = {"required": True, "selectors": [{"logical_names": ["google-drive-oauth-client-id"]}]}
+
+        body = _backend_secret_request_body(
+            body={},
+            method="GET",
+            route_path="/api/apps/storage/media",
+            query={"stable_storage_file_id": "file_123", "_app_secret_request": json.dumps(secret_request)},
+        )
+
+        self.assertEqual(body["stable_storage_file_id"], "file_123")
+        self.assertEqual(body["_app_secret_request"], secret_request)
 
     def test_app_secret_payload_uses_active_backend_grants_not_legacy_bindings(self) -> None:
         secret_store = _secret_store()
@@ -584,6 +709,24 @@ def _serve(root: Path, subpath: str, *, cross_origin: bool = False) -> tuple[str
 
     serve_frontend(start_response, frontend_root=root, subpath=subpath, cross_origin=cross_origin)
     return str(captured["status"]), captured["headers"]  # type: ignore[return-value]
+
+
+def _serve_file_response(*, root: Path, file_response: dict[str, object], environ: dict[str, str]) -> tuple[str, dict[str, str], bytes]:
+    captured: dict[str, object] = {}
+
+    def start_response(status: str, headers: list[tuple[str, str]]) -> None:
+        captured["status"] = status
+        captured["headers"] = dict(headers)
+
+    body = b"".join(
+        _serve_app_file_response(
+            environ=environ,
+            start_response=start_response,
+            file_response=file_response,
+            allowed_roots=[root],
+        )
+    )
+    return str(captured["status"]), captured["headers"], body  # type: ignore[return-value]
 
 
 def _secret_store() -> SecretDocumentStore:

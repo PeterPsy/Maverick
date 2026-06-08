@@ -1,4 +1,4 @@
-import { decodeBase64, previewDriveFile, readFile, readPreviewTable, readPreviewText, renderPreview, renderThumbnail } from './storageApi';
+import { decodeBase64, driveMediaStreamUrl, previewDriveFile, readFile, readPreviewTable, readPreviewText, renderPreview, renderThumbnail } from './storageApi';
 import type { StorageFile, PreviewTablePayload } from './types';
 
 const MAX_CACHE_ENTRIES = 80;
@@ -42,8 +42,12 @@ function isDriveFile(file: StorageFile) {
   return file.provider === 'google_drive';
 }
 
+function isDriveStreamable(file: StorageFile) {
+  return isDriveFile(file) && ['image', 'video', 'audio', 'pdf'].includes(file.preview_kind);
+}
+
 function previewKey(file: StorageFile, scope: 'card' | 'full') {
-  return [scope, file.id, file.modified_at, file.size_bytes, file.preview_kind].join(':');
+  return [scope, file.id, file.modified_at, file.size_bytes, file.preview_kind, file.etag_or_version || file.source_version || ''].join(':');
 }
 
 function remember(key: string, promise: Promise<CachedPreview>) {
@@ -60,7 +64,7 @@ function pruneCache() {
   if (cache.size <= MAX_CACHE_ENTRIES) return;
   const staleEntries = [...cache.entries()].sort((left, right) => left[1].lastUsedAt - right[1].lastUsedAt);
   for (const [key, entry] of staleEntries.slice(0, cache.size - MAX_CACHE_ENTRIES)) {
-    if (entry.url) URL.revokeObjectURL(entry.url);
+    if (entry.url.startsWith('blob:')) URL.revokeObjectURL(entry.url);
     cache.delete(key);
   }
 }
@@ -102,6 +106,9 @@ function blobPreview(file: StorageFile, maxBytes: number, textLimit?: number) {
 }
 
 function drivePreview(file: StorageFile, maxBytes: number, textLimit?: number) {
+  if (isDriveStreamable(file)) {
+    return Promise.resolve({ text: '', url: driveMediaStreamUrl(file) });
+  }
   return previewDriveFile(file, maxBytes, textLimit).then((payload) => {
     if ('preview_text' in payload) {
       return { text: payload.preview_text || '', url: '' };

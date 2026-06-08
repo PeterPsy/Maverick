@@ -1,5 +1,26 @@
 import { describe, expect, it, vi } from 'vitest';
-import { callBackend, completeDriveOAuth, currentStorageAppId, driveConnectionSecretRequest, listDriveChildren, listDriveConnections, listDriveRoots, moveItemsReferences, previewDriveFile, startDriveOAuth, storageBackendEndpoint, syncDriveConnection, trashDriveFile } from './storageApi';
+import { callBackend, completeDriveOAuth, currentStorageAppId, driveConnectionSecretRequest, driveMediaDownloadUrl, driveMediaStreamUrl, listDriveChildren, listDriveConnections, listDriveRoots, localizeDriveFile, moveItemsReferences, previewDriveFile, startDriveOAuth, storageBackendEndpoint, syncDriveConnection, trashDriveFile, uploadDriveFile } from './storageApi';
+
+class FakeFileReader {
+  onerror: ((this: FileReader, ev: ProgressEvent<FileReader>) => unknown) | null = null;
+  onload: ((this: FileReader, ev: ProgressEvent<FileReader>) => unknown) | null = null;
+  onprogress: ((this: FileReader, ev: ProgressEvent<FileReader>) => unknown) | null = null;
+  result: string | ArrayBuffer | null = null;
+
+  readAsDataURL(file: File) {
+    void file.arrayBuffer().then((buffer) => {
+      this.onprogress?.call(this as unknown as FileReader, {
+        lengthComputable: true,
+        loaded: file.size,
+        total: file.size,
+      } as ProgressEvent<FileReader>);
+      this.result = `data:${file.type || 'application/octet-stream'};base64,${Buffer.from(buffer).toString('base64')}`;
+      this.onload?.call(this as unknown as FileReader, {} as ProgressEvent<FileReader>);
+    }).catch(() => {
+      this.onerror?.call(this as unknown as FileReader, {} as ProgressEvent<FileReader>);
+    });
+  }
+}
 
 describe('storage api client', () => {
   it('derives the mounted app backend from app and widget routes', () => {
@@ -289,6 +310,124 @@ describe('storage api client', () => {
           stable_storage_file_id: 'file_123',
           max_bytes: 8192,
           max_chars: 1200,
+          _app_secret_request: expectedSecretRequest
+        }),
+        method: 'POST'
+      })
+    );
+  });
+
+  it('localizes Drive media with resource-scoped Drive secrets', async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      status: 'ready',
+      provider: 'google_drive',
+      stream_url: '/api/apps/storage/media?stable_storage_file_id=file_123',
+      download_url: '/api/apps/storage/media?stable_storage_file_id=file_123&download=1',
+      localization: { file_name: 'Clip.mp4' },
+      file: {}
+    }), { status: 200 }));
+    const expectedSecretRequest = driveConnectionSecretRequest('drive_conn_1');
+
+    const payload = await localizeDriveFile({
+      id: 'file_123',
+      file_id: 'file_123',
+      path_id: '',
+      provider: 'google_drive',
+      connection_id: 'drive_conn_1',
+      drive_file_id: 'file-1',
+      role: '',
+      name: 'Clip.mp4',
+      relative_path: '',
+      workspace_relative_path: '',
+      extension: '.mp4',
+      size_bytes: 1024,
+      modified_at: '2026-05-28T00:00:00Z',
+      content_type: 'video/mp4',
+      preview_kind: 'video',
+      sha256: ''
+    }, { fetchImpl });
+
+    expect(payload.stream_url).toBe('/api/apps/storage/media?stable_storage_file_id=file_123');
+    expect(fetchImpl).toHaveBeenCalledWith(
+      '/api/apps/storage/backend',
+      expect.objectContaining({
+        body: JSON.stringify({
+          action: 'file.localize',
+          connection_id: 'drive_conn_1',
+          drive_file_id: 'file-1',
+          stable_storage_file_id: 'file_123',
+          _app_secret_request: expectedSecretRequest
+        }),
+        method: 'POST'
+      })
+    );
+  });
+
+  it('derives Drive media download URLs from stream URLs when needed', () => {
+    expect(driveMediaDownloadUrl({ stream_url: '/api/apps/storage/media?stable_storage_file_id=file_123', download_url: '' }))
+      .toBe('/api/apps/storage/media?stable_storage_file_id=file_123&download=1');
+  });
+
+  it('builds direct Drive media stream URLs with source version and secret selectors', () => {
+    const url = driveMediaStreamUrl({
+      id: 'file_123',
+      file_id: 'file_123',
+      path_id: '',
+      provider: 'google_drive',
+      connection_id: 'drive_conn_1',
+      drive_file_id: 'file-1',
+      role: '',
+      name: 'Clip.mp4',
+      relative_path: '',
+      workspace_relative_path: '',
+      extension: '.mp4',
+      size_bytes: 1024,
+      modified_at: '2026-05-28T00:00:00Z',
+      content_type: 'video/mp4',
+      preview_kind: 'video',
+      sha256: '',
+      etag_or_version: '8'
+    }, { appId: 'storage', download: true });
+    const parsed = new URL(url, 'https://example.test');
+    const secretRequest = JSON.parse(parsed.searchParams.get('_app_secret_request') || '{}');
+
+    expect(parsed.pathname).toBe('/api/apps/storage/media');
+    expect(parsed.searchParams.get('stable_storage_file_id')).toBe('file_123');
+    expect(parsed.searchParams.get('source_version')).toBe('8');
+    expect(parsed.searchParams.get('download')).toBe('1');
+    expect(secretRequest).toEqual(driveConnectionSecretRequest('drive_conn_1'));
+  });
+
+  it('uploads files into the selected Drive folder with resource-scoped Drive secrets', async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      connection_id: 'drive_conn_1',
+      file: {},
+      provider: 'google_drive',
+      status: 'uploaded',
+    }), { status: 200 }));
+    const expectedSecretRequest = driveConnectionSecretRequest('drive_conn_1');
+    vi.stubGlobal('FileReader', FakeFileReader);
+
+    try {
+      await uploadDriveFile(
+        new File(['hello'], 'notes.txt', { type: 'text/plain' }),
+        { connectionId: ' drive_conn_1 ', driveFileId: ' folder-1 ' },
+        { fetchImpl }
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      '/api/apps/storage/backend',
+      expect.objectContaining({
+        body: JSON.stringify({
+          action: 'drive_write',
+          connection_id: 'drive_conn_1',
+          parent_drive_file_id: 'folder-1',
+          file_name: 'notes.txt',
+          content_base64: 'aGVsbG8=',
+          content_type: 'text/plain',
           _app_secret_request: expectedSecretRequest
         }),
         method: 'POST'

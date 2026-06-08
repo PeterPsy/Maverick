@@ -17,7 +17,7 @@ def _response(status_code: int, payload: dict) -> None:
 
 def main() -> None:
     payload = json.loads(sys.stdin.read() or "{}")
-    body = payload.get("body") if isinstance(payload.get("body"), dict) else {}
+    body = _body_from_payload(payload)
     body = {
         **body,
         "_app_secrets": payload.get("app_secrets", {}),
@@ -39,12 +39,29 @@ def main() -> None:
         _response(400, validation_error_payload(error))
         return
     platform_secret_writes = result.pop("platform_secret_writes", None)
-    response = {"status_code": status_code, "json": result}
+    response = {"status_code": status_code}
+    file_response = result.pop("file_response", None)
+    if isinstance(file_response, dict):
+        response["file_response"] = file_response
+        if result:
+            response["json"] = result
+    else:
+        response["json"] = result
     if platform_secret_writes is not None:
         response["platform_secret_writes"] = platform_secret_writes
     if status_code < 400:
         response["app_events"] = app_events_for_action(action)
     print(json.dumps(response, ensure_ascii=False))
+
+
+def _body_from_payload(payload: dict) -> dict:
+    route_path = str(payload.get("route_path") or "")
+    method = str(payload.get("method") or "").upper()
+    if method in {"GET", "HEAD"} and route_path.startswith("/api/apps/") and route_path.endswith("/media"):
+        query = payload.get("query") if isinstance(payload.get("query"), dict) else {}
+        headers = payload.get("headers") if isinstance(payload.get("headers"), dict) else {}
+        return {**query, "_request_headers": headers, "_media_route": True, "action": "file.media_stream"}
+    return payload.get("body") if isinstance(payload.get("body"), dict) else {}
 
 
 if __name__ == "__main__":

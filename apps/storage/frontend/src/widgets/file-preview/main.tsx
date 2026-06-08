@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { createRoot } from 'react-dom/client';
-import { callBackend, decodeBase64, previewDriveFile, readFile } from '../../storageApi';
+import { callBackend, decodeBase64, driveMediaStreamUrl, previewDriveFile, readFile } from '../../storageApi';
 import { iconForKind, kindLabels } from '../../storageMeta';
 import { Icon } from '../../Icon';
 import { MarkdownPreview } from '../../markdownPreview';
@@ -58,6 +58,10 @@ function canInlinePreview(file: StorageFile) {
 
 function isDriveFile(file: StorageFile) {
   return file.provider === 'google_drive';
+}
+
+function isDriveStreamable(file: StorageFile) {
+  return isDriveFile(file) && ['image', 'video', 'audio', 'pdf'].includes(file.preview_kind);
 }
 
 function openStorage(file?: StorageFile) {
@@ -163,10 +167,18 @@ function StorageFilePreviewWidget() {
     if (!file || !canInlinePreview(file)) return;
     let active = true;
     let objectUrl = '';
-    const previewRequest = isDriveFile(file) ? previewDriveFile(file, PREVIEW_BYTES) : readFile(file, PREVIEW_BYTES);
+    const previewRequest = isDriveStreamable(file)
+      ? Promise.resolve({ stream_url: driveMediaStreamUrl(file) })
+      : isDriveFile(file)
+        ? previewDriveFile(file, PREVIEW_BYTES)
+        : readFile(file, PREVIEW_BYTES);
     previewRequest
       .then(async (payload) => {
         if (!active) return;
+        if ('stream_url' in payload) {
+          setPreviewUrl(payload.stream_url);
+          return;
+        }
         if ('preview_text' in payload) {
           setPreviewText(payload.preview_text || '');
           return;

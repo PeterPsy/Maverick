@@ -56,7 +56,9 @@
               "drive_read",
               "drive_preview",
               "drive_export",
+              "file.localize",
               "drive_index",
+              "drive_mark_indexed",
               "drive_write",
               "drive_rename",
               "drive_move",
@@ -76,9 +78,11 @@
           "relative_path": {"type": "string"},
           "offset": {"type": "integer", "minimum": 0},
           "limit": {"type": "integer", "minimum": 1, "maximum": 2000},
+          "max_bytes": {"type": "integer", "minimum": 1},
           "max_chars": {"type": "integer", "minimum": 1},
           "content": {"type": "string"},
           "content_base64": {"type": "string"},
+          "file_name": {"type": "string"},
           "mode": {"type": "string", "enum": ["create", "overwrite"]},
           "entity_type": {"type": "string", "enum": ["file", "folder"]},
           "entity_id": {"type": "string"},
@@ -86,6 +90,7 @@
           "connection_id": {"type": "string"},
           "drive_file_id": {"type": "string"},
           "stable_storage_file_id": {"type": "string"},
+          "source_version": {"type": "string"},
           "parent_drive_file_id": {"type": "string"},
           "target_parent_drive_file_id": {"type": "string"},
           "export_mime_type": {"type": "string"},
@@ -95,12 +100,80 @@
           "state": {"type": "string"},
           "code": {"type": "string"},
           "confirm": {"type": "boolean", "default": false},
+          "force": {"type": "boolean", "default": false},
+          "download": {"type": "boolean", "default": false},
           "delete_policy": {"type": "string", "enum": ["user_confirmed", "workspace_policy", "explicit_policy"]}
         },
         "additionalProperties": true,
         "examples": [{"action": "operations.manifest"}, {"action": "catalog", "limit": 20}]
       },
-      "output_schema": {"type": "object"}
+      "output_schema": {"type": "object"},
+      "secret_selectors": [
+        {
+          "required_secrets": ["google-drive-oauth-client-id", "google-drive-oauth-client-secret"],
+          "when": {"action": "drive_connections.start_oauth"}
+        },
+        {
+          "required_secrets": ["google-drive-oauth-client-id", "google-drive-oauth-client-secret"],
+          "when": {
+            "action": [
+              "drive_sync",
+              "drive_list_roots",
+              "drive_list_children",
+              "drive_search",
+              "drive_read",
+              "drive_preview",
+              "drive_export",
+              "file.localize",
+              "drive_index",
+              "drive_write",
+              "drive_rename",
+              "drive_move",
+              "drive_trash"
+            ]
+          }
+        },
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_id_argument": "connection_id",
+          "when": {
+            "action": [
+              "drive_sync",
+              "drive_list_roots",
+              "drive_list_children",
+              "drive_search",
+              "drive_read",
+              "drive_preview",
+              "drive_export",
+              "file.localize",
+              "drive_index",
+              "drive_write",
+              "drive_rename",
+              "drive_move",
+              "drive_trash"
+            ]
+          }
+        },
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_lookup": {"kind": "storage_drive_file"},
+          "when": {
+            "action": [
+              "drive_read",
+              "drive_preview",
+              "drive_export",
+              "file.localize",
+              "drive_index",
+              "drive_write",
+              "drive_rename",
+              "drive_move",
+              "drive_trash"
+            ]
+          }
+        }
+      ]
     },
     "storage_list_files": {
       "description": "List workspace Storage files and folders with compact, paginated metadata.",
@@ -536,6 +609,50 @@
         "additionalProperties": false
       },
       "output_schema": {"type": "object"},
+      "secret_selectors": [
+        {"required_secrets": ["google-drive-oauth-client-id", "google-drive-oauth-client-secret"]},
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_id_argument": "connection_id"
+        },
+        {
+          "required_secrets": ["google-drive-refresh-token"],
+          "resource_type": "drive_connection",
+          "resource_lookup": {"kind": "storage_drive_file"}
+        }
+      ]
+    },
+    "storage_file_localize": {
+      "description": "Localize one browser-streamable Google Drive image, video, audio, or PDF into Storage's workspace-governed cache and return media stream URLs.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "connection_id": {"type": "string"},
+          "drive_file_id": {"type": "string"},
+          "stable_storage_file_id": {"type": "string"},
+          "max_bytes": {"type": "integer", "minimum": 1},
+          "force": {"type": "boolean", "default": false}
+        },
+        "anyOf": [
+          {"required": ["connection_id", "drive_file_id"]},
+          {"required": ["stable_storage_file_id"]}
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["status", "provider", "file", "localization", "stream_url", "download_url"],
+        "properties": {
+          "status": {"type": "string", "enum": ["ready"]},
+          "provider": {"type": "string", "enum": ["google_drive"]},
+          "file": {"type": "object"},
+          "localization": {"type": "object"},
+          "stream_url": {"type": "string"},
+          "download_url": {"type": "string"}
+        },
+        "additionalProperties": true
+      },
       "secret_selectors": [
         {"required_secrets": ["google-drive-oauth-client-id", "google-drive-oauth-client-secret"]},
         {

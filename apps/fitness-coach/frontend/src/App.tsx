@@ -10,8 +10,10 @@ import {
   Library,
   MoreHorizontal,
   Pause,
+  Pencil,
   Play,
   Plus,
+  Save,
   Search,
   Timer,
   Trash2,
@@ -66,6 +68,7 @@ export function App() {
   const [playerWorkout, setPlayerWorkout] = useState<Workout | null>(null);
   const [exerciseDraft, setExerciseDraft] = useState<Partial<Exercise> | null>(null);
   const [libraryTargetBlockId, setLibraryTargetBlockId] = useState<string | null>(null);
+  const [savedWorkoutId, setSavedWorkoutId] = useState<string | null>(null);
   const dirtyWorkoutIdsRef = useRef<Set<string>>(new Set());
 
   const selectedWorkout = useMemo(
@@ -86,6 +89,7 @@ export function App() {
 
   const markWorkoutDirty = useCallback((workout: Workout) => {
     dirtyWorkoutIdsRef.current.add(workout.id);
+    setSavedWorkoutId(null);
     setWorkouts((items) => replaceById(items, workout));
   }, []);
 
@@ -107,7 +111,12 @@ export function App() {
         const params = payload.params || {};
         const appPage = String(params.app_page || payload.app_page || '');
         const workoutId = appPage.startsWith('workouts/') ? appPage.split('/')[1] : String(params.workout_id || '');
+        const setupTabParam = String(params.setup_tab || '');
         if (workoutId) setSelectedWorkoutId(workoutId);
+        if (setupTabParam === 'workout-settings' || setupTabParam === 'exercise-library') {
+          setLibraryTargetBlockId(null);
+          setSetupTab(setupTabParam);
+        }
         if (params.new_exercise) {
           setLibraryTargetBlockId(null);
           setSetupTab('exercise-library');
@@ -130,7 +139,7 @@ export function App() {
       {
         type: 'maverick.app.selection-changed',
         owner_app_id: 'fitness-coach',
-        selection: { workout_id: selectedWorkout.id, app_page: `workouts/${selectedWorkout.id}` }
+        selection: { workout_id: selectedWorkout.id, app_page: `workouts/${selectedWorkout.id}`, setup_tab: setupTab }
       },
       window.location.origin
     );
@@ -157,7 +166,8 @@ export function App() {
       const saved = await saveWorkout(syncWorkoutExerciseSnapshots(workout, exercises) || workout);
       dirtyWorkoutIdsRef.current.delete(workout.id);
       setWorkouts((items) => replaceById(items, saved));
-      setNotice('Saved');
+      setSavedWorkoutId(saved.id);
+      setNotice('');
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Unable to save workout.');
     } finally {
@@ -173,6 +183,7 @@ export function App() {
       const saved = await saveWorkout(workoutToStart);
       dirtyWorkoutIdsRef.current.delete(saved.id);
       setWorkouts((items) => replaceById(items, saved));
+      setSavedWorkoutId(saved.id);
       const payload = await startWorkout(saved.id);
       setPlayerWorkout(payload.workout);
       setNotice('');
@@ -247,59 +258,45 @@ export function App() {
     <main className="fitness-app">
       <section className="fitness-main">
         <section className="setup-panel">
-          <div className="setup-switch" role="tablist" aria-label="Setup mode">
-            <button type="button" className={setupTab === 'workout-settings' ? 'is-active' : ''} onClick={() => setSetupTab('workout-settings')}>
-              <Timer size={16} aria-hidden="true" />
-              <span>Workout settings</span>
-            </button>
-            <button
-              type="button"
-              className={setupTab === 'exercise-library' ? 'is-active' : ''}
-              onClick={() => {
-                setLibraryTargetBlockId(null);
-                setSetupTab('exercise-library');
-              }}
-            >
-              <Library size={16} aria-hidden="true" />
-              <span>Exercise library</span>
-            </button>
-          </div>
-
           {notice ? <div className="notice">{notice}</div> : null}
 
-          {setupTab === 'workout-settings' ? (
-            <WorkoutEditor
-              workout={syncedSelectedWorkout}
-              exercises={exercises}
-              validation={validation}
-              busy={busy}
-              onChange={markWorkoutDirty}
-              onSave={handleSaveWorkout}
-              onStart={handleStart}
-              onDelete={handleDeleteWorkout}
-              onDuplicate={handleDuplicateWorkout}
-              onOpenLibraryForBlock={(blockId) => {
-                setLibraryTargetBlockId(blockId);
-                setSetupTab('exercise-library');
-              }}
-            />
-          ) : (
-            <ExerciseLibrary
-              exercises={exercises}
-              tags={tags}
-              query={libraryQuery}
-              tag={libraryTag}
-              draft={exerciseDraft}
-              busy={busy}
-              onQuery={setLibraryQuery}
-              onTag={setLibraryTag}
-              onDraft={setExerciseDraft}
-              onSave={handleSaveExercise}
-              onDelete={handleDeleteExercise}
-              onAddToWorkout={handleAddExerciseToWorkout}
-              selectionMode={libraryTargetBlockId ? 'replace' : 'add'}
-            />
-          )}
+          <div className="setup-content">
+            {setupTab === 'workout-settings' ? (
+              <WorkoutEditor
+                workout={syncedSelectedWorkout}
+                exercises={exercises}
+                validation={validation}
+                busy={busy}
+                isDirty={syncedSelectedWorkout ? dirtyWorkoutIdsRef.current.has(syncedSelectedWorkout.id) : false}
+                isSaved={Boolean(syncedSelectedWorkout && savedWorkoutId === syncedSelectedWorkout.id && !dirtyWorkoutIdsRef.current.has(syncedSelectedWorkout.id))}
+                onChange={markWorkoutDirty}
+                onSave={handleSaveWorkout}
+                onStart={handleStart}
+                onDelete={handleDeleteWorkout}
+                onDuplicate={handleDuplicateWorkout}
+                onOpenLibraryForBlock={(blockId) => {
+                  setLibraryTargetBlockId(blockId);
+                  setSetupTab('exercise-library');
+                }}
+              />
+            ) : (
+              <ExerciseLibrary
+                exercises={exercises}
+                tags={tags}
+                query={libraryQuery}
+                tag={libraryTag}
+                draft={exerciseDraft}
+                busy={busy}
+                onQuery={setLibraryQuery}
+                onTag={setLibraryTag}
+                onDraft={setExerciseDraft}
+                onSave={handleSaveExercise}
+                onDelete={handleDeleteExercise}
+                onAddToWorkout={handleAddExerciseToWorkout}
+                selectionMode={libraryTargetBlockId ? 'replace' : 'add'}
+              />
+            )}
+          </div>
         </section>
       </section>
     </main>
@@ -311,6 +308,8 @@ function WorkoutEditor(props: {
   exercises: Exercise[];
   validation: ReturnType<typeof validateWorkoutForStart>;
   busy: string;
+  isDirty: boolean;
+  isSaved: boolean;
   onChange: (workout: Workout) => void;
   onSave: (workout: Workout) => void;
   onStart: () => void;
@@ -319,9 +318,12 @@ function WorkoutEditor(props: {
   onOpenLibraryForBlock: (blockId: string) => void;
 }) {
   const { workout } = props;
+  const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
   if (!workout) {
     return <div className="empty-state">Create a workout to begin.</div>;
   }
+  const isEditingTitle = editingTitleId === workout.id;
+  const summary = workoutSummary(workout);
 
   function update(patch: Partial<Workout>) {
     props.onChange({ ...workout!, ...patch });
@@ -349,18 +351,53 @@ function WorkoutEditor(props: {
     const block = blankWorkBlock('timer', workout!);
     update({ blocks: [...workout!.blocks, block] });
   }
+  const saveState = props.isSaved ? 'saved' : props.isDirty ? 'dirty' : 'clean';
+  const isSaving = props.busy === `save:${workout.id}`;
+  const saveDisabled = isSaving || !props.isDirty;
 
   return (
     <div className="editor">
       <div className="workout-header">
-        <input className="workout-name-input" value={workout.name} onChange={(event) => update({ name: event.target.value })} aria-label="Workout name" />
-        <div className="header-actions">
-          <button className="icon-button" type="button" onClick={() => props.onDuplicate(workout)} title="Duplicate" aria-label="Duplicate workout">
-            <Copy size={16} aria-hidden="true" />
-          </button>
-          <button className="icon-button danger" type="button" onClick={() => props.onDelete(workout)} title="Delete" aria-label="Delete workout">
-            <Trash2 size={16} aria-hidden="true" />
-          </button>
+        {isEditingTitle ? (
+          <input
+            className="workout-title-input"
+            value={workout.name}
+            onBlur={() => setEditingTitleId(null)}
+            onChange={(event) => update({ name: event.target.value })}
+            onFocus={(event) => event.currentTarget.select()}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === 'Escape') {
+                event.currentTarget.blur();
+              }
+            }}
+            aria-label="Workout name"
+            autoFocus
+          />
+        ) : (
+          <h1 className="workout-title">{workout.name || 'Untitled workout'}</h1>
+        )}
+        <div className="workout-title-toolbar">
+          <div className="workout-summary-badges" aria-label="Workout summary">
+            <span className="workout-summary-badge" title="Workout duration">
+              <Timer size={14} aria-hidden="true" />
+              <span>{summary.duration}</span>
+            </span>
+            <span className="workout-summary-badge" title="Total reps">
+              <Dumbbell size={14} aria-hidden="true" />
+              <span>{summary.reps}</span>
+            </span>
+          </div>
+          <div className="header-actions">
+            <button className="icon-button" type="button" onClick={() => setEditingTitleId(workout.id)} title="Edit title" aria-label="Edit workout title">
+              <Pencil size={16} aria-hidden="true" />
+            </button>
+            <button className="icon-button" type="button" onClick={() => props.onDuplicate(workout)} title="Duplicate" aria-label="Duplicate workout">
+              <Copy size={16} aria-hidden="true" />
+            </button>
+            <button className="icon-button danger" type="button" onClick={() => props.onDelete(workout)} title="Delete" aria-label="Delete workout">
+              <Trash2 size={16} aria-hidden="true" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -388,9 +425,9 @@ function WorkoutEditor(props: {
       </div>
 
       <div className="bottom-action-bar">
-        <button className="secondary-action" type="button" onClick={() => props.onSave(workout)} disabled={props.busy === `save:${workout.id}`}>
-          <Check size={16} aria-hidden="true" />
-          <span>Save</span>
+        <button className={`secondary-action save-button is-${saveState}`} type="button" onClick={() => props.onSave(workout)} disabled={saveDisabled}>
+          {props.isSaved ? <Check size={16} aria-hidden="true" /> : <Save size={16} aria-hidden="true" />}
+          <span>{props.isSaved ? 'Saved' : 'Save'}</span>
         </button>
         <button className="start-button" type="button" onClick={props.onStart} disabled={!props.validation.valid || props.busy === 'start'}>
           <Play size={16} aria-hidden="true" />
@@ -428,22 +465,34 @@ function BlockEditor(props: {
         <span>{props.index + 1}</span>
         <button type="button" className="mini-icon" onClick={() => props.onMove(-1)} aria-label="Move up" title="Move up"><ArrowUp size={14} /></button>
         <button type="button" className="mini-icon" onClick={() => props.onMove(1)} aria-label="Move down" title="Move down"><ArrowDown size={14} /></button>
+        <div className="block-mobile-actions">
+          <button className="mini-icon" type="button" onClick={props.onDuplicate} aria-label="Duplicate block" title="Duplicate"><Copy size={14} /></button>
+          <button className="mini-icon danger" type="button" onClick={props.onDelete} aria-label="Delete block" title="Delete"><Trash2 size={14} /></button>
+        </div>
       </div>
       <div className="block-fields">
-        {block.type === 'rest' ? (
-          <div className="block-rest-title">Rest</div>
-        ) : (
-          <div className="block-exercise-row">
+        <div className="block-exercise-row">
+          {block.type === 'rest' ? (
+            <div className="block-rest-title">Rest</div>
+          ) : (
             <div className="block-exercise-text">
               <strong>{title}</strong>
               <span>{description}</span>
             </div>
-            <button className="secondary-action compact" type="button" onClick={props.onOpenLibrary}>
-              <Library size={15} aria-hidden="true" />
-              <span>{hasExercise ? 'Change' : 'Choose'}</span>
-            </button>
+          )}
+          <div className="block-control-row">
+            {block.type === 'work' ? (
+              <button className="secondary-action compact block-change-button" type="button" onClick={props.onOpenLibrary}>
+                <Library size={15} aria-hidden="true" />
+                <span>{hasExercise ? 'Change' : 'Choose'}</span>
+              </button>
+            ) : null}
+            <div className="block-actions">
+              <button className="mini-icon" type="button" onClick={props.onDuplicate} aria-label="Duplicate block" title="Duplicate"><Copy size={14} /></button>
+              <button className="mini-icon danger" type="button" onClick={props.onDelete} aria-label="Delete block" title="Delete"><Trash2 size={14} /></button>
+            </div>
           </div>
-        )}
+        </div>
         <div className="mode-value-row">
           <select className="block-mode-select" value={mode} onChange={(event) => props.onModeChange(event.target.value as WorkoutBlockMode)} aria-label="Block mode">
             <option value="timer">Timer</option>
@@ -456,10 +505,6 @@ function BlockEditor(props: {
             <NumberField label={block.type === 'rest' ? 'Rest seconds' : 'Seconds'} value={block.type === 'rest' ? block.seconds : block.seconds || 0} onChange={(seconds) => props.onChange({ seconds } as Partial<WorkoutBlock>)} />
           )}
         </div>
-      </div>
-      <div className="block-actions">
-        <button className="mini-icon" type="button" onClick={props.onDuplicate} aria-label="Duplicate block" title="Duplicate"><Copy size={14} /></button>
-        <button className="mini-icon danger" type="button" onClick={props.onDelete} aria-label="Delete block" title="Delete"><Trash2 size={14} /></button>
       </div>
     </article>
   );
@@ -841,12 +886,44 @@ function MediaThumb({ media }: { media: ExerciseMediaRef | null }) {
 }
 
 function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
+  const unit = label.toLowerCase().includes('reps') ? 'reps' : 'seconds';
   return (
     <label className="number-field">
-      <span>{label}</span>
-      <input type="number" min={0} value={value} onChange={(event) => onChange(Math.max(0, Number(event.target.value) || 0))} />
+      <input aria-label={label} type="number" min={0} value={value} onChange={(event) => onChange(Math.max(0, Number(event.target.value) || 0))} />
+      <span className="number-field-unit" aria-hidden="true">{unit}</span>
     </label>
   );
+}
+
+function workoutSummary(workout: Workout) {
+  const totals = workout.blocks.reduce(
+    (acc, block, index) => {
+      if (block.type === 'rest') {
+        const hasNextWork = workout.blocks.slice(index + 1).some((candidate) => candidate.type === 'work');
+        if (block.skip_if_last && !hasNextWork) return acc;
+        acc.seconds += Math.max(0, block.seconds || 0);
+      } else if (block.mode === 'timer') {
+        acc.seconds += Math.max(0, block.seconds || 0);
+      } else {
+        acc.reps += Math.max(0, block.reps || 0);
+      }
+      return acc;
+    },
+    { seconds: 0, reps: 0 }
+  );
+  return {
+    duration: formatWorkoutDuration(totals.seconds),
+    reps: `${totals.reps} reps`
+  };
+}
+
+function formatWorkoutDuration(totalSeconds: number) {
+  const seconds = Math.max(0, Math.round(totalSeconds));
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  if (minutes && remainder) return `${minutes}m ${remainder}s`;
+  if (minutes) return `${minutes}m`;
+  return `${remainder}s`;
 }
 
 function blockWithMode(block: WorkoutBlock, mode: WorkoutBlockMode, workout: Workout): WorkoutBlock {

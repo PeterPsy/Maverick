@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Dumbbell, Search } from 'lucide-react';
-import { listWorkouts } from '../../api';
-import type { Workout } from '../../types';
+import { Dumbbell, Library, Search, Timer } from 'lucide-react';
+import { listWorkouts, updateViewState } from '../../api';
+import type { SetupTab, Workout } from '../../types';
 import './styles.css';
 
 const DATA_RESOURCES = new Set(['workouts', 'runs', 'view-state']);
@@ -42,6 +42,11 @@ function isMobileFromContext(context: WidgetContext) {
   return context.content?.payload?.is_mobile_layout === true;
 }
 
+function setupTabFromContext(context: WidgetContext): SetupTab {
+  const setupTab = String(context.content?.payload?.active_app_params?.setup_tab || '');
+  return setupTab === 'exercise-library' ? 'exercise-library' : 'workout-settings';
+}
+
 function openWorkout(workoutId: string, isMobile: boolean) {
   window.parent?.postMessage(
     {
@@ -56,10 +61,26 @@ function openWorkout(workoutId: string, isMobile: boolean) {
   }
 }
 
+function openSetupTab(setupTab: SetupTab, isMobile: boolean) {
+  updateViewState({ setup_tab: setupTab }).catch(() => undefined);
+  window.parent?.postMessage(
+    {
+      type: 'maverick.widget.open-app',
+      app_id: 'fitness-coach',
+      params: { setup_tab: setupTab }
+    },
+    window.location.origin
+  );
+  if (isMobile) {
+    window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, window.location.origin);
+  }
+}
+
 function Sidebar() {
   const [query, setQuery] = useState('');
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [activeWorkoutId, setActiveWorkoutId] = useState('');
+  const [setupTab, setSetupTab] = useState<SetupTab>('workout-settings');
   const [isMobile, setIsMobile] = useState(false);
   const [notice, setNotice] = useState('');
 
@@ -75,6 +96,7 @@ function Sidebar() {
   useEffect(() => {
     loadWidgetContext().then((context) => {
       setActiveWorkoutId(activeWorkoutFromContext(context));
+      setSetupTab(setupTabFromContext(context));
       setIsMobile(isMobileFromContext(context));
     });
   }, []);
@@ -89,10 +111,15 @@ function Sidebar() {
       const payload = event.data as { context?: WidgetContext; owner_app_id?: string; resource?: string; selection?: Record<string, unknown>; type?: string };
       if (payload.type === 'maverick.widget.context-changed' && payload.context) {
         setActiveWorkoutId(activeWorkoutFromContext(payload.context));
+        setSetupTab(setupTabFromContext(payload.context));
         setIsMobile(isMobileFromContext(payload.context));
       }
       if (payload.type === 'maverick.app.selection-changed' && payload.owner_app_id === 'fitness-coach') {
         setActiveWorkoutId(String(payload.selection?.workout_id || ''));
+        const nextSetupTab = String(payload.selection?.setup_tab || '');
+        if (nextSetupTab === 'workout-settings' || nextSetupTab === 'exercise-library') {
+          setSetupTab(nextSetupTab);
+        }
       }
       if (payload.type === 'maverick.widget.data-changed' && payload.owner_app_id === 'fitness-coach' && DATA_RESOURCES.has(String(payload.resource || ''))) {
         refresh();
@@ -103,9 +130,23 @@ function Sidebar() {
   }, [refresh]);
 
   const rows = useMemo(() => workouts, [workouts]);
+  function handleSetupTab(nextSetupTab: SetupTab) {
+    setSetupTab(nextSetupTab);
+    openSetupTab(nextSetupTab, isMobile);
+  }
 
   return (
     <main className={`fitness-sidebar-widget ${isMobile ? 'is-shell-mobile' : ''}`}>
+      <div className="fitness-sidebar-switch" role="tablist" aria-label="Setup mode">
+        <button type="button" className={setupTab === 'workout-settings' ? 'is-active' : ''} onClick={() => handleSetupTab('workout-settings')}>
+          <Timer size={14} aria-hidden="true" />
+          <span>Workout</span>
+        </button>
+        <button type="button" className={setupTab === 'exercise-library' ? 'is-active' : ''} onClick={() => handleSetupTab('exercise-library')}>
+          <Library size={14} aria-hidden="true" />
+          <span>Library</span>
+        </button>
+      </div>
       <label className="fitness-sidebar-search-frame">
         <Search size={15} aria-hidden="true" />
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search workouts" />

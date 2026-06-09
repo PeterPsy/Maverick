@@ -1,6 +1,8 @@
 /*
 
 !.gitignore
+!.node-version
+!.nvmrc
 !AGENTS.md
 !README.md
 !/apps/

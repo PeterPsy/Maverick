@@ -11,6 +11,7 @@ from core.apps.errors import AppLifecycleError
 from core.apps.models import WorkspaceAppBindingRecord
 from core.apps.store import AppStore
 from core.apps.surfaces import resolve_workspace_app_surface
+from core.shared.node_runtime import NODE_RUNTIME_REQUIREMENT, require_supported_node_runtime
 
 
 def build_workspace_app_frontend(
@@ -84,6 +85,10 @@ def _run_npm_build(build_root: Path, *, app_id: str) -> None:
     scripts = package_payload.get("scripts") if isinstance(package_payload, dict) else None
     if not isinstance(scripts, dict) or not scripts.get("build"):
         raise AppLifecycleError(f"App `{app_id}` package.json does not declare a build script.")
+    try:
+        require_supported_node_runtime()
+    except RuntimeError as exc:
+        raise AppLifecycleError(f"Frontend build for app `{app_id}` requires {NODE_RUNTIME_REQUIREMENT}: {exc}") from exc
     _ensure_node_dependencies(build_root, app_id=app_id)
     completed = subprocess.run(
         ["npm", "run", "build"],

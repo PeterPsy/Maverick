@@ -18,6 +18,12 @@ from tests.support.app_hosting import AppHostingTestBase
 
 
 class AppFrontendBuildTests(AppHostingTestBase):
+    def setUp(self) -> None:
+        super().setUp()
+        node_runtime = patch("core.apps.frontend_build.require_supported_node_runtime")
+        node_runtime.start()
+        self.addCleanup(node_runtime.stop)
+
     def operator_context(self) -> CliInvocationContext:
         return CliInvocationContext(
             caller_kind="operator",

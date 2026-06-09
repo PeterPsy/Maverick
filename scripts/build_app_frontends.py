@@ -8,8 +8,12 @@ from pathlib import Path
 import subprocess
 import sys
 
-
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+if str(REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY_ROOT))
+
+from core.shared.node_runtime import NODE_RUNTIME_REQUIREMENT, require_supported_node_runtime  # noqa: E402
+
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -22,6 +26,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if argv:
         raise SystemExit(f"Unexpected arguments: {' '.join(argv)}")
+    try:
+        require_supported_node_runtime()
+    except RuntimeError as exc:
+        raise SystemExit(f"Building app frontends requires {NODE_RUNTIME_REQUIREMENT}: {exc}") from exc
     for build_root in _frontend_app_build_roots(REPOSITORY_ROOT / "apps"):
         print(f"==> Building frontend dependencies in {build_root}", flush=True)
         subprocess.run(["npm", "ci"], cwd=build_root, check=True)

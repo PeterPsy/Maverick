@@ -4,8 +4,11 @@
   "type": "module",
   "version": "0.2.0",
   "scripts": {
+    "prebuild": "node ../../scripts/check-node-runtime.mjs",
     "build": "tsc --noEmit && vite build",
+    "predev": "node ../../scripts/check-node-runtime.mjs",
     "dev": "vite --host 0.0.0.0",
+    "pretest": "node ../../scripts/check-node-runtime.mjs",
     "test": "vitest run"
   },
   "dependencies": {
@@ -28,5 +31,8 @@
     "typescript": "^5.9.3",
     "vite": "^7.3.0",
     "vitest": "^4.1.7"
+  },
+  "engines": {
+    "node": ">=24.11.0 <25"
   }
 }

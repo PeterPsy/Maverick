@@ -269,7 +269,9 @@ class InstallerFlowTestCase(unittest.TestCase):
         repo_root = Path(__file__).resolve().parents[3]
         with tempfile.TemporaryDirectory(prefix="maverick-install-") as temp_dir:
             output_root = Path(temp_dir) / "install"
-            with patch("core.shared.installer.subprocess.run") as mocked_run:
+            with patch("core.shared.installer.node_runtime_diagnostic", return_value=None), patch(
+                "core.shared.installer.subprocess.run"
+            ) as mocked_run:
                 exit_code = installer_main(
                     [
                         "--local-only",
@@ -293,7 +295,9 @@ class InstallerFlowTestCase(unittest.TestCase):
         repo_root = Path(__file__).resolve().parents[3]
         with tempfile.TemporaryDirectory(prefix="maverick-install-") as temp_dir:
             output_root = Path(temp_dir) / "install"
-            with patch("core.shared.installer.subprocess.run") as mocked_run:
+            with patch("core.shared.installer.node_runtime_diagnostic", return_value=None), patch(
+                "core.shared.installer.subprocess.run"
+            ) as mocked_run:
                 exit_code = installer_main(
                     [
                         "--local-only",

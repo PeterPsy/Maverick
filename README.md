@@ -33,7 +33,7 @@ Requirements:
 
 - Linux
 - Python 3.12, including the `venv` package
-- Node.js and npm
+- Node.js 24 LTS (v24.11.0 or newer within the 24.x line) and npm
 - `bubblewrap` for sandbox verification
 - Codex CLI for the default Codex-backed runtime path
 
@@ -43,6 +43,18 @@ On Ubuntu:
 sudo apt-get update
 sudo apt-get install -y python3.12 python3.12-venv bubblewrap
 ```
+
+Install Node.js 24 LTS through a system-wide package, runtime image, or version
+manager that exposes `node` and `npm` to non-interactive Maverick processes.
+Verify the selected runtime before building frontends:
+
+```bash
+node --version  # v24.11.0 or newer 24.x
+npm --version
+```
+
+Maverick npm packages enforce this range with `engine-strict` for dependency
+installs and runtime checks before direct Node-backed npm scripts.
 
 Run Maverick locally:
 

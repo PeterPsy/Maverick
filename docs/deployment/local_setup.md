@@ -7,7 +7,7 @@ Maverick is experimental. Use fake data and local-only networking.
 ## Prerequisites
 
 - Python 3.12, including the `venv` package
-- Node.js and npm
+- Node.js 24 LTS (v24.11.0 or newer within the 24.x line) and npm
 - `bubblewrap` on Linux for sandbox tests
 - Codex CLI for Codex-backed runtime sessions
 - `systemd`, nginx, and certbot for public service installs with TLS
@@ -21,6 +21,19 @@ On Ubuntu, install Python 3.12 support and the sandbox dependency before running
 sudo apt-get update
 sudo apt-get install -y python3.12 python3.12-venv bubblewrap
 ```
+
+Install Node.js 24 LTS through a system-wide package, runtime image, or version
+manager that exposes `node` and `npm` to non-interactive Maverick processes such
+as systemd services and agent sessions. Verify the selected runtime before using
+`--build-frontends`:
+
+```bash
+node --version  # v24.11.0 or newer 24.x
+npm --version
+```
+
+Maverick npm packages enforce this range with `engine-strict` for dependency
+installs and runtime checks before direct Node-backed npm scripts.
 
 For a public service install that should configure nginx and request HTTPS certificates, also install:
 

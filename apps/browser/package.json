@@ -4,11 +4,17 @@
   "license": "MIT",
   "private": true,
   "scripts": {
+    "prebroker": "node ../../scripts/check-node-runtime.mjs",
     "broker": "node broker/playwright-broker.mjs",
+    "prebroker:docker": "node ../../scripts/check-node-runtime.mjs",
     "broker:docker": "node broker/playwright-server-docker.mjs",
+    "prebroker:local": "node ../../scripts/check-node-runtime.mjs",
     "broker:local": "node broker/playwright-server-local.mjs"
   },
   "dependencies": {
     "playwright": "1.60.0"
+  },
+  "engines": {
+    "node": ">=24.11.0 <25"
   }
 }

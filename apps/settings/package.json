@@ -5,12 +5,17 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "prebuild": "node ../../scripts/check-node-runtime.mjs",
     "build": "tsc --noEmit && vite build",
+    "predev": "node ../../scripts/check-node-runtime.mjs",
     "dev": "vite --host 0.0.0.0"
   },
   "dependencies": {
     "typescript": "^5.9.3",
     "vite": "^7.3.0"
   },
-  "devDependencies": {}
+  "devDependencies": {},
+  "engines": {
+    "node": ">=24.11.0 <25"
+  }
 }

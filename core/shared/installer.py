@@ -23,6 +23,7 @@ from core.secrets.key_material import secret_store_key_from_text
 from core.secrets.service import create_platform_secret
 from core.secrets.store import SecretCollections, SecretDocumentStore
 from core.shared.json_file_collection import JsonFileCollection
+from core.shared.node_runtime import node_runtime_diagnostic
 from core.shared.repository import installation_paths
 from core.workspaces.store import WorkspaceDocumentStore
 
@@ -371,8 +372,9 @@ def preflight_check(
     if request_tls and shutil.which("certbot") is None:
         errors.append("certbot not found in PATH")
     if config.build_frontends:
-        if shutil.which("node") is None:
-            errors.append("node not found in PATH")
+        node_diagnostic = node_runtime_diagnostic()
+        if node_diagnostic is not None:
+            errors.append(node_diagnostic)
         if shutil.which("npm") is None:
             errors.append("npm not found in PATH")
     if live_apply and shutil.which("bubblewrap") is None and shutil.which("bwrap") is None:

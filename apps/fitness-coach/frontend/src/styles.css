@@ -36,6 +36,10 @@
   --fitness-accent: #ffffff;
   --fitness-accent-soft: rgba(255, 255, 255, 0.18);
   --fitness-panel: rgba(13, 15, 12, 0.76);
+  --fitness-shell-top-offset: var(--maverick-shell-mobile-content-top-offset, 0px);
+  --fitness-mobile-top-fade-height: calc(var(--fitness-shell-top-offset) + 1.1rem);
+  --fitness-editor-top-clearance: 0.7rem;
+  --fitness-editor-bottom-clearance: 5rem;
 }
 
 * {
@@ -128,7 +132,7 @@ select:focus {
   height: 100dvh;
   min-height: 0;
   margin: 0 auto;
-  padding: calc(0.72rem + var(--maverick-shell-mobile-content-top-offset, 0px)) 0.8rem 0.8rem;
+  padding: 0.72rem 0.8rem 0.8rem;
   background: var(--fitness-bg);
 }
 
@@ -167,6 +171,7 @@ select:focus {
 }
 
 .setup-panel {
+  position: relative;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
@@ -295,7 +300,7 @@ select:focus {
 .library {
   min-height: 0;
   overflow-y: auto;
-  padding: 0.7rem 0.1rem 5rem;
+  padding: var(--fitness-editor-top-clearance) 0.1rem var(--fitness-editor-bottom-clearance);
 }
 
 .workout-header {
@@ -777,7 +782,7 @@ select:focus {
 
 .player-progress {
   position: absolute;
-  top: calc(0.62rem + env(safe-area-inset-top) + var(--maverick-shell-mobile-content-top-offset, 0px));
+  top: calc(0.62rem + env(safe-area-inset-top) + var(--fitness-shell-top-offset));
   left: max(0.7rem, env(safe-area-inset-left));
   right: max(0.7rem, env(safe-area-inset-right));
   z-index: 3;
@@ -799,7 +804,7 @@ select:focus {
 
 .player-top {
   position: absolute;
-  top: calc(1.06rem + env(safe-area-inset-top) + var(--maverick-shell-mobile-content-top-offset, 0px));
+  top: calc(1.06rem + env(safe-area-inset-top) + var(--fitness-shell-top-offset));
   left: max(0.7rem, env(safe-area-inset-left));
   right: max(0.7rem, env(safe-area-inset-right));
   z-index: 4;
@@ -932,8 +937,40 @@ select:focus {
   }
 
   .fitness-app {
+    padding-top: 0.58rem;
     padding-left: 0.58rem;
     padding-right: 0.58rem;
+  }
+
+  .setup-panel::before {
+    content: "";
+    position: absolute;
+    z-index: 10;
+    top: 0;
+    right: 0;
+    left: 0;
+    height: var(--fitness-mobile-top-fade-height);
+    pointer-events: none;
+    background: linear-gradient(
+      to bottom,
+      rgba(7, 7, 8, 0.82) 0%,
+      rgba(7, 7, 8, 0.58) 48%,
+      rgba(7, 7, 8, 0) 100%
+    );
+  }
+
+  .editor,
+  .library {
+    --fitness-editor-top-clearance: calc(0.7rem + var(--fitness-shell-top-offset));
+  }
+
+  .editor {
+    --fitness-editor-bottom-clearance: calc(7.2rem + env(safe-area-inset-bottom));
+  }
+
+  .setup-panel > .notice,
+  .setup-content > .empty-state {
+    margin-top: var(--fitness-shell-top-offset);
   }
 
   .library-toolbar,

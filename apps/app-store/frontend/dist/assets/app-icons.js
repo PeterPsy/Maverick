@@ -12,6 +12,7 @@
     "document-generator": "description",
     "docs-studio": "article",
     "dynamic-views": "dashboard_customize",
+    "fitness-coach": "fitness_center",
     "fleet": "table_chart",
     "gallery": "photo_library",
     "mail": "mail",

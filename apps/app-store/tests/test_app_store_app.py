@@ -721,6 +721,7 @@ assert(icon.classList.classes.includes("is-non-launchable"), "icons use installe
         self.assertIn("MaverickAppIcons.renderIcon", shortcut_script)
         self.assertIn("logo?.kind === \"image\"", icon_script)
         self.assertIn("logo?.kind === \"glyph\"", icon_script)
+        self.assertIn('"fitness-coach": "fitness_center"', icon_script)
         self.assertIn("pinned_apps.toggle", shortcut_script)
         self.assertIn("state.apps = registry.items || []", shortcut_script)
         self.assertIn("state.apps.filter(isFrontendLaunchable).map", shortcut_script)

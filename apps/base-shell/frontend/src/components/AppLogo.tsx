@@ -29,6 +29,7 @@ function defaultIcon(app: AppRegistryItem): string {
     "docs-studio": "description",
     "document-generator": "description",
     "dynamic-views": "dashboard_customize",
+    "fitness-coach": "fitness_center",
     mail: "mail",
     storage: "cloud",
     "gmail-app": "mail",

@@ -45,4 +45,8 @@ describe("AppLogo", () => {
   it("uses the same material language glyph for the Browser app", () => {
     expect(renderedLogo("browser")).toContain(">language<");
   });
+
+  it("uses the fitness glyph for Fitness Coach", () => {
+    expect(renderedLogo("fitness-coach")).toContain(">fitness_center<");
+  });
 });

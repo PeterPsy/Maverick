@@ -35,6 +35,7 @@ from store import (
     page_context,
     prepare_git_connection,
     preview_document,
+    preview_media,
     publish,
     read_file,
     rebuild_index,
@@ -248,9 +249,17 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
                 diff_limit=payload.get("diff_limit"),
             )
         if action == "build_preview":
-            return 200, build_preview(data_root, payload.get("site_id"), payload.get("route") or "/")
+            return 200, build_preview(
+                data_root,
+                payload.get("site_id"),
+                payload.get("route") or "/",
+                include_html=payload.get("include_html") if "include_html" in payload else True,
+                preview_origin=payload.get("_preview_origin"),
+            )
         if action == "preview_document":
-            return 200, preview_document(data_root, payload.get("preview_id"))
+            return 200, preview_document(data_root, payload.get("preview_id"), preview_origin=payload.get("_preview_origin"))
+        if action == "preview_media":
+            return 200, preview_media(data_root, payload.get("preview_id"), payload.get("path"))
         if action == "runtime_status":
             return 200, runtime_status(data_root, payload.get("site_id"))
         if action == "build_validate":

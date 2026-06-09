@@ -1318,7 +1318,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertIn("<style>body { color: #111; }</style>", preview["html"])
             self.assertIn("data:image/png;base64,", preview["html"])
 
-    def test_runtime_preview_document_inlines_local_scripts_for_static_sites(self) -> None:
+    def test_runtime_preview_document_rewrites_local_assets_for_static_sites(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
             archive = BytesIO()
@@ -1328,13 +1328,30 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
                     (
                         "<!doctype html><html><head>"
                         '<link rel="stylesheet" href="assets/site.css">'
-                        "</head><body><main>Runtime</main>"
+                        '<style>.hero{background:url("assets/hero.webp")}</style>'
+                        '</head><body><a href="/index.php#trails">Trails</a><main>Runtime</main>'
+                        '<img data-src="assets/photo.webp" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">'
                         '<script src="assets/site.js"></script>'
+                        "<script>const lateScript = document.createElement('script'); lateScript.src = 'assets/late.js'; document.body.appendChild(lateScript);</script>"
                         "</body></html>"
                     ),
                 )
-                zip_file.writestr("assets/site.css", "main { color: #123; }")
+                zip_file.writestr(
+                    "legal/terms.html",
+                    (
+                        "<!doctype html><html><head>"
+                        '<link rel="stylesheet" href="../assets/site.css">'
+                        "</head><body>"
+                        '<img data-src="../assets/photo.webp">'
+                        "</body></html>"
+                    ),
+                )
+                zip_file.writestr("assets/site.css", "main { color: #123; background: url('/assets/bg.webp'); }")
                 zip_file.writestr("assets/site.js", "window.__websiteStudioRuntimeTest = true;")
+                zip_file.writestr("assets/late.js", "window.__websiteStudioLateScript = true;")
+                zip_file.writestr("assets/photo.webp", b"photo")
+                zip_file.writestr("assets/hero.webp", b"hero")
+                zip_file.writestr("assets/bg.webp", b"bg")
             encoded = base64.b64encode(archive.getvalue()).decode("ascii")
 
             status, imported = handle_action(data_root, {"action": "import_zip", "display_name": "Runtime Static", "archive_base64": encoded})
@@ -1350,10 +1367,106 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(status, 200)
             self.assertEqual(document["preview"]["id"], preview["preview_id"])
             self.assertEqual(document["preview"]["status"], "ready")
-            self.assertIn("<style>main { color: #123; }</style>", document["html"])
-            self.assertIn("window.__websiteStudioRuntimeTest = true;", document["html"])
-            self.assertIn("script-src &#39;unsafe-inline&#39;", document["html"])
+            self.assertIn('<meta charset="utf-8">', document["html"])
+            self.assertIn("/api/apps/website-studio/backend/media?", document["html"])
+            self.assertIn('data-website-studio-inline-stylesheet="assets/site.css"', document["html"])
+            self.assertIn("main { color: #123", document["html"])
+            self.assertIn('data-website-studio-inline-script="assets/site.js"', document["html"])
+            self.assertIn("data-website-studio-inline-script-runner", document["html"])
+            self.assertIn("data-website-studio-preview-shim", document["html"])
+            self.assertIn("data-website-studio-preview-lazy-assets", document["html"])
+            self.assertIn("path=assets%2Flate.js", document["html"])
+            self.assertIn("path=assets%2Fphoto.webp", document["html"])
+            self.assertIn("path=assets%2Fhero.webp", document["html"])
+            self.assertIn("path=assets%2Fbg.webp", document["html"])
+            self.assertIn("script-src &#39;unsafe-inline&#39; blob: __WEBSITE_STUDIO_PREVIEW_MEDIA_SOURCE__", document["html"])
+            self.assertIn("font-src data: blob: https: __WEBSITE_STUDIO_PREVIEW_MEDIA_SOURCE__", document["html"])
+            self.assertIn("style-src &#39;unsafe-inline&#39; blob: https: __WEBSITE_STUDIO_PREVIEW_MEDIA_SOURCE__", document["html"])
             self.assertNotIn('src="assets/site.js"', document["html"])
+            self.assertNotIn('<script src="__WEBSITE_STUDIO_PREVIEW_ORIGIN__/api/apps/website-studio/backend/media?preview_id=', document["html"])
+            self.assertNotIn('data-src="assets/photo.webp"', document["html"])
+            self.assertNotIn('rel="stylesheet" href="__WEBSITE_STUDIO_PREVIEW_ORIGIN__/api/apps/website-studio/backend/media?preview_id=', document["html"])
+            self.assertIn('href="#trails"', document["html"])
+
+            status, css_media = handle_action(
+                data_root,
+                {"action": "preview_media", "preview_id": preview["preview_id"], "path": "assets/site.css"},
+            )
+            self.assertEqual(status, 200)
+            css_path = Path(css_media["file_response"]["path"])
+            self.assertTrue(css_path.exists())
+            self.assertEqual(css_media["file_response"]["content_type"], "text/css; charset=utf-8")
+            self.assertEqual(css_media["file_response"]["headers"]["Access-Control-Allow-Origin"], "*")
+            self.assertEqual(css_media["file_response"]["headers"]["Cross-Origin-Resource-Policy"], "cross-origin")
+            self.assertIn("path=assets%2Fbg.webp", css_path.read_text(encoding="utf-8"))
+
+            video_bytes = b"0" * (3 * 1024 * 1024)
+            video_target = data_root / "sites" / imported["site"]["id"] / "source" / "assets" / "hero.mp4"
+            video_target.write_bytes(video_bytes)
+            status, video_media = handle_action(
+                data_root,
+                {"action": "preview_media", "preview_id": preview["preview_id"], "path": "assets/hero.mp4"},
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(video_media["file_response"]["path"], str(video_target.resolve()))
+            self.assertEqual(video_media["file_response"]["content_type"], "video/mp4")
+
+            entrypoint_payload = {
+                "data_root": str(data_root),
+                "body": {},
+                "route_path": "/api/apps/website-studio/backend/media",
+                "method": "GET",
+                "query": {"preview_id": preview["preview_id"], "path": "assets/site.css"},
+                "headers": {},
+            }
+            result = subprocess.run(
+                [sys.executable, str(APP_ROOT / "backend" / "app_backend.py")],
+                cwd=APP_ROOT,
+                input=json.dumps(entrypoint_payload),
+                capture_output=True,
+                text=True,
+                check=False,
+                env={**os.environ, "PYTHONPATH": str(MAVERICK_ROOT)},
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            entrypoint_response = json.loads(result.stdout)
+            self.assertEqual(entrypoint_response["status_code"], 200)
+            self.assertIn("file_response", entrypoint_response)
+            self.assertEqual(entrypoint_response.get("json", {}).get("preview_id"), preview["preview_id"])
+
+            document_entrypoint_payload = {
+                "data_root": str(data_root),
+                "body": {"action": "preview_document", "preview_id": preview["preview_id"]},
+                "route_path": "/api/apps/website-studio/backend",
+                "method": "POST",
+                "query": {},
+                "headers": {"Origin": "https://studio.example"},
+            }
+            result = subprocess.run(
+                [sys.executable, str(APP_ROOT / "backend" / "app_backend.py")],
+                cwd=APP_ROOT,
+                input=json.dumps(document_entrypoint_payload),
+                capture_output=True,
+                text=True,
+                check=False,
+                env={**os.environ, "PYTHONPATH": str(MAVERICK_ROOT)},
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            entrypoint_response = json.loads(result.stdout)
+            entrypoint_html = entrypoint_response["json"]["html"]
+            self.assertIn("https://studio.example/api/apps/website-studio/backend/media?", entrypoint_html)
+            self.assertIn("style-src &#39;unsafe-inline&#39; blob: https: https://studio.example/api/apps/website-studio/backend/media", entrypoint_html)
+            self.assertNotIn("__WEBSITE_STUDIO_PREVIEW_ORIGIN__", entrypoint_html)
+            self.assertNotIn("__WEBSITE_STUDIO_PREVIEW_MEDIA_SOURCE__", entrypoint_html)
+
+            status, nested_preview = handle_action(data_root, {"action": "build_preview", "site_id": imported["site"]["id"], "route": "/legal/terms"})
+            self.assertEqual(status, 200)
+            status, nested_document = handle_action(data_root, {"action": "preview_document", "preview_id": nested_preview["preview_id"]})
+            self.assertEqual(status, 200)
+            self.assertIn('data-website-studio-inline-stylesheet="assets/site.css"', nested_document["html"])
+            self.assertIn("path=assets%2Fphoto.webp", nested_document["html"])
+            self.assertNotIn('href="../assets/site.css"', nested_document["html"])
+            self.assertNotIn('data-src="../assets/photo.webp"', nested_document["html"])
 
     def test_preview_contract_reports_missing_runtime_requirements_for_build_and_php_sites(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1469,6 +1582,110 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             preview_warnings = " ".join(preview["warnings"])
             self.assertIn(".htaccess rules are not fully reproduced", preview_warnings)
             self.assertIn("third-party services require explicit preview configuration", preview_warnings)
+
+    @unittest.skipUnless(shutil.which("php"), "php executable is required for PHP runtime preview integration")
+    def test_php_preview_rewrites_runtime_assets_and_serves_router_aliases(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            archive = BytesIO()
+            with ZipFile(archive, "w") as zip_file:
+                zip_file.writestr(
+                    "frontend-website/index.php",
+                    (
+                        "<?php echo '<!doctype html><html><head><title>PHP Assets</title>"
+                        "<link rel=\"stylesheet\" href=\"/dist/css/style.min.css\">"
+                        "<link rel=\"preload\" href=\"/fonts/Chilly-Variable.ttf\" as=\"font\">"
+                        "</head><body><video src=\"/assets/images/hero.mp4#t=0.1\"></video>"
+                        "<div data-bg=\"images/card.webp\"></div>"
+                        "<script src=\"/dist/js/main.bundle.js\"></script></body></html>';"
+                    ),
+                )
+                zip_file.writestr(
+                    "frontend-website/legal/terms.php",
+                    (
+                        "<?php echo '<!doctype html><html><head><title>Nested PHP Assets</title>"
+                        "<link rel=\"stylesheet\" href=\"../dist/css/style.min.css\">"
+                        "</head><body><img data-src=\"../assets/images/card.webp\"></body></html>';"
+                    ),
+                )
+                zip_file.writestr(
+                    "local/router.php",
+                    (
+                        "<?php\n"
+                        "$projectRoot = dirname(__DIR__);\n"
+                        "$uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?: '/';\n"
+                        "if ($uri === '/' || $uri === '/index.php') {\n"
+                        "    include $projectRoot . '/frontend-website/index.php';\n"
+                        "    return;\n"
+                        "}\n"
+                        "if ($uri === '/terms.html') {\n"
+                        "    include $projectRoot . '/frontend-website/legal/terms.php';\n"
+                        "    return;\n"
+                        "}\n"
+                        "return false;\n"
+                    ),
+                )
+                zip_file.writestr("frontend-website/dist/css/style.min.css", "@font-face{src:url('/fonts/Chilly-Variable.ttf')} .x{background:url('/assets/images/card.webp')}")
+                zip_file.writestr("frontend-website/dist/js/main.bundle.js", "window.__assetPreview = true;")
+                zip_file.writestr("frontend-website/assets/fonts/Chilly-Variable.ttf", b"font")
+                zip_file.writestr("frontend-website/assets/images/card.webp", b"card")
+                zip_file.writestr("frontend-website/assets/images/hero.mp4", b"0" * (3 * 1024 * 1024))
+            encoded = base64.b64encode(archive.getvalue()).decode("ascii")
+
+            status, imported = handle_action(data_root, {"action": "import_zip", "display_name": "PHP Assets", "archive_base64": encoded})
+            self.assertEqual(status, 201)
+            status, preview = handle_action(data_root, {"action": "build_preview", "site_id": imported["site"]["id"], "route": "/"})
+
+            self.assertEqual(status, 200)
+            self.assertEqual(preview["runtime_kind"], "php")
+            self.assertEqual(preview["runtime_status"], "ready")
+            self.assertIn('data-website-studio-inline-stylesheet="dist/css/style.min.css"', preview["html"])
+            self.assertIn('data-website-studio-inline-script="dist/js/main.bundle.js"', preview["html"])
+            self.assertIn("data-website-studio-inline-script-runner", preview["html"])
+            self.assertIn("data-website-studio-preview-shim", preview["html"])
+            self.assertIn("data-website-studio-preview-lazy-assets", preview["html"])
+            self.assertIn("path=fonts%2FChilly-Variable.ttf", preview["html"])
+            self.assertIn("path=assets%2Fimages%2Fhero.mp4", preview["html"])
+            self.assertIn("#t=0.1", preview["html"])
+            self.assertIn("path=images%2Fcard.webp", preview["html"])
+            self.assertIn("path=assets%2Fimages%2Fcard.webp", preview["html"])
+
+            status, css_media = handle_action(
+                data_root,
+                {"action": "preview_media", "preview_id": preview["preview_id"], "path": "dist/css/style.min.css"},
+            )
+            self.assertEqual(status, 200)
+            rewritten_css = Path(css_media["file_response"]["path"]).read_text(encoding="utf-8")
+            self.assertIn("path=fonts%2FChilly-Variable.ttf", rewritten_css)
+            self.assertIn("path=assets%2Fimages%2Fcard.webp", rewritten_css)
+
+            status, font_media = handle_action(
+                data_root,
+                {"action": "preview_media", "preview_id": preview["preview_id"], "path": "fonts/Chilly-Variable.ttf"},
+            )
+            self.assertEqual(status, 200)
+            self.assertTrue(font_media["file_response"]["path"].endswith("assets/fonts/Chilly-Variable.ttf"))
+
+            status, bg_media = handle_action(
+                data_root,
+                {"action": "preview_media", "preview_id": preview["preview_id"], "path": "images/card.webp"},
+            )
+            self.assertEqual(status, 200)
+            self.assertTrue(bg_media["file_response"]["path"].endswith("assets/images/card.webp"))
+
+            status, nested_preview = handle_action(data_root, {"action": "build_preview", "site_id": imported["site"]["id"], "route": "/legal/terms.php"})
+            self.assertEqual(status, 200)
+            self.assertIn('data-website-studio-inline-stylesheet="dist/css/style.min.css"', nested_preview["html"])
+            self.assertIn("path=assets%2Fimages%2Fcard.webp", nested_preview["html"])
+            self.assertNotIn('href="../dist/css/style.min.css"', nested_preview["html"])
+            self.assertNotIn('data-src="../assets/images/card.webp"', nested_preview["html"])
+
+            status, alias_preview = handle_action(data_root, {"action": "build_preview", "site_id": imported["site"]["id"], "route": "/terms.html"})
+            self.assertEqual(status, 200)
+            self.assertIn('data-website-studio-inline-stylesheet="dist/css/style.min.css"', alias_preview["html"])
+            self.assertIn("path=assets%2Fimages%2Fcard.webp", alias_preview["html"])
+            self.assertNotIn('href="../dist/css/style.min.css"', alias_preview["html"])
+            self.assertNotIn('data-src="../assets/images/card.webp"', alias_preview["html"])
 
     @unittest.skipUnless(shutil.which("php"), "php executable is required for PHP runtime preview integration")
     def test_php_runtime_marks_4xx_routes_failed(self) -> None:
@@ -1617,6 +1834,10 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             status, second = handle_action(data_root, {"action": "build_preview", "site_id": site_id, "route": "/"})
             self.assertEqual(status, 200)
             self.assertEqual(second["preview_id"], first["preview_id"])
+            status, slim = handle_action(data_root, {"action": "build_preview", "site_id": site_id, "route": "/", "include_html": False})
+            self.assertEqual(status, 200)
+            self.assertEqual(slim["preview_id"], first["preview_id"])
+            self.assertEqual(slim["html"], "")
             with closing(sqlite3.connect(data_root / "app.sqlite")) as db:
                 preview_count = db.execute("SELECT COUNT(*) FROM previews WHERE site_id = ?", (site_id,)).fetchone()[0]
             self.assertEqual(preview_count, 1)
@@ -1680,7 +1901,11 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(context["runtime_status"], "ready")
             self.assertEqual(context["runtime_kind"], "php")
             self.assertEqual(context["preview_id"], "preview_ready")
-            self.assertEqual(context["preview_url"], preview_url)
+            self.assertNotEqual(context["preview_url"], preview_url)
+            self.assertTrue(context["preview_url"].startswith(preview_url + "&runtime_version="))
+            self.assertEqual(context["runtime"]["latest_preview"]["preview_url"], context["preview_url"])
+            self.assertEqual(context["runtime"]["latest_runtime_session"]["preview_url"], context["preview_url"])
+            self.assertEqual(context["runtime"]["latest_runtime_session"]["health"]["preview_url"], context["preview_url"])
             self.assertEqual(context["preview"]["runtime_status"], "ready")
 
     def test_active_context_includes_route_assets_and_change_state(self) -> None:
@@ -1821,6 +2046,8 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("from 'motion/react'", tree_source)
         self.assertIn("map.routes || []", widget_source)
         self.assertIn("map.assets || []", widget_source)
+        self.assertIn('<option value="">Select a site</option>', widget_source)
+        self.assertIn("Select a site to load its sitemap.", widget_source)
         self.assertIn("route_id", widget_source)
         self.assertIn("asset_id", widget_source)
         self.assertIn("maverick.widget.data-changed", widget_source)
@@ -1857,9 +2084,9 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("runtime_status", app_source)
         self.assertIn("missing_requirements", app_source)
         self.assertIn("action: 'site_status'", app_source)
-        self.assertIn("action: 'preview_document'", app_source)
         self.assertIn("action: 'list_changes'", app_source)
-        self.assertIn("previewPayloadFromDocument", app_source)
+        self.assertIn("previewPayloadFromRecord", app_source)
+        self.assertIn("include_html: false", app_source)
         self.assertIn("previewLoading", app_source)
         self.assertIn("setPreviewLoading(true)", app_source)
         self.assertIn("setPreviewLoading(false)", app_source)
@@ -1867,7 +2094,9 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("Preview is loading", app_source)
         self.assertIn("active_view: activeView", app_source)
         self.assertIn("context_tool: 'website_page_context'", app_source)
-        self.assertIn("previewState?.preview_url || ''", app_source)
+        self.assertIn("normalizePreviewUrl(previewState?.preview_url || '')", app_source)
+        self.assertIn("PREVIEW_CLIENT_VERSION", app_source)
+        self.assertIn("client_version", app_source)
         self.assertIn("previewUrl || previewHtml", app_source)
         self.assertIn("sandbox=\"allow-scripts allow-same-origin\"", app_source)
         self.assertIn("src={previewUrl}", app_source)
@@ -1878,11 +2107,28 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
 
         self.assertIn("action: 'preview_document'", runtime_source)
         self.assertIn("preview_id: previewId", runtime_source)
-        self.assertIn("frame.srcdoc = String(payload.html || '')", runtime_source)
+        self.assertIn("URL.createObjectURL", runtime_source)
+        self.assertIn("normalizePreviewDocument", runtime_source)
+        self.assertIn("normalizeCssUrls", runtime_source)
+        self.assertIn("normalizeInlineMediaUrls", runtime_source)
+        self.assertIn("normalizedMediaDocumentUrl", runtime_source)
+        self.assertIn("text/html;charset=utf-8", runtime_source)
+        self.assertIn("mountHtml(payload.html || '')", runtime_source)
+        self.assertNotIn("credentials: 'same-origin'", runtime_source)
+        self.assertNotIn("response.blob()", runtime_source)
+        self.assertNotIn("asset materialization failed", runtime_source)
+        self.assertNotIn("currentAssetUrls", runtime_source)
+        self.assertNotIn("fetchMediaText", runtime_source)
+        self.assertNotIn("method: 'HEAD'", runtime_source)
+        self.assertNotIn("shouldMaterializeElementAsset", runtime_source)
+        self.assertNotIn("STREAMING_MEDIA_EXTENSIONS", runtime_source)
+        self.assertNotIn("blobUrlForMedia", runtime_source)
+        self.assertIn("__WEBSITE_STUDIO_PREVIEW_MEDIA_SOURCE__", runtime_source)
+        self.assertIn("/api/apps/website-studio/backend/media", runtime_source)
         self.assertIn('sandbox="allow-scripts allow-forms"', runtime_source)
         self.assertNotIn("allow-popups", runtime_source)
         self.assertNotIn("allow-same-origin", runtime_source)
-        self.assertIn("frame.srcdoc", runtime_source)
+        self.assertIn("frame.src = currentDocumentUrl", runtime_source)
 
     def test_connection_onboarding_is_owned_by_website_ops_skill(self) -> None:
         app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
@@ -1911,6 +2157,8 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("availableSites = sitePayload.items.filter((site) => site.status !== 'archived')", app_source)
         self.assertIn("const selectableSites = nextSites.filter((item) => item.status !== 'archived')", widget_source)
         self.assertNotIn("sitePayload.items[0]?.id", app_source)
+        self.assertNotIn("availableSites[0]?.id", app_source)
+        self.assertNotIn("selectableSites[0]", widget_source)
         self.assertNotIn("|| sites[0]", widget_source)
 
     def test_frontend_resolves_storage_writer_dependency(self) -> None:
@@ -1928,9 +2176,9 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
 
         self.assertIn("connection-guide", app_source)
-        self.assertIn("Scrivi in chat a un agente che vuoi connettere un sito.", app_source)
-        self.assertIn("link ZIP di Drive", app_source)
-        self.assertIn("secret salvato in Vault", app_source)
+        self.assertIn("Ask an agent to connect a website.", app_source)
+        self.assertIn("Drive ZIP import", app_source)
+        self.assertIn("secret saved in", app_source)
         self.assertNotIn("handleZipDrop", app_source)
         self.assertNotIn("onDrop={handleZipDrop}", app_source)
         self.assertNotIn("Drop ZIP", app_source)

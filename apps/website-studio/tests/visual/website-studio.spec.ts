@@ -29,9 +29,9 @@ test.describe('Website Studio visual smoke', () => {
 
     const guide = page.locator('.connection-guide');
     await expect(guide).toBeVisible();
-    await expect(guide).toContainText('Scrivi in chat a un agente');
-    await expect(guide).toContainText('ZIP da Drive');
-    await expect(guide).toContainText('GitHub con Vault');
+    await expect(guide).toContainText('Ask an agent to connect a website');
+    await expect(guide).toContainText('Drive ZIP');
+    await expect(guide).toContainText('GitHub with Vault');
     await expect(page.locator('.import-button')).toHaveCount(0);
     await expect(page.locator('.git-import')).toHaveCount(0);
 
@@ -48,6 +48,7 @@ test.describe('Website Studio visual smoke', () => {
     await installWebsiteStudioMocks(page, { delayedAction: 'sitemap', delayMs: 650 });
 
     await page.goto('/');
+    await openSite(page);
 
     const loading = page.locator('.preview-loading-state');
     await expect(loading).toBeVisible();
@@ -74,6 +75,7 @@ test.describe('Website Studio visual smoke', () => {
       await installWebsiteStudioMocks(page);
 
       await page.goto('/');
+      await openSite(page);
 
       const canvas = page.locator('.site-canvas');
       const iframe = page.locator('.site-canvas iframe');
@@ -81,6 +83,7 @@ test.describe('Website Studio visual smoke', () => {
 
       await expect(canvas).toBeVisible();
       await expect(iframe).toBeVisible();
+      await expect(iframe).toHaveAttribute('src', /client_version=website-studio-preview-frame-v7/);
       await expect(page.locator('.preview-status')).toHaveCount(0);
       await expect(page.locator('.site-status-panel')).toHaveCount(0);
       await expect(infoPanel).toHaveCount(0);
@@ -125,6 +128,7 @@ test.describe('Website Studio visual smoke', () => {
     const mockState = await installWebsiteStudioMocks(page);
 
     await page.goto('/');
+    await openSite(page);
 
     const iframe = page.locator('.site-canvas iframe');
     await expect(iframe).toBeVisible();
@@ -178,6 +182,7 @@ test.describe('Website Studio visual smoke', () => {
     await installWebsiteStudioMocks(page);
 
     await page.goto('/');
+    await openSite(page);
 
     const fullscreenPreview = page.locator('.website-fullscreen-preview');
     const inlinePreview = page.locator('.site-canvas iframe');
@@ -192,6 +197,70 @@ test.describe('Website Studio visual smoke', () => {
     await expect(page.locator('.website-fullscreen-preview-close')).toHaveCount(0);
     await expect(inlinePreview).toBeVisible();
     await expect(inlinePreview).toHaveAttribute('src', /preview-runtime/);
+  });
+});
+
+test.describe('Website Studio preview runtime', () => {
+  test('mounts the document before slow lazy media finishes loading', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 860 });
+    const previewId = 'preview_slow_assets';
+    let slowVideoRequested = false;
+    const mediaUrl = (path: string) =>
+      `__WEBSITE_STUDIO_PREVIEW_ORIGIN__/api/apps/website-studio/backend/media?preview_id=${previewId}&path=${encodeURIComponent(path)}`;
+
+    await page.route('**/api/apps/website-studio/backend', async (route) => {
+      const body = JSON.parse(route.request().postData() || '{}') as { action?: string };
+      expect(body.action).toBe('preview_document');
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          preview: { id: previewId, status: 'ready' },
+          html: `<!doctype html>
+            <html>
+              <head>
+                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob: __WEBSITE_STUDIO_PREVIEW_MEDIA_SOURCE__; media-src data: blob: __WEBSITE_STUDIO_PREVIEW_MEDIA_SOURCE__; font-src data: blob: __WEBSITE_STUDIO_PREVIEW_MEDIA_SOURCE__; style-src 'unsafe-inline' blob: __WEBSITE_STUDIO_PREVIEW_MEDIA_SOURCE__; script-src 'unsafe-inline' blob: __WEBSITE_STUDIO_PREVIEW_MEDIA_SOURCE__; connect-src 'none'; frame-ancestors 'self'; form-action 'none'; base-uri 'none'">
+                <style>
+                  @font-face { font-family: PreviewRuntime; src: url("${mediaUrl('assets/fonts/preview.woff2')}") format("woff2"); }
+                  body { margin: 0; font-family: PreviewRuntime, system-ui, sans-serif; background: #f7f7f2; }
+                  main { min-height: 100vh; display: grid; place-content: center; background-image: url("${mediaUrl('assets/images/hero.webp')}"); }
+                </style>
+              </head>
+              <body>
+                <main data-testid="runtime-preview">
+                  <h1>Giuntitrail</h1>
+                  <img data-testid="eager-image" src="${mediaUrl('assets/images/logo.webp')}" alt="">
+                  <video data-testid="slow-video" data-src="${mediaUrl('assets/video/slow.mp4')}" muted playsinline></video>
+                </main>
+              </body>
+            </html>`
+        })
+      });
+    });
+
+    await page.route('**/api/apps/website-studio/backend/media?**', async (route) => {
+      const url = new URL(route.request().url());
+      const path = url.searchParams.get('path') || '';
+      if (path.endsWith('slow.mp4')) {
+        slowVideoRequested = true;
+        await delay(4_000);
+        await route.fulfill({ status: 200, contentType: 'video/mp4', body: Buffer.from([0]) });
+        return;
+      }
+      const contentType = path.endsWith('.woff2') ? 'font/woff2' : path.endsWith('.webp') ? 'image/webp' : 'application/octet-stream';
+      await route.fulfill({ status: 200, contentType, body: Buffer.from([0]) });
+    });
+
+    const startedAt = Date.now();
+    await page.goto(`/apps/website-studio/preview-runtime/index.html?preview_id=${previewId}`);
+
+    const previewFrame = page.frameLocator('#preview');
+    await expect(previewFrame.locator('[data-testid="runtime-preview"]')).toContainText('Giuntitrail', { timeout: 1_500 });
+    expect(Date.now() - startedAt).toBeLessThan(2_000);
+    expect(slowVideoRequested).toBe(false);
+
+    const imageSrc = await previewFrame.locator('[data-testid="eager-image"]').getAttribute('src');
+    expect(imageSrc).toContain('/api/apps/website-studio/backend/media');
   });
 });
 
@@ -257,6 +326,13 @@ async function installWebsiteStudioMocks(page: Page, options: MockOptions = {}):
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function openSite(page: Page, params: Record<string, string> = {}): Promise<void> {
+  await emitShellMessage(page, {
+    type: 'maverick.app.navigate',
+    params: { site_id: SITE_ID, ...params }
+  });
 }
 
 async function emitShellMessage(page: Page, payload: Record<string, unknown>): Promise<void> {

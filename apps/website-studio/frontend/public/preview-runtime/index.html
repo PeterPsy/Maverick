@@ -25,6 +25,157 @@
       const params = new URLSearchParams(window.location.search);
       const previewId = params.get('preview_id') || '';
       const frame = document.getElementById('preview');
+      let currentDocumentUrl = '';
+
+      function revokeMountedUrls() {
+        if (currentDocumentUrl) {
+          URL.revokeObjectURL(currentDocumentUrl);
+          currentDocumentUrl = '';
+        }
+      }
+
+      function mountHtml(html) {
+        revokeMountedUrls();
+        const origin = window.location.origin;
+        const mediaSource = `${origin}/api/apps/website-studio/backend/media`;
+        const documentHtml = normalizePreviewDocument(String(html || '')
+          .replaceAll('__WEBSITE_STUDIO_PREVIEW_ORIGIN__', origin)
+          .replaceAll('__WEBSITE_STUDIO_PREVIEW_MEDIA_SOURCE__', mediaSource));
+        currentDocumentUrl = URL.createObjectURL(new Blob([documentHtml], { type: 'text/html;charset=utf-8' }));
+        frame.removeAttribute('srcdoc');
+        frame.src = currentDocumentUrl;
+      }
+
+      function normalizePreviewDocument(html) {
+        const document = new DOMParser().parseFromString(html, 'text/html');
+        ensureUtf8Meta(document);
+        expandPreviewCspForRuntimeAssets(document);
+
+        for (const link of Array.from(document.querySelectorAll('link[href]'))) {
+          const href = link.getAttribute('href') || '';
+          if (isPreviewMediaUrl(href)) link.setAttribute('href', normalizedMediaDocumentUrl(href));
+        }
+
+        for (const style of Array.from(document.querySelectorAll('style'))) {
+          style.textContent = normalizeCssUrls(style.textContent || '');
+        }
+        for (const element of Array.from(document.querySelectorAll('[style]'))) {
+          element.setAttribute('style', normalizeCssUrls(element.getAttribute('style') || ''));
+        }
+
+        for (const script of Array.from(document.querySelectorAll('script[src]'))) {
+          const src = script.getAttribute('src') || '';
+          if (!isPreviewMediaUrl(src)) continue;
+          script.setAttribute('src', normalizedMediaDocumentUrl(src));
+        }
+        for (const script of Array.from(document.querySelectorAll('script:not([src])'))) {
+          const scriptType = (script.getAttribute('type') || '').trim().toLowerCase();
+          if (scriptType === 'application/x-website-studio-inline-script') continue;
+          script.textContent = normalizeInlineMediaUrls(script.textContent || '');
+        }
+
+        for (const attr of ['src', 'href', 'data-src', 'data-bg', 'data-background', 'data-poster', 'poster']) {
+          for (const element of Array.from(document.querySelectorAll(`[${attr}]`))) {
+            const value = element.getAttribute(attr) || '';
+            if (!isPreviewMediaUrl(value)) continue;
+            element.setAttribute(attr, normalizedMediaDocumentUrl(value));
+          }
+        }
+        for (const attr of ['srcset', 'data-srcset']) {
+          for (const element of Array.from(document.querySelectorAll(`[${attr}]`))) {
+            element.setAttribute(attr, normalizeSrcset(element.getAttribute(attr) || ''));
+          }
+        }
+
+        return `<!doctype html>\n${document.documentElement.outerHTML}`;
+      }
+
+      function normalizeCssUrls(css) {
+        const replacements = [];
+        const pattern = /url\(\s*(['"]?)(.*?)\1\s*\)/gi;
+        for (const match of css.matchAll(pattern)) {
+          const value = match[2] || '';
+          if (!isPreviewMediaUrl(value)) continue;
+          replacements.push({
+            start: match.index,
+            end: match.index + match[0].length,
+            value: `url("${normalizedMediaDocumentUrl(value)}")`
+          });
+        }
+        return applyReplacements(css, replacements);
+      }
+
+      function normalizeSrcset(value) {
+        const items = [];
+        for (const item of value.split(',')) {
+          const trimmed = item.trim();
+          if (!trimmed) continue;
+          const parts = trimmed.split(/\s+/);
+          if (isPreviewMediaUrl(parts[0])) parts[0] = normalizedMediaDocumentUrl(parts[0]);
+          items.push(parts.join(' '));
+        }
+        return items.join(', ');
+      }
+
+      function normalizeInlineMediaUrls(text) {
+        const replacements = [];
+        const pattern = /(?:https?:\/\/[^"'`\s<>)]+)?\/api\/apps\/website-studio\/backend\/media\?[^"'`\s<>)]+/gi;
+        for (const match of text.matchAll(pattern)) {
+          const value = match[0] || '';
+          if (!isPreviewMediaUrl(value)) continue;
+          replacements.push({
+            start: match.index,
+            end: match.index + value.length,
+            value: normalizedMediaDocumentUrl(value)
+          });
+        }
+        return applyReplacements(text, replacements);
+      }
+
+      function applyReplacements(text, replacements) {
+        let result = '';
+        let offset = 0;
+        for (const replacement of replacements.sort((a, b) => a.start - b.start)) {
+          result += text.slice(offset, replacement.start) + replacement.value;
+          offset = replacement.end;
+        }
+        return result + text.slice(offset);
+      }
+
+      function normalizedMediaDocumentUrl(rawUrl) {
+        return new URL(rawUrl, window.location.origin).toString();
+      }
+
+      function isPreviewMediaUrl(value) {
+        try {
+          const parsed = new URL(String(value || '').trim(), window.location.origin);
+          return parsed.origin === window.location.origin && parsed.pathname === '/api/apps/website-studio/backend/media';
+        } catch {
+          return false;
+        }
+      }
+
+      function ensureUtf8Meta(document) {
+        const head = document.head || document.documentElement.insertBefore(document.createElement('head'), document.body || null);
+        if (head.querySelector('meta[charset]')) return;
+        const meta = document.createElement('meta');
+        meta.setAttribute('charset', 'utf-8');
+        head.insertBefore(meta, head.firstChild);
+      }
+
+      function expandPreviewCspForRuntimeAssets(document) {
+        const meta = document.querySelector('meta[http-equiv="Content-Security-Policy" i]');
+        if (!meta) return;
+        const directives = String(meta.getAttribute('content') || '').split(';').map((item) => item.trim()).filter(Boolean);
+        const next = directives.map((directive) => {
+          const name = directive.split(/\s+/, 1)[0];
+          if (!['img-src', 'media-src', 'font-src', 'style-src', 'script-src'].includes(name) || directive.includes('blob:')) {
+            return directive;
+          }
+          return `${directive} blob:`;
+        });
+        meta.setAttribute('content', next.join('; '));
+      }
 
       async function load() {
         if (!previewId) throw new Error('preview_id is required');
@@ -35,11 +186,11 @@
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(String(payload.detail || payload.error || 'preview request failed'));
-        frame.srcdoc = String(payload.html || '');
+        mountHtml(payload.html || '');
       }
 
       load().catch(() => {
-        frame.srcdoc = '<!doctype html><html><body style="margin:0;background:#080808;color:#ececec;font:14px system-ui;display:grid;place-content:center;min-height:100vh;">Preview unavailable</body></html>';
+        mountHtml('<!doctype html><html><body style="margin:0;background:#080808;color:#ececec;font:14px system-ui;display:grid;place-content:center;min-height:100vh;">Preview unavailable</body></html>');
       });
     </script>
   </body>

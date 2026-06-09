@@ -7,12 +7,16 @@ import {
   type Page,
   type PreviewPayload,
   type Route,
+  type RuntimeSummary,
   type SitemapPayload,
   type Site,
   type SiteStatusPayload
 } from './api';
 
 type Notice = { tone: 'ok' | 'warn' | 'error'; text: string } | null;
+
+const PREVIEW_RUNTIME_VERSION = 'preview-inline-assets-v6';
+const PREVIEW_CLIENT_VERSION = 'website-studio-preview-frame-v7';
 
 export function App() {
   const [sites, setSites] = useState<Site[]>([]);
@@ -26,7 +30,7 @@ export function App() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [siteStatus, setSiteStatus] = useState<SiteStatusPayload | null>(null);
   const [changeHistory, setChangeHistory] = useState<ChangeHistoryPayload | null>(null);
-  const [showNewWebsite, setShowNewWebsite] = useState(false);
+  const [showNewWebsite, setShowNewWebsite] = useState(true);
   const [notice, setNotice] = useState<Notice>(null);
   const [infoPanelOpen, setInfoPanelOpen] = useState(false);
   const activeSiteIdRef = useRef('');
@@ -35,7 +39,7 @@ export function App() {
   const activeSite = useMemo(() => sites.find((site) => site.id === activeSiteId), [sites, activeSiteId]);
   const activePage = useMemo(() => pages.find((page) => page.id === activePageId), [pages, activePageId]);
   const importOnly = showNewWebsite || !activeSite;
-  const previewUrl = previewState?.preview_url || '';
+  const previewUrl = useMemo(() => normalizePreviewUrl(previewState?.preview_url || ''), [previewState?.preview_url]);
 
   useEffect(() => {
     activeSiteIdRef.current = activeSiteId;
@@ -51,7 +55,7 @@ export function App() {
     const availableSites = sitePayload.items.filter((site) => site.status !== 'archived');
     const requestedSite = availableSites.find((site) => site.id === nextSiteId)?.id || '';
     const persistedSite = availableSites.find((site) => site.is_active)?.id || '';
-    const selectedSite = requestedSite || persistedSite || availableSites[0]?.id || '';
+    const selectedSite = requestedSite;
     setActiveSiteId(selectedSite);
     if (!selectedSite) {
       setPages([]);
@@ -67,6 +71,7 @@ export function App() {
       setInfoPanelOpen(false);
       return;
     }
+    setShowNewWebsite(false);
     setPreviewLoading(true);
     setPreviewHtml('');
     setPreviewState(null);
@@ -104,17 +109,12 @@ export function App() {
   async function renderSite(siteId: string, route = '/', status?: SiteStatusPayload) {
     const latestPreview = status?.runtime?.latest_preview || null;
     if (latestPreview?.id && latestPreview.route === route && latestPreview.preview_url) {
-      try {
-        const document = await callBackend<PreviewDocumentPayload>({ action: 'preview_document', preview_id: latestPreview.id });
-        const payload = previewPayloadFromDocument(siteId, route, document);
-        setPreviewState(payload);
-        setPreviewHtml(payload.html || ' ');
-        return;
-      } catch {
-        // Fall through to creating a fresh preview when the cached document is stale.
-      }
+      const payload = previewPayloadFromRecord(siteId, route, latestPreview);
+      setPreviewState(payload);
+      setPreviewHtml('');
+      return;
     }
-    const payload = await callBackend<PreviewPayload>({ action: 'build_preview', site_id: siteId, route });
+    const payload = await callBackend<PreviewPayload>({ action: 'build_preview', site_id: siteId, route, include_html: false });
     setPreviewState(payload);
     setPreviewHtml(payload.html || '');
   }
@@ -133,6 +133,15 @@ export function App() {
       }
       if (payload.type !== 'maverick.app.navigate') return;
       if (payload.params?.new_website_request_id) {
+        setActiveSiteId('');
+        setPages([]);
+        setActivePageId('');
+        setActiveRouteId('');
+        setActiveAssetId('');
+        setPreviewHtml('');
+        setPreviewState(null);
+        setSiteStatus(null);
+        setChangeHistory(null);
         setShowNewWebsite(true);
         setInfoPanelOpen(false);
         setNotice(null);
@@ -182,14 +191,14 @@ export function App() {
       {importOnly ? (
         <section className="connection-guide" aria-label="Connect a website">
           <span className="connection-guide-kicker">Website Studio</span>
-          <h1>Scrivi in chat a un agente che vuoi connettere un sito.</h1>
+          <h1>Ask an agent to connect a website.</h1>
           <p>
-            L'agente ti guidera passo passo: puoi incollare un link ZIP di Drive, oppure collegare una repository GitHub
-            usando un secret salvato in Vault. Buon divertimento.
+            The agent can walk you through a Drive ZIP import or a GitHub repository connection using a secret saved in
+            Vault.
           </p>
           <div className="connection-guide-options" aria-label="Connection options">
-            <span>ZIP da Drive</span>
-            <span>GitHub con Vault</span>
+            <span>Drive ZIP</span>
+            <span>GitHub with Vault</span>
           </div>
         </section>
       ) : (
@@ -328,20 +337,9 @@ function InfoLine({ label, value }: { label: string; value: string }) {
   );
 }
 
-type PreviewDocumentPayload = {
-  preview?: Partial<PreviewPayload> & {
-    id?: string;
-    status?: string;
-    warnings?: string[];
-    missing_requirements?: string[];
-  };
-  html?: string;
-};
-
-function previewPayloadFromDocument(siteId: string, route: string, document: PreviewDocumentPayload): PreviewPayload {
-  const preview = document.preview || {};
+function previewPayloadFromRecord(siteId: string, route: string, preview: NonNullable<RuntimeSummary['latest_preview']>): PreviewPayload {
   return {
-    preview_id: String(preview.preview_id || preview.id || ''),
+    preview_id: String(preview.id || ''),
     site_id: String(preview.site_id || siteId),
     environment_id: String(preview.environment_id || 'env_preview'),
     route: String(preview.route || route || '/'),
@@ -353,8 +351,26 @@ function previewPayloadFromDocument(siteId: string, route: string, document: Pre
     build_id: String(preview.build_id || ''),
     missing_requirements: Array.isArray(preview.missing_requirements) ? preview.missing_requirements : [],
     warnings: Array.isArray(preview.warnings) ? preview.warnings : [],
-    html: String(document.html || '')
+    html: ''
   };
+}
+
+function normalizePreviewUrl(rawUrl: string): string {
+  const value = rawUrl.trim();
+  if (!value) return '';
+  try {
+    const url = new URL(value, window.location.origin);
+    if (url.pathname === '/apps/website-studio/preview-runtime/' || url.pathname === '/apps/website-studio/preview-runtime') {
+      url.searchParams.set('runtime_version', PREVIEW_RUNTIME_VERSION);
+      url.searchParams.set('client_version', PREVIEW_CLIENT_VERSION);
+    }
+    if (url.origin === window.location.origin) {
+      return `${url.pathname}${url.search}${url.hash}`;
+    }
+    return url.toString();
+  } catch {
+    return value;
+  }
 }
 
 function postSelection(siteId: string, page?: Page, route?: Route, asset?: Asset) {

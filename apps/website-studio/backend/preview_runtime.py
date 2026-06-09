@@ -18,7 +18,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
-from safety import copy_tree_snapshot, runtime_diagnostic_html, runtime_srcdoc_html, safe_relative_path
+from safety import copy_tree_snapshot, runtime_diagnostic_html, safe_relative_path
 
 
 MAX_LOG_CHARS = 12000
@@ -301,8 +301,9 @@ def _render_php_preview(
     return {
         "status": "ready",
         "runtime_kind": "php",
-        "html": runtime_srcdoc_html(html, source_root=docroot, page_path="index.php"),
+        "html": html[:MAX_RENDER_BYTES],
         "raw_html": html[:MAX_RENDER_BYTES],
+        "page_path": _runtime_page_path_for_route(route),
         "title": _html_title(html),
         "source_files": source_files_for_runtime_route(source_root, source_profile),
         "warnings": warnings,
@@ -329,8 +330,9 @@ def _render_node_build_preview(
     return {
         "status": "ready",
         "runtime_kind": "node_build",
-        "html": runtime_srcdoc_html(html, source_root=runtime_root, page_path=html_path.relative_to(runtime_root).as_posix()),
+        "html": html[:MAX_RENDER_BYTES],
         "raw_html": html[:MAX_RENDER_BYTES],
+        "page_path": html_path.relative_to(runtime_root).as_posix(),
         "title": _html_title(html),
         "source_files": [html_path.relative_to(runtime_root).as_posix()],
         "warnings": [],
@@ -389,6 +391,20 @@ def _request_php_route(runtime_root: Path, docroot: Path, router: Path | None, r
         except subprocess.TimeoutExpired:
             process.kill()
             process.communicate()
+
+
+def _runtime_page_path_for_route(route: str) -> str:
+    path = urlsplit(str(route or "/")).path or "/"
+    if path == "/":
+        return "index.php"
+    stripped = path.strip("/")
+    if not stripped:
+        return "index.php"
+    try:
+        clean = safe_relative_path(f"{stripped}/index.php" if path.endswith("/") else stripped)
+    except ValueError:
+        return "index.php"
+    return clean
 
 
 def _run_npm_install(source_root: Path) -> str:

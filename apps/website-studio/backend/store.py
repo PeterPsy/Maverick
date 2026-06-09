@@ -15,7 +15,7 @@ import re
 import shutil
 import subprocess
 import xml.etree.ElementTree as ET
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.parse import quote, urlencode, urlparse
 from urllib.request import Request, urlopen
@@ -33,7 +33,6 @@ from safety import (
     replace_tree_from_directory,
     resolve_site_path,
     runtime_diagnostic_html,
-    runtime_srcdoc_html,
     safe_relative_path,
     sha256_text,
     slugify,
@@ -55,6 +54,7 @@ from preview_runtime import (
     route_specific_warnings,
     source_files_for_runtime_route,
 )
+from preview_delivery import prepare_preview_document_html, rewrite_preview_css, safe_preview_asset_path
 from publish_workflow import managed_static_platform_binding, working_branch_for_site
 
 HttpTransport = Callable[[str, str, dict[str, Any]], tuple[int, dict[str, Any] | list[Any] | bytes]]
@@ -68,6 +68,11 @@ COMPACT_LOG_CHARS = 1200
 DEFAULT_RETAIN_BUILDS = 10
 DEFAULT_RETAIN_PREVIEWS_PER_ROUTE = 3
 DEFAULT_RETAIN_RUNTIME_SESSIONS = 20
+PREVIEW_RUNTIME_VERSION = "preview-inline-assets-v6"
+PREVIEW_MEDIA_RESPONSE_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Cross-Origin-Resource-Policy": "cross-origin",
+}
 
 
 def list_sites(data_root: Path) -> list[dict[str, object]]:
@@ -872,13 +877,21 @@ def diff_site(data_root: Path, site_id: object) -> dict[str, object]:
     return {"site_id": site["id"], "base_revision_id": site.get("active_revision_id"), "files": files}
 
 
-def build_preview(data_root: Path, site_id: object, route: object = "/") -> dict[str, object]:
+def build_preview(
+    data_root: Path,
+    site_id: object,
+    route: object = "/",
+    *,
+    include_html: object = True,
+    preview_origin: object = None,
+) -> dict[str, object]:
     site = get_site(data_root, site_id)
     source_root = _source_root(data_root, str(site["id"]))
     profile = source_profile(source_root)
     route_text = str(route or "/")
+    include_preview_html = _truthy(include_html)
     if profile.get("preview_runtime_kind") in {"php", "node_build"}:
-        return _build_runtime_preview(data_root, site, profile, route_text)
+        return _build_runtime_preview(data_root, site, profile, route_text, include_html=include_preview_html, preview_origin=preview_origin)
     pages = sitemap(data_root, site["id"])["items"]
     page = next((item for item in pages if item["route"] == route_text), pages[0] if pages else None)
     preview_route = page["route"] if page else route_text
@@ -892,7 +905,7 @@ def build_preview(data_root: Path, site_id: object, route: object = "/") -> dict
         source_fingerprint=source_fingerprint,
     )
     if cached_preview:
-        return _preview_response_from_record(data_root, site, cached_preview)
+        return _preview_response_from_record(data_root, site, cached_preview, include_html=include_preview_html, preview_origin=preview_origin)
     preview_id = f"preview_{uuid4().hex[:12]}"
     contract = _preview_contract(data_root, site, page=page, route=preview_route, preview_id=preview_id)
     contract["artifact_ref"] = {
@@ -901,7 +914,7 @@ def build_preview(data_root: Path, site_id: object, route: object = "/") -> dict
     }
     if not page:
         _record_preview(data_root, site, contract)
-        html = runtime_diagnostic_html("Preview runtime unavailable", contract["missing_requirements"] or ["site has no HTML page to preview"])
+        html = runtime_diagnostic_html("Preview runtime unavailable", contract["missing_requirements"] or ["site has no HTML page to preview"]) if include_preview_html else ""
         return {
             "preview_id": preview_id,
             "site_id": str(site["id"]),
@@ -919,7 +932,7 @@ def build_preview(data_root: Path, site_id: object, route: object = "/") -> dict
             "html": html,
         }
     rel_path = page["source_files"][0]
-    html = read_file(data_root, site_id=site_id, path=rel_path)["content"]
+    html = read_file(data_root, site_id=site_id, path=rel_path)["content"] if include_preview_html else ""
     _record_preview(data_root, site, contract)
     return {
         "preview_id": preview_id,
@@ -935,11 +948,19 @@ def build_preview(data_root: Path, site_id: object, route: object = "/") -> dict
         "missing_requirements": contract["missing_requirements"],
         "asset_refs": page.get("asset_refs", []),
         "warnings": contract["warnings"],
-        "html": preview_srcdoc_html(html, source_root=_source_root(data_root, str(site["id"])), page_path=rel_path),
+        "html": preview_srcdoc_html(html, source_root=_source_root(data_root, str(site["id"])), page_path=rel_path) if include_preview_html else "",
     }
 
 
-def _build_runtime_preview(data_root: Path, site: dict[str, object], profile: dict[str, object], route: str) -> dict[str, object]:
+def _build_runtime_preview(
+    data_root: Path,
+    site: dict[str, object],
+    profile: dict[str, object],
+    route: str,
+    *,
+    include_html: bool = True,
+    preview_origin: object = None,
+) -> dict[str, object]:
     runtime_kind = str(profile.get("preview_runtime_kind") or "unavailable")
     build = _latest_passed_runtime_build(data_root, str(site["id"]), runtime_kind)
     if not build:
@@ -953,7 +974,7 @@ def _build_runtime_preview(data_root: Path, site: dict[str, object], profile: di
             build_id=str(build.get("id") or ""),
         )
         if cached_preview:
-            return _preview_response_from_record(data_root, site, cached_preview)
+            return _preview_response_from_record(data_root, site, cached_preview, include_html=include_html, preview_origin=preview_origin)
     preview_id = f"preview_{uuid4().hex[:12]}"
     artifact_ref = dict(build.get("artifact_ref") or {}) if isinstance(build.get("artifact_ref"), dict) else {}
     result = render_runtime_preview(
@@ -986,6 +1007,17 @@ def _build_runtime_preview(data_root: Path, site: dict[str, object], profile: di
         "artifact_ref": artifact_ref,
     }
     _record_preview(data_root, site, contract)
+    html = str(result.get("html") or "")
+    if include_html and result.get("status") == "ready":
+        preview_record = {**contract, "id": preview_id}
+        html = prepare_preview_document_html(
+            html,
+            preview_id=preview_id,
+            page_path=result.get("page_path") or "index.html",
+            preview_origin=preview_origin,
+            stylesheet_loader=_preview_stylesheet_loader(data_root, preview_record),
+            script_loader=_preview_script_loader(data_root, preview_record),
+        )
     return {
         "preview_id": preview_id,
         "site_id": str(site["id"]),
@@ -1000,7 +1032,7 @@ def _build_runtime_preview(data_root: Path, site: dict[str, object], profile: di
         "missing_requirements": contract["missing_requirements"],
         "asset_refs": [],
         "warnings": contract["warnings"],
-        "html": str(result.get("html") or ""),
+        "html": html,
     }
 
 
@@ -1066,8 +1098,15 @@ def _latest_preview_for_route(data_root: Path, *, site_id: object, route: object
     return _preview_row(row) if row else {}
 
 
-def _preview_response_from_record(data_root: Path, site: dict[str, object], preview: dict[str, object]) -> dict[str, object]:
-    document = preview_document(data_root, preview["id"])
+def _preview_response_from_record(
+    data_root: Path,
+    site: dict[str, object],
+    preview: dict[str, object],
+    *,
+    include_html: bool = True,
+    preview_origin: object = None,
+) -> dict[str, object]:
+    document = preview_document(data_root, preview["id"], preview_origin=preview_origin) if include_html else {}
     page_id = str(preview.get("page_id") or "")
     asset_refs: list[object] = []
     if page_id:
@@ -1090,7 +1129,7 @@ def _preview_response_from_record(data_root: Path, site: dict[str, object], prev
         "missing_requirements": list(preview.get("missing_requirements") or [])[:50],
         "asset_refs": asset_refs,
         "warnings": list(preview.get("warnings") or [])[:100],
-        "html": str(document.get("html") or ""),
+        "html": str(document.get("html") or "") if include_html else "",
     }
 
 
@@ -1429,7 +1468,7 @@ def runtime_status(data_root: Path, site_id: object) -> dict[str, object]:
     }
 
 
-def preview_document(data_root: Path, preview_id: object) -> dict[str, object]:
+def preview_document(data_root: Path, preview_id: object, *, preview_origin: object = None) -> dict[str, object]:
     preview = get_preview(data_root, preview_id)
     site = get_site(data_root, preview["site_id"])
     details = [str(item) for item in preview.get("missing_requirements", []) if str(item).strip()]
@@ -1443,7 +1482,15 @@ def preview_document(data_root: Path, preview_id: object) -> dict[str, object]:
             artifact_ref=preview.get("artifact_ref") if isinstance(preview.get("artifact_ref"), dict) else {},
         )
         if result.get("status") == "ready":
-            return {"preview": preview, "html": str(result.get("html") or "")}
+            html = prepare_preview_document_html(
+                str(result.get("html") or ""),
+                preview_id=preview["id"],
+                page_path=result.get("page_path") or "index.html",
+                preview_origin=preview_origin,
+                stylesheet_loader=_preview_stylesheet_loader(data_root, preview),
+                script_loader=_preview_script_loader(data_root, preview),
+            )
+            return {"preview": preview, "html": html}
         detail = [str(item) for item in result.get("missing_requirements", []) if str(item).strip()] or [str(item) for item in result.get("warnings", []) if str(item).strip()]
         return {"preview": preview, "html": runtime_diagnostic_html("Preview runtime unavailable", detail or details or ["preview route could not be rendered"])}
     if not preview.get("page_id"):
@@ -1456,12 +1503,182 @@ def preview_document(data_root: Path, preview_id: object) -> dict[str, object]:
         if preview.get("status") in {"ready", "static_fallback"}:
             return {
                 "preview": preview,
-                "html": runtime_srcdoc_html(html, source_root=_source_root(data_root, str(site["id"])), page_path=rel_path),
+                "html": prepare_preview_document_html(
+                    html,
+                    preview_id=preview["id"],
+                    page_path=rel_path,
+                    preview_origin=preview_origin,
+                    stylesheet_loader=_preview_stylesheet_loader(data_root, preview),
+                    script_loader=_preview_script_loader(data_root, preview),
+                ),
             }
     except (IndexError, ValueError) as error:
         details.append(str(error))
     html = runtime_diagnostic_html("Preview runtime unavailable", details or ["preview source could not be rendered"])
     return {"preview": preview, "html": html}
+
+
+def preview_media(data_root: Path, preview_id: object, path: object) -> dict[str, object]:
+    preview = get_preview(data_root, preview_id)
+    clean_path = safe_preview_asset_path(path)
+    target, resolved_rel_path = _resolve_preview_asset_path(data_root, preview, clean_path)
+    if target.suffix.lower() == ".css" and target.stat().st_size <= 2 * 1024 * 1024:
+        css = target.read_text(encoding="utf-8", errors="replace")
+        rewritten = rewrite_preview_css(css, preview_id=preview["id"], css_path=resolved_rel_path)
+        target = _write_preview_css_cache(data_root, preview["id"], resolved_rel_path, rewritten)
+        content_type = "text/css; charset=utf-8"
+        etag = sha256_text(rewritten)
+    else:
+        content_type = detect_content_type(target)
+        etag = _file_etag(target)
+    return {
+        "preview_id": str(preview["id"]),
+        "path": resolved_rel_path,
+        "file_response": {
+            "path": str(target),
+            "content_type": content_type,
+            "file_name": target.name,
+            "etag": etag,
+            "download": False,
+            "cache_control": "private, max-age=60",
+            "headers": PREVIEW_MEDIA_RESPONSE_HEADERS,
+        },
+    }
+
+
+def _preview_stylesheet_loader(data_root: Path, preview: dict[str, object]):
+    preview_id = str(preview.get("id") or preview.get("preview_id") or "")
+
+    def load(asset_path: str) -> tuple[str, str] | None:
+        target, resolved_rel_path = _resolve_preview_asset_path(data_root, preview, safe_preview_asset_path(asset_path))
+        if target.suffix.lower() != ".css" or target.stat().st_size > 2 * 1024 * 1024:
+            return None
+        css = target.read_text(encoding="utf-8", errors="replace")
+        rewritten = rewrite_preview_css(css, preview_id=preview_id, css_path=resolved_rel_path, with_origin_placeholder=True)
+        return rewritten, resolved_rel_path
+
+    return load
+
+
+def _preview_script_loader(data_root: Path, preview: dict[str, object]):
+    inlined_shared_scripts: set[str] = set()
+
+    def load(asset_path: str) -> tuple[str, str] | None:
+        target, resolved_rel_path = _resolve_preview_asset_path(data_root, preview, safe_preview_asset_path(asset_path))
+        if target.suffix.lower() not in {".js", ".mjs"} or target.stat().st_size > 2 * 1024 * 1024:
+            return None
+        scripts: list[str] = []
+        for dependency, dependency_rel_path in _shared_script_dependencies(target, resolved_rel_path):
+            if dependency_rel_path in inlined_shared_scripts:
+                continue
+            scripts.append(dependency.read_text(encoding="utf-8", errors="replace"))
+            inlined_shared_scripts.add(dependency_rel_path)
+        scripts.append(target.read_text(encoding="utf-8", errors="replace"))
+        script = "\n".join(scripts)
+        return script, resolved_rel_path
+
+    return load
+
+
+def _shared_script_dependencies(target: Path, resolved_rel_path: str) -> list[tuple[Path, str]]:
+    if target.suffix.lower() not in {".js", ".mjs"}:
+        return []
+    parent = target.parent
+    if not parent.is_dir():
+        return []
+    base_dir = PurePosixPath(resolved_rel_path).parent
+    candidates: list[tuple[int, str, Path]] = []
+    for sibling in parent.iterdir():
+        if sibling == target or not sibling.is_file() or sibling.suffix.lower() not in {".js", ".mjs"}:
+            continue
+        priority = _shared_script_priority(sibling.name)
+        if priority is None:
+            continue
+        candidates.append((priority, sibling.name, sibling))
+    return [(path, (base_dir / name).as_posix()) for _priority, name, path in sorted(candidates)]
+
+
+def _shared_script_priority(name: str) -> int | None:
+    lowered = name.lower()
+    if lowered.startswith(("runtime", "manifest")) or ".runtime." in lowered or ".manifest." in lowered:
+        return 0
+    if lowered.startswith(("vendor", "vendors")) or ".vendor." in lowered or ".vendors." in lowered:
+        return 1
+    if lowered.startswith(("common", "commons")) or ".common." in lowered or ".commons." in lowered:
+        return 2
+    return None
+
+
+def _resolve_preview_asset_path(data_root: Path, preview: dict[str, object], rel_path: str) -> tuple[Path, str]:
+    site = get_site(data_root, preview["site_id"])
+    source_root = _source_root(data_root, str(site["id"])).resolve()
+    artifact_ref = preview.get("artifact_ref") if isinstance(preview.get("artifact_ref"), dict) else {}
+    runtime_root = _preview_artifact_root(data_root, artifact_ref) or source_root
+    runtime_root = runtime_root.resolve()
+    profile = source_profile(source_root)
+    docroot_rel = str(artifact_ref.get("docroot") or profile.get("php_docroot") or "").strip()
+    docroot = (runtime_root / docroot_rel).resolve() if docroot_rel and docroot_rel != "." else runtime_root
+    roots = [docroot, runtime_root, source_root]
+    for alias in _preview_asset_aliases(rel_path, docroot_rel=docroot_rel):
+        for root in roots:
+            target = (root / alias).resolve()
+            if _path_is_within(target, root) and target.is_file():
+                return target, alias
+    raise ValueError(f"preview asset `{rel_path}` was not found")
+
+
+def _preview_artifact_root(data_root: Path, artifact_ref: dict[str, object]) -> Path | None:
+    rel = str(artifact_ref.get("runtime_root") or "").strip()
+    if not rel:
+        return None
+    root = (data_root / rel).resolve()
+    allowed = data_root.resolve()
+    if not _path_is_within(root, allowed):
+        raise ValueError("runtime artifact root escaped the Website Studio data root")
+    return root if root.exists() else None
+
+
+def _preview_asset_aliases(rel_path: str, *, docroot_rel: str = "") -> list[str]:
+    aliases: list[str] = []
+
+    def add(value: str) -> None:
+        try:
+            clean = safe_relative_path(value)
+        except ValueError:
+            return
+        if clean not in aliases:
+            aliases.append(clean)
+
+    add(rel_path)
+    if docroot_rel and docroot_rel != "." and rel_path.startswith(f"{docroot_rel}/"):
+        add(rel_path.removeprefix(f"{docroot_rel}/"))
+    if rel_path.startswith("fonts/"):
+        add(f"assets/{rel_path}")
+    if rel_path.startswith("images/"):
+        add(f"assets/{rel_path}")
+    for prefix in ("assets/css/images/", "css/images/", "dist/css/images/"):
+        if rel_path.startswith(prefix):
+            add("assets/images/" + rel_path.removeprefix(prefix))
+    return aliases
+
+
+def _write_preview_css_cache(data_root: Path, preview_id: object, source_rel_path: str, css: str) -> Path:
+    digest = sha256_text(str(preview_id) + "\0" + source_rel_path + "\0" + css)
+    path = data_root / "run" / "preview-media" / str(preview_id) / f"{digest[:24]}.css"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(css, encoding="utf-8")
+    return path
+
+
+def _file_etag(path: Path) -> str:
+    stat = path.stat()
+    return f"{stat.st_mtime_ns:x}-{stat.st_size:x}"
+
+
+def _path_is_within(path: Path, root: Path) -> bool:
+    resolved = path.resolve()
+    resolved_root = root.resolve()
+    return resolved == resolved_root or resolved_root in resolved.parents
 
 
 def get_preview(data_root: Path, preview_id: object) -> dict[str, object]:
@@ -2020,7 +2237,7 @@ def _record_runtime_session(data_root: Path, site: dict[str, object], contract: 
 def _preview_runtime_url(preview_id: str, route: str) -> str:
     if not preview_id:
         return ""
-    return f"/apps/website-studio/preview-runtime/?{urlencode({'preview_id': preview_id, 'route': route or '/'})}"
+    return f"/apps/website-studio/preview-runtime/?{urlencode({'preview_id': preview_id, 'route': route or '/', 'runtime_version': PREVIEW_RUNTIME_VERSION})}"
 
 
 def _prune_site_operational_history(
@@ -2669,6 +2886,7 @@ def _preview_row(row) -> dict[str, object]:
     payload["warnings"] = _dedupe_strings(json.loads(payload.pop("warnings_json", "[]") or "[]"))[:100]
     payload["missing_requirements"] = _dedupe_strings(json.loads(payload.pop("missing_requirements_json", "[]") or "[]"))[:50]
     payload["artifact_ref"] = json.loads(payload.pop("artifact_ref_json", "{}") or "{}")
+    payload["preview_url"] = _preview_runtime_url(str(payload.get("id") or ""), str(payload.get("route") or "/"))
     return payload
 
 
@@ -2678,6 +2896,11 @@ def _runtime_session_row(row) -> dict[str, object]:
     payload = dict(row)
     payload["health"] = json.loads(payload.pop("health_json", "{}") or "{}")
     payload["missing_requirements"] = _dedupe_strings(json.loads(payload.pop("missing_requirements_json", "[]") or "[]"))[:50]
+    preview_id = str(payload.get("preview_id") or "")
+    if preview_id:
+        payload["preview_url"] = _preview_runtime_url(preview_id, str(payload.get("route") or "/"))
+        if isinstance(payload.get("health"), dict):
+            payload["health"]["preview_url"] = payload["preview_url"]
     return payload
 
 

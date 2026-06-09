@@ -107,7 +107,10 @@ function WebsiteSitemapSidebarWidget() {
   const [error, setError] = useState('');
 
   const filteredSites = useMemo(() => sites.filter((site) => site.status !== 'archived'), [sites]);
-  const treeItems = useMemo(() => filterTree(buildTree(pages, routes, assets, siteStatus, changeHistory, changedPaths), query.trim().toLowerCase()), [assets, changedPaths, changeHistory, pages, query, routes, siteStatus]);
+  const treeItems = useMemo(
+    () => activeSiteId ? filterTree(buildTree(pages, routes, assets, siteStatus, changeHistory, changedPaths), query.trim().toLowerCase()) : [],
+    [activeSiteId, assets, changedPaths, changeHistory, pages, query, routes, siteStatus]
+  );
   const defaultExpandedIds = useMemo(() => collectDefaultExpandedIds(treeItems, Boolean(query.trim())), [query, treeItems]);
   const treeProviderKey = `${activeSiteId || 'site'}:${query.trim().toLowerCase() || 'tree'}`;
 
@@ -117,7 +120,7 @@ function WebsiteSitemapSidebarWidget() {
     const nextSites = sitePayload.items || [];
     setSites(nextSites);
     const selectableSites = nextSites.filter((item) => item.status !== 'archived');
-    const site = selectableSites.find((item) => item.id === nextSiteId) || selectableSites.find((item) => item.is_active) || selectableSites[0];
+    const site = selectableSites.find((item) => item.id === nextSiteId);
     if (!site?.id) {
       setPages([]);
       setRoutes([]);
@@ -173,6 +176,17 @@ function WebsiteSitemapSidebarWidget() {
 
   async function selectSite(siteId: string) {
     setActiveSiteId(siteId);
+    if (!siteId) {
+      setPages([]);
+      setRoutes([]);
+      setAssets([]);
+      setSiteStatus(null);
+      setChangeHistory(null);
+      setChangedPaths(new Set());
+      setSelectedNodeId('');
+      setError('');
+      return;
+    }
     if (siteId) {
       await backend({ action: 'site_set_active', site_id: siteId }).catch(() => null);
     }
@@ -193,14 +207,17 @@ function WebsiteSitemapSidebarWidget() {
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search site tree" />
       </label>
       <label className="website-studio-sitemap-select-frame">
-        <select aria-label="Website site" value={activeSiteId} onChange={(event) => void selectSite(event.target.value)}>
+        <select aria-label="Select a site" value={activeSiteId} onChange={(event) => void selectSite(event.target.value)}>
+          <option value="">Select a site</option>
           {filteredSites.length ? filteredSites.map((site) => (
             <option key={site.id || site.display_name} value={site.id || ''}>{site.display_name || site.id}</option>
-          )) : <option value="">No active websites yet</option>}
+          )) : <option value="" disabled>No active websites yet</option>}
         </select>
       </label>
       <div className="website-studio-sitemap-list storage-sidebar-tree-list">
-        {isLoading ? <WebsiteTreeSkeleton /> : error ? <p className="website-studio-sitemap-empty">{error}</p> : treeItems.length ? (
+        {isLoading ? <WebsiteTreeSkeleton /> : error ? <p className="website-studio-sitemap-empty">{error}</p> : !activeSiteId ? (
+          <p className="website-studio-sitemap-empty">{filteredSites.length ? 'Select a site to load its sitemap.' : 'No active websites yet.'}</p>
+        ) : treeItems.length ? (
           <TreeProvider
             animateExpand
             className="storage-folder-tree website-studio-folder-tree"

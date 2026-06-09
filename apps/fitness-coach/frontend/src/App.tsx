@@ -8,12 +8,10 @@ import {
   Copy,
   Dumbbell,
   Library,
-  ListPlus,
   MoreHorizontal,
   Pause,
   Play,
   Plus,
-  RefreshCw,
   Search,
   Timer,
   Trash2,
@@ -40,7 +38,7 @@ import {
 import { createLocalBlobFallback, initialMediaResolution, resolveMediaPlayback } from './mediaPlaybackResolver';
 import type { Exercise, ExerciseMediaRef, RestBlock, RuntimeSegment, SetupTab, StorageFile, WorkBlock, Workout, WorkoutBlock, WorkoutRunSummary } from './types';
 import { runtimeSegmentsForWorkout } from './workoutSegments';
-import { estimateWorkoutSeconds, validateWorkoutForStart } from './workoutValidation';
+import { validateWorkoutForStart } from './workoutValidation';
 
 const EMPTY_EXERCISE: Partial<Exercise> = {
   title: '',
@@ -53,34 +51,43 @@ const EMPTY_EXERCISE: Partial<Exercise> = {
   source_display_path: null
 };
 
+type WorkoutBlockMode = 'timer' | 'reps' | 'rest';
+
 export function App() {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [runs, setRuns] = useState<WorkoutRunSummary[]>([]);
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
   const [setupTab, setSetupTab] = useState<SetupTab>('workout-settings');
-  const [query, setQuery] = useState('');
   const [libraryQuery, setLibraryQuery] = useState('');
   const [libraryTag, setLibraryTag] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState('');
   const [playerWorkout, setPlayerWorkout] = useState<Workout | null>(null);
   const [exerciseDraft, setExerciseDraft] = useState<Partial<Exercise> | null>(null);
+  const [libraryTargetBlockId, setLibraryTargetBlockId] = useState<string | null>(null);
+  const dirtyWorkoutIdsRef = useRef<Set<string>>(new Set());
 
   const selectedWorkout = useMemo(
     () => workouts.find((workout) => workout.id === selectedWorkoutId) || workouts[0] || null,
     [selectedWorkoutId, workouts]
   );
-  const validation = useMemo(() => validateWorkoutForStart(selectedWorkout), [selectedWorkout]);
+  const syncedSelectedWorkout = useMemo(() => syncWorkoutExerciseSnapshots(selectedWorkout, exercises), [selectedWorkout, exercises]);
+  const validation = useMemo(() => validateWorkoutForStart(syncedSelectedWorkout), [syncedSelectedWorkout]);
   const tags = useMemo(() => Array.from(new Set(exercises.flatMap((exercise) => exercise.tags))).sort(), [exercises]);
 
   const refresh = useCallback(async () => {
-    const [nextWorkouts, nextExercises, nextRuns] = await Promise.all([listWorkouts(query), listExercises(libraryQuery, libraryTag), listRuns(selectedWorkoutId || undefined)]);
-    setWorkouts(nextWorkouts);
+    const [nextWorkouts, nextExercises, nextRuns] = await Promise.all([listWorkouts(), listExercises(libraryQuery, libraryTag), listRuns(selectedWorkoutId || undefined)]);
+    setWorkouts((current) => mergeDirtyWorkouts(nextWorkouts, current, dirtyWorkoutIdsRef.current));
     setExercises(nextExercises);
     setRuns(nextRuns);
     setSelectedWorkoutId((current) => current || nextWorkouts[0]?.id || null);
-  }, [libraryQuery, libraryTag, query, selectedWorkoutId]);
+  }, [libraryQuery, libraryTag, selectedWorkoutId]);
+
+  const markWorkoutDirty = useCallback((workout: Workout) => {
+    dirtyWorkoutIdsRef.current.add(workout.id);
+    setWorkouts((items) => replaceById(items, workout));
+  }, []);
 
   useEffect(() => {
     refresh().catch((error: Error) => setNotice(error.message));
@@ -91,7 +98,10 @@ export function App() {
       if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') return;
       const payload = event.data as { type?: string; owner_app_id?: string; resource?: string; params?: Record<string, unknown>; app_page?: string };
       if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === 'fitness-coach') {
-        refresh().catch((error: Error) => setNotice(error.message));
+        const resource = String(payload.resource || '');
+        if (resource !== 'view-state') {
+          refresh().catch((error: Error) => setNotice(error.message));
+        }
       }
       if (payload.type === 'maverick.app.navigate') {
         const params = payload.params || {};
@@ -99,10 +109,14 @@ export function App() {
         const workoutId = appPage.startsWith('workouts/') ? appPage.split('/')[1] : String(params.workout_id || '');
         if (workoutId) setSelectedWorkoutId(workoutId);
         if (params.new_exercise) {
+          setLibraryTargetBlockId(null);
           setSetupTab('exercise-library');
           setExerciseDraft({ ...EMPTY_EXERCISE });
         }
-        if (params.new_workout) void handleCreateWorkout();
+        if (params.new_workout) {
+          setLibraryTargetBlockId(null);
+          void handleCreateWorkout();
+        }
       }
     }
     window.addEventListener('message', handleMessage);
@@ -111,7 +125,7 @@ export function App() {
 
   useEffect(() => {
     if (!selectedWorkout?.id) return;
-    updateViewState({ selected_workout_id: selectedWorkout.id, setup_tab: setupTab, sidebar_query: query }).catch(() => undefined);
+    updateViewState({ selected_workout_id: selectedWorkout.id, setup_tab: setupTab }).catch(() => undefined);
     window.parent?.postMessage(
       {
         type: 'maverick.app.selection-changed',
@@ -120,7 +134,7 @@ export function App() {
       },
       window.location.origin
     );
-  }, [query, selectedWorkout?.id, setupTab]);
+  }, [selectedWorkout?.id, setupTab]);
 
   async function handleCreateWorkout() {
     setBusy('new-workout');
@@ -140,7 +154,8 @@ export function App() {
   async function handleSaveWorkout(workout: Workout) {
     setBusy(`save:${workout.id}`);
     try {
-      const saved = await saveWorkout(workout);
+      const saved = await saveWorkout(syncWorkoutExerciseSnapshots(workout, exercises) || workout);
+      dirtyWorkoutIdsRef.current.delete(workout.id);
       setWorkouts((items) => replaceById(items, saved));
       setNotice('Saved');
     } catch (error) {
@@ -151,10 +166,12 @@ export function App() {
   }
 
   async function handleStart() {
-    if (!selectedWorkout || !validation.valid) return;
+    const workoutToStart = syncWorkoutExerciseSnapshots(selectedWorkout, exercises);
+    if (!workoutToStart || !validation.valid) return;
     setBusy('start');
     try {
-      const saved = await saveWorkout(selectedWorkout);
+      const saved = await saveWorkout(workoutToStart);
+      dirtyWorkoutIdsRef.current.delete(saved.id);
       setWorkouts((items) => replaceById(items, saved));
       const payload = await startWorkout(saved.id);
       setPlayerWorkout(payload.workout);
@@ -169,6 +186,7 @@ export function App() {
   async function handleDeleteWorkout(workout: Workout) {
     if (!window.confirm(`Delete workout "${workout.name}"?`)) return;
     await deleteWorkout(workout.id);
+    dirtyWorkoutIdsRef.current.delete(workout.id);
     setWorkouts((items) => items.filter((item) => item.id !== workout.id));
     setSelectedWorkoutId((current) => (current === workout.id ? null : current));
   }
@@ -209,10 +227,15 @@ export function App() {
       setNotice('Create or select a workout first.');
       return;
     }
-    const block = workBlockFromExercise(exercise, selectedWorkout);
-    const next = { ...selectedWorkout, blocks: [...selectedWorkout.blocks, block] };
+    const baseWorkout = syncWorkoutExerciseSnapshots(selectedWorkout, exercises) || selectedWorkout;
+    const targetBlock = libraryTargetBlockId ? baseWorkout.blocks.find((block) => block.id === libraryTargetBlockId) : null;
+    const block = workBlockFromExercise(exercise, baseWorkout, targetBlock || undefined);
+    const next = targetBlock
+      ? { ...baseWorkout, blocks: baseWorkout.blocks.map((candidate) => (candidate.id === targetBlock.id ? block : candidate)) }
+      : { ...baseWorkout, blocks: [...baseWorkout.blocks, block] };
     setWorkouts((items) => replaceById(items, next));
     await handleSaveWorkout(next);
+    setLibraryTargetBlockId(null);
     setSetupTab('workout-settings');
   }
 
@@ -222,52 +245,21 @@ export function App() {
 
   return (
     <main className="fitness-app">
-      <header className="fitness-topbar">
-        <div className="fitness-title">
-          <Dumbbell size={20} aria-hidden="true" />
-          <span>Fitness Coach</span>
-        </div>
-        <label className="fitness-search" aria-label="Search workouts">
-          <Search size={16} aria-hidden="true" />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search workouts" />
-        </label>
-        <button className="icon-button" type="button" onClick={() => refresh()} title="Refresh" aria-label="Refresh">
-          <RefreshCw size={16} aria-hidden="true" />
-        </button>
-      </header>
-
-      <section className="fitness-layout">
-        <aside className="workout-list" aria-label="Workout list">
-          <button className="primary-action" type="button" onClick={handleCreateWorkout} disabled={busy === 'new-workout'}>
-            <Plus size={16} aria-hidden="true" />
-            <span>New workout</span>
-          </button>
-          {workouts.length === 0 ? (
-            <div className="empty-state">No workouts yet.</div>
-          ) : (
-            workouts.map((workout) => (
-              <button
-                key={workout.id}
-                type="button"
-                className={`workout-row ${selectedWorkout?.id === workout.id ? 'is-active' : ''}`}
-                onClick={() => setSelectedWorkoutId(workout.id)}
-              >
-                <span>{workout.name}</span>
-                <small>
-                  {workout.blocks.filter((block) => block.type === 'work').length} exercises · {formatDuration(estimateWorkoutSeconds(workout))}
-                </small>
-              </button>
-            ))
-          )}
-        </aside>
-
+      <section className="fitness-main">
         <section className="setup-panel">
           <div className="setup-switch" role="tablist" aria-label="Setup mode">
             <button type="button" className={setupTab === 'workout-settings' ? 'is-active' : ''} onClick={() => setSetupTab('workout-settings')}>
               <Timer size={16} aria-hidden="true" />
               <span>Workout settings</span>
             </button>
-            <button type="button" className={setupTab === 'exercise-library' ? 'is-active' : ''} onClick={() => setSetupTab('exercise-library')}>
+            <button
+              type="button"
+              className={setupTab === 'exercise-library' ? 'is-active' : ''}
+              onClick={() => {
+                setLibraryTargetBlockId(null);
+                setSetupTab('exercise-library');
+              }}
+            >
               <Library size={16} aria-hidden="true" />
               <span>Exercise library</span>
             </button>
@@ -277,16 +269,19 @@ export function App() {
 
           {setupTab === 'workout-settings' ? (
             <WorkoutEditor
-              workout={selectedWorkout}
+              workout={syncedSelectedWorkout}
               exercises={exercises}
               validation={validation}
               busy={busy}
-              onChange={(workout) => setWorkouts((items) => replaceById(items, workout))}
+              onChange={markWorkoutDirty}
               onSave={handleSaveWorkout}
               onStart={handleStart}
               onDelete={handleDeleteWorkout}
               onDuplicate={handleDuplicateWorkout}
-              onOpenLibrary={() => setSetupTab('exercise-library')}
+              onOpenLibraryForBlock={(blockId) => {
+                setLibraryTargetBlockId(blockId);
+                setSetupTab('exercise-library');
+              }}
             />
           ) : (
             <ExerciseLibrary
@@ -302,6 +297,7 @@ export function App() {
               onSave={handleSaveExercise}
               onDelete={handleDeleteExercise}
               onAddToWorkout={handleAddExerciseToWorkout}
+              selectionMode={libraryTargetBlockId ? 'replace' : 'add'}
             />
           )}
         </section>
@@ -320,7 +316,7 @@ function WorkoutEditor(props: {
   onStart: () => void;
   onDelete: (workout: Workout) => void;
   onDuplicate: (workout: Workout) => void;
-  onOpenLibrary: () => void;
+  onOpenLibraryForBlock: (blockId: string) => void;
 }) {
   const { workout } = props;
   if (!workout) {
@@ -335,6 +331,10 @@ function WorkoutEditor(props: {
     update({ blocks: workout!.blocks.map((block) => (block.id === blockId ? ({ ...block, ...patch } as WorkoutBlock) : block)) });
   }
 
+  function replaceBlock(blockId: string, nextBlock: WorkoutBlock) {
+    update({ blocks: workout!.blocks.map((block) => (block.id === blockId ? nextBlock : block)) });
+  }
+
   function moveBlock(blockId: string, direction: -1 | 1) {
     const index = workout!.blocks.findIndex((block) => block.id === blockId);
     const target = index + direction;
@@ -345,8 +345,8 @@ function WorkoutEditor(props: {
     update({ blocks });
   }
 
-  function addBlock(type: 'timer' | 'reps' | 'rest') {
-    const block = type === 'rest' ? blankRestBlock(workout!.default_rest_seconds) : blankWorkBlock(type, workout!);
+  function addBlock() {
+    const block = blankWorkBlock('timer', workout!);
     update({ blocks: [...workout!.blocks, block] });
   }
 
@@ -355,9 +355,8 @@ function WorkoutEditor(props: {
       <div className="workout-header">
         <input className="workout-name-input" value={workout.name} onChange={(event) => update({ name: event.target.value })} aria-label="Workout name" />
         <div className="header-actions">
-          <button className="icon-text-button" type="button" onClick={() => props.onDuplicate(workout)} title="Duplicate">
+          <button className="icon-button" type="button" onClick={() => props.onDuplicate(workout)} title="Duplicate" aria-label="Duplicate workout">
             <Copy size={16} aria-hidden="true" />
-            <span>Duplicate</span>
           </button>
           <button className="icon-button danger" type="button" onClick={() => props.onDelete(workout)} title="Delete" aria-label="Delete workout">
             <Trash2 size={16} aria-hidden="true" />
@@ -365,47 +364,37 @@ function WorkoutEditor(props: {
         </div>
       </div>
 
-      <div className="settings-grid">
-        <NumberField label="Work sec" value={workout.default_work_seconds} onChange={(value) => update({ default_work_seconds: value })} />
-        <NumberField label="Rest sec" value={workout.default_rest_seconds} onChange={(value) => update({ default_rest_seconds: value })} />
-        <NumberField label="Reps" value={workout.default_reps} onChange={(value) => update({ default_reps: value })} />
-      </div>
-
-      <div className="block-toolbar">
-        <button type="button" onClick={props.onOpenLibrary}>
-          <ListPlus size={16} aria-hidden="true" />
-          <span>Add from library</span>
-        </button>
-        <button type="button" onClick={() => addBlock('timer')}>Timer</button>
-        <button type="button" onClick={() => addBlock('reps')}>Reps</button>
-        <button type="button" onClick={() => addBlock('rest')}>Rest</button>
-      </div>
-
       <div className="block-list">
         {workout.blocks.map((block, index) => (
           <BlockEditor
             block={block}
+            exercises={props.exercises}
             key={block.id}
             index={index}
             onChange={(patch) => updateBlock(block.id, patch)}
+            onModeChange={(mode) => replaceBlock(block.id, blockWithMode(block, mode, workout))}
+            onOpenLibrary={() => props.onOpenLibraryForBlock(block.id)}
             onMove={(direction) => moveBlock(block.id, direction)}
             onDuplicate={() => update({ blocks: insertAfter(workout.blocks, block.id, { ...block, id: crypto.randomUUID() } as WorkoutBlock) })}
             onDelete={() => update({ blocks: workout.blocks.filter((candidate) => candidate.id !== block.id) })}
           />
         ))}
       </div>
+      <div className="block-add-row">
+        <button className="primary-action block-add-button" type="button" onClick={addBlock}>
+          <Plus size={16} aria-hidden="true" />
+          <span>Add new block</span>
+        </button>
+      </div>
 
       <div className="bottom-action-bar">
-        <div className="validation-summary">
-          {props.validation.valid ? <span className="ok">Ready · {formatDuration(props.validation.estimated_seconds)}</span> : <span>{props.validation.errors[0]?.message || 'Workout is incomplete.'}</span>}
-        </div>
         <button className="secondary-action" type="button" onClick={() => props.onSave(workout)} disabled={props.busy === `save:${workout.id}`}>
           <Check size={16} aria-hidden="true" />
           <span>Save</span>
         </button>
         <button className="start-button" type="button" onClick={props.onStart} disabled={!props.validation.valid || props.busy === 'start'}>
           <Play size={16} aria-hidden="true" />
-          <span>Avvia</span>
+          <span>Start</span>
         </button>
       </div>
     </div>
@@ -414,13 +403,25 @@ function WorkoutEditor(props: {
 
 function BlockEditor(props: {
   block: WorkoutBlock;
+  exercises: Exercise[];
   index: number;
   onChange: (patch: Partial<WorkoutBlock>) => void;
+  onModeChange: (mode: WorkoutBlockMode) => void;
+  onOpenLibrary: () => void;
   onMove: (direction: -1 | 1) => void;
   onDuplicate: () => void;
   onDelete: () => void;
 }) {
   const { block } = props;
+  const mode: WorkoutBlockMode = block.type === 'rest' ? 'rest' : block.mode;
+  const exercise = block.type === 'work' && block.exercise_id ? props.exercises.find((item) => item.id === block.exercise_id) || null : null;
+  const hasExercise = block.type === 'work' && Boolean(block.exercise_id);
+  const title = block.type === 'rest' ? 'Rest' : hasExercise ? exercise?.title || block.title || 'Exercise unavailable' : 'No exercise selected';
+  const description = block.type === 'work'
+    ? hasExercise
+      ? exercise?.short_description || block.short_description || 'No short description'
+      : 'Choose an exercise from the library.'
+    : '';
   return (
     <article className={`block-editor ${block.type === 'rest' ? 'is-rest' : ''}`}>
       <div className="block-handle">
@@ -429,38 +430,32 @@ function BlockEditor(props: {
         <button type="button" className="mini-icon" onClick={() => props.onMove(1)} aria-label="Move down" title="Move down"><ArrowDown size={14} /></button>
       </div>
       <div className="block-fields">
-        <div className="inline-fields">
-          <input value={block.title} onChange={(event) => props.onChange({ title: event.target.value } as Partial<WorkoutBlock>)} placeholder={block.type === 'rest' ? 'Recupero' : 'Exercise title'} />
-          {block.type === 'work' ? (
-            <select value={block.mode} onChange={(event) => props.onChange({ mode: event.target.value as 'timer' | 'reps' } as Partial<WorkoutBlock>)}>
-              <option value="timer">Timer</option>
-              <option value="reps">Reps</option>
-            </select>
-          ) : null}
-        </div>
-        <input value={block.short_description} onChange={(event) => props.onChange({ short_description: event.target.value } as Partial<WorkoutBlock>)} placeholder="Short description" />
-        <textarea value={block.long_description} onChange={(event) => props.onChange({ long_description: event.target.value } as Partial<WorkoutBlock>)} placeholder="Full cues and setup" />
-        {block.type === 'work' ? (
-          <>
-            <div className="inline-fields">
-              {block.mode === 'timer' ? (
-                <NumberField label="Seconds" value={block.seconds || 0} onChange={(seconds) => props.onChange({ seconds } as Partial<WorkoutBlock>)} />
-              ) : (
-                <>
-                  <NumberField label="Reps" value={block.reps || 0} onChange={(reps) => props.onChange({ reps } as Partial<WorkoutBlock>)} />
-                  <input value={block.reps_label || ''} onChange={(event) => props.onChange({ reps_label: event.target.value } as Partial<WorkoutBlock>)} placeholder="Label" />
-                </>
-              )}
-            </div>
-            <MediaPicker media={block.media} onChange={(media) => props.onChange({ media } as Partial<WorkoutBlock>)} />
-          </>
+        {block.type === 'rest' ? (
+          <div className="block-rest-title">Rest</div>
         ) : (
-          <div className="inline-fields">
-            <NumberField label="Seconds" value={block.seconds} onChange={(seconds) => props.onChange({ seconds } as Partial<WorkoutBlock>)} />
-            <label className="toggle-field"><input type="checkbox" checked={block.show_next_exercise} onChange={(event) => props.onChange({ show_next_exercise: event.target.checked } as Partial<WorkoutBlock>)} /> Next</label>
-            <label className="toggle-field"><input type="checkbox" checked={block.skip_if_last} onChange={(event) => props.onChange({ skip_if_last: event.target.checked } as Partial<WorkoutBlock>)} /> Skip last</label>
+          <div className="block-exercise-row">
+            <div className="block-exercise-text">
+              <strong>{title}</strong>
+              <span>{description}</span>
+            </div>
+            <button className="secondary-action compact" type="button" onClick={props.onOpenLibrary}>
+              <Library size={15} aria-hidden="true" />
+              <span>{hasExercise ? 'Change' : 'Choose'}</span>
+            </button>
           </div>
         )}
+        <div className="mode-value-row">
+          <select className="block-mode-select" value={mode} onChange={(event) => props.onModeChange(event.target.value as WorkoutBlockMode)} aria-label="Block mode">
+            <option value="timer">Timer</option>
+            <option value="reps">Reps</option>
+            <option value="rest">Rest</option>
+          </select>
+          {block.type === 'work' && block.mode === 'reps' ? (
+            <NumberField label="Reps" value={block.reps || 0} onChange={(reps) => props.onChange({ reps, reps_label: null } as Partial<WorkoutBlock>)} />
+          ) : (
+            <NumberField label={block.type === 'rest' ? 'Rest seconds' : 'Seconds'} value={block.type === 'rest' ? block.seconds : block.seconds || 0} onChange={(seconds) => props.onChange({ seconds } as Partial<WorkoutBlock>)} />
+          )}
+        </div>
       </div>
       <div className="block-actions">
         <button className="mini-icon" type="button" onClick={props.onDuplicate} aria-label="Duplicate block" title="Duplicate"><Copy size={14} /></button>
@@ -483,6 +478,7 @@ function ExerciseLibrary(props: {
   onSave: (exercise: Partial<Exercise>) => void;
   onDelete: (exercise: Exercise) => void;
   onAddToWorkout: (exercise: Exercise) => void;
+  selectionMode: 'add' | 'replace';
 }) {
   const filtered = props.exercises.filter((exercise) => {
     const query = props.query.trim().toLowerCase();
@@ -521,7 +517,7 @@ function ExerciseLibrary(props: {
               <small>{exercise.tags.join(' · ') || 'No tags'}</small>
             </div>
             <div className="exercise-actions">
-              <button type="button" onClick={() => props.onAddToWorkout(exercise)}>Add</button>
+              <button type="button" onClick={() => props.onAddToWorkout(exercise)}>{props.selectionMode === 'replace' ? 'Select' : 'Add'}</button>
               <button type="button" onClick={() => props.onDraft(exercise)}>Edit</button>
               <button type="button" onClick={() => openStorageForMedia(exercise.primary_media)}>Storage</button>
               <button className="icon-button danger" type="button" onClick={() => props.onDelete(exercise)} aria-label="Delete exercise" title="Delete"><Trash2 size={15} /></button>
@@ -765,9 +761,9 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
           <h1>Workout complete</h1>
           <p>{summary.exercise_count} exercises · {formatDuration(summary.elapsed_seconds)} · {summary.skipped_segments} skipped</p>
           <div className="summary-actions">
-            <button type="button" onClick={() => { setSummary(null); setIndex(0); }}>Rifai</button>
-            <button type="button" onClick={onClose}>Modifica workout</button>
-            <button type="button" onClick={onClose}>Chiudi</button>
+            <button type="button" onClick={() => { setSummary(null); setIndex(0); }}>Repeat</button>
+            <button type="button" onClick={onClose}>Edit workout</button>
+            <button type="button" onClick={onClose}>Close</button>
           </div>
         </section>
       </main>
@@ -779,7 +775,7 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
   }
 
   const isReps = segment.type === 'work' && segment.mode === 'reps';
-  const counter = segment.type === 'rest' ? `Recupero ${formatClock(remaining)}` : isReps ? segment.repsLabel || 'reps' : formatClock(remaining);
+  const counter = segment.type === 'rest' ? `Rest ${formatClock(remaining)}` : isReps ? segment.repsLabel || 'reps' : formatClock(remaining);
   return (
     <main
       className="work-player"
@@ -853,6 +849,36 @@ function NumberField({ label, value, onChange }: { label: string; value: number;
   );
 }
 
+function blockWithMode(block: WorkoutBlock, mode: WorkoutBlockMode, workout: Workout): WorkoutBlock {
+  if (mode === 'rest') {
+    if (block.type === 'rest') {
+      return { ...block, title: 'Rest', seconds: block.seconds || workout.default_rest_seconds };
+    }
+    return {
+      ...blankRestBlock(workout.default_rest_seconds),
+      id: block.id,
+      seconds: block.mode === 'timer' && block.seconds ? block.seconds : workout.default_rest_seconds
+    };
+  }
+
+  if (block.type === 'work') {
+    return {
+      ...block,
+      mode,
+      seconds: mode === 'timer' ? block.seconds || workout.default_work_seconds : null,
+      reps: mode === 'reps' ? block.reps || workout.default_reps : null,
+      reps_label: null
+    };
+  }
+
+  return {
+    ...blankWorkBlock(mode, workout),
+    id: block.id,
+    seconds: mode === 'timer' ? block.seconds || workout.default_work_seconds : null,
+    reps: mode === 'reps' ? workout.default_reps : null
+  };
+}
+
 function blankWorkBlock(mode: 'timer' | 'reps', workout: Workout): WorkBlock {
   return {
     id: crypto.randomUUID(),
@@ -876,18 +902,19 @@ function blankRestBlock(seconds: number): RestBlock {
   return {
     id: crypto.randomUUID(),
     type: 'rest',
-    title: 'Recupero',
-    short_description: 'Preparati al prossimo esercizio.',
-    long_description: 'Respira, riposizionati e guarda il prossimo movimento.',
+    title: 'Rest',
+    short_description: 'Get ready for the next exercise.',
+    long_description: 'Breathe, reset, and preview the next movement.',
     seconds,
     show_next_exercise: true,
     skip_if_last: true
   };
 }
 
-function workBlockFromExercise(exercise: Exercise, workout: Workout): WorkBlock {
+function workBlockFromExercise(exercise: Exercise, workout: Workout, existing?: WorkoutBlock): WorkBlock {
+  const mode = existing?.type === 'work' ? existing.mode : 'timer';
   return {
-    id: crypto.randomUUID(),
+    id: existing?.id || crypto.randomUUID(),
     type: 'work',
     exercise_id: exercise.id,
     exercise_snapshot_updated_at: exercise.updated_at,
@@ -895,18 +922,56 @@ function workBlockFromExercise(exercise: Exercise, workout: Workout): WorkBlock 
     short_description: exercise.short_description,
     long_description: exercise.long_description,
     tags: exercise.tags,
-    mode: 'timer',
-    seconds: workout.default_work_seconds,
-    reps: workout.default_reps,
+    mode,
+    seconds: mode === 'timer' ? (existing?.type === 'work' && existing.seconds ? existing.seconds : workout.default_work_seconds) : null,
+    reps: mode === 'reps' ? (existing?.type === 'work' && existing.reps ? existing.reps : workout.default_reps) : null,
     reps_label: null,
     media: exercise.primary_media,
-    notes: null
+    notes: existing?.type === 'work' ? existing.notes : null
   };
+}
+
+function syncWorkoutExerciseSnapshots(workout: Workout | null, exercises: Exercise[]): Workout | null {
+  if (!workout || exercises.length === 0) return workout;
+  const exercisesById = new Map(exercises.map((exercise) => [exercise.id, exercise]));
+  let changed = false;
+  const blocks = workout.blocks.map((block) => {
+    if (block.type !== 'work' || !block.exercise_id) return block;
+    const exercise = exercisesById.get(block.exercise_id);
+    if (!exercise) return block;
+    changed = true;
+    return {
+      ...block,
+      exercise_snapshot_updated_at: exercise.updated_at,
+      title: exercise.title,
+      short_description: exercise.short_description,
+      long_description: exercise.long_description,
+      tags: exercise.tags,
+      media: exercise.primary_media
+    };
+  });
+  return changed ? { ...workout, blocks } : workout;
 }
 
 function replaceById<T extends { id: string }>(items: T[], next: T) {
   const exists = items.some((item) => item.id === next.id);
   return exists ? items.map((item) => (item.id === next.id ? next : item)) : [next, ...items];
+}
+
+function mergeDirtyWorkouts(nextWorkouts: Workout[], currentWorkouts: Workout[], dirtyIds: Set<string>) {
+  if (dirtyIds.size === 0) return nextWorkouts;
+  const localById = new Map(currentWorkouts.map((workout) => [workout.id, workout]));
+  const serverIds = new Set(nextWorkouts.map((workout) => workout.id));
+  const merged = nextWorkouts.map((workout) => {
+    const local = localById.get(workout.id);
+    return dirtyIds.has(workout.id) && local ? local : workout;
+  });
+  currentWorkouts.forEach((workout) => {
+    if (dirtyIds.has(workout.id) && !serverIds.has(workout.id)) {
+      merged.unshift(workout);
+    }
+  });
+  return merged;
 }
 
 function insertAfter<T extends { id: string }>(items: T[], id: string, next: T) {

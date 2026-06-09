@@ -32,7 +32,7 @@ function workout(): Workout {
       {
         id: 'work_1',
         type: 'work',
-        exercise_id: null,
+        exercise_id: 'exercise_1',
         exercise_snapshot_updated_at: null,
         title: 'Squat',
         short_description: 'Drive up.',
@@ -48,7 +48,7 @@ function workout(): Workout {
       {
         id: 'rest_1',
         type: 'rest',
-        title: 'Recupero',
+        title: 'Rest',
         short_description: 'Breathe.',
         long_description: 'Prepare.',
         seconds: 20,

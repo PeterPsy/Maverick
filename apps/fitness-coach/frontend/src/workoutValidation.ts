@@ -15,6 +15,7 @@ export function validateWorkoutForStart(workout: Workout | null): WorkoutValidat
       if (block.seconds <= 0) errors.push({ path: `${path}.seconds`, message: 'Rest needs seconds > 0.' });
       return;
     }
+    if (!block.exercise_id) errors.push({ path: `${path}.exercise_id`, message: 'Choose an exercise from the library.' });
     if (!block.title.trim()) errors.push({ path: `${path}.title`, message: 'Title is required.' });
     if (!block.short_description.trim()) errors.push({ path: `${path}.short_description`, message: 'Short description is required.' });
     if (!block.long_description.trim()) errors.push({ path: `${path}.long_description`, message: 'Long description is required.' });

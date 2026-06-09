@@ -9,14 +9,14 @@ export function initialMediaResolution(): MediaPlaybackResolution {
 
 export async function resolveMediaPlayback(media: ExerciseMediaRef | null, storageAppId = currentStorageAppId()): Promise<MediaPlaybackResolution> {
   if (!media) {
-    return { status: 'blocked', url: '', mediaKind: 'none', detail: 'Questo segmento non ha media Storage riproducibili.' };
+    return { status: 'blocked', url: '', mediaKind: 'none', detail: 'This segment has no playable Storage media.' };
   }
   if (media.preview_kind !== 'image' && media.preview_kind !== 'video') {
-    return { status: 'blocked', url: '', mediaKind: 'none', detail: 'Questo file non e riproducibile nella Work mode V1.' };
+    return { status: 'blocked', url: '', mediaKind: 'none', detail: 'This file is not playable in Work mode V1.' };
   }
   if (media.kind === 'local_file') {
     if (!media.file_id) {
-      return { status: 'blocked', url: '', mediaKind: 'none', detail: 'Il media locale non ha un file_id Storage stabile.' };
+      return { status: 'blocked', url: '', mediaKind: 'none', detail: 'Local media needs a stable Storage file_id.' };
     }
     const params = new URLSearchParams();
     params.set('file_id', media.file_id);
@@ -47,7 +47,7 @@ export async function resolveMediaPlayback(media: ExerciseMediaRef | null, stora
       status: 'localizing',
       url: driveMediaStreamUrl(media, storageAppId),
       mediaKind: media.preview_kind,
-      detail: String(payload.localization?.status || payload.status || 'Storage sta preparando il media Drive.'),
+      detail: String(payload.localization?.status || payload.status || 'Storage is preparing the Drive media.'),
       canRetry: Boolean(payload.localization?.can_retry),
       canCancel: Boolean(payload.localization?.can_cancel)
     };
@@ -56,7 +56,7 @@ export async function resolveMediaPlayback(media: ExerciseMediaRef | null, stora
       status: 'error',
       url: driveMediaStreamUrl(media, storageAppId),
       mediaKind: media.preview_kind,
-      detail: error instanceof Error ? error.message : 'Storage non riesce a preparare questo video Drive per la riproduzione.',
+      detail: error instanceof Error ? error.message : 'Storage cannot prepare this Drive media for playback.',
       canRetry: true
     };
   }
@@ -71,7 +71,7 @@ export async function createLocalBlobFallback(media: ExerciseMediaRef, storageAp
       status: 'blocked',
       url: '',
       mediaKind: 'none',
-      detail: 'Questo file non puo essere riprodotto con il fallback bounded. Aprilo in Storage o usa un media stream Storage.'
+      detail: 'This file cannot be played with the bounded fallback. Open it in Storage or use a Storage media stream.'
     };
   }
   const payload = await callStorageBackend<{ content_base64: string; file?: { content_type?: string } }>(

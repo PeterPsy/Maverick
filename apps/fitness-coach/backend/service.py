@@ -573,6 +573,8 @@ def validate_workout(workout: dict[str, Any]) -> dict[str, Any]:
     for index, block in enumerate(workout.get("blocks", [])):
         path = f"blocks[{index}]"
         if block.get("type") == "work":
+            if not normalized_text(block.get("exercise_id")):
+                errors.append({"path": f"{path}.exercise_id", "message": "Choose an exercise from the library."})
             for field in ("title", "short_description", "long_description"):
                 if not normalized_text(block.get(field)):
                     errors.append({"path": f"{path}.{field}", "message": f"{field} is required."})
@@ -690,9 +692,9 @@ def normalize_blocks(raw_blocks: Any, *, default_work: int, default_rest: int, d
             blocks.append({
                 "id": str(raw.get("id") or new_id("block")),
                 "type": "rest",
-                "title": normalized_text(raw.get("title")) or "Recupero",
-                "short_description": normalized_text(raw.get("short_description")) or "Preparati al prossimo esercizio.",
-                "long_description": normalized_text(raw.get("long_description")) or "Respira, riposizionati e guarda il prossimo movimento.",
+                "title": normalized_text(raw.get("title")) or "Rest",
+                "short_description": normalized_text(raw.get("short_description")) or "Get ready for the next exercise.",
+                "long_description": normalized_text(raw.get("long_description")) or "Breathe, reset, and preview the next movement.",
                 "seconds": positive_int(raw.get("seconds"), default=default_rest),
                 "show_next_exercise": bool(raw.get("show_next_exercise", True)),
                 "skip_if_last": bool(raw.get("skip_if_last", True)),

@@ -40,6 +40,9 @@ It always renders a copy of the deployment plan under:
 The generated `.env.maverick` file is written outside `.maverick` by default and is loaded by the systemd units through `EnvironmentFile=`.
 It contains local bootstrap credentials and secret refs and is written with mode `0600`.
 The corresponding encrypted bootstrap secret envelopes and local secret-store key are written to the configured bootstrap paths. Keep all of those files out of version control and rotate generated values before any longer-lived public exposure.
+Generated systemd services put `/usr/local/bin` before `/usr/bin` in `PATH`,
+so host-level Node 24 installs under `/usr/local` are visible to
+backend-triggered frontend builds and runtime agent processes.
 
 The backend watchdog also loads `.env.maverick`, but rescue authority comes from the configured provider selection persisted in the control-plane store. A `MAVERICK_BACKEND_RESCUE_COMMAND` value is only a provider command override for the selected provider; it must not start rescue by itself when no provider is configured.
 

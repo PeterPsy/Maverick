@@ -7,6 +7,7 @@ Type=simple
 User={{SERVICE_USER}}
 Group={{SERVICE_GROUP}}
 WorkingDirectory={{INSTALL_ROOT}}
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
 Environment=PYTHONUNBUFFERED=1
 EnvironmentFile={{ENV_FILE}}
 ExecStart={{INSTALL_ROOT}}/.venv/bin/python -m uvicorn core.api.asgi_application:app --host {{BIND_HOST}} --port {{CORE_PORT}}

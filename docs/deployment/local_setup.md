@@ -34,6 +34,9 @@ npm --version
 
 Maverick npm packages enforce this range with `engine-strict` for dependency
 installs and runtime checks before direct Node-backed npm scripts.
+Generated systemd services put `/usr/local/bin` before `/usr/bin` in `PATH`,
+so a host-level Node install under `/usr/local` is visible to backend-triggered
+frontend builds and agent runtime processes.
 
 For a public service install that should configure nginx and request HTTPS certificates, also install:
 

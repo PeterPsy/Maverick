@@ -8,6 +8,7 @@ Type=oneshot
 User={{SERVICE_USER}}
 Group={{SERVICE_GROUP}}
 WorkingDirectory={{INSTALL_ROOT}}
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
 Environment=PYTHONUNBUFFERED=1
 EnvironmentFile={{ENV_FILE}}
 Environment=MAVERICK_CORE_HEALTH_URL=http://{{BIND_HOST}}:{{CORE_PORT}}/health

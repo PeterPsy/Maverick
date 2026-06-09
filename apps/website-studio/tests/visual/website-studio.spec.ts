@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 type Box = { x: number; y: number; width: number; height: number };
 type MockState = { backendActions: string[]; changedFilesCount: number };
+type MockOptions = { delayedAction?: string; delayMs?: number; emptySites?: boolean };
 type MockPreview = {
   id: string;
   site_id: string;
@@ -20,6 +21,50 @@ const SITE_ID = 'site_giuntitrail';
 const PREVIEW_ID = 'preview_giuntitrail_ready';
 
 test.describe('Website Studio visual smoke', () => {
+  test('shows chat guidance when no website is connected', async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 1180, height: 820 });
+    await installWebsiteStudioMocks(page, { emptySites: true });
+
+    await page.goto('/');
+
+    const guide = page.locator('.connection-guide');
+    await expect(guide).toBeVisible();
+    await expect(guide).toContainText('Scrivi in chat a un agente');
+    await expect(guide).toContainText('ZIP da Drive');
+    await expect(guide).toContainText('GitHub con Vault');
+    await expect(page.locator('.import-button')).toHaveCount(0);
+    await expect(page.locator('.git-import')).toHaveCount(0);
+
+    const screenshot = await page.screenshot({ fullPage: false });
+    expect(screenshot.length).toBeGreaterThan(6_000);
+    await testInfo.attach('website-studio-empty-guide.png', {
+      body: screenshot,
+      contentType: 'image/png'
+    });
+  });
+
+  test('shows a shell-style preview loading state while preview data resolves', async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 1180, height: 820 });
+    await installWebsiteStudioMocks(page, { delayedAction: 'sitemap', delayMs: 650 });
+
+    await page.goto('/');
+
+    const loading = page.locator('.preview-loading-state');
+    await expect(loading).toBeVisible();
+    await expect(loading).toContainText('Preview is loading');
+    await expect(page.locator('.site-empty')).toHaveCount(0);
+
+    const screenshot = await page.screenshot({ fullPage: false });
+    expect(screenshot.length).toBeGreaterThan(4_000);
+    await testInfo.attach('website-studio-preview-loading.png', {
+      body: screenshot,
+      contentType: 'image/png'
+    });
+
+    await expect(page.locator('.site-canvas iframe')).toBeVisible();
+    await expect(loading).toHaveCount(0);
+  });
+
   for (const viewport of [
     { name: 'desktop', width: 1440, height: 920 },
     { name: 'mobile', width: 390, height: 844 }
@@ -150,14 +195,17 @@ test.describe('Website Studio visual smoke', () => {
   });
 });
 
-async function installWebsiteStudioMocks(page: Page): Promise<MockState> {
+async function installWebsiteStudioMocks(page: Page, options: MockOptions = {}): Promise<MockState> {
   const state: MockState = { backendActions: [], changedFilesCount: 0 };
 
   await page.route('**/api/apps/website-studio/backend', async (route) => {
     const body = JSON.parse(route.request().postData() || '{}') as Record<string, unknown> & { action?: string };
     const action = body.action || 'sites_list';
     state.backendActions.push(action);
-    const response = backendResponse(action, body, state);
+    const response = backendResponse(action, body, state, options);
+    if (options.delayedAction === action) {
+      await delay(options.delayMs || 500);
+    }
     await route.fulfill({
       status: response.status,
       contentType: 'application/json',
@@ -207,6 +255,10 @@ async function installWebsiteStudioMocks(page: Page): Promise<MockState> {
   return state;
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function emitShellMessage(page: Page, payload: Record<string, unknown>): Promise<void> {
   await page.evaluate((message) => {
     window.dispatchEvent(
@@ -220,7 +272,7 @@ async function emitShellMessage(page: Page, payload: Record<string, unknown>): P
   }, payload);
 }
 
-function backendResponse(action: string, body: Record<string, unknown>, state: MockState): { status: number; body: Record<string, unknown> } {
+function backendResponse(action: string, body: Record<string, unknown>, state: MockState, options: MockOptions): { status: number; body: Record<string, unknown> } {
   const requestedRoute = typeof body.route === 'string' && body.route ? body.route : '/';
   const preview = previewForRoute(requestedRoute);
   const latestPreview = previewForRoute('/');
@@ -253,6 +305,7 @@ function backendResponse(action: string, body: Record<string, unknown>, state: M
 
   switch (action) {
     case 'sites_list':
+      if (options.emptySites) return { status: 200, body: { items: [] } };
       return { status: 200, body: { items: [site] } };
     case 'sitemap':
       return { status: 200, body: sitemapBody() };

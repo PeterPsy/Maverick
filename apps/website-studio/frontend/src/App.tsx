@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { DragEvent } from 'react';
 import {
   callBackend,
-  callStorageProvider,
   type Asset,
   type ChangeHistoryPayload,
   type ChangeRecord,
@@ -11,8 +9,7 @@ import {
   type Route,
   type SitemapPayload,
   type Site,
-  type SiteStatusPayload,
-  type StorageFile
+  type SiteStatusPayload
 } from './api';
 
 type Notice = { tone: 'ok' | 'warn' | 'error'; text: string } | null;
@@ -26,15 +23,11 @@ export function App() {
   const [activeAssetId, setActiveAssetId] = useState('');
   const [previewHtml, setPreviewHtml] = useState('');
   const [previewState, setPreviewState] = useState<PreviewPayload | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [siteStatus, setSiteStatus] = useState<SiteStatusPayload | null>(null);
   const [changeHistory, setChangeHistory] = useState<ChangeHistoryPayload | null>(null);
   const [showNewWebsite, setShowNewWebsite] = useState(false);
-  const [gitDialogOpen, setGitDialogOpen] = useState(false);
-  const [gitUrl, setGitUrl] = useState('');
-  const [gitBranch, setGitBranch] = useState('');
   const [notice, setNotice] = useState<Notice>(null);
-  const [busy, setBusy] = useState(false);
-  const [draggingZip, setDraggingZip] = useState(false);
   const [infoPanelOpen, setInfoPanelOpen] = useState(false);
   const activeSiteIdRef = useRef('');
   const activePageIdRef = useRef('');
@@ -67,37 +60,45 @@ export function App() {
       setActiveAssetId('');
       setPreviewHtml('');
       setPreviewState(null);
+      setPreviewLoading(false);
       setSiteStatus(null);
       setChangeHistory(null);
       setShowNewWebsite(true);
       setInfoPanelOpen(false);
       return;
     }
-    if (selectedSite !== persistedSite) {
-      await callBackend({ action: 'site_set_active', site_id: selectedSite });
-    }
+    setPreviewLoading(true);
+    setPreviewHtml('');
+    setPreviewState(null);
+    try {
+      if (selectedSite !== persistedSite) {
+        await callBackend({ action: 'site_set_active', site_id: selectedSite });
+      }
 
-    const map = await callBackend<SitemapPayload>({ action: 'sitemap', site_id: selectedSite });
-    const [statusPayload, changesPayload] = await Promise.all([
-      callBackend<SiteStatusPayload>({ action: 'site_status', site_id: selectedSite }),
-      callBackend<ChangeHistoryPayload>({ action: 'list_changes', site_id: selectedSite })
-    ]);
-    setSiteStatus(statusPayload);
-    setChangeHistory(changesPayload);
-    setPages(map.items);
-    const selectedRoute = (map.routes || []).find((route) => route.id === nextRouteId) || (map.routes || []).find((route) => route.route === nextRoute);
-    const selectedAsset = (map.assets || []).find((asset) => asset.id === nextAssetId);
-    const selectedPage =
-      map.items.find((page) => page.id === nextPageId) ||
-      (selectedRoute?.page_id ? map.items.find((page) => page.id === selectedRoute.page_id) : undefined) ||
-      map.items.find((page) => page.route === nextRoute) ||
-      (selectedRoute && !selectedRoute.page_id ? undefined : map.items[0]);
-    setActivePageId(selectedPage?.id || '');
-    setActiveRouteId(selectedRoute?.id || '');
-    setActiveAssetId(selectedAsset?.id || '');
-    const previewRoute = selectedPage?.route || selectedRoute?.route || '/';
-    postSelection(selectedSite, selectedPage, selectedRoute, selectedAsset);
-    await renderSite(selectedSite, previewRoute, statusPayload);
+      const map = await callBackend<SitemapPayload>({ action: 'sitemap', site_id: selectedSite });
+      const [statusPayload, changesPayload] = await Promise.all([
+        callBackend<SiteStatusPayload>({ action: 'site_status', site_id: selectedSite }),
+        callBackend<ChangeHistoryPayload>({ action: 'list_changes', site_id: selectedSite })
+      ]);
+      setSiteStatus(statusPayload);
+      setChangeHistory(changesPayload);
+      setPages(map.items);
+      const selectedRoute = (map.routes || []).find((route) => route.id === nextRouteId) || (map.routes || []).find((route) => route.route === nextRoute);
+      const selectedAsset = (map.assets || []).find((asset) => asset.id === nextAssetId);
+      const selectedPage =
+        map.items.find((page) => page.id === nextPageId) ||
+        (selectedRoute?.page_id ? map.items.find((page) => page.id === selectedRoute.page_id) : undefined) ||
+        map.items.find((page) => page.route === nextRoute) ||
+        (selectedRoute && !selectedRoute.page_id ? undefined : map.items[0]);
+      setActivePageId(selectedPage?.id || '');
+      setActiveRouteId(selectedRoute?.id || '');
+      setActiveAssetId(selectedAsset?.id || '');
+      const previewRoute = selectedPage?.route || selectedRoute?.route || '/';
+      postSelection(selectedSite, selectedPage, selectedRoute, selectedAsset);
+      await renderSite(selectedSite, previewRoute, statusPayload);
+    } finally {
+      setPreviewLoading(false);
+    }
   }
 
   async function renderSite(siteId: string, route = '/', status?: SiteStatusPayload) {
@@ -174,156 +175,28 @@ export function App() {
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
-  async function run<T>(fn: () => Promise<T>, message?: string) {
-    setBusy(true);
-    setNotice(null);
-    try {
-      const result = await fn();
-      if (message) setNotice({ tone: 'ok', text: message });
-      return result;
-    } catch (error) {
-      setNotice({ tone: 'error', text: error instanceof Error ? error.message : String(error) });
-      return undefined;
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function importZip(fileInput: File | null) {
-    if (!fileInput) return;
-    if (!fileInput.name.toLowerCase().endsWith('.zip')) {
-      setNotice({ tone: 'warn', text: 'Select a ZIP archive.' });
-      return;
-    }
-    const encoded = await toBase64(fileInput);
-    const displayName = fileInput.name.replace(/\.zip$/i, '').replace(/[-_]+/g, ' ').trim() || 'Imported Website';
-    const payload = await run(
-      async () => {
-        const stored = await writeZipToStorage(fileInput, encoded);
-        return callBackend<{ site: Site }>({
-          action: 'import_zip',
-          display_name: displayName,
-          archive_base64: encoded,
-          source_artifact_ref: storageArtifactRef(stored.file, fileInput)
-        });
-      },
-      'ZIP imported'
-    );
-    if (payload?.site) {
-      setShowNewWebsite(false);
-      setInfoPanelOpen(false);
-      await refresh(payload.site.id);
-    }
-  }
-
-  function handleZipDrop(event: DragEvent<HTMLLabelElement>) {
-    event.preventDefault();
-    setDraggingZip(false);
-    if (busy) return;
-    const file = Array.from(event.dataTransfer.files).find((item) => item.name.toLowerCase().endsWith('.zip'));
-    if (!file) {
-      setNotice({ tone: 'warn', text: 'Drop a ZIP archive.' });
-      return;
-    }
-    void importZip(file);
-  }
-
-  async function importGit() {
-    const repositoryUrl = gitUrl.trim();
-    const baseBranch = gitBranch.trim() || undefined;
-    if (!repositoryUrl) {
-      setNotice({ tone: 'warn', text: 'Repository URL is required.' });
-      return;
-    }
-    const payload = await run(
-      async () => {
-        const prepared = await callBackend<{ site: Site }>({
-          action: 'git_connection_prepare',
-          repository_url: repositoryUrl,
-          base_branch: baseBranch,
-          auth_mode: 'fine_grained_token'
-        });
-        return callBackend<{ site: Site }>({
-          action: 'import_git',
-          site_id: prepared.site.id,
-          repository_url: repositoryUrl,
-          branch: baseBranch
-        });
-      },
-      'Git connected and imported'
-    );
-    if (payload?.site) {
-      setGitDialogOpen(false);
-      setShowNewWebsite(false);
-      setInfoPanelOpen(false);
-      setGitUrl('');
-      setGitBranch('');
-      await refresh(payload.site.id);
-    }
-  }
-
   return (
     <main className={importOnly ? 'website-studio-shell import-mode' : 'website-studio-shell site-mode'}>
       {notice ? <div className={`notice ${notice.tone}`}>{notice.text}</div> : null}
 
       {importOnly ? (
-        <section className="import-screen" aria-label="New website">
-          <div className="import-actions">
-            <label
-              className={`import-button drop-target${draggingZip ? ' dragging' : ''}`}
-              onDragEnter={(event) => {
-                event.preventDefault();
-                if (!busy) setDraggingZip(true);
-              }}
-              onDragOver={(event) => {
-                event.preventDefault();
-                if (!busy) event.dataTransfer.dropEffect = 'copy';
-              }}
-              onDragLeave={() => setDraggingZip(false)}
-              onDrop={handleZipDrop}
-              aria-disabled={busy}
-            >
-              <span className="import-button-icon" aria-hidden="true">upload_file</span>
-              <span>Drop ZIP</span>
-              <input type="file" accept=".zip,application/zip" onChange={(event) => importZip(event.target.files?.[0] || null)} disabled={busy} />
-            </label>
-            <button className="import-button" onClick={() => setGitDialogOpen(true)} disabled={busy}>
-              <span className="import-button-icon" aria-hidden="true">commit</span>
-              <span>Connect Git</span>
-            </button>
+        <section className="connection-guide" aria-label="Connect a website">
+          <span className="connection-guide-kicker">Website Studio</span>
+          <h1>Scrivi in chat a un agente che vuoi connettere un sito.</h1>
+          <p>
+            L'agente ti guidera passo passo: puoi incollare un link ZIP di Drive, oppure collegare una repository GitHub
+            usando un secret salvato in Vault. Buon divertimento.
+          </p>
+          <div className="connection-guide-options" aria-label="Connection options">
+            <span>ZIP da Drive</span>
+            <span>GitHub con Vault</span>
           </div>
-          {gitDialogOpen ? (
-            <form
-              className="git-import"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void importGit();
-              }}
-            >
-              <input
-                value={gitUrl}
-                onChange={(event) => setGitUrl(event.target.value)}
-                placeholder="https://github.com/company/site.git"
-                autoComplete="off"
-                disabled={busy}
-              />
-              <input
-                value={gitBranch}
-                onChange={(event) => setGitBranch(event.target.value)}
-                placeholder="base branch"
-                autoComplete="off"
-                disabled={busy}
-              />
-              <div className="git-import-actions">
-                <button type="button" onClick={() => setGitDialogOpen(false)} disabled={busy}>Cancel</button>
-                <button type="submit" disabled={busy}>Connect</button>
-              </div>
-            </form>
-          ) : null}
         </section>
       ) : (
         <section className="site-canvas" aria-label={activeSite?.display_name || 'Website'}>
-          {previewHtml ? (
+          {previewLoading ? (
+            <PreviewLoadingState />
+          ) : previewUrl || previewHtml ? (
             <>
               {previewUrl ? (
                 <iframe
@@ -358,6 +231,17 @@ export function App() {
         </section>
       )}
     </main>
+  );
+}
+
+function PreviewLoadingState() {
+  return (
+    <div className="preview-loading-state" role="status" aria-label="Preview is loading">
+      <span className="preview-loading-indicator" aria-hidden="true">
+        <span className="preview-loading-shape" />
+      </span>
+      <span className="preview-loading-label">Preview is loading</span>
+    </div>
   );
 }
 
@@ -496,35 +380,4 @@ function postSelection(siteId: string, page?: Page, route?: Route, asset?: Asset
     },
     window.location.origin
   );
-}
-
-async function writeZipToStorage(file: File, contentBase64: string): Promise<{ file?: StorageFile }> {
-  const safeName = file.name.replace(/[^A-Za-z0-9_.-]+/g, '-').replace(/^-+|-+$/g, '') || 'website.zip';
-  return callStorageProvider<{ file?: StorageFile }>('storage-writer', {
-    action: 'file.content.write',
-    workspace_relative_path: `storage/uploaded/website-studio/${Date.now()}-${safeName}`,
-    mode: 'create',
-    content_base64: contentBase64,
-    content_type: file.type || 'application/zip'
-  });
-}
-
-function storageArtifactRef(file: StorageFile | undefined, fallback: File): Record<string, string> {
-  return {
-    app_id: 'storage',
-    file_id: file?.file_id || file?.id || '',
-    workspace_relative_path: file?.workspace_relative_path || '',
-    role: file?.role || 'uploaded',
-    relative_path: file?.relative_path || '',
-    name: file?.name || fallback.name,
-    content_type: file?.content_type || fallback.type || 'application/zip',
-    sha256: file?.sha256 || ''
-  };
-}
-
-async function toBase64(file: File): Promise<string> {
-  const buffer = await file.arrayBuffer();
-  let binary = '';
-  for (const byte of new Uint8Array(buffer)) binary += String.fromCharCode(byte);
-  return btoa(binary);
 }

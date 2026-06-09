@@ -1860,9 +1860,15 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("action: 'preview_document'", app_source)
         self.assertIn("action: 'list_changes'", app_source)
         self.assertIn("previewPayloadFromDocument", app_source)
+        self.assertIn("previewLoading", app_source)
+        self.assertIn("setPreviewLoading(true)", app_source)
+        self.assertIn("setPreviewLoading(false)", app_source)
+        self.assertIn("PreviewLoadingState", app_source)
+        self.assertIn("Preview is loading", app_source)
         self.assertIn("active_view: activeView", app_source)
         self.assertIn("context_tool: 'website_page_context'", app_source)
         self.assertIn("previewState?.preview_url || ''", app_source)
+        self.assertIn("previewUrl || previewHtml", app_source)
         self.assertIn("sandbox=\"allow-scripts allow-same-origin\"", app_source)
         self.assertIn("src={previewUrl}", app_source)
         self.assertIn("srcDoc={previewHtml}", app_source)
@@ -1878,13 +1884,18 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertNotIn("allow-same-origin", runtime_source)
         self.assertIn("frame.srcdoc", runtime_source)
 
-    def test_frontend_connect_git_prepares_and_imports_source(self) -> None:
+    def test_connection_onboarding_is_owned_by_website_ops_skill(self) -> None:
         app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
+        skill_source = (APP_ROOT / "skills" / "website-ops" / "SKILL.md").read_text(encoding="utf-8")
 
-        self.assertIn("action: 'git_connection_prepare'", app_source)
-        self.assertIn("action: 'import_git'", app_source)
-        self.assertIn("site_id: prepared.site.id", app_source)
-        self.assertIn("'Git connected and imported'", app_source)
+        self.assertNotIn("action: 'git_connection_prepare'", app_source)
+        self.assertNotIn("action: 'import_git'", app_source)
+        self.assertIn("website_git_connection_prepare", skill_source)
+        self.assertIn("website_git_connection_activate", skill_source)
+        self.assertIn("website_import_git", skill_source)
+        self.assertIn("website_import_zip", skill_source)
+        self.assertIn("github-token", skill_source)
+        self.assertIn("ZIP di Drive/Storage", skill_source)
 
     def test_frontend_refreshes_on_app_data_changed_events(self) -> None:
         app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
@@ -1904,21 +1915,26 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
 
     def test_frontend_resolves_storage_writer_dependency(self) -> None:
         api_source = (APP_ROOT / "frontend" / "src" / "api.ts").read_text(encoding="utf-8")
-        app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
+        contract = json.loads((APP_ROOT / "app_contract.json").read_text(encoding="utf-8"))
 
         self.assertIn("/api/apps/dependencies", api_source)
-        self.assertIn("storage-writer", app_source)
+        self.assertIn("storage-writer", json.dumps(contract.get("requires", [])))
         self.assertNotIn("/api/apps/storage/backend", api_source)
 
     def test_build_preview_does_not_emit_data_changed_event(self) -> None:
         self.assertEqual(app_events_for_action("build_preview"), [])
 
-    def test_frontend_drop_zip_is_real_drop_target(self) -> None:
+    def test_frontend_new_site_screen_is_conversation_guide(self) -> None:
         app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
 
-        self.assertIn("handleZipDrop", app_source)
-        self.assertIn("onDrop={handleZipDrop}", app_source)
-        self.assertIn("Drop a ZIP archive", app_source)
+        self.assertIn("connection-guide", app_source)
+        self.assertIn("Scrivi in chat a un agente che vuoi connettere un sito.", app_source)
+        self.assertIn("link ZIP di Drive", app_source)
+        self.assertIn("secret salvato in Vault", app_source)
+        self.assertNotIn("handleZipDrop", app_source)
+        self.assertNotIn("onDrop={handleZipDrop}", app_source)
+        self.assertNotIn("Drop ZIP", app_source)
+        self.assertNotIn("Connect Git", app_source)
 
     def test_phase1_frontend_and_widgets_follow_operational_design_rules(self) -> None:
         app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
@@ -1932,10 +1948,15 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("--website-studio-bg: var(--maverick-bg)", styles)
         self.assertIn("height: 100dvh", styles)
         self.assertIn("overflow: hidden", styles)
-        self.assertIn("Drop ZIP", app_source)
-        self.assertIn("Connect Git", app_source)
-        self.assertIn("upload_file", app_source)
-        self.assertIn("commit", app_source)
+        self.assertIn("connection-guide", app_source)
+        self.assertIn(".connection-guide", styles)
+        self.assertIn(".preview-loading-state", styles)
+        self.assertIn("website-studio-preview-loading-morph", styles)
+        self.assertIn("prefers-reduced-motion", styles)
+        self.assertNotIn("Drop ZIP", app_source)
+        self.assertNotIn("Connect Git", app_source)
+        self.assertNotIn("upload_file", app_source)
+        self.assertNotIn("commit", app_source)
         self.assertIn("website-studio-sitemap-search-icon", sitemap_widget)
         self.assertIn("website-studio-sitemap-search-icon", sitemap_widget_styles)
         self.assertNotIn("material-symbols-rounded", sitemap_widget)

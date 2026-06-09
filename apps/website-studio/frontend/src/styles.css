@@ -308,60 +308,105 @@ select {
   background: var(--website-studio-bg);
 }
 
-.import-screen {
-  display: grid;
-  place-items: center;
-  gap: 14px;
-  width: min(100%, 520px);
-  min-height: 220px;
-}
-
-.import-actions {
-  display: flex;
-  flex-wrap: wrap;
+.preview-loading-state {
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  gap: 10px;
-}
-
-.import-button {
-  display: inline-grid;
-  grid-template-columns: auto auto;
-  place-items: center;
-  gap: 8px;
-  min-width: 138px;
-  min-height: 44px;
-  border: 1px solid var(--website-studio-border);
-  border-radius: 18px;
-  background: var(--website-studio-surface);
-  box-shadow: var(--maverick-inner-edge);
-  color: var(--website-studio-text);
-  padding: 0 16px;
-  cursor: pointer;
-}
-
-.import-button-icon {
-  font-family: "Material Symbols Rounded", "Avenir Next", system-ui, sans-serif;
-  font-size: 1.05rem;
+  gap: 0.6rem;
+  width: 100%;
+  height: 100%;
+  background: var(--website-studio-bg);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.9rem;
   line-height: 1;
 }
 
-.import-button:hover {
-  background: var(--website-studio-surface-hover);
+.preview-loading-indicator {
+  position: relative;
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 1.35rem;
+  height: 1.35rem;
+  color: #fff;
 }
 
-.import-button.dragging {
-  border-color: var(--website-studio-accent);
-  background: var(--website-studio-surface-hover);
-  box-shadow: var(--maverick-inner-edge), 0 0 0 3px rgba(255, 255, 255, 0.18);
+.preview-loading-shape {
+  position: absolute;
+  inset: 0;
+  background: currentColor;
+  animation: website-studio-preview-loading-morph 3s ease-in-out infinite;
 }
 
-.import-button input {
-  display: none;
+.preview-loading-label {
+  display: inline-block;
+  min-width: 0;
+  overflow: hidden;
+  color: transparent;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.5) 0%,
+    rgba(255, 255, 255, 0.72) 34%,
+    #fff 50%,
+    rgba(255, 255, 255, 0.72) 66%,
+    rgba(255, 255, 255, 0.5) 100%
+  );
+  background-position: 130% 50%;
+  background-size: 230% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  animation: website-studio-preview-loading-text-flow 1.85s ease-in-out infinite;
 }
 
-.import-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
+.connection-guide {
+  display: grid;
+  gap: 12px;
+  width: min(100%, 620px);
+  text-align: center;
+}
+
+.connection-guide-kicker {
+  color: var(--website-studio-soft);
+  font-size: 0.78rem;
+  letter-spacing: 0;
+}
+
+.connection-guide h1 {
+  margin: 0;
+  color: var(--website-studio-text);
+  font-size: 3.1rem;
+  font-weight: 500;
+  line-height: 1.04;
+}
+
+.connection-guide p {
+  width: min(100%, 580px);
+  margin: 0 auto;
+  color: var(--website-studio-muted);
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.connection-guide-options {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.connection-guide-options span {
+  display: inline-grid;
+  place-items: center;
+  min-height: 34px;
+  border: 1px solid var(--website-studio-border);
+  border-radius: 999px;
+  background: var(--website-studio-surface-muted);
+  color: var(--website-studio-muted);
+  font-size: 0.82rem;
+  padding: 0 12px;
 }
 
 .notice {
@@ -382,61 +427,6 @@ select {
 .notice.warn { color: var(--maverick-warning); }
 .notice.error { color: var(--maverick-danger); }
 
-.git-import {
-  display: grid;
-  gap: 10px;
-  width: min(100%, 420px);
-  border: 1px solid var(--website-studio-border);
-  border-radius: 22px;
-  background: var(--website-studio-surface);
-  box-shadow: var(--maverick-glass-edge);
-  padding: 12px;
-}
-
-.git-import input,
-.git-import select {
-  width: 100%;
-  min-width: 0;
-  min-height: 42px;
-  border: 1px solid var(--website-studio-border);
-  border-radius: 18px;
-  outline: 0;
-  background: var(--website-studio-surface-muted);
-  color: var(--website-studio-text);
-  padding: 0 12px;
-}
-
-.git-import input:focus,
-.git-import select:focus {
-  border-color: var(--website-studio-accent);
-}
-
-.git-import-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.git-import-actions button {
-  min-width: 84px;
-  min-height: 38px;
-  border: 1px solid var(--website-studio-border);
-  border-radius: 18px;
-  background: var(--website-studio-surface-muted);
-  color: var(--website-studio-text);
-  cursor: pointer;
-}
-
-.git-import-actions button[type="submit"] {
-  background: var(--website-studio-accent);
-  color: var(--maverick-text-on-accent);
-}
-
-.git-import-actions button:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
 @media (max-width: 700px) {
   .website-info-panel {
     top: calc(10px + var(--maverick-shell-mobile-content-top-offset, 0px));
@@ -446,5 +436,77 @@ select {
 
   .website-info-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .connection-guide {
+    gap: 10px;
+    text-align: left;
+  }
+
+  .connection-guide h1 {
+    font-size: 2rem;
+  }
+
+  .connection-guide p {
+    margin: 0;
+  }
+
+  .connection-guide-options {
+    justify-content: flex-start;
+  }
+}
+
+@keyframes website-studio-preview-loading-morph {
+  0% {
+    border-radius: 50%;
+    transform: scale(1) rotate(0deg);
+  }
+
+  20% {
+    border-radius: 35%;
+    transform: scale(0.9) rotate(72deg);
+  }
+
+  40% {
+    border-radius: 15%;
+    transform: scale(1.1) rotate(144deg);
+  }
+
+  60% {
+    border-radius: 8%;
+    transform: scale(0.85) rotate(216deg);
+  }
+
+  80% {
+    border-radius: 25%;
+    transform: scale(1.05) rotate(288deg);
+  }
+
+  100% {
+    border-radius: 50%;
+    transform: scale(1) rotate(360deg);
+  }
+}
+
+@keyframes website-studio-preview-loading-text-flow {
+  0% {
+    background-position: 130% 50%;
+  }
+
+  100% {
+    background-position: -130% 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .preview-loading-shape {
+    border-radius: 50%;
+    animation: none;
+  }
+
+  .preview-loading-label {
+    color: rgba(255, 255, 255, 0.72);
+    background: none;
+    animation: none;
   }
 }

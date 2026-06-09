@@ -1,6 +1,6 @@
 ---
 name: website-ops
-description: Operate Website Studio projects through scoped Maverick surfaces for site inspection, lifecycle, editing, preview, diff, approval, publish, and rollback workflows.
+description: Operate Website Studio projects and guide users who ask to connect, import, add, or link a website through ZIP/Drive or GitHub/Vault onboarding.
 ---
 
 # Website Ops
@@ -8,6 +8,24 @@ description: Operate Website Studio projects through scoped Maverick surfaces fo
 Use this skill when working on websites managed by the `website-studio` app.
 
 Website Studio is the authenticated operating layer inside Maverick. It is not the public website and it is not a reason to scan workspace files directly.
+
+Also use this skill when the user asks in chat to connect, import, add, or link a website/site/repository to Website Studio, including requests such as "voglio connettere un sito", "collega un sito", "importa il sito", "ho uno ZIP su Drive", or "connetti una repo GitHub".
+
+## Connection Onboarding
+
+When the user is starting from no connected site, explain the supported paths in the user's language and keep the answer concrete:
+
+1. ZIP path: ask the user to provide a Drive or Storage link to a `.zip` archive, or to upload the ZIP. Use official Storage surfaces to read/localize the file, then call `website_import_zip`. Preserve a Storage artifact reference when available.
+2. GitHub path: ask for the repository HTTPS URL and optional base branch. For a private repository, tell the user to create a fine-grained GitHub token with access to the repo and save it in Vault/Core Secrets under the logical name `github-token`. Never ask them to paste the token in chat.
+3. Prepare and activate private GitHub access with `website_git_connection_prepare` and `website_git_connection_activate` using a Vault/Core Secrets grant reference. Then call `website_import_git`.
+
+Do not claim GitHub App authentication is available until Website Studio exposes a supported `auth_mode` for it. The implemented private GitHub path is a fine-grained token delivered by Vault/Core Secrets.
+
+Suggested short user-facing copy:
+
+```text
+Posso collegare il sito in due modi: incollami un link ZIP di Drive/Storage, oppure dammi la URL HTTPS della repo GitHub. Se la repo e privata, crea un fine-grained GitHub token con accesso alla repo e salvalo in Vault come `github-token`; non incollarlo qui in chat.
+```
 
 ## Required Workflow
 

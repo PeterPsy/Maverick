@@ -49,12 +49,9 @@ GitHub-backed sites with an activated grant receive a redaction-safe `github_pul
 
 The central workspace frame is reserved for the selected website only. It does not show the editor, diff, preview, or publish controls; those operations are handled through agent-facing MCP/CLI/backend surfaces.
 
-When no site exists, or when the user clicks `New website` in the sidebar footer, the central frame shows only two centered actions:
+When no site exists, or when the user clicks `New` in the sidebar footer, the central frame shows a concise conversational guide instead of direct import controls. It asks the user to write in chat that they want to connect a website, then points them to the two supported onboarding paths: share a Drive/Storage ZIP link or connect a GitHub repository with the required secret stored in Vault.
 
-- `Drop ZIP`
-- `Connect Git`
-
-`Drop ZIP` supports both file-picker selection and direct drag-and-drop. ZIP bytes are persisted through the resolved Storage provider before Website Studio imports the working copy and stores a Storage artifact reference on the site. `Connect Git` prepares a redaction-safe GitHub connection record and Vault grant requirements before importing the source; private repo clone/push/PR execution requires the activated Vault/Core Secrets grant path described above.
+The direct import work is handled by agents through the declared Website Studio, Storage, and Vault surfaces. For ZIP onboarding, an agent should obtain or localize the ZIP through Storage, call `website_import_zip`, and preserve the Storage artifact reference when available. For GitHub onboarding, an agent should prepare the repository connection with `website_git_connection_prepare`, tell the user to store a fine-grained GitHub token in Vault/Core Secrets as `github-token`, activate the grant with `website_git_connection_activate`, and then call `website_import_git`. Raw GitHub tokens are never accepted in chat, frontend fields, logs, or summaries.
 
 The central preview also shows a compact read-only status overlay with page, route, asset, working-change, runtime, build, request, and deployment state derived from `website_site_status` and `website_list_changes`. It intentionally does not expose production action buttons.
 

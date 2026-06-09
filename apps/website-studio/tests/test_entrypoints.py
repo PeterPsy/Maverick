@@ -1423,6 +1423,101 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertIn("PHP Docroot Home", preview["html"])
             self.assertIn("PHP router returned an empty response", " ".join(preview["warnings"]))
 
+    @unittest.skipUnless(shutil.which("php"), "php executable is required for PHP runtime preview integration")
+    def test_php_runtime_global_warnings_do_not_persist_as_page_warnings(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            archive = BytesIO()
+            with ZipFile(archive, "w") as zip_file:
+                zip_file.writestr(".htaccess", "RewriteEngine On\n")
+                zip_file.writestr(
+                    "frontend-website/index.php",
+                    "<?php echo '<!doctype html><html><head><title>Home</title></head><body><main>PHP Home</main></body></html>';",
+                )
+                zip_file.writestr(
+                    "local/router.php",
+                    (
+                        "<?php\n"
+                        "$projectRoot = dirname(__DIR__);\n"
+                        "$uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?: '/';\n"
+                        "if ($uri === '/' || $uri === '/index.php') {\n"
+                        "    include $projectRoot . '/frontend-website/index.php';\n"
+                        "    return;\n"
+                        "}\n"
+                        "http_response_code(404);\n"
+                        "echo 'missing';\n"
+                    ),
+                )
+            encoded = base64.b64encode(archive.getvalue()).decode("ascii")
+
+            status, imported = handle_action(data_root, {"action": "import_zip", "display_name": "PHP Caveats", "archive_base64": encoded})
+            self.assertEqual(status, 201)
+            site_id = imported["site"]["id"]
+            status, build_payload = handle_action(data_root, {"action": "build_validate", "site_id": site_id})
+            self.assertEqual(status, 201)
+            self.assertEqual(build_payload["build"]["status"], "passed")
+
+            status, map_payload = handle_action(data_root, {"action": "sitemap", "site_id": site_id})
+            self.assertEqual(status, 200)
+            pages = {item["route"]: item for item in map_payload["items"]}
+            routes = {item["route"]: item for item in map_payload["routes"]}
+            self.assertEqual(pages["/"]["warnings"], [])
+            self.assertEqual(routes["/"]["warnings"], [])
+
+            status, preview = handle_action(data_root, {"action": "build_preview", "site_id": site_id, "route": "/"})
+            self.assertEqual(status, 200)
+            preview_warnings = " ".join(preview["warnings"])
+            self.assertIn(".htaccess rules are not fully reproduced", preview_warnings)
+            self.assertIn("third-party services require explicit preview configuration", preview_warnings)
+
+    @unittest.skipUnless(shutil.which("php"), "php executable is required for PHP runtime preview integration")
+    def test_php_runtime_marks_4xx_routes_failed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            archive = BytesIO()
+            with ZipFile(archive, "w") as zip_file:
+                zip_file.writestr("frontend-website/index.php", "<?php echo '<title>Home</title>';")
+                zip_file.writestr(
+                    "sitemap.xml",
+                    """<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://example.com/</loc></url>
+  <url><loc>https://example.com/missing</loc></url>
+</urlset>
+""",
+                )
+                zip_file.writestr(
+                    "local/router.php",
+                    (
+                        "<?php\n"
+                        "$projectRoot = dirname(__DIR__);\n"
+                        "$uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?: '/';\n"
+                        "if ($uri === '/' || $uri === '/index.php') {\n"
+                        "    include $projectRoot . '/frontend-website/index.php';\n"
+                        "    return;\n"
+                        "}\n"
+                        "http_response_code(404);\n"
+                        "echo 'missing';\n"
+                    ),
+                )
+            encoded = base64.b64encode(archive.getvalue()).decode("ascii")
+
+            status, imported = handle_action(data_root, {"action": "import_zip", "display_name": "PHP 404", "archive_base64": encoded})
+            self.assertEqual(status, 201)
+            site_id = imported["site"]["id"]
+            status, build_payload = handle_action(data_root, {"action": "build_validate", "site_id": site_id})
+            self.assertEqual(status, 201)
+            self.assertEqual(build_payload["build"]["status"], "passed")
+
+            status, map_payload = handle_action(data_root, {"action": "sitemap", "site_id": site_id})
+            self.assertEqual(status, 200)
+            routes = {item["route"]: item for item in map_payload["routes"]}
+            pages = {item["route"]: item for item in map_payload["items"]}
+            self.assertEqual(routes["/missing"]["status"], "failed")
+            self.assertEqual(routes["/missing"]["page_id"], "")
+            self.assertIn("PHP route returned HTTP 404", " ".join(routes["/missing"]["warnings"]))
+            self.assertNotIn("/missing", pages)
+
     def test_php_site_without_static_html_returns_runtime_diagnostic_preview(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
@@ -1707,17 +1802,29 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(parsed["items"], [])
 
     def test_sitemap_widget_avoids_route_html_interpolation(self) -> None:
-        widget_source = (APP_ROOT / "frontend" / "public" / "widgets" / "website-studio-sitemap-sidebar" / "index.html").read_text(encoding="utf-8")
+        widget_source = (APP_ROOT / "frontend" / "src" / "widgets" / "website-studio-sitemap-sidebar" / "main.tsx").read_text(encoding="utf-8")
+        tree_source = (APP_ROOT / "frontend" / "src" / "components" / "ui" / "tree.tsx").read_text(encoding="utf-8")
 
         self.assertNotIn('data-route="${page.route}"', widget_source)
         self.assertNotIn("list.innerHTML = filtered.map", widget_source)
-        self.assertIn("document.createElement('button')", widget_source)
+        self.assertNotIn("dangerouslySetInnerHTML", widget_source)
+        self.assertIn("TreeProvider", widget_source)
+        self.assertIn("TreeView", widget_source)
+        self.assertIn("WebsiteTreeNodeView", widget_source)
+        self.assertIn("TreeNodeTrigger", widget_source)
+        self.assertIn("TreeExpander", widget_source)
+        self.assertIn("TreeIcon", widget_source)
+        self.assertIn("TreeLabel", widget_source)
+        self.assertIn("export const TreeProvider", tree_source)
+        self.assertIn("export const TreeNodeTrigger", tree_source)
+        self.assertIn("from 'lucide-react'", tree_source)
+        self.assertIn("from 'motion/react'", tree_source)
         self.assertIn("map.routes || []", widget_source)
         self.assertIn("map.assets || []", widget_source)
         self.assertIn("route_id", widget_source)
         self.assertIn("asset_id", widget_source)
         self.assertIn("maverick.widget.data-changed", widget_source)
-        self.assertIn("function buildTree()", widget_source)
+        self.assertIn("function buildTree(pages:", widget_source)
         self.assertIn("action: 'site_status'", widget_source)
         self.assertIn("action: 'list_changes'", widget_source)
         self.assertIn("changedPaths", widget_source)
@@ -1725,7 +1832,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("groupNode('group:pages'", widget_source)
         self.assertIn("groupNode('group:components'", widget_source)
         self.assertIn("groupNode('group:status'", widget_source)
-        self.assertIn("toggleNode", widget_source)
+        self.assertIn("toggleExpanded", tree_source)
         self.assertIn("No static HTML pages", widget_source)
 
     def test_frontend_handles_route_and_asset_deep_links(self) -> None:
@@ -1738,8 +1845,15 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("maverick.app.selection-changed", app_source)
         self.assertIn("selectedRoute && !selectedRoute.page_id ? undefined : map.items[0]", app_source)
         self.assertIn("selectedPage?.route || selectedRoute?.route || '/'", app_source)
-        self.assertIn("PreviewStatus", app_source)
-        self.assertIn("SiteStatusPanel", app_source)
+        self.assertIn("WebsiteInfoPanel", app_source)
+        self.assertIn("infoPanelOpen", app_source)
+        self.assertIn("website_info", app_source)
+        self.assertNotIn("PreviewStatus", app_source)
+        self.assertNotIn("SiteStatusPanel", app_source)
+        self.assertNotIn("fullscreenPreviewOpen", app_source)
+        self.assertNotIn("fullscreen_preview", app_source)
+        self.assertNotIn("preview_website", app_source)
+        self.assertNotIn("website-fullscreen-preview", app_source)
         self.assertIn("runtime_status", app_source)
         self.assertIn("missing_requirements", app_source)
         self.assertIn("action: 'site_status'", app_source)
@@ -1781,10 +1895,10 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
 
     def test_frontend_and_sidebar_do_not_select_archived_sites(self) -> None:
         app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
-        widget_source = (APP_ROOT / "frontend" / "public" / "widgets" / "website-studio-sitemap-sidebar" / "index.html").read_text(encoding="utf-8")
+        widget_source = (APP_ROOT / "frontend" / "src" / "widgets" / "website-studio-sitemap-sidebar" / "main.tsx").read_text(encoding="utf-8")
 
         self.assertIn("availableSites = sitePayload.items.filter((site) => site.status !== 'archived')", app_source)
-        self.assertIn("const selectableSites = sites.filter(item => item.status !== 'archived')", widget_source)
+        self.assertIn("const selectableSites = nextSites.filter((item) => item.status !== 'archived')", widget_source)
         self.assertNotIn("sitePayload.items[0]?.id", app_source)
         self.assertNotIn("|| sites[0]", widget_source)
 
@@ -1809,7 +1923,10 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
     def test_phase1_frontend_and_widgets_follow_operational_design_rules(self) -> None:
         app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
         styles = (APP_ROOT / "frontend" / "src" / "styles.css").read_text(encoding="utf-8")
-        sitemap_widget = (APP_ROOT / "frontend" / "public" / "widgets" / "website-studio-sitemap-sidebar" / "index.html").read_text(encoding="utf-8")
+        preview_runtime = (APP_ROOT / "frontend" / "public" / "preview-runtime" / "index.html").read_text(encoding="utf-8")
+        sitemap_widget = (APP_ROOT / "frontend" / "src" / "widgets" / "website-studio-sitemap-sidebar" / "main.tsx").read_text(encoding="utf-8")
+        sitemap_widget_styles = (APP_ROOT / "frontend" / "src" / "widgets" / "website-studio-sitemap-sidebar" / "styles.css").read_text(encoding="utf-8")
+        sitemap_widget_html = (APP_ROOT / "frontend" / "widgets" / "website-studio-sitemap-sidebar" / "index.html").read_text(encoding="utf-8")
         footer_widget = (APP_ROOT / "frontend" / "public" / "widgets" / "website-studio-sidebar-footer" / "index.html").read_text(encoding="utf-8")
 
         self.assertIn("--website-studio-bg: var(--maverick-bg)", styles)
@@ -1819,25 +1936,60 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("Connect Git", app_source)
         self.assertIn("upload_file", app_source)
         self.assertIn("commit", app_source)
-        self.assertIn("material-symbols-rounded", sitemap_widget)
-        self.assertIn("material-symbols-rounded", footer_widget)
+        self.assertIn("website-studio-sitemap-search-icon", sitemap_widget)
+        self.assertIn("website-studio-sitemap-search-icon", sitemap_widget_styles)
+        self.assertNotIn("material-symbols-rounded", sitemap_widget)
+        self.assertNotIn("material-symbols-rounded", sitemap_widget_styles)
+        self.assertNotIn("material-symbols-rounded", sitemap_widget_html)
+        self.assertNotIn("Material Symbols Rounded", sitemap_widget)
+        self.assertNotIn("Material Symbols Rounded", sitemap_widget_styles)
+        self.assertNotIn("Material Symbols Rounded", sitemap_widget_html)
+        self.assertIn("icon-add", footer_widget)
+        self.assertNotIn("icon-preview", footer_widget)
+        self.assertIn("icon-info", footer_widget)
+        self.assertIn(".icon-info { display: grid; place-items: center; font-size: .86rem", footer_widget)
+        self.assertNotIn("material-symbols-rounded", footer_widget)
+        self.assertNotIn("Material Symbols Rounded", footer_widget)
+        self.assertNotIn('id="status"', preview_runtime)
+        self.assertNotIn("renderStatus", preview_runtime)
+        self.assertNotIn("website-fullscreen-preview", app_source)
+        self.assertNotIn("website-fullscreen-preview", styles)
         for forbidden in {"Commit", "Push", "Deploy", "Publish", "Rollback"}:
             self.assertNotIn(f">{forbidden}<", app_source)
-        self.assertLess(sitemap_widget.index('class="search"'), sitemap_widget.index('class="site-select-frame"'))
+        self.assertLess(sitemap_widget.index("website-studio-sitemap-search"), sitemap_widget.index("website-studio-sitemap-select-frame"))
         self.assertIn("maverick.widget.open-app", sitemap_widget)
         self.assertIn("app_page: `${kind}s/${id}`", sitemap_widget)
-        self.assertIn("class=\"tree\"", sitemap_widget)
+        self.assertIn("TreeProvider", sitemap_widget)
+        self.assertIn("TreeView", sitemap_widget)
+        self.assertIn("WebsiteTreeNodeView", sitemap_widget)
+        self.assertIn("TreeNodeTrigger", sitemap_widget)
+        self.assertIn("TreeExpander", sitemap_widget)
+        self.assertIn("TreeIcon", sitemap_widget)
+        self.assertIn("TreeLabel", sitemap_widget)
+        self.assertIn("storage-folder-tree", sitemap_widget)
+        self.assertIn("storage-folder-tree .rounded-md", sitemap_widget_styles)
         self.assertIn("Components", sitemap_widget)
         self.assertIn("Backend and config", sitemap_widget)
         self.assertIn("Status", sitemap_widget)
-        self.assertIn("badge changed", sitemap_widget)
+        self.assertIn("website-studio-tree-badge.changed", sitemap_widget_styles)
         self.assertIn("params.page_id", sitemap_widget)
         self.assertIn("params.route_id", sitemap_widget)
         self.assertIn("params.asset_id", sitemap_widget)
-        self.assertIn("New website", footer_widget)
-        self.assertIn("Preview website", footer_widget)
-        self.assertIn("open_in_full", footer_widget)
-        self.assertIn("fullscreen_preview", footer_widget)
+        self.assertIn("grid-template-columns: minmax(0, 1fr) 2.65rem", footer_widget)
+        self.assertIn("<span>New</span>", footer_widget)
+        self.assertNotIn("<span>Preview</span>", footer_widget)
+        self.assertNotIn('id="preview"', footer_widget)
+        self.assertNotIn("openPreview", footer_widget)
+        self.assertIn('aria-label="Info"', footer_widget)
+        self.assertIn("openInfoPanel", footer_widget)
+        self.assertIn("website_info: '1'", footer_widget)
+        self.assertIn("app_page: 'info'", footer_widget)
+        self.assertIn("label: 'New'", footer_widget)
+        self.assertIn("height: '2.65rem'", footer_widget)
+        self.assertNotIn("New website", footer_widget)
+        self.assertNotIn("Preview website", footer_widget)
+        self.assertNotIn("open_in_full", footer_widget)
+        self.assertNotIn("fullscreen_preview", footer_widget)
         self.assertIn("maverick.widget.resize", footer_widget)
         self.assertIn("maverick.shell.sidebar.close", footer_widget)
 

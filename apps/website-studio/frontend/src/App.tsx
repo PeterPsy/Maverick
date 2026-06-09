@@ -35,7 +35,7 @@ export function App() {
   const [notice, setNotice] = useState<Notice>(null);
   const [busy, setBusy] = useState(false);
   const [draggingZip, setDraggingZip] = useState(false);
-  const [fullscreenPreviewOpen, setFullscreenPreviewOpen] = useState(false);
+  const [infoPanelOpen, setInfoPanelOpen] = useState(false);
   const activeSiteIdRef = useRef('');
   const activePageIdRef = useRef('');
 
@@ -70,6 +70,7 @@ export function App() {
       setSiteStatus(null);
       setChangeHistory(null);
       setShowNewWebsite(true);
+      setInfoPanelOpen(false);
       return;
     }
     if (selectedSite !== persistedSite) {
@@ -132,22 +133,22 @@ export function App() {
       if (payload.type !== 'maverick.app.navigate') return;
       if (payload.params?.new_website_request_id) {
         setShowNewWebsite(true);
-        setFullscreenPreviewOpen(false);
+        setInfoPanelOpen(false);
         setNotice(null);
         return;
       }
       const appPage = (payload.params?.app_page || '').replace(/^\/+|\/+$/g, '');
-      const wantsFullscreenPreview =
-        payload.params?.fullscreen_preview === '1' ||
-        payload.params?.preview_website === '1' ||
-        appPage === 'preview' ||
-        appPage === 'preview/fullscreen';
+      const wantsInfoPanel =
+        payload.params?.website_info === '1' ||
+        payload.params?.info_panel === '1' ||
+        appPage === 'info' ||
+        appPage === 'site/info';
       const pageFromRoute = appPage.startsWith('pages/') ? appPage.slice('pages/'.length) : '';
       const routeFromRoute = appPage.startsWith('routes/') ? appPage.slice('routes/'.length) : '';
       const assetFromRoute = appPage.startsWith('assets/') ? appPage.slice('assets/'.length) : '';
-      if (wantsFullscreenPreview) {
+      if (wantsInfoPanel) {
         setShowNewWebsite(false);
-        setFullscreenPreviewOpen(true);
+        setInfoPanelOpen(true);
         refresh(
           payload.params?.site_id || activeSiteIdRef.current,
           payload.params?.page_id || pageFromRoute || activePageIdRef.current,
@@ -159,7 +160,7 @@ export function App() {
       }
       if (payload.params?.site_id || pageFromRoute || routeFromRoute || assetFromRoute || payload.params?.route) {
         setShowNewWebsite(false);
-        setFullscreenPreviewOpen(false);
+        setInfoPanelOpen(false);
         refresh(
           payload.params?.site_id || activeSiteIdRef.current,
           payload.params?.page_id || pageFromRoute,
@@ -210,7 +211,7 @@ export function App() {
     );
     if (payload?.site) {
       setShowNewWebsite(false);
-      setFullscreenPreviewOpen(false);
+      setInfoPanelOpen(false);
       await refresh(payload.site.id);
     }
   }
@@ -254,7 +255,7 @@ export function App() {
     if (payload?.site) {
       setGitDialogOpen(false);
       setShowNewWebsite(false);
-      setFullscreenPreviewOpen(false);
+      setInfoPanelOpen(false);
       setGitUrl('');
       setGitBranch('');
       await refresh(payload.site.id);
@@ -341,84 +342,83 @@ export function App() {
                   srcDoc={previewHtml}
                 />
               )}
-              {previewState ? <PreviewStatus preview={previewState} /> : null}
-              {siteStatus ? <SiteStatusPanel status={siteStatus} changes={changeHistory} site={activeSite} /> : null}
+              {infoPanelOpen && previewState && siteStatus ? (
+                <WebsiteInfoPanel
+                  preview={previewState}
+                  status={siteStatus}
+                  changes={changeHistory}
+                  site={activeSite}
+                  onClose={() => setInfoPanelOpen(false)}
+                />
+              ) : null}
             </>
           ) : (
             <div className="site-empty">No renderable page in this site.</div>
           )}
-          {fullscreenPreviewOpen && previewHtml ? (
-            <section className="website-fullscreen-preview" aria-label="Preview website">
-              <button className="website-fullscreen-preview-close" type="button" aria-label="Close preview" onClick={() => setFullscreenPreviewOpen(false)}>
-                <span className="material-symbols-rounded" aria-hidden="true">close</span>
-              </button>
-              {previewUrl ? (
-                <iframe
-                  title={`${activePage?.title || activeSite?.display_name || 'Website'} fullscreen preview`}
-                  data-testid="fullscreen-preview-frame"
-                  sandbox="allow-scripts allow-same-origin"
-                  src={previewUrl}
-                />
-              ) : (
-                <iframe
-                  title={`${activePage?.title || activeSite?.display_name || 'Website'} fullscreen preview`}
-                  data-testid="fullscreen-preview-frame"
-                  sandbox=""
-                  srcDoc={previewHtml}
-                />
-              )}
-            </section>
-          ) : null}
         </section>
       )}
     </main>
   );
 }
 
-function SiteStatusPanel({ status, changes, site }: { status: SiteStatusPayload; changes: ChangeHistoryPayload | null; site?: Site }) {
+function WebsiteInfoPanel({
+  preview,
+  status,
+  changes,
+  site,
+  onClose
+}: {
+  preview: PreviewPayload;
+  status: SiteStatusPayload;
+  changes: ChangeHistoryPayload | null;
+  site?: Site;
+  onClose: () => void;
+}) {
   const latestBuild = latest(changes?.builds) || status.runtime?.latest_build || null;
   const latestRequest = latest(changes?.publish_requests);
   const latestDeploy = latest(changes?.deployments);
   const pendingRequests = (changes?.publish_requests || []).filter((item) => item.status === 'pending').length;
   const deployed = latestDeploy?.status || (site?.published_revision_id ? 'published' : 'not published');
+  const requirements = preview.missing_requirements || [];
+  const warnings = preview.warnings || [];
+  const runtimeDetail = requirements[0] || warnings[0] || 'Preview runtime ready.';
+  const runtimeKind = preview.runtime_kind || status.runtime_kind || status.runtime?.runtime_kind || 'preview';
+  const runtimeStatus = preview.runtime_status || status.runtime_status || status.runtime?.runtime_status || 'unknown';
   return (
-    <aside className="site-status-panel" aria-label="Site status">
-      <div className="site-status-row">
-        <span>site</span>
-        <strong>{site?.display_name || status.site.display_name}</strong>
+    <aside className="website-info-panel" aria-label="Website info">
+      <div className="website-info-header">
+        <div className="website-info-title">
+          <span>site info</span>
+          <strong>{site?.display_name || status.site.display_name}</strong>
+        </div>
+        <button className="website-info-close" type="button" aria-label="Close info" onClick={onClose}>
+          <span aria-hidden="true" />
+        </button>
       </div>
-      <div className="site-status-grid">
+
+      <div className="website-info-runtime" data-runtime-status={runtimeStatus}>
+        <i aria-hidden="true" />
+        <div>
+          <span>{String(runtimeKind).replace('_', ' ')}</span>
+          <strong>{String(runtimeStatus).replace('_', ' ')}</strong>
+          <small>{runtimeDetail}</small>
+        </div>
+      </div>
+
+      <div className="website-info-metrics">
         <Metric label="pages" value={status.page_count} />
         <Metric label="routes" value={status.route_count} />
         <Metric label="assets" value={status.asset_count} />
         <Metric label="changed" value={status.changed_files_count} tone={status.changed_files_count ? 'warn' : 'ok'} />
       </div>
-      <div className="site-status-line">
-        <span>runtime</span>
-        <strong>{String(status.runtime_status || status.runtime?.runtime_status || 'unknown').replace('_', ' ')}</strong>
-      </div>
-      <div className="site-status-line">
-        <span>build</span>
-        <strong>{String(latestBuild?.status || 'none').replace('_', ' ')}</strong>
-      </div>
-      <div className="site-status-line">
-        <span>requests</span>
-        <strong>{pendingRequests ? `${pendingRequests} pending` : String(latestRequest?.status || 'none').replace('_', ' ')}</strong>
-      </div>
-      <div className="site-status-line">
-        <span>deploys</span>
-        <strong>{String(deployed).replace('_', ' ')}</strong>
+
+      <div className="website-info-lines">
+        <InfoLine label="runtime" value={String(status.runtime_status || status.runtime?.runtime_status || 'unknown').replace('_', ' ')} />
+        <InfoLine label="build" value={String(latestBuild?.status || 'none').replace('_', ' ')} />
+        <InfoLine label="requests" value={pendingRequests ? `${pendingRequests} pending` : String(latestRequest?.status || 'none').replace('_', ' ')} />
+        <InfoLine label="deploys" value={String(deployed).replace('_', ' ')} />
       </div>
     </aside>
-  );
-}
-
-function Metric({ label, value, tone = 'neutral' }: { label: string; value: number; tone?: 'neutral' | 'ok' | 'warn' }) {
-  return (
-    <div className="site-status-metric" data-tone={tone}>
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
   );
 }
 
@@ -426,16 +426,20 @@ function latest(records?: ChangeRecord[] | null): ChangeRecord | null {
   return records && records.length ? records[0] : null;
 }
 
-function PreviewStatus({ preview }: { preview: PreviewPayload }) {
-  const requirements = preview.missing_requirements || [];
-  const warnings = preview.warnings || [];
-  const detail = requirements[0] || warnings[0] || '';
+function Metric({ label, value, tone = 'neutral' }: { label: string; value: number; tone?: 'neutral' | 'ok' | 'warn' }) {
   return (
-    <div className="preview-status" data-runtime-kind={preview.runtime_kind} data-runtime-status={preview.runtime_status}>
-      <i aria-hidden="true" />
-      <span>{preview.runtime_kind.replace('_', ' ')}</span>
-      <strong>{preview.runtime_status.replace('_', ' ')}</strong>
-      {detail ? <small>{detail}</small> : null}
+    <div className="website-info-metric" data-tone={tone}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function InfoLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="website-info-line">
+      <span>{label}</span>
+      <strong>{value}</strong>
     </div>
   );
 }

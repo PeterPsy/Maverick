@@ -9,52 +9,22 @@
         color-scheme: dark;
         --bg: #080808;
         --text: #ececec;
-        --muted: rgba(236, 236, 236, .68);
-        --border: rgba(255, 255, 255, .1);
-        --surface: rgba(12, 12, 14, .72);
         font-family: "Avenir Next", "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
       }
       * { box-sizing: border-box; }
       html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; background: var(--bg); color: var(--text); }
       #root { position: relative; }
       iframe { width: 100%; height: 100%; border: 0; background: #fff; }
-      .status {
-        position: absolute;
-        left: 12px;
-        bottom: 12px;
-        z-index: 2;
-        max-width: min(720px, calc(100% - 24px));
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        background: var(--surface);
-        color: var(--muted);
-        padding: 8px 10px;
-        font-size: 12px;
-        line-height: 1.35;
-        backdrop-filter: blur(18px);
-      }
-      .status strong { color: var(--text); font-weight: 600; }
     </style>
   </head>
   <body>
     <div id="root">
       <iframe id="preview" title="Website runtime document" sandbox="allow-scripts allow-forms"></iframe>
-      <div id="status" class="status">Loading preview</div>
     </div>
     <script>
       const params = new URLSearchParams(window.location.search);
       const previewId = params.get('preview_id') || '';
-      const statusNode = document.getElementById('status');
       const frame = document.getElementById('preview');
-
-      function renderStatus(preview, detail) {
-        const pieces = [
-          `<strong>${escapeHtml(preview.runtime_kind || 'preview')}</strong>`,
-          escapeHtml(preview.status || preview.runtime_status || 'unknown')
-        ];
-        if (detail) pieces.push(escapeHtml(detail));
-        statusNode.innerHTML = pieces.join(' | ');
-      }
 
       async function load() {
         if (!previewId) throw new Error('preview_id is required');
@@ -66,18 +36,10 @@
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(String(payload.detail || payload.error || 'preview request failed'));
         frame.srcdoc = String(payload.html || '');
-        const preview = payload.preview || {};
-        const details = Array.isArray(preview.missing_requirements) ? preview.missing_requirements : [];
-        renderStatus(preview, details[0] || '');
       }
 
-      function escapeHtml(value) {
-        return String(value || '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
-      }
-
-      load().catch(error => {
+      load().catch(() => {
         frame.srcdoc = '<!doctype html><html><body style="margin:0;background:#080808;color:#ececec;font:14px system-ui;display:grid;place-content:center;min-height:100vh;">Preview unavailable</body></html>';
-        statusNode.textContent = error instanceof Error ? error.message : String(error);
       });
     </script>
   </body>

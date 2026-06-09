@@ -52,6 +52,7 @@ from preview_runtime import (
     render_runtime_preview,
     runtime_capability_status,
     rendered_route_warnings,
+    route_specific_warnings,
     source_files_for_runtime_route,
 )
 from publish_workflow import managed_static_platform_binding, working_branch_for_site
@@ -1128,17 +1129,19 @@ def validate_build(data_root: Path, site_id: object) -> dict[str, object]:
     source_root = _source_root(data_root, str(site["id"]))
     profile = source_profile(source_root)
     map_payload = sitemap(data_root, site["id"])
+    map_warnings: list[str] = []
     warnings: list[str] = []
     for item in map_payload.get("items", []):
-        warnings.extend(str(warning) for warning in item.get("warnings", []))
+        map_warnings.extend(route_specific_warnings(list(item.get("warnings") or [])))
     for item in map_payload.get("routes", []):
-        warnings.extend(str(warning) for warning in item.get("warnings", []))
+        map_warnings.extend(route_specific_warnings(list(item.get("warnings") or [])))
     runtime_kind = str(profile.get("preview_runtime_kind") or "unavailable")
     build_id = f"build_{uuid4().hex[:16]}"
     missing_requirements = [str(item) for item in profile.get("missing_requirements", []) if str(item).strip()] if isinstance(profile.get("missing_requirements"), list) else []
     artifact_ref: dict[str, object] = {}
     rendered_routes: list[dict[str, object]] = []
     if runtime_kind == "static_export":
+        warnings.extend(map_warnings)
         status = "passed" if profile.get("static_preview_supported") else "blocked"
         logs_summary = "Static preview artifact prepared." if status == "passed" else "No runnable preview artifact is available without a supported runtime."
         artifact_ref = _create_static_build_artifact(data_root, site, build_id) if status == "passed" else {}
@@ -1151,11 +1154,16 @@ def validate_build(data_root: Path, site_id: object) -> dict[str, object]:
         logs_summary = str(runtime_build.get("logs_summary") or "")
         if status == "passed":
             rendered_routes = _render_known_routes(data_root, site, profile, artifact_ref, map_payload)
+            for rendered in rendered_routes:
+                warnings.extend(route_specific_warnings(list(rendered.get("warnings") or [])))
             failed_routes = [item for item in rendered_routes if item.get("status") != "ready"]
             if rendered_routes and len(failed_routes) == len(rendered_routes):
                 status = "failed"
                 warnings.append("runtime build completed, but no indexed route rendered successfully")
+        else:
+            warnings.extend(map_warnings)
     else:
+        warnings.extend(map_warnings)
         status = "blocked"
         logs_summary = "No runnable preview artifact is available without a supported runtime."
     now = now_timestamp()
@@ -1178,7 +1186,7 @@ def validate_build(data_root: Path, site_id: object) -> dict[str, object]:
                 json.dumps(profile, sort_keys=True),
                 len(map_payload.get("routes", [])),
                 len(map_payload.get("assets", [])),
-                json.dumps(warnings[:100]),
+                json.dumps(_dedupe_strings(warnings)[:100]),
                 json.dumps(missing_requirements[:50]),
                 logs_summary,
                 now,
@@ -1246,9 +1254,9 @@ def _upsert_runtime_route_index(
     source_files = [str(item) for item in rendered.get("source_files", []) if str(item).strip()]
     if not source_files:
         source_files = source_files_for_runtime_route(_source_root(data_root, str(site["id"])), profile)
-    warnings = [str(item) for item in rendered.get("warnings", []) if str(item).strip()]
-    if not warnings:
-        warnings = rendered_route_warnings(_source_root(data_root, str(site["id"])), profile)
+    warnings = route_specific_warnings(list(rendered.get("warnings") or []))
+    if rendered.get("status") != "ready" and not warnings:
+        warnings = [f"{runtime_kind} route did not render successfully"]
     now = now_timestamp()
     route_id = f"route_{sha256_text(str(site['id']) + runtime_kind + route)[:16]}"
     with connect(data_root) as db:
@@ -1922,6 +1930,7 @@ def _preview_contract(
         warnings.append(f"{runtime_kind} runtime is not available yet; serving sanitized static HTML fallback")
     if runtime_kind == "static_export" and profile.get("static_preview_supported"):
         warnings.append("serving static export in an isolated preview runtime")
+    warnings = _dedupe_strings(warnings + rendered_route_warnings(_source_root(data_root, str(site["id"])), profile))
     preview_url = _preview_runtime_url(preview_id, route_text) if preview_id else ""
     return {
         "preview_id": preview_id,

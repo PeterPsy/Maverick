@@ -41,6 +41,9 @@ ALLOWED_WORKSPACE_BUILD_BINARIES = {
 UNSUPPORTED_WORKSPACE_BUILD_BINARIES = {
     "node-sass": "node-sass requires npm install scripts/native bindings and is not supported by the Website Studio preview runtime; use Dart Sass `sass` instead",
 }
+HTACCESS_RUNTIME_WARNING = ".htaccess rules are not fully reproduced by the Website Studio preview runtime"
+PHP_SERVICES_RUNTIME_WARNING = "database, SMTP, analytics, payment, and third-party services require explicit preview configuration"
+GLOBAL_RUNTIME_WARNINGS = frozenset({HTACCESS_RUNTIME_WARNING, PHP_SERVICES_RUNTIME_WARNING})
 
 
 @dataclass(frozen=True)
@@ -221,13 +224,26 @@ def source_files_for_runtime_route(source_root: Path, source_profile: dict[str, 
     return files
 
 
-def rendered_route_warnings(source_root: Path, source_profile: dict[str, object]) -> list[str]:
+def runtime_environment_warnings(source_root: Path, source_profile: dict[str, object]) -> list[str]:
     warnings: list[str] = []
     if (source_root / ".htaccess").exists():
-        warnings.append(".htaccess rules are not fully reproduced by the Website Studio preview runtime")
+        warnings.append(HTACCESS_RUNTIME_WARNING)
     if str(source_profile.get("preview_runtime_kind") or "") == "php":
-        warnings.append("database, SMTP, analytics, payment, and third-party services require explicit preview configuration")
+        warnings.append(PHP_SERVICES_RUNTIME_WARNING)
     return warnings
+
+
+def rendered_route_warnings(source_root: Path, source_profile: dict[str, object]) -> list[str]:
+    return runtime_environment_warnings(source_root, source_profile)
+
+
+def route_specific_warnings(warnings: list[object]) -> list[str]:
+    clean: list[str] = []
+    for warning in warnings:
+        text = str(warning).strip()
+        if text and text not in GLOBAL_RUNTIME_WARNINGS and text not in clean:
+            clean.append(text)
+    return clean
 
 
 def _render_php_preview(
@@ -361,7 +377,7 @@ def _request_php_route(runtime_root: Path, docroot: Path, router: Path | None, r
         if len(content) > MAX_RENDER_BYTES:
             return {"status": "failed", "detail": "rendered route exceeded preview byte limit", "http_status": status}
         text = content.decode("utf-8", errors="replace")
-        if status >= 500:
+        if status >= 400:
             return {"status": "failed", "detail": f"PHP route returned HTTP {status}", "http_status": status, "html": text}
         return {"status": "ready", "html": text, "http_status": status}
     except (OSError, URLError, TimeoutError, subprocess.SubprocessError) as error:

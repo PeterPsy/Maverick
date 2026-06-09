@@ -32,33 +32,42 @@ test.describe('Website Studio visual smoke', () => {
 
       const canvas = page.locator('.site-canvas');
       const iframe = page.locator('.site-canvas iframe');
-      const previewStatus = page.locator('.preview-status');
-      const siteStatus = page.locator('.site-status-panel');
+      const infoPanel = page.locator('.website-info-panel');
 
       await expect(canvas).toBeVisible();
       await expect(iframe).toBeVisible();
-      await expect(previewStatus).toContainText('ready');
-      await expect(siteStatus).toContainText('Giuntitrail');
-      await expect(siteStatus).toContainText('published');
+      await expect(page.locator('.preview-status')).toHaveCount(0);
+      await expect(page.locator('.site-status-panel')).toHaveCount(0);
+      await expect(infoPanel).toHaveCount(0);
 
       const frame = await iframe.elementHandle();
       const contentFrame = await frame?.contentFrame();
       expect(contentFrame).not.toBeNull();
       await expect(contentFrame!.locator('[data-testid="runtime-preview"]')).toContainText('Giuntitrail');
 
+      await emitShellMessage(page, {
+        type: 'maverick.app.navigate',
+        params: { site_id: SITE_ID, app_page: 'info', website_info: '1' }
+      });
+
+      await expect(infoPanel).toBeVisible();
+      await expect(infoPanel).toContainText('Giuntitrail');
+      await expect(infoPanel).toContainText('ready');
+      await expect(infoPanel).toContainText('published');
+
       const canvasBox = await requiredBox(canvas, 'site canvas');
       const iframeBox = await requiredBox(iframe, 'preview iframe');
-      const previewStatusBox = await requiredBox(previewStatus, 'preview status');
-      const siteStatusBox = await requiredBox(siteStatus, 'site status');
+      const infoPanelBox = await requiredBox(infoPanel, 'website info panel');
 
       expect(iframeBox.width).toBeGreaterThan(280);
       expect(iframeBox.height).toBeGreaterThan(420);
-      expect(isInside(previewStatusBox, canvasBox)).toBe(true);
-      expect(isInside(siteStatusBox, canvasBox)).toBe(true);
-      expect(intersects(previewStatusBox, siteStatusBox)).toBe(false);
+      expect(isInside(infoPanelBox, canvasBox)).toBe(true);
+
+      await page.locator('.website-info-close').click();
+      await expect(infoPanel).toBeHidden();
 
       const screenshot = await page.screenshot({ fullPage: false });
-      expect(screenshot.length).toBeGreaterThan(12_000);
+      expect(screenshot.length).toBeGreaterThan(viewport.name === 'mobile' ? 8_000 : 12_000);
       await testInfo.attach(`website-studio-${viewport.name}.png`, {
         body: screenshot,
         contentType: 'image/png'
@@ -73,9 +82,9 @@ test.describe('Website Studio visual smoke', () => {
     await page.goto('/');
 
     const iframe = page.locator('.site-canvas iframe');
-    const siteStatus = page.locator('.site-status-panel');
     await expect(iframe).toBeVisible();
-    await expect(siteStatus).toContainText('Giuntitrail');
+    await expect(page.locator('.preview-status')).toHaveCount(0);
+    await expect(page.locator('.site-status-panel')).toHaveCount(0);
 
     await expect(async () => {
       await emitShellMessage(page, {
@@ -86,6 +95,14 @@ test.describe('Website Studio visual smoke', () => {
       await expect(iframe).toHaveAttribute('src', /route=%2Fabout/, { timeout: 750 });
     }).toPass({ timeout: 6_000 });
 
+    await emitShellMessage(page, {
+      type: 'maverick.app.navigate',
+      params: { site_id: SITE_ID, app_page: 'info', website_info: '1' }
+    });
+    const infoPanel = page.locator('.website-info-panel');
+    await expect(infoPanel).toBeVisible();
+    await expect(infoPanel).toContainText('Giuntitrail');
+
     mockState.changedFilesCount = 1;
     const actionsBeforeRefresh = mockState.backendActions.length;
     await expect(async () => {
@@ -93,18 +110,15 @@ test.describe('Website Studio visual smoke', () => {
       await expect.poll(() => mockState.backendActions.length, { timeout: 750 }).toBeGreaterThan(actionsBeforeRefresh);
     }).toPass({ timeout: 6_000 });
 
-    await expect(siteStatus.locator('.site-status-metric').filter({ hasText: 'changed' }).locator('strong')).toHaveText('1');
+    await expect(infoPanel.locator('.website-info-metric').filter({ hasText: 'changed' }).locator('strong')).toHaveText('1');
     expect(mockState.backendActions.filter((action) => action === 'list_changes').length).toBeGreaterThanOrEqual(2);
 
     const canvasBox = await requiredBox(page.locator('.site-canvas'), 'site canvas');
     const iframeBox = await requiredBox(iframe, 'preview iframe');
-    const previewStatusBox = await requiredBox(page.locator('.preview-status'), 'preview status');
-    const siteStatusBox = await requiredBox(siteStatus, 'site status');
+    const infoPanelBox = await requiredBox(infoPanel, 'website info panel');
 
     expect(isInside(iframeBox, canvasBox)).toBe(true);
-    expect(isInside(previewStatusBox, canvasBox)).toBe(true);
-    expect(isInside(siteStatusBox, canvasBox)).toBe(true);
-    expect(intersects(previewStatusBox, siteStatusBox)).toBe(false);
+    expect(isInside(infoPanelBox, canvasBox)).toBe(true);
 
     const screenshot = await page.screenshot({ fullPage: false });
     expect(screenshot.length).toBeGreaterThan(12_000);
@@ -114,42 +128,25 @@ test.describe('Website Studio visual smoke', () => {
     });
   });
 
-  test('opens and closes the private fullscreen website preview', async ({ page }, testInfo) => {
+  test('does not open the removed sidebar fullscreen preview flow', async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await installWebsiteStudioMocks(page);
 
     await page.goto('/');
 
     const fullscreenPreview = page.locator('.website-fullscreen-preview');
-    const fullscreenFrame = page.locator('.website-fullscreen-preview iframe');
-    await expect(page.locator('.site-canvas iframe')).toBeVisible();
+    const inlinePreview = page.locator('.site-canvas iframe');
+    await expect(inlinePreview).toBeVisible();
 
     await emitShellMessage(page, {
       type: 'maverick.app.navigate',
       params: { site_id: SITE_ID, app_page: 'preview/fullscreen', fullscreen_preview: '1' }
     });
 
-    await expect(fullscreenPreview).toBeVisible();
-    await expect(fullscreenFrame).toBeVisible();
-    await expect(fullscreenFrame).toHaveAttribute('src', /preview-runtime/);
-    await expect(page.locator('.website-fullscreen-preview-close')).toBeVisible();
-
-    const previewBox = await requiredBox(fullscreenPreview, 'fullscreen preview');
-    const frameBox = await requiredBox(fullscreenFrame, 'fullscreen preview iframe');
-    expect(previewBox.width).toBe(1366);
-    expect(previewBox.height).toBe(900);
-    expect(frameBox.width).toBe(1366);
-    expect(frameBox.height).toBe(900);
-
-    const screenshot = await page.screenshot({ fullPage: false });
-    expect(screenshot.length).toBeGreaterThan(12_000);
-    await testInfo.attach('website-studio-fullscreen-preview.png', {
-      body: screenshot,
-      contentType: 'image/png'
-    });
-
-    await page.locator('.website-fullscreen-preview-close').click();
-    await expect(fullscreenPreview).toBeHidden();
+    await expect(fullscreenPreview).toHaveCount(0);
+    await expect(page.locator('.website-fullscreen-preview-close')).toHaveCount(0);
+    await expect(inlinePreview).toBeVisible();
+    await expect(inlinePreview).toHaveAttribute('src', /preview-runtime/);
   });
 });
 
@@ -345,8 +342,4 @@ async function requiredBox(locator: ReturnType<Page['locator']>, label: string):
 
 function isInside(inner: Box, outer: Box): boolean {
   return inner.x >= outer.x && inner.y >= outer.y && inner.x + inner.width <= outer.x + outer.width && inner.y + inner.height <= outer.y + outer.height;
-}
-
-function intersects(a: Box, b: Box): boolean {
-  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
 }

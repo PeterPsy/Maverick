@@ -1,0 +1,259 @@
+{
+  "tools": {
+    "fitness_coach_list_workouts": {
+      "description": "List Fitness Coach workouts with optional query filtering.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string" }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "fitness_coach_get_workout": {
+      "description": "Read one workout by id.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workout_id": { "type": "string" },
+          "id": { "type": "string" }
+        },
+        "anyOf": [
+          { "required": ["workout_id"] },
+          { "required": ["id"] }
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "fitness_coach_create_workout": {
+      "description": "Create one workout. Blocks may be supplied as structured WorkoutBlock objects.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "workout": { "type": "object" },
+          "blocks": { "type": "array", "items": { "type": "object" } },
+          "default_work_seconds": { "type": "integer", "minimum": 1 },
+          "default_rest_seconds": { "type": "integer", "minimum": 1 },
+          "default_reps": { "type": "integer", "minimum": 1 }
+        },
+        "additionalProperties": true
+      },
+      "output_schema": { "type": "object" }
+    },
+    "fitness_coach_update_workout": {
+      "description": "Update one workout by id or by workout.id.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workout_id": { "type": "string" },
+          "id": { "type": "string" },
+          "workout": { "type": "object" }
+        },
+        "anyOf": [
+          { "required": ["workout_id"] },
+          { "required": ["id"] },
+          { "required": ["workout"] }
+        ],
+        "additionalProperties": true
+      },
+      "output_schema": { "type": "object" }
+    },
+    "fitness_coach_duplicate_workout": {
+      "description": "Duplicate one workout and keep block snapshots.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workout_id": { "type": "string" },
+          "id": { "type": "string" },
+          "name": { "type": "string" }
+        },
+        "anyOf": [
+          { "required": ["workout_id"] },
+          { "required": ["id"] }
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "fitness_coach_delete_workout": {
+      "description": "Delete one workout by id. Agents should confirm ambiguous deletes before calling this tool.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workout_id": { "type": "string" },
+          "id": { "type": "string" }
+        },
+        "anyOf": [
+          { "required": ["workout_id"] },
+          { "required": ["id"] }
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "fitness_coach_validate_workout": {
+      "description": "Validate whether a workout can be started.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workout_id": { "type": "string" },
+          "id": { "type": "string" }
+        },
+        "anyOf": [
+          { "required": ["workout_id"] },
+          { "required": ["id"] }
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "fitness_coach_list_exercises": {
+      "description": "List exercise library records with optional query and tag filters.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string" },
+          "tag": { "type": "string" }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "fitness_coach_get_exercise": {
+      "description": "Read one exercise by id.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "exercise_id": { "type": "string" },
+          "id": { "type": "string" }
+        },
+        "anyOf": [
+          { "required": ["exercise_id"] },
+          { "required": ["id"] }
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "fitness_coach_create_exercise": {
+      "description": "Create one reusable exercise with Storage media references.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string" },
+          "short_description": { "type": "string" },
+          "long_description": { "type": "string" },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "primary_media": { "type": ["object", "null"] },
+          "media": { "type": "array", "items": { "type": "object" } },
+          "exercise": { "type": "object" }
+        },
+        "additionalProperties": true
+      },
+      "output_schema": { "type": "object" }
+    },
+    "fitness_coach_update_exercise": {
+      "description": "Update one exercise by id or by exercise.id.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "exercise_id": { "type": "string" },
+          "id": { "type": "string" },
+          "exercise": { "type": "object" }
+        },
+        "anyOf": [
+          { "required": ["exercise_id"] },
+          { "required": ["id"] },
+          { "required": ["exercise"] }
+        ],
+        "additionalProperties": true
+      },
+      "output_schema": { "type": "object" }
+    },
+    "fitness_coach_delete_exercise": {
+      "description": "Delete one unused exercise by id. Agents should confirm ambiguous deletes before calling this tool.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "exercise_id": { "type": "string" },
+          "id": { "type": "string" }
+        },
+        "anyOf": [
+          { "required": ["exercise_id"] },
+          { "required": ["id"] }
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "fitness_coach_list_runs": {
+      "description": "List recent bounded workout run summaries.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workout_id": { "type": "string" },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 100 }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "fitness_coach_reference_manifest": {
+      "description": "Describe Fitness Coach reference entity support. V1 returns no reference entity types.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "fitness_coach_view_filter": {
+      "description": "Read the shared Fitness Coach view filter state.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "fitness_coach_set_view_filter": {
+      "description": "Set Fitness Coach query, setup tab, or selected workout state.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string" },
+          "sidebar_query": { "type": "string" },
+          "setup_tab": { "type": "string", "enum": ["workout-settings", "exercise-library"] },
+          "selected_workout_id": { "type": ["string", "null"] }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "fitness_coach_set_custom_view": {
+      "description": "Set a custom Fitness Coach view from explicit workout or exercise ids.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string" },
+          "workout_ids": { "type": "array", "items": { "type": "string" } },
+          "exercise_ids": { "type": "array", "items": { "type": "string" } }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "fitness_coach_clear_custom_view": {
+      "description": "Clear a custom Fitness Coach view and return to normal search mode.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    }
+  }
+}

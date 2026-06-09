@@ -1,0 +1,27 @@
+# Python caches and local test output
+__pycache__/
+*.py[cod]
+.pytest_cache/
+playwright-report/
+test-results/
+.coverage
+htmlcov/
+
+# Node/Vite local dependencies and caches
+node_modules/
+.vite/
+.vite-temp/
+
+# Local environment and machine state
+.env
+.env.*
+*.log
+tmp/
+temp/
+
+# App data belongs under the workspace data root, not the source repo.
+data/
+*.sqlite
+*.sqlite3
+*.db
+.maverick-app.json

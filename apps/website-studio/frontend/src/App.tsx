@@ -35,6 +35,7 @@ export function App() {
   const [notice, setNotice] = useState<Notice>(null);
   const [busy, setBusy] = useState(false);
   const [draggingZip, setDraggingZip] = useState(false);
+  const [fullscreenPreviewOpen, setFullscreenPreviewOpen] = useState(false);
   const activeSiteIdRef = useRef('');
   const activePageIdRef = useRef('');
 
@@ -131,15 +132,34 @@ export function App() {
       if (payload.type !== 'maverick.app.navigate') return;
       if (payload.params?.new_website_request_id) {
         setShowNewWebsite(true);
+        setFullscreenPreviewOpen(false);
         setNotice(null);
         return;
       }
       const appPage = (payload.params?.app_page || '').replace(/^\/+|\/+$/g, '');
+      const wantsFullscreenPreview =
+        payload.params?.fullscreen_preview === '1' ||
+        payload.params?.preview_website === '1' ||
+        appPage === 'preview' ||
+        appPage === 'preview/fullscreen';
       const pageFromRoute = appPage.startsWith('pages/') ? appPage.slice('pages/'.length) : '';
       const routeFromRoute = appPage.startsWith('routes/') ? appPage.slice('routes/'.length) : '';
       const assetFromRoute = appPage.startsWith('assets/') ? appPage.slice('assets/'.length) : '';
+      if (wantsFullscreenPreview) {
+        setShowNewWebsite(false);
+        setFullscreenPreviewOpen(true);
+        refresh(
+          payload.params?.site_id || activeSiteIdRef.current,
+          payload.params?.page_id || pageFromRoute || activePageIdRef.current,
+          payload.params?.route || '',
+          payload.params?.route_id || routeFromRoute,
+          payload.params?.asset_id || assetFromRoute
+        ).catch((error: Error) => setNotice({ tone: 'error', text: error.message }));
+        return;
+      }
       if (payload.params?.site_id || pageFromRoute || routeFromRoute || assetFromRoute || payload.params?.route) {
         setShowNewWebsite(false);
+        setFullscreenPreviewOpen(false);
         refresh(
           payload.params?.site_id || activeSiteIdRef.current,
           payload.params?.page_id || pageFromRoute,
@@ -190,6 +210,7 @@ export function App() {
     );
     if (payload?.site) {
       setShowNewWebsite(false);
+      setFullscreenPreviewOpen(false);
       await refresh(payload.site.id);
     }
   }
@@ -233,6 +254,7 @@ export function App() {
     if (payload?.site) {
       setGitDialogOpen(false);
       setShowNewWebsite(false);
+      setFullscreenPreviewOpen(false);
       setGitUrl('');
       setGitBranch('');
       await refresh(payload.site.id);
@@ -325,6 +347,28 @@ export function App() {
           ) : (
             <div className="site-empty">No renderable page in this site.</div>
           )}
+          {fullscreenPreviewOpen && previewHtml ? (
+            <section className="website-fullscreen-preview" aria-label="Preview website">
+              <button className="website-fullscreen-preview-close" type="button" aria-label="Close preview" onClick={() => setFullscreenPreviewOpen(false)}>
+                <span className="material-symbols-rounded" aria-hidden="true">close</span>
+              </button>
+              {previewUrl ? (
+                <iframe
+                  title={`${activePage?.title || activeSite?.display_name || 'Website'} fullscreen preview`}
+                  data-testid="fullscreen-preview-frame"
+                  sandbox="allow-scripts allow-same-origin"
+                  src={previewUrl}
+                />
+              ) : (
+                <iframe
+                  title={`${activePage?.title || activeSite?.display_name || 'Website'} fullscreen preview`}
+                  data-testid="fullscreen-preview-frame"
+                  sandbox=""
+                  srcDoc={previewHtml}
+                />
+              )}
+            </section>
+          ) : null}
         </section>
       )}
     </main>

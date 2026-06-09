@@ -1835,6 +1835,11 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("params.route_id", sitemap_widget)
         self.assertIn("params.asset_id", sitemap_widget)
         self.assertIn("New website", footer_widget)
+        self.assertIn("Preview website", footer_widget)
+        self.assertIn("open_in_full", footer_widget)
+        self.assertIn("fullscreen_preview", footer_widget)
+        self.assertIn("maverick.widget.resize", footer_widget)
+        self.assertIn("maverick.shell.sidebar.close", footer_widget)
 
     def test_phase2_approval_publish_and_rollback_flow(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

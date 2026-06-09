@@ -113,6 +113,44 @@ test.describe('Website Studio visual smoke', () => {
       contentType: 'image/png'
     });
   });
+
+  test('opens and closes the private fullscreen website preview', async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 1366, height: 900 });
+    await installWebsiteStudioMocks(page);
+
+    await page.goto('/');
+
+    const fullscreenPreview = page.locator('.website-fullscreen-preview');
+    const fullscreenFrame = page.locator('.website-fullscreen-preview iframe');
+    await expect(page.locator('.site-canvas iframe')).toBeVisible();
+
+    await emitShellMessage(page, {
+      type: 'maverick.app.navigate',
+      params: { site_id: SITE_ID, app_page: 'preview/fullscreen', fullscreen_preview: '1' }
+    });
+
+    await expect(fullscreenPreview).toBeVisible();
+    await expect(fullscreenFrame).toBeVisible();
+    await expect(fullscreenFrame).toHaveAttribute('src', /preview-runtime/);
+    await expect(page.locator('.website-fullscreen-preview-close')).toBeVisible();
+
+    const previewBox = await requiredBox(fullscreenPreview, 'fullscreen preview');
+    const frameBox = await requiredBox(fullscreenFrame, 'fullscreen preview iframe');
+    expect(previewBox.width).toBe(1366);
+    expect(previewBox.height).toBe(900);
+    expect(frameBox.width).toBe(1366);
+    expect(frameBox.height).toBe(900);
+
+    const screenshot = await page.screenshot({ fullPage: false });
+    expect(screenshot.length).toBeGreaterThan(12_000);
+    await testInfo.attach('website-studio-fullscreen-preview.png', {
+      body: screenshot,
+      contentType: 'image/png'
+    });
+
+    await page.locator('.website-fullscreen-preview-close').click();
+    await expect(fullscreenPreview).toBeHidden();
+  });
 });
 
 async function installWebsiteStudioMocks(page: Page): Promise<MockState> {

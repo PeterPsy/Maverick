@@ -21,7 +21,7 @@ updates:
     schedule:
       interval: "weekly"
   - package-ecosystem: "npm"
-    directory: "/apps/gallery"
+    directory: "/apps/storage"
     schedule:
       interval: "weekly"
   - package-ecosystem: "npm"
@@ -29,6 +29,6 @@ updates:
     schedule:
       interval: "weekly"
   - package-ecosystem: "npm"
-    directory: "/apps/user-admin"
+    directory: "/apps/settings"
     schedule:
       interval: "weekly"

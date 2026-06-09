@@ -39,9 +39,9 @@ jobs:
           - apps/base-shell
           - apps/chat
           - apps/dynamic-views
-          - apps/gallery
+          - apps/storage
           - apps/skills
-          - apps/user-admin
+          - apps/settings
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -70,7 +70,7 @@ jobs:
           node-version: "24"
       - name: Rebuild source frontends and check committed dist
         run: |
-          for app in apps/agents apps/base-shell apps/chat apps/dynamic-views apps/gallery apps/skills apps/user-admin; do
+          for app in apps/agents apps/base-shell apps/chat apps/dynamic-views apps/storage apps/skills apps/settings; do
             (cd "$app" && npm ci && npm run build)
           done
           git diff --exit-code -- apps/*/frontend/dist

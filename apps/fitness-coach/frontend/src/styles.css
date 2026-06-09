@@ -75,6 +75,28 @@ button:disabled {
   opacity: 0.48;
 }
 
+body.is-workout-block-dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.fitness-app,
+.fitness-app *,
+.work-player,
+.work-player * {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.fitness-app::-webkit-scrollbar,
+.fitness-app *::-webkit-scrollbar,
+.work-player::-webkit-scrollbar,
+.work-player *::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 input,
 textarea,
 select {
@@ -416,6 +438,10 @@ select:focus {
   margin-top: 0.72rem;
 }
 
+.block-list.is-reordering {
+  touch-action: none;
+}
+
 .block-add-row {
   display: flex;
   justify-content: flex-end;
@@ -427,28 +453,31 @@ select:focus {
 }
 
 .block-editor {
+  position: relative;
   display: grid;
-  grid-template-columns: 2.1rem minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.58rem;
   border: 1px solid var(--fitness-border);
   border-radius: 8px;
+  cursor: grab;
   padding: 0.68rem;
+  touch-action: pan-y;
+  transition: background 140ms ease, border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
 }
 
 .block-editor.is-rest {
   background: rgba(255, 255, 255, 0.06);
 }
 
-.block-handle {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.36rem;
+.block-editor.is-dragging {
+  z-index: 3;
+  border-color: #ffffff;
+  cursor: grabbing;
+  transform: scale(0.98);
 }
 
-.block-handle span {
-  color: var(--fitness-soft);
-  font-size: 0.72rem;
+.block-list.is-reordering .block-editor {
+  touch-action: none;
 }
 
 .block-fields {
@@ -475,14 +504,32 @@ select:focus {
   justify-self: end;
 }
 
-.block-mobile-actions {
-  display: none;
-}
-
 .block-exercise-text {
   display: grid;
   gap: 0.18rem;
   min-width: 0;
+}
+
+.block-title-line {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.44rem;
+  min-width: 0;
+}
+
+.block-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.55rem;
+  height: 1.55rem;
+  border: 1px solid var(--fitness-border);
+  border-radius: 999px;
+  color: var(--fitness-muted);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
 }
 
 .block-exercise-text strong,
@@ -512,6 +559,10 @@ select:focus {
   align-items: center;
   flex-wrap: wrap;
   gap: 0.46rem;
+}
+
+.mode-value-row .block-actions {
+  margin-left: auto;
 }
 
 .block-mode-select {
@@ -874,6 +925,12 @@ select:focus {
 }
 
 @media (max-width: 920px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+
   .fitness-app {
     padding-left: 0.58rem;
     padding-right: 0.58rem;
@@ -912,10 +969,6 @@ select:focus {
 }
 
 @media (max-width: 520px) {
-  .block-editor {
-    grid-template-columns: 1fr;
-  }
-
   .block-exercise-row {
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: start;
@@ -924,21 +977,6 @@ select:focus {
   .block-control-row {
     justify-self: end;
     flex-wrap: nowrap;
-  }
-
-  .block-handle {
-    flex-direction: row;
-    justify-content: flex-start;
-  }
-
-  .block-mobile-actions {
-    display: flex;
-    align-items: center;
-    gap: 0.36rem;
-  }
-
-  .block-control-row .block-actions {
-    display: none;
   }
 
   .block-change-button {

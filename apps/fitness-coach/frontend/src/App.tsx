@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { PointerEvent } from 'react';
+import type { PointerEvent as ReactPointerEvent } from 'react';
 import {
-  ArrowDown,
   ArrowLeft,
-  ArrowUp,
   Check,
   Copy,
   Dumbbell,
@@ -39,6 +37,7 @@ import {
 } from './api';
 import { createLocalBlobFallback, initialMediaResolution, resolveMediaPlayback } from './mediaPlaybackResolver';
 import type { Exercise, ExerciseMediaRef, RestBlock, RuntimeSegment, SetupTab, StorageFile, WorkBlock, Workout, WorkoutBlock, WorkoutRunSummary } from './types';
+import { useWorkoutBlockReorder, type ReorderItemProps } from './useWorkoutBlockReorder';
 import { runtimeSegmentsForWorkout } from './workoutSegments';
 import { validateWorkoutForStart } from './workoutValidation';
 
@@ -319,6 +318,16 @@ function WorkoutEditor(props: {
 }) {
   const { workout } = props;
   const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
+  const workoutRef = useRef(workout);
+  const onChangeRef = useRef(props.onChange);
+
+  useEffect(() => {
+    workoutRef.current = workout;
+    onChangeRef.current = props.onChange;
+  }, [props.onChange, workout]);
+
+  const blockReorder = useWorkoutBlockReorder(workout?.blocks ?? [], updateWorkoutBlocks);
+
   if (!workout) {
     return <div className="empty-state">Create a workout to begin.</div>;
   }
@@ -337,14 +346,12 @@ function WorkoutEditor(props: {
     update({ blocks: workout!.blocks.map((block) => (block.id === blockId ? nextBlock : block)) });
   }
 
-  function moveBlock(blockId: string, direction: -1 | 1) {
-    const index = workout!.blocks.findIndex((block) => block.id === blockId);
-    const target = index + direction;
-    if (index < 0 || target < 0 || target >= workout!.blocks.length) return;
-    const blocks = [...workout!.blocks];
-    const [item] = blocks.splice(index, 1);
-    blocks.splice(target, 0, item);
-    update({ blocks });
+  function updateWorkoutBlocks(blocks: WorkoutBlock[]) {
+    const current = workoutRef.current;
+    if (!current) return;
+    const nextWorkout = { ...current, blocks };
+    workoutRef.current = nextWorkout;
+    onChangeRef.current(nextWorkout);
   }
 
   function addBlock() {
@@ -401,17 +408,19 @@ function WorkoutEditor(props: {
         </div>
       </div>
 
-      <div className="block-list">
+      <div className={`block-list ${blockReorder.draggingItemId ? 'is-reordering' : ''}`} ref={blockReorder.listRef}>
         {workout.blocks.map((block, index) => (
           <BlockEditor
             block={block}
             exercises={props.exercises}
             key={block.id}
             index={index}
+            isDragging={blockReorder.draggingItemId === block.id}
+            blockRef={(element) => blockReorder.setItemElement(block.id, element)}
+            reorderItemProps={blockReorder.getItemProps(block.id)}
             onChange={(patch) => updateBlock(block.id, patch)}
             onModeChange={(mode) => replaceBlock(block.id, blockWithMode(block, mode, workout))}
             onOpenLibrary={() => props.onOpenLibraryForBlock(block.id)}
-            onMove={(direction) => moveBlock(block.id, direction)}
             onDuplicate={() => update({ blocks: insertAfter(workout.blocks, block.id, { ...block, id: crypto.randomUUID() } as WorkoutBlock) })}
             onDelete={() => update({ blocks: workout.blocks.filter((candidate) => candidate.id !== block.id) })}
           />
@@ -442,10 +451,12 @@ function BlockEditor(props: {
   block: WorkoutBlock;
   exercises: Exercise[];
   index: number;
+  isDragging: boolean;
+  blockRef: (element: HTMLElement | null) => void;
+  reorderItemProps: ReorderItemProps;
   onChange: (patch: Partial<WorkoutBlock>) => void;
   onModeChange: (mode: WorkoutBlockMode) => void;
   onOpenLibrary: () => void;
-  onMove: (direction: -1 | 1) => void;
   onDuplicate: () => void;
   onDelete: () => void;
 }) {
@@ -460,38 +471,31 @@ function BlockEditor(props: {
       : 'Choose an exercise from the library.'
     : '';
   return (
-    <article className={`block-editor ${block.type === 'rest' ? 'is-rest' : ''}`}>
-      <div className="block-handle">
-        <span>{props.index + 1}</span>
-        <button type="button" className="mini-icon" onClick={() => props.onMove(-1)} aria-label="Move up" title="Move up"><ArrowUp size={14} /></button>
-        <button type="button" className="mini-icon" onClick={() => props.onMove(1)} aria-label="Move down" title="Move down"><ArrowDown size={14} /></button>
-        <div className="block-mobile-actions">
-          <button className="mini-icon" type="button" onClick={props.onDuplicate} aria-label="Duplicate block" title="Duplicate"><Copy size={14} /></button>
-          <button className="mini-icon danger" type="button" onClick={props.onDelete} aria-label="Delete block" title="Delete"><Trash2 size={14} /></button>
-        </div>
-      </div>
+    <article ref={props.blockRef} className={`block-editor ${block.type === 'rest' ? 'is-rest' : ''} ${props.isDragging ? 'is-dragging' : ''}`} {...props.reorderItemProps}>
       <div className="block-fields">
         <div className="block-exercise-row">
           {block.type === 'rest' ? (
-            <div className="block-rest-title">Rest</div>
+            <div className="block-title-line">
+              <span className="block-index">{props.index + 1}</span>
+              <div className="block-rest-title">Rest</div>
+            </div>
           ) : (
             <div className="block-exercise-text">
-              <strong>{title}</strong>
+              <div className="block-title-line">
+                <span className="block-index">{props.index + 1}</span>
+                <strong>{title}</strong>
+              </div>
               <span>{description}</span>
             </div>
           )}
-          <div className="block-control-row">
-            {block.type === 'work' ? (
+          {block.type === 'work' ? (
+            <div className="block-control-row">
               <button className="secondary-action compact block-change-button" type="button" onClick={props.onOpenLibrary}>
                 <Library size={15} aria-hidden="true" />
                 <span>{hasExercise ? 'Change' : 'Choose'}</span>
               </button>
-            ) : null}
-            <div className="block-actions">
-              <button className="mini-icon" type="button" onClick={props.onDuplicate} aria-label="Duplicate block" title="Duplicate"><Copy size={14} /></button>
-              <button className="mini-icon danger" type="button" onClick={props.onDelete} aria-label="Delete block" title="Delete"><Trash2 size={14} /></button>
             </div>
-          </div>
+          ) : null}
         </div>
         <div className="mode-value-row">
           <select className="block-mode-select" value={mode} onChange={(event) => props.onModeChange(event.target.value as WorkoutBlockMode)} aria-label="Block mode">
@@ -504,6 +508,10 @@ function BlockEditor(props: {
           ) : (
             <NumberField label={block.type === 'rest' ? 'Rest seconds' : 'Seconds'} value={block.type === 'rest' ? block.seconds : block.seconds || 0} onChange={(seconds) => props.onChange({ seconds } as Partial<WorkoutBlock>)} />
           )}
+          <div className="block-actions">
+            <button className="mini-icon" type="button" onClick={props.onDuplicate} aria-label="Duplicate block" title="Duplicate"><Copy size={14} /></button>
+            <button className="mini-icon danger" type="button" onClick={props.onDelete} aria-label="Delete block" title="Delete"><Trash2 size={14} /></button>
+          </div>
         </div>
       </div>
     </article>
@@ -779,7 +787,7 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
     setIndex((value) => Math.max(0, value - 1));
   }
 
-  function handlePointerUp(event: PointerEvent) {
+  function handlePointerUp(event: ReactPointerEvent) {
     const start = pointerStartRef.current;
     pointerStartRef.current = null;
     if (!start) return;

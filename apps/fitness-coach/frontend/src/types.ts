@@ -145,6 +145,7 @@ export type RuntimeSegment =
       short_description: string;
       long_description: string;
       seconds?: number;
+      reps?: number;
       repsLabel?: string;
     }
   | {

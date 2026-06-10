@@ -16,6 +16,7 @@ export function runtimeSegmentsForWorkout(workout: Workout): RuntimeSegment[] {
         short_description: block.short_description || block.long_description,
         long_description: block.long_description || block.short_description,
         seconds: block.mode === 'timer' ? block.seconds || undefined : undefined,
+        reps: block.mode === 'reps' ? block.reps || undefined : undefined,
         repsLabel: block.mode === 'reps' ? repsLabel(block) : undefined
       });
       return;

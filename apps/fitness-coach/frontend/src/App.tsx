@@ -41,7 +41,7 @@ import {
 import { GradientBarsBackground } from './components/ui/gradient-bars-background';
 import { createLocalBlobFallback, driveMediaStreamUrl, initialMediaResolution, resolveMediaPlayback } from './mediaPlaybackResolver';
 import { TagsInputField } from './components/ui/tags-input';
-import type { Exercise, ExerciseMediaRef, RestBlock, RuntimeSegment, SetupTab, WorkBlock, Workout, WorkoutBlock, WorkoutRunSummary } from './types';
+import type { Exercise, ExerciseMediaRef, MediaPlaybackResolution, RestBlock, RuntimeSegment, SetupTab, WorkBlock, Workout, WorkoutBlock, WorkoutRunSummary } from './types';
 import { useWorkoutBlockReorder, type ReorderItemProps } from './useWorkoutBlockReorder';
 import { runtimeSegmentsForWorkout, segmentProgressRepeats, segmentProgressSeconds } from './workoutSegments';
 import { validateWorkoutForStart } from './workoutValidation';
@@ -60,6 +60,8 @@ const EMPTY_EXERCISE: Partial<Exercise> = {
 type WorkoutBlockMode = 'timer' | 'reps' | 'rest';
 type PlayerPlaybackOverlay = 'idle' | 'play' | 'pause';
 const REST_ICON_SRC = 'rest-icon.svg';
+const COUNTDOWN_SOUND_SRC = '/apps/fitness-coach/count-down-fitness-coach.mp3';
+const COUNTDOWN_SOUND_LEAD_MS = 3800;
 
 export function App() {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
@@ -800,16 +802,18 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const [remaining, setRemaining] = useState(segments[0]?.type === 'work' && segments[0].mode === 'reps' ? 0 : segments[0]?.seconds || 0);
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [playbackOverlay, setPlaybackOverlay] = useState<PlayerPlaybackOverlay>('idle');
   const [resolution, setResolution] = useState(initialMediaResolution());
+  const [nextPreviewResolution, setNextPreviewResolution] = useState(initialMediaResolution());
   const [summary, setSummary] = useState<WorkoutRunSummary | null>(null);
   const [startedAt] = useState(new Date().toISOString());
   const [skipped, setSkipped] = useState(0);
   const [retryNonce, setRetryNonce] = useState(0);
   const timerRemainingMsRef = useRef(0);
   const timerStartedAtRef = useRef(0);
-  const beepedRef = useRef<Set<number>>(new Set());
+  const countdownPlayedRef = useRef(false);
+  const countdownAudioRef = useRef<HTMLAudioElement | null>(null);
   const playbackOverlayTimerRef = useRef<number | null>(null);
   const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
   const segment = segments[index];
@@ -835,26 +839,45 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
     rootRef.current?.requestFullscreen?.().catch(() => undefined);
   }, []);
 
+  useEffect(() => {
+    const audio = new Audio(COUNTDOWN_SOUND_SRC);
+    audio.preload = 'auto';
+    countdownAudioRef.current = audio;
+    return () => {
+      audio.pause();
+      countdownAudioRef.current = null;
+    };
+  }, []);
+
   useEffect(() => clearPlaybackOverlayTimer, [clearPlaybackOverlayTimer]);
 
   useEffect(() => {
     clearPlaybackOverlayTimer();
     setPlaybackOverlay(paused ? 'play' : 'idle');
-    setSheetOpen(false);
+    setDescriptionExpanded(false);
   }, [clearPlaybackOverlayTimer, index]);
 
   useEffect(() => {
     setResolution(initialMediaResolution());
-    if (!segment) return;
-    const media = segment.type === 'work' ? segment.media : nextWorkMedia(segments, index);
+    if (!segment || segment.type !== 'work') return;
     let canceled = false;
-    resolveMediaPlayback(media).then((next) => {
+    resolveMediaPlayback(segment.media).then((next) => {
       if (!canceled) setResolution(next);
     });
-    const nextSegment = segments[index + 1];
-    if (nextSegment?.type === 'work') {
-      resolveMediaPlayback(nextSegment.media).catch(() => undefined);
-    }
+    return () => {
+      canceled = true;
+    };
+  }, [index, retryNonce, segment, segments]);
+
+  useEffect(() => {
+    setNextPreviewResolution(initialMediaResolution());
+    if (!segment) return;
+    const nextPreview = nextWorkSegment(segments, index);
+    if (!nextPreview) return;
+    let canceled = false;
+    resolveMediaPlayback(nextPreview.media).then((next) => {
+      if (!canceled) setNextPreviewResolution(next);
+    });
     return () => {
       canceled = true;
     };
@@ -885,7 +908,7 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
     const durationSeconds = segment.seconds || 0;
     setRemaining(durationSeconds);
     timerRemainingMsRef.current = durationSeconds * 1000;
-    beepedRef.current = new Set();
+    countdownPlayedRef.current = false;
   }, [index, segment]);
 
   useEffect(() => {
@@ -897,9 +920,9 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
       const remainingMs = Math.max(0, timerRemainingMsRef.current - elapsed);
       const next = Math.max(0, Math.ceil(remainingMs / 1000));
       setRemaining(next);
-      if (next <= 3 && next > 0 && !beepedRef.current.has(next)) {
-        beepedRef.current.add(next);
-        playTone(520, 0.08);
+      if (remainingMs <= COUNTDOWN_SOUND_LEAD_MS && remainingMs > 0 && !countdownPlayedRef.current) {
+        countdownPlayedRef.current = true;
+        playCountdownSound(countdownAudioRef.current);
       }
       if (next === 0) {
         playTone(820, 0.16);
@@ -1019,10 +1042,19 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
   }
 
   const isReps = segment.type === 'work' && segment.mode === 'reps';
-  const segmentModeLabel = segment.type === 'rest' ? 'Rest' : isReps ? 'Reps' : 'Timer';
-  const counter = isReps ? segment.repsLabel || 'reps' : formatClock(remaining);
+  const nextPreviewCandidate = nextWorkSegment(segments, index);
+  const shouldShowNextPreview = Boolean(nextPreviewCandidate) && (
+    segment.type === 'rest'
+      ? segment.showNextExercise
+      : segment.mode === 'timer' && remaining <= 5 && remaining > 0
+  );
+  const nextSegmentPreview = shouldShowNextPreview ? nextPreviewCandidate : null;
+  const nextPreviewDescription = nextSegmentPreview?.short_description || nextSegmentPreview?.long_description || '';
+  const segmentModeLabel = segment.type === 'rest' ? 'Rest' : isReps ? '' : 'Timer';
+  const counter = isReps ? formatRepsCounter(segment.reps, segment.repsLabel) : formatClock(remaining);
   const segmentDescription = segment.short_description || segment.long_description || '';
   const fullDescription = segment.long_description || segment.short_description || '';
+  const visibleDescription = descriptionExpanded && fullDescription ? fullDescription : segmentDescription;
   const progressSeconds = Math.max(0.01, segmentProgressSeconds(segment));
   const progressRepeats = segmentProgressRepeats(segment);
   const progressFillStyle = {
@@ -1044,7 +1076,16 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
       onPointerUp={handlePointerUp}
     >
       <div className="player-media" onClick={togglePlayback}>
-        {resolution.status === 'ready' && resolution.mediaKind === 'video' ? (
+        {segment.type === 'rest' ? (
+          <GradientBarsBackground
+            className="player-media-backdrop is-rest-background"
+            numBars={9}
+            gradientFrom="rgba(224, 228, 230, 0.72)"
+            gradientTo="rgba(5, 6, 5, 0)"
+            animationDuration={2.4}
+            backgroundColor="#050605"
+          />
+        ) : resolution.status === 'ready' && resolution.mediaKind === 'video' ? (
           <video ref={videoRef} src={resolution.url} muted autoPlay={!paused} loop playsInline onError={fallbackBlob} />
         ) : resolution.status === 'ready' && resolution.mediaKind === 'image' ? (
           <img src={resolution.url} alt="" onError={fallbackBlob} />
@@ -1079,40 +1120,57 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
         <Play className="player-playback-icon player-playback-icon-play" size={64} aria-hidden="true" />
         <Pause className="player-playback-icon player-playback-icon-pause" size={64} aria-hidden="true" />
       </button>
-      <div className="player-progress" aria-label="Workout progress">
-        {segments.map((item, itemIndex) => {
-          const className = itemIndex < index ? 'is-done' : itemIndex === index ? `is-current ${progressRepeats ? 'is-looping' : ''}` : '';
-          return (
-            <span key={`${item.blockId}-${itemIndex}`} className={className}>
-              {itemIndex === index ? (
-                <span
-                  key={`${item.blockId}-${itemIndex}-${progressSeconds}-${progressRepeats ? 'loop' : 'once'}`}
-                  className="player-progress-fill"
-                  style={progressFillStyle}
-                />
-              ) : null}
-            </span>
-          );
-        })}
-      </div>
-      <div className="player-top">
-        <div className="player-heading">
-          <strong>{segment.title}</strong>
-          {segmentDescription ? (
-            <button className={`player-description ${sheetOpen ? 'is-open' : ''}`} type="button" onClick={() => setSheetOpen((value) => !value)} aria-expanded={sheetOpen}>
-              <span>{segmentDescription}</span>
-            </button>
-          ) : null}
+      <div className={`player-header ${descriptionExpanded ? 'is-expanded' : ''}`}>
+        <div className="player-progress" aria-label="Workout progress">
+          {segments.map((item, itemIndex) => {
+            const className = itemIndex < index ? 'is-done' : itemIndex === index ? `is-current ${progressRepeats ? 'is-looping' : ''}` : '';
+            return (
+              <span key={`${item.blockId}-${itemIndex}`} className={className}>
+                {itemIndex === index ? (
+                  <span
+                    key={`${item.blockId}-${itemIndex}-${progressSeconds}-${progressRepeats ? 'loop' : 'once'}`}
+                    className="player-progress-fill"
+                    style={progressFillStyle}
+                  />
+                ) : null}
+              </span>
+            );
+          })}
         </div>
-        <button className="player-icon player-close" type="button" onClick={onClose} aria-label="Close player"><X size={20} /></button>
+        <div className="player-top">
+          <div className="player-heading">
+            <strong>{segment.title}</strong>
+            {segmentDescription ? (
+              <button
+                className={`player-description ${descriptionExpanded ? 'is-open' : ''}`}
+                type="button"
+                onClick={() => setDescriptionExpanded((value) => !value)}
+                aria-expanded={descriptionExpanded}
+                aria-label={descriptionExpanded ? 'Collapse description' : 'Expand description'}
+              >
+                <span>{visibleDescription}</span>
+              </button>
+            ) : null}
+          </div>
+          <button className="player-icon player-close" type="button" onClick={onClose} aria-label="Close player"><X size={20} /></button>
+        </div>
+        {nextSegmentPreview ? (
+          <section className="player-next-preview" aria-label="Next exercise preview">
+            <NextPreviewMedia resolution={nextPreviewResolution} />
+            <div className="player-next-preview-copy">
+              <strong>{nextSegmentPreview.title}</strong>
+              <span>{nextPreviewDescription || 'Next exercise'}</span>
+            </div>
+          </section>
+        ) : null}
       </div>
       <div className="player-bottom-actions">
         <button type="button" onClick={previous}>
           <ChevronLeft size={17} aria-hidden="true" />
           <span>Prev</span>
         </button>
-        <div className="player-time" aria-live="polite">
-          <span>{segmentModeLabel}</span>
+        <div className={`player-time ${isReps ? 'is-reps' : ''}`} aria-live="polite">
+          {segmentModeLabel ? <span>{segmentModeLabel}</span> : null}
           <strong>{counter}</strong>
         </div>
         <button type="button" onClick={() => advance(!isReps)}>
@@ -1120,7 +1178,7 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
           <span>{isReps ? 'Done' : 'Skip'}</span>
         </button>
       </div>
-      {resolution.status === 'error' ? (
+      {resolution.status === 'error' && segment.type === 'work' ? (
         <div className="player-error">
           <span>{resolution.detail}</span>
           {resolution.canRetry ? (
@@ -1131,22 +1189,34 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
           ) : null}
         </div>
       ) : null}
-      {sheetOpen ? (
-        <div className="sheet-backdrop" onClick={() => setSheetOpen(false)}>
-          <section className="description-sheet" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
-            <button className="icon-button" type="button" onClick={() => setSheetOpen(false)} aria-label="Close details"><X size={16} /></button>
-            <h2>{segment.title}</h2>
-            <p>{fullDescription}</p>
-            <small>{segmentModeLabel} · {counter}</small>
-          </section>
-        </div>
-      ) : null}
     </main>
   );
 }
 
 function RestIconImage({ className }: { className: string }) {
   return <img className={className} src={REST_ICON_SRC} alt="" aria-hidden="true" draggable={false} />;
+}
+
+function NextPreviewMedia({ resolution }: { resolution: MediaPlaybackResolution }) {
+  if (resolution.status === 'ready' && resolution.mediaKind === 'video') {
+    return (
+      <div className="player-next-preview-media">
+        <video src={resolution.url} muted autoPlay loop playsInline />
+      </div>
+    );
+  }
+  if (resolution.status === 'ready' && resolution.mediaKind === 'image') {
+    return (
+      <div className="player-next-preview-media">
+        <img src={resolution.url} alt="" />
+      </div>
+    );
+  }
+  return (
+    <div className="player-next-preview-media is-loading" aria-hidden="true">
+      <span className="player-next-preview-skeleton" />
+    </div>
+  );
 }
 
 function MediaThumb({ media, variant = 'small' }: { media: ExerciseMediaRef | null; variant?: 'small' | 'large' }) {
@@ -1449,9 +1519,9 @@ function insertAfter<T extends { id: string }>(items: T[], id: string, next: T) 
   return [...items.slice(0, index + 1), next, ...items.slice(index + 1)];
 }
 
-function nextWorkMedia(segments: RuntimeSegment[], index: number): ExerciseMediaRef | null {
+function nextWorkSegment(segments: RuntimeSegment[], index: number): Extract<RuntimeSegment, { type: 'work' }> | null {
   const next = segments.slice(index + 1).find((item) => item.type === 'work');
-  return next?.type === 'work' ? next.media : null;
+  return next?.type === 'work' ? next : null;
 }
 
 function formatDuration(seconds: number) {
@@ -1464,6 +1534,12 @@ function formatDuration(seconds: number) {
 function formatClock(seconds: number) {
   const value = Math.max(0, seconds);
   return `${Math.floor(value / 60).toString().padStart(2, '0')}:${(value % 60).toString().padStart(2, '0')}`;
+}
+
+function formatRepsCounter(reps?: number, label?: string) {
+  if (reps && reps > 0) return String(reps);
+  const match = String(label || '').match(/\d+(?:[.,]\d+)?/);
+  return match ? match[0] : '0';
 }
 
 function playTone(frequency: number, duration: number) {
@@ -1479,5 +1555,19 @@ function playTone(frequency: number, duration: number) {
     oscillator.stop(audioContext.currentTime + duration);
   } catch {
     // Audio can be blocked until a user gesture; visual state still works.
+  }
+}
+
+function playCountdownSound(audio: HTMLAudioElement | null) {
+  if (!audio) return;
+  try {
+    audio.pause();
+    audio.currentTime = 0;
+    const playPromise = audio.play();
+    if (playPromise && typeof playPromise.catch === 'function') {
+      playPromise.catch(() => undefined);
+    }
+  } catch {
+    // Countdown audio is non-critical; timer advancement remains authoritative.
   }
 }

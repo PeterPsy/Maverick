@@ -96,6 +96,7 @@ describe('workout logic', () => {
 
     expect(segmentProgressSeconds(repsSegments[0])).toBe(60);
     expect(segmentProgressRepeats(repsSegments[0])).toBe(true);
+    expect(repsSegments[0].type === 'work' ? repsSegments[0].reps : null).toBe(12);
     expect(segmentProgressSeconds(repsSegments[1])).toBe(20);
     expect(segmentProgressRepeats(repsSegments[1])).toBe(false);
   });

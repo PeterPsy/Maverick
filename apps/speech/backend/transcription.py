@@ -156,7 +156,6 @@ def transcribe_file_payload(
     size_bytes = audio_path.stat().st_size
     validate_audio_size(size_bytes, operation="transcribe_file", max_audio_bytes=MAX_TRANSCRIPTION_FILE_AUDIO_BYTES)
     language = normalized_language(body.get("language"))
-    dictation_mode = dictation_mode_enabled(body)
     return transcribe_path(
         data_root=data_root,
         audio_path=audio_path,
@@ -165,7 +164,6 @@ def transcribe_file_payload(
         language=language,
         operation="transcribe_file",
         source={"kind": "storage", "workspace_relative_path": normalized_workspace_relative_path(body)},
-        dictation_mode=dictation_mode,
     )
 
 

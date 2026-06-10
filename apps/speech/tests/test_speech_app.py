@@ -1439,7 +1439,7 @@ class SpeechAppTests(unittest.TestCase):
                     uploaded,
                 )
 
-    def test_transcribe_file_does_not_apply_dictation_commands_by_default(self) -> None:
+    def test_transcribe_file_ignores_dictation_commands(self) -> None:
         fake_result = {
             "engine": "faster-whisper",
             "model": "base",
@@ -1459,7 +1459,7 @@ class SpeechAppTests(unittest.TestCase):
                 status_code, payload = handle_action(
                     root / "data",
                     root / "storage" / "generated",
-                    {"action": "transcribe_file", "workspace_relative_path": "storage/uploaded/sample.wav"},
+                    {"action": "transcribe_file", "dictation": True, "dictation_mode": True, "workspace_relative_path": "storage/uploaded/sample.wav"},
                     uploaded,
                 )
 

@@ -2234,6 +2234,50 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(asset_context["asset_id"], asset_id)
             self.assertEqual(asset_context["asset_path"], "assets/logo.png")
 
+    def test_page_context_uses_route_specific_preview_report_and_visual_assets(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            archive = BytesIO()
+            with ZipFile(archive, "w") as zip_file:
+                zip_file.writestr("index.html", '<title>Home</title><main><img src="assets/home.webp"></main>')
+                zip_file.writestr("about.html", '<title>About</title><main><img src="assets/about.webp"></main>')
+                zip_file.writestr("assets/home.webp", b"home")
+                zip_file.writestr("assets/about.webp", b"about")
+            encoded = base64.b64encode(archive.getvalue()).decode("ascii")
+            status, imported = handle_action(data_root, {"action": "import_zip", "display_name": "Route Reports", "archive_base64": encoded})
+            self.assertEqual(status, 201)
+            site_id = imported["site"]["id"]
+
+            status, home_preview = handle_action(data_root, {"action": "build_preview", "site_id": site_id, "route": "/"})
+            self.assertEqual(status, 200)
+            status, home_report = handle_action(data_root, {"action": "preview_report", "preview_id": home_preview["preview_id"]})
+            self.assertEqual(status, 201)
+            self.assertEqual(home_report["report"]["route"], "/")
+
+            status, about_preview = handle_action(data_root, {"action": "build_preview", "site_id": site_id, "route": "/about"})
+            self.assertEqual(status, 200)
+            status, about_report = handle_action(data_root, {"action": "preview_report", "preview_id": about_preview["preview_id"]})
+            self.assertEqual(status, 201)
+            self.assertEqual(about_report["report"]["route"], "/about")
+
+            status, runtime = handle_action(data_root, {"action": "runtime_status", "site_id": site_id})
+            self.assertEqual(status, 200)
+            self.assertEqual(runtime["latest_preview_report"]["route"], "/about")
+
+            status, home_context = handle_action(data_root, {"action": "page_context", "site_id": site_id, "route": "/"})
+            self.assertEqual(status, 200)
+            self.assertEqual(home_context["runtime"]["latest_preview_report"]["route"], "/")
+            home_visual_assets = {item["path"] for item in home_context["visual_assets"]}
+            self.assertIn("assets/home.webp", home_visual_assets)
+            self.assertNotIn("assets/about.webp", home_visual_assets)
+
+            status, about_context = handle_action(data_root, {"action": "page_context", "site_id": site_id, "route": "/about"})
+            self.assertEqual(status, 200)
+            self.assertEqual(about_context["runtime"]["latest_preview_report"]["route"], "/about")
+            about_visual_assets = {item["path"] for item in about_context["visual_assets"]}
+            self.assertIn("assets/about.webp", about_visual_assets)
+            self.assertNotIn("assets/home.webp", about_visual_assets)
+
     def test_reference_manifest_and_search_match_declared_entities(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)

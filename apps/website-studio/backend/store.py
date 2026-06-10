@@ -2014,6 +2014,11 @@ def _latest_preview_reports_by_route(data_root: Path, site_id: object) -> dict[s
     return reports
 
 
+def _latest_preview_report_for_route(data_root: Path, site_id: object, route: object) -> dict[str, object] | None:
+    report = _preview_report_for_route(_latest_preview_reports_by_route(data_root, site_id), str(route or "/"))
+    return report or None
+
+
 def _preview_report_for_route(reports_by_route: dict[str, dict[str, object]], route: str) -> dict[str, object]:
     if route in reports_by_route:
         return reports_by_route[route]
@@ -2933,7 +2938,7 @@ def _context_payload(
     runtime_status_value = str(runtime.get("runtime_status") or preview.get("runtime_status") or "blocked")
     missing_requirements = list(runtime.get("missing_requirements") or preview.get("missing_requirements") or [])[:50]
     include_source_inventory = _truthy(include_inventory)
-    latest_preview_report = runtime.get("latest_preview_report") if isinstance(runtime.get("latest_preview_report"), dict) else {}
+    latest_preview_report = _latest_preview_report_for_route(data_root, site["id"], preview_route)
     page_source_files = _source_files_for_visual_context(page.get("source_files", []) if page else [], include_inventory=include_source_inventory)
     route_source_files = _source_files_for_visual_context(route.get("source_files", []) if route else [], include_inventory=include_source_inventory)
     component_source_files = _source_files_for_visual_context(component.get("source_files", []) if component else [], include_inventory=include_source_inventory)
@@ -2952,7 +2957,7 @@ def _context_payload(
         "title": site["display_name"],
         "site": site,
         "source_profile": source_profile_payload,
-        "runtime": _context_runtime(runtime, include_inventory=include_source_inventory),
+        "runtime": _context_runtime(runtime, latest_preview_report=latest_preview_report, include_inventory=include_source_inventory),
         "page_id": page["id"] if page else None,
         "route_id": route["id"] if route else None,
         "asset_id": asset["id"] if asset else None,
@@ -2990,8 +2995,14 @@ def _context_payload(
     }
 
 
-def _context_runtime(runtime: dict[str, object], *, include_inventory: bool = False) -> dict[str, object]:
+def _context_runtime(
+    runtime: dict[str, object],
+    *,
+    latest_preview_report: dict[str, object] | None,
+    include_inventory: bool = False,
+) -> dict[str, object]:
     payload = deepcopy(runtime)
+    payload["latest_preview_report"] = deepcopy(latest_preview_report) if latest_preview_report else None
     if include_inventory:
         return payload
     report = payload.get("latest_preview_report")

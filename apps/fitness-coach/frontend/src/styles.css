@@ -37,6 +37,10 @@
   --fitness-accent-soft: rgba(255, 255, 255, 0.18);
   --fitness-panel: rgba(13, 15, 12, 0.76);
   --fitness-shell-top-offset: var(--maverick-shell-mobile-content-top-offset, 0px);
+  --fitness-player-top-offset: var(--maverick-shell-mobile-content-top-offset, env(safe-area-inset-top, 0px));
+  --fitness-player-progress-top: calc(0.62rem + var(--fitness-player-top-offset));
+  --fitness-player-heading-top: calc(1.06rem + var(--fitness-player-top-offset));
+  --fitness-player-sheet-top: calc(4.55rem + var(--fitness-player-top-offset));
   --fitness-mobile-top-fade-height: calc(var(--fitness-shell-top-offset) + 1.1rem);
   --fitness-editor-top-clearance: 0.7rem;
   --fitness-editor-bottom-clearance: 5rem;
@@ -708,6 +712,34 @@ select:focus {
   background: transparent;
 }
 
+.rest-block-layout {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.52rem;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.rest-block-icon-frame {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 2.45rem;
+  height: 2.45rem;
+  border: 1px solid var(--fitness-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: var(--maverick-inner-edge);
+}
+
+.rest-block-icon {
+  display: block;
+  width: 1.56rem;
+  height: 1.56rem;
+  object-fit: contain;
+}
+
 .block-editor.is-dragging {
   z-index: 3;
   border-color: #ffffff;
@@ -1219,11 +1251,12 @@ select:focus {
 }
 
 .player-media,
-.player-media video,
-.player-media img,
 .player-scrim {
   position: absolute;
-  inset: 0;
+  top: var(--fitness-player-progress-top);
+  right: 0;
+  bottom: 0;
+  left: 0;
 }
 
 .player-media {
@@ -1232,10 +1265,13 @@ select:focus {
 
 .player-media video,
 .player-media img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   background: #050605;
   object-fit: contain;
+  object-position: center top;
 }
 
 .media-placeholder {
@@ -1254,6 +1290,23 @@ select:focus {
 .player-scrim {
   pointer-events: none;
   background: linear-gradient(180deg, rgba(0, 0, 0, 0.58), transparent 30%, transparent 58%, rgba(0, 0, 0, 0.72));
+}
+
+.player-rest-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.player-rest-icon {
+  display: block;
+  width: clamp(5.5rem, 18vmin, 8rem);
+  height: auto;
+  opacity: 0.92;
+  filter: drop-shadow(0 16px 34px rgba(0, 0, 0, 0.66));
 }
 
 .player-playback-control {
@@ -1334,7 +1387,7 @@ select:focus {
 
 .player-progress {
   position: absolute;
-  top: calc(0.62rem + env(safe-area-inset-top) + var(--fitness-shell-top-offset));
+  top: var(--fitness-player-progress-top);
   left: max(0.7rem, env(safe-area-inset-left));
   right: max(0.7rem, env(safe-area-inset-right));
   z-index: 3;
@@ -1377,7 +1430,7 @@ select:focus {
 
 .player-top {
   position: absolute;
-  top: calc(1.06rem + env(safe-area-inset-top) + var(--fitness-shell-top-offset));
+  top: var(--fitness-player-heading-top);
   left: max(0.7rem, env(safe-area-inset-left));
   right: max(0.7rem, env(safe-area-inset-right));
   z-index: 4;
@@ -1472,7 +1525,7 @@ select:focus {
 
 .player-time span {
   color: rgba(249, 250, 249, 0.68);
-  font-size: 0.78rem;
+  font-size: 0.86rem;
   line-height: 1;
 }
 
@@ -1515,7 +1568,7 @@ select:focus {
   align-items: flex-start;
   justify-content: center;
   background: rgba(0, 0, 0, 0.38);
-  padding: calc(4.55rem + env(safe-area-inset-top) + var(--fitness-shell-top-offset)) max(1rem, env(safe-area-inset-right)) 1rem max(1rem, env(safe-area-inset-left));
+  padding: var(--fitness-player-sheet-top) max(1rem, env(safe-area-inset-right)) 1rem max(1rem, env(safe-area-inset-left));
 }
 
 .description-sheet {

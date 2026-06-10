@@ -58,6 +58,7 @@ const EMPTY_EXERCISE: Partial<Exercise> = {
 
 type WorkoutBlockMode = 'timer' | 'reps' | 'rest';
 type PlayerPlaybackOverlay = 'idle' | 'play' | 'pause';
+const REST_ICON_SRC = 'rest-icon.svg';
 
 export function App() {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
@@ -556,7 +557,14 @@ function BlockEditor(props: {
     : '';
   const controls = (
     <div className={`mode-value-row ${block.type === 'rest' ? 'is-rest' : ''}`}>
-      {block.type === 'rest' ? <span className="block-index">{props.index + 1}</span> : null}
+      {block.type === 'rest' ? (
+        <>
+          <span className="block-index">{props.index + 1}</span>
+          <span className="rest-block-icon-frame" aria-hidden="true">
+            <RestIconImage className="rest-block-icon" />
+          </span>
+        </>
+      ) : null}
       <select className="block-mode-select" value={mode} onChange={(event) => props.onModeChange(event.target.value as WorkoutBlockMode)} aria-label="Block mode">
         <option value="timer">Timer</option>
         <option value="reps">Reps</option>
@@ -599,7 +607,9 @@ function BlockEditor(props: {
           </div>
         </div>
       ) : (
-        controls
+        <div className="rest-block-layout">
+          {controls}
+        </div>
       )}
     </article>
   );
@@ -1038,6 +1048,11 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
         )}
       </div>
       <div className="player-scrim" />
+      {segment.type === 'rest' ? (
+        <div className="player-rest-overlay" aria-hidden="true">
+          <RestIconImage className="player-rest-icon" />
+        </div>
+      ) : null}
       <button
         className={`player-playback-control is-${playbackOverlay === 'idle' ? 'idle' : `showing-${playbackOverlay}`}`}
         type="button"
@@ -1113,6 +1128,10 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
       ) : null}
     </main>
   );
+}
+
+function RestIconImage({ className }: { className: string }) {
+  return <img className={className} src={REST_ICON_SRC} alt="" aria-hidden="true" draggable={false} />;
 }
 
 function MediaThumb({ media, variant = 'small' }: { media: ExerciseMediaRef | null; variant?: 'small' | 'large' }) {

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { currentStorageAppId } from './api';
 import { driveMediaStreamUrl } from './mediaPlaybackResolver';
 import type { ExerciseMediaRef, RestBlock, WorkBlock, Workout } from './types';
-import { runtimeSegmentsForWorkout, segmentProgressRepeats, segmentProgressSeconds } from './workoutSegments';
+import { repsLabel, runtimeSegmentsForWorkout, segmentProgressRepeats, segmentProgressSeconds } from './workoutSegments';
 import { validateWorkoutForStart } from './workoutValidation';
 
 const media: ExerciseMediaRef = {
@@ -98,6 +98,19 @@ describe('workout logic', () => {
     expect(segmentProgressRepeats(repsSegments[0])).toBe(true);
     expect(segmentProgressSeconds(repsSegments[1])).toBe(20);
     expect(segmentProgressRepeats(repsSegments[1])).toBe(false);
+  });
+
+  it('formats numeric reps labels with a visible reps unit', () => {
+    const block = {
+      ...(workout().blocks[0] as WorkBlock),
+      mode: 'reps',
+      seconds: null,
+      reps: 20
+    } satisfies WorkBlock;
+
+    expect(repsLabel({ ...block, reps_label: null })).toBe('20 reps');
+    expect(repsLabel({ ...block, reps_label: '20' })).toBe('20 reps');
+    expect(repsLabel({ ...block, reps_label: '20 each side' })).toBe('20 each side');
   });
 
   it('builds Drive media stream URLs without raw Google URLs', () => {

@@ -37,7 +37,8 @@ export function runtimeSegmentsForWorkout(workout: Workout): RuntimeSegment[] {
 }
 
 export function repsLabel(block: WorkBlock): string {
-  if (block.reps_label?.trim()) return block.reps_label.trim();
+  const explicitLabel = block.reps_label?.trim();
+  if (explicitLabel) return /^\d+(?:[.,]\d+)?$/.test(explicitLabel) ? `${explicitLabel} reps` : explicitLabel;
   return `${block.reps || 0} reps`;
 }
 

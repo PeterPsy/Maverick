@@ -592,6 +592,7 @@ export function AppShell() {
           activeAppId={activeApp?.app_id ?? activeAppId}
           apps={railApps}
           isOpen={isMobilePinnedAppsOpen}
+          isLoading={isLoading && railApps.length === 0}
           onOpenApp={openApp}
         />
       ) : null}

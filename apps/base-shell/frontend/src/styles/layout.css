@@ -491,6 +491,10 @@
   visibility: visible;
 }
 
+.bs-mobile-pinned-apps.is-loading {
+  cursor: progress;
+}
+
 .bs-mobile-chat-panel {
   position: fixed;
   top: var(--bs-mobile-shell-content-top-offset);
@@ -605,12 +609,40 @@
   transform: scale(0.97);
 }
 
+.bs-mobile-pinned-apps__skeleton {
+  pointer-events: none;
+}
+
+.bs-mobile-pinned-apps__skeleton-name {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  width: min(3.4rem, 76%);
+  height: 0.42rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  opacity: 0.72;
+}
+
+.bs-mobile-pinned-apps__skeleton-name::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.13), transparent);
+  transform: translateX(-100%);
+  animation: bs-sidebar-skeleton-shimmer 1.35s ease-in-out infinite;
+}
+
 .bs-mobile-pinned-apps__logo.bs-app-logo {
   width: 2.72rem;
   height: 2.72rem;
   min-width: 2.72rem;
   min-height: 2.72rem;
   border-radius: 1rem;
+}
+
+.bs-mobile-pinned-apps__skeleton-logo.bs-app-logo {
+  opacity: 0.76;
 }
 
 .bs-mobile-pinned-apps__button.is-active .bs-mobile-pinned-apps__logo.bs-app-logo {
@@ -644,6 +676,10 @@
   .bs-mobile-pinned-apps,
   .bs-mobile-chat-panel {
     transition: none;
+  }
+
+  .bs-mobile-pinned-apps__skeleton-name::after {
+    animation: none;
   }
 }
 

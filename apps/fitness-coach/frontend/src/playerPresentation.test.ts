@@ -61,13 +61,33 @@ describe('work player presentation', () => {
     expect(styles).toMatch(/\.player-close\s*{[\s\S]*border:\s*0;[\s\S]*background:\s*transparent;[\s\S]*box-shadow:\s*none;[\s\S]*color:\s*#fff;[\s\S]*filter:\s*drop-shadow/);
   });
 
-  it('shows only the numeric count for reps player segments', () => {
+  it('shows reps player segments with the same mode label treatment as timers', () => {
     expect(appSource).toContain('const counter = isReps ? formatRepsCounter(segment.reps, segment.repsLabel) : formatClock(remaining);');
-    expect(appSource).toContain("const segmentModeLabel = segment.type === 'rest' ? 'Rest' : isReps ? '' : 'Timer';");
+    expect(appSource).toContain("const segmentModeLabel = segment.type === 'rest' ? 'Rest' : isReps ? 'Reps' : 'Timer';");
     expect(appSource).toContain("className={`player-time ${isReps ? 'is-reps' : ''}`}");
     expect(appSource).toContain('{segmentModeLabel ? <span>{segmentModeLabel}</span> : null}');
-    expect(appSource).not.toContain("isReps ? 'Reps' : 'Timer'");
     expect(appSource).not.toContain("segment.repsLabel || 'reps'");
+  });
+
+  it('places a default-off audio unlock toggle to the left of the close action', () => {
+    expect(appSource).toContain('Volume2,');
+    expect(appSource).toContain('VolumeX,');
+    expect(appSource).toContain('const [audioEnabled, setAudioEnabled] = useState(false);');
+    expect(appSource).toContain('const audioContextRef = useRef<AudioContext | null>(null);');
+    expect(appSource).toContain('const unlocked = await unlockWorkoutAudio(countdownAudioRef.current, audioContextRef);');
+    expect(appSource).toContain("const audioToggleLabel = audioEnabled ? 'Turn workout audio off' : 'Turn workout audio on';");
+    expect(appSource).toContain('className="player-control-stack"');
+    expect(appSource).toContain("className={`player-icon player-audio ${audioEnabled ? 'is-on' : 'is-off'}`}");
+    expect(appSource).toContain('aria-pressed={audioEnabled}');
+    expect(appSource).toContain('onClick={toggleAudio}');
+    const controlsStart = appSource.indexOf('className="player-control-stack"');
+    const audioPosition = appSource.indexOf('player-audio', controlsStart);
+    const closePosition = appSource.indexOf('player-close', controlsStart);
+    expect(audioPosition).toBeGreaterThan(controlsStart);
+    expect(audioPosition).toBeLessThan(closePosition);
+    expect(styles).toContain('.player-control-stack');
+    expect(styles).toMatch(/\.player-control-stack\s*{[\s\S]*display:\s*inline-flex;[\s\S]*justify-content:\s*flex-end;/);
+    expect(styles).toContain('.player-audio.is-off');
   });
 
   it('uses animated rest background with a skeleton-backed next-exercise preview', () => {
@@ -150,9 +170,14 @@ describe('work player presentation', () => {
     expect(appSource).toContain('const COUNTDOWN_SOUND_LEAD_MS = 3800;');
     expect(appSource).toContain('const audio = new Audio(COUNTDOWN_SOUND_SRC);');
     expect(appSource).toContain("if (!segment || paused || segment.type === 'work' && segment.mode === 'reps') return;");
-    expect(appSource).toContain('remainingMs <= COUNTDOWN_SOUND_LEAD_MS');
+    expect(appSource).toContain('audioEnabled && remainingMs <= COUNTDOWN_SOUND_LEAD_MS');
     expect(appSource).toContain('countdownPlayedRef.current = true;');
     expect(appSource).toContain('playCountdownSound(countdownAudioRef.current);');
+    expect(appSource).toContain('if (audioEnabled) playTone(820, 0.16, audioContextRef.current);');
+    expect(appSource).toContain('async function unlockWorkoutAudio');
+    expect(appSource).toContain('async function unlockCountdownAudio');
+    expect(appSource).toContain('async function unlockToneAudio');
+    expect(appSource).toContain('function disableWorkoutAudio');
     expect(appSource).not.toContain('playTone(520, 0.08);');
   });
 });

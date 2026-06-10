@@ -1534,6 +1534,14 @@ select:focus {
   -webkit-line-clamp: unset;
 }
 
+.player-control-stack {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.48rem;
+  pointer-events: auto;
+}
+
 .player-close {
   justify-self: end;
   border: 0;
@@ -1546,8 +1554,28 @@ select:focus {
   -webkit-backdrop-filter: none;
 }
 
+.player-audio {
+  justify-self: end;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: #fff;
+  filter: drop-shadow(0 10px 22px rgba(0, 0, 0, 0.84));
+  pointer-events: auto;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.player-audio.is-off {
+  color: rgba(249, 250, 249, 0.58);
+}
+
 .player-close:hover,
-.player-close:active {
+.player-close:active,
+.player-audio:hover,
+.player-audio:active {
   background: transparent;
   transform: translateY(-1px);
 }

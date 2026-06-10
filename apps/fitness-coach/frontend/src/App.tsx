@@ -18,6 +18,8 @@ import {
   SkipForward,
   Timer,
   Trash2,
+  Volume2,
+  VolumeX,
   X
 } from 'lucide-react';
 import {
@@ -804,6 +806,7 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
   const [remaining, setRemaining] = useState(segments[0]?.type === 'work' && segments[0].mode === 'reps' ? 0 : segments[0]?.seconds || 0);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [playbackOverlay, setPlaybackOverlay] = useState<PlayerPlaybackOverlay>('idle');
+  const [audioEnabled, setAudioEnabled] = useState(false);
   const [resolution, setResolution] = useState(initialMediaResolution());
   const [nextPreviewResolution, setNextPreviewResolution] = useState(initialMediaResolution());
   const [summary, setSummary] = useState<WorkoutRunSummary | null>(null);
@@ -814,6 +817,7 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
   const timerStartedAtRef = useRef(0);
   const countdownPlayedRef = useRef(false);
   const countdownAudioRef = useRef<HTMLAudioElement | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
   const playbackOverlayTimerRef = useRef<number | null>(null);
   const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
   const segment = segments[index];
@@ -847,6 +851,11 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
       audio.pause();
       countdownAudioRef.current = null;
     };
+  }, []);
+
+  useEffect(() => () => {
+    audioContextRef.current?.close().catch(() => undefined);
+    audioContextRef.current = null;
   }, []);
 
   useEffect(() => clearPlaybackOverlayTimer, [clearPlaybackOverlayTimer]);
@@ -920,12 +929,12 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
       const remainingMs = Math.max(0, timerRemainingMsRef.current - elapsed);
       const next = Math.max(0, Math.ceil(remainingMs / 1000));
       setRemaining(next);
-      if (remainingMs <= COUNTDOWN_SOUND_LEAD_MS && remainingMs > 0 && !countdownPlayedRef.current) {
+      if (audioEnabled && remainingMs <= COUNTDOWN_SOUND_LEAD_MS && remainingMs > 0 && !countdownPlayedRef.current) {
         countdownPlayedRef.current = true;
         playCountdownSound(countdownAudioRef.current);
       }
       if (next === 0) {
-        playTone(820, 0.16);
+        if (audioEnabled) playTone(820, 0.16, audioContextRef.current);
         completed = true;
         window.clearInterval(timer);
         advance();
@@ -937,7 +946,7 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
         timerRemainingMsRef.current = Math.max(0, timerRemainingMsRef.current - (performance.now() - timerStartedAtRef.current));
       }
     };
-  }, [index, paused, segment]);
+  }, [audioEnabled, index, paused, segment]);
 
   useEffect(() => {
     function onVisibility() {
@@ -983,6 +992,20 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
       showPlaybackOverlay(next ? 'play' : 'pause');
       return next;
     });
+  }
+
+  async function enableAudio() {
+    const unlocked = await unlockWorkoutAudio(countdownAudioRef.current, audioContextRef);
+    setAudioEnabled(unlocked);
+  }
+
+  function toggleAudio() {
+    if (audioEnabled) {
+      setAudioEnabled(false);
+      disableWorkoutAudio(countdownAudioRef.current, audioContextRef);
+      return;
+    }
+    void enableAudio();
   }
 
   function handlePointerUp(event: ReactPointerEvent) {
@@ -1050,11 +1073,12 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
   );
   const nextSegmentPreview = shouldShowNextPreview ? nextPreviewCandidate : null;
   const nextPreviewDescription = nextSegmentPreview?.short_description || nextSegmentPreview?.long_description || '';
-  const segmentModeLabel = segment.type === 'rest' ? 'Rest' : isReps ? '' : 'Timer';
+  const segmentModeLabel = segment.type === 'rest' ? 'Rest' : isReps ? 'Reps' : 'Timer';
   const counter = isReps ? formatRepsCounter(segment.reps, segment.repsLabel) : formatClock(remaining);
   const segmentDescription = segment.short_description || segment.long_description || '';
   const fullDescription = segment.long_description || segment.short_description || '';
   const visibleDescription = descriptionExpanded && fullDescription ? fullDescription : segmentDescription;
+  const audioToggleLabel = audioEnabled ? 'Turn workout audio off' : 'Turn workout audio on';
   const progressSeconds = Math.max(0.01, segmentProgressSeconds(segment));
   const progressRepeats = segmentProgressRepeats(segment);
   const progressFillStyle = {
@@ -1152,7 +1176,19 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
               </button>
             ) : null}
           </div>
-          <button className="player-icon player-close" type="button" onClick={onClose} aria-label="Close player"><X size={20} /></button>
+          <div className="player-control-stack">
+            <button
+              className={`player-icon player-audio ${audioEnabled ? 'is-on' : 'is-off'}`}
+              type="button"
+              onClick={toggleAudio}
+              aria-label={audioToggleLabel}
+              aria-pressed={audioEnabled}
+              title={audioEnabled ? 'Audio on' : 'Audio off'}
+            >
+              {audioEnabled ? <Volume2 size={20} aria-hidden="true" /> : <VolumeX size={20} aria-hidden="true" />}
+            </button>
+            <button className="player-icon player-close" type="button" onClick={onClose} aria-label="Close player"><X size={20} /></button>
+          </div>
         </div>
         {nextSegmentPreview ? (
           <section className="player-next-preview" aria-label="Next exercise preview">
@@ -1542,9 +1578,10 @@ function formatRepsCounter(reps?: number, label?: string) {
   return match ? match[0] : '0';
 }
 
-function playTone(frequency: number, duration: number) {
+function playTone(frequency: number, duration: number, context?: AudioContext | null) {
   try {
-    const audioContext = new AudioContext();
+    const audioContext = context || new AudioContext();
+    if (audioContext.state !== 'running') return;
     const oscillator = audioContext.createOscillator();
     const gain = audioContext.createGain();
     oscillator.frequency.value = frequency;
@@ -1556,6 +1593,63 @@ function playTone(frequency: number, duration: number) {
   } catch {
     // Audio can be blocked until a user gesture; visual state still works.
   }
+}
+
+async function unlockWorkoutAudio(audio: HTMLAudioElement | null, audioContextRef: { current: AudioContext | null }) {
+  const mediaReady = await unlockCountdownAudio(audio);
+  const toneReady = await unlockToneAudio(audioContextRef);
+  return mediaReady && toneReady;
+}
+
+async function unlockCountdownAudio(audio: HTMLAudioElement | null) {
+  if (!audio) return true;
+  const previousMuted = audio.muted;
+  const previousVolume = audio.volume;
+  try {
+    audio.pause();
+    audio.currentTime = 0;
+    audio.muted = true;
+    audio.volume = 0;
+    const playPromise = audio.play();
+    if (playPromise && typeof playPromise.then === 'function') await playPromise;
+    audio.pause();
+    audio.currentTime = 0;
+    return true;
+  } catch {
+    return false;
+  } finally {
+    audio.muted = previousMuted;
+    audio.volume = previousVolume;
+  }
+}
+
+async function unlockToneAudio(audioContextRef: { current: AudioContext | null }) {
+  try {
+    const audioContext = audioContextRef.current || new AudioContext();
+    audioContextRef.current = audioContext;
+    if (audioContext.state === 'suspended') await audioContext.resume();
+    if (audioContext.state !== 'running') return false;
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    gain.gain.value = 0;
+    oscillator.connect(gain);
+    gain.connect(audioContext.destination);
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + 0.01);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function disableWorkoutAudio(audio: HTMLAudioElement | null, audioContextRef: { current: AudioContext | null }) {
+  try {
+    audio?.pause();
+    if (audio) audio.currentTime = 0;
+  } catch {
+    // Disabling audio should never block the player UI.
+  }
+  audioContextRef.current?.suspend().catch(() => undefined);
 }
 
 function playCountdownSound(audio: HTMLAudioElement | null) {

@@ -3,16 +3,20 @@ import type { PointerEvent as ReactPointerEvent } from 'react';
 import {
   ArrowLeft,
   Check,
+  ChevronLeft,
   Copy,
   Dumbbell,
+  Info,
   Library,
   MoreHorizontal,
   Pause,
   Pencil,
   Play,
   Plus,
+  RotateCcw,
   Save,
   Search,
+  SkipForward,
   Timer,
   Trash2,
   X
@@ -21,6 +25,7 @@ import {
   completeWorkout,
   createExercise,
   createWorkout,
+  currentStorageAppId,
   deleteExercise,
   deleteWorkout,
   duplicateWorkout,
@@ -34,7 +39,8 @@ import {
   storageMediaSelectionFromPickerParams,
   updateViewState
 } from './api';
-import { createLocalBlobFallback, initialMediaResolution, resolveMediaPlayback } from './mediaPlaybackResolver';
+import { createLocalBlobFallback, driveMediaStreamUrl, initialMediaResolution, resolveMediaPlayback } from './mediaPlaybackResolver';
+import { TagsInputField } from './components/ui/tags-input';
 import type { Exercise, ExerciseMediaRef, RestBlock, RuntimeSegment, SetupTab, WorkBlock, Workout, WorkoutBlock, WorkoutRunSummary } from './types';
 import { useWorkoutBlockReorder, type ReorderItemProps } from './useWorkoutBlockReorder';
 import { runtimeSegmentsForWorkout } from './workoutSegments';
@@ -222,9 +228,10 @@ export function App() {
   async function handleSaveExercise(draft: Partial<Exercise>) {
     setBusy('save-exercise');
     try {
-      const saved = draft.id ? await saveExercise(draft as Exercise) : await createExercise(draft);
+      const prepared = prepareExerciseForSave(draft);
+      const saved = prepared.id ? await saveExercise(prepared as Exercise) : await createExercise(prepared);
       setExercises((items) => replaceById(items, saved));
-      setExerciseDraft(saved);
+      setExerciseDraft(null);
       setNotice('Exercise saved');
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Unable to save exercise.');
@@ -479,7 +486,7 @@ function BlockEditor(props: {
   const title = block.type === 'rest' ? 'Rest' : hasExercise ? exercise?.title || block.title || 'Exercise unavailable' : 'No exercise selected';
   const description = block.type === 'work'
     ? hasExercise
-      ? exercise?.short_description || block.short_description || 'No short description'
+      ? exerciseDescriptionPreview(exercise || block) || 'No description'
       : 'Choose an exercise from the library.'
     : '';
   return (
@@ -551,6 +558,8 @@ function ExerciseLibrary(props: {
     const queryOk = !query || [exercise.title, exercise.short_description, exercise.long_description, exercise.tags.join(' ')].join(' ').toLowerCase().includes(query);
     return tagOk && queryOk;
   });
+  const editingExerciseId = props.draft?.id || '';
+  const visibleExercises = editingExerciseId ? filtered.filter((exercise) => exercise.id !== editingExerciseId) : filtered;
   return (
     <div className="library">
       <div className="library-toolbar">
@@ -573,17 +582,23 @@ function ExerciseLibrary(props: {
       ) : null}
 
       <div className="exercise-grid">
-        {filtered.map((exercise) => (
+        {visibleExercises.map((exercise) => (
           <article key={exercise.id} className="exercise-row">
             <MediaThumb media={exercise.primary_media} />
             <div className="exercise-main">
               <strong>{exercise.title}</strong>
-              <span>{exercise.short_description || 'No short description'}</span>
+              <span>{exerciseDescriptionPreview(exercise) || 'No description'}</span>
               <small>{exercise.tags.join(' · ') || 'No tags'}</small>
             </div>
             <div className="exercise-actions">
-              <button type="button" onClick={() => props.onAddToWorkout(exercise)}>{props.selectionMode === 'replace' ? 'Select' : 'Add'}</button>
-              <button type="button" onClick={() => props.onDraft(exercise)}>Edit</button>
+              <button type="button" onClick={() => props.onAddToWorkout(exercise)}>
+                {props.selectionMode === 'replace' ? <Check size={15} aria-hidden="true" /> : <Plus size={15} aria-hidden="true" />}
+                <span>{props.selectionMode === 'replace' ? 'Select' : 'Add'}</span>
+              </button>
+              <button type="button" onClick={() => props.onDraft(exercise)}>
+                <Pencil size={15} aria-hidden="true" />
+                <span>Edit</span>
+              </button>
               <button className="icon-button danger" type="button" onClick={() => props.onDelete(exercise)} aria-label="Delete exercise" title="Delete"><Trash2 size={15} /></button>
             </div>
           </article>
@@ -601,30 +616,64 @@ function ExerciseEditor(props: {
 }) {
   const draft = props.draft;
   const update = (patch: Partial<Exercise>) => props.onDraft({ ...draft, ...patch });
+  const description = exerciseDescriptionValue(draft);
+  const preparedDraft = useMemo(() => prepareExerciseForSave(draft), [draft]);
+  const draftSignature = useMemo(() => exerciseDraftSignature(preparedDraft), [preparedDraft]);
+  const draftKey = draft.id || 'new-exercise';
+  const baselineRef = useRef({ key: draftKey, signature: draftSignature });
+  if (baselineRef.current.key !== draftKey) {
+    baselineRef.current = { key: draftKey, signature: draftSignature };
+  }
+  const hasChanges = draftSignature !== baselineRef.current.signature;
+  const canSave = Boolean((draft.title || '').trim() && description.trim());
+  const saveDisabled = props.busy === 'save-exercise' || !canSave || !hasChanges;
   return (
     <section className="exercise-editor">
-      <div className="inline-fields">
-        <input value={draft.title || ''} onChange={(event) => update({ title: event.target.value })} placeholder="Exercise title" />
-        <button className="icon-button" type="button" onClick={() => props.onDraft(null)} aria-label="Close editor" title="Close"><X size={16} /></button>
-      </div>
-      <input value={draft.short_description || ''} onChange={(event) => update({ short_description: event.target.value })} placeholder="Short description" />
-      <textarea value={draft.long_description || ''} onChange={(event) => update({ long_description: event.target.value })} placeholder="Full description and cues" />
-      <input value={(draft.tags || []).join(', ')} onChange={(event) => update({ tags: event.target.value.split(',').map((tag) => tag.trim()).filter(Boolean) })} placeholder="tags, comma separated" />
-      <MediaPicker
-        media={draft.primary_media || null}
-        sourceFolder={draft.source_folder || null}
-        onChange={(selection) => update({
-          primary_media: selection?.media || null,
-          media: selection?.media ? [selection.media] : [],
-          source_display_path: selection?.sourceDisplayPath || null,
-          source_folder: selection?.sourceFolder || null
-        })}
-      />
-      <div className="editor-actions">
-        <button className="secondary-action" type="button" onClick={() => props.onSave(draft)} disabled={props.busy === 'save-exercise'}>
-          <Check size={16} aria-hidden="true" />
-          <span>Save exercise</span>
-        </button>
+      <div className="exercise-editor-grid">
+        <div className="exercise-media-column">
+          <MediaPicker
+            media={draft.primary_media || null}
+            sourceFolder={draft.source_folder || null}
+            onChange={(selection) => update({
+              primary_media: selection?.media || null,
+              media: selection?.media ? [selection.media] : [],
+              source_display_path: selection?.sourceDisplayPath || null,
+              source_folder: selection?.sourceFolder || null
+            })}
+          />
+        </div>
+        <div className="exercise-details-column">
+          <div className="exercise-editor-heading">
+            <label className="field-label">
+              <span>Exercise title</span>
+              <input value={draft.title || ''} onChange={(event) => update({ title: event.target.value })} placeholder="Exercise title" />
+            </label>
+          </div>
+          <label className="field-label">
+            <span>Description</span>
+            <textarea
+              value={description}
+              onChange={(event) => update({ long_description: event.target.value })}
+              placeholder="Explain how to perform the exercise, including setup, movement and cues."
+            />
+          </label>
+          <TagsInputField
+            label="Tags"
+            value={draft.tags || []}
+            onValueChange={(value) => update({ tags: value })}
+            placeholder="mobility, shoulders, core"
+          />
+          <div className="editor-actions exercise-editor-actions">
+            <button className={`secondary-action exercise-save-action ${hasChanges ? 'is-dirty' : 'is-clean'}`} type="button" onClick={() => props.onSave(draft)} disabled={saveDisabled}>
+              <Check size={16} aria-hidden="true" />
+              <span>Save exercise</span>
+            </button>
+            <button className="secondary-action exercise-close-action" type="button" onClick={() => props.onDraft(null)}>
+              <X size={16} aria-hidden="true" />
+              <span>Close</span>
+            </button>
+          </div>
+        </div>
       </div>
     </section>
   );
@@ -638,12 +687,14 @@ function MediaPicker({ media, sourceFolder, onChange }: {
   const storageButtonLabel = media ? 'Change video' : 'Select video';
   return (
     <div className="media-picker">
-      <div className="media-current">
-        <MediaThumb media={media} />
-        <div>
+      <div className="media-cover-panel">
+        <MediaThumb media={media} variant="large" />
+        <div className="media-current-copy">
           <strong>{media?.name || 'No media selected'}</strong>
           <span>{media?.display_path || 'Select a video from Storage.'}</span>
         </div>
+      </div>
+      <div className="media-actions">
         <button
           className={`media-select-action ${media ? 'is-selected' : 'is-empty'}`}
           type="button"
@@ -652,7 +703,12 @@ function MediaPicker({ media, sourceFolder, onChange }: {
           <Library size={15} aria-hidden="true" />
           <span>{storageButtonLabel}</span>
         </button>
-        {media ? <button type="button" onClick={() => onChange(null)}>Clear</button> : null}
+        {media ? (
+          <button type="button" onClick={() => onChange(null)}>
+            <X size={15} aria-hidden="true" />
+            <span>Clear</span>
+          </button>
+        ) : null}
       </div>
     </div>
   );
@@ -669,6 +725,7 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
   const [summary, setSummary] = useState<WorkoutRunSummary | null>(null);
   const [startedAt] = useState(new Date().toISOString());
   const [skipped, setSkipped] = useState(0);
+  const [retryNonce, setRetryNonce] = useState(0);
   const timerTargetRef = useRef(0);
   const beepedRef = useRef<Set<number>>(new Set());
   const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -693,7 +750,7 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
     return () => {
       canceled = true;
     };
-  }, [index, segment, segments]);
+  }, [index, retryNonce, segment, segments]);
 
   useEffect(() => {
     if (!segment || paused || segment.type === 'work' && segment.mode === 'reps') return;
@@ -779,9 +836,18 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
           <h1>Workout complete</h1>
           <p>{summary.exercise_count} exercises · {formatDuration(summary.elapsed_seconds)} · {summary.skipped_segments} skipped</p>
           <div className="summary-actions">
-            <button type="button" onClick={() => { setSummary(null); setIndex(0); }}>Repeat</button>
-            <button type="button" onClick={onClose}>Edit workout</button>
-            <button type="button" onClick={onClose}>Close</button>
+            <button type="button" onClick={() => { setSummary(null); setIndex(0); }}>
+              <RotateCcw size={15} aria-hidden="true" />
+              <span>Repeat</span>
+            </button>
+            <button type="button" onClick={onClose}>
+              <Pencil size={15} aria-hidden="true" />
+              <span>Edit workout</span>
+            </button>
+            <button type="button" onClick={onClose}>
+              <X size={15} aria-hidden="true" />
+              <span>Close</span>
+            </button>
           </div>
         </section>
       </main>
@@ -789,7 +855,14 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
   }
 
   if (!segment) {
-    return <main className="work-player"><button onClick={onClose}>Close</button></main>;
+    return (
+      <main className="work-player">
+        <button className="secondary-action" type="button" onClick={onClose}>
+          <X size={15} aria-hidden="true" />
+          <span>Close</span>
+        </button>
+      </main>
+    );
   }
 
   const isReps = segment.type === 'work' && segment.mode === 'reps';
@@ -823,17 +896,31 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
         <span className="counter-pill">{counter}</span>
       </div>
       <button className="player-caption" type="button" onClick={() => setSheetOpen(true)}>
-        <strong>{segment.title}</strong>
-        <span>{segment.short_description}</span>
+        <Info size={17} aria-hidden="true" />
+        <span className="player-caption-copy">
+          <strong>{segment.title}</strong>
+          <span>{segment.short_description}</span>
+        </span>
       </button>
       <div className="player-bottom-actions">
-        <button type="button" onClick={previous}>Prev</button>
-        <button type="button" onClick={() => advance(true)}>{isReps ? 'Done' : 'Skip'}</button>
+        <button type="button" onClick={previous}>
+          <ChevronLeft size={17} aria-hidden="true" />
+          <span>Prev</span>
+        </button>
+        <button type="button" onClick={() => advance(true)}>
+          {isReps ? <Check size={17} aria-hidden="true" /> : <SkipForward size={17} aria-hidden="true" />}
+          <span>{isReps ? 'Done' : 'Skip'}</span>
+        </button>
       </div>
       {resolution.status === 'error' ? (
         <div className="player-error">
           <span>{resolution.detail}</span>
-          {resolution.canRetry ? <button type="button" onClick={() => setIndex((value) => value)}>Retry</button> : null}
+          {resolution.canRetry ? (
+            <button type="button" onClick={() => setRetryNonce((value) => value + 1)}>
+              <RotateCcw size={14} aria-hidden="true" />
+              <span>Retry</span>
+            </button>
+          ) : null}
         </div>
       ) : null}
       {sheetOpen ? (
@@ -850,12 +937,130 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
   );
 }
 
-function MediaThumb({ media }: { media: ExerciseMediaRef | null }) {
+function MediaThumb({ media, variant = 'small' }: { media: ExerciseMediaRef | null; variant?: 'small' | 'large' }) {
+  const [previewFailed, setPreviewFailed] = useState(false);
+  const previewUrl = useMemo(() => mediaCoverUrl(media), [media]);
+
+  useEffect(() => {
+    setPreviewFailed(false);
+  }, [previewUrl]);
+
+  const className = `media-thumb ${variant === 'large' ? 'is-large' : ''} ${media ? '' : 'is-empty'}`;
+  if (previewUrl && media && !previewFailed) {
+    return (
+      <div className={className}>
+        {media.preview_kind === 'video' ? (
+          <video
+            src={withVideoFrameHint(previewUrl)}
+            muted
+            playsInline
+            preload="metadata"
+            aria-hidden="true"
+            onLoadedMetadata={(event) => {
+              try {
+                event.currentTarget.currentTime = Math.min(0.12, event.currentTarget.duration || 0.12);
+              } catch {
+                // Some Storage streams do not allow seeking during metadata load.
+              }
+            }}
+            onError={() => setPreviewFailed(true)}
+          />
+        ) : (
+          <img src={previewUrl} alt="" onError={() => setPreviewFailed(true)} />
+        )}
+      </div>
+    );
+  }
   return (
-    <div className={`media-thumb ${media ? '' : 'is-empty'}`}>
+    <div className={className}>
       {media?.preview_kind === 'video' ? <Play size={18} aria-hidden="true" /> : media ? <Library size={18} aria-hidden="true" /> : <MoreHorizontal size={18} aria-hidden="true" />}
     </div>
   );
+}
+
+function mediaCoverUrl(media: ExerciseMediaRef | null) {
+  if (!media) return '';
+  const storageAppId = currentStorageAppId();
+  if (media.kind === 'local_file') {
+    if (!media.file_id) return '';
+    const params = new URLSearchParams();
+    params.set('file_id', media.file_id);
+    const sourceVersion = String(media.etag_or_version || media.sha256 || '').trim();
+    if (sourceVersion) params.set('source_version', sourceVersion);
+    return `/api/apps/${encodeURIComponent(storageAppId)}/media?${params.toString()}`;
+  }
+  if (!media.stable_storage_file_id || !media.connection_id || !media.drive_file_id) return '';
+  return driveMediaStreamUrl(media, storageAppId);
+}
+
+function withVideoFrameHint(url: string) {
+  if (!url || url.includes('#')) return url;
+  return `${url}#t=0.1`;
+}
+
+function exerciseDescriptionValue(exercise: { long_description?: string | null; short_description?: string | null }) {
+  return (exercise.long_description || exercise.short_description || '').trim();
+}
+
+function exerciseDescriptionPreview(exercise: { long_description?: string | null; short_description?: string | null }) {
+  return shortDescriptionFrom(exerciseDescriptionValue(exercise), 160);
+}
+
+function prepareExerciseForSave(draft: Partial<Exercise>): Partial<Exercise> {
+  const description = exerciseDescriptionValue(draft);
+  return {
+    ...draft,
+    long_description: description,
+    short_description: shortDescriptionFrom(description),
+    tags: normalizeDraftTags(draft.tags || [])
+  };
+}
+
+function exerciseDraftSignature(draft: Partial<Exercise>) {
+  return JSON.stringify({
+    title: (draft.title || '').trim(),
+    description: exerciseDescriptionValue(draft),
+    tags: normalizeDraftTags(draft.tags || []),
+    primary_media: mediaSignature(draft.primary_media || null),
+    source_folder: draft.source_folder || null,
+    source_display_path: draft.source_display_path || null
+  });
+}
+
+function mediaSignature(media: ExerciseMediaRef | null) {
+  if (!media) return null;
+  if (media.kind === 'local_file') {
+    return {
+      kind: media.kind,
+      file_id: media.file_id,
+      workspace_relative_path: media.workspace_relative_path,
+      etag_or_version: media.etag_or_version || media.sha256 || ''
+    };
+  }
+  return {
+    kind: media.kind,
+    stable_storage_file_id: media.stable_storage_file_id,
+    connection_id: media.connection_id,
+    drive_file_id: media.drive_file_id,
+    source_version: media.source_version || media.etag_or_version || ''
+  };
+}
+
+function normalizeDraftTags(tags: string[]) {
+  const next: string[] = [];
+  tags.forEach((tag) => {
+    const value = tag.trim().toLowerCase();
+    if (value && !next.includes(value)) next.push(value);
+  });
+  return next;
+}
+
+function shortDescriptionFrom(value: string, maxLength = 140) {
+  const text = value.replace(/\s+/g, ' ').trim();
+  if (text.length <= maxLength) return text;
+  const clipped = text.slice(0, maxLength - 3).trimEnd();
+  const lastSpace = clipped.lastIndexOf(' ');
+  return `${(lastSpace > 48 ? clipped.slice(0, lastSpace) : clipped).trimEnd()}...`;
 }
 
 function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
@@ -963,14 +1168,15 @@ function blankRestBlock(seconds: number): RestBlock {
 
 function workBlockFromExercise(exercise: Exercise, workout: Workout, existing?: WorkoutBlock): WorkBlock {
   const mode = existing?.type === 'work' ? existing.mode : 'timer';
+  const description = exerciseDescriptionValue(exercise);
   return {
     id: existing?.id || crypto.randomUUID(),
     type: 'work',
     exercise_id: exercise.id,
     exercise_snapshot_updated_at: exercise.updated_at,
     title: exercise.title,
-    short_description: exercise.short_description,
-    long_description: exercise.long_description,
+    short_description: shortDescriptionFrom(description),
+    long_description: description,
     tags: exercise.tags,
     mode,
     seconds: mode === 'timer' ? (existing?.type === 'work' && existing.seconds ? existing.seconds : workout.default_work_seconds) : null,
@@ -989,13 +1195,14 @@ function syncWorkoutExerciseSnapshots(workout: Workout | null, exercises: Exerci
     if (block.type !== 'work' || !block.exercise_id) return block;
     const exercise = exercisesById.get(block.exercise_id);
     if (!exercise) return block;
+    const description = exerciseDescriptionValue(exercise);
     changed = true;
     return {
       ...block,
       exercise_snapshot_updated_at: exercise.updated_at,
       title: exercise.title,
-      short_description: exercise.short_description,
-      long_description: exercise.long_description,
+      short_description: shortDescriptionFrom(description),
+      long_description: description,
       tags: exercise.tags,
       media: exercise.primary_media
     };

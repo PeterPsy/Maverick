@@ -98,6 +98,24 @@ class FitnessCoachServiceTest(unittest.TestCase):
             self.assertEqual(status, 200)
             self.assertEqual(deleted["deleted_id"], workout_id)
 
+    def test_exercise_description_derives_legacy_summary(self) -> None:
+        with tempfile.TemporaryDirectory() as data_root:
+            description = "Set the feet under the hips, hinge softly, then press through the floor while keeping the ribs stacked."
+            status, payload = handle_action(
+                data_root,
+                "exercise.create",
+                {
+                    "title": "Hinge press",
+                    "long_description": description,
+                    "tags": ["posterior-chain"],
+                    "primary_media": MEDIA_REF,
+                },
+            )
+            self.assertEqual(status, 201)
+            exercise = payload["exercise"]
+            self.assertEqual(exercise["long_description"], description)
+            self.assertEqual(exercise["short_description"], description)
+
     def test_media_refs_reject_stream_urls_and_raw_drive_urls(self) -> None:
         with tempfile.TemporaryDirectory() as data_root:
             bad_media = {**MEDIA_REF, "stream_url": "/api/apps/storage/media?file_id=file_test_media"}

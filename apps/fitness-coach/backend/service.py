@@ -575,9 +575,10 @@ def validate_workout(workout: dict[str, Any]) -> dict[str, Any]:
         if block.get("type") == "work":
             if not normalized_text(block.get("exercise_id")):
                 errors.append({"path": f"{path}.exercise_id", "message": "Choose an exercise from the library."})
-            for field in ("title", "short_description", "long_description"):
-                if not normalized_text(block.get(field)):
-                    errors.append({"path": f"{path}.{field}", "message": f"{field} is required."})
+            if not normalized_text(block.get("title")):
+                errors.append({"path": f"{path}.title", "message": "Title is required."})
+            if not normalized_text(block.get("long_description") or block.get("short_description")):
+                errors.append({"path": f"{path}.long_description", "message": "Description is required."})
             if block.get("mode") == "timer":
                 if positive_int(block.get("seconds"), default=0, allow_zero=True) <= 0:
                     errors.append({"path": f"{path}.seconds", "message": "Timer work blocks need seconds > 0."})
@@ -666,11 +667,13 @@ def normalize_exercise(payload: dict[str, Any], *, now: str, existing: dict[str,
         primary = deepcopy(media[0])
     if primary is not None and not any(same_media(primary, item) for item in media):
         media = [deepcopy(primary), *media]
+    long_description = normalized_text(payload.get("long_description") or payload.get("description") or payload.get("short_description"))
+    short_description = normalized_text(payload.get("short_description")) or summarize_description(long_description)
     return {
         "id": str(payload.get("id") or (existing or {}).get("id") or new_id("exercise")),
         "title": normalized_text(payload.get("title")) or "Untitled exercise",
-        "short_description": normalized_text(payload.get("short_description")),
-        "long_description": normalized_text(payload.get("long_description")),
+        "short_description": short_description,
+        "long_description": long_description,
         "tags": normalize_tags(payload.get("tags")),
         "primary_media": primary,
         "media": media,
@@ -703,14 +706,16 @@ def normalize_blocks(raw_blocks: Any, *, default_work: int, default_rest: int, d
         mode = str(raw.get("mode") or "timer")
         if mode not in {"timer", "reps"}:
             mode = "timer"
+        long_description = normalized_text(raw.get("long_description") or raw.get("description") or raw.get("short_description"))
+        short_description = normalized_text(raw.get("short_description")) or summarize_description(long_description)
         blocks.append({
             "id": str(raw.get("id") or new_id("block")),
             "type": "work",
             "exercise_id": nullable_string(raw.get("exercise_id")),
             "exercise_snapshot_updated_at": nullable_string(raw.get("exercise_snapshot_updated_at")),
             "title": normalized_text(raw.get("title")),
-            "short_description": normalized_text(raw.get("short_description")),
-            "long_description": normalized_text(raw.get("long_description")),
+            "short_description": short_description,
+            "long_description": long_description,
             "tags": normalize_tags(raw.get("tags")),
             "mode": mode,
             "seconds": positive_int(raw.get("seconds"), default=default_work) if mode == "timer" else nullable_positive_int(raw.get("seconds")),
@@ -816,14 +821,16 @@ def migrate_state(state: dict[str, Any]) -> dict[str, Any]:
 
 
 def exercise_to_work_block(exercise: dict[str, Any], *, default_work_seconds: int = 40, default_reps: int = 12) -> dict[str, Any]:
+    long_description = normalized_text(exercise.get("long_description") or exercise.get("description") or exercise.get("short_description"))
+    short_description = normalized_text(exercise.get("short_description")) or summarize_description(long_description)
     return {
         "id": new_id("block"),
         "type": "work",
         "exercise_id": exercise["id"],
         "exercise_snapshot_updated_at": exercise.get("updated_at"),
         "title": exercise.get("title", ""),
-        "short_description": exercise.get("short_description", ""),
-        "long_description": exercise.get("long_description", ""),
+        "short_description": short_description,
+        "long_description": long_description,
         "tags": list(exercise.get("tags", [])),
         "mode": "timer",
         "seconds": default_work_seconds,
@@ -877,6 +884,17 @@ def object_arg(args: dict[str, Any], key: str) -> dict[str, Any]:
 
 def normalized_text(value: Any) -> str:
     return re.sub(r"\s+", " ", str(value or "")).strip()
+
+
+def summarize_description(value: Any, max_length: int = 140) -> str:
+    text = normalized_text(value)
+    if len(text) <= max_length:
+        return text
+    clipped = text[: max_length - 3].rstrip()
+    last_space = clipped.rfind(" ")
+    if last_space > 48:
+        clipped = clipped[:last_space].rstrip()
+    return f"{clipped}..."
 
 
 def nullable_string(value: Any) -> str | None:

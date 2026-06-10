@@ -5,12 +5,14 @@ from __future__ import annotations
 import base64
 from datetime import UTC, datetime
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
 import tempfile
 import time
 import uuid
+import wave
 
 from engines import resolve_local_tts_engine as resolve_local_engine
 from engines import run_local_tts_engine as run_local_engine
@@ -210,6 +212,9 @@ def read_cached_synthesis(data_root: Path, cache_key: str) -> bytes | None:
     if len(audio) > MAX_AUDIO_BYTES:
         path.unlink(missing_ok=True)
         return None
+    if is_empty_wav_audio(audio):
+        path.unlink(missing_ok=True)
+        return None
     return audio
 
 
@@ -254,6 +259,18 @@ def validate_audio_size(audio: bytes) -> None:
             "Synthesized audio exceeds the response size limit.",
             allowed_values={"max_audio_bytes": [str(MAX_AUDIO_BYTES)]},
         )
+    if is_empty_wav_audio(audio):
+        raise SpeechProviderUnavailableError("TTS engine produced empty audio.")
+
+
+def is_empty_wav_audio(audio: bytes) -> bool:
+    if not audio.startswith(b"RIFF") or b"WAVE" not in audio[:16]:
+        return False
+    try:
+        with wave.open(io.BytesIO(audio), "rb") as wav_file:
+            return wav_file.getnframes() <= 0
+    except (EOFError, OSError, wave.Error):
+        return False
 
 
 def evict_synthesis_cache(data_root: Path) -> None:

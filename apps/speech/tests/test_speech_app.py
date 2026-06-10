@@ -39,7 +39,7 @@ from models import (
 )
 from service import app_events_for_action, handle_action, operations_manifest
 from store import append_job, read_jobs, write_settings
-from synthesis import evict_synthesis_cache
+from synthesis import evict_synthesis_cache, read_cached_synthesis
 from transcription import cleaned_transcript
 
 
@@ -129,6 +129,7 @@ class SpeechAppTests(unittest.TestCase):
         self.assertFalse(payload["interfaces"]["speech.transcription"]["inline_default_profile_available"])
         self.assertEqual(payload["interfaces"]["speech.transcription"]["inline_default_profile_engine"], "")
         self.assertFalse(payload["interfaces"]["speech.transcription"]["streaming_supported"])
+        self.assertFalse(payload["interfaces"]["speech.transcription"]["chunked_dictation_supported"])
         self.assertTrue(payload["interfaces"]["speech.transcription"]["inputs"]["audio_base64"])
         self.assertTrue(payload["interfaces"]["speech.transcription"]["inputs"]["http_binary_body"])
         self.assertEqual(payload["interfaces"]["speech.transcription"]["max_audio_bytes"], MAX_INLINE_TRANSCRIPTION_AUDIO_BYTES)
@@ -342,6 +343,19 @@ class SpeechAppTests(unittest.TestCase):
             cache_files = sorted(path.name for path in cache_dir.glob("*.wav"))
             self.assertEqual(len(cache_files), 2)
             self.assertNotIn("old-0.wav", cache_files)
+
+    def test_synthesis_cache_ignores_empty_wav_audio(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            cache_path = root / "data" / "cache" / "tts" / "empty.wav"
+            cache_path.parent.mkdir(parents=True)
+            with wave.open(str(cache_path), "wb") as wav_file:
+                wav_file.setnchannels(1)
+                wav_file.setsampwidth(2)
+                wav_file.setframerate(22050)
+
+            self.assertIsNone(read_cached_synthesis(root / "data", "empty"))
+            self.assertFalse(cache_path.exists())
 
     def test_list_engines_reports_synthesis_and_transcription(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -978,6 +992,25 @@ class SpeechAppTests(unittest.TestCase):
             self.assertEqual(wav_file.getnchannels(), 1)
             self.assertEqual(wav_file.getsampwidth(), 2)
             self.assertEqual(wav_file.getframerate(), 16000)
+
+    def test_piper_worker_writes_chunked_piper_api_audio(self) -> None:
+        class Chunk:
+            sample_rate = 24000
+            sample_width = 2
+            sample_channels = 1
+            audio_int16_bytes = b"\1\0" * 6
+
+        class ChunkedPiperVoice:
+            def synthesize(self, text):
+                yield Chunk()
+
+        audio = tts_worker._synthesize_wav(ChunkedPiperVoice(), "hello")
+
+        with wave.open(io.BytesIO(audio), "rb") as wav_file:
+            self.assertEqual(wav_file.getnchannels(), 1)
+            self.assertEqual(wav_file.getsampwidth(), 2)
+            self.assertEqual(wav_file.getframerate(), 24000)
+            self.assertEqual(wav_file.getnframes(), 6)
 
     def test_piper_cache_fingerprint_hashes_small_model_content(self) -> None:
         with TemporaryDirectory() as temp_dir:

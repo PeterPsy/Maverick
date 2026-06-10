@@ -128,8 +128,7 @@ def _load_piper_voice(config: dict) -> object:
 def _synthesize_wav(voice: object, text: str) -> bytes:
     buffer = io.BytesIO()
     with wave.open(buffer, "wb") as wav_file:
-        _prepare_piper_wav_file(voice, wav_file)
-        voice.synthesize(text, wav_file)
+        _write_piper_synthesis(voice, text, wav_file)
     return buffer.getvalue()
 
 
@@ -138,8 +137,7 @@ def _synthesize_wav_file(voice: object, text: str, output_path: Path) -> int:
     temp_path = output_path.with_name(f".{output_path.name}.{os.getpid()}.tmp")
     try:
         with wave.open(str(temp_path), "wb") as wav_file:
-            _prepare_piper_wav_file(voice, wav_file)
-            voice.synthesize(text, wav_file)
+            _write_piper_synthesis(voice, text, wav_file)
         os.replace(temp_path, output_path)
     finally:
         try:
@@ -147,6 +145,55 @@ def _synthesize_wav_file(voice: object, text: str, output_path: Path) -> int:
         except FileNotFoundError:
             pass
     return output_path.stat().st_size
+
+
+def _write_piper_synthesis(voice: object, text: str, wav_file: wave.Wave_write) -> None:
+    try:
+        chunks = voice.synthesize(text)
+    except TypeError:
+        _prepare_piper_wav_file(voice, wav_file)
+        result = voice.synthesize(text, wav_file)
+        if result is not None:
+            _write_piper_audio_chunks(result, wav_file)
+        return
+    _write_piper_audio_chunks(chunks, wav_file)
+
+
+def _write_piper_audio_chunks(chunks: object, wav_file: wave.Wave_write) -> None:
+    if chunks is None:
+        return
+    prepared = False
+    for chunk in chunks:
+        audio = _piper_chunk_audio_bytes(chunk)
+        if not audio:
+            continue
+        if not prepared:
+            wav_file.setnchannels(_piper_chunk_channels(chunk))
+            wav_file.setsampwidth(_piper_chunk_sample_width(chunk))
+            wav_file.setframerate(_piper_chunk_sample_rate(chunk))
+            prepared = True
+        wav_file.writeframes(audio)
+
+
+def _piper_chunk_audio_bytes(chunk: object) -> bytes:
+    audio = getattr(chunk, "audio_int16_bytes", b"")
+    if isinstance(audio, bytes):
+        return audio
+    if isinstance(audio, bytearray):
+        return bytes(audio)
+    return b""
+
+
+def _piper_chunk_channels(chunk: object) -> int:
+    return _positive_int(getattr(chunk, "sample_channels", None), default=1)
+
+
+def _piper_chunk_sample_width(chunk: object) -> int:
+    return _positive_int(getattr(chunk, "sample_width", None), default=2)
+
+
+def _piper_chunk_sample_rate(chunk: object) -> int:
+    return max(8000, _positive_int(getattr(chunk, "sample_rate", None), default=22050))
 
 
 def _prepare_piper_wav_file(voice: object, wav_file: wave.Wave_write) -> None:
@@ -157,29 +204,25 @@ def _prepare_piper_wav_file(voice: object, wav_file: wave.Wave_write) -> None:
 
 def _piper_voice_channels(voice: object) -> int:
     value = _piper_voice_config_value(voice, "num_channels", "channels")
-    try:
-        channels = int(value)
-    except (TypeError, ValueError):
-        channels = 1
-    return max(1, channels)
+    return _positive_int(value, default=1)
 
 
 def _piper_voice_sample_width(voice: object) -> int:
     value = _piper_voice_config_value(voice, "sample_width", "sample_width_bytes")
-    try:
-        sample_width = int(value)
-    except (TypeError, ValueError):
-        sample_width = 2
-    return max(1, sample_width)
+    return _positive_int(value, default=2)
 
 
 def _piper_voice_sample_rate(voice: object) -> int:
     value = _piper_voice_config_value(voice, "sample_rate")
+    return max(8000, _positive_int(value, default=22050))
+
+
+def _positive_int(value: object, *, default: int) -> int:
     try:
-        sample_rate = int(value)
+        parsed = int(value)
     except (TypeError, ValueError):
-        sample_rate = 22050
-    return max(8000, sample_rate)
+        parsed = default
+    return max(1, parsed)
 
 
 def _piper_voice_config_value(voice: object, *names: str) -> object:

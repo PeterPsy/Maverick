@@ -203,6 +203,7 @@ function AnimatedFileItem({
   const canRead = file.capabilities ? Boolean(file.capabilities.can_read) : true;
   const canDelete = file.capabilities ? Boolean(file.capabilities.can_delete) : true;
   const canMove = file.provider === "google_drive" ? false : file.capabilities ? Boolean(file.capabilities.can_move) : true;
+  const canDrag = file.provider === "google_drive" ? Boolean(file.connection_id && file.drive_file_id) : canMove;
   const timestamp = file.created_at || file.modified_at;
   const timestampLabel = formatStorageTimestamp(timestamp, {
     fallback: file.provider === "google_drive" ? "Drive" : roleLabels[file.role as keyof typeof roleLabels],
@@ -224,7 +225,7 @@ function AnimatedFileItem({
 
   function handleDragStart(event: DragEvent<HTMLDivElement>) {
     cancelLongPress();
-    if (!canMove) {
+    if (!canDrag) {
       event.preventDefault();
       return;
     }
@@ -247,7 +248,7 @@ function AnimatedFileItem({
       )}
       style={{ zIndex: 1 }}
       animate={{ rotate: 0, x: 0, y: 0 }}
-      draggable={canMove}
+      draggable={canDrag}
       onDragEnd={onDragEnd}
       onDragStartCapture={handleDragStart}
       {...longPressHandlers}

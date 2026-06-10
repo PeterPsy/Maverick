@@ -1,10 +1,12 @@
 import type { FileRole } from '../types';
+import { driveBreadcrumbTargetsFromInput, type DriveBreadcrumbTarget } from './storageDriveBreadcrumbs';
 
 export type StorageNavigationParams = Record<string, string | boolean | null | undefined>;
 
 export type StorageNavigationTarget = {
   connectionId?: string;
   displayPath?: string;
+  driveBreadcrumbs?: DriveBreadcrumbTarget[];
   driveFileId?: string;
   fileId: string;
   provider?: 'google_drive';
@@ -43,9 +45,11 @@ export function storageTargetFromParams(params: StorageNavigationParams): Storag
     if (!connectionId) {
       return null;
     }
+    const driveBreadcrumbs = driveBreadcrumbTargetsFromInput(params.drive_breadcrumbs, connectionId);
     return {
       connectionId,
       displayPath: scalarString(params.display_path),
+      ...(driveBreadcrumbs.length ? { driveBreadcrumbs } : {}),
       driveFileId,
       fileId: '',
       folderRelativePath: '',

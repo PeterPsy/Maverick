@@ -208,13 +208,15 @@ class GoogleDriveProvider:
     def list_children(self, *, parent_drive_file_id: str, limit: int | None = None, page_token: str | None = None) -> dict[str, Any]:
         parent_id = _required_drive_file_id(parent_drive_file_id, operation="drive_list_children")
         page_size = _bounded_limit(limit)
-        parent_display_path, list_scope = self._parent_list_context(parent_id)
+        parent_display_path, list_scope, breadcrumbs = self._parent_list_context(parent_id)
         if parent_id == SHARED_WITH_ME_ROOT_ID:
             query = "sharedWithMe = true and trashed = false"
         else:
             query = f"'{_drive_query_literal(parent_id)}' in parents and trashed = false"
         items, next_page_token = self._list_files(query=query, limit=page_size, page_token=page_token, list_scope=list_scope)
-        return self._split_items(items, parent_display_path=parent_display_path, limit=page_size, next_page_token=next_page_token)
+        payload = self._split_items(items, parent_display_path=parent_display_path, limit=page_size, next_page_token=next_page_token)
+        payload["breadcrumbs"] = breadcrumbs
+        return payload
 
     def search(
         self,
@@ -229,7 +231,7 @@ class GoogleDriveProvider:
         parent_display_path = ""
         list_scope = _drive_list_scope()
         if parent_id:
-            parent_display_path, list_scope = self._parent_list_context(parent_id)
+            parent_display_path, list_scope, _breadcrumbs = self._parent_list_context(parent_id)
             if parent_id == SHARED_WITH_ME_ROOT_ID:
                 drive_query = f"({drive_query}) and sharedWithMe = true"
             else:
@@ -952,16 +954,17 @@ class GoogleDriveProvider:
         items = [item for item in payload.get("files") if isinstance(item, dict)] if isinstance(payload.get("files"), list) else []
         return items[:limit], str(payload.get("nextPageToken") or "")
 
-    def _parent_list_context(self, parent_id: str) -> tuple[str, dict[str, Any]]:
+    def _parent_list_context(self, parent_id: str) -> tuple[str, dict[str, Any], list[dict[str, str]]]:
         if parent_id == "root":
-            return "/My Drive", _drive_list_scope(corpora="user")
+            return "/My Drive", _drive_list_scope(corpora="user"), [self._breadcrumb_target(drive_file_id="root", label="My Drive", display_path="/My Drive")]
         if parent_id == SHARED_WITH_ME_ROOT_ID:
-            return "/Shared with me", _drive_list_scope(corpora="user")
+            return "/Shared with me", _drive_list_scope(corpora="user"), [self._breadcrumb_target(drive_file_id=SHARED_WITH_ME_ROOT_ID, label="Shared with me", display_path="/Shared with me")]
         parent = self._parent_item(parent_id)
         if not parent:
-            return "", _drive_list_scope()
+            return "", _drive_list_scope(), []
         drive_id = str(parent.get("driveId") or "").strip()
-        return self._display_path_for_item(parent), _drive_list_scope(corpora="drive", drive_id=drive_id) if drive_id else _drive_list_scope(corpora="user")
+        parent_display_path, breadcrumbs = self._display_context_for_item(parent)
+        return parent_display_path, _drive_list_scope(corpora="drive", drive_id=drive_id) if drive_id else _drive_list_scope(corpora="user"), breadcrumbs
 
     def _parent_item(self, parent_id: str) -> dict[str, Any] | None:
         try:
@@ -974,7 +977,16 @@ class GoogleDriveProvider:
             return None
 
     def _display_path_for_item(self, item: dict[str, Any]) -> str:
-        names = [str(item.get("name") or "").strip()]
+        display_path, _breadcrumbs = self._display_context_for_item(item)
+        return display_path
+
+    def _display_context_for_item(self, item: dict[str, Any]) -> tuple[str, list[dict[str, str]]]:
+        items = [
+            {
+                "drive_file_id": str(item.get("id") or "").strip(),
+                "label": str(item.get("name") or "").strip(),
+            }
+        ]
         current = item
         seen = {str(item.get("id") or "")}
         for _depth in range(12):
@@ -983,7 +995,7 @@ class GoogleDriveProvider:
             if not parent_id or parent_id in seen:
                 break
             if parent_id == "root":
-                names.append("My Drive")
+                items.append({"drive_file_id": "root", "label": "My Drive"})
                 break
             seen.add(parent_id)
             try:
@@ -996,9 +1008,26 @@ class GoogleDriveProvider:
                 break
             parent_name = str(current.get("name") or "").strip()
             if parent_name:
-                names.append(parent_name)
-        names = [name for name in reversed(names) if name]
-        return "/" + "/".join(names) if names else ""
+                items.append({"drive_file_id": str(current.get("id") or "").strip(), "label": parent_name})
+        items = [entry for entry in reversed(items) if entry["drive_file_id"] and entry["label"]]
+        names = [entry["label"] for entry in items]
+        breadcrumbs: list[dict[str, str]] = []
+        for index, entry in enumerate(items):
+            display_path = "/" + "/".join(names[: index + 1])
+            breadcrumbs.append(self._breadcrumb_target(
+                drive_file_id=entry["drive_file_id"],
+                label=entry["label"],
+                display_path=display_path,
+            ))
+        return "/" + "/".join(names) if names else "", breadcrumbs
+
+    def _breadcrumb_target(self, *, drive_file_id: str, label: str, display_path: str) -> dict[str, str]:
+        return {
+            "connection_id": self.connection_id,
+            "display_path": display_path,
+            "drive_file_id": drive_file_id,
+            "label": label,
+        }
 
     def _normalize_item(self, item: dict[str, Any], *, display_path: str) -> dict[str, Any]:
         drive_file_id = str(item.get("id") or "").strip()

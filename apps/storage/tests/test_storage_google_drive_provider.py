@@ -173,12 +173,69 @@ class GoogleDriveProviderTest(unittest.TestCase):
         self.assertTrue(file_record["capabilities"]["can_move"])
         self.assertTrue(file_record["capabilities"]["can_delete"])
         self.assertEqual(result["folders"][0]["display_path"], "/My Drive/Acme/Invoices")
+        self.assertEqual(result["breadcrumbs"], [
+            {
+                "connection_id": "drive_conn_abc",
+                "display_path": "/My Drive",
+                "drive_file_id": "root",
+                "label": "My Drive",
+            },
+            {
+                "connection_id": "drive_conn_abc",
+                "display_path": "/My Drive/Acme",
+                "drive_file_id": "folder-1",
+                "label": "Acme",
+            },
+        ])
         list_call = transport.calls[-1]
         list_query = parse_qs(urlparse(list_call[1]).query)
         self.assertEqual(list_query["pageSize"], ["10"])
         self.assertEqual(list_query["corpora"], ["user"])
         self.assertIn("'folder-1' in parents", list_query["q"][0])
         self.assertFalse(result["pagination"]["has_more"])
+
+    def test_list_folder_children_returns_nested_parent_breadcrumbs(self) -> None:
+        transport = FakeDriveTransport(
+            {
+                ("GET", "/drive/v3/files/folder-mobility"): {
+                    "id": "folder-mobility",
+                    "name": "Mobility",
+                    "mimeType": "application/vnd.google-apps.folder",
+                    "parents": ["folder-fitness"],
+                },
+                ("GET", "/drive/v3/files/folder-fitness"): {
+                    "id": "folder-fitness",
+                    "name": "Fitness Coach",
+                    "mimeType": "application/vnd.google-apps.folder",
+                    "parents": ["root"],
+                },
+                ("GET", "/drive/v3/files"): {"files": []},
+            }
+        )
+        provider = GoogleDriveProvider(connection=CONNECTION, app_secrets=SECRETS, transport=transport)
+
+        result = provider.list_children(parent_drive_file_id="folder-mobility", limit=10)
+
+        self.assertEqual(result["breadcrumbs"], [
+            {
+                "connection_id": "drive_conn_abc",
+                "display_path": "/My Drive",
+                "drive_file_id": "root",
+                "label": "My Drive",
+            },
+            {
+                "connection_id": "drive_conn_abc",
+                "display_path": "/My Drive/Fitness Coach",
+                "drive_file_id": "folder-fitness",
+                "label": "Fitness Coach",
+            },
+            {
+                "connection_id": "drive_conn_abc",
+                "display_path": "/My Drive/Fitness Coach/Mobility",
+                "drive_file_id": "folder-mobility",
+                "label": "Mobility",
+            },
+        ])
 
     def test_list_folder_children_uses_drive_page_tokens(self) -> None:
         transport = FakeDriveTransport(

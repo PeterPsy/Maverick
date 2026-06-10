@@ -1,16 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import {
+  readStorageDriveFileDragData,
+  readStorageDriveFolderDragData,
   readStorageFileDragData,
   readStorageFolderDragData,
   readStorageSelectionDragData,
+  storageDriveDragPayloadFromFile,
+  storageDriveDragPayloadFromFolder,
   storageDragPayloadFromFile,
   storageDragPayloadFromFolder,
   storageDragPayloadFromSelection,
   storageFileDropStatus,
   storageMoveDropStatus,
+  writeStorageDriveFileDragData,
+  writeStorageDriveFolderDragData,
   writeStorageFileDragData,
   writeStorageFolderDragData,
   writeStorageSelectionDragData,
+  type StorageDriveFileDragPayload,
+  type StorageDriveFolderDragPayload,
   type StorageFileDragPayload,
   type StorageFolderDragPayload,
   type StorageSelectionDragPayload,
@@ -67,6 +75,39 @@ function storageFolder(overrides: Partial<StorageFolder> = {}): StorageFolder {
   };
 }
 
+function driveFile(overrides: Partial<StorageFile> = {}): StorageFile {
+  return storageFile({
+    connection_id: 'drive_conn_1',
+    display_path: '/My Drive/reports/drive-report.pdf',
+    drive_file_id: 'drive_file_1',
+    file_id: 'file_drive_1',
+    id: 'file_drive_1',
+    name: 'drive-report.pdf',
+    preview_kind: 'pdf',
+    provider: 'google_drive',
+    relative_path: '',
+    role: '',
+    web_url: 'https://drive.google.com/file/d/drive_file_1/view',
+    workspace_relative_path: '',
+    ...overrides,
+  });
+}
+
+function driveFolder(overrides: Partial<StorageFolder> = {}): StorageFolder {
+  return storageFolder({
+    connection_id: 'drive_conn_1',
+    display_path: '/My Drive/reports',
+    drive_file_id: 'drive_folder_1',
+    id: 'folder_drive_1',
+    name: 'reports',
+    provider: 'google_drive',
+    relative_path: '',
+    role: '',
+    workspace_relative_path: '',
+    ...overrides,
+  });
+}
+
 function writePayload(payload: StorageFileDragPayload) {
   const dataTransfer = new FakeDataTransfer();
   writeStorageFileDragData(dataTransfer, payload);
@@ -82,6 +123,18 @@ function writeFolderPayload(payload: StorageFolderDragPayload) {
 function writeSelectionPayload(payload: StorageSelectionDragPayload) {
   const dataTransfer = new FakeDataTransfer();
   writeStorageSelectionDragData(dataTransfer, payload);
+  return dataTransfer;
+}
+
+function writeDriveFilePayload(payload: StorageDriveFileDragPayload) {
+  const dataTransfer = new FakeDataTransfer();
+  writeStorageDriveFileDragData(dataTransfer, payload);
+  return dataTransfer;
+}
+
+function writeDriveFolderPayload(payload: StorageDriveFolderDragPayload) {
+  const dataTransfer = new FakeDataTransfer();
+  writeStorageDriveFolderDragData(dataTransfer, payload);
   return dataTransfer;
 }
 
@@ -147,6 +200,77 @@ describe('Storage drag and drop payloads', () => {
       }],
       owner_app_id: 'storage',
     });
+  });
+
+  it('serializes Drive files as copy-only external references', () => {
+    const payload = storageDriveDragPayloadFromFile(driveFile(), 'storage');
+    expect(payload).toEqual({
+      connection_id: 'drive_conn_1',
+      display_path: '/My Drive/reports/drive-report.pdf',
+      drive_file_id: 'drive_file_1',
+      file_id: 'file_drive_1',
+      name: 'drive-report.pdf',
+      owner_app_id: 'storage',
+      preview_kind: 'pdf',
+      provider: 'google_drive',
+      web_url: 'https://drive.google.com/file/d/drive_file_1/view',
+    });
+
+    const dataTransfer = writeDriveFilePayload(payload!);
+
+    expect(dataTransfer.effectAllowed).toBe('copy');
+    expect(storageFileDropStatus(dataTransfer, 'generated')).toBe('none');
+    expect(storageMoveDropStatus(dataTransfer, 'generated')).toBe('none');
+    expect(readStorageDriveFileDragData(dataTransfer, 'storage')).toEqual(payload);
+  });
+
+  it('serializes Drive folders as copy-only external references', () => {
+    const payload = storageDriveDragPayloadFromFolder(driveFolder(), 'storage', [
+      {
+        connectionId: 'drive_conn_1',
+        displayPath: '/My Drive',
+        driveFileId: 'root',
+        label: 'My Drive',
+        path: '/My Drive',
+      },
+      {
+        connectionId: 'drive_conn_1',
+        displayPath: '/My Drive/reports',
+        driveFileId: 'drive_folder_1',
+        label: 'reports',
+        path: '/My Drive/reports',
+      },
+    ]);
+    expect(payload).toEqual({
+      connection_id: 'drive_conn_1',
+      display_path: '/My Drive/reports',
+      drive_breadcrumbs: [
+        {
+          connection_id: 'drive_conn_1',
+          display_path: '/My Drive',
+          drive_file_id: 'root',
+          label: 'My Drive',
+        },
+        {
+          connection_id: 'drive_conn_1',
+          display_path: '/My Drive/reports',
+          drive_file_id: 'drive_folder_1',
+          label: 'reports',
+        },
+      ],
+      drive_file_id: 'drive_folder_1',
+      folder_id: 'folder_drive_1',
+      name: 'reports',
+      owner_app_id: 'storage',
+      provider: 'google_drive',
+    });
+
+    const dataTransfer = writeDriveFolderPayload(payload!);
+
+    expect(dataTransfer.effectAllowed).toBe('copy');
+    expect(storageFileDropStatus(dataTransfer, 'generated')).toBe('none');
+    expect(storageMoveDropStatus(dataTransfer, 'generated')).toBe('none');
+    expect(readStorageDriveFolderDragData(dataTransfer, 'storage')).toEqual(payload);
   });
 
   it('blocks role-incompatible targets and the aggregate Storage root', () => {
@@ -220,6 +344,30 @@ describe('Storage drag and drop payloads', () => {
       folders: [],
     }, 'storage-fork'));
     expect(readStorageSelectionDragData(otherAppSelection, 'storage')).toBeNull();
+
+    const malformedDriveFile = new FakeDataTransfer();
+    malformedDriveFile.setData('application/x-maverick-storage-drive-file', JSON.stringify({
+      connection_id: 'drive_conn_1',
+      display_path: '/../secret',
+      drive_file_id: 'drive_file_1',
+      file_id: 'file_drive_1',
+      name: 'secret.pdf',
+      owner_app_id: 'storage',
+      provider: 'google_drive',
+    }));
+    expect(readStorageDriveFileDragData(malformedDriveFile, 'storage')).toBeNull();
+
+    const malformedDriveFolder = new FakeDataTransfer();
+    malformedDriveFolder.setData('application/x-maverick-storage-drive-folder', JSON.stringify({
+      connection_id: 'drive_conn_1',
+      display_path: '/My Drive/reports',
+      drive_file_id: '',
+      folder_id: 'folder_drive_1',
+      name: 'reports',
+      owner_app_id: 'storage',
+      provider: 'google_drive',
+    }));
+    expect(readStorageDriveFolderDragData(malformedDriveFolder, 'storage')).toBeNull();
   });
 
   it('rejects path escape payloads before calling the backend', () => {

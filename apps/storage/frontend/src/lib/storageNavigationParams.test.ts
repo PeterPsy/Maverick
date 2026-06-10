@@ -41,6 +41,55 @@ describe('storage navigation params', () => {
     });
   });
 
+  it('parses Google Drive breadcrumb targets from navigation params', () => {
+    expect(storageTargetFromParams({
+      provider: 'google_drive',
+      connection_id: 'drive_conn_1',
+      drive_file_id: 'folder-reports',
+      display_path: '/My Drive/Clients/Reports',
+      drive_breadcrumbs: JSON.stringify([
+        {
+          connection_id: 'drive_conn_1',
+          display_path: '/My Drive',
+          drive_file_id: 'root',
+          label: 'My Drive',
+        },
+        {
+          connection_id: 'drive_conn_1',
+          display_path: '/My Drive/Clients',
+          drive_file_id: 'folder-clients',
+          label: 'Clients',
+        },
+      ]),
+    })).toEqual({
+      connectionId: 'drive_conn_1',
+      displayPath: '/My Drive/Clients/Reports',
+      driveBreadcrumbs: [
+        {
+          connectionId: 'drive_conn_1',
+          displayPath: '/My Drive',
+          driveFileId: 'root',
+          label: 'My Drive',
+          path: '/My Drive',
+        },
+        {
+          connectionId: 'drive_conn_1',
+          displayPath: '/My Drive/Clients',
+          driveFileId: 'folder-clients',
+          label: 'Clients',
+          path: '/My Drive/Clients',
+        },
+      ],
+      driveFileId: 'folder-reports',
+      fileId: '',
+      folderRelativePath: '',
+      provider: 'google_drive',
+      role: 'all',
+      targetType: 'folder',
+      workspaceRelativePath: ''
+    });
+  });
+
   it('falls back from a missing file target to its parent folder', () => {
     expect(folderTargetFromMissingFileTarget({
       fileId: '',

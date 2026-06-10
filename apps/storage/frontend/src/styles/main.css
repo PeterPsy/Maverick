@@ -481,6 +481,15 @@ p {
   padding: 0;
 }
 
+.storage-breadcrumb button[data-slot="breadcrumb-link"],
+.storage-breadcrumb [data-slot="breadcrumb-link"] button {
+  cursor: pointer;
+}
+
+.storage-breadcrumb span[data-slot="breadcrumb-link"] {
+  cursor: default;
+}
+
 .storage-breadcrumb [data-slot="breadcrumb-link"]:hover,
 .storage-breadcrumb [data-slot="breadcrumb-link"] button:hover {
   color: var(--storage-text);

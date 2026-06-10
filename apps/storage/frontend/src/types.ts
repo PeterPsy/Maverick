@@ -124,9 +124,17 @@ export type DriveDisconnectPayload = {
   status: 'disconnected';
 };
 
+export type DriveBreadcrumbPayload = {
+  connection_id: string;
+  display_path: string;
+  drive_file_id: string;
+  label?: string;
+};
+
 export type DriveListPayload = {
   provider: 'google_drive';
   connection_id: string;
+  breadcrumbs?: DriveBreadcrumbPayload[];
   files?: StorageFile[];
   folders?: StorageFolder[];
   pagination?: {

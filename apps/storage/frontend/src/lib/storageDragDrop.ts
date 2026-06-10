@@ -1,8 +1,11 @@
 import type { FileRole, PreviewKind, StorageFile, StorageFolder } from '../types';
+import type { DriveBreadcrumbTarget } from './storageDriveBreadcrumbs';
 
 export const STORAGE_FILE_DRAG_DATA_TYPE = 'application/x-maverick-storage-file';
 export const STORAGE_FOLDER_DRAG_DATA_TYPE = 'application/x-maverick-storage-folder';
 export const STORAGE_SELECTION_DRAG_DATA_TYPE = 'application/x-maverick-storage-selection';
+export const STORAGE_DRIVE_FILE_DRAG_DATA_TYPE = 'application/x-maverick-storage-drive-file';
+export const STORAGE_DRIVE_FOLDER_DRAG_DATA_TYPE = 'application/x-maverick-storage-drive-folder';
 
 const STORAGE_FILE_DRAG_ROLE_TYPE_PREFIX = 'application/x-maverick-storage-file-role-';
 const STORAGE_FOLDER_DRAG_ROLE_TYPE_PREFIX = 'application/x-maverick-storage-folder-role-';
@@ -32,6 +35,36 @@ export type StorageSelectionDragPayload = {
   files: StorageFileDragPayload[];
   folders: StorageFolderDragPayload[];
   owner_app_id: string;
+};
+
+export type StorageDriveFileDragPayload = {
+  connection_id: string;
+  display_path: string;
+  drive_file_id: string;
+  file_id: string;
+  name: string;
+  owner_app_id: string;
+  preview_kind?: PreviewKind;
+  provider: 'google_drive';
+  web_url?: string;
+};
+
+export type StorageDriveBreadcrumbPayload = {
+  connection_id: string;
+  display_path: string;
+  drive_file_id: string;
+  label?: string;
+};
+
+export type StorageDriveFolderDragPayload = {
+  connection_id: string;
+  display_path: string;
+  drive_breadcrumbs?: StorageDriveBreadcrumbPayload[];
+  drive_file_id: string;
+  folder_id: string;
+  name: string;
+  owner_app_id: string;
+  provider: 'google_drive';
 };
 
 export type StorageFileDropStatus = 'none' | 'ready' | 'blocked';
@@ -77,6 +110,54 @@ export function storageDragPayloadFromSelection(
   };
 }
 
+export function storageDriveDragPayloadFromFile(file: StorageFile, ownerAppId: string): StorageDriveFileDragPayload | null {
+  if (file.provider !== 'google_drive') {
+    return null;
+  }
+  const connectionId = normalizeRequiredText(file.connection_id);
+  const driveFileId = normalizeRequiredText(file.drive_file_id);
+  const fileId = normalizeRequiredText(file.file_id || file.id);
+  const name = normalizeRequiredText(file.name);
+  if (!connectionId || !driveFileId || !fileId || !name) {
+    return null;
+  }
+  return {
+    connection_id: connectionId,
+    display_path: normalizeDriveDisplayPath(file.display_path) || `/${name}`,
+    drive_file_id: driveFileId,
+    file_id: fileId,
+    name,
+    owner_app_id: ownerAppId,
+    preview_kind: file.preview_kind,
+    provider: 'google_drive',
+    ...(file.web_url ? { web_url: file.web_url } : {}),
+  };
+}
+
+export function storageDriveDragPayloadFromFolder(folder: StorageFolder, ownerAppId: string, breadcrumbTrail: DriveBreadcrumbTarget[] = []): StorageDriveFolderDragPayload | null {
+  if (folder.provider !== 'google_drive') {
+    return null;
+  }
+  const connectionId = normalizeRequiredText(folder.connection_id);
+  const driveFileId = normalizeRequiredText(folder.drive_file_id);
+  const folderId = normalizeRequiredText(folder.id);
+  const name = normalizeRequiredText(folder.name);
+  if (!connectionId || !driveFileId || !folderId || !name) {
+    return null;
+  }
+  const driveBreadcrumbs = storageDriveBreadcrumbPayloadsFromTrail(breadcrumbTrail, connectionId);
+  return {
+    connection_id: connectionId,
+    display_path: normalizeDriveDisplayPath(folder.display_path) || `/${name}`,
+    ...(driveBreadcrumbs.length ? { drive_breadcrumbs: driveBreadcrumbs } : {}),
+    drive_file_id: driveFileId,
+    folder_id: folderId,
+    name,
+    owner_app_id: ownerAppId,
+    provider: 'google_drive',
+  };
+}
+
 export function writeStorageFileDragData(dataTransfer: StorageDragDataTransfer, payload: StorageFileDragPayload) {
   dataTransfer.setData(STORAGE_FILE_DRAG_DATA_TYPE, JSON.stringify(payload));
   dataTransfer.setData(storageFileDragRoleType(payload.role), payload.role);
@@ -96,6 +177,16 @@ export function writeStorageSelectionDragData(dataTransfer: StorageDragDataTrans
   dataTransfer.setData(STORAGE_SELECTION_DRAG_DATA_TYPE, JSON.stringify(payload));
   storageSelectionRoles(payload).forEach((role) => dataTransfer.setData(storageSelectionDragRoleType(role), role));
   dataTransfer.effectAllowed = 'copyMove';
+}
+
+export function writeStorageDriveFileDragData(dataTransfer: StorageDragDataTransfer, payload: StorageDriveFileDragPayload) {
+  dataTransfer.setData(STORAGE_DRIVE_FILE_DRAG_DATA_TYPE, JSON.stringify(payload));
+  dataTransfer.effectAllowed = 'copy';
+}
+
+export function writeStorageDriveFolderDragData(dataTransfer: StorageDragDataTransfer, payload: StorageDriveFolderDragPayload) {
+  dataTransfer.setData(STORAGE_DRIVE_FOLDER_DRAG_DATA_TYPE, JSON.stringify(payload));
+  dataTransfer.effectAllowed = 'copy';
 }
 
 export function readStorageFileDragData(dataTransfer: Pick<DataTransfer, 'getData'>, expectedOwnerAppId?: string) {
@@ -135,6 +226,52 @@ export function readStorageFolderDragData(dataTransfer: Pick<DataTransfer, 'getD
   }
 
   const payload = normalizeStorageFolderDragPayload(parsed);
+  if (!payload) {
+    return null;
+  }
+  if (expectedOwnerAppId && payload.owner_app_id !== expectedOwnerAppId) {
+    return null;
+  }
+  return payload;
+}
+
+export function readStorageDriveFileDragData(dataTransfer: Pick<DataTransfer, 'getData'>, expectedOwnerAppId?: string) {
+  const rawPayload = dataTransfer.getData(STORAGE_DRIVE_FILE_DRAG_DATA_TYPE);
+  if (!rawPayload) {
+    return null;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawPayload);
+  } catch {
+    return null;
+  }
+
+  const payload = normalizeStorageDriveFileDragPayload(parsed);
+  if (!payload) {
+    return null;
+  }
+  if (expectedOwnerAppId && payload.owner_app_id !== expectedOwnerAppId) {
+    return null;
+  }
+  return payload;
+}
+
+export function readStorageDriveFolderDragData(dataTransfer: Pick<DataTransfer, 'getData'>, expectedOwnerAppId?: string) {
+  const rawPayload = dataTransfer.getData(STORAGE_DRIVE_FOLDER_DRAG_DATA_TYPE);
+  if (!rawPayload) {
+    return null;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawPayload);
+  } catch {
+    return null;
+  }
+
+  const payload = normalizeStorageDriveFolderDragPayload(parsed);
   if (!payload) {
     return null;
   }
@@ -335,6 +472,126 @@ function normalizeStorageSelectionDragPayload(payload: unknown): StorageSelectio
   };
 }
 
+function normalizeStorageDriveFileDragPayload(payload: unknown): StorageDriveFileDragPayload | null {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+  const record = payload as Record<string, unknown>;
+  const provider = record.provider === 'google_drive' ? 'google_drive' : null;
+  const ownerAppId = normalizeRequiredText(record.owner_app_id);
+  const fileId = normalizeRequiredText(record.file_id);
+  const name = normalizeRequiredText(record.name);
+  const connectionId = normalizeRequiredText(record.connection_id);
+  const driveFileId = normalizeRequiredText(record.drive_file_id);
+  const displayPath = normalizeDriveDisplayPath(record.display_path);
+  const previewKind = normalizePreviewKind(record.preview_kind);
+  const webUrl = normalizeOptionalHttpsUrl(record.web_url);
+
+  if (!provider || !ownerAppId || !fileId || !name || !connectionId || !driveFileId || !displayPath) {
+    return null;
+  }
+
+  return {
+    connection_id: connectionId,
+    display_path: displayPath,
+    drive_file_id: driveFileId,
+    file_id: fileId,
+    name,
+    owner_app_id: ownerAppId,
+    ...(previewKind ? { preview_kind: previewKind } : {}),
+    provider,
+    ...(webUrl ? { web_url: webUrl } : {}),
+  };
+}
+
+function normalizeStorageDriveFolderDragPayload(payload: unknown): StorageDriveFolderDragPayload | null {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+  const record = payload as Record<string, unknown>;
+  const provider = record.provider === 'google_drive' ? 'google_drive' : null;
+  const ownerAppId = normalizeRequiredText(record.owner_app_id);
+  const folderId = normalizeRequiredText(record.folder_id);
+  const name = normalizeRequiredText(record.name);
+  const connectionId = normalizeRequiredText(record.connection_id);
+  const driveFileId = normalizeRequiredText(record.drive_file_id);
+  const displayPath = normalizeDriveDisplayPath(record.display_path);
+  const driveBreadcrumbs = normalizeStorageDriveBreadcrumbPayloads(record.drive_breadcrumbs, connectionId);
+
+  if (!provider || !ownerAppId || !folderId || !name || !connectionId || !driveFileId || !displayPath || !driveBreadcrumbs) {
+    return null;
+  }
+
+  return {
+    connection_id: connectionId,
+    display_path: displayPath,
+    ...(driveBreadcrumbs.length ? { drive_breadcrumbs: driveBreadcrumbs } : {}),
+    drive_file_id: driveFileId,
+    folder_id: folderId,
+    name,
+    owner_app_id: ownerAppId,
+    provider,
+  };
+}
+
+function storageDriveBreadcrumbPayloadsFromTrail(trail: DriveBreadcrumbTarget[], fallbackConnectionId: string): StorageDriveBreadcrumbPayload[] {
+  const payloads = trail
+    .map((target) => {
+      const connectionId = normalizeRequiredText(target.connectionId) || fallbackConnectionId;
+      const driveFileId = normalizeRequiredText(target.driveFileId);
+      const displayPath = normalizeDriveDisplayPath(target.displayPath || target.path);
+      if (connectionId !== fallbackConnectionId || !driveFileId || !displayPath) {
+        return null;
+      }
+      return {
+        connection_id: connectionId,
+        display_path: displayPath,
+        drive_file_id: driveFileId,
+        ...(target.label ? { label: target.label } : {}),
+      };
+    })
+    .filter((target): target is StorageDriveBreadcrumbPayload => Boolean(target));
+  const byPath = new Map<string, StorageDriveBreadcrumbPayload>();
+  payloads.forEach((target) => byPath.set(target.display_path, target));
+  return [...byPath.values()];
+}
+
+function normalizeStorageDriveBreadcrumbPayloads(value: unknown, fallbackConnectionId: string): StorageDriveBreadcrumbPayload[] | null {
+  if (value === undefined) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  const payloads = value.map((item) => normalizeStorageDriveBreadcrumbPayload(item, fallbackConnectionId));
+  if (payloads.some((item) => !item)) {
+    return null;
+  }
+  const byPath = new Map<string, StorageDriveBreadcrumbPayload>();
+  (payloads as StorageDriveBreadcrumbPayload[]).forEach((target) => byPath.set(target.display_path, target));
+  return [...byPath.values()];
+}
+
+function normalizeStorageDriveBreadcrumbPayload(value: unknown, fallbackConnectionId: string): StorageDriveBreadcrumbPayload | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  const connectionId = normalizeRequiredText(record.connection_id) || normalizeRequiredText(record.connectionId) || fallbackConnectionId;
+  const displayPath = normalizeDriveDisplayPath(record.display_path || record.displayPath || record.path);
+  const driveFileId = normalizeRequiredText(record.drive_file_id) || normalizeRequiredText(record.driveFileId);
+  const label = normalizeRequiredText(record.label);
+  if (!connectionId || connectionId !== fallbackConnectionId || !displayPath || !driveFileId) {
+    return null;
+  }
+  return {
+    connection_id: connectionId,
+    display_path: displayPath,
+    drive_file_id: driveFileId,
+    ...(label ? { label } : {}),
+  };
+}
+
 function normalizeRole(value: unknown): FileRole | null {
   return value === 'uploaded' || value === 'generated' ? value : null;
 }
@@ -370,6 +627,33 @@ function normalizeRequiredRelativePath(value: unknown) {
     return '';
   }
   return parts.join('/');
+}
+
+function normalizeDriveDisplayPath(value: unknown) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  const parts = value.split('/').filter(Boolean);
+  if (!parts.length || parts.some((part) => part === '.' || part === '..')) {
+    return '';
+  }
+  return `/${parts.join('/')}`;
+}
+
+function normalizeOptionalHttpsUrl(value: unknown) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return '';
+  }
+  try {
+    const url = new URL(trimmed);
+    return url.protocol === 'https:' ? url.toString() : '';
+  } catch {
+    return '';
+  }
 }
 
 function normalizePayloadList<T>(value: unknown, normalize: (item: unknown) => T | null): T[] | null {

@@ -19,6 +19,7 @@ import { storageSelectionFromMessage, type ActiveStorageSelectionMessage } from 
 import { applyStorageFoldersDelta, type StorageCatalogDelta } from '../../lib/storageCatalogDelta';
 import { attachStorageFolderDragImage } from '../../lib/storageDragImage';
 import { readStorageFileDragData, readStorageFolderDragData, readStorageSelectionDragData, storageDragPayloadFromFolder, storageMoveDropStatus, writeStorageFolderDragData, type StorageMoveDropStatus, type StorageSelectionDragPayload } from '../../lib/storageDragDrop';
+import type { DriveBreadcrumbTarget } from '../../lib/storageDriveBreadcrumbs';
 import { storageTargetFromWidgetContext, type StorageNavigationTarget } from '../../lib/storageNavigationParams';
 import { storageViewFilterChangedMessage, storageViewFilterFromMessage } from '../../lib/storageViewFilterEvents';
 import type { DriveConnection, FileRole, StorageFolder, StorageViewFilter, PreviewKind } from '../../types';
@@ -485,13 +486,14 @@ function folderIdentityFromWorkspacePath(workspaceRelativePath: string) {
   return folderIdentity(parts[1], pathParts.join('/'));
 }
 
-function openFolderInShell(node: FolderTreeNode, appId: string) {
+function openFolderInShell(node: FolderTreeNode, appId: string, ancestors: FolderTreeNode[] = []) {
   const params = node.provider === 'google_drive'
     ? {
       provider: 'google_drive',
       connection_id: node.connectionId,
       ...(node.driveFileId ? { drive_file_id: node.driveFileId } : {}),
       display_path: node.displayPath || node.label,
+      ...driveBreadcrumbNavigationParams([...ancestors, node]),
     }
     : {
       folder_relative_path: node.role === 'all' ? '' : node.relativePath,
@@ -508,6 +510,42 @@ function openFolderInShell(node: FolderTreeNode, appId: string) {
   if (isMobileLayoutViewport()) {
     window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, window.location.origin);
   }
+}
+
+function driveBreadcrumbNavigationParams(nodes: FolderTreeNode[]) {
+  const breadcrumbs = driveBreadcrumbTargetsFromNodes(nodes);
+  return breadcrumbs.length ? { drive_breadcrumbs: JSON.stringify(breadcrumbs) } : {};
+}
+
+function driveBreadcrumbTargetsFromNodes(nodes: FolderTreeNode[]): DriveBreadcrumbTarget[] {
+  return nodes
+    .map((node) => driveBreadcrumbTargetFromNode(node))
+    .filter((node): node is DriveBreadcrumbTarget => Boolean(node));
+}
+
+function driveBreadcrumbTargetFromNode(node: FolderTreeNode): DriveBreadcrumbTarget | null {
+  if (node.provider !== 'google_drive' || !node.connectionId || !node.driveFileId) {
+    return null;
+  }
+  const displayPath = normalizeDriveBreadcrumbDisplayPath(node.displayPath || node.label);
+  if (!displayPath) {
+    return null;
+  }
+  return {
+    connectionId: node.connectionId,
+    displayPath,
+    driveFileId: node.driveFileId,
+    label: node.label,
+    path: displayPath,
+  };
+}
+
+function normalizeDriveBreadcrumbDisplayPath(value: string | undefined) {
+  const parts = String(value || '').split('/').filter(Boolean);
+  if (!parts.length || parts.some((part) => part === '.' || part === '..')) {
+    return '';
+  }
+  return `/${parts.join('/')}`;
 }
 
 function KindFilterRail({ activeKind, availableKinds, onSelect }: {
@@ -900,13 +938,13 @@ function StorageSidebarWidget() {
     return () => window.removeEventListener('message', handleShellMessage);
   }, [storageAppId]);
 
-  function selectFolder(node: FolderTreeNode) {
+  function selectFolder(node: FolderTreeNode, ancestors: FolderTreeNode[] = []) {
     setSelectedFolderId(node.id);
     if (node.provider === 'google_drive' && node.status === 'reconnect_required') {
       setError('Reconnect required');
       return;
     }
-    openFolderInShell(node, storageAppId);
+    openFolderInShell(node, storageAppId, ancestors);
   }
 
   function handleFolderDragStart(event: DragEvent<HTMLElement>, node: FolderTreeNode) {
@@ -1068,6 +1106,7 @@ function StorageSidebarWidget() {
             <TreeView>
               {filteredTreeNodes.map((node, index) => (
                 <FolderTreeNodeView
+                  ancestors={[]}
                   dropTarget={dropTarget}
                   isLast={index === filteredTreeNodes.length - 1}
                   key={node.id}
@@ -1097,8 +1136,9 @@ function StorageSidebarWidget() {
   );
 }
 
-function FolderTreeNodeView({ activeOperation, dropTarget, node, level, isLast, onDragEnd, onDragLeave, onDragOver, onDragStart, onDrop, onDisconnectDriveAccount, onEnsureChildren, onSelect, onSyncDriveAccount, onSyncStorageRoot }: {
+function FolderTreeNodeView({ activeOperation, ancestors, dropTarget, node, level, isLast, onDragEnd, onDragLeave, onDragOver, onDragStart, onDrop, onDisconnectDriveAccount, onEnsureChildren, onSelect, onSyncDriveAccount, onSyncStorageRoot }: {
   activeOperation: string;
+  ancestors: FolderTreeNode[];
   dropTarget: FolderTreeDropTarget | null;
   isLast: boolean;
   level: number;
@@ -1110,7 +1150,7 @@ function FolderTreeNodeView({ activeOperation, dropTarget, node, level, isLast, 
   onDrop: (event: DragEvent<HTMLElement>, node: FolderTreeNode) => void;
   onDisconnectDriveAccount: (node: FolderTreeNode) => Promise<void>;
   onEnsureChildren: (node: FolderTreeNode) => void;
-  onSelect: (node: FolderTreeNode) => void;
+  onSelect: (node: FolderTreeNode, ancestors: FolderTreeNode[]) => void;
   onSyncDriveAccount: (node: FolderTreeNode) => Promise<void>;
   onSyncStorageRoot: () => Promise<void>;
 }) {
@@ -1123,12 +1163,13 @@ function FolderTreeNodeView({ activeOperation, dropTarget, node, level, isLast, 
   const isSyncing = activeOperation === `sync:${isDriveAccount ? node.connectionId : 'storage'}`;
   const isDisconnecting = activeOperation === `disconnect:${node.connectionId}`;
   const label = node.status === 'reconnect_required' ? `${node.label} (Reconnect required)` : node.label;
+  const childAncestors = [...ancestors, node];
 
   return (
     <TreeNode isLast={isLast} level={level} nodeId={node.id}>
       <TreeNodeTrigger
         className={nodeDropStatus === 'ready' ? 'storage-folder-tree-drop-ready' : nodeDropStatus === 'blocked' ? 'storage-folder-tree-drop-blocked' : ''}
-        onClick={() => onSelect(node)}
+        onClick={() => onSelect(node, ancestors)}
         toggleOnTriggerClick={false}
         draggable={node.provider === 'local' && node.role !== 'all' && Boolean(node.relativePath)}
         onDragEnd={onDragEnd}
@@ -1190,6 +1231,7 @@ function FolderTreeNodeView({ activeOperation, dropTarget, node, level, isLast, 
         ) : null}
         {node.children.map((child, index) => (
           <FolderTreeNodeView
+            ancestors={childAncestors}
             dropTarget={dropTarget}
             isLast={index === node.children.length - 1}
             key={child.id}

@@ -42,7 +42,7 @@ describe('storage Drive navigation stability', () => {
     expect(triggerEnd).toBeGreaterThan(triggerStart);
     const triggerSource = source.slice(triggerStart, triggerEnd);
 
-    expect(triggerSource).toContain('onClick={() => onSelect(node)}');
+    expect(triggerSource).toContain('onClick={() => onSelect(node, ancestors)}');
     expect(triggerSource).not.toContain('onEnsureChildren(node)');
   });
 
@@ -93,9 +93,40 @@ describe('storage Drive navigation stability', () => {
   it('starts Drive breadcrumbs at the Drive account instead of Storage', () => {
     const source = readSource('main.tsx');
 
-    expect(source).toContain('function driveBreadcrumbItems(displayPath: string)');
-    expect(source).toContain("const driveBreadcrumbs = isDriveView ? driveBreadcrumbItems(driveTarget?.displayPath || 'Google Drive') : [];");
+    expect(source).toContain("import { driveBreadcrumbItems, driveBreadcrumbTargetsFromInput, driveBreadcrumbTrailForFolder, driveBreadcrumbTrailForTarget, type DriveBreadcrumbTarget } from './lib/storageDriveBreadcrumbs';");
+    expect(source).toContain('function driveTargetWithBreadcrumbDisplayPath(target: DriveFolderTarget, trail: DriveBreadcrumbTarget[])');
+    expect(source).toContain("const driveBreadcrumbs = isDriveView ? driveBreadcrumbItems(driveTarget?.displayPath || 'Google Drive', driveBreadcrumbTrail) : [];");
+    expect(source).toContain('const payloadBreadcrumbTrail = driveBreadcrumbTargetsFromInput(payload.breadcrumbs, target.connectionId);');
+    expect(source).toContain('breadcrumbTrail ?? (payloadBreadcrumbTrail.length ? payloadBreadcrumbTrail : driveBreadcrumbTrailForTarget(target, driveBreadcrumbTrailRef.current));');
+    expect(source).toContain('const nextDriveTarget = driveTargetWithBreadcrumbDisplayPath(target, nextBreadcrumbTrail);');
+    expect(source).toContain("loadDriveFolder(nextTarget, 'foreground', target.driveBreadcrumbs)");
     expect(source).toContain('{isDriveView ? (');
-    expect(source).toContain('aria-label={`Show ${item.label} root`}');
+    expect(source).toContain("const canNavigate = Boolean(!isCurrent && driveTarget?.connectionId && (item.driveFileId || index === 0));");
+    expect(source).toContain("const nextTrail = target.driveFileId ? driveBreadcrumbTrailForTarget(target, driveBreadcrumbTrailRef.current) : [];");
+  });
+
+  it('passes resolved Drive breadcrumb ids from sidebar folder selection', () => {
+    const source = readSource('widgets/storage-sidebar/main.tsx');
+
+    expect(source).toContain("import type { DriveBreadcrumbTarget } from '../../lib/storageDriveBreadcrumbs';");
+    expect(source).toContain('function openFolderInShell(node: FolderTreeNode, appId: string, ancestors: FolderTreeNode[] = [])');
+    expect(source).toContain("...driveBreadcrumbNavigationParams([...ancestors, node]),");
+    expect(source).toContain('function driveBreadcrumbTargetsFromNodes(nodes: FolderTreeNode[]): DriveBreadcrumbTarget[]');
+    expect(source).toContain('onClick={() => onSelect(node, ancestors)}');
+    expect(source).toContain('ancestors={childAncestors}');
+  });
+
+  it('drags Drive files and folders as Storage references instead of blocking the drag', () => {
+    const source = readSource('main.tsx');
+    const fileCollectionSource = readSource('components/ui/animated-collection.tsx');
+
+    expect(source).toContain('storageDriveDragPayloadFromFile');
+    expect(source).toContain('writeStorageDriveFileDragData(event.dataTransfer, payload);');
+    expect(source).toContain('storageDriveDragPayloadFromFolder');
+    expect(source).toContain('writeStorageDriveFolderDragData(event.dataTransfer, payload);');
+    expect(source).toContain('canDrag={isDriveItem(folder) ? Boolean(folder.connection_id && folder.drive_file_id) : Boolean(folder.relative_path)}');
+    expect(fileCollectionSource).toContain('const canDrag = file.provider === "google_drive" ? Boolean(file.connection_id && file.drive_file_id) : canMove;');
+    expect(fileCollectionSource).toContain('draggable={canDrag}');
+    expect(source).not.toContain('if (isDriveItem(file)) {\n      event.preventDefault();\n      return 0;\n    }');
   });
 });

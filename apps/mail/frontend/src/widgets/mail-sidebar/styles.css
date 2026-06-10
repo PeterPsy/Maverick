@@ -58,6 +58,12 @@ button {
   cursor: pointer;
 }
 
+@keyframes mail-sidebar-skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
 .mail-sidebar-widget {
   --mail-sidebar-scroll-under-bottom: 7.15rem;
   --mail-sidebar-scroll-under-top: 3.12rem;
@@ -259,6 +265,81 @@ button {
 
 .mail-folder-tree-muted {
   color: var(--maverick-text-soft);
+}
+
+.mail-sidebar-skeleton {
+  display: grid;
+  gap: 0.46rem;
+}
+
+.mail-sidebar-skeleton__row {
+  display: grid;
+  grid-template-columns: 0.75rem 2rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 3.05rem;
+  border-radius: 22px;
+  box-shadow: var(--maverick-inner-edge);
+  padding: 0.58rem 0.7rem;
+}
+
+.mail-sidebar-skeleton__row.depth-1 {
+  padding-left: 1.45rem;
+}
+
+.mail-sidebar-skeleton__row.depth-2,
+.mail-sidebar-skeleton__row.depth-3 {
+  padding-left: 2.2rem;
+}
+
+.mail-sidebar-skeleton__expander,
+.mail-sidebar-skeleton__icon,
+.mail-sidebar-skeleton__copy span {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.mail-sidebar-skeleton__expander::after,
+.mail-sidebar-skeleton__icon::after,
+.mail-sidebar-skeleton__copy span::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+  content: "";
+  transform: translateX(-100%);
+  animation: mail-sidebar-skeleton-shimmer 1.45s ease-in-out infinite;
+}
+
+.mail-sidebar-skeleton__expander {
+  width: 0.54rem;
+  height: 0.54rem;
+}
+
+.mail-sidebar-skeleton__icon {
+  width: 2rem;
+  height: 2rem;
+}
+
+.mail-sidebar-skeleton__copy {
+  display: grid;
+  gap: 0.38rem;
+}
+
+.mail-sidebar-skeleton__copy span {
+  width: 72%;
+  height: 0.72rem;
+}
+
+.mail-sidebar-skeleton__row.depth-1 .mail-sidebar-skeleton__copy span {
+  width: 62%;
+}
+
+.mail-sidebar-skeleton__row.depth-2 .mail-sidebar-skeleton__copy span,
+.mail-sidebar-skeleton__row.depth-3 .mail-sidebar-skeleton__copy span {
+  width: 54%;
 }
 
 .mail-folder-tree-filter-icon {

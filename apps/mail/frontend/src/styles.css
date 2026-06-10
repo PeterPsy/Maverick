@@ -106,6 +106,12 @@ p {
   background: transparent;
 }
 
+@keyframes mail-loading-skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
 .mail-shell {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -420,6 +426,19 @@ p {
   white-space: nowrap;
 }
 
+.mail-page-range.is-loading {
+  display: inline-flex;
+  align-items: center;
+  min-width: 4.6rem;
+  min-height: 1.62rem;
+}
+
+.mail-page-range.is-loading > span {
+  width: 4.4rem;
+  height: 0.72rem;
+  border-radius: 999px;
+}
+
 .sliding-pagination {
   position: relative;
   display: inline-flex;
@@ -483,6 +502,180 @@ p {
   text-align: center;
 }
 
+.mail-thread-skeleton {
+  display: grid;
+  gap: 0;
+  pointer-events: none;
+}
+
+.mail-thread-skeleton__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 64px;
+  border-radius: 14px;
+  padding: 0;
+}
+
+.mail-thread-skeleton__body {
+  display: grid;
+  grid-template-columns: 2.2rem minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.mail-thread-skeleton__copy {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.mail-thread-skeleton__title-line {
+  display: grid;
+  grid-template-columns: minmax(0, 16rem) 3.6rem;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mail-thread-skeleton__side {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  width: min(34rem, 48vw);
+  min-width: 0;
+}
+
+.mail-thread-skeleton__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+.mail-app-skeleton__avatar,
+.mail-app-skeleton__line,
+.mail-page-range.is-loading > span,
+.mail-thread-skeleton__actions span,
+.mail-reader-skeleton__actions span {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.mail-app-skeleton__avatar::after,
+.mail-app-skeleton__line::after,
+.mail-page-range.is-loading > span::after,
+.mail-thread-skeleton__actions span::after,
+.mail-reader-skeleton__actions span::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+  content: "";
+  transform: translateX(-100%);
+  animation: mail-loading-skeleton-shimmer 1.45s ease-in-out infinite;
+}
+
+.mail-app-skeleton__avatar {
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 999px;
+}
+
+.mail-app-skeleton__line {
+  border-radius: 999px;
+}
+
+.mail-app-skeleton__line--title {
+  width: min(16rem, 86%);
+  height: 0.86rem;
+}
+
+.mail-app-skeleton__line--date {
+  width: 3.2rem;
+  height: 0.64rem;
+}
+
+.mail-app-skeleton__line--snippet {
+  width: min(24rem, 72%);
+  height: 0.7rem;
+}
+
+.mail-app-skeleton__line--route {
+  width: min(18rem, 100%);
+  height: 0.68rem;
+}
+
+.mail-thread-skeleton__actions span,
+.mail-reader-skeleton__actions span {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+}
+
+.mail-reader-skeleton {
+  pointer-events: none;
+}
+
+.mail-reader-skeleton__header {
+  gap: 14px;
+}
+
+.mail-reader-skeleton__actions {
+  display: inline-flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.mail-app-skeleton__line--reader-title {
+  width: min(38rem, 74%);
+  height: 1rem;
+}
+
+.mail-reader-skeleton__stack {
+  gap: 16px;
+}
+
+.mail-reader-skeleton__message {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.mail-reader-skeleton__block {
+  display: grid;
+  gap: 0.58rem;
+  min-width: 0;
+  border: 1px solid var(--maverick-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+  padding: 14px 12px;
+}
+
+.mail-app-skeleton__line--message-meta {
+  width: min(22rem, 62%);
+  height: 0.72rem;
+}
+
+.mail-app-skeleton__line--body-wide {
+  width: 96%;
+  height: 0.68rem;
+}
+
+.mail-app-skeleton__line--body {
+  width: 82%;
+  height: 0.68rem;
+}
+
+.mail-app-skeleton__line--body-short {
+  width: 54%;
+  height: 0.68rem;
+}
+
 .thread-row {
   position: relative;
   display: grid;
@@ -531,6 +724,14 @@ p {
 }
 
 .mail-shell.is-reading .thread-side {
+  display: none;
+}
+
+.mail-shell.is-reading .mail-thread-skeleton__row {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.mail-shell.is-reading .mail-thread-skeleton__side {
   display: none;
 }
 

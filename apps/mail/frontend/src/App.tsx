@@ -754,10 +754,14 @@ export function App() {
   const [page, setPage] = useState(1);
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
+  const [threadListLoading, setThreadListLoading] = useState(true);
+  const [threadOpenLoading, setThreadOpenLoading] = useState(false);
   const [oauthCompleting, setOauthCompleting] = useState(false);
   const [accountModalOpen, setAccountModalOpen] = useState(false);
   const [readerPlain, setReaderPlain] = useState(false);
   const [readerShowImages, setReaderShowImages] = useState(false);
+  const threadListRequestRef = useRef(0);
+  const threadOpenRequestRef = useRef(0);
   const serializedMailboxScopes = useMemo(() => serializeMailboxScopeIds(mailboxScopeIds), [mailboxScopeIds]);
   const primaryScope = useMemo(() => primaryMailboxScope(mailboxScopeIds), [mailboxScopeIds]);
 
@@ -769,7 +773,13 @@ export function App() {
   }, [connections]);
 
   const openThread = useCallback(async (threadId: string, connectionId?: string, refresh = false) => {
+    const requestId = threadOpenRequestRef.current + 1;
+    threadOpenRequestRef.current = requestId;
     setBusy(true);
+    setThreadOpenLoading(true);
+    if (!refresh) {
+      setSelectedThread(null);
+    }
     try {
       const payload = await callBackend<{ thread: MailThread }>({
         action: MAIL_BACKEND_ACTIONS.threadsGet,
@@ -778,6 +788,9 @@ export function App() {
         max_body_html_chars: READER_HTML_BODY_CHARS,
         ...(refresh && connectionId ? secretRequestForConnectionId(connectionId) : noSecretRequest())
       });
+      if (threadOpenRequestRef.current !== requestId) {
+        return;
+      }
       setSelectedThread(payload.thread);
       setConnectionId(payload.thread.connection_id);
       notifySelection({
@@ -786,29 +799,53 @@ export function App() {
         mailbox_scopes: serializedMailboxScopes,
         connection_id: payload.thread.connection_id
       });
+    } catch (error) {
+      if (threadOpenRequestRef.current === requestId) {
+        setNotice(error instanceof Error ? error.message : 'Unable to open mail thread.');
+      }
     } finally {
-      setBusy(false);
+      if (threadOpenRequestRef.current === requestId) {
+        setThreadOpenLoading(false);
+        setBusy(false);
+      }
     }
   }, [mailbox, secretRequestForConnectionId, serializedMailboxScopes]);
 
   const loadThreads = useCallback(async () => {
+    const requestId = threadListRequestRef.current + 1;
+    threadListRequestRef.current = requestId;
+    setThreadListLoading(true);
     const offset = (page - 1) * THREADS_PAGE_SIZE;
-    const [connectionPayload, threadPayload] = await Promise.all([
-      callBackend<ConnectionPayload>({ action: MAIL_BACKEND_ACTIONS.connectionsList, ...noSecretRequest() }),
-      callBackend<ThreadListPayload>({
-        action: MAIL_BACKEND_ACTIONS.threadsList,
-        mailbox,
-        mailbox_scopes: serializedMailboxScopes,
-        ...(primaryScope.connectionId ? { connection_id: primaryScope.connectionId } : {}),
-        query,
-        max_threads: THREADS_PAGE_SIZE,
-        offset,
-        ...noSecretRequest()
-      })
-    ]);
-    setConnections(connectionPayload.items);
-    setThreads(threadPayload.items);
-    setTotalThreads(threadPayload.total_count ?? threadPayload.items.length);
+    try {
+      const [connectionPayload, threadPayload] = await Promise.all([
+        callBackend<ConnectionPayload>({ action: MAIL_BACKEND_ACTIONS.connectionsList, ...noSecretRequest() }),
+        callBackend<ThreadListPayload>({
+          action: MAIL_BACKEND_ACTIONS.threadsList,
+          mailbox,
+          mailbox_scopes: serializedMailboxScopes,
+          ...(primaryScope.connectionId ? { connection_id: primaryScope.connectionId } : {}),
+          query,
+          max_threads: THREADS_PAGE_SIZE,
+          offset,
+          ...noSecretRequest()
+        })
+      ]);
+      if (threadListRequestRef.current !== requestId) {
+        return;
+      }
+      setConnections(connectionPayload.items);
+      setThreads(threadPayload.items);
+      setTotalThreads(threadPayload.total_count ?? threadPayload.items.length);
+    } catch (error) {
+      if (threadListRequestRef.current !== requestId) {
+        return;
+      }
+      throw error;
+    } finally {
+      if (threadListRequestRef.current === requestId) {
+        setThreadListLoading(false);
+      }
+    }
   }, [mailbox, page, primaryScope.connectionId, query, serializedMailboxScopes]);
 
   useEffect(() => {
@@ -1122,19 +1159,21 @@ export function App() {
   }
 
   return (
-    <main className={`mail-shell ${selectedThread ? 'is-reading' : 'is-list-only'}`}>
+    <main className={`mail-shell ${selectedThread || threadOpenLoading ? 'is-reading' : 'is-list-only'}`}>
       <div className="toolbar">
         <label className="mail-search">
           <span className="mail-search__icon" aria-hidden="true" />
           <input aria-label="Search in Mail" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search in Mail" />
         </label>
         <div className="mail-page-controls" aria-label="Mail pagination">
-          <span className="mail-page-range">{visibleStart}-{visibleEnd}</span>
+          <span className={`mail-page-range ${threadListLoading ? 'is-loading' : ''}`}>
+            {threadListLoading ? <span aria-hidden="true" /> : `${visibleStart}-${visibleEnd}`}
+          </span>
           <button
             type="button"
             className="mail-icon-button"
             onClick={refreshMailbox}
-            disabled={busy || !canUseConnection}
+            disabled={busy || threadListLoading || !canUseConnection}
             aria-label="Refresh mailbox"
             title="Refresh mailbox"
           >
@@ -1200,13 +1239,14 @@ export function App() {
       <div className="mail-workspace">
         <section className="thread-column">
           {notice ? <div className="mail-sidebar-notice" role="status" aria-live="polite">{notice}</div> : null}
-          <div className="thread-list">
-            {threads.length === 0 ? (
+          <div className="thread-list" aria-busy={threadListLoading}>
+            {threadListLoading ? <MailThreadListSkeleton /> : null}
+            {!threadListLoading && threads.length === 0 ? (
               <div className="thread-empty">
                 {canUseConnection ? 'No threads match this view.' : 'Connect a mail account to load mail.'}
               </div>
             ) : null}
-            {threads.map((thread) => {
+            {!threadListLoading ? threads.map((thread) => {
               const sender = threadSender(thread);
               const threadDate = formatThreadDate(thread.last_message_at);
               const canModifyThread = connectionById.get(thread.connection_id)?.status !== 'disconnected';
@@ -1259,7 +1299,7 @@ export function App() {
                   </span>
                 </article>
               );
-            })}
+            }) : null}
           </div>
         </section>
 
@@ -1325,8 +1365,67 @@ export function App() {
               ))}
             </div>
           </section>
+        ) : threadOpenLoading ? (
+          <MailReaderSkeleton />
         ) : null}
       </div>
     </main>
+  );
+}
+
+function MailThreadListSkeleton() {
+  return (
+    <div className="mail-thread-skeleton" role="status" aria-label="Mail threads are loading">
+      {Array.from({ length: 8 }).map((_, index) => (
+        <article className="mail-thread-skeleton__row" key={index} aria-hidden="true">
+          <span className="mail-thread-skeleton__body">
+            <span className="mail-app-skeleton__avatar" />
+            <span className="mail-thread-skeleton__copy">
+              <span className="mail-thread-skeleton__title-line">
+                <span className="mail-app-skeleton__line mail-app-skeleton__line--title" />
+                <span className="mail-app-skeleton__line mail-app-skeleton__line--date" />
+              </span>
+              <span className="mail-app-skeleton__line mail-app-skeleton__line--snippet" />
+            </span>
+          </span>
+          <span className="mail-thread-skeleton__side">
+            <span className="mail-app-skeleton__line mail-app-skeleton__line--route" />
+            <span className="mail-thread-skeleton__actions">
+              <span />
+              <span />
+            </span>
+          </span>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function MailReaderSkeleton() {
+  return (
+    <section className="reader-column mail-reader-skeleton" role="status" aria-label="Mail message is loading" aria-busy="true">
+      <header className="reader-header mail-reader-skeleton__header" aria-hidden="true">
+        <span className="mail-reader-skeleton__actions">
+          <span />
+          <span />
+          <span />
+          <span />
+        </span>
+        <span className="mail-app-skeleton__line mail-app-skeleton__line--reader-title" />
+      </header>
+      <div className="message-stack mail-reader-skeleton__stack" aria-hidden="true">
+        {Array.from({ length: 2 }).map((_, index) => (
+          <article className="mail-reader-skeleton__message" key={index}>
+            <span className="mail-app-skeleton__line mail-app-skeleton__line--message-meta" />
+            <span className="mail-reader-skeleton__block">
+              <span className="mail-app-skeleton__line mail-app-skeleton__line--body-wide" />
+              <span className="mail-app-skeleton__line mail-app-skeleton__line--body" />
+              <span className="mail-app-skeleton__line mail-app-skeleton__line--body-short" />
+              <span className="mail-app-skeleton__line mail-app-skeleton__line--body" />
+            </span>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }

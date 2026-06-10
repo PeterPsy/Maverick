@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { LogOut, Mail, RefreshCw, Square, SquareCheck } from 'lucide-react';
 import {
@@ -169,15 +169,23 @@ function MailSidebarWidget() {
   const [mailboxCounts, setMailboxCounts] = useState<Record<string, Record<string, MailboxCount>>>({});
   const [mailboxScopeIds, setMailboxScopeIds] = useState<string[]>(DEFAULT_MAILBOX_SCOPE_IDS);
   const [notice, setNotice] = useState('');
+  const [loading, setLoading] = useState(true);
   const [activeOperation, setActiveOperation] = useState('');
   const [isMobileLayout, setIsMobileLayout] = useState(false);
+  const refreshRequestRef = useRef(0);
 
   const refresh = useCallback(async (options: { preserveNotice?: boolean } = {}) => {
+    const requestId = refreshRequestRef.current + 1;
+    refreshRequestRef.current = requestId;
+    setLoading(true);
     try {
       const [connectionPayload, countPayload] = await Promise.all([
         callBackend<ConnectionPayload>({ action: MAIL_BACKEND_ACTIONS.connectionsList, ...noSecretRequest() }),
         callBackend<MailboxCountPayload>({ action: MAIL_BACKEND_ACTIONS.mailboxesCounts, ...noSecretRequest() })
       ]);
+      if (refreshRequestRef.current !== requestId) {
+        return false;
+      }
       setConnections(connectionPayload.items);
       setMailboxCounts(countPayload.counts || {});
       if (!options.preserveNotice) {
@@ -185,10 +193,17 @@ function MailSidebarWidget() {
       }
       return true;
     } catch (error) {
+      if (refreshRequestRef.current !== requestId) {
+        return false;
+      }
       if (!options.preserveNotice) {
         setNotice(error instanceof Error ? error.message : 'Unable to load mail.');
       }
       return false;
+    } finally {
+      if (refreshRequestRef.current === requestId) {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -320,9 +335,11 @@ function MailSidebarWidget() {
   }
 
   return (
-    <main className={`mail-sidebar-widget ${isMobileLayout ? 'is-shell-mobile' : ''}`} aria-busy={Boolean(activeOperation)}>
+    <main className={`mail-sidebar-widget ${isMobileLayout ? 'is-shell-mobile' : ''}`} aria-busy={loading || Boolean(activeOperation)}>
       <div className="mail-sidebar-widget__list mail-sidebar-widget__tree-list">
-        {connections.length ? (
+        {loading ? (
+          <MailSidebarSkeleton />
+        ) : connections.length ? (
           <TreeProvider
             animateExpand
             className="mail-folder-tree"
@@ -353,6 +370,22 @@ function MailSidebarWidget() {
         {notice ? <p className="mail-sidebar-widget__notice">{notice}</p> : null}
       </div>
     </main>
+  );
+}
+
+function MailSidebarSkeleton() {
+  return (
+    <div className="mail-sidebar-skeleton" role="status" aria-label="Mail folders are loading">
+      {Array.from({ length: 7 }).map((_, index) => (
+        <div className={`mail-sidebar-skeleton__row depth-${Math.min(index, 3)}`} key={index} aria-hidden="true">
+          <span className="mail-sidebar-skeleton__expander" />
+          <span className="mail-sidebar-skeleton__icon" />
+          <span className="mail-sidebar-skeleton__copy">
+            <span />
+          </span>
+        </div>
+      ))}
+    </div>
   );
 }
 

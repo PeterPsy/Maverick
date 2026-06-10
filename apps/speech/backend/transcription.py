@@ -73,6 +73,7 @@ def transcribe_audio_payload(*, data_root: Path, body: dict) -> dict:
     language = normalized_language(body.get("language"))
     profile = normalized_transcription_profile(body.get("profile"), operation="transcribe_audio")
     session = normalized_transcription_session(body)
+    dictation_mode = bool(session) or dictation_mode_enabled(body)
     body_file_path = str(body.get("_body_file_path") or "")
     if body_file_path:
         return transcribe_inline_body_file(
@@ -83,6 +84,7 @@ def transcribe_audio_payload(*, data_root: Path, body: dict) -> dict:
             language=language,
             profile=profile,
             session=session,
+            dictation_mode=dictation_mode,
         )
     audio = decoded_audio(body.get("audio_base64"))
     return transcribe_bytes(
@@ -93,6 +95,7 @@ def transcribe_audio_payload(*, data_root: Path, body: dict) -> dict:
         profile=profile,
         source={"kind": "inline"},
         session=session,
+        dictation_mode=dictation_mode,
     )
 
 
@@ -105,6 +108,7 @@ def transcribe_inline_body_file(
     language: str,
     profile: str,
     session: dict | None = None,
+    dictation_mode: bool = False,
 ) -> dict:
     if not audio_path.exists() or not audio_path.is_file():
         raise SpeechValidationError("inline audio upload is unavailable.", operation="transcribe_audio")
@@ -122,6 +126,7 @@ def transcribe_inline_body_file(
         operation="transcribe_audio",
         source={"kind": "inline", "transport": "binary"},
         session=session,
+        dictation_mode=dictation_mode,
     )
 
 
@@ -151,6 +156,7 @@ def transcribe_file_payload(
     size_bytes = audio_path.stat().st_size
     validate_audio_size(size_bytes, operation="transcribe_file", max_audio_bytes=MAX_TRANSCRIPTION_FILE_AUDIO_BYTES)
     language = normalized_language(body.get("language"))
+    dictation_mode = dictation_mode_enabled(body)
     return transcribe_path(
         data_root=data_root,
         audio_path=audio_path,
@@ -159,10 +165,21 @@ def transcribe_file_payload(
         language=language,
         operation="transcribe_file",
         source={"kind": "storage", "workspace_relative_path": normalized_workspace_relative_path(body)},
+        dictation_mode=dictation_mode,
     )
 
 
-def transcribe_bytes(*, data_root: Path, audio: bytes, content_type: str, language: str, profile: str, source: dict, session: dict | None = None) -> dict:
+def transcribe_bytes(
+    *,
+    data_root: Path,
+    audio: bytes,
+    content_type: str,
+    language: str,
+    profile: str,
+    source: dict,
+    session: dict | None = None,
+    dictation_mode: bool = False,
+) -> dict:
     extension = CONTENT_TYPE_EXTENSIONS[content_type]
     with tempfile.TemporaryDirectory(prefix="maverick-speech-stt-") as temp_dir:
         audio_path = Path(temp_dir) / f"input{extension}"
@@ -177,6 +194,7 @@ def transcribe_bytes(*, data_root: Path, audio: bytes, content_type: str, langua
             operation="transcribe_audio",
             source=source,
             session=session,
+            dictation_mode=dictation_mode,
         )
 
 
@@ -191,6 +209,7 @@ def transcribe_path(
     source: dict,
     profile: str = "",
     session: dict | None = None,
+    dictation_mode: bool = False,
 ) -> dict:
     preflight_duration_seconds = probe_audio_duration_seconds(audio_path, content_type=content_type)
     validate_audio_duration(preflight_duration_seconds, operation=operation)
@@ -201,12 +220,12 @@ def transcribe_path(
     transcription_started = time.monotonic()
     result = transcribe_audio_file(audio_path, settings=settings, language=language)
     transcription_seconds = time.monotonic() - transcription_started
-    post_processed = post_process_transcript(str(result.get("text") or ""))
+    post_processed = post_process_transcript(str(result.get("text") or ""), enable_commands=dictation_mode)
     cleaned_text = str(post_processed.get("text") or "")
     commands = [item for item in post_processed.get("commands", []) if isinstance(item, dict)]
     duration_seconds = float(result.get("duration_seconds") or preflight_duration_seconds or 0.0)
     validate_audio_duration(duration_seconds, operation=operation)
-    segments = normalized_segments(result.get("segments", []))
+    segments = normalized_segments(result.get("segments", []), enable_commands=dictation_mode)
     metrics = transcription_metrics(result=result, transcription_seconds=transcription_seconds, duration_seconds=duration_seconds)
     session_payload = apply_transcription_session(
         data_root,
@@ -264,14 +283,14 @@ def transcribe_path(
     }
 
 
-def normalized_segments(value: object) -> list[dict]:
+def normalized_segments(value: object, *, enable_commands: bool = False) -> list[dict]:
     segments: list[dict] = []
     if not isinstance(value, list):
         return segments
     for segment in value:
         if not isinstance(segment, dict):
             continue
-        text = cleaned_transcript(str(segment.get("text") or ""))
+        text = cleaned_transcript(str(segment.get("text") or ""), enable_commands=enable_commands)
         if not text.strip():
             continue
         segments.append(
@@ -455,16 +474,22 @@ def truthy(value: object) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes", "on", "final"}
 
 
-def cleaned_transcript(text: str) -> str:
-    return str(post_process_transcript(text).get("text") or "")
+def dictation_mode_enabled(body: dict) -> bool:
+    if "dictation" in body:
+        return truthy(body.get("dictation"))
+    return truthy(body.get("dictation_mode"))
 
 
-def post_process_transcript(text: str) -> dict:
+def cleaned_transcript(text: str, *, enable_commands: bool = False) -> str:
+    return str(post_process_transcript(text, enable_commands=enable_commands).get("text") or "")
+
+
+def post_process_transcript(text: str, *, enable_commands: bool = False) -> dict:
     transcript = normalized_transcript_text(text)
     normalized = transcript.lower().strip(" .!?")
     if normalized in HALLUCINATION_TRANSCRIPTS:
         return {"text": "", "commands": []}
-    command = dictation_command(transcript)
+    command = dictation_command(transcript) if enable_commands else {}
     if command:
         return {"text": str(command.get("text") or ""), "commands": [command]}
     transcript = remove_adjacent_repeated_words(clean_punctuation_spacing(transcript))

@@ -103,6 +103,8 @@ export type SpeechCapabilitiesPayload = {
       language_hint_supported?: boolean;
       profiles?: string[];
       inline_default_profile?: string;
+      inline_default_profile_available?: boolean;
+      inline_default_profile_engine?: string;
     };
   };
 };
@@ -145,6 +147,7 @@ export type SpeechTranscribeOptions = {
   sessionId?: string;
   chunkIndex?: number;
   final?: boolean;
+  dictation?: boolean;
 };
 
 export type ChatThread = {

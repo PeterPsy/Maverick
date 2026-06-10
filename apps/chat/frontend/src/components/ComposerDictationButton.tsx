@@ -20,6 +20,7 @@ type AdaptiveLanguageHint = {
 };
 
 export function ComposerDictationButton({
+  chunkedDictationSupported = false,
   disabled,
   maxAudioBytes = DEFAULT_MAX_DICTATION_AUDIO_BYTES,
   maxDurationSeconds = DEFAULT_MAX_DICTATION_MS / 1000,
@@ -29,6 +30,7 @@ export function ComposerDictationButton({
   providerAvailable,
   supportedContentTypes = [],
 }: {
+  chunkedDictationSupported?: boolean;
   disabled: boolean;
   maxAudioBytes?: number;
   maxDurationSeconds?: number;
@@ -42,8 +44,11 @@ export function ComposerDictationButton({
   const recorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const recordingTimerRef = useRef<number | null>(null);
+  const recordingChunksRef = useRef<Blob[]>([]);
+  const recordingContentTypeRef = useRef("");
   const adaptiveLanguageRef = useRef<AdaptiveLanguageHint>({ language: "", usesRemaining: 0 });
   const dictationSessionIdRef = useRef("");
+  const activeChunkedDictationRef = useRef(false);
   const failedDictationRef = useRef(false);
   const insertedTranscriptRef = useRef(false);
   const pendingTranscriptionRef = useRef<Promise<void>>(Promise.resolve());
@@ -96,19 +101,25 @@ export function ComposerDictationButton({
       const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
       mediaStreamRef.current = stream;
       recorderRef.current = recorder;
+      activeChunkedDictationRef.current = chunkedDictationSupported === true;
       dictationSessionIdRef.current = newDictationSessionId();
       failedDictationRef.current = false;
       insertedTranscriptRef.current = false;
       pendingTranscriptionRef.current = Promise.resolve();
+      recordingChunksRef.current = [];
+      recordingContentTypeRef.current = recorder.mimeType || mimeType || "audio/webm";
       nextChunkIndexRef.current = 0;
       stoppingRef.current = false;
       totalAudioBytesRef.current = 0;
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
-          queueDictationChunk(event.data, {
-            contentType: recorder.mimeType || mimeType || event.data.type || "audio/webm",
-            final: stoppingRef.current,
-          });
+          const contentType = recorder.mimeType || mimeType || event.data.type || recordingContentTypeRef.current || "audio/webm";
+          recordingContentTypeRef.current = contentType;
+          if (activeChunkedDictationRef.current) {
+            queueDictationChunk(event.data, { contentType, final: stoppingRef.current });
+          } else {
+            collectOneShotDictationChunk(event.data);
+          }
         }
       };
       recorder.onerror = (event) => {
@@ -117,7 +128,11 @@ export function ComposerDictationButton({
       recorder.onstop = () => {
         void finishDictation();
       };
-      recorder.start(DICTATION_CHUNK_MS);
+      if (activeChunkedDictationRef.current) {
+        recorder.start(DICTATION_CHUNK_MS);
+      } else {
+        recorder.start();
+      }
       setStatus("recording");
       recordingTimerRef.current = window.setTimeout(stopCurrentRecording, maxDurationMs(effectiveMaxDurationSeconds));
     } catch (error) {
@@ -130,6 +145,7 @@ export function ComposerDictationButton({
 
   async function finishDictation() {
     stopRecordingTimer();
+    const contentType = recordingContentTypeRef.current || recorderRef.current?.mimeType || "audio/webm";
     stopMediaStream();
     recorderRef.current = null;
     if (failedDictationRef.current) {
@@ -138,13 +154,61 @@ export function ComposerDictationButton({
     }
     setStatus("transcribing");
     try {
-      await pendingTranscriptionRef.current;
+      if (activeChunkedDictationRef.current) {
+        await pendingTranscriptionRef.current;
+      } else {
+        await finishOneShotDictation(contentType);
+      }
+      if (failedDictationRef.current) {
+        setStatus("idle");
+        return;
+      }
       if (!insertedTranscriptRef.current) {
         onError("No speech detected.");
       }
       setStatus("idle");
     } catch (error) {
       failDictation(transcriptionErrorMessage(error));
+    }
+  }
+
+  function collectOneShotDictationChunk(data: Blob) {
+    if (failedDictationRef.current || data.size <= 0) {
+      return;
+    }
+    totalAudioBytesRef.current += data.size;
+    if (totalAudioBytesRef.current > effectiveMaxAudioBytes) {
+      failDictation(`Microphone audio is too large to transcribe. Keep recordings under ${formatBytes(effectiveMaxAudioBytes)}.`);
+      stopCurrentRecording();
+      return;
+    }
+    recordingChunksRef.current.push(data);
+  }
+
+  async function finishOneShotDictation(contentType: string) {
+    const chunks = recordingChunksRef.current;
+    recordingChunksRef.current = [];
+    if (!chunks.length || totalAudioBytesRef.current <= 0) {
+      return;
+    }
+    const languageHint = adaptiveLanguageForRequest(adaptiveLanguageRef.current);
+    const audioBlob = new Blob(chunks, { type: contentType || chunks[0]?.type || "audio/webm" });
+    const result = await transcribeSpeechBlob(providerAppId, audioBlob, {
+      dictation: true,
+      language: languageHint || undefined,
+      profile: DICTATION_TRANSCRIPTION_PROFILE,
+    });
+    const transcript = result.chunk_text ?? result.text ?? "";
+    adaptiveLanguageRef.current = nextAdaptiveLanguageHint({
+      current: adaptiveLanguageRef.current,
+      detectedLanguage: result.language,
+      languageHint,
+      probability: result.language_probability,
+      transcript,
+    });
+    if (transcript || result.commands?.length) {
+      insertedTranscriptRef.current = true;
+      onTranscript(transcript, result);
     }
   }
 

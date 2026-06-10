@@ -60,6 +60,7 @@ type UseChatControllerPresentationParams = {
   speechProviderAppId: string;
   speechProviderAvailable: boolean;
   speechProviderQualityProfile: string;
+  transcriptionChunkedDictationSupported: boolean;
   transcriptionContentTypes: string[];
   transcriptionMaxAudioBytes: number;
   transcriptionMaxDurationSeconds: number;
@@ -114,6 +115,7 @@ export function useChatControllerPresentation({
   speechProviderAppId,
   speechProviderAvailable,
   speechProviderQualityProfile,
+  transcriptionChunkedDictationSupported,
   transcriptionContentTypes,
   transcriptionMaxAudioBytes,
   transcriptionMaxDurationSeconds,
@@ -180,6 +182,7 @@ export function useChatControllerPresentation({
       queuedCount: queuedMessages.length,
       queuedPreview: queuedMessages[0]?.content || null,
       selectedAgentTypeId: composerSelectedAgentTypeId,
+      transcriptionChunkedDictationSupported,
       transcriptionContentTypes,
       transcriptionMaxAudioBytes,
       transcriptionMaxDurationSeconds,

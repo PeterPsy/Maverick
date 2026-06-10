@@ -161,6 +161,8 @@ def capabilities_payload(data_root: Path) -> dict:
     settings = read_settings(data_root)
     engine = resolve_local_engine(settings)
     transcription_engine = resolve_transcription_engine(settings)
+    inline_transcription_settings = {**settings, "transcription_profile": DEFAULT_INLINE_TRANSCRIPTION_PROFILE}
+    inline_transcription_engine = resolve_transcription_engine(inline_transcription_settings)
     return {
         "app_id": "speech",
         "interfaces": {
@@ -203,6 +205,8 @@ def capabilities_payload(data_root: Path) -> dict:
                 "language_hint_supported": True,
                 "profiles": ["fast", "balanced", "accurate"],
                 "inline_default_profile": DEFAULT_INLINE_TRANSCRIPTION_PROFILE,
+                "inline_default_profile_available": bool(inline_transcription_engine),
+                "inline_default_profile_engine": inline_transcription_engine,
                 "word_timestamps_supported": False,
                 "inputs": {
                     "audio_base64": True,

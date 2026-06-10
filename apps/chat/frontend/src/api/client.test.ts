@@ -202,13 +202,17 @@ describe("speech provider client calls", () => {
     vi.stubGlobal("fetch", fetchMock);
     const audio = new Blob(["audio"], { type: "audio/webm" });
 
-    await expect(transcribeSpeechBlob("speech", audio, { chunkIndex: 2, final: true, language: "it", profile: "fast", sessionId: "chat-session" })).resolves.toMatchObject({
+    await expect(
+      transcribeSpeechBlob("speech", audio, { chunkIndex: 2, dictation: true, final: true, language: "it", profile: "fast", sessionId: "chat-session" }),
+    ).resolves.toMatchObject({
       text: "Hello transcript",
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [path, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(path).toBe("/api/apps/speech/backend?action=transcribe_audio&language=it&profile=fast&session_id=chat-session&chunk_index=2&final=true");
+    expect(path).toBe(
+      "/api/apps/speech/backend?action=transcribe_audio&language=it&profile=fast&session_id=chat-session&chunk_index=2&final=true&dictation=true",
+    );
     expect(init.method).toBe("POST");
     expect(init.headers).toMatchObject({ Accept: "application/json", "Content-Type": "audio/webm" });
     expect(init.body).toBe(audio);

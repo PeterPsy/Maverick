@@ -48,6 +48,9 @@ export function transcribeSpeech(
   if (typeof options.final === "boolean") {
     body.final = options.final ? "true" : "false";
   }
+  if (typeof options.dictation === "boolean") {
+    body.dictation = options.dictation ? "true" : "false";
+  }
   return requestJson<SpeechTranscribePayload>(`/api/apps/${encodeURIComponent(providerAppId)}/backend`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -76,6 +79,9 @@ export function transcribeSpeechBlob(
   }
   if (typeof options.final === "boolean") {
     params.set("final", options.final ? "true" : "false");
+  }
+  if (typeof options.dictation === "boolean") {
+    params.set("dictation", options.dictation ? "true" : "false");
   }
   return requestJson<SpeechTranscribePayload>(`/api/apps/${encodeURIComponent(providerAppId)}/backend?${params.toString()}`, {
     method: "POST",

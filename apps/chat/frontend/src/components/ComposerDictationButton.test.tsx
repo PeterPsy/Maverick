@@ -18,6 +18,7 @@ vi.mock("../api/client", () => ({
 class MockMediaRecorder {
   static instances: MockMediaRecorder[] = [];
   static stopCalls = 0;
+  static startTimeslices: Array<number | undefined> = [];
   static isTypeSupported = vi.fn(() => true);
 
   mimeType = "audio/webm";
@@ -31,7 +32,8 @@ class MockMediaRecorder {
     MockMediaRecorder.instances.push(this);
   }
 
-  start() {
+  start(timeslice?: number) {
+    MockMediaRecorder.startTimeslices.push(timeslice);
     this.state = "recording";
     this.emit("audio");
   }
@@ -60,6 +62,7 @@ describe("ComposerDictationButton", () => {
   beforeEach(() => {
     MockMediaRecorder.instances = [];
     MockMediaRecorder.stopCalls = 0;
+    MockMediaRecorder.startTimeslices = [];
     originalMediaRecorder = globalThis.MediaRecorder;
     originalGetUserMedia = navigator.mediaDevices?.getUserMedia;
     originalIsSecureContext = window.isSecureContext;
@@ -100,6 +103,7 @@ describe("ComposerDictationButton", () => {
     await act(async () => {
       root.render(
         <ComposerDictationButton
+          chunkedDictationSupported
           disabled={false}
           onError={onError}
           onTranscript={onTranscript}
@@ -127,6 +131,7 @@ describe("ComposerDictationButton", () => {
     });
 
     expect(MockMediaRecorder.stopCalls).toBe(1);
+    expect(MockMediaRecorder.startTimeslices).toEqual([1500]);
     expect(transcribeSpeechBlob).toHaveBeenCalledWith(
       "speech",
       expect.any(Blob),
@@ -144,6 +149,7 @@ describe("ComposerDictationButton", () => {
     await act(async () => {
       root.render(
         <ComposerDictationButton
+          chunkedDictationSupported
           disabled={false}
           onError={onError}
           onTranscript={onTranscript}
@@ -171,5 +177,74 @@ describe("ComposerDictationButton", () => {
     expect(secondOptions).toMatchObject({ chunkIndex: 1, profile: "fast", sessionId: firstOptions.sessionId });
     expect(onTranscript).toHaveBeenCalledWith("first", expect.objectContaining({ chunk_text: "first" }));
     expect(onTranscript).toHaveBeenCalledWith("second", expect.objectContaining({ chunk_text: "second" }));
+  });
+
+  it("falls back to one-shot dictation when chunked sessions are not supported", async () => {
+    const onError = vi.fn();
+    const onTranscript = vi.fn();
+    vi.mocked(transcribeSpeechBlob).mockResolvedValue({ language: "en", language_probability: 0.9, text: "one shot" });
+
+    await act(async () => {
+      root.render(
+        <ComposerDictationButton
+          disabled={false}
+          onError={onError}
+          onTranscript={onTranscript}
+          providerAppId="speech"
+          providerAvailable
+          supportedContentTypes={["audio/webm"]}
+        />,
+      );
+    });
+
+    const button = container.querySelector("button");
+    await act(async () => {
+      button?.click();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      button?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(MockMediaRecorder.startTimeslices).toEqual([undefined]);
+    expect(transcribeSpeechBlob).toHaveBeenCalledTimes(1);
+    const options = vi.mocked(transcribeSpeechBlob).mock.calls[0]?.[2] as Record<string, unknown>;
+    expect(options).toMatchObject({ dictation: true, language: undefined, profile: "fast" });
+    expect(options).not.toHaveProperty("sessionId");
+    expect(options).not.toHaveProperty("chunkIndex");
+    expect(onTranscript).toHaveBeenCalledWith("one shot", expect.objectContaining({ text: "one shot" }));
+  });
+
+  it("keeps a chunk transcription error instead of replacing it with no speech", async () => {
+    const onError = vi.fn();
+    const onTranscript = vi.fn();
+    vi.mocked(transcribeSpeechBlob).mockRejectedValue(new Error("backend unavailable"));
+
+    await act(async () => {
+      root.render(
+        <ComposerDictationButton
+          chunkedDictationSupported
+          disabled={false}
+          onError={onError}
+          onTranscript={onTranscript}
+          providerAppId="speech"
+          providerAvailable
+          supportedContentTypes={["audio/webm"]}
+        />,
+      );
+    });
+
+    const button = container.querySelector("button");
+    await act(async () => {
+      button?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(onTranscript).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenLastCalledWith("Unable to transcribe microphone audio: backend unavailable");
+    expect(onError).not.toHaveBeenCalledWith("No speech detected.");
   });
 });

@@ -126,6 +126,8 @@ class SpeechAppTests(unittest.TestCase):
         self.assertFalse(payload["interfaces"]["speech.synthesis"]["output"]["workspace_relative_path"])
         self.assertEqual(payload["interfaces"]["speech.synthesis"]["output"]["retention"], "derived_cache")
         self.assertFalse(payload["interfaces"]["speech.transcription"]["provider_available"])
+        self.assertFalse(payload["interfaces"]["speech.transcription"]["inline_default_profile_available"])
+        self.assertEqual(payload["interfaces"]["speech.transcription"]["inline_default_profile_engine"], "")
         self.assertFalse(payload["interfaces"]["speech.transcription"]["streaming_supported"])
         self.assertTrue(payload["interfaces"]["speech.transcription"]["inputs"]["audio_base64"])
         self.assertTrue(payload["interfaces"]["speech.transcription"]["inputs"]["http_binary_body"])
@@ -136,6 +138,24 @@ class SpeechAppTests(unittest.TestCase):
         self.assertEqual(payload["interfaces"]["speech.transcription"]["language_detection"], "auto")
         self.assertEqual(payload["interfaces"]["speech.transcription"]["inline_default_profile"], "fast")
         self.assertIn("fast", payload["interfaces"]["speech.transcription"]["profiles"])
+
+    def test_capabilities_report_inline_default_profile_availability_separately(self) -> None:
+        def resolve_transcription(settings: dict) -> str:
+            return "faster-whisper" if settings.get("transcription_profile") == "balanced" else ""
+
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            write_settings(root / "data", {"transcription_profile": "balanced"})
+            with patch("service.resolve_local_engine", return_value=None), patch("service.resolve_transcription_engine", side_effect=resolve_transcription):
+                status_code, payload = handle_action(root / "data", root / "generated", {"action": "capabilities"})
+
+        transcription = payload["interfaces"]["speech.transcription"]
+        self.assertEqual(status_code, 200)
+        self.assertTrue(transcription["provider_available"])
+        self.assertEqual(transcription["engine"], "faster-whisper")
+        self.assertEqual(transcription["inline_default_profile"], "fast")
+        self.assertFalse(transcription["inline_default_profile_available"])
+        self.assertEqual(transcription["inline_default_profile_engine"], "")
 
     def test_synthesize_rejects_empty_or_too_long_text(self) -> None:
         with self.assertRaises(SpeechValidationError):
@@ -1193,6 +1213,38 @@ class SpeechAppTests(unittest.TestCase):
             self.assertNotIn("ciao mondo", jobs_json)
             self.assertIn('"realtime_factor"', jobs_json)
 
+    def test_transcribe_audio_explicit_dictation_mode_applies_commands(self) -> None:
+        audio = b"RIFF" + b"\0" * 512
+        fake_result = {
+            "engine": "faster-whisper",
+            "model": "base",
+            "language": "it",
+            "language_probability": 0.95,
+            "duration_seconds": 1.0,
+            "segments": [],
+            "text": "nuova riga",
+            "profile": "fast",
+            "beam_size": 1,
+        }
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            with patch("transcription.transcribe_audio_file", return_value=fake_result):
+                status_code, payload = handle_action(
+                    root / "data",
+                    root / "storage" / "generated",
+                    {
+                        "action": "transcribe_audio",
+                        "content_type": "audio/wav",
+                        "audio_base64": base64.b64encode(audio).decode("ascii"),
+                        "dictation": True,
+                    },
+                )
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(payload["text"], "\n")
+        self.assertEqual(payload["chunk_text"], "\n")
+        self.assertEqual(payload["commands"][0]["type"], "insert_text")
+
     def test_transcribe_audio_binary_upload_uses_spooled_body_file(self) -> None:
         audio = b"not-a-real-webm" * 20
         fake_result = {
@@ -1239,7 +1291,15 @@ class SpeechAppTests(unittest.TestCase):
     def test_app_backend_maps_binary_body_file_to_transcription_body(self) -> None:
         body = app_backend.body_from_payload(
             {
-                "query": {"action": "transcribe_audio", "language": "it", "profile": "fast", "session_id": "chat-session", "chunk_index": "2", "final": "true"},
+                "query": {
+                    "action": "transcribe_audio",
+                    "language": "it",
+                    "profile": "fast",
+                    "session_id": "chat-session",
+                    "chunk_index": "2",
+                    "final": "true",
+                    "dictation": "true",
+                },
                 "body_file": {"path": "/tmp/audio.webm", "content_type": "audio/webm", "size_bytes": 123},
             }
         )
@@ -1251,6 +1311,7 @@ class SpeechAppTests(unittest.TestCase):
         self.assertEqual(body["session_id"], "chat-session")
         self.assertEqual(body["chunk_index"], "2")
         self.assertEqual(body["final"], "true")
+        self.assertEqual(body["dictation"], "true")
         self.assertEqual(body["_body_file_path"], "/tmp/audio.webm")
         self.assertEqual(body["_body_file_size_bytes"], 123)
 
@@ -1341,7 +1402,8 @@ class SpeechAppTests(unittest.TestCase):
         self.assertEqual(cleaned_transcript("you"), "you")
         self.assertEqual(cleaned_transcript("hi"), "hi")
         self.assertEqual(cleaned_transcript("hello hello , world"), "hello, world")
-        self.assertEqual(cleaned_transcript("nuova riga"), "\n")
+        self.assertEqual(cleaned_transcript("nuova riga"), "nuova riga")
+        self.assertEqual(cleaned_transcript("nuova riga", enable_commands=True), "\n")
 
     def test_transcribe_file_resolves_only_workspace_storage_paths(self) -> None:
         fake_result = {
@@ -1376,6 +1438,34 @@ class SpeechAppTests(unittest.TestCase):
                     {"action": "transcribe_file", "workspace_relative_path": "../sample.wav"},
                     uploaded,
                 )
+
+    def test_transcribe_file_does_not_apply_dictation_commands_by_default(self) -> None:
+        fake_result = {
+            "engine": "faster-whisper",
+            "model": "base",
+            "language": "it",
+            "language_probability": 0.9,
+            "duration_seconds": 0.5,
+            "segments": [],
+            "text": "nuova riga",
+        }
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            uploaded = root / "storage" / "uploaded"
+            uploaded.mkdir(parents=True)
+            audio_path = uploaded / "sample.wav"
+            audio_path.write_bytes(b"RIFF" + b"\0" * 512)
+            with patch("transcription.transcribe_audio_file", return_value=fake_result):
+                status_code, payload = handle_action(
+                    root / "data",
+                    root / "storage" / "generated",
+                    {"action": "transcribe_file", "workspace_relative_path": "storage/uploaded/sample.wav"},
+                    uploaded,
+                )
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(payload["text"], "nuova riga")
+        self.assertEqual(payload["commands"], [])
 
     def test_whisper_cpp_transcription_redacts_operator_paths(self) -> None:
         with TemporaryDirectory() as temp_dir:

@@ -283,6 +283,33 @@ describe("App agent catalog dependency refresh", () => {
     });
   });
 
+  it("does not prewarm transcription when the inline default profile is unavailable", async () => {
+    vi.mocked(getSpeechCapabilities).mockResolvedValue({
+      interfaces: {
+        "speech.synthesis": {
+          available: true,
+          provider_available: true,
+        },
+        "speech.transcription": {
+          available: true,
+          provider_available: true,
+          inline_default_profile_available: false,
+        },
+      },
+    });
+
+    await renderApp();
+
+    await waitForAssertion(() => {
+      expect(getSpeechCapabilities).toHaveBeenCalledWith("speech");
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(prewarmSpeechWorker).not.toHaveBeenCalled();
+  });
+
   it("clears stale agent options when a dependency refresh cannot load the selected catalog", async () => {
     const element = await renderApp();
 

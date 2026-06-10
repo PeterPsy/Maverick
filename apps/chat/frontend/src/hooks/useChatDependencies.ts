@@ -36,6 +36,7 @@ export function useChatDependencies() {
   const [transcriptionMaxAudioBytes, setTranscriptionMaxAudioBytes] = useState(0);
   const [transcriptionMaxDurationSeconds, setTranscriptionMaxDurationSeconds] = useState(0);
   const [transcriptionContentTypes, setTranscriptionContentTypes] = useState<string[]>([]);
+  const [transcriptionChunkedDictationSupported, setTranscriptionChunkedDictationSupported] = useState(false);
   const [agentOptions, setAgentOptions] = useState<AgentTypeSummary[]>([]);
   const [selectedAgentTypeId, setSelectedAgentTypeId] = useState("");
   const prewarmedTranscriptionProviderRef = useRef("");
@@ -118,6 +119,7 @@ export function useChatDependencies() {
     setTranscriptionMaxAudioBytes(0);
     setTranscriptionMaxDurationSeconds(0);
     setTranscriptionContentTypes([]);
+    setTranscriptionChunkedDictationSupported(false);
     prewarmedTranscriptionProviderRef.current = "";
   }, []);
 
@@ -135,7 +137,9 @@ export function useChatDependencies() {
           clearTranscriptionProvider();
           return;
         }
-        const providerAvailable = Boolean(transcription.available && transcription.provider_available !== false);
+        const providerAvailable = Boolean(
+          transcription.available && transcription.provider_available !== false && transcription.inline_default_profile_available !== false,
+        );
         setTranscriptionProviderAppId(providerAppId);
         setTranscriptionProviderAvailable(providerAvailable);
         setTranscriptionMaxAudioBytes(
@@ -153,6 +157,7 @@ export function useChatDependencies() {
               : 0,
         );
         setTranscriptionContentTypes(Array.isArray(transcription.content_types) ? transcription.content_types.filter((item) => typeof item === "string") : []);
+        setTranscriptionChunkedDictationSupported(transcription.chunked_dictation_supported === true);
         if (providerAvailable && prewarmedTranscriptionProviderRef.current !== providerAppId) {
           prewarmedTranscriptionProviderRef.current = providerAppId;
           void prewarmSpeechWorker(providerAppId).catch(() => {
@@ -227,6 +232,7 @@ export function useChatDependencies() {
     speechProviderAvailable,
     speechProviderQualityProfile,
     transcriptionContentTypes,
+    transcriptionChunkedDictationSupported,
     transcriptionMaxAudioBytes,
     transcriptionMaxDurationSeconds,
     transcriptionProviderAppId,

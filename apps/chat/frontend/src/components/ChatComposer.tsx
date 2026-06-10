@@ -45,6 +45,7 @@ export type ChatComposerProps = {
   selectedAgentTypeId: string;
   transcriptionProviderAppId?: string;
   transcriptionProviderAvailable?: boolean;
+  transcriptionChunkedDictationSupported?: boolean;
   transcriptionMaxAudioBytes?: number;
   transcriptionMaxDurationSeconds?: number;
   transcriptionContentTypes?: string[];
@@ -80,6 +81,7 @@ export function ChatComposer({
   selectedAgentTypeId,
   transcriptionProviderAppId = "",
   transcriptionProviderAvailable = false,
+  transcriptionChunkedDictationSupported = false,
   transcriptionMaxAudioBytes = 0,
   transcriptionMaxDurationSeconds = 0,
   transcriptionContentTypes = [],
@@ -247,6 +249,7 @@ export function ChatComposer({
                   </span>
                 </button>
                 <ComposerDictationButton
+                  chunkedDictationSupported={transcriptionChunkedDictationSupported}
                   disabled={disabled || isSending}
                   maxAudioBytes={transcriptionMaxAudioBytes}
                   maxDurationSeconds={transcriptionMaxDurationSeconds}

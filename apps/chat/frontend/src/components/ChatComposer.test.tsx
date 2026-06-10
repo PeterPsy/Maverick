@@ -160,6 +160,7 @@ async function renderComposer({
   onSearchReferences = async () => [],
   onSelectAgent = () => undefined,
   onSubmit = () => undefined,
+  transcriptionChunkedDictationSupported = false,
   transcriptionProviderAppId = "",
   transcriptionProviderAvailable = false,
 }: {
@@ -170,6 +171,7 @@ async function renderComposer({
   onSearchReferences?: (query: string, signal: AbortSignal) => Promise<MentionItem[]>;
   onSelectAgent?: (agentTypeId: string) => void;
   onSubmit?: () => void;
+  transcriptionChunkedDictationSupported?: boolean;
   transcriptionProviderAppId?: string;
   transcriptionProviderAvailable?: boolean;
 } = {}) {
@@ -208,6 +210,7 @@ async function renderComposer({
         queuedCount={0}
         queuedPreview={null}
         selectedAgentTypeId=""
+        transcriptionChunkedDictationSupported={transcriptionChunkedDictationSupported}
         transcriptionProviderAppId={transcriptionProviderAppId}
         transcriptionProviderAvailable={transcriptionProviderAvailable}
         value={value}
@@ -567,11 +570,10 @@ describe("ChatComposer reference search", () => {
       await Promise.resolve();
     });
     await waitForComposerAssertion(() => {
-      expect(transcribeSpeechBlob).toHaveBeenCalledWith(
-        "speech",
-        expect.any(Blob),
-        expect.objectContaining({ chunkIndex: 0, language: undefined, profile: "fast", sessionId: expect.any(String) }),
-      );
+      const options = vi.mocked(transcribeSpeechBlob).mock.calls[0]?.[2] as Record<string, unknown>;
+      expect(options).toMatchObject({ dictation: true, language: undefined, profile: "fast" });
+      expect(options).not.toHaveProperty("chunkIndex");
+      expect(options).not.toHaveProperty("sessionId");
       expect(getValue()).toBe("Hello transcript");
     });
 
@@ -618,18 +620,12 @@ describe("ChatComposer reference search", () => {
     });
 
     await waitForComposerAssertion(() => {
-      expect(transcribeSpeechBlob).toHaveBeenNthCalledWith(
-        1,
-        "speech",
-        expect.any(Blob),
-        expect.objectContaining({ chunkIndex: 0, language: undefined, profile: "fast", sessionId: expect.any(String) }),
-      );
-      expect(transcribeSpeechBlob).toHaveBeenNthCalledWith(
-        2,
-        "speech",
-        expect.any(Blob),
-        expect.objectContaining({ chunkIndex: 0, language: "it", profile: "fast", sessionId: expect.any(String) }),
-      );
+      const firstOptions = vi.mocked(transcribeSpeechBlob).mock.calls[0]?.[2] as Record<string, unknown>;
+      const secondOptions = vi.mocked(transcribeSpeechBlob).mock.calls[1]?.[2] as Record<string, unknown>;
+      expect(firstOptions).toMatchObject({ dictation: true, language: undefined, profile: "fast" });
+      expect(firstOptions).not.toHaveProperty("sessionId");
+      expect(secondOptions).toMatchObject({ dictation: true, language: "it", profile: "fast" });
+      expect(secondOptions).not.toHaveProperty("sessionId");
     });
 
     await act(async () => {
@@ -643,12 +639,9 @@ describe("ChatComposer reference search", () => {
     });
 
     await waitForComposerAssertion(() => {
-      expect(transcribeSpeechBlob).toHaveBeenNthCalledWith(
-        3,
-        "speech",
-        expect.any(Blob),
-        expect.objectContaining({ chunkIndex: 0, language: undefined, profile: "fast", sessionId: expect.any(String) }),
-      );
+      const thirdOptions = vi.mocked(transcribeSpeechBlob).mock.calls[2]?.[2] as Record<string, unknown>;
+      expect(thirdOptions).toMatchObject({ dictation: true, language: undefined, profile: "fast" });
+      expect(thirdOptions).not.toHaveProperty("sessionId");
     });
   });
 

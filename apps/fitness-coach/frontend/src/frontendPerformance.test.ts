@@ -34,10 +34,11 @@ describe('frontend performance guardrails', () => {
     expect(tagsInputSource).toContain('useId');
   });
 
-  it('uses only explicit or backend-validated workspace scopes for bootstrap cache reads', () => {
-    expect(bootstrapCacheSource).toContain('readBootstrapCacheScopeIndex');
+  it('requires an explicit current workspace scope for bootstrap cache reads', () => {
+    expect(bootstrapCacheSource).toContain('if (requireWorkspace && !workspaceId) return null;');
     expect(bootstrapCacheSource).toContain('payload.workspace_id');
-    expect(bootstrapCacheSource).toContain('if (workspaceId) return { workspaceId, appId, storageAppId };');
+    expect(bootstrapCacheSource).not.toContain('readBootstrapCacheScopeIndex');
+    expect(bootstrapCacheSource).not.toContain('bootstrap-scope');
     expect(bootstrapCacheSource).not.toContain("params.get('workspace_id') || params.get('workspace') || 'default'");
   });
 

@@ -37,24 +37,32 @@ describe('bootstrap cache', () => {
     vi.unstubAllGlobals();
   });
 
-  it('does not read a cache scope when neither URL nor validated index provides a workspace', () => {
+  it('does not read a cache scope when the current URL does not provide a workspace', () => {
     stubWindow('');
 
     expect(readBootstrapCache()).toBeNull();
   });
 
-  it('uses the last backend-validated scope for reload prepaint without workspace query params', () => {
+  it('does not prepaint cached workspace data after a workspace switch leaves the iframe URL unscoped', () => {
     const { values } = stubWindow('');
     writeBootstrapCache({
       ...bootstrapPayload(),
       stream_url: 'must-not-persist'
     } as unknown as AppBootstrapPayload);
 
-    expect(readBootstrapCache()).toEqual(bootstrapPayload());
+    expect(readBootstrapCache()).toBeNull();
     expect(Array.from(values.values()).join('\n')).not.toContain('must-not-persist');
   });
 
-  it('prefers an explicit URL workspace over the stored scope index', () => {
+  it('reads cached data only when the URL workspace matches the stored payload scope', () => {
+    const { sessionStorage } = stubWindow('');
+    writeBootstrapCache(bootstrapPayload());
+    vi.stubGlobal('window', { location: { search: '?workspace_id=default' }, sessionStorage });
+
+    expect(readBootstrapCache()).toEqual(bootstrapPayload());
+  });
+
+  it('does not read cached data when the URL workspace differs from the stored payload scope', () => {
     const { sessionStorage } = stubWindow('');
     writeBootstrapCache(bootstrapPayload());
     vi.stubGlobal('window', { location: { search: '?workspace_id=other' }, sessionStorage });

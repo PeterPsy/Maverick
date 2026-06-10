@@ -2,7 +2,6 @@ import { currentStorageAppId } from './api';
 import type { AppBootstrapPayload } from './types';
 
 const BOOTSTRAP_CACHE_VERSION = 1;
-const BOOTSTRAP_SCOPE_INDEX_VERSION = 1;
 const FORBIDDEN_SESSION_STORAGE_KEYS = new Set(['stream_url', 'download_url', '_app_secret_request', 'token', 'access_token', 'refresh_token', 'local_path', 'path']);
 
 type BootstrapCacheScope = {
@@ -15,18 +14,13 @@ function bootstrapCacheKey(scope: BootstrapCacheScope) {
   return `fitness-coach:bootstrap:${scope.workspaceId}:${scope.appId}:${scope.storageAppId}`;
 }
 
-function bootstrapScopeIndexKey(storageAppId: string) {
-  return `fitness-coach:bootstrap-scope:${storageAppId}`;
-}
-
 export function bootstrapCacheScopeFromLocation(requireWorkspace: boolean): BootstrapCacheScope | null {
   if (typeof window === 'undefined') return null;
   const params = new URLSearchParams(window.location.search);
   const workspaceId = params.get('workspace_id') || params.get('workspace') || '';
   const appId = params.get('app_id') || 'fitness-coach';
   const storageAppId = currentStorageAppId();
-  if (workspaceId) return { workspaceId, appId, storageAppId };
-  if (requireWorkspace) return readBootstrapCacheScopeIndex(appId, storageAppId);
+  if (requireWorkspace && !workspaceId) return null;
   return { workspaceId, appId, storageAppId };
 }
 
@@ -37,31 +31,6 @@ function bootstrapCacheScopeFromPayload(payload: AppBootstrapPayload): Bootstrap
     appId: payload.app_id || 'fitness-coach',
     storageAppId: currentStorageAppId()
   };
-}
-
-function readBootstrapCacheScopeIndex(appId: string, storageAppId: string): BootstrapCacheScope | null {
-  try {
-    const raw = window.sessionStorage.getItem(bootstrapScopeIndexKey(storageAppId));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as { version?: number; scope?: Partial<BootstrapCacheScope> };
-    const scope = parsed.scope || {};
-    if (parsed.version !== BOOTSTRAP_SCOPE_INDEX_VERSION) return null;
-    if (!scope.workspaceId || scope.appId !== appId || scope.storageAppId !== storageAppId) return null;
-    return {
-      workspaceId: scope.workspaceId,
-      appId: scope.appId,
-      storageAppId: scope.storageAppId
-    };
-  } catch {
-    return null;
-  }
-}
-
-function writeBootstrapCacheScopeIndex(scope: BootstrapCacheScope) {
-  window.sessionStorage.setItem(
-    bootstrapScopeIndexKey(scope.storageAppId),
-    JSON.stringify({ version: BOOTSTRAP_SCOPE_INDEX_VERSION, scope })
-  );
 }
 
 export function readBootstrapCache(): AppBootstrapPayload | null {
@@ -100,7 +69,6 @@ export function writeBootstrapCache(payload: AppBootstrapPayload) {
         payload: sanitizeBootstrapForSessionStorage(payload)
       })
     );
-    writeBootstrapCacheScopeIndex(scope);
   } catch {
     // Cache is best-effort and must never block the app.
   }

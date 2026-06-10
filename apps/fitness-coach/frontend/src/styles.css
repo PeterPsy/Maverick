@@ -1226,11 +1226,16 @@ select:focus {
   inset: 0;
 }
 
+.player-media {
+  cursor: pointer;
+}
+
 .player-media video,
 .player-media img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  background: #050605;
+  object-fit: contain;
 }
 
 .media-placeholder {
@@ -1251,6 +1256,82 @@ select:focus {
   background: linear-gradient(180deg, rgba(0, 0, 0, 0.58), transparent 30%, transparent 58%, rgba(0, 0, 0, 0.72));
 }
 
+.player-playback-control {
+  appearance: none;
+  -webkit-tap-highlight-color: transparent;
+  position: absolute;
+  inset: 50% auto auto 50%;
+  z-index: 4;
+  display: inline-grid;
+  place-items: center;
+  width: clamp(180px, 36vmin, 360px);
+  height: clamp(180px, 36vmin, 360px);
+  border: 0;
+  background: transparent;
+  color: #fff;
+  opacity: 1;
+  padding: 0;
+  transform: translate(-50%, -50%);
+  transition:
+    opacity 0.22s ease,
+    transform 0.2s ease;
+}
+
+.player-playback-control.is-idle {
+  opacity: 0;
+}
+
+.player-playback-control:hover {
+  transform: translate(-50%, -50%) translateY(-1px);
+}
+
+.player-playback-control:active {
+  background: transparent;
+}
+
+.player-playback-icon {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 64px;
+  height: 64px;
+  margin: auto;
+  color: #fff;
+  opacity: 0;
+  filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.72));
+  transform: scale(0.82);
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.player-playback-control.is-showing-play .player-playback-icon-play,
+.player-playback-control.is-showing-pause .player-playback-icon-pause {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.player-playback-control.is-showing-pause .player-playback-icon-pause {
+  animation: player-playback-control-pop 0.54s ease both;
+}
+
+@keyframes player-playback-control-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.72);
+  }
+
+  42% {
+    opacity: 1;
+    transform: translateY(0) scale(1.04);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 .player-progress {
   position: absolute;
   top: calc(0.62rem + env(safe-area-inset-top) + var(--fitness-shell-top-offset));
@@ -1263,14 +1344,35 @@ select:focus {
   height: 0.22rem;
 }
 
-.player-progress span {
+.player-progress > span {
+  position: relative;
+  overflow: hidden;
   border-radius: 999px;
   background: rgba(249, 250, 249, 0.26);
 }
 
-.player-progress span.is-done,
-.player-progress span.is-current {
+.player-progress > span.is-done {
   background: var(--fitness-accent);
+}
+
+.player-progress-fill {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--fitness-accent);
+  transform: scaleX(0);
+  transform-origin: left center;
+  animation: fitness-player-progress-fill var(--fitness-player-progress-duration, 60s) linear forwards;
+}
+
+.player-progress > span.is-current.is-looping .player-progress-fill {
+  animation-iteration-count: infinite;
+}
+
+@keyframes fitness-player-progress-fill {
+  to {
+    transform: scaleX(1);
+  }
 }
 
 .player-top {
@@ -1279,13 +1381,13 @@ select:focus {
   left: max(0.7rem, env(safe-area-inset-left));
   right: max(0.7rem, env(safe-area-inset-right));
   z-index: 4;
-  display: flex;
-  align-items: center;
-  gap: 0.42rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.78rem;
 }
 
 .player-icon,
-.counter-pill,
 .player-bottom-actions button,
 .player-error {
   border-color: rgba(249, 250, 249, 0.16);
@@ -1294,51 +1396,44 @@ select:focus {
   backdrop-filter: blur(16px);
 }
 
-.counter-pill {
-  margin-left: auto;
-  border: 1px solid rgba(249, 250, 249, 0.16);
-  border-radius: 999px;
-  padding: 0.52rem 0.76rem;
-  font-variant-numeric: tabular-nums;
+.player-heading {
+  display: grid;
+  gap: 0.24rem;
+  min-width: 0;
 }
 
-.player-caption {
-  position: absolute;
-  left: max(1rem, env(safe-area-inset-left));
-  right: max(1rem, env(safe-area-inset-right));
-  bottom: calc(5.2rem + env(safe-area-inset-bottom));
-  z-index: 4;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
-  gap: 0.5rem;
+.player-heading strong {
+  overflow: hidden;
+  max-width: min(42rem, 100%);
+  font-size: 1rem;
+  font-weight: 650;
+  line-height: 1.12;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-description {
+  display: block;
+  justify-self: start;
+  max-width: min(38rem, 100%);
+  min-height: 0;
   border: 0;
   background: transparent;
+  color: rgba(249, 250, 249, 0.78);
   padding: 0;
   text-align: left;
 }
 
-.player-caption > svg {
-  margin-top: 0.15rem;
-  color: rgba(249, 250, 249, 0.78);
-}
-
-.player-caption-copy {
-  display: grid;
-  gap: 0.22rem;
-  min-width: 0;
-}
-
-.player-caption-copy strong {
-  font-size: 1.35rem;
-  line-height: 1.1;
-}
-
-.player-caption-copy span {
+.player-description span {
+  display: -webkit-box;
   overflow: hidden;
-  color: rgba(249, 250, 249, 0.78);
   text-overflow: ellipsis;
-  white-space: nowrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+}
+
+.player-close {
+  justify-self: end;
 }
 
 .player-bottom-actions {
@@ -1348,8 +1443,46 @@ select:focus {
   bottom: calc(1rem + env(safe-area-inset-bottom));
   z-index: 4;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.54rem;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: end;
+  gap: 0.7rem;
+}
+
+.player-bottom-actions button {
+  min-width: 6.4rem;
+  border-radius: 999px;
+}
+
+.player-bottom-actions button:first-child {
+  justify-self: start;
+}
+
+.player-bottom-actions button:last-child {
+  justify-self: end;
+}
+
+.player-time {
+  display: grid;
+  justify-items: center;
+  gap: 0.26rem;
+  min-width: min(16rem, 46vw);
+  text-align: center;
+  text-shadow: 0 12px 28px rgba(0, 0, 0, 0.78);
+}
+
+.player-time span {
+  color: rgba(249, 250, 249, 0.68);
+  font-size: 0.78rem;
+  line-height: 1;
+}
+
+.player-time strong {
+  overflow-wrap: anywhere;
+  color: #fff;
+  font-size: clamp(2.4rem, 8vmin, 4.2rem);
+  font-variant-numeric: tabular-nums;
+  font-weight: 720;
+  line-height: 0.94;
 }
 
 .player-error {
@@ -1379,23 +1512,53 @@ select:focus {
   inset: 0;
   z-index: 8;
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
+  justify-content: center;
   background: rgba(0, 0, 0, 0.38);
+  padding: calc(4.55rem + env(safe-area-inset-top) + var(--fitness-shell-top-offset)) max(1rem, env(safe-area-inset-right)) 1rem max(1rem, env(safe-area-inset-left));
 }
 
 .description-sheet {
-  width: 100%;
-  max-height: 70dvh;
+  display: grid;
+  gap: 0.68rem;
+  width: min(36rem, 100%);
+  max-height: min(58dvh, 28rem);
   overflow-y: auto;
-  border-radius: 20px 20px 0 0;
-  background: rgba(8, 9, 8, 0.94);
   border: 1px solid rgba(249, 250, 249, 0.13);
-  padding: 1rem max(1rem, env(safe-area-inset-right)) calc(1rem + env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+  border-radius: 0 0 20px 20px;
+  background: rgba(8, 9, 8, 0.94);
+  padding: 0.82rem 0.92rem 1rem;
+  animation: player-description-drop 0.22s ease both;
+}
+
+.description-sheet .icon-button {
+  justify-self: end;
 }
 
 .description-sheet h2,
 .description-sheet p {
-  margin: 0 0 0.7rem;
+  margin: 0;
+}
+
+.description-sheet p {
+  color: rgba(249, 250, 249, 0.78);
+  line-height: 1.45;
+}
+
+.description-sheet small {
+  color: rgba(249, 250, 249, 0.58);
+}
+
+@keyframes player-description-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .summary {
@@ -1549,6 +1712,34 @@ select:focus {
   .fitness-main-skeleton__actions > * {
     width: 100%;
   }
+
+  .player-bottom-actions {
+    left: max(0.74rem, env(safe-area-inset-left));
+    right: max(0.74rem, env(safe-area-inset-right));
+    grid-template-columns: 3rem minmax(0, 1fr) 3rem;
+    gap: 0.42rem;
+  }
+
+  .player-bottom-actions button {
+    width: 3rem;
+    min-width: 3rem;
+    height: 3rem;
+    border-radius: 999px;
+    padding: 0;
+  }
+
+  .player-bottom-actions button span {
+    display: none;
+  }
+
+  .player-time {
+    min-width: 0;
+  }
+
+  .player-time strong {
+    max-width: 58vw;
+    font-size: clamp(2.35rem, 16vw, 3.65rem);
+  }
 }
 
 @media (max-width: 520px) {
@@ -1612,7 +1803,7 @@ select:focus {
     border-radius: 11px;
   }
 
-  .player-caption-copy strong {
-    font-size: 1.12rem;
+  .player-heading strong {
+    font-size: 0.94rem;
   }
 }

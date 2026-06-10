@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { currentStorageAppId } from './api';
 import { driveMediaStreamUrl } from './mediaPlaybackResolver';
-import type { ExerciseMediaRef, WorkBlock, Workout } from './types';
-import { runtimeSegmentsForWorkout } from './workoutSegments';
+import type { ExerciseMediaRef, RestBlock, WorkBlock, Workout } from './types';
+import { runtimeSegmentsForWorkout, segmentProgressRepeats, segmentProgressSeconds } from './workoutSegments';
 import { validateWorkoutForStart } from './workoutValidation';
 
 const media: ExerciseMediaRef = {
@@ -77,6 +77,27 @@ describe('workout logic', () => {
     const segments = runtimeSegmentsForWorkout(workout());
     expect(segments).toHaveLength(1);
     expect(segments[0].type).toBe('work');
+  });
+
+  it('uses timer seconds for timed progress and loops reps progress every minute', () => {
+    const timedSegments = runtimeSegmentsForWorkout(workout());
+    expect(segmentProgressSeconds(timedSegments[0])).toBe(30);
+    expect(segmentProgressRepeats(timedSegments[0])).toBe(false);
+
+    const repsWorkout = workout();
+    repsWorkout.blocks[0] = {
+      ...(repsWorkout.blocks[0] as WorkBlock),
+      mode: 'reps',
+      seconds: null,
+      reps: 12
+    };
+    repsWorkout.blocks[1] = { ...(repsWorkout.blocks[1] as RestBlock), skip_if_last: false };
+    const repsSegments = runtimeSegmentsForWorkout(repsWorkout);
+
+    expect(segmentProgressSeconds(repsSegments[0])).toBe(60);
+    expect(segmentProgressRepeats(repsSegments[0])).toBe(true);
+    expect(segmentProgressSeconds(repsSegments[1])).toBe(20);
+    expect(segmentProgressRepeats(repsSegments[1])).toBe(false);
   });
 
   it('builds Drive media stream URLs without raw Google URLs', () => {

@@ -1,5 +1,7 @@
 import type { RuntimeSegment, WorkBlock, Workout } from './types';
 
+export const REPS_PROGRESS_SECONDS = 60;
+
 export function runtimeSegmentsForWorkout(workout: Workout): RuntimeSegment[] {
   const segments: RuntimeSegment[] = [];
   workout.blocks.forEach((block, index) => {
@@ -37,4 +39,14 @@ export function runtimeSegmentsForWorkout(workout: Workout): RuntimeSegment[] {
 export function repsLabel(block: WorkBlock): string {
   if (block.reps_label?.trim()) return block.reps_label.trim();
   return `${block.reps || 0} reps`;
+}
+
+export function segmentProgressSeconds(segment: RuntimeSegment | null | undefined): number {
+  if (!segment) return 0;
+  if (segment.type === 'work' && segment.mode === 'reps') return REPS_PROGRESS_SECONDS;
+  return Math.max(0, segment.seconds || 0);
+}
+
+export function segmentProgressRepeats(segment: RuntimeSegment | null | undefined): boolean {
+  return segment?.type === 'work' && segment.mode === 'reps';
 }

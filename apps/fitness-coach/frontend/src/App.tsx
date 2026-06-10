@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { PointerEvent as ReactPointerEvent } from 'react';
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import {
   ArrowDown,
-  ArrowLeft,
   Check,
   ChevronLeft,
   Copy,
   Dumbbell,
-  Info,
   Library,
   MoreHorizontal,
   Pause,
@@ -44,7 +42,7 @@ import { createLocalBlobFallback, driveMediaStreamUrl, initialMediaResolution, r
 import { TagsInputField } from './components/ui/tags-input';
 import type { Exercise, ExerciseMediaRef, RestBlock, RuntimeSegment, SetupTab, WorkBlock, Workout, WorkoutBlock, WorkoutRunSummary } from './types';
 import { useWorkoutBlockReorder, type ReorderItemProps } from './useWorkoutBlockReorder';
-import { runtimeSegmentsForWorkout } from './workoutSegments';
+import { runtimeSegmentsForWorkout, segmentProgressRepeats, segmentProgressSeconds } from './workoutSegments';
 import { validateWorkoutForStart } from './workoutValidation';
 
 const EMPTY_EXERCISE: Partial<Exercise> = {
@@ -59,6 +57,7 @@ const EMPTY_EXERCISE: Partial<Exercise> = {
 };
 
 type WorkoutBlockMode = 'timer' | 'reps' | 'rest';
+type PlayerPlaybackOverlay = 'idle' | 'play' | 'pause';
 
 export function App() {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
@@ -785,24 +784,53 @@ function MediaPicker({ media, sourceFolder, onChange }: {
 
 function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClose: () => void; onComplete: (run: WorkoutRunSummary) => void }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const segments = useMemo(() => runtimeSegmentsForWorkout(workout), [workout]);
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const [remaining, setRemaining] = useState(segments[0]?.type === 'work' && segments[0].mode === 'reps' ? 0 : segments[0]?.seconds || 0);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [playbackOverlay, setPlaybackOverlay] = useState<PlayerPlaybackOverlay>('idle');
   const [resolution, setResolution] = useState(initialMediaResolution());
   const [summary, setSummary] = useState<WorkoutRunSummary | null>(null);
   const [startedAt] = useState(new Date().toISOString());
   const [skipped, setSkipped] = useState(0);
   const [retryNonce, setRetryNonce] = useState(0);
-  const timerTargetRef = useRef(0);
+  const timerRemainingMsRef = useRef(0);
+  const timerStartedAtRef = useRef(0);
   const beepedRef = useRef<Set<number>>(new Set());
+  const playbackOverlayTimerRef = useRef<number | null>(null);
   const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
   const segment = segments[index];
+
+  const clearPlaybackOverlayTimer = useCallback(() => {
+    if (playbackOverlayTimerRef.current === null) return;
+    window.clearTimeout(playbackOverlayTimerRef.current);
+    playbackOverlayTimerRef.current = null;
+  }, []);
+
+  const showPlaybackOverlay = useCallback((mode: PlayerPlaybackOverlay) => {
+    clearPlaybackOverlayTimer();
+    setPlaybackOverlay(mode);
+    if (mode === 'pause') {
+      playbackOverlayTimerRef.current = window.setTimeout(() => {
+        setPlaybackOverlay('idle');
+        playbackOverlayTimerRef.current = null;
+      }, 700);
+    }
+  }, [clearPlaybackOverlayTimer]);
 
   useEffect(() => {
     rootRef.current?.requestFullscreen?.().catch(() => undefined);
   }, []);
+
+  useEffect(() => clearPlaybackOverlayTimer, [clearPlaybackOverlayTimer]);
+
+  useEffect(() => {
+    clearPlaybackOverlayTimer();
+    setPlaybackOverlay(paused ? 'play' : 'idle');
+    setSheetOpen(false);
+  }, [clearPlaybackOverlayTimer, index]);
 
   useEffect(() => {
     setResolution(initialMediaResolution());
@@ -822,13 +850,41 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
   }, [index, retryNonce, segment, segments]);
 
   useEffect(() => {
-    if (!segment || paused || segment.type === 'work' && segment.mode === 'reps') return;
-    const duration = segment.seconds || 0;
-    setRemaining(duration);
-    timerTargetRef.current = performance.now() + duration * 1000;
+    const video = videoRef.current;
+    if (!video || resolution.mediaKind !== 'video') return;
+    if (paused) {
+      video.pause();
+      return;
+    }
+    const playPromise = video.play();
+    if (playPromise && typeof playPromise.catch === 'function') {
+      playPromise.catch(() => {
+        setPaused(true);
+        showPlaybackOverlay('play');
+      });
+    }
+  }, [paused, resolution.mediaKind, resolution.url, showPlaybackOverlay]);
+
+  useEffect(() => {
+    if (!segment || segment.type === 'work' && segment.mode === 'reps') {
+      setRemaining(0);
+      timerRemainingMsRef.current = 0;
+      return;
+    }
+    const durationSeconds = segment.seconds || 0;
+    setRemaining(durationSeconds);
+    timerRemainingMsRef.current = durationSeconds * 1000;
     beepedRef.current = new Set();
+  }, [index, segment]);
+
+  useEffect(() => {
+    if (!segment || paused || segment.type === 'work' && segment.mode === 'reps') return;
+    timerStartedAtRef.current = performance.now();
+    let completed = false;
     const timer = window.setInterval(() => {
-      const next = Math.max(0, Math.ceil((timerTargetRef.current - performance.now()) / 1000));
+      const elapsed = performance.now() - timerStartedAtRef.current;
+      const remainingMs = Math.max(0, timerRemainingMsRef.current - elapsed);
+      const next = Math.max(0, Math.ceil(remainingMs / 1000));
       setRemaining(next);
       if (next <= 3 && next > 0 && !beepedRef.current.has(next)) {
         beepedRef.current.add(next);
@@ -836,20 +892,29 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
       }
       if (next === 0) {
         playTone(820, 0.16);
+        completed = true;
         window.clearInterval(timer);
         advance();
       }
     }, 160);
-    return () => window.clearInterval(timer);
+    return () => {
+      window.clearInterval(timer);
+      if (!completed) {
+        timerRemainingMsRef.current = Math.max(0, timerRemainingMsRef.current - (performance.now() - timerStartedAtRef.current));
+      }
+    };
   }, [index, paused, segment]);
 
   useEffect(() => {
     function onVisibility() {
-      if (document.hidden) setPaused(true);
+      if (document.hidden) {
+        setPaused(true);
+        showPlaybackOverlay('play');
+      }
     }
     document.addEventListener('visibilitychange', onVisibility);
     return () => document.removeEventListener('visibilitychange', onVisibility);
-  }, []);
+  }, [showPlaybackOverlay]);
 
   async function finish() {
     const elapsed = Math.max(0, Math.round((Date.now() - Date.parse(startedAt)) / 1000));
@@ -876,6 +941,14 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
 
   function previous() {
     setIndex((value) => Math.max(0, value - 1));
+  }
+
+  function togglePlayback() {
+    setPaused((current) => {
+      const next = !current;
+      showPlaybackOverlay(next ? 'play' : 'pause');
+      return next;
+    });
   }
 
   function handlePointerUp(event: ReactPointerEvent) {
@@ -935,7 +1008,16 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
   }
 
   const isReps = segment.type === 'work' && segment.mode === 'reps';
-  const counter = segment.type === 'rest' ? `Rest ${formatClock(remaining)}` : isReps ? segment.repsLabel || 'reps' : formatClock(remaining);
+  const segmentModeLabel = segment.type === 'rest' ? 'Rest' : isReps ? 'Reps' : 'Timer';
+  const counter = isReps ? segment.repsLabel || 'reps' : formatClock(remaining);
+  const segmentDescription = segment.short_description || segment.long_description || '';
+  const fullDescription = segment.long_description || segment.short_description || '';
+  const progressSeconds = Math.max(0.01, segmentProgressSeconds(segment));
+  const progressRepeats = segmentProgressRepeats(segment);
+  const progressFillStyle = {
+    '--fitness-player-progress-duration': `${progressSeconds}s`,
+    animationPlayState: paused ? 'paused' : 'running'
+  } as CSSProperties;
   return (
     <main
       className="work-player"
@@ -943,9 +1025,9 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
       onPointerDown={(event) => { pointerStartRef.current = { x: event.clientX, y: event.clientY }; }}
       onPointerUp={handlePointerUp}
     >
-      <div className="player-media" onClick={() => setPaused((value) => !value)}>
+      <div className="player-media" onClick={togglePlayback}>
         {resolution.status === 'ready' && resolution.mediaKind === 'video' ? (
-          <video src={resolution.url} muted autoPlay loop playsInline onError={fallbackBlob} />
+          <video ref={videoRef} src={resolution.url} muted autoPlay={!paused} loop playsInline onError={fallbackBlob} />
         ) : resolution.status === 'ready' && resolution.mediaKind === 'image' ? (
           <img src={resolution.url} alt="" onError={fallbackBlob} />
         ) : (
@@ -956,27 +1038,54 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
         )}
       </div>
       <div className="player-scrim" />
+      <button
+        className={`player-playback-control is-${playbackOverlay === 'idle' ? 'idle' : `showing-${playbackOverlay}`}`}
+        type="button"
+        onClick={togglePlayback}
+        aria-label={paused ? 'Resume workout' : 'Pause workout'}
+        title={paused ? 'Resume' : 'Pause'}
+        tabIndex={playbackOverlay === 'idle' ? -1 : 0}
+      >
+        <Play className="player-playback-icon player-playback-icon-play" size={64} aria-hidden="true" />
+        <Pause className="player-playback-icon player-playback-icon-pause" size={64} aria-hidden="true" />
+      </button>
       <div className="player-progress" aria-label="Workout progress">
-        {segments.map((item, itemIndex) => <span key={`${item.blockId}-${itemIndex}`} className={itemIndex < index ? 'is-done' : itemIndex === index ? 'is-current' : ''} />)}
+        {segments.map((item, itemIndex) => {
+          const className = itemIndex < index ? 'is-done' : itemIndex === index ? `is-current ${progressRepeats ? 'is-looping' : ''}` : '';
+          return (
+            <span key={`${item.blockId}-${itemIndex}`} className={className}>
+              {itemIndex === index ? (
+                <span
+                  key={`${item.blockId}-${itemIndex}-${progressSeconds}-${progressRepeats ? 'loop' : 'once'}`}
+                  className="player-progress-fill"
+                  style={progressFillStyle}
+                />
+              ) : null}
+            </span>
+          );
+        })}
       </div>
       <div className="player-top">
-        <button className="player-icon" type="button" onClick={onClose} aria-label="Close player"><ArrowLeft size={20} /></button>
-        <button className="player-icon" type="button" onClick={() => setPaused((value) => !value)} aria-label={paused ? 'Resume' : 'Pause'}>{paused ? <Play size={20} /> : <Pause size={20} />}</button>
-        <span className="counter-pill">{counter}</span>
-      </div>
-      <button className="player-caption" type="button" onClick={() => setSheetOpen(true)}>
-        <Info size={17} aria-hidden="true" />
-        <span className="player-caption-copy">
+        <div className="player-heading">
           <strong>{segment.title}</strong>
-          <span>{segment.short_description}</span>
-        </span>
-      </button>
+          {segmentDescription ? (
+            <button className={`player-description ${sheetOpen ? 'is-open' : ''}`} type="button" onClick={() => setSheetOpen((value) => !value)} aria-expanded={sheetOpen}>
+              <span>{segmentDescription}</span>
+            </button>
+          ) : null}
+        </div>
+        <button className="player-icon player-close" type="button" onClick={onClose} aria-label="Close player"><X size={20} /></button>
+      </div>
       <div className="player-bottom-actions">
         <button type="button" onClick={previous}>
           <ChevronLeft size={17} aria-hidden="true" />
           <span>Prev</span>
         </button>
-        <button type="button" onClick={() => advance(true)}>
+        <div className="player-time" aria-live="polite">
+          <span>{segmentModeLabel}</span>
+          <strong>{counter}</strong>
+        </div>
+        <button type="button" onClick={() => advance(!isReps)}>
           {isReps ? <Check size={17} aria-hidden="true" /> : <SkipForward size={17} aria-hidden="true" />}
           <span>{isReps ? 'Done' : 'Skip'}</span>
         </button>
@@ -997,8 +1106,8 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
           <section className="description-sheet" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
             <button className="icon-button" type="button" onClick={() => setSheetOpen(false)} aria-label="Close details"><X size={16} /></button>
             <h2>{segment.title}</h2>
-            <p>{segment.long_description}</p>
-            <small>{counter}</small>
+            <p>{fullDescription}</p>
+            <small>{segmentModeLabel} · {counter}</small>
           </section>
         </div>
       ) : null}

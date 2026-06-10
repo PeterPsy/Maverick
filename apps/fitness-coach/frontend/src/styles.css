@@ -204,7 +204,6 @@ select:focus {
 .block-add-button,
 .exercise-actions button,
 .media-current button,
-.media-catalog-controls button,
 .editor-actions button,
 .player-bottom-actions button,
 .summary-actions button {
@@ -700,40 +699,16 @@ select:focus {
   min-width: 0;
 }
 
-.media-catalog-controls,
-.drive-ref-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: 0.42rem;
+.media-current .media-select-action {
+  border-color: var(--fitness-border-strong);
+  background: var(--fitness-surface-active);
+  color: var(--fitness-text);
 }
 
-.drive-ref-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
-}
-
-.media-results {
-  display: grid;
-  gap: 0.34rem;
-  max-height: 12rem;
-  overflow-y: auto;
-}
-
-.media-results button {
-  display: grid;
-  gap: 0.1rem;
-  border: 1px solid var(--fitness-border);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
-  padding: 0.5rem;
-  text-align: left;
-}
-
-.media-results small {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--fitness-muted);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.media-current .media-select-action.is-empty {
+  border-color: transparent;
+  background: var(--fitness-accent);
+  color: #070807;
 }
 
 .work-player {
@@ -976,8 +951,6 @@ select:focus {
   .library-toolbar,
   .workout-header,
   .media-current,
-  .media-catalog-controls,
-  .drive-ref-grid,
   .exercise-row {
     grid-template-columns: 1fr;
   }

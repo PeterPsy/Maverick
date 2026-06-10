@@ -26,17 +26,16 @@ import {
   duplicateWorkout,
   listExercises,
   listRuns,
-  listStorageMedia,
   listWorkouts,
-  openStorageForMedia,
+  openStorageVideoPicker,
   saveExercise,
   saveWorkout,
   startWorkout,
-  storageFileToMediaRef,
+  storageMediaSelectionFromPickerParams,
   updateViewState
 } from './api';
 import { createLocalBlobFallback, initialMediaResolution, resolveMediaPlayback } from './mediaPlaybackResolver';
-import type { Exercise, ExerciseMediaRef, RestBlock, RuntimeSegment, SetupTab, StorageFile, WorkBlock, Workout, WorkoutBlock, WorkoutRunSummary } from './types';
+import type { Exercise, ExerciseMediaRef, RestBlock, RuntimeSegment, SetupTab, WorkBlock, Workout, WorkoutBlock, WorkoutRunSummary } from './types';
 import { useWorkoutBlockReorder, type ReorderItemProps } from './useWorkoutBlockReorder';
 import { runtimeSegmentsForWorkout } from './workoutSegments';
 import { validateWorkoutForStart } from './workoutValidation';
@@ -115,6 +114,19 @@ export function App() {
         if (setupTabParam === 'workout-settings' || setupTabParam === 'exercise-library') {
           setLibraryTargetBlockId(null);
           setSetupTab(setupTabParam);
+        }
+        const pickerSelection = storageMediaSelectionFromPickerParams(params);
+        if (pickerSelection) {
+          setLibraryTargetBlockId(null);
+          setSetupTab('exercise-library');
+          setExerciseDraft((current) => ({
+            ...(current || EMPTY_EXERCISE),
+            media: [pickerSelection.media],
+            primary_media: pickerSelection.media,
+            source_display_path: pickerSelection.sourceDisplayPath,
+            source_folder: pickerSelection.sourceFolder
+          }));
+          setNotice('');
         }
         if (params.new_exercise) {
           setLibraryTargetBlockId(null);
@@ -572,7 +584,6 @@ function ExerciseLibrary(props: {
             <div className="exercise-actions">
               <button type="button" onClick={() => props.onAddToWorkout(exercise)}>{props.selectionMode === 'replace' ? 'Select' : 'Add'}</button>
               <button type="button" onClick={() => props.onDraft(exercise)}>Edit</button>
-              <button type="button" onClick={() => openStorageForMedia(exercise.primary_media)}>Storage</button>
               <button className="icon-button danger" type="button" onClick={() => props.onDelete(exercise)} aria-label="Delete exercise" title="Delete"><Trash2 size={15} /></button>
             </div>
           </article>
@@ -601,7 +612,13 @@ function ExerciseEditor(props: {
       <input value={(draft.tags || []).join(', ')} onChange={(event) => update({ tags: event.target.value.split(',').map((tag) => tag.trim()).filter(Boolean) })} placeholder="tags, comma separated" />
       <MediaPicker
         media={draft.primary_media || null}
-        onChange={(media) => update({ primary_media: media, media: media ? [media] : [] })}
+        sourceFolder={draft.source_folder || null}
+        onChange={(selection) => update({
+          primary_media: selection?.media || null,
+          media: selection?.media ? [selection.media] : [],
+          source_display_path: selection?.sourceDisplayPath || null,
+          source_folder: selection?.sourceFolder || null
+        })}
       />
       <div className="editor-actions">
         <button className="secondary-action" type="button" onClick={() => props.onSave(draft)} disabled={props.busy === 'save-exercise'}>
@@ -613,82 +630,30 @@ function ExerciseEditor(props: {
   );
 }
 
-function MediaPicker({ media, onChange }: { media: ExerciseMediaRef | null; onChange: (media: ExerciseMediaRef | null) => void }) {
-  const [files, setFiles] = useState<StorageFile[]>([]);
-  const [query, setQuery] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [manualDrive, setManualDrive] = useState(false);
-  const [driveDraft, setDriveDraft] = useState({ stable_storage_file_id: '', connection_id: '', drive_file_id: '', display_path: '', name: '', content_type: 'video/mp4' });
-
-  async function load() {
-    setLoading(true);
-    setError('');
-    try {
-      setFiles(await listStorageMedia(query));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Storage catalog unavailable.');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function useManualDrive() {
-    onChange({
-      kind: 'drive_file',
-      provider: 'google_drive',
-      stable_storage_file_id: driveDraft.stable_storage_file_id,
-      connection_id: driveDraft.connection_id,
-      drive_file_id: driveDraft.drive_file_id,
-      display_path: driveDraft.display_path,
-      name: driveDraft.name || 'Drive exercise media',
-      content_type: driveDraft.content_type,
-      preview_kind: driveDraft.content_type.startsWith('image/') ? 'image' : 'video',
-      source_version: '',
-      etag_or_version: '',
-      capabilities: { can_read: true, can_preview: true }
-    });
-  }
-
+function MediaPicker({ media, sourceFolder, onChange }: {
+  media: ExerciseMediaRef | null;
+  sourceFolder: Exercise['source_folder'];
+  onChange: (selection: { media: ExerciseMediaRef; sourceDisplayPath: string | null; sourceFolder: Exercise['source_folder'] } | null) => void;
+}) {
+  const storageButtonLabel = media ? 'Change video' : 'Select video';
   return (
     <div className="media-picker">
       <div className="media-current">
         <MediaThumb media={media} />
         <div>
           <strong>{media?.name || 'No media selected'}</strong>
-          <span>{media?.display_path || 'Use Storage image/video or a Drive Storage ref.'}</span>
+          <span>{media?.display_path || 'Select a video from Storage.'}</span>
         </div>
-        <button type="button" onClick={() => openStorageForMedia(media)}>Open Storage</button>
+        <button
+          className={`media-select-action ${media ? 'is-selected' : 'is-empty'}`}
+          type="button"
+          onClick={() => openStorageVideoPicker(media, sourceFolder)}
+        >
+          <Library size={15} aria-hidden="true" />
+          <span>{storageButtonLabel}</span>
+        </button>
         {media ? <button type="button" onClick={() => onChange(null)}>Clear</button> : null}
       </div>
-      <div className="media-catalog-controls">
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filter Storage media" />
-        <button type="button" onClick={load} disabled={loading}>{loading ? 'Loading' : 'Load Storage'}</button>
-        <button type="button" onClick={() => setManualDrive((value) => !value)}>Drive ref</button>
-      </div>
-      {error ? <div className="inline-error">{error}</div> : null}
-      {manualDrive ? (
-        <div className="drive-ref-grid">
-          <input value={driveDraft.stable_storage_file_id} onChange={(event) => setDriveDraft({ ...driveDraft, stable_storage_file_id: event.target.value })} placeholder="stable_storage_file_id" />
-          <input value={driveDraft.connection_id} onChange={(event) => setDriveDraft({ ...driveDraft, connection_id: event.target.value })} placeholder="connection_id" />
-          <input value={driveDraft.drive_file_id} onChange={(event) => setDriveDraft({ ...driveDraft, drive_file_id: event.target.value })} placeholder="drive_file_id" />
-          <input value={driveDraft.display_path} onChange={(event) => setDriveDraft({ ...driveDraft, display_path: event.target.value })} placeholder="display path" />
-          <button type="button" onClick={useManualDrive}>Use Drive ref</button>
-        </div>
-      ) : null}
-      {files.length ? (
-        <div className="media-results">
-          {files.map((file) => {
-            const ref = storageFileToMediaRef(file);
-            return (
-              <button type="button" key={file.file_id || file.id || file.workspace_relative_path} onClick={() => ref && onChange(ref)}>
-                <span>{file.name || 'Storage file'}</span>
-                <small>{file.preview_kind} · {file.display_path || file.workspace_relative_path}</small>
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import type { Exercise, ExerciseMediaRef, StorageFile, ViewState, Workout, WorkoutRunSummary, WorkoutValidation } from './types';
+import type { Exercise, ExerciseMediaRef, StorageFile, StorageFolderRef, ViewState, Workout, WorkoutRunSummary, WorkoutValidation } from './types';
 
 export type BackendListPayload = {
   workouts?: Workout[];
@@ -6,6 +6,13 @@ export type BackendListPayload = {
   runs?: WorkoutRunSummary[];
   view_state?: ViewState;
 };
+
+const EMPTY_STORAGE_SECRET_REQUEST = {
+  logical_names: [],
+  required: false
+};
+
+const UPLOAD_BUCKET_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function callBackend<T>(body: Record<string, unknown>): Promise<T> {
   const response = await fetch('/api/apps/fitness-coach/backend', {
@@ -94,7 +101,7 @@ export async function callStorageBackend<T>(body: Record<string, unknown>, stora
     method: 'POST',
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
+    body: JSON.stringify(withDefaultStorageSecretRequest(body))
   });
   const payload = (await response.json()) as T & { error?: string; detail?: string };
   if (!response.ok) {
@@ -103,16 +110,11 @@ export async function callStorageBackend<T>(body: Record<string, unknown>, stora
   return payload;
 }
 
-export async function listStorageMedia(query = '') {
-  const payload = await callStorageBackend<{ files: StorageFile[] }>({
-    action: 'catalog',
-    role: 'all',
-    kind: 'all',
-    query,
-    limit: 80
-  });
-  return (payload.files || []).filter((file) => file.preview_kind === 'image' || file.preview_kind === 'video');
-}
+export type StorageMediaPickerSelection = {
+  media: ExerciseMediaRef;
+  sourceDisplayPath: string | null;
+  sourceFolder: StorageFolderRef | null;
+};
 
 export function storageFileToMediaRef(file: StorageFile): ExerciseMediaRef | null {
   const previewKind = file.preview_kind === 'video' ? 'video' : file.preview_kind === 'image' ? 'image' : '';
@@ -165,14 +167,163 @@ export function mountedAppIdFromPath(pathname: string, fallback: string): string
   }
 }
 
-export function openStorageForMedia(media: ExerciseMediaRef | null) {
-  if (!media) {
-    window.parent?.postMessage({ type: 'maverick.widget.open-app', app_id: 'storage', params: {} }, window.location.origin);
-    return;
-  }
-  const params =
-    media.kind === 'local_file'
-      ? { file_id: media.file_id }
-      : { provider: 'google_drive', connection_id: media.connection_id, drive_file_id: media.drive_file_id, display_path: media.display_path };
+export function openStorageForMedia(media: ExerciseMediaRef | null, sourceFolder?: StorageFolderRef | null) {
+  const params = storageNavigationParamsForMedia(media, sourceFolder);
   window.parent?.postMessage({ type: 'maverick.widget.open-app', app_id: 'storage', params }, window.location.origin);
+}
+
+export function openStorageVideoPicker(media: ExerciseMediaRef | null, sourceFolder?: StorageFolderRef | null) {
+  const params = storageVideoPickerNavigationParamsForMedia(media, sourceFolder);
+  window.parent?.postMessage({ type: 'maverick.widget.open-app', app_id: 'storage', params }, window.location.origin);
+}
+
+export function storageVideoPickerNavigationParamsForMedia(media: ExerciseMediaRef | null, sourceFolder?: StorageFolderRef | null): Record<string, string> {
+  return {
+    ...storageNavigationParamsForMedia(media, sourceFolder),
+    picker_accept: 'video',
+    picker_mode: 'fitness-coach-media',
+    picker_return_app_id: 'fitness-coach'
+  };
+}
+
+export function storageNavigationParamsForMedia(media: ExerciseMediaRef | null, sourceFolder?: StorageFolderRef | null): Record<string, string> {
+  if (!media) {
+    return sourceFolder ? storageNavigationParamsForFolder(sourceFolder) : {};
+  }
+  if (media.kind === 'local_file') {
+    const folder = localStorageFolderParams(media.workspace_relative_path);
+    if (folder) return folder;
+    return media.file_id ? { file_id: media.file_id } : {};
+  }
+  if (sourceFolder?.kind === 'drive_folder' && driveFolderContainsMedia(sourceFolder, media)) {
+    return {
+      provider: 'google_drive',
+      connection_id: sourceFolder.connection_id,
+      drive_file_id: sourceFolder.drive_file_id,
+      display_path: sourceFolder.display_path
+    };
+  }
+  const fileId = media.stable_storage_file_id.trim();
+  return fileId ? { file_id: fileId, app_page: `files/${encodeURIComponent(fileId)}` } : {};
+}
+
+export function storageMediaSelectionFromPickerParams(params: Record<string, unknown>): StorageMediaPickerSelection | null {
+  if (String(params.picker_mode || '') !== 'fitness-coach-media') {
+    return null;
+  }
+  const rawResult = params.storage_picker_result;
+  const result = typeof rawResult === 'string' ? parseJsonObject(rawResult) : rawResult;
+  if (!result || typeof result !== 'object' || Array.isArray(result)) {
+    return null;
+  }
+  const file = (result as { file?: unknown }).file;
+  if (!file || typeof file !== 'object' || Array.isArray(file)) {
+    return null;
+  }
+  const media = storageFileToMediaRef(file as StorageFile);
+  if (!media || media.preview_kind !== 'video') {
+    return null;
+  }
+  const sourceFolder = storageFolderRefFromUnknown((result as { source_folder?: unknown }).source_folder);
+  const sourceDisplayPath = stringOrNull((result as { source_display_path?: unknown }).source_display_path) || sourceFolder?.display_path || null;
+  return { media, sourceDisplayPath, sourceFolder };
+}
+
+function withDefaultStorageSecretRequest(body: Record<string, unknown>) {
+  const request = body._app_secret_request;
+  if (request && typeof request === 'object' && !Array.isArray(request)) {
+    return body;
+  }
+  return { ...body, _app_secret_request: EMPTY_STORAGE_SECRET_REQUEST };
+}
+
+function localStorageFolderParams(workspaceRelativePath: string) {
+  const match = /^storage\/(uploaded|generated)\/(.+)$/.exec(workspaceRelativePath.trim());
+  if (!match) return null;
+  const pathParts = match[2].split('/').filter(Boolean);
+  const folderParts = match[1] === 'uploaded' && pathParts.length === 2 && UPLOAD_BUCKET_PATTERN.test(pathParts[0])
+    ? []
+    : pathParts.slice(0, -1);
+  return {
+    role: match[1],
+    folder_relative_path: folderParts.join('/')
+  };
+}
+
+function storageNavigationParamsForFolder(sourceFolder: StorageFolderRef): Record<string, string> {
+  if (sourceFolder.kind === 'drive_folder') {
+    return {
+      provider: 'google_drive',
+      connection_id: sourceFolder.connection_id,
+      drive_file_id: sourceFolder.drive_file_id,
+      display_path: sourceFolder.display_path
+    };
+  }
+  return {
+    role: sourceFolder.role,
+    folder_relative_path: sourceFolder.folder_relative_path
+  };
+}
+
+function driveFolderContainsMedia(folder: Extract<StorageFolderRef, { kind: 'drive_folder' }>, media: Extract<ExerciseMediaRef, { kind: 'drive_file' }>) {
+  if (!folder.connection_id || folder.connection_id !== media.connection_id || !folder.drive_file_id) {
+    return false;
+  }
+  const folderPath = folder.display_path.replace(/\/+$/, '');
+  const mediaPath = media.display_path.trim();
+  if (!folderPath || !mediaPath) {
+    return false;
+  }
+  return mediaPath === folderPath || mediaPath.startsWith(`${folderPath}/`);
+}
+
+function parseJsonObject(value: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
+
+function storageFolderRefFromUnknown(value: unknown): StorageFolderRef | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  const folder = value as Record<string, unknown>;
+  if (folder.kind === 'drive_folder') {
+    const connectionId = stringOrNull(folder.connection_id);
+    const driveFileId = stringOrNull(folder.drive_file_id);
+    const displayPath = stringOrNull(folder.display_path);
+    if (!connectionId || !driveFileId || !displayPath) {
+      return null;
+    }
+    return {
+      kind: 'drive_folder',
+      provider: 'google_drive',
+      connection_id: connectionId,
+      drive_file_id: driveFileId,
+      display_path: displayPath
+    };
+  }
+  if (folder.kind === 'local_folder') {
+    const role = folder.role === 'uploaded' || folder.role === 'generated' ? folder.role : null;
+    const folderRelativePath = stringOrNull(folder.folder_relative_path) || '';
+    const workspaceRelativePath = stringOrNull(folder.workspace_relative_path) || (role ? `storage/${role}${folderRelativePath ? `/${folderRelativePath}` : ''}` : '');
+    if (!role || !workspaceRelativePath.startsWith(`storage/${role}`)) {
+      return null;
+    }
+    return {
+      kind: 'local_folder',
+      role,
+      folder_relative_path: folderRelativePath,
+      workspace_relative_path: workspaceRelativePath,
+      display_path: stringOrNull(folder.display_path) || workspaceRelativePath
+    };
+  }
+  return null;
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
 }

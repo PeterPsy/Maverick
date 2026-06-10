@@ -1490,6 +1490,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
                 zip_file.writestr("assets/bg.webp", b"bg")
                 zip_file.writestr("assets/logo.webp", b"logo")
                 zip_file.writestr("assets/hero.mp4", b"video")
+                zip_file.writestr("assets/unused.webp", b"unused")
             encoded = base64.b64encode(archive.getvalue()).decode("ascii")
 
             status, imported = handle_action(data_root, {"action": "import_zip", "display_name": "Observable", "archive_base64": encoded})
@@ -1505,6 +1506,8 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertIn("asset_index", document["source_map"])
             self.assertIn("asset_summary", document["source_map"])
             self.assertNotIn("assets", document["source_map"])
+            default_asset_paths = {item["path"] for item in document["source_map"]["asset_index"]}
+            self.assertNotIn("assets/unused.webp", default_asset_paths)
             self.assertTrue(any(hint["selector"] == ".cta" for hint in document["source_map"]["selector_hints"]))
             self.assertEqual(document["observability"]["browser_report_global"], "__WEBSITE_STUDIO_PREVIEW_REPORT__")
 
@@ -1512,6 +1515,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(status, 201)
             report = report_payload["report"]
             self.assertEqual(report["preview_id"], preview["preview_id"])
+            self.assertTrue(any(component["selector"] == ".cta" for component in report["components"]))
             self.assertTrue(report["acceptance"]["passed"])
             self.assertEqual(report["asset_coverage"]["status"], "passed")
             self.assertGreaterEqual(report["asset_coverage"]["font_count"], 1)
@@ -1521,6 +1525,11 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertIn("assets/hero.mp4", resolved_paths)
             self.assertIn("assets/logo.webp", resolved_paths)
             self.assertEqual(report["browser_probe"]["event_type"], "maverick.website-studio.preview-report")
+
+            status, inventory_report_payload = handle_action(data_root, {"action": "preview_report", "preview_id": preview["preview_id"], "include_inventory": True})
+            self.assertEqual(status, 201)
+            inventory_paths = {item["path"] for item in inventory_report_payload["report"]["source_map"]["asset_index"]}
+            self.assertIn("assets/unused.webp", inventory_paths)
 
             status, compared_payload = handle_action(
                 data_root,
@@ -1533,6 +1542,81 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             status, runtime = handle_action(data_root, {"action": "runtime_status", "site_id": site_id})
             self.assertEqual(status, 200)
             self.assertEqual(runtime["latest_preview_report"]["preview_id"], preview["preview_id"])
+
+    def test_visual_navigation_excludes_source_inventory_and_exposes_components(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            status, created = handle_action(data_root, {"action": "site_create", "display_name": "Giuntitrail"})
+            self.assertEqual(status, 201)
+            site_id = created["site"]["id"]
+            source_root = data_root / "sites" / site_id / "source"
+            (source_root / "index.html").write_text(
+                (
+                    "<!doctype html><html><head><title>Trail Home</title>"
+                    '<link rel="stylesheet" href="assets/site.css"></head><body>'
+                    '<main><section id="hero"><h1>Giuntitrail</h1><a href="#booking">Book</a>'
+                    '<button class="cta">Join now</button></section><section id="booking"><h2>Booking</h2></section></main>'
+                    "</body></html>"
+                ),
+                encoding="utf-8",
+            )
+            (source_root / "assets").mkdir(exist_ok=True)
+            (source_root / "assets" / "site.css").write_text("body{color:#123}", encoding="utf-8")
+            (source_root / "assets" / "unused.png").write_bytes(b"unused")
+            (source_root / ".gitignore").write_text("node_modules\n", encoding="utf-8")
+            (source_root / ".htaccess").write_text("RewriteEngine On\n", encoding="utf-8")
+            (source_root / "README.md").write_text("internal notes\n", encoding="utf-8")
+            (source_root / "backend-admin").mkdir(exist_ok=True)
+            (source_root / "backend-admin" / "panel.php").write_text("<?php echo 'admin';", encoding="utf-8")
+            rebuild_index(data_root, site_id)
+
+            status, inventory = handle_action(data_root, {"action": "sitemap", "site_id": site_id})
+            self.assertEqual(status, 200)
+            inventory_paths = {item["path"] for item in inventory["assets"]}
+            self.assertIn(".gitignore", inventory_paths)
+            self.assertIn(".htaccess", inventory_paths)
+            self.assertIn("README.md", inventory_paths)
+            self.assertIn("backend-admin/panel.php", inventory_paths)
+
+            status, preview = handle_action(data_root, {"action": "build_preview", "site_id": site_id, "route": "/"})
+            self.assertEqual(status, 200)
+            status, report_payload = handle_action(data_root, {"action": "preview_report", "preview_id": preview["preview_id"]})
+            self.assertEqual(status, 201)
+
+            status, navigation = handle_action(data_root, {"action": "navigation_analyze", "site_id": site_id})
+            self.assertEqual(status, 200)
+            self.assertTrue(navigation["inventory_summary"]["source_inventory_hidden"])
+            navigation_text = json.dumps(navigation, sort_keys=True)
+            self.assertNotIn(".gitignore", navigation_text)
+            self.assertNotIn(".htaccess", navigation_text)
+            self.assertNotIn("README.md", navigation_text)
+            self.assertNotIn("backend-admin", navigation_text)
+            home = navigation["pages"][0]
+            self.assertEqual(home["route"], "/")
+            self.assertTrue(any(section["anchor"] == "#booking" for section in home["anchors"]))
+            self.assertTrue(any(section["selector"] == "#hero" for section in home["sections"]))
+            component = next(item for item in home["components"] if item["selector"] == ".cta")
+            self.assertEqual(component["route"], "/")
+            self.assertEqual(component["last_report_id"], report_payload["report"]["id"])
+            component_selectors = {item["selector"] for item in home["components"]}
+            self.assertNotIn("link[href]", component_selectors)
+            self.assertNotIn("a[href]", component_selectors)
+            self.assertNotIn("meta[href]", component_selectors)
+
+            status, component_context = handle_action(
+                data_root,
+                {
+                    "action": "page_context",
+                    "site_id": site_id,
+                    "route": "/",
+                    "component_id": component["id"],
+                    "target_selector": component["selector"],
+                },
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(component_context["active_view"], "component")
+            self.assertEqual(component_context["component_id"], component["id"])
+            self.assertEqual(component_context["target_selector"], ".cta")
 
     def test_preview_contract_reports_missing_runtime_requirements_for_build_and_php_sites(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -2037,6 +2121,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(status, 200)
             searchable = {item["entity_type"]: item["searchable"] for item in manifest["entity_types"]}
             self.assertFalse(searchable["revision"])
+            self.assertTrue(searchable["component"])
             self.assertTrue(searchable["publish_request"])
 
             status, results = handle_action(data_root, {"action": "reference_search", "query": "pending"})
@@ -2110,31 +2195,46 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("export const TreeNodeTrigger", tree_source)
         self.assertIn("from 'lucide-react'", tree_source)
         self.assertIn("from 'motion/react'", tree_source)
-        self.assertIn("map.routes || []", widget_source)
-        self.assertIn("map.assets || []", widget_source)
+        self.assertIn("action: 'navigation_analyze'", widget_source)
+        self.assertNotIn("action: 'sitemap'", widget_source)
+        self.assertNotIn("map.assets || []", widget_source)
         self.assertIn('<option value="">Select a site</option>', widget_source)
-        self.assertIn("Select a site to load its sitemap.", widget_source)
+        self.assertIn("Select a site to load its visual navigation.", widget_source)
         self.assertIn("route_id", widget_source)
-        self.assertIn("asset_id", widget_source)
+        self.assertIn("component_id", widget_source)
+        self.assertIn("target_selector", widget_source)
         self.assertIn("maverick.widget.data-changed", widget_source)
-        self.assertIn("function buildTree(pages:", widget_source)
-        self.assertIn("action: 'site_status'", widget_source)
+        self.assertIn("function buildTree(navigation:", widget_source)
+        self.assertNotIn("action: 'site_status'", widget_source)
         self.assertIn("action: 'list_changes'", widget_source)
-        self.assertIn("changedPaths", widget_source)
         self.assertIn("modified", widget_source)
         self.assertIn("groupNode('group:pages'", widget_source)
-        self.assertIn("groupNode('group:components'", widget_source)
-        self.assertIn("groupNode('group:status'", widget_source)
+        self.assertIn("Sections", widget_source)
+        self.assertIn("Components", widget_source)
+        self.assertIn("statusSummary(navigation", widget_source)
+        self.assertIn("Other routes", widget_source)
+        self.assertIn("group:warnings", widget_source)
+        self.assertNotIn("Rendered routes", widget_source)
+        self.assertNotIn("No observed sections", widget_source)
+        self.assertNotIn("No agent warnings", widget_source)
+        self.assertNotIn("Backend and config", widget_source)
+        self.assertNotIn("bucketAssets", widget_source)
         self.assertIn("toggleExpanded", tree_source)
-        self.assertIn("No static HTML pages", widget_source)
+        self.assertIn("No visual pages", widget_source)
 
     def test_frontend_handles_route_and_asset_deep_links(self) -> None:
         app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
 
         self.assertIn("appPage.startsWith('routes/')", app_source)
         self.assertIn("appPage.startsWith('assets/')", app_source)
+        self.assertIn("appPage.startsWith('components/')", app_source)
+        self.assertIn("appPage.startsWith('sections/')", app_source)
+        self.assertIn("appPage.startsWith('anchors/')", app_source)
         self.assertIn("route_id", app_source)
         self.assertIn("asset_id", app_source)
+        self.assertIn("component_id", app_source)
+        self.assertIn("target_selector", app_source)
+        self.assertIn("data-target-selector", app_source)
         self.assertIn("maverick.app.selection-changed", app_source)
         self.assertIn("selectedRoute && !selectedRoute.page_id ? undefined : map.items[0]", app_source)
         self.assertIn("selectedPage?.route || selectedRoute?.route || '/'", app_source)
@@ -2160,7 +2260,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("Preview is loading", app_source)
         self.assertIn("active_view: activeView", app_source)
         self.assertIn("context_tool: 'website_page_context'", app_source)
-        self.assertIn("normalizePreviewUrl(previewState?.preview_url || '')", app_source)
+        self.assertIn("normalizePreviewUrl(previewState?.preview_url || '', activeTarget)", app_source)
         self.assertIn("PREVIEW_CLIENT_VERSION", app_source)
         self.assertIn("client_version", app_source)
         self.assertIn("previewUrl || previewHtml", app_source)
@@ -2303,7 +2403,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertNotIn(f">{forbidden}<", app_source)
         self.assertLess(sitemap_widget.index("website-studio-sitemap-search"), sitemap_widget.index("website-studio-sitemap-select-frame"))
         self.assertIn("maverick.widget.open-app", sitemap_widget)
-        self.assertIn("app_page: `${kind}s/${id}`", sitemap_widget)
+        self.assertIn("app_page: `${appPageKind}/${id}`", sitemap_widget)
         self.assertIn("TreeProvider", sitemap_widget)
         self.assertIn("TreeView", sitemap_widget)
         self.assertIn("WebsiteTreeNodeView", sitemap_widget)
@@ -2314,12 +2414,16 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("storage-folder-tree", sitemap_widget)
         self.assertIn("storage-folder-tree .rounded-md", sitemap_widget_styles)
         self.assertIn("Components", sitemap_widget)
-        self.assertIn("Backend and config", sitemap_widget)
+        self.assertIn("Sections", sitemap_widget)
+        self.assertNotIn("Backend and config", sitemap_widget)
+        self.assertNotIn("Assets", sitemap_widget)
         self.assertIn("Status", sitemap_widget)
+        self.assertIn("Warnings", sitemap_widget)
         self.assertIn("website-studio-tree-badge.changed", sitemap_widget_styles)
         self.assertIn("params.page_id", sitemap_widget)
         self.assertIn("params.route_id", sitemap_widget)
-        self.assertIn("params.asset_id", sitemap_widget)
+        self.assertIn("params.target_selector", sitemap_widget)
+        self.assertIn("params.component_id", sitemap_widget)
         self.assertIn("grid-template-columns: minmax(0, 1fr) 2.65rem", footer_widget)
         self.assertIn("<span>New</span>", footer_widget)
         self.assertNotIn("<span>Preview</span>", footer_widget)

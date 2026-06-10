@@ -63,6 +63,12 @@ from preview_observability import (
     summarize_asset_probe,
 )
 from publish_workflow import managed_static_platform_binding, working_branch_for_site
+from visual_navigation import (
+    component_candidates_from_selector_hints,
+    component_matches_query,
+    visual_sections_from_html,
+    visual_sections_from_selector_hints,
+)
 
 HttpTransport = Callable[[str, str, dict[str, Any]], tuple[int, dict[str, Any] | list[Any] | bytes]]
 GITHUB_API_BASE = "https://api.github.com"
@@ -761,6 +767,145 @@ def sitemap(data_root: Path, site_id: object) -> dict[str, object]:
         "items": [_page_row(row) for row in page_rows],
         "routes": [_route_row(row) for row in route_rows],
         "assets": [_asset_row(row) for row in asset_rows],
+    }
+
+
+def navigation_analyze(data_root: Path, site_id: object) -> dict[str, object]:
+    """Return visual navigation, not the imported source inventory."""
+    site = get_site(data_root, site_id)
+    map_payload = sitemap(data_root, site["id"])
+    pages = list(map_payload.get("items") or [])
+    routes = list(map_payload.get("routes") or [])
+    assets = list(map_payload.get("assets") or [])
+    diff_payload = diff_site(data_root, site["id"])
+    changed_paths = {str(item.get("path") or "") for item in diff_payload.get("files", []) if str(item.get("path") or "").strip()}
+    runtime = runtime_status(data_root, site["id"])
+    reports_by_route = _latest_preview_reports_by_route(data_root, site["id"])
+    routes_by_page: dict[str, dict[str, object]] = {}
+    for route_item in routes:
+        page_id = str(route_item.get("page_id") or "")
+        if page_id and page_id not in routes_by_page:
+            routes_by_page[page_id] = route_item
+
+    site_label = str(site.get("display_name") or site.get("slug") or site["id"])
+    visual_page_entries = _canonical_visual_pages(
+        pages,
+        runtime_kind=str(runtime.get("runtime_kind") or ""),
+        reports_by_route=reports_by_route,
+        site_label=site_label,
+    )
+    visual_pages: list[dict[str, object]] = []
+    flattened_components: list[dict[str, object]] = []
+    for page, aliases in visual_page_entries:
+        route_text = str(page.get("route") or "/")
+        report = _preview_report_for_route(reports_by_route, route_text)
+        report_id = str(report.get("id") or "")
+        source_map = report.get("source_map") if isinstance(report.get("source_map"), dict) else {}
+        source_files = _visual_source_files(page.get("source_files", []))
+        section_items = _visual_sections_for_page(data_root, site["id"], page, source_map=source_map, report_id=report_id)
+        sections = [item for item in section_items if item.get("kind") != "anchor"]
+        anchors = [item for item in section_items if item.get("kind") == "anchor"]
+        components = _components_from_report(source_map, route=route_text, page_id=str(page.get("id") or ""), report_id=report_id)
+        flattened_components.extend(components)
+        route_item = routes_by_page.get(str(page.get("id") or ""))
+        visual_pages.append(
+            {
+                "id": page.get("id") or "",
+                "kind": "page",
+                "route": route_text,
+                "canonical_route": _visual_route_key(route_text),
+                "title": page.get("title") or route_text,
+                "label": _visual_page_label(page, route_text, site_label=site_label),
+                "aliases": aliases,
+                "status": page.get("status") or "",
+                "source_files": source_files[:20],
+                "route_id": route_item.get("id") if route_item else "",
+                "preview_report_id": report_id,
+                "sections": sections,
+                "anchors": anchors,
+                "components": components,
+                "warnings": _dedupe_strings(list(page.get("warnings") or []) + (list(route_item.get("warnings") or []) if route_item else []))[:50],
+                "changed": _source_files_changed(source_files, changed_paths),
+            }
+        )
+
+    page_route_keys: set[str] = set()
+    for page, aliases in visual_page_entries:
+        page_route_keys.add(_visual_route_key(str(page.get("route") or "/")))
+        page_route_keys.update(_visual_route_key(alias) for alias in aliases)
+    visual_routes: list[dict[str, object]] = []
+    seen_visual_route_keys: set[str] = set()
+    for route_item in routes:
+        route_text = str(route_item.get("route") or "/")
+        route_key = _visual_route_key(route_text)
+        if route_key in page_route_keys or route_key in seen_visual_route_keys or not _route_is_visual(route_item):
+            continue
+        seen_visual_route_keys.add(route_key)
+        report = _preview_report_for_route(reports_by_route, route_text)
+        report_id = str(report.get("id") or "")
+        source_map = report.get("source_map") if isinstance(report.get("source_map"), dict) else {}
+        source_files = _visual_source_files(route_item.get("source_files", []))
+        components = _components_from_report(source_map, route=route_text, page_id="", report_id=report_id)
+        flattened_components.extend(components)
+        visual_routes.append(
+            {
+                "id": route_item.get("id") or "",
+                "kind": "route",
+                "route": route_text,
+                "canonical_route": route_key,
+                "title": _route_label(route_text),
+                "label": _route_label(route_text),
+                "status": route_item.get("status") or "",
+                "source_files": source_files[:20],
+                "preview_report_id": report_id,
+                "sections": [],
+                "anchors": [],
+                "components": components,
+                "warnings": list(route_item.get("warnings") or [])[:50],
+                "changed": _source_files_changed(source_files, changed_paths),
+            }
+        )
+
+    latest_build = runtime.get("latest_build") if isinstance(runtime.get("latest_build"), dict) else {}
+    latest_preview = runtime.get("latest_preview") if isinstance(runtime.get("latest_preview"), dict) else {}
+    warnings = _navigation_warnings(visual_pages, visual_routes, runtime)
+    return {
+        "site_id": site["id"],
+        "model": "visual_navigation.v1",
+        "generated_at": now_timestamp(),
+        "site": {
+            "id": site["id"],
+            "display_name": site.get("display_name") or site.get("slug") or site["id"],
+            "slug": site.get("slug") or "",
+            "status": site.get("status") or "",
+            "source_provider": site.get("source_provider") or "",
+        },
+        "pages": visual_pages,
+        "routes": visual_routes,
+        "components": flattened_components[:120],
+        "warnings": warnings,
+        "status": {
+            "runtime_kind": runtime.get("runtime_kind") or "",
+            "runtime_status": runtime.get("runtime_status") or "unknown",
+            "missing_requirements": list(runtime.get("missing_requirements") or [])[:50],
+            "latest_build_id": latest_build.get("id") or "",
+            "latest_build_status": latest_build.get("status") or "",
+            "latest_preview_id": latest_preview.get("id") or "",
+            "changed_files_count": len(changed_paths),
+        },
+        "inventory_summary": {
+            "page_count": len(pages),
+            "visible_page_count": len(visual_pages),
+            "route_count": len(routes),
+            "visible_route_count": len(visual_routes),
+            "asset_count": len(assets),
+            "source_inventory_hidden": True,
+        },
+        "navigation_policy": {
+            "scope": "visual",
+            "excludes_source_inventory": True,
+            "excluded_categories": ["repository metadata", "server config", "backend admin source", "package manager metadata"],
+        },
     }
 
 
@@ -1478,7 +1623,7 @@ def runtime_status(data_root: Path, site_id: object) -> dict[str, object]:
     }
 
 
-def preview_document(data_root: Path, preview_id: object, *, preview_origin: object = None) -> dict[str, object]:
+def preview_document(data_root: Path, preview_id: object, *, preview_origin: object = None, include_inventory: object = False) -> dict[str, object]:
     preview = get_preview(data_root, preview_id)
     site = get_site(data_root, preview["site_id"])
     details = [str(item) for item in preview.get("missing_requirements", []) if str(item).strip()]
@@ -1500,13 +1645,13 @@ def preview_document(data_root: Path, preview_id: object, *, preview_origin: obj
                 stylesheet_loader=_preview_stylesheet_loader(data_root, preview),
                 script_loader=_preview_script_loader(data_root, preview),
             )
-            return _preview_document_payload(data_root, preview, html)
+            return _preview_document_payload(data_root, preview, html, include_inventory=include_inventory)
         detail = [str(item) for item in result.get("missing_requirements", []) if str(item).strip()] or [str(item) for item in result.get("warnings", []) if str(item).strip()]
         html = runtime_diagnostic_html("Preview runtime unavailable", detail or details or ["preview route could not be rendered"])
-        return _preview_document_payload(data_root, preview, html)
+        return _preview_document_payload(data_root, preview, html, include_inventory=include_inventory)
     if not preview.get("page_id"):
         html = runtime_diagnostic_html("Preview runtime unavailable", details or ["site has no HTML page to preview"])
-        return _preview_document_payload(data_root, preview, html)
+        return _preview_document_payload(data_root, preview, html, include_inventory=include_inventory)
     try:
         page = _get_page(data_root, preview["page_id"])
         rel_path = page["source_files"][0]
@@ -1520,11 +1665,11 @@ def preview_document(data_root: Path, preview_id: object, *, preview_origin: obj
                     stylesheet_loader=_preview_stylesheet_loader(data_root, preview),
                     script_loader=_preview_script_loader(data_root, preview),
             )
-            return _preview_document_payload(data_root, preview, html)
+            return _preview_document_payload(data_root, preview, html, include_inventory=include_inventory)
     except (IndexError, ValueError) as error:
         details.append(str(error))
     html = runtime_diagnostic_html("Preview runtime unavailable", details or ["preview source could not be rendered"])
-    return _preview_document_payload(data_root, preview, html)
+    return _preview_document_payload(data_root, preview, html, include_inventory=include_inventory)
 
 
 def preview_report(
@@ -1535,6 +1680,7 @@ def preview_report(
     route: object = "/",
     baseline_report_id: object = None,
     preview_origin: object = None,
+    include_inventory: object = False,
 ) -> dict[str, object]:
     """Create a bounded report that lets agents reason about the real preview surface."""
     clean_preview_id = str(preview_id or "").strip()
@@ -1547,7 +1693,7 @@ def preview_report(
     if site_id and str(preview.get("site_id") or "") != str(site_id):
         raise ValueError("preview_id does not belong to the selected site")
     site = get_site(data_root, preview["site_id"])
-    document = preview_document(data_root, clean_preview_id, preview_origin=preview_origin)
+    document = preview_document(data_root, clean_preview_id, preview_origin=preview_origin, include_inventory=include_inventory)
     source_map = dict(document.get("source_map") or {})
     asset_probe = _preview_asset_probe(data_root, preview, document.get("html") or "", source_map)
     warnings = [str(item) for item in preview.get("warnings", []) if str(item).strip()]
@@ -1560,8 +1706,15 @@ def preview_report(
         source_map=source_map,
     )
     now = now_timestamp()
+    report_id = f"report_{uuid4().hex[:16]}"
+    components = component_candidates_from_selector_hints(
+        source_map.get("selector_hints") if isinstance(source_map, dict) else [],
+        route=str(preview.get("route") or "/"),
+        page_id=str(source_map.get("page_id") or "") if isinstance(source_map, dict) else "",
+        last_report_id=report_id,
+    )
     report = {
-        "id": f"report_{uuid4().hex[:16]}",
+        "id": report_id,
         "site_id": site["id"],
         "preview_id": preview["id"],
         "route": preview.get("route") or "/",
@@ -1570,6 +1723,12 @@ def preview_report(
         "runtime_status": preview.get("status") or "blocked",
         "generated_at": now,
         "source_map": source_map,
+        "navigation": {
+            "route": preview.get("route") or "/",
+            "page_id": source_map.get("page_id") if isinstance(source_map, dict) else "",
+            "components": components,
+        },
+        "components": components,
         "asset_coverage": asset_probe,
         "warnings": warnings,
         "missing_requirements": missing,
@@ -1615,8 +1774,8 @@ def preview_media(data_root: Path, preview_id: object, path: object) -> dict[str
     }
 
 
-def _preview_document_payload(data_root: Path, preview: dict[str, object], html: str) -> dict[str, object]:
-    source_map = _preview_source_map(data_root, preview, html)
+def _preview_document_payload(data_root: Path, preview: dict[str, object], html: str, *, include_inventory: object = False) -> dict[str, object]:
+    source_map = _preview_source_map(data_root, preview, html, include_inventory=include_inventory)
     return {
         "preview": preview,
         "html": html,
@@ -1629,7 +1788,7 @@ def _preview_document_payload(data_root: Path, preview: dict[str, object], html:
     }
 
 
-def _preview_source_map(data_root: Path, preview: dict[str, object], html: object) -> dict[str, object]:
+def _preview_source_map(data_root: Path, preview: dict[str, object], html: object, *, include_inventory: object = False) -> dict[str, object]:
     site = get_site(data_root, preview["site_id"])
     map_payload = sitemap(data_root, site["id"])
     route_text = str(preview.get("route") or "/")
@@ -1666,7 +1825,7 @@ def _preview_source_map(data_root: Path, preview: dict[str, object], html: objec
         "route_source_files": list(route_item.get("source_files") or [])[:20] if route_item else [],
         "asset_refs": asset_refs[:200],
         "asset_summary": _asset_inventory_summary(assets),
-        "asset_index": _compact_asset_index(assets, asset_refs),
+        "asset_index": _compact_asset_index(assets, asset_refs, include_inventory=_truthy(include_inventory)),
         "selector_hints": selector_hints,
         "rendered_route_count": rendered_count,
         "failed_route_count": failed_count,
@@ -1733,7 +1892,7 @@ def _asset_inventory_summary(assets: list[object]) -> dict[str, object]:
     return {"indexed_asset_count": len(assets), "indexed_by_kind": dict(sorted(by_kind.items()))}
 
 
-def _compact_asset_index(assets: list[object], asset_refs: list[str]) -> list[dict[str, object]]:
+def _compact_asset_index(assets: list[object], asset_refs: list[str], *, include_inventory: bool = False) -> list[dict[str, object]]:
     referenced = set(asset_refs)
     compact: list[dict[str, object]] = []
     seen: set[str] = set()
@@ -1762,10 +1921,11 @@ def _compact_asset_index(assets: list[object], asset_refs: list[str]) -> list[di
         path = str(asset.get("path") or "") if isinstance(asset, dict) else ""
         if path in referenced:
             append(asset)
-    for asset in assets:
-        if len(compact) >= MAX_SOURCE_MAP_ASSET_INDEX:
-            break
-        append(asset)
+    if include_inventory:
+        for asset in assets:
+            if len(compact) >= MAX_SOURCE_MAP_ASSET_INDEX:
+                break
+            append(asset)
     return compact
 
 
@@ -1825,6 +1985,300 @@ def _latest_preview_report(data_root: Path, site_id: object) -> dict[str, object
             (str(site_id),),
         ).fetchone()
     return _preview_report_row(data_root, row["id"])["report"] if row else None
+
+
+def _latest_preview_reports_by_route(data_root: Path, site_id: object) -> dict[str, dict[str, object]]:
+    ensure_schema(data_root)
+    with connect(data_root) as db:
+        rows = db.execute(
+            """
+            SELECT * FROM preview_reports
+            WHERE site_id = ?
+            ORDER BY created_at DESC
+            LIMIT 100
+            """,
+            (str(site_id),),
+        ).fetchall()
+    reports: dict[str, dict[str, object]] = {}
+    for row in rows:
+        payload = dict(row)
+        report = json.loads(payload.pop("report_json") or "{}")
+        route = str(report.get("route") or payload.get("route") or "/")
+        if route not in reports:
+            reports[route] = report
+    return reports
+
+
+def _preview_report_for_route(reports_by_route: dict[str, dict[str, object]], route: str) -> dict[str, object]:
+    if route in reports_by_route:
+        return reports_by_route[route]
+    route_key = _visual_route_key(route)
+    for report_route, report in reports_by_route.items():
+        if _visual_route_key(report_route) == route_key:
+            return report
+    return {}
+
+
+def _canonical_visual_pages(
+    pages: list[dict[str, object]],
+    *,
+    runtime_kind: str,
+    reports_by_route: dict[str, dict[str, object]],
+    site_label: str,
+) -> list[tuple[dict[str, object], list[str]]]:
+    selected: dict[str, dict[str, object]] = {}
+    aliases: dict[str, list[str]] = {}
+    for page in pages:
+        route = str(page.get("route") or "/")
+        key = _visual_page_identity_key(page, route, site_label=site_label)
+        aliases.setdefault(key, [])
+        if route not in aliases[key]:
+            aliases[key].append(route)
+        current = selected.get(key)
+        if current is None or _visual_page_rank(page, runtime_kind=runtime_kind, reports_by_route=reports_by_route) > _visual_page_rank(
+            current,
+            runtime_kind=runtime_kind,
+            reports_by_route=reports_by_route,
+        ):
+            selected[key] = page
+    entries = [(page, [alias for alias in aliases.get(key, []) if alias != str(page.get("route") or "/")]) for key, page in selected.items()]
+    return sorted(entries, key=lambda item: _visual_route_sort_key(str(item[0].get("route") or "/")))
+
+
+def _visual_page_identity_key(page: dict[str, object], route: str, *, site_label: str) -> str:
+    route_key = _visual_route_key(route)
+    if route_key == "/":
+        return "route:/"
+    label_key = _identity_slug(_visual_page_label(page, route, site_label=site_label))
+    route_stem_key = _identity_slug(PurePosixPath(route_key).name or route_key)
+    if label_key and route_stem_key and (label_key == route_stem_key or label_key.endswith(route_stem_key)):
+        return f"page:{label_key}"
+    if label_key in {"cookiepolicy", "privacypolicy", "terminiecondizioni", "termsandconditions"}:
+        return f"page:{label_key}"
+    return f"route:{route_key}"
+
+
+def _visual_page_rank(page: dict[str, object], *, runtime_kind: str, reports_by_route: dict[str, dict[str, object]]) -> int:
+    route = str(page.get("route") or "/")
+    lower = route.lower()
+    score = 0
+    if route == "/":
+        score += 1000
+    if _preview_report_for_route(reports_by_route, route):
+        score += 200
+    if runtime_kind == "php" and lower.endswith(".php"):
+        score += 80
+    if lower.endswith((".html", ".htm")):
+        score += 40
+    if _visual_source_files(page.get("source_files", [])):
+        score += 20
+    if _navigation_compact(page.get("title"), 160) and not _navigation_compact(page.get("title"), 160).startswith("/"):
+        score += 10
+    return score
+
+
+def _visual_route_key(route: str) -> str:
+    parsed = urlparse(route or "/")
+    path = parsed.path or "/"
+    if not path.startswith("/"):
+        path = f"/{path}"
+    path = re.sub(r"/+", "/", path)
+    lower = path.lower()
+    if lower in {"/", "/index", "/index.html", "/index.htm", "/index.php"}:
+        return "/"
+    suffix = PurePosixPath(lower).suffix
+    if suffix in {".html", ".htm", ".php"}:
+        path = path[: -len(suffix)]
+    return path.rstrip("/") or "/"
+
+
+def _visual_route_sort_key(route: str) -> tuple[int, str]:
+    key = _visual_route_key(route)
+    return (0 if key == "/" else 1, key)
+
+
+def _visual_page_label(page: dict[str, object], route: str, *, site_label: str) -> str:
+    route_key = _visual_route_key(route)
+    if route_key == "/":
+        return "Home"
+    raw_title = _navigation_compact(page.get("title"), 160)
+    if raw_title and not raw_title.startswith("/"):
+        title = raw_title.split("|", 1)[0].strip()
+        if title and _identity_slug(title) != _identity_slug(site_label):
+            return title[:90]
+    return _route_label(route)
+
+
+def _route_label(route: str) -> str:
+    key = _visual_route_key(route)
+    if key == "/":
+        return "Home"
+    name = PurePosixPath(key).name or key.strip("/")
+    text = re.sub(r"[_-]+", " ", name).strip()
+    return text[:1].upper() + text[1:] if text else key
+
+
+def _identity_slug(value: str) -> str:
+    stopwords = {"a", "and", "e", "i", "il", "la", "le", "lo", "the"}
+    words = [word for word in re.findall(r"[a-z0-9]+", value.lower()) if word not in stopwords]
+    return "".join(words)
+
+
+def _navigation_compact(value: object, limit: int) -> str:
+    return " ".join(str(value or "").split())[:limit]
+
+
+def _visual_sections_for_page(
+    data_root: Path,
+    site_id: object,
+    page: dict[str, object],
+    *,
+    source_map: dict[str, object] | None = None,
+    report_id: str = "",
+) -> list[dict[str, object]]:
+    source_map = source_map or {}
+    source_files = _visual_source_files(page.get("source_files", [])) or _visual_source_files(source_map.get("source_files", []))
+    source_root = _source_root(data_root, str(site_id))
+    sections: list[dict[str, object]] = []
+    for rel_path in source_files[:5]:
+        if not rel_path.lower().endswith((".html", ".htm")):
+            continue
+        try:
+            target = resolve_site_path(source_root, rel_path)
+            if not target.is_file() or target.stat().st_size > 1024 * 1024:
+                continue
+            html = read_text_file(target)
+        except (OSError, ValueError):
+            continue
+        sections.extend(
+            visual_sections_from_html(
+                html,
+                route=str(page.get("route") or "/"),
+                page_id=str(page.get("id") or ""),
+                source_files=source_files,
+                last_report_id=report_id,
+            )
+        )
+        if len(sections) >= 32:
+            break
+    sections.extend(
+        visual_sections_from_selector_hints(
+            source_map.get("selector_hints") if isinstance(source_map, dict) else [],
+            route=str(page.get("route") or "/"),
+            page_id=str(page.get("id") or ""),
+            source_files=source_files,
+            last_report_id=report_id,
+            limit=32,
+        )
+    )
+    return _unique_visual_navigation_items(sections)[:32]
+
+
+def _unique_visual_navigation_items(items: list[dict[str, object]]) -> list[dict[str, object]]:
+    result: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for item in items:
+        selector = str(item.get("selector") or "")
+        anchor = str(item.get("anchor") or "")
+        label = str(item.get("label") or "")
+        key = f"{item.get('kind') or ''}:{selector}:{anchor}:{_identity_slug(label)}"
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(item)
+    return result
+
+
+def _visual_source_files(value: object) -> list[str]:
+    files = [str(item or "").strip() for item in value if str(item or "").strip()] if isinstance(value, list) else []
+    return [path for path in files if not _is_hidden_source_inventory_file(path)][:20]
+
+
+def _is_hidden_source_inventory_file(path: str) -> bool:
+    clean = path.strip().lstrip("/")
+    lower = clean.lower()
+    name = lower.rsplit("/", 1)[-1]
+    if not clean:
+        return True
+    if lower.startswith(("backend-admin/", "admin/", "wp-admin/", ".git/", "node_modules/", "vendor/")):
+        return True
+    if name in {".gitignore", ".htaccess", "readme.md", "package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock"}:
+        return True
+    if name.endswith((".lock", ".log", ".env")):
+        return True
+    return False
+
+
+def _components_from_report(source_map: dict[str, object], *, route: str, page_id: str, report_id: str) -> list[dict[str, object]]:
+    components = component_candidates_from_selector_hints(
+        source_map.get("selector_hints") if isinstance(source_map, dict) else [],
+        route=route or "/",
+        page_id=page_id,
+        last_report_id=report_id,
+    )
+    for component in components:
+        component["source_files"] = _visual_source_files(component.get("source_files", []))
+    return components
+
+
+def _source_files_changed(source_files: list[str], changed_paths: set[str]) -> bool:
+    return any(path in changed_paths for path in source_files)
+
+
+def _route_is_visual(route: dict[str, object]) -> bool:
+    status = str(route.get("status") or "").strip()
+    kind = str(route.get("kind") or "").strip()
+    return status in {"rendered", "ready", "draft", "active", "static_fallback"} and kind not in {"redirect", "sitemap"}
+
+
+def _navigation_warnings(
+    pages: list[dict[str, object]],
+    routes: list[dict[str, object]],
+    runtime: dict[str, object],
+) -> list[dict[str, object]]:
+    warnings: list[dict[str, object]] = []
+    for item in pages + routes:
+        for warning in item.get("warnings", []) or []:
+            text = str(warning or "").strip()
+            if text:
+                warnings.append({"scope": item.get("kind") or "page", "route": item.get("route") or "", "message": text})
+    for requirement in runtime.get("missing_requirements", []) or []:
+        text = str(requirement or "").strip()
+        if text:
+            warnings.append({"scope": "runtime", "route": "", "message": text})
+    return warnings[:100]
+
+
+def _navigation_target_for_site(
+    data_root: Path,
+    site_id: object,
+    *,
+    component_id: str = "",
+    selector: str = "",
+    anchor: str = "",
+    route: str = "",
+) -> dict[str, object] | None:
+    navigation = navigation_analyze(data_root, site_id)
+    candidates: list[dict[str, object]] = []
+    for page in navigation.get("pages", []) or []:
+        if not isinstance(page, dict):
+            continue
+        candidates.extend(item for item in page.get("sections", []) or [] if isinstance(item, dict))
+        candidates.extend(item for item in page.get("anchors", []) or [] if isinstance(item, dict))
+        candidates.extend(item for item in page.get("components", []) or [] if isinstance(item, dict))
+    for visual_route in navigation.get("routes", []) or []:
+        if isinstance(visual_route, dict):
+            candidates.extend(item for item in visual_route.get("components", []) or [] if isinstance(item, dict))
+    for item in candidates:
+        if route and str(item.get("route") or "") != route:
+            continue
+        if component_id and str(item.get("id") or "") == component_id:
+            return item
+        if selector and str(item.get("selector") or "") == selector:
+            return item
+        if anchor and str(item.get("anchor") or "") == anchor:
+            return item
+    return None
 
 
 def _preview_report_comparison(baseline_row: dict[str, object], report: dict[str, object]) -> dict[str, object]:
@@ -2289,6 +2743,9 @@ def page_context(
     route_id: object = None,
     route: object = None,
     asset_id: object = None,
+    component_id: object = None,
+    target_selector: object = None,
+    target_anchor: object = None,
 ) -> dict[str, object]:
     site = _select_context_site(data_root, site_id)
     if not site:
@@ -2300,6 +2757,7 @@ def page_context(
     selected_page = None
     selected_route = None
     selected_asset = None
+    selected_component = None
     clean_asset_id = str(asset_id or "").strip()
     if clean_asset_id:
         selected_asset = next((item for item in assets if item["id"] == clean_asset_id), None)
@@ -2312,6 +2770,25 @@ def page_context(
     clean_page_id = str(page_id or "").strip()
     if clean_page_id:
         selected_page = next((item for item in pages if item["id"] == clean_page_id), None)
+    clean_component_id = str(component_id or "").strip()
+    clean_selector = str(target_selector or "").strip()
+    clean_anchor = str(target_anchor or "").strip()
+    if clean_component_id or clean_selector or clean_anchor:
+        selected_component = _navigation_target_for_site(
+            data_root,
+            site["id"],
+            component_id=clean_component_id,
+            selector=clean_selector,
+            anchor=clean_anchor,
+            route=clean_route,
+        )
+        if selected_component:
+            component_page_id = str(selected_component.get("page_id") or "")
+            component_route = str(selected_component.get("route") or "")
+            if selected_page is None and component_page_id:
+                selected_page = next((item for item in pages if item["id"] == component_page_id), None)
+            if selected_route is None and component_route:
+                selected_route = next((item for item in routes if item["route"] == component_route), None)
     if selected_page is None and selected_route and selected_route.get("page_id"):
         selected_page = next((item for item in pages if item["id"] == selected_route.get("page_id")), None)
     if selected_page is None and clean_route:
@@ -2323,6 +2800,7 @@ def page_context(
         page=selected_page,
         route=selected_route,
         asset=selected_asset,
+        component=selected_component,
         map_payload=map_payload,
         diff_payload=diff_payload,
     )
@@ -2337,8 +2815,9 @@ def _context_payload(
     asset: dict[str, object] | None,
     map_payload: dict[str, object],
     diff_payload: dict[str, object],
+    component: dict[str, object] | None = None,
 ) -> dict[str, object]:
-    active_view = "asset" if asset else "route" if route and not page else "page" if page else "site"
+    active_view = "component" if component else "asset" if asset else "route" if route and not page else "page" if page else "site"
     preview_route = page["route"] if page else route.get("route") if route else "/"
     runtime = runtime_status(data_root, site["id"])
     preview = _context_preview_contract(data_root, site, page=page, route=preview_route, runtime=runtime)
@@ -2357,6 +2836,7 @@ def _context_payload(
         "page_id": page["id"] if page else None,
         "route_id": route["id"] if route else None,
         "asset_id": asset["id"] if asset else None,
+        "component_id": component.get("id") if component else None,
         "route": page["route"] if page else route.get("route") if route else None,
         "preview_id": preview["preview_id"],
         "preview_url": preview["preview_url"],
@@ -2364,9 +2844,12 @@ def _context_payload(
         "runtime_status": runtime_status_value,
         "missing_requirements": missing_requirements,
         "preview": preview,
-        "source_files": page["source_files"] if page else [],
+        "source_files": page["source_files"] if page else list(component.get("source_files") or []) if component else [],
         "route_source_files": route.get("source_files", []) if route else [],
         "asset_path": asset.get("path") if asset else None,
+        "component": component or None,
+        "target_selector": component.get("selector") if component else None,
+        "target_anchor": component.get("anchor") if component else None,
         "asset_refs": page.get("asset_refs", []) if page else [],
         "warnings": page.get("warnings", []) if page else [],
         "route_warnings": route.get("warnings", []) if route else [],
@@ -2701,6 +3184,7 @@ def reference_manifest() -> dict[str, object]:
         "site": {"display_name": "Website Site", "searchable": True},
         "page": {"display_name": "Website Page", "searchable": True},
         "route": {"display_name": "Website Route", "searchable": True},
+        "component": {"display_name": "Website Component", "searchable": True},
         "asset": {"display_name": "Website Asset", "searchable": True},
         "revision": {"display_name": "Website Revision", "searchable": False},
         "publish_request": {"display_name": "Publish Request", "searchable": True},
@@ -2722,6 +3206,7 @@ def reference_manifest() -> dict[str, object]:
 
 def reference_search(data_root: Path, query: object = "", site_id: object = None) -> list[dict[str, object]]:
     items = search(data_root, query, site_id)
+    items.extend(_component_reference_search(data_root, query, site_id))
     needle = f"%{str(query or '').strip()}%"
     ensure_schema(data_root)
     with connect(data_root) as db:
@@ -2754,6 +3239,8 @@ def reference_resolve(data_root: Path, entity_type: object, entity_id: object) -
         return _reference_payload("page", _get_page(data_root, entity_id))
     if entity == "route":
         return _reference_payload("route", _get_route(data_root, entity_id))
+    if entity == "component":
+        return _reference_payload("component", _get_component(data_root, entity_id))
     if entity == "asset":
         return _reference_payload("asset", _get_asset(data_root, entity_id))
     if entity == "revision":
@@ -3680,12 +4167,66 @@ def _reference_app_page(entity_type: str, entity_id: str) -> str:
         "site": "sites",
         "page": "pages",
         "route": "routes",
+        "component": "components",
         "asset": "assets",
         "revision": "revisions",
         "publish_request": "publish-requests",
     }
     segment = segments.get(entity_type)
     return f"{segment}/{entity_id}" if segment else ""
+
+
+def _component_reference_search(data_root: Path, query: object = "", site_id: object = None) -> list[dict[str, object]]:
+    components: list[dict[str, object]] = []
+    sites = [get_site(data_root, site_id)] if site_id else [site for site in list_sites(data_root) if site.get("status") != "archived"]
+    for site in sites[:25]:
+        try:
+            navigation = navigation_analyze(data_root, site["id"])
+        except ValueError:
+            continue
+        for component in navigation.get("components", []) or []:
+            if isinstance(component, dict) and component_matches_query(component, str(query or "")):
+                components.append(_component_reference_payload(site, component))
+                if len(components) >= 50:
+                    return components
+    return components
+
+
+def _component_reference_payload(site: dict[str, object], component: dict[str, object]) -> dict[str, object]:
+    return _reference_payload(
+        "component",
+        {
+            "id": component.get("id") or "",
+            "site_id": site.get("id") or "",
+            "display_name": component.get("label") or component.get("selector") or component.get("id") or "",
+            "label": component.get("label") or "",
+            "route": component.get("route") or "",
+            "selector": component.get("selector") or "",
+            "source_files": list(component.get("source_files") or [])[:8],
+            "confidence": component.get("confidence") or "",
+            "last_report_id": component.get("last_report_id") or "",
+        },
+    )
+
+
+def _get_component(data_root: Path, component_id: object) -> dict[str, object]:
+    clean_id = _required_id(component_id, "component_id")
+    for site in [item for item in list_sites(data_root) if item.get("status") != "archived"]:
+        navigation = navigation_analyze(data_root, site["id"])
+        for component in navigation.get("components", []) or []:
+            if isinstance(component, dict) and component.get("id") == clean_id:
+                return {
+                    "id": clean_id,
+                    "site_id": site["id"],
+                    "display_name": component.get("label") or clean_id,
+                    "label": component.get("label") or "",
+                    "route": component.get("route") or "",
+                    "selector": component.get("selector") or "",
+                    "source_files": list(component.get("source_files") or [])[:8],
+                    "confidence": component.get("confidence") or "",
+                    "last_report_id": component.get("last_report_id") or "",
+                }
+    raise ValueError(f"component `{clean_id}` was not found")
 
 
 def _source_asset_paths(source_root: Path) -> set[str]:

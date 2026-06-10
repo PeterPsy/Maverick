@@ -32,6 +32,7 @@ from store import (
     list_sites,
     load_view_state,
     maintenance_prune,
+    navigation_analyze,
     page_context,
     prepare_git_connection,
     preview_document,
@@ -211,6 +212,8 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
             return (409 if result.get("blocked") else 200), result
         if action == "sitemap":
             return 200, sitemap(data_root, payload.get("site_id"))
+        if action == "navigation_analyze":
+            return 200, navigation_analyze(data_root, payload.get("site_id"))
         if action == "index":
             return 200, rebuild_index(data_root, payload.get("site_id"))
         if action == "search":
@@ -259,7 +262,12 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
                 preview_origin=payload.get("_preview_origin"),
             )
         if action == "preview_document":
-            return 200, preview_document(data_root, payload.get("preview_id"), preview_origin=payload.get("_preview_origin"))
+            return 200, preview_document(
+                data_root,
+                payload.get("preview_id"),
+                preview_origin=payload.get("_preview_origin"),
+                include_inventory=payload.get("include_inventory"),
+            )
         if action == "preview_report":
             return 201, preview_report(
                 data_root,
@@ -268,6 +276,7 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
                 route=payload.get("route") or "/",
                 baseline_report_id=payload.get("baseline_report_id"),
                 preview_origin=payload.get("_preview_origin"),
+                include_inventory=payload.get("include_inventory"),
             )
         if action == "preview_media":
             return 200, preview_media(data_root, payload.get("preview_id"), payload.get("path"))
@@ -346,6 +355,9 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
                 route_id=payload.get("route_id"),
                 route=payload.get("route"),
                 asset_id=payload.get("asset_id"),
+                component_id=payload.get("component_id") or payload.get("section_id") or payload.get("anchor_id"),
+                target_selector=payload.get("target_selector") or payload.get("selector"),
+                target_anchor=payload.get("target_anchor") or payload.get("anchor"),
             )
         if action == "reference_manifest":
             return 200, reference_manifest()

@@ -32,6 +32,7 @@ TOOL_ACTIONS = {
     "website_import_zip": "import_zip",
     "website_sync_source": "sync_source",
     "website_sitemap": "sitemap",
+    "website_navigation_analyze": "navigation_analyze",
     "website_search": "search",
     "website_read_file": "read_file",
     "website_write_file": "write_file",

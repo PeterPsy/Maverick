@@ -32,12 +32,12 @@ Posso collegare il sito in due modi: incollami un link ZIP di Drive/Storage, opp
 1. Resolve the active context with `website_active_context` or list sites with `website_sites_list`.
 2. For site-specific work, require a `site_id`.
 3. When the user changes focus to a different site, use `website_site_set_active` before reading context.
-4. Inspect sitemap and route linkage with `website_sitemap`, `website_search`, and `website_read_file`.
+4. Inspect source inventory and route linkage with `website_sitemap`, `website_search`, and `website_read_file`; use `website_navigation_analyze` for visual sidebar/page/component navigation.
 5. Modify only the selected site's working source through `website_write_file` or `website_apply_patch`.
 6. Include `expected_hash` for every write or patch; use `expected_hash=new` only when intentionally creating a new file.
 7. Run `website_diff` and, when useful, `website_list_changes` after edits.
 8. Use `website_sync_source` only for Git-backed sites after reviewing local working changes. If it returns `blocked_local_changes`, inspect the diff and do not rerun with `confirm=true` without explicit user direction.
-9. Run `website_build_validate`, then use `website_build_preview`, `website_preview_report`, and `website_runtime_status` for preview checks. Static exports should return `runtime_status=ready`; PHP and Node-build sources use bounded Website Studio adapters and may return `ready`, `failed`, or `blocked` with explicit missing requirements. For chat-driven edits, capture a `website_preview_report` before and after the change, passing the previous `report.id` as `baseline_report_id` for comparison when possible.
+9. Run `website_build_validate`, then use `website_build_preview`, `website_preview_report`, `website_navigation_analyze`, and `website_runtime_status` for preview checks. Static exports should return `runtime_status=ready`; PHP and Node-build sources use bounded Website Studio adapters and may return `ready`, `failed`, or `blocked` with explicit missing requirements. For chat-driven edits, capture a `website_preview_report` before and after the change, passing the previous `report.id` as `baseline_report_id` for comparison when possible, and refresh `website_navigation_analyze` after each report so pages, sections, anchors, and component targets stay current.
 10. Create a `website_publish_request` only after the working diff contains at least one intended change.
 11. Use `website_approval_record` only when the user has explicitly approved the exact publish request or rollback revision.
 12. Use `website_publish` or `website_rollback` only with a matching single-use approval id.
@@ -83,6 +83,7 @@ Posso collegare il sito in due modi: incollami un link ZIP di Drive/Storage, opp
 - `website_import_git`
 - `website_sync_source`
 - `website_sitemap`
+- `website_navigation_analyze`
 - `website_search`
 - `website_read_file`
 - `website_write_file`

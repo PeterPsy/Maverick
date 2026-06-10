@@ -10,7 +10,7 @@ import sqlite3
 
 
 SCHEMA_VERSION = "3"
-REFERENCE_ENTITIES = ["site", "page", "route", "asset", "revision", "publish_request"]
+REFERENCE_ENTITIES = ["site", "page", "route", "component", "asset", "revision", "publish_request"]
 
 
 def now_timestamp() -> str:

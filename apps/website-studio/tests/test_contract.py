@@ -122,11 +122,13 @@ class GeneratedAppContractTest(unittest.TestCase):
         mcp_tools = set(contract.get("capabilities", {}).get("mcp_tools", []))
         self.assertIn("website_preview_document", mcp_tools)
         self.assertIn("website_preview_report", mcp_tools)
+        self.assertIn("website_navigation_analyze", mcp_tools)
         self.assertIn("website_runtime_status", mcp_tools)
 
         schemas = json.loads((APP_ROOT / "mcp" / "tool_schemas.json").read_text(encoding="utf-8"))
         self.assertIn("website_preview_document", schemas["tools"])
         self.assertIn("website_preview_report", schemas["tools"])
+        self.assertIn("website_navigation_analyze", schemas["tools"])
         self.assertIn("website_runtime_status", schemas["tools"])
         self.assertIn("website_maintenance_prune", schemas["tools"])
 
@@ -134,6 +136,7 @@ class GeneratedAppContractTest(unittest.TestCase):
         actions = set(cli_schema["commands"]["website-studio"]["argument_schema"]["properties"]["action"]["enum"])
         self.assertIn("preview_document", actions)
         self.assertIn("preview_report", actions)
+        self.assertIn("navigation_analyze", actions)
         self.assertIn("runtime_status", actions)
         self.assertIn("maintenance_prune", actions)
 

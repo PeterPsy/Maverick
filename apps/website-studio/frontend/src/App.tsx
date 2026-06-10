@@ -14,6 +14,7 @@ import {
 } from './api';
 
 type Notice = { tone: 'ok' | 'warn' | 'error'; text: string } | null;
+type ActiveTarget = { anchor?: string; componentId?: string; id?: string; kind?: string; selector?: string };
 
 const PREVIEW_RUNTIME_VERSION = 'preview-asset-broker-v2';
 const PREVIEW_CLIENT_VERSION = 'website-studio-preview-frame-v7';
@@ -25,6 +26,7 @@ export function App() {
   const [activePageId, setActivePageId] = useState('');
   const [activeRouteId, setActiveRouteId] = useState('');
   const [activeAssetId, setActiveAssetId] = useState('');
+  const [activeTarget, setActiveTarget] = useState<ActiveTarget>({});
   const [previewHtml, setPreviewHtml] = useState('');
   const [previewState, setPreviewState] = useState<PreviewPayload | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -39,7 +41,7 @@ export function App() {
   const activeSite = useMemo(() => sites.find((site) => site.id === activeSiteId), [sites, activeSiteId]);
   const activePage = useMemo(() => pages.find((page) => page.id === activePageId), [pages, activePageId]);
   const importOnly = showNewWebsite || !activeSite;
-  const previewUrl = useMemo(() => normalizePreviewUrl(previewState?.preview_url || ''), [previewState?.preview_url]);
+  const previewUrl = useMemo(() => normalizePreviewUrl(previewState?.preview_url || '', activeTarget), [activeTarget, previewState?.preview_url]);
 
   useEffect(() => {
     activeSiteIdRef.current = activeSiteId;
@@ -49,7 +51,14 @@ export function App() {
     activePageIdRef.current = activePageId;
   }, [activePageId]);
 
-  async function refresh(nextSiteId = activeSiteIdRef.current, nextPageId = activePageIdRef.current, nextRoute = '', nextRouteId = '', nextAssetId = '') {
+  async function refresh(
+    nextSiteId = activeSiteIdRef.current,
+    nextPageId = activePageIdRef.current,
+    nextRoute = '',
+    nextRouteId = '',
+    nextAssetId = '',
+    nextTarget: ActiveTarget = {}
+  ) {
     const sitePayload = await callBackend<{ items: Site[] }>({ action: 'sites_list' });
     setSites(sitePayload.items);
     const availableSites = sitePayload.items.filter((site) => site.status !== 'archived');
@@ -62,6 +71,7 @@ export function App() {
       setActivePageId('');
       setActiveRouteId('');
       setActiveAssetId('');
+      setActiveTarget({});
       setPreviewHtml('');
       setPreviewState(null);
       setPreviewLoading(false);
@@ -98,8 +108,9 @@ export function App() {
       setActivePageId(selectedPage?.id || '');
       setActiveRouteId(selectedRoute?.id || '');
       setActiveAssetId(selectedAsset?.id || '');
+      setActiveTarget(nextTarget || {});
       const previewRoute = selectedPage?.route || selectedRoute?.route || '/';
-      postSelection(selectedSite, selectedPage, selectedRoute, selectedAsset);
+      postSelection(selectedSite, selectedPage, selectedRoute, selectedAsset, nextTarget);
       await renderSite(selectedSite, previewRoute, statusPayload);
     } finally {
       setPreviewLoading(false);
@@ -138,6 +149,7 @@ export function App() {
         setActivePageId('');
         setActiveRouteId('');
         setActiveAssetId('');
+        setActiveTarget({});
         setPreviewHtml('');
         setPreviewState(null);
         setSiteStatus(null);
@@ -156,6 +168,16 @@ export function App() {
       const pageFromRoute = appPage.startsWith('pages/') ? appPage.slice('pages/'.length) : '';
       const routeFromRoute = appPage.startsWith('routes/') ? appPage.slice('routes/'.length) : '';
       const assetFromRoute = appPage.startsWith('assets/') ? appPage.slice('assets/'.length) : '';
+      const componentFromRoute = appPage.startsWith('components/') ? appPage.slice('components/'.length) : '';
+      const sectionFromRoute = appPage.startsWith('sections/') ? appPage.slice('sections/'.length) : '';
+      const anchorFromRoute = appPage.startsWith('anchors/') ? appPage.slice('anchors/'.length) : '';
+      const target: ActiveTarget = {
+        id: componentFromRoute || sectionFromRoute || anchorFromRoute || '',
+        componentId: payload.params?.component_id || componentFromRoute || '',
+        kind: componentFromRoute ? 'component' : sectionFromRoute ? 'section' : anchorFromRoute ? 'anchor' : '',
+        selector: payload.params?.target_selector || payload.params?.selector || '',
+        anchor: payload.params?.target_anchor || payload.params?.anchor || ''
+      };
       if (wantsInfoPanel) {
         setShowNewWebsite(false);
         setInfoPanelOpen(true);
@@ -164,11 +186,12 @@ export function App() {
           payload.params?.page_id || pageFromRoute || activePageIdRef.current,
           payload.params?.route || '',
           payload.params?.route_id || routeFromRoute,
-          payload.params?.asset_id || assetFromRoute
+          payload.params?.asset_id || assetFromRoute,
+          target
         ).catch((error: Error) => setNotice({ tone: 'error', text: error.message }));
         return;
       }
-      if (payload.params?.site_id || pageFromRoute || routeFromRoute || assetFromRoute || payload.params?.route) {
+      if (payload.params?.site_id || pageFromRoute || routeFromRoute || assetFromRoute || componentFromRoute || sectionFromRoute || anchorFromRoute || payload.params?.route) {
         setShowNewWebsite(false);
         setInfoPanelOpen(false);
         refresh(
@@ -176,7 +199,8 @@ export function App() {
           payload.params?.page_id || pageFromRoute,
           payload.params?.route || '',
           payload.params?.route_id || routeFromRoute,
-          payload.params?.asset_id || assetFromRoute
+          payload.params?.asset_id || assetFromRoute,
+          target
         ).catch((error: Error) => setNotice({ tone: 'error', text: error.message }));
       }
     }
@@ -212,6 +236,9 @@ export function App() {
                   title={activePage?.title || activeSite?.display_name || 'Website preview'}
                   data-route-id={activeRouteId}
                   data-asset-id={activeAssetId}
+                  data-component-id={activeTarget.componentId || activeTarget.id || ''}
+                  data-target-anchor={activeTarget.anchor || ''}
+                  data-target-selector={activeTarget.selector || ''}
                   sandbox="allow-scripts allow-same-origin"
                   src={previewUrl}
                 />
@@ -220,6 +247,9 @@ export function App() {
                   title={activePage?.title || activeSite?.display_name || 'Website preview'}
                   data-route-id={activeRouteId}
                   data-asset-id={activeAssetId}
+                  data-component-id={activeTarget.componentId || activeTarget.id || ''}
+                  data-target-anchor={activeTarget.anchor || ''}
+                  data-target-selector={activeTarget.selector || ''}
                   sandbox=""
                   srcDoc={previewHtml}
                 />
@@ -355,7 +385,7 @@ function previewPayloadFromRecord(siteId: string, route: string, preview: NonNul
   };
 }
 
-function normalizePreviewUrl(rawUrl: string): string {
+function normalizePreviewUrl(rawUrl: string, target: ActiveTarget = {}): string {
   const value = rawUrl.trim();
   if (!value) return '';
   try {
@@ -364,6 +394,14 @@ function normalizePreviewUrl(rawUrl: string): string {
       url.searchParams.set('runtime_version', PREVIEW_RUNTIME_VERSION);
       url.searchParams.set('client_version', PREVIEW_CLIENT_VERSION);
     }
+    if (target.selector) url.searchParams.set('target_selector', target.selector);
+    else url.searchParams.delete('target_selector');
+    if (target.anchor) url.searchParams.set('target_anchor', target.anchor);
+    else url.searchParams.delete('target_anchor');
+    if (target.id) url.searchParams.set('target_id', target.id);
+    else url.searchParams.delete('target_id');
+    if (target.kind) url.searchParams.set('target_kind', target.kind);
+    else url.searchParams.delete('target_kind');
     if (url.origin === window.location.origin) {
       return `${url.pathname}${url.search}${url.hash}`;
     }
@@ -373,10 +411,10 @@ function normalizePreviewUrl(rawUrl: string): string {
   }
 }
 
-function postSelection(siteId: string, page?: Page, route?: Route, asset?: Asset) {
+function postSelection(siteId: string, page?: Page, route?: Route, asset?: Asset, target: ActiveTarget = {}) {
   if (!siteId) return;
-  const appPage = asset ? `assets/${asset.id}` : route ? `routes/${route.id}` : page ? `pages/${page.id}` : `sites/${siteId}`;
-  const activeView = asset ? 'asset' : route && !page ? 'route' : page ? 'page' : 'site';
+  const appPage = target.id && target.kind ? `${target.kind}s/${target.id}` : asset ? `assets/${asset.id}` : route ? `routes/${route.id}` : page ? `pages/${page.id}` : `sites/${siteId}`;
+  const activeView = target.kind || (asset ? 'asset' : route && !page ? 'route' : page ? 'page' : 'site');
   window.parent?.postMessage(
     {
       type: 'maverick.app.selection-changed',
@@ -388,8 +426,11 @@ function postSelection(siteId: string, page?: Page, route?: Route, asset?: Asset
         page_id: page?.id || '',
         route_id: route?.id || '',
         asset_id: asset?.id || '',
+        component_id: target.componentId || '',
+        target_selector: target.selector || '',
+        target_anchor: target.anchor || '',
         route: page?.route || route?.route || '',
-        title: page?.title || route?.route || asset?.path || '',
+        title: target.selector || target.anchor || page?.title || route?.route || asset?.path || '',
         context_tool: 'website_page_context',
         app_page: appPage
       }

@@ -24,6 +24,12 @@
     <script>
       const params = new URLSearchParams(window.location.search);
       const previewId = params.get('preview_id') || '';
+      const previewTarget = {
+        id: params.get('target_id') || '',
+        kind: params.get('target_kind') || '',
+        selector: params.get('target_selector') || '',
+        anchor: params.get('target_anchor') || ''
+      };
       const frame = document.getElementById('preview');
       let currentDocumentUrl = '';
       const previewReports = [];
@@ -109,9 +115,10 @@
         revokeMountedUrls();
         const origin = window.location.origin;
         const mediaSource = `${origin}/api/apps/website-studio/backend/media`;
+        const targetSourceMap = { ...(sourceMap || {}), target_id: previewTarget.id, target_kind: previewTarget.kind, target_selector: previewTarget.selector, target_anchor: previewTarget.anchor };
         const documentHtml = await normalizePreviewDocument(String(html || '')
           .replaceAll('__WEBSITE_STUDIO_PREVIEW_ORIGIN__', origin)
-          .replaceAll('__WEBSITE_STUDIO_PREVIEW_MEDIA_SOURCE__', mediaSource), sourceMap);
+          .replaceAll('__WEBSITE_STUDIO_PREVIEW_MEDIA_SOURCE__', mediaSource), targetSourceMap);
         currentDocumentUrl = URL.createObjectURL(new Blob([documentHtml], { type: 'text/html;charset=utf-8' }));
         frame.removeAttribute('srcdoc');
         frame.src = currentDocumentUrl;
@@ -122,6 +129,7 @@
         ensureUtf8Meta(document);
         expandPreviewCspForRuntimeAssets(document);
         injectPreviewAssetBroker(document, sourceMap);
+        injectPreviewTarget(document, sourceMap);
         injectPreviewObservability(document, sourceMap);
         const blobCache = new Map();
 
@@ -182,6 +190,51 @@
         return `<!doctype html>\n${document.documentElement.outerHTML}`;
       }
 
+      function injectPreviewTarget(document, sourceMap) {
+        if (!sourceMap?.target_selector && !sourceMap?.target_anchor) return;
+        const head = document.head || document.documentElement.insertBefore(document.createElement('head'), document.body || null);
+        const style = document.createElement('style');
+        style.setAttribute('data-website-studio-target-style', '');
+        style.textContent = '[data-website-studio-target="active"]{outline:3px solid #ffbf47!important;outline-offset:4px!important;scroll-margin:12vh!important;}';
+        const script = document.createElement('script');
+        script.setAttribute('data-website-studio-target-probe', '');
+        script.textContent = `
+(() => {
+  const target = ${JSON.stringify(previewTarget).replace(/</g, '\\u003c')};
+  const findTarget = () => {
+    if (target.selector) {
+      try {
+        const node = document.querySelector(target.selector);
+        if (node) return node;
+      } catch {}
+    }
+    if (target.anchor) {
+      const id = String(target.anchor || '').replace(/^#/, '');
+      if (id) {
+        const escaped = window.CSS?.escape ? CSS.escape(id) : id.replace(/["\\\\]/g, '\\\\$&');
+        return document.getElementById(id) || document.querySelector('[name="' + escaped + '"]');
+      }
+    }
+    return null;
+  };
+  const mark = () => {
+    const node = findTarget();
+    window.__WEBSITE_STUDIO_TARGET__ = { ...target, found: Boolean(node) };
+    if (!node) return;
+    try {
+      node.setAttribute('data-website-studio-target', 'active');
+      node.scrollIntoView({ block: 'center', inline: 'nearest' });
+    } catch {}
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => requestAnimationFrame(mark), { once: true });
+  else requestAnimationFrame(mark);
+  window.setTimeout(mark, 600);
+})();
+        `.trim();
+        head.appendChild(style);
+        head.appendChild(script);
+      }
+
       function injectPreviewObservability(document, sourceMap) {
         const head = document.head || document.documentElement.insertBefore(document.createElement('head'), document.body || null);
         const mapScript = document.createElement('script');
@@ -211,7 +264,13 @@
     try { return JSON.parse(document.getElementById('website-studio-source-map')?.textContent || '{}'); }
     catch { return {}; }
   })();
-  const previewId = sourceMap.preview_id || '${previewId.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}';
+      const previewId = sourceMap.preview_id || '${previewId.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}';
+  const target = {
+    id: sourceMap.target_id || '',
+    kind: sourceMap.target_kind || '',
+    selector: sourceMap.target_selector || '',
+    anchor: sourceMap.target_anchor || ''
+  };
   const consoleLog = [];
   for (const level of ['debug', 'log', 'info', 'warn', 'error']) {
     const original = console[level];
@@ -321,6 +380,7 @@
       asset_broker: {
         cache_size: window.__WEBSITE_STUDIO_ASSET_BROKER__?.cache_size?.() ?? 0
       },
+      target: { ...target, found: Boolean(window.__WEBSITE_STUDIO_TARGET__?.found) },
       console_log: consoleLog.slice(-80),
       source_map: {
         source_files: (sourceMap.source_files || []).slice(0, 20),

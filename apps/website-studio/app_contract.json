@@ -71,6 +71,7 @@
       "website_import_zip",
       "website_sync_source",
       "website_sitemap",
+      "website_navigation_analyze",
       "website_search",
       "website_read_file",
       "website_write_file",
@@ -131,6 +132,7 @@
             "site",
             "page",
             "route",
+            "component",
             "asset",
             "revision",
             "publish_request"
@@ -181,6 +183,14 @@
       {
         "entity_type": "route",
         "display_name": "Website Route",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      },
+      {
+        "entity_type": "component",
+        "display_name": "Website Component",
         "searchable": true,
         "resolvable": true,
         "summarizable": true,

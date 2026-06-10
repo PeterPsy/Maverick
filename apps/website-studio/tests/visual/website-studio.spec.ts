@@ -144,6 +144,16 @@ test.describe('Website Studio visual smoke', () => {
       await expect(iframe).toHaveAttribute('src', /route=%2Fabout/, { timeout: 750 });
     }).toPass({ timeout: 6_000 });
 
+    await expect(async () => {
+      await emitShellMessage(page, {
+        type: 'maverick.app.navigate',
+        params: { site_id: SITE_ID, app_page: 'components/component_cta', page_id: 'page_home', route: '/', target_selector: '.cta' }
+      });
+      await expect(iframe).toHaveAttribute('data-component-id', 'component_cta', { timeout: 750 });
+      await expect(iframe).toHaveAttribute('data-target-selector', '.cta', { timeout: 750 });
+      await expect(iframe).toHaveAttribute('src', /target_selector=\.cta/, { timeout: 750 });
+    }).toPass({ timeout: 6_000 });
+
     await emitShellMessage(page, {
       type: 'maverick.app.navigate',
       params: { site_id: SITE_ID, app_page: 'info', website_info: '1' }
@@ -197,6 +207,45 @@ test.describe('Website Studio visual smoke', () => {
     await expect(page.locator('.website-fullscreen-preview-close')).toHaveCount(0);
     await expect(inlinePreview).toBeVisible();
     await expect(inlinePreview).toHaveAttribute('src', /preview-runtime/);
+  });
+
+  test('sidebar visual navigation opens pages and component targets', async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 780 });
+    await installWebsiteStudioMocks(page);
+    await page.goto('/apps/website-studio/widgets/website-studio-sitemap-sidebar/');
+    await page.evaluate(() => {
+      (window as unknown as { __websiteStudioMessages?: unknown[] }).__websiteStudioMessages = [];
+      window.addEventListener('message', (event) => {
+        (window as unknown as { __websiteStudioMessages?: unknown[] }).__websiteStudioMessages?.push(event.data);
+      });
+    });
+
+    await emitShellMessage(page, {
+      type: 'maverick.widget.context-changed',
+      context: { content: { payload: { active_app_params: { site_id: SITE_ID } } } }
+    });
+
+    await expect(page.locator('.website-studio-tree-trigger').filter({ hasText: 'Giuntitrail' }).first()).toBeVisible();
+    await expect(page.getByText('Backend and config')).toHaveCount(0);
+    await expect(page.getByText('README.md')).toHaveCount(0);
+    await expect(page.getByText('No observed sections')).toHaveCount(0);
+    await expect(page.getByText('Rendered routes')).toHaveCount(0);
+
+    await page.getByText('Home').click();
+    await expect.poll(async () => openAppMessages(page).then((messages) => messages.some((message) => message.params?.app_page === 'pages/page_home' && message.params?.route === '/')), { timeout: 2_000 }).toBe(true);
+
+    const homeTrigger = page.locator('.website-studio-tree-trigger').filter({ hasText: 'Home' }).first();
+    await homeTrigger.locator('.website-studio-tree-expander').click();
+    const componentsTrigger = page.locator('.website-studio-tree-trigger').filter({ hasText: 'Components' }).first();
+    await componentsTrigger.locator('.website-studio-tree-expander').click();
+    await expect(page.getByText('Call to action')).toBeVisible();
+    await page.getByText('Call to action').click();
+    await expect.poll(async () => openAppMessages(page).then((messages) => messages.some((message) => (
+      message.params?.app_page === 'components/component_cta' &&
+      message.params?.route === '/' &&
+      message.params?.component_id === 'component_cta' &&
+      message.params?.target_selector === '.cta'
+    ))), { timeout: 2_000 }).toBe(true);
   });
 });
 
@@ -293,7 +342,7 @@ test.describe('Website Studio preview runtime', () => {
     });
 
     const startedAt = Date.now();
-    await page.goto(`/apps/website-studio/preview-runtime/index.html?preview_id=${previewId}`);
+    await page.goto(`/apps/website-studio/preview-runtime/index.html?preview_id=${previewId}&target_selector=main&target_id=component_main&target_kind=component`);
 
     const previewFrame = page.frameLocator('#preview');
     await expect(previewFrame.locator('[data-testid="runtime-preview"]')).toContainText('Giuntitrail', { timeout: 1_500 });
@@ -342,6 +391,8 @@ test.describe('Website Studio preview runtime', () => {
       return (latest?.placeholder_images?.length || 0) + (latest?.broken_images?.length || 0);
     }), { timeout: 3_000 }).toBe(0);
     expect((runtimeReport.source_map as { asset_refs: string[] }).asset_refs).toContain('assets/fonts/preview.woff2');
+    expect((runtimeReport.target as { found?: boolean; selector?: string }).selector).toBe('main');
+    expect((runtimeReport.target as { found?: boolean; selector?: string }).found).toBe(true);
   });
 });
 
@@ -429,6 +480,13 @@ async function emitShellMessage(page: Page, payload: Record<string, unknown>): P
   }, payload);
 }
 
+async function openAppMessages(page: Page): Promise<Array<{ params?: Record<string, string>; type?: string }>> {
+  return page.evaluate(() => {
+    const messages = (window as unknown as { __websiteStudioMessages?: Array<{ params?: Record<string, string>; type?: string }> }).__websiteStudioMessages || [];
+    return messages.filter((message) => message?.type === 'maverick.widget.open-app');
+  });
+}
+
 function backendResponse(action: string, body: Record<string, unknown>, state: MockState, options: MockOptions): { status: number; body: Record<string, unknown> } {
   const requestedRoute = typeof body.route === 'string' && body.route ? body.route : '/';
   const preview = previewForRoute(requestedRoute);
@@ -460,12 +518,59 @@ function backendResponse(action: string, body: Record<string, unknown>, state: M
     };
   }
 
+  function navigationBody() {
+    return {
+      site_id: SITE_ID,
+      model: 'visual_navigation.v1',
+      site,
+      pages: [
+        {
+          id: 'page_home',
+          route: '/',
+          route_id: 'route_home',
+          title: 'Home',
+          status: 'rendered',
+          changed: Boolean(state.changedFilesCount),
+          sections: [{ id: 'section_hero', kind: 'section', route: '/', page_id: 'page_home', selector: '#hero', anchor: '#hero', label: 'Hero' }],
+          anchors: [],
+          components: [{ id: 'component_cta', kind: 'component', route: '/', page_id: 'page_home', selector: '.cta', label: 'Call to action', confidence: 'token_match' }],
+          warnings: []
+        }
+      ],
+      routes: [
+        {
+          id: 'route_about',
+          route: '/about',
+          title: '/about',
+          status: 'rendered',
+          sections: [],
+          anchors: [],
+          components: [],
+          warnings: []
+        }
+      ],
+      components: [{ id: 'component_cta', kind: 'component', route: '/', page_id: 'page_home', selector: '.cta', label: 'Call to action', confidence: 'token_match' }],
+      warnings: [],
+      status: {
+        runtime_kind: 'php',
+        runtime_status: 'ready',
+        latest_build_id: 'build_ready',
+        latest_build_status: 'passed',
+        latest_preview_id: latestPreview.id,
+        changed_files_count: state.changedFilesCount
+      },
+      inventory_summary: { page_count: 1, route_count: 2, asset_count: 1, source_inventory_hidden: true }
+    };
+  }
+
   switch (action) {
     case 'sites_list':
       if (options.emptySites) return { status: 200, body: { items: [] } };
       return { status: 200, body: { items: [site] } };
     case 'sitemap':
       return { status: 200, body: sitemapBody() };
+    case 'navigation_analyze':
+      return { status: 200, body: navigationBody() };
     case 'site_status':
       return {
         status: 200,

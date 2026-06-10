@@ -13,7 +13,7 @@ import {
 import './styles.css';
 
 type TreeItem = {
-  assetId?: string;
+  anchor?: string;
   changed?: boolean;
   children?: TreeItem[];
   empty?: boolean;
@@ -24,35 +24,10 @@ type TreeItem = {
   pageId?: string;
   route?: string;
   routeId?: string;
+  selector?: string;
   status?: string;
   subtitle?: string;
   warning?: boolean;
-};
-
-type BackendPage = Record<string, unknown> & {
-  id?: string;
-  route?: string;
-  source_files?: string[];
-  title?: string;
-  warnings?: unknown[];
-};
-
-type BackendRoute = Record<string, unknown> & {
-  id?: string;
-  kind?: string;
-  page_id?: string;
-  route?: string;
-  source_files?: string[];
-  status?: string;
-  warnings?: unknown[];
-};
-
-type BackendAsset = Record<string, unknown> & {
-  id?: string;
-  kind?: string;
-  path?: string;
-  source_files?: string[];
-  warnings?: unknown[];
 };
 
 type Site = {
@@ -62,10 +37,55 @@ type Site = {
   status?: string;
 };
 
-type SitemapPayload = {
-  assets?: BackendAsset[];
-  items?: BackendPage[];
-  routes?: BackendRoute[];
+type VisualComponent = {
+  anchor?: string;
+  changed?: boolean;
+  confidence?: string;
+  id?: string;
+  kind?: string;
+  label?: string;
+  page_id?: string;
+  route?: string;
+  selector?: string;
+  source_files?: string[];
+  status?: string;
+  warnings?: unknown[];
+};
+
+type VisualPage = {
+  aliases?: string[];
+  anchors?: VisualComponent[];
+  canonical_route?: string;
+  changed?: boolean;
+  components?: VisualComponent[];
+  id?: string;
+  kind?: string;
+  label?: string;
+  route?: string;
+  route_id?: string;
+  sections?: VisualComponent[];
+  source_files?: string[];
+  status?: string;
+  title?: string;
+  warnings?: unknown[];
+};
+
+type VisualNavigationPayload = {
+  inventory_summary?: { asset_count?: number; page_count?: number; route_count?: number; source_inventory_hidden?: boolean };
+  pages?: VisualPage[];
+  routes?: VisualPage[];
+  site?: { display_name?: string; id?: string; slug?: string; source_provider?: string; status?: string };
+  site_id?: string;
+  status?: {
+    changed_files_count?: number;
+    latest_build_id?: string;
+    latest_build_status?: string;
+    latest_preview_id?: string;
+    missing_requirements?: string[];
+    runtime_kind?: string;
+    runtime_status?: string;
+  };
+  warnings?: Array<{ message?: string; route?: string; scope?: string }>;
 };
 
 type ChangesPayload = {
@@ -74,13 +94,7 @@ type ChangesPayload = {
   working_diff?: Array<{ path?: string }>;
 };
 
-type AssetBuckets = {
-  assets: { children: TreeItem[]; count: number };
-  backend: { children: TreeItem[]; count: number };
-  components: { children: TreeItem[]; count: number };
-};
-
-const DEFAULT_EXPANDED_IDS = ['group:pages', 'group:routes', 'group:components'];
+const DEFAULT_EXPANDED_IDS = ['site:root', 'group:pages'];
 
 async function backend<T>(body: Record<string, unknown>): Promise<T> {
   const response = await fetch('/api/apps/website-studio/backend', {
@@ -94,12 +108,8 @@ async function backend<T>(body: Record<string, unknown>): Promise<T> {
 
 function WebsiteSitemapSidebarWidget() {
   const [sites, setSites] = useState<Site[]>([]);
-  const [pages, setPages] = useState<BackendPage[]>([]);
-  const [routes, setRoutes] = useState<BackendRoute[]>([]);
-  const [assets, setAssets] = useState<BackendAsset[]>([]);
-  const [siteStatus, setSiteStatus] = useState<Record<string, unknown> | null>(null);
+  const [navigation, setNavigation] = useState<VisualNavigationPayload | null>(null);
   const [changeHistory, setChangeHistory] = useState<ChangesPayload | null>(null);
-  const [changedPaths, setChangedPaths] = useState<Set<string>>(() => new Set());
   const [activeSiteId, setActiveSiteId] = useState('');
   const [selectedNodeId, setSelectedNodeId] = useState('');
   const [query, setQuery] = useState('');
@@ -108,8 +118,8 @@ function WebsiteSitemapSidebarWidget() {
 
   const filteredSites = useMemo(() => sites.filter((site) => site.status !== 'archived'), [sites]);
   const treeItems = useMemo(
-    () => activeSiteId ? filterTree(buildTree(pages, routes, assets, siteStatus, changeHistory, changedPaths), query.trim().toLowerCase()) : [],
-    [activeSiteId, assets, changedPaths, changeHistory, pages, query, routes, siteStatus]
+    () => activeSiteId && navigation ? filterTree(buildTree(navigation, changeHistory), query.trim().toLowerCase()) : [],
+    [activeSiteId, changeHistory, navigation, query]
   );
   const defaultExpandedIds = useMemo(() => collectDefaultExpandedIds(treeItems, Boolean(query.trim())), [query, treeItems]);
   const treeProviderKey = `${activeSiteId || 'site'}:${query.trim().toLowerCase() || 'tree'}`;
@@ -122,36 +132,27 @@ function WebsiteSitemapSidebarWidget() {
     const selectableSites = nextSites.filter((item) => item.status !== 'archived');
     const site = selectableSites.find((item) => item.id === nextSiteId);
     if (!site?.id) {
-      setPages([]);
-      setRoutes([]);
-      setAssets([]);
       setActiveSiteId('');
-      setSiteStatus(null);
+      setNavigation(null);
       setChangeHistory(null);
-      setChangedPaths(new Set());
       setError('');
       setIsLoading(false);
       return;
     }
     setActiveSiteId(site.id);
-    const [map, statusPayload, changesPayload] = await Promise.all([
-      backend<SitemapPayload>({ action: 'sitemap', site_id: site.id }),
-      backend<Record<string, unknown>>({ action: 'site_status', site_id: site.id }),
+    const [navigationPayload, changesPayload] = await Promise.all([
+      backend<VisualNavigationPayload>({ action: 'navigation_analyze', site_id: site.id }),
       backend<ChangesPayload>({ action: 'list_changes', site_id: site.id })
     ]);
-    setPages(map.items || []);
-    setRoutes(map.routes || []);
-    setAssets(map.assets || []);
-    setSiteStatus(statusPayload || null);
+    setNavigation(navigationPayload || null);
     setChangeHistory(changesPayload || null);
-    setChangedPaths(new Set((changesPayload?.working_diff || []).map((item) => String(item.path || '')).filter(Boolean)));
     setError('');
     setIsLoading(false);
   }
 
   useEffect(() => {
     load().catch((loadError: Error) => {
-      setError(loadError.message || 'Sitemap unavailable.');
+      setError(loadError.message || 'Visual navigation unavailable.');
       setIsLoading(false);
     });
   }, []);
@@ -161,13 +162,13 @@ function WebsiteSitemapSidebarWidget() {
       if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') return;
       const payload = event.data as { context?: { content?: { payload?: { active_app_params?: Record<string, string> } } }; owner_app_id?: string; type?: string };
       if (payload.type === 'maverick.widget.data-changed' && payload.owner_app_id === 'website-studio') {
-        load(activeSiteId).catch((loadError: Error) => setError(loadError.message || 'Sitemap unavailable.'));
+        load(activeSiteId).catch((loadError: Error) => setError(loadError.message || 'Visual navigation unavailable.'));
         return;
       }
       if (payload.type !== 'maverick.widget.context-changed') return;
       const params = payload.context?.content?.payload?.active_app_params || {};
       if (params.site_id && params.site_id !== activeSiteId) {
-        load(String(params.site_id)).catch((loadError: Error) => setError(loadError.message || 'Sitemap unavailable.'));
+        load(String(params.site_id)).catch((loadError: Error) => setError(loadError.message || 'Visual navigation unavailable.'));
       }
     }
     window.addEventListener('message', handleMessage);
@@ -177,26 +178,20 @@ function WebsiteSitemapSidebarWidget() {
   async function selectSite(siteId: string) {
     setActiveSiteId(siteId);
     if (!siteId) {
-      setPages([]);
-      setRoutes([]);
-      setAssets([]);
-      setSiteStatus(null);
+      setNavigation(null);
       setChangeHistory(null);
-      setChangedPaths(new Set());
       setSelectedNodeId('');
       setError('');
       return;
     }
-    if (siteId) {
-      await backend({ action: 'site_set_active', site_id: siteId }).catch(() => null);
-    }
+    await backend({ action: 'site_set_active', site_id: siteId }).catch(() => null);
     window.parent?.postMessage({ type: 'maverick.widget.open-app', app_id: 'website-studio', params: { site_id: siteId } }, window.location.origin);
     await load(siteId);
   }
 
   function selectNode(node: TreeItem) {
     setSelectedNodeId(node.id);
-    if (node.empty || !node.kind || !node.entityId) return;
+    if (node.empty || !isActionable(node)) return;
     openNode(node, activeSiteId);
   }
 
@@ -204,7 +199,7 @@ function WebsiteSitemapSidebarWidget() {
     <main className="website-studio-sitemap-widget">
       <label className="website-studio-sitemap-search">
         <span className="website-studio-sitemap-search-icon" aria-hidden="true" />
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search site tree" />
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search visual site" />
       </label>
       <label className="website-studio-sitemap-select-frame">
         <select aria-label="Select a site" value={activeSiteId} onChange={(event) => void selectSite(event.target.value)}>
@@ -216,7 +211,7 @@ function WebsiteSitemapSidebarWidget() {
       </label>
       <div className="website-studio-sitemap-list storage-sidebar-tree-list">
         {isLoading ? <WebsiteTreeSkeleton /> : error ? <p className="website-studio-sitemap-empty">{error}</p> : !activeSiteId ? (
-          <p className="website-studio-sitemap-empty">{filteredSites.length ? 'Select a site to load its sitemap.' : 'No active websites yet.'}</p>
+          <p className="website-studio-sitemap-empty">{filteredSites.length ? 'Select a site to load its visual navigation.' : 'No active websites yet.'}</p>
         ) : treeItems.length ? (
           <TreeProvider
             animateExpand
@@ -239,7 +234,7 @@ function WebsiteSitemapSidebarWidget() {
               ))}
             </TreeView>
           </TreeProvider>
-        ) : <p className="website-studio-sitemap-empty">No matching site items.</p>}
+        ) : <p className="website-studio-sitemap-empty">No matching visual site items.</p>}
       </div>
     </main>
   );
@@ -255,7 +250,7 @@ function WebsiteTreeNodeView({ node, level, isLast, onSelect }: { isLast: boolea
         onClick={() => onSelect(node)}
         toggleOnTriggerClick={false}
       >
-        <TreeExpander hasChildren={hasChildren} />
+        <TreeExpander className="website-studio-tree-expander" hasChildren={hasChildren} />
         <TreeIcon hasChildren={hasChildren} />
         <TreeLabel title={node.subtitle || label}>{label}</TreeLabel>
         {node.status ? <span className={`website-studio-tree-badge${node.warning ? ' warn' : ''}${node.changed ? ' changed' : ''}`}>{node.status}</span> : null}
@@ -275,58 +270,117 @@ function WebsiteTreeNodeView({ node, level, isLast, onSelect }: { isLast: boolea
   );
 }
 
-function buildTree(pages: BackendPage[], routes: BackendRoute[], assets: BackendAsset[], siteStatus: Record<string, unknown> | null, changeHistory: ChangesPayload | null, changedPaths: Set<string>): TreeItem[] {
-  const pageNodes: TreeItem[] = pages
+function buildTree(navigation: VisualNavigationPayload, changeHistory: ChangesPayload | null): TreeItem[] {
+  const pages = navigation.pages || [];
+  const routes = navigation.routes || [];
+  const warnings = navigation.warnings || [];
+  const pageNodes = pages
     .slice()
     .sort((left, right) => String(left.route || '').localeCompare(String(right.route || '')))
-    .map((page) => {
-      const changed = itemChanged(page, changedPaths);
-      return {
-        id: `page:${page.id}`,
-        kind: 'page',
-        entityId: String(page.id || ''),
-        pageId: String(page.id || ''),
-        route: String(page.route || ''),
-        label: String(page.route || page.title || page.id),
-        subtitle: String(page.title || 'static page'),
-        status: changed ? 'modified' : page.warnings?.length ? 'warning' : '',
-        warning: Boolean(page.warnings?.length),
-        changed
-      };
-    });
-  if (!pageNodes.length) pageNodes.push(emptyNode('No static HTML pages', 'source tree has no .html files'));
+    .map(pageNode);
+  if (!pageNodes.length) pageNodes.push(emptyNode('No visual pages', 'preview has no navigable pages'));
 
-  const pageRouteIds = new Set(pages.map((page) => String(page.id || '')));
-  const routeNodes: TreeItem[] = routes
-    .filter((route) => !route.page_id || !pageRouteIds.has(String(route.page_id)))
+  const routeNodes = routes
     .slice()
     .sort((left, right) => String(left.route || '').localeCompare(String(right.route || '')))
-    .map((route) => {
-      const changed = itemChanged(route, changedPaths);
-      return {
-        id: `route:${route.id}`,
-        kind: 'route',
-        entityId: String(route.id || ''),
-        routeId: String(route.id || ''),
-        route: String(route.route || ''),
-        label: String(route.route || route.id),
-        subtitle: String(route.kind || 'route'),
-        status: changed ? 'modified' : route.page_id ? String(route.status || '') : 'no html',
-        warning: Boolean(!route.page_id || route.warnings?.length || route.status === 'broken' || route.status === 'unmatched'),
-        changed
-      };
-    });
-  if (!routeNodes.length) routeNodes.push(emptyNode('No sitemap-only routes', 'all routes map to pages'));
-
-  const assetBuckets = bucketAssets(assets, changedPaths);
+    .map(routeNode);
+  const children: TreeItem[] = [groupNode('group:pages', 'Pages', `${pages.length}`, pageNodes)];
+  if (routeNodes.length) children.push(groupNode('group:routes', 'Other routes', `${routeNodes.length}`, routeNodes));
+  if (warnings.length) children.push(groupNode('group:warnings', 'Warnings', `${warnings.length}`, warnings.map((warning, index) => warningNode(warning, index))));
+  const site = navigation.site || {};
+  const changedCount = Number(navigation.status?.changed_files_count || changeHistory?.working_diff?.length || 0);
+  const runtimeStatus = String(navigation.status?.runtime_status || site.status || 'unknown').replace('_', ' ');
   return [
-    groupNode('group:pages', 'Pages', `${pages.length} static`, pageNodes),
-    groupNode('group:routes', 'Sitemap routes', `${routeNodes.filter((node) => !node.empty).length} checked`, routeNodes),
-    groupNode('group:components', 'Components', `${assetBuckets.components.count} files`, assetBuckets.components.children),
-    groupNode('group:assets', 'Assets', `${assetBuckets.assets.count} files`, assetBuckets.assets.children),
-    groupNode('group:backend', 'Backend and config', `${assetBuckets.backend.count} files`, assetBuckets.backend.children),
-    groupNode('group:status', 'Status', `${String(siteStatus?.runtime_status || 'unknown')} | ${changedPaths.size} changed`, [statusNode(siteStatus, changeHistory, changedPaths)])
+    {
+      id: 'site:root',
+      kind: 'site',
+      entityId: String(site.id || navigation.site_id || ''),
+      label: String(site.display_name || site.slug || navigation.site_id || 'Website'),
+      subtitle: statusSummary(navigation, changeHistory),
+      status: changedCount ? `${changedCount} modified` : runtimeStatus,
+      changed: Boolean(changedCount),
+      warning: Boolean(warnings.length),
+      children
+    }
   ];
+}
+
+function pageNode(page: VisualPage): TreeItem {
+  const sections = uniqueVisualItems([...(page.sections || []), ...(page.anchors || [])]).map((item) => visualItemNode(item, page, item.kind === 'anchor' ? 'anchor' : 'section'));
+  const components = (page.components || []).map((item) => visualItemNode(item, page, 'component'));
+  const children: TreeItem[] = [];
+  if (sections.length) children.push(groupNode(`sections:${page.id}`, 'Sections', `${sections.length}`, sections));
+  if (components.length) children.push(groupNode(`components:${page.id}`, 'Components', `${components.length}`, components));
+  return {
+    id: `page:${page.id}`,
+    kind: 'page',
+    entityId: String(page.id || ''),
+    pageId: String(page.id || ''),
+    route: String(page.route || ''),
+    routeId: String(page.route_id || ''),
+    label: String(page.label || page.title || page.route || page.id),
+    subtitle: page.aliases?.length ? `${String(page.route || 'page')} +${page.aliases.length} aliases` : String(page.route || 'page'),
+    status: page.changed ? 'modified' : page.warnings?.length ? 'warning' : '',
+    warning: Boolean(page.warnings?.length),
+    changed: Boolean(page.changed),
+    children
+  };
+}
+
+function routeNode(route: VisualPage): TreeItem {
+  const components = (route.components || []).map((item) => visualItemNode(item, route, 'component'));
+  return {
+    id: `route:${route.id}`,
+    kind: 'route',
+    entityId: String(route.id || ''),
+    routeId: String(route.id || ''),
+    route: String(route.route || ''),
+    label: String(route.label || route.title || route.route || route.id),
+    subtitle: String(route.status || 'rendered route'),
+    status: route.changed ? 'modified' : route.warnings?.length ? 'warning' : String(route.status || ''),
+    warning: Boolean(route.warnings?.length),
+    changed: Boolean(route.changed),
+    children: components.length ? [groupNode(`components:${route.id}`, 'Components', `${components.length}`, components)] : []
+  };
+}
+
+function visualItemNode(item: VisualComponent, page: VisualPage, kind: 'anchor' | 'component' | 'section'): TreeItem {
+  const confidence = item.confidence ? String(item.confidence).replace('_', ' ') : kind;
+  return {
+    id: `${kind}:${item.id}`,
+    kind,
+    entityId: String(item.id || ''),
+    pageId: String(item.page_id || page.id || ''),
+    routeId: String(page.route_id || ''),
+    route: String(item.route || page.route || ''),
+    selector: String(item.selector || ''),
+    anchor: String(item.anchor || ''),
+    label: String(item.label || item.selector || item.id),
+    subtitle: String(item.selector || item.anchor || confidence),
+    status: item.changed ? 'modified' : item.warnings?.length ? 'warning' : '',
+    warning: Boolean(item.warnings?.length),
+    changed: Boolean(item.changed || page.changed)
+  };
+}
+
+function statusSummary(navigation: VisualNavigationPayload, changeHistory: ChangesPayload | null) {
+  const latestBuild = (changeHistory?.builds || [])[0] || {};
+  const latestRequest = (changeHistory?.publish_requests || [])[0] || {};
+  const runtime = String(navigation.status?.runtime_status || 'unknown').replace('_', ' ');
+  const build = String(navigation.status?.latest_build_status || latestBuild.status || 'none');
+  const request = String(latestRequest.status || 'none');
+  return `runtime ${runtime} | build ${build} | request ${request}`;
+}
+
+function warningNode(warning: { message?: string; route?: string; scope?: string }, index: number): TreeItem {
+  return {
+    id: `warning:${index}`,
+    kind: 'warning',
+    label: String(warning.message || 'Warning'),
+    subtitle: [warning.scope, warning.route].filter(Boolean).join(' | '),
+    status: 'warning',
+    warning: true
+  };
 }
 
 function groupNode(id: string, label: string, subtitle: string, children: TreeItem[]): TreeItem {
@@ -337,87 +391,16 @@ function emptyNode(label: string, subtitle: string): TreeItem {
   return { id: `empty:${label}`, kind: 'empty', label, subtitle, status: 'empty', empty: true };
 }
 
-function bucketAssets(sourceAssets: BackendAsset[], changedPaths: Set<string>): AssetBuckets {
-  const buckets: AssetBuckets = {
-    components: { count: 0, children: [] },
-    assets: { count: 0, children: [] },
-    backend: { count: 0, children: [] }
-  };
-  for (const asset of sourceAssets) {
-    const path = String(asset.path || '');
-    const category = assetCategory(path, String(asset.kind || 'file'));
-    buckets[category].count += 1;
-    const changed = itemChanged(asset, changedPaths);
-    addPathNode(buckets[category].children, path, {
-      id: `asset:${asset.id}`,
-      kind: 'asset',
-      entityId: String(asset.id || ''),
-      assetId: String(asset.id || ''),
-      label: basename(path),
-      subtitle: dirname(path) || String(asset.kind || 'file'),
-      status: changed ? 'modified' : '',
-      warning: Boolean(asset.warnings?.length),
-      changed
-    });
+function uniqueVisualItems(items: VisualComponent[]) {
+  const seen = new Set<string>();
+  const result: VisualComponent[] = [];
+  for (const item of items) {
+    const key = String(item.id || `${item.kind}:${item.selector}:${item.anchor}:${item.label}`);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    result.push(item);
   }
-  for (const bucket of Object.values(buckets)) {
-    if (!bucket.children.length) bucket.children.push(emptyNode('No files', ''));
-    sortNodes(bucket.children);
-  }
-  return buckets;
-}
-
-function statusNode(siteStatus: Record<string, unknown> | null, changeHistory: ChangesPayload | null, changedPaths: Set<string>): TreeItem {
-  const latestBuild = (changeHistory?.builds || [])[0] || {};
-  const latestRequest = (changeHistory?.publish_requests || [])[0] || {};
-  return {
-    id: 'status:summary',
-    kind: 'status',
-    label: String(siteStatus?.runtime_status || 'unknown').replace('_', ' '),
-    subtitle: `build ${String(latestBuild.status || 'none')} | requests ${String(latestRequest.status || 'none')}`,
-    status: changedPaths.size ? `${changedPaths.size} modified` : 'clean',
-    changed: Boolean(changedPaths.size)
-  };
-}
-
-function itemChanged(item: { path?: string; source_files?: string[] } | null | undefined, changedPaths: Set<string>) {
-  if (!item || !changedPaths.size) return false;
-  const directPath = String(item.path || '');
-  if (directPath && changedPaths.has(directPath)) return true;
-  return (item.source_files || []).some((path) => changedPaths.has(String(path || '')));
-}
-
-function assetCategory(path: string, kind: string): keyof AssetBuckets {
-  const lower = path.toLowerCase();
-  if (lower.startsWith('frontend-website/src/') || lower.startsWith('src/') || lower.includes('/components/') || lower.endsWith('.scss')) return 'components';
-  if (['image', 'font', 'media', 'stylesheet', 'script'].includes(kind) && !lower.endsWith('.php')) return 'assets';
-  if (/\.(png|jpe?g|gif|webp|svg|ico|avif|mp4|webm|mp3|woff2?|ttf|css|js)$/i.test(path)) return 'assets';
-  return 'backend';
-}
-
-function addPathNode(children: TreeItem[], path: string, leaf: TreeItem) {
-  const parts = path.split('/').filter(Boolean);
-  let currentChildren = children;
-  let currentPath = '';
-  for (let index = 0; index < parts.length - 1; index += 1) {
-    const part = parts[index];
-    currentPath = currentPath ? `${currentPath}/${part}` : part;
-    let folder = currentChildren.find((node) => node.kind === 'folder' && node.route === currentPath);
-    if (!folder) {
-      folder = { id: `folder:${currentPath}`, kind: 'folder', route: currentPath, label: part, subtitle: currentPath, status: '', children: [] };
-      currentChildren.push(folder);
-    }
-    currentChildren = folder.children || [];
-  }
-  currentChildren.push(leaf);
-}
-
-function sortNodes(nodes: TreeItem[]) {
-  nodes.sort((left, right) => {
-    if (Boolean(left.children?.length) !== Boolean(right.children?.length)) return left.children?.length ? -1 : 1;
-    return String(left.label).localeCompare(String(right.label));
-  });
-  nodes.forEach((node) => node.children && sortNodes(node.children));
+  return result;
 }
 
 function filterTree(nodes: TreeItem[], needle: string): TreeItem[] {
@@ -433,7 +416,7 @@ function filterNode(node: TreeItem, needle: string): TreeItem | null {
 }
 
 function nodeMatches(node: TreeItem, needle: string) {
-  return `${node.label || ''} ${node.subtitle || ''} ${node.status || ''}`.toLowerCase().includes(needle);
+  return `${node.label || ''} ${node.subtitle || ''} ${node.status || ''} ${node.route || ''} ${node.selector || ''}`.toLowerCase().includes(needle);
 }
 
 function collectDefaultExpandedIds(nodes: TreeItem[], expandAll: boolean) {
@@ -447,11 +430,19 @@ function collectDefaultExpandedIds(nodes: TreeItem[], expandAll: boolean) {
   return ids;
 }
 
+function isActionable(node: TreeItem) {
+  return Boolean(node.entityId && ['site', 'page', 'route', 'section', 'anchor', 'component'].includes(node.kind));
+}
+
 function openNode(node: TreeItem, activeSiteId: string) {
-  if (!node || node.empty || !node.kind || !node.entityId) return;
+  if (!isActionable(node)) return;
   const kind = node.kind;
-  const id = node.entityId;
-  const params: Record<string, string> = { site_id: activeSiteId, app_page: `${kind}s/${id}` };
+  const id = String(node.entityId || '');
+  const appPageKind = kind === 'anchor' ? 'anchors' : `${kind}s`;
+  const params: Record<string, string> = { site_id: activeSiteId, app_page: `${appPageKind}/${id}` };
+  if (kind === 'site') {
+    params.app_page = `sites/${id}`;
+  }
   if (kind === 'page') {
     params.page_id = node.pageId || id;
     params.route = node.route || '';
@@ -460,26 +451,23 @@ function openNode(node: TreeItem, activeSiteId: string) {
     params.route_id = node.routeId || id;
     params.route = node.route || '';
   }
-  if (kind === 'asset') {
-    params.asset_id = node.assetId || id;
+  if (kind === 'section' || kind === 'anchor' || kind === 'component') {
+    params.page_id = node.pageId || '';
+    params.route_id = node.routeId || '';
+    params.route = node.route || '';
+    params.target_selector = node.selector || '';
+    params.target_anchor = node.anchor || '';
+    if (kind === 'component') params.component_id = id;
+    if (kind === 'section') params.section_id = id;
+    if (kind === 'anchor') params.anchor_id = id;
   }
   window.parent?.postMessage({ type: 'maverick.widget.open-app', app_id: 'website-studio', params }, window.location.origin);
   window.parent?.postMessage({ type: 'maverick.shell.sidebar.close' }, window.location.origin);
 }
 
-function basename(path: string) {
-  return path.split('/').filter(Boolean).pop() || path || '/';
-}
-
-function dirname(path: string) {
-  const parts = path.split('/').filter(Boolean);
-  parts.pop();
-  return parts.join('/');
-}
-
 function WebsiteTreeSkeleton() {
   return (
-    <div className="website-studio-sitemap-skeleton" role="status" aria-label="Website sitemap is loading">
+    <div className="website-studio-sitemap-skeleton" role="status" aria-label="Website visual navigation is loading">
       {Array.from({ length: 8 }).map((_, index) => (
         <div className={`website-studio-sitemap-skeleton__row depth-${Math.min(index, 3)}`} key={index} aria-hidden="true">
           <span className="website-studio-sitemap-skeleton__expander" />

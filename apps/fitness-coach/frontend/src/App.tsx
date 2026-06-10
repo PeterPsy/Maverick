@@ -38,6 +38,7 @@ import {
   storageMediaSelectionFromPickerParams,
   updateViewState
 } from './api';
+import { GradientBarsBackground } from './components/ui/gradient-bars-background';
 import { createLocalBlobFallback, driveMediaStreamUrl, initialMediaResolution, resolveMediaPlayback } from './mediaPlaybackResolver';
 import { TagsInputField } from './components/ui/tags-input';
 import type { Exercise, ExerciseMediaRef, RestBlock, RuntimeSegment, SetupTab, WorkBlock, Workout, WorkoutBlock, WorkoutRunSummary } from './types';
@@ -1028,6 +1029,13 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
     '--fitness-player-progress-duration': `${progressSeconds}s`,
     animationPlayState: paused ? 'paused' : 'running'
   } as CSSProperties;
+  const mediaPlaceholderLabel = resolution.status === 'blocked'
+    ? resolution.detail
+    : resolution.status === 'error'
+      ? 'Workout media could not be loaded'
+      : resolution.status === 'localizing'
+        ? 'Storage is preparing workout media'
+        : 'Loading workout media';
   return (
     <main
       className="work-player"
@@ -1041,10 +1049,17 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
         ) : resolution.status === 'ready' && resolution.mediaKind === 'image' ? (
           <img src={resolution.url} alt="" onError={fallbackBlob} />
         ) : (
-          <div className="media-placeholder">
-            <Dumbbell size={42} />
-            <span>{resolution.detail || 'Resolving Storage media'}</span>
-          </div>
+          <GradientBarsBackground
+            className={`player-media-backdrop is-${resolution.status}`}
+            numBars={9}
+            gradientFrom="rgba(224, 228, 230, 0.78)"
+            gradientTo="rgba(5, 6, 5, 0)"
+            animationDuration={2.2}
+            backgroundColor="#050605"
+            ariaLabel={mediaPlaceholderLabel}
+          >
+            {resolution.status === 'blocked' && resolution.detail ? <span className="player-media-backdrop-message">{resolution.detail}</span> : null}
+          </GradientBarsBackground>
         )}
       </div>
       <div className="player-scrim" />

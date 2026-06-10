@@ -1274,17 +1274,30 @@ select:focus {
   object-position: center top;
 }
 
-.media-placeholder {
-  display: grid;
-  place-items: center;
-  align-content: center;
-  gap: 0.7rem;
-  width: 100%;
-  height: 100%;
-  background: #090a09;
-  color: rgba(249, 250, 249, 0.72);
-  padding: 1.2rem;
+.player-media-backdrop {
+  isolation: isolate;
+  color: rgba(249, 250, 249, 0.74);
+}
+
+.player-media-backdrop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 78%, rgba(224, 228, 230, 0.14), transparent 34%),
+    linear-gradient(180deg, rgba(5, 6, 5, 0.1), rgba(5, 6, 5, 0.68));
+}
+
+.player-media-backdrop-message {
+  max-width: min(28rem, 88vw);
+  border: 1px solid rgba(249, 250, 249, 0.14);
+  border-radius: 999px;
+  background: rgba(8, 9, 8, 0.64);
+  padding: 0.62rem 0.78rem;
   text-align: center;
+  backdrop-filter: blur(18px);
 }
 
 .player-scrim {

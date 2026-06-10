@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 describe('work player presentation', () => {
   const styles = readFileSync(new URL('./styles.css', import.meta.url), 'utf8');
   const appSource = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8');
+  const gradientBarsSource = readFileSync(new URL('./components/ui/gradient-bars-background.tsx', import.meta.url), 'utf8');
   const restIcon = readFileSync(new URL('../public/rest-icon.svg', import.meta.url), 'utf8');
 
   it('contains workout media instead of cropping it', () => {
@@ -66,5 +67,16 @@ describe('work player presentation', () => {
     expect(styles).toContain('.rest-block-icon-frame');
     expect(styles).toContain('.player-rest-overlay');
     expect(styles).toContain('.player-rest-icon');
+  });
+
+  it('replaces the resolving media text placeholder with animated gradient bars', () => {
+    expect(appSource).toContain('GradientBarsBackground');
+    expect(appSource).toContain('className={`player-media-backdrop is-${resolution.status}`}');
+    expect(appSource).not.toContain('Resolving Storage media');
+    expect(styles).toContain('.player-media-backdrop');
+    expect(styles).toContain('.player-media-backdrop-message');
+    expect(gradientBarsSource).toContain('fitnessGradientBarPulse');
+    expect(gradientBarsSource).toContain("gradientFrom = 'rgb(215, 219, 220)'");
+    expect(gradientBarsSource).toContain("backgroundColor = '#050605'");
   });
 });

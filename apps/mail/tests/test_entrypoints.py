@@ -224,6 +224,91 @@ class MailServiceTest(unittest.TestCase):
             self.assertEqual(payload["sync"]["synced_threads"], 0)
             self.assertEqual(provider.max_threads, 25)
 
+    def test_secret_resource_lookup_remaps_disconnected_connection_to_active_same_mailbox(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            ensure_schema(data_root)
+            now = now_timestamp()
+            with connect(data_root) as db:
+                db.execute(
+                    """
+                    INSERT INTO connections(id, provider, email_address, display_name, status, scopes_json, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    ("mail_connection_gmail_old", "gmail", "person@example.com", "Person", "disconnected", "[]", now, now),
+                )
+                db.execute(
+                    """
+                    INSERT INTO connections(id, provider, email_address, display_name, status, scopes_json, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    ("mail_connection_gmail_new", "gmail", "person@example.com", "Person", "connected", "[]", now, now),
+                )
+                db.execute(
+                    """
+                    INSERT INTO threads(id, connection_id, provider_thread_id, subject, participants_json, last_message_at, snippet, unread, starred, labels_json, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    ("email_thread_gmail_mail_connection_gmail_old_thread_1", "mail_connection_gmail_old", "thread-1", "Subject", "[]", now, "", 0, 0, "[]", now),
+                )
+
+            result = resolve_secret_resource(data_root, {"action": "mail_get_thread", "thread_id": "email_thread_gmail_mail_connection_gmail_old_thread_1"})
+
+            self.assertTrue(result["requires_secrets"])
+            self.assertEqual(result["resource_type"], "mail_connection")
+            self.assertEqual(result["resource_id"], "mail_connection_gmail_new")
+
+    def test_threads_sync_remaps_disconnected_explicit_connection_to_active_same_mailbox(self) -> None:
+        class FakeProvider:
+            provider_id = "gmail"
+
+            def __init__(self) -> None:
+                self.connection_id: str | None = None
+
+            def sync_incremental(
+                self,
+                data_root: Path,
+                connection_id: str | None = None,
+                app_secrets: dict[str, object] | None = None,
+                max_threads: int = 100,
+                query: str | None = None,
+                page_token: str | None = None,
+                continue_cursor: bool = False,
+            ) -> dict[str, object]:
+                self.connection_id = connection_id
+                return {"connection_id": connection_id, "synced_threads": 0, "has_more": False}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            ensure_schema(data_root)
+            now = now_timestamp()
+            with connect(data_root) as db:
+                db.execute(
+                    """
+                    INSERT INTO connections(id, provider, email_address, display_name, status, scopes_json, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    ("mail_connection_gmail_old", "gmail", "person@example.com", "Person", "disconnected", "[]", now, now),
+                )
+                db.execute(
+                    """
+                    INSERT INTO connections(id, provider, email_address, display_name, status, scopes_json, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    ("mail_connection_gmail_new", "gmail", "person@example.com", "Person", "connected", "[]", now, now),
+                )
+
+            provider = FakeProvider()
+            with patch("backend.service.provider_for_connection", return_value=provider):
+                status, payload = handle_action(
+                    data_root,
+                    {"action": "threads.sync", "connection_id": "mail_connection_gmail_old", "_app_secrets": self._gmail_secrets()},
+                )
+
+            self.assertEqual(status, 200)
+            self.assertEqual(provider.connection_id, "mail_connection_gmail_new")
+            self.assertEqual(payload["sync"]["connection_id"], "mail_connection_gmail_new")
+
     def test_imap_smtp_sync_and_send_use_delivered_mailbox_secret(self) -> None:
         source = EmailMessage()
         source["From"] = "Sender <sender@example.com>"

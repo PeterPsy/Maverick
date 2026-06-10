@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from store import get_connection
+from store import resolve_connected_connection
 
 from .base import MailProvider
 from .gmail import GmailProvider
@@ -14,7 +14,7 @@ from .imap_smtp import ImapSmtpProvider
 def provider_for_connection(data_root: Path, connection_id: str | None) -> MailProvider:
     if not connection_id:
         return GmailProvider()
-    connection = get_connection(data_root, connection_id)
+    connection = resolve_connected_connection(data_root, connection_id)
     return provider_by_id(str(connection["provider"]))
 
 

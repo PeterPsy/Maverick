@@ -33,6 +33,7 @@ from store import (
     list_folders,
     list_labels,
     mailbox_counts,
+    resolve_connected_connection,
     search_messages,
     status,
 )
@@ -135,7 +136,7 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
                 )
             }
         if action in {"threads.sync", "mail_sync"}:
-            connection_id = _optional_string(payload.get("connection_id")) or _payload_connection_id(data_root, payload)
+            connection_id = _payload_connection_id(data_root, payload)
             _require_connected(data_root, connection_id)
             provider = provider_for_connection(data_root, connection_id)
             return 200, {
@@ -168,7 +169,7 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
                 )
             }
         if action in {"drafts.create", "mail_create_draft"}:
-            return 201, {"draft": create_draft(data_root, payload)}
+            return 201, {"draft": create_draft(data_root, _with_effective_connection_payload(data_root, payload))}
         if action in {"drafts.update", "mail_update_draft"}:
             return 200, {"draft": update_draft(data_root, _required_string(payload.get("draft_id") or payload.get("id"), "draft_id"), payload)}
         if action == "drafts.get":
@@ -189,8 +190,9 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
                 )
             }
         if action in {"messages.send", "mail_send"}:
-            _require_connected(data_root, _optional_string(payload.get("connection_id")) or _payload_connection_id(data_root, payload))
-            draft = create_draft(data_root, payload)
+            connection_id = _payload_connection_id(data_root, payload)
+            _require_connected(data_root, connection_id)
+            draft = create_draft(data_root, {**payload, "connection_id": connection_id})
             provider = provider_for_connection(data_root, str(draft["connection_id"]))
             result = provider.send_draft(data_root, str(draft["id"]), confirm=bool(payload.get("confirm")), app_secrets=_app_secrets(payload))
             return 200, {"draft": draft, "result": result}
@@ -369,11 +371,13 @@ def _optional_path(value: object) -> Path | None:
 def _payload_connection_id(data_root: Path, payload: dict[str, object]) -> str | None:
     explicit = _optional_string(payload.get("connection_id"))
     if explicit:
-        return explicit
+        return _effective_connection_id(data_root, explicit)
     connections = list_connections(data_root)
     if not connections:
         return None
-    return str(connections[0]["id"])
+    connected = [connection for connection in connections if connection.get("status") == "connected"]
+    selected = connected[0] if connected else connections[0]
+    return _effective_connection_id(data_root, str(selected["id"]))
 
 
 def _threads_list_provider_payload(
@@ -397,13 +401,13 @@ def _threads_list_provider_payload(
 def _is_disconnected(data_root: Path, connection_id: str | None) -> bool:
     if not connection_id:
         return False
-    return get_connection(data_root, connection_id).get("status") == "disconnected"
+    return resolve_connected_connection(data_root, connection_id).get("status") == "disconnected"
 
 
 def _require_connected(data_root: Path, connection_id: str | None) -> None:
     if not connection_id:
         raise ValueError("connection_id is required")
-    status = str(get_connection(data_root, connection_id).get("status") or "")
+    status = str(resolve_connected_connection(data_root, connection_id).get("status") or "")
     if status != "connected":
         raise ValueError(f"Connection `{connection_id}` is `{status or 'unknown'}`; test and activate it before mail operations.")
 
@@ -411,7 +415,7 @@ def _require_connected(data_root: Path, connection_id: str | None) -> None:
 def _secret_resource_connection_id(data_root: Path, payload: dict[str, object]) -> str | None:
     explicit = _optional_string(payload.get("connection_id"))
     if explicit:
-        return explicit
+        return _effective_connection_id(data_root, explicit)
     action = str(payload.get("action") or "")
     fallback_id = _optional_string(payload.get("id"))
     thread_id = _optional_string(payload.get("thread_id")) or (
@@ -430,19 +434,30 @@ def _secret_resource_connection_id(data_root: Path, payload: dict[str, object]) 
         else None
     )
     if thread_id:
-        return str(get_thread(data_root, thread_id)["connection_id"])
+        return _effective_connection_id(data_root, str(get_thread(data_root, thread_id)["connection_id"]))
     draft_id = _optional_string(payload.get("draft_id")) or (fallback_id if action in {"drafts.send", "mail_send_draft", "drafts.get", "drafts.update", "mail_update_draft"} else None)
     if draft_id:
-        return str(get_draft(data_root, draft_id)["connection_id"])
+        return _effective_connection_id(data_root, str(get_draft(data_root, draft_id)["connection_id"]))
     attachment_id = _optional_string(payload.get("attachment_id")) or (fallback_id if action in {"attachments.get", "mail_get_attachment"} else None)
     if attachment_id:
         attachment = get_attachment(data_root, attachment_id)
-        return str(get_thread(data_root, str(attachment["thread_id"]))["connection_id"])
+        return _effective_connection_id(data_root, str(get_thread(data_root, str(attachment["thread_id"]))["connection_id"]))
     message_id = _optional_string(payload.get("message_id")) or (fallback_id if action in {"messages.get", "mail_get_message"} else None)
     if message_id:
         message = get_message(data_root, message_id)
-        return str(get_thread(data_root, str(message["thread_id"]))["connection_id"])
+        return _effective_connection_id(data_root, str(get_thread(data_root, str(message["thread_id"]))["connection_id"]))
     return _payload_connection_id(data_root, payload)
+
+
+def _effective_connection_id(data_root: Path, connection_id: str) -> str:
+    return str(resolve_connected_connection(data_root, connection_id).get("id") or connection_id)
+
+
+def _with_effective_connection_payload(data_root: Path, payload: dict[str, object]) -> dict[str, object]:
+    connection_id = _optional_string(payload.get("connection_id"))
+    if not connection_id:
+        return payload
+    return {**payload, "connection_id": _effective_connection_id(data_root, connection_id)}
 
 
 def _app_secrets(payload: dict[str, object]) -> dict[str, object]:

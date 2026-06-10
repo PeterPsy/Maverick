@@ -53,6 +53,32 @@ def get_connection(data_root: Path, connection_id: str) -> dict[str, object]:
     return _connection(row)
 
 
+def resolve_connected_connection(data_root: Path, connection_id: str) -> dict[str, object]:
+    connection = get_connection(data_root, connection_id)
+    if connection.get("status") == "connected":
+        return connection
+    replacement = connected_replacement_for_connection(data_root, connection)
+    return replacement or connection
+
+
+def connected_replacement_for_connection(data_root: Path, connection: dict[str, object]) -> dict[str, object] | None:
+    provider = str(connection.get("provider") or "").strip()
+    email_key = str(connection.get("email_address") or "").strip().casefold()
+    if not provider or not email_key:
+        return None
+    candidates = [
+        item
+        for item in list_connections(data_root)
+        if item.get("id") != connection.get("id")
+        and item.get("status") == "connected"
+        and str(item.get("provider") or "") == provider
+        and str(item.get("email_address") or "").strip().casefold() == email_key
+    ]
+    if not candidates:
+        return None
+    return sorted(candidates, key=lambda item: str(item.get("updated_at") or item.get("created_at") or ""), reverse=True)[0]
+
+
 def disconnect_connection(data_root: Path, connection_id: str, *, reason: str = "") -> dict[str, object]:
     ensure_schema(data_root)
     connection_id = connection_id.strip()

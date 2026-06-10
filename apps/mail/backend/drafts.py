@@ -260,7 +260,9 @@ def _default_connection_id(data_root: Path) -> str:
     connections = list_connections(data_root)
     if not connections:
         raise ValueError("No mail connection is available")
-    return str(connections[0]["id"])
+    connected = [connection for connection in connections if connection.get("status") == "connected"]
+    selected = connected[0] if connected else connections[0]
+    return str(selected["id"])
 
 
 def _connection_for_draft(data_root: Path, connection_id: str) -> dict[str, object]:

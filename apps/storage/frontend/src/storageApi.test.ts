@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { callBackend, completeDriveOAuth, currentStorageAppId, driveConnectionSecretRequest, driveMediaDownloadUrl, driveMediaStreamUrl, listDriveChildren, listDriveConnections, listDriveRoots, localizeDriveFile, MAX_BASE64_WRITE_BYTES, moveItemsReferences, previewDriveFile, startDriveOAuth, storageBackendEndpoint, syncDriveConnection, trashDriveFile, uploadDriveFile } from './storageApi';
+import { callBackend, completeDriveOAuth, currentStorageAppId, driveConnectionSecretRequest, driveMediaDownloadUrl, driveMediaStreamUrl, folderMediaDownloadUrl, listDriveChildren, listDriveConnections, listDriveRoots, localizeDriveFile, LOCAL_UPLOAD_SESSION_CHUNK_BYTES, MAX_BASE64_WRITE_BYTES, moveItemsReferences, previewDriveFile, startDriveOAuth, storageBackendEndpoint, storageMediaStreamUrl, syncDriveConnection, trashDriveFile, uploadDriveFile, uploadFile } from './storageApi';
 
 class FakeFileReader {
   onerror: ((this: FileReader, ev: ProgressEvent<FileReader>) => unknown) | null = null;
@@ -400,6 +400,53 @@ describe('storage api client', () => {
     expect(secretRequest).toEqual(driveConnectionSecretRequest('drive_conn_1'));
   });
 
+  it('builds direct local file media stream URLs without provider secrets', () => {
+    const url = storageMediaStreamUrl({
+      id: 'file_123',
+      file_id: 'file_123',
+      path_id: 'generated:Videos/clip.mp4',
+      provider: 'local',
+      role: 'generated',
+      name: 'clip.mp4',
+      relative_path: 'Videos/clip.mp4',
+      workspace_relative_path: 'storage/generated/Videos/clip.mp4',
+      extension: '.mp4',
+      size_bytes: 1024,
+      modified_at: '2026-05-28T00:00:00Z',
+      content_type: 'video/mp4',
+      preview_kind: 'video',
+      sha256: 'abc123'
+    }, { appId: 'storage', download: true });
+    const parsed = new URL(url, 'https://example.test');
+    const secretRequest = JSON.parse(parsed.searchParams.get('_app_secret_request') || '{}');
+
+    expect(parsed.pathname).toBe('/api/apps/storage/media');
+    expect(parsed.searchParams.get('stable_storage_file_id')).toBe('file_123');
+    expect(parsed.searchParams.get('download')).toBe('1');
+    expect(secretRequest).toEqual({ logical_names: [], required: false });
+  });
+
+  it('builds folder media download URLs for streamed local archives', () => {
+    const url = folderMediaDownloadUrl({
+      id: 'folder_123',
+      provider: 'local',
+      role: 'generated',
+      name: 'Reports',
+      relative_path: 'Reports',
+      workspace_relative_path: 'storage/generated/Reports',
+      modified_at: '2026-05-28T00:00:00Z'
+    }, { appId: 'storage' });
+    const parsed = new URL(url, 'https://example.test');
+    const secretRequest = JSON.parse(parsed.searchParams.get('_app_secret_request') || '{}');
+
+    expect(parsed.pathname).toBe('/api/apps/storage/media');
+    expect(parsed.searchParams.get('media_kind')).toBe('folder');
+    expect(parsed.searchParams.get('role')).toBe('generated');
+    expect(parsed.searchParams.get('relative_path')).toBe('Reports');
+    expect(parsed.searchParams.get('download')).toBe('1');
+    expect(secretRequest).toEqual({ logical_names: [], required: false });
+  });
+
   it('uploads files into the selected Drive folder with resource-scoped Drive secrets', async () => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
       connection_id: 'drive_conn_1',
@@ -435,6 +482,78 @@ describe('storage api client', () => {
         method: 'POST'
       })
     );
+  });
+
+  it('uses local upload sessions for files above the base64 write limit', async () => {
+    const fileSize = MAX_BASE64_WRITE_BYTES + 3;
+    const largeFile = {
+      name: 'large.bin',
+      type: 'application/octet-stream',
+      size: fileSize,
+      slice: (start: number, end: number) => new Blob([new Uint8Array(Math.min(16, Math.max(0, end - start))).fill(97)])
+    } as unknown as File;
+    const fetchImpl = vi.fn(async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body || '{}'));
+      if (body.action === 'local_upload_session.start') {
+        return new Response(JSON.stringify({
+          status: 'uploading',
+          provider: 'local',
+          upload_session: {
+            id: 'local_upload_1',
+            status: 'uploading',
+            provider: 'local',
+            role: 'generated',
+            folder_relative_path: 'Social',
+            relative_path: 'Social/large.bin',
+            file_name: 'large.bin',
+            content_type: 'application/octet-stream',
+            size_bytes: fileSize,
+            bytes_uploaded: 0
+          }
+        }), { status: 200 });
+      }
+      if (body.action === 'local_upload_session.chunk') {
+        const nextOffset = Math.min(fileSize, Number(body.chunk_offset) + LOCAL_UPLOAD_SESSION_CHUNK_BYTES);
+        const complete = nextOffset >= fileSize;
+        return new Response(JSON.stringify({
+          status: complete ? 'uploaded' : 'uploading',
+          provider: 'local',
+          expected_offset: nextOffset,
+          upload_session: {
+            id: 'local_upload_1',
+            status: complete ? 'complete' : 'uploading',
+            provider: 'local',
+            role: 'generated',
+            folder_relative_path: 'Social',
+            relative_path: 'Social/large.bin',
+            file_name: 'large.bin',
+            content_type: 'application/octet-stream',
+            size_bytes: fileSize,
+            bytes_uploaded: nextOffset,
+            file: complete ? { id: 'file_large', file_id: 'file_large', name: 'large.bin' } : null
+          },
+          ...(complete ? { file: { id: 'file_large', file_id: 'file_large', name: 'large.bin' } } : {})
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ detail: `Unexpected action ${body.action}` }), { status: 400 });
+    });
+
+    const payload = await uploadFile('generated', 'Social', largeFile, { fetchImpl });
+    const bodies = fetchImpl.mock.calls.map((call) => JSON.parse(String(call[1]?.body || '{}')));
+
+    expect(payload.file.id).toBe('file_large');
+    expect(bodies[0]).toMatchObject({
+      action: 'local_upload_session.start',
+      role: 'generated',
+      folder_relative_path: 'Social',
+      file_name: 'large.bin',
+      content_type: 'application/octet-stream',
+      size_bytes: fileSize,
+      _app_secret_request: { logical_names: [], required: false }
+    });
+    expect(bodies.slice(1).every((body) => body.action === 'local_upload_session.chunk')).toBe(true);
+    expect(bodies.slice(1).every((body) => body._app_secret_request.logical_names.length === 0)).toBe(true);
+    expect(bodies.some((body) => body.action === 'upload_file')).toBe(false);
   });
 
   it('uses Drive resumable upload sessions for files above the base64 write limit', async () => {

@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { Home } from 'lucide-react';
 import { AnimatedFileCollection, CollectionViewToggle, type CollectionViewMode } from './components/ui/animated-collection';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from './components/ui/breadcramb';
-import { CATALOG_PAGE_LIMIT, DRIVE_PAGE_LIMIT, clearCustomView, completeDriveOAuth, currentStorageAppId, decodeBase64, deleteFile, deleteFolder, downloadFolder, driveMediaStreamUrl, listDriveChildren, listDriveRoots, loadCatalog, loadViewFilter, moveFileReference, moveFolderReference, moveItemsReferences, readDriveFile, readFile, renameDriveFile, renameFile, setViewFilter, trashDriveFile, updateMarkdownFile, uploadDriveFile, uploadFile } from './storageApi';
+import { CATALOG_PAGE_LIMIT, DRIVE_PAGE_LIMIT, clearCustomView, completeDriveOAuth, currentStorageAppId, decodeBase64, deleteFile, deleteFolder, folderMediaDownloadUrl, listDriveChildren, listDriveRoots, loadCatalog, loadViewFilter, moveFileReference, moveFolderReference, moveItemsReferences, readDriveFile, readFile, renameDriveFile, renameFile, setViewFilter, storageMediaStreamUrl, trashDriveFile, updateMarkdownFile, uploadDriveFile, uploadFile } from './storageApi';
 import { canInlinePreview, canTextPreview, StoragePreview } from './filePreview';
 import { formatBytes, formatMegabytes, kindLabels, roleLabels } from './storageMeta';
 import { Icon } from './Icon';
@@ -1678,9 +1678,9 @@ function App() {
   const previewBackdropClassName = previewFullscreenActive ? 'preview-modal-backdrop is-fullscreen-preview' : 'preview-modal-backdrop';
 
   async function download(file: StorageFile) {
-    if (isDriveBinaryDownloadFile(file)) {
+    if (!isDriveItem(file) || isDriveBinaryDownloadFile(file)) {
       const anchor = document.createElement('a');
-      anchor.href = driveMediaStreamUrl(file, { download: true });
+      anchor.href = storageMediaStreamUrl(file, { download: true });
       anchor.download = file.name;
       anchor.click();
       return;
@@ -1702,13 +1702,10 @@ function App() {
   }
 
   async function downloadFolderArchive(folder: StorageFolder) {
-    const payload = await downloadFolder(folder);
-    const url = URL.createObjectURL(decodeBase64(payload.content_base64, payload.content_type));
     const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = payload.file_name;
+    anchor.href = folderMediaDownloadUrl(folder);
+    anchor.download = `${folder.name || folder.role || 'folder'}.zip`;
     anchor.click();
-    URL.revokeObjectURL(url);
   }
 
   async function saveRename() {

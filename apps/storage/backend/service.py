@@ -25,6 +25,13 @@ from drive_upload_sessions import (
     public_drive_upload_session,
     update_drive_upload_session,
 )
+from local_upload_sessions import (
+    append_local_upload_chunk,
+    cancel_local_upload_session,
+    create_local_upload_session,
+    get_local_upload_session,
+    public_local_upload_session,
+)
 from drive_localization import (
     DRIVE_LOCALIZE_MAX_BYTES,
     cancel_drive_localization_payload,
@@ -107,6 +114,7 @@ DATA_CHANGED_RESOURCES = {
     "move_items": "files",
     "update_markdown_file": "files",
     "upload_file": "files",
+    "local_upload_session.chunk": "files",
     "write_file": "files",
     "file.content.write": "files",
     "drive_connections.start_oauth": "drive-connections",
@@ -158,6 +166,15 @@ def app_events_for_action(action: str) -> list[dict[str, str]]:
         return []
     resources = resource if isinstance(resource, list) else [resource]
     return [{"type": "maverick.app.data-changed", "resource": item} for item in resources]
+
+
+def app_events_for_result(action: str, result: dict[str, Any]) -> list[dict[str, str]]:
+    if action == "local_upload_session.chunk":
+        session = result.get("upload_session") if isinstance(result.get("upload_session"), dict) else {}
+        completed = str(result.get("status") or "").strip() in {"uploaded", "complete"} or str(session.get("status") or "").strip() == "complete"
+        if not completed:
+            return []
+    return app_events_for_action(action)
 
 
 def secret_lookup_for_drive_action(
@@ -475,6 +492,20 @@ def handle_action(
             request_method=media_request_method,
             streaming_response_supported=streaming_response_supported,
         )
+    if action == "folder.media_stream":
+        if not media_route:
+            raise StorageValidationError(
+                "folder.media_stream is available only through the authenticated Storage media route.",
+                operation="folder.media_stream",
+            )
+        return 200, read_folder_payload(
+            role=str(body.get("role") or ""),
+            relative_path=body.get("relative_path"),
+            uploaded_root=uploaded_root,
+            generated_root=generated_root,
+            data_root=data_root,
+            stream_download=True,
+        )
     if action == "file.reconcile":
         return 200, _reconcile_payload(
             data_root=data_root,
@@ -501,6 +532,33 @@ def handle_action(
             uploaded_root=uploaded_root,
             generated_root=generated_root,
             body=body,
+        )
+    if action == "local_upload_session.start":
+        session = create_local_upload_session(
+            data_root=data_root,
+            role=str(body.get("role") or ""),
+            folder_relative_path=body.get("folder_relative_path"),
+            file_name=body.get("file_name"),
+            content_type=body.get("content_type"),
+            size_bytes=_optional_nonnegative_int(body, "size_bytes") or 0,
+            uploaded_root=uploaded_root,
+            generated_root=generated_root,
+        )
+        return 200, {"status": "uploading", "provider": "local", "upload_session": session}
+    if action == "local_upload_session.status":
+        session = get_local_upload_session(data_root=data_root, session_id=_local_upload_session_id(body))
+        return 200, {"status": str(session.get("status") or "uploading"), "provider": "local", "upload_session": public_local_upload_session(session)}
+    if action == "local_upload_session.cancel":
+        session = cancel_local_upload_session(data_root=data_root, session_id=_local_upload_session_id(body))
+        return 200, {"status": "canceled", "provider": "local", "upload_session": session}
+    if action == "local_upload_session.chunk":
+        return 200, append_local_upload_chunk(
+            data_root=data_root,
+            session_id=_local_upload_session_id(body),
+            chunk_offset=_optional_nonnegative_int(body, "chunk_offset") or 0,
+            content_base64=body.get("content_base64"),
+            uploaded_root=uploaded_root,
+            generated_root=generated_root,
         )
     if action == "drive_upload_session.start":
         connection_id = str(body.get("connection_id") or "").strip()
@@ -1665,6 +1723,10 @@ def _drive_content_from_body(body: dict[str, Any]) -> tuple[bytes, str]:
 
 def _drive_upload_session_id(body: dict[str, Any]) -> str:
     return str(body.get("drive_upload_session_id") or body.get("upload_session_id") or body.get("session_id") or "").strip()
+
+
+def _local_upload_session_id(body: dict[str, Any]) -> str:
+    return str(body.get("local_upload_session_id") or body.get("upload_session_id") or body.get("session_id") or "").strip()
 
 
 def _drive_upload_chunk_from_body(body: dict[str, Any]) -> tuple[bytes, int]:

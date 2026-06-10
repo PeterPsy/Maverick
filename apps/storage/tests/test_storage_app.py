@@ -1319,6 +1319,183 @@ class StorageAppTestCase(unittest.TestCase):
             self.assertEqual((target_folder / "empty.txt").read_bytes(), b"")
             self.assertEqual(escaped["status_code"], 400)
 
+    def test_backend_local_upload_session_writes_file_from_chunks(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            generated_root = root / "storage" / "generated"
+            uploaded_root = root / "storage" / "uploaded"
+            generated_root.mkdir(parents=True)
+            uploaded_root.mkdir(parents=True)
+            data_root = root / "data" / "storage"
+            first = b"hello "
+            second = b"world"
+
+            started = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={
+                    "action": "local_upload_session.start",
+                    "role": "generated",
+                    "file_name": "large.txt",
+                    "content_type": "text/plain",
+                    "size_bytes": len(first) + len(second),
+                },
+            )
+            session_id = started["json"]["upload_session"]["id"]
+            first_chunk = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={
+                    "action": "local_upload_session.chunk",
+                    "local_upload_session_id": session_id,
+                    "chunk_offset": 0,
+                    "content_base64": b64encode(first).decode("ascii"),
+                },
+            )
+            completed = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={
+                    "action": "local_upload_session.chunk",
+                    "local_upload_session_id": session_id,
+                    "chunk_offset": len(first),
+                    "content_base64": b64encode(second).decode("ascii"),
+                },
+            )
+            catalog = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={"action": "catalog", "sync": True},
+            )
+
+            self.assertEqual(started["status_code"], 200)
+            self.assertEqual(first_chunk["json"]["expected_offset"], len(first))
+            self.assertEqual(first_chunk["app_events"], [])
+            self.assertEqual(completed["status_code"], 200)
+            self.assertEqual(completed["json"]["status"], "uploaded")
+            self.assertEqual(completed["app_events"], [{"type": "maverick.app.data-changed", "resource": "files"}])
+            self.assertEqual(completed["json"]["file"]["workspace_relative_path"], "storage/generated/large.txt")
+            self.assertEqual((generated_root / "large.txt").read_bytes(), first + second)
+            self.assertEqual(catalog["json"]["files"][0]["file_id"], completed["json"]["file"]["file_id"])
+
+    def test_backend_local_upload_session_reserves_storage_quota(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            generated_root = root / "storage" / "generated"
+            uploaded_root = root / "storage" / "uploaded"
+            generated_root.mkdir(parents=True)
+            uploaded_root.mkdir(parents=True)
+            data_root = root / "data" / "storage"
+            with patch.dict(os.environ, {"MAVERICK_STORAGE_MAX_BYTES": "10"}, clear=False):
+                first = self.run_backend(
+                    data_root=data_root,
+                    uploaded_root=uploaded_root,
+                    generated_root=generated_root,
+                    body={
+                        "action": "local_upload_session.start",
+                        "role": "generated",
+                        "file_name": "reserved.bin",
+                        "size_bytes": 10,
+                    },
+                )
+                second = self.run_backend(
+                    data_root=data_root,
+                    uploaded_root=uploaded_root,
+                    generated_root=generated_root,
+                    body={
+                        "action": "local_upload_session.start",
+                        "role": "generated",
+                        "file_name": "other.bin",
+                        "size_bytes": 1,
+                    },
+                )
+                canceled = self.run_backend(
+                    data_root=data_root,
+                    uploaded_root=uploaded_root,
+                    generated_root=generated_root,
+                    body={
+                        "action": "local_upload_session.cancel",
+                        "local_upload_session_id": first["json"]["upload_session"]["id"],
+                    },
+                )
+                after_cancel = self.run_backend(
+                    data_root=data_root,
+                    uploaded_root=uploaded_root,
+                    generated_root=generated_root,
+                    body={
+                        "action": "local_upload_session.start",
+                        "role": "generated",
+                        "file_name": "other.bin",
+                        "size_bytes": 10,
+                    },
+                )
+
+            self.assertEqual(first["status_code"], 200)
+            self.assertEqual(second["status_code"], 400)
+            self.assertEqual(second["json"]["detail"], "workspace_storage_quota_exceeded")
+            self.assertEqual(canceled["status_code"], 200)
+            self.assertEqual(after_cancel["status_code"], 200)
+
+    def test_backend_local_upload_session_rejects_forward_offset_and_declared_oversize(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            generated_root = root / "storage" / "generated"
+            uploaded_root = root / "storage" / "uploaded"
+            generated_root.mkdir(parents=True)
+            uploaded_root.mkdir(parents=True)
+            data_root = root / "data" / "storage"
+
+            oversized = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={
+                    "action": "local_upload_session.start",
+                    "role": "generated",
+                    "file_name": "too-large.bin",
+                    "size_bytes": 500 * 1024 * 1024 + 1,
+                },
+            )
+            started = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={
+                    "action": "local_upload_session.start",
+                    "role": "generated",
+                    "file_name": "clip.bin",
+                    "size_bytes": 5,
+                },
+            )
+            session_id = started["json"]["upload_session"]["id"]
+            ahead = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={
+                    "action": "local_upload_session.chunk",
+                    "local_upload_session_id": session_id,
+                    "chunk_offset": 2,
+                    "content_base64": b64encode(b"abc").decode("ascii"),
+                },
+            )
+            canceled = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={"action": "local_upload_session.cancel", "local_upload_session_id": session_id},
+            )
+
+            self.assertEqual(oversized["status_code"], 400)
+            self.assertIn(str(500 * 1024 * 1024), oversized["json"]["detail"])
+            self.assertEqual(ahead["status_code"], 400)
+            self.assertEqual(canceled["status_code"], 200)
+            self.assertFalse((data_root / "run" / "local_upload_sessions" / f"{session_id}.part").exists())
+
     def test_backend_deletes_file_inside_workspace_storage(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -1391,6 +1568,42 @@ class StorageAppTestCase(unittest.TestCase):
             self.assertFalse(report_folder.exists())
             self.assertEqual(rejected_root["status_code"], 400)
             self.assertEqual(rejected_escape["status_code"], 400)
+
+    def test_backend_media_route_downloads_folder_as_file_response(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            generated_root = root / "storage" / "generated"
+            report_folder = generated_root / "Reports"
+            report_folder.mkdir(parents=True)
+            (report_folder / "summary.md").write_text("# summary", encoding="utf-8")
+            data_root = root / "data" / "storage"
+
+            response = run_json_entrypoint(
+                STORAGE_ROOT / "backend" / "app_backend.py",
+                payload={
+                    "data_root": str(data_root),
+                    "uploaded_storage_root": str(root / "storage" / "uploaded"),
+                    "generated_storage_root": str(generated_root),
+                    "route_path": "/api/apps/storage/media",
+                    "method": "GET",
+                    "query": {
+                        "media_kind": "folder",
+                        "role": "generated",
+                        "relative_path": "Reports",
+                        "download": "1",
+                    },
+                },
+                cwd=STORAGE_ROOT,
+            )
+
+            self.assertEqual(response["status_code"], 200)
+            self.assertEqual(response["json"]["folder"]["workspace_relative_path"], "storage/generated/Reports")
+            self.assertEqual(response["file_response"]["file_name"], "Reports.zip")
+            self.assertTrue(response["file_response"]["delete_after_send"])
+            archive_path = Path(response["file_response"]["path"])
+            self.assertTrue(archive_path.is_file())
+            with zipfile.ZipFile(archive_path) as zip_file:
+                self.assertEqual(zip_file.namelist(), ["summary.md"])
 
     def test_backend_extracts_office_preview_text(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

@@ -8,7 +8,7 @@ import sys
 
 from errors import StorageValidationError, validation_error_payload
 from operations_manifest import STORAGE_ACTION_ALIASES
-from service import app_events_for_action, handle_action, prepare_media_response_body, secret_lookup_for_drive_action, stream_prepared_media_response_body
+from service import app_events_for_result, handle_action, prepare_media_response_body, secret_lookup_for_drive_action, stream_prepared_media_response_body
 
 
 def _response(status_code: int, payload: dict) -> None:
@@ -58,6 +58,7 @@ def main() -> None:
     except StorageValidationError as error:
         _response(400, validation_error_payload(error))
         return
+    app_events = app_events_for_result(action, result) if status_code < 400 else []
     stream_plan = result.pop("drive_stream", None)
     if isinstance(stream_plan, dict) and media_route and str(payload.get("stream_response_protocol") or "") == "maverick.backend.stream.v1":
         stream_response = result.pop("stream_response", None)
@@ -100,7 +101,7 @@ def main() -> None:
     if platform_secret_writes is not None:
         response["platform_secret_writes"] = platform_secret_writes
     if status_code < 400:
-        response["app_events"] = app_events_for_action(action)
+        response["app_events"] = app_events
     print(json.dumps(response, ensure_ascii=False))
 
 
@@ -110,7 +111,8 @@ def _body_from_payload(payload: dict) -> tuple[dict, bool]:
     if method in {"GET", "HEAD"} and route_path.startswith("/api/apps/") and route_path.endswith("/media"):
         query = payload.get("query") if isinstance(payload.get("query"), dict) else {}
         headers = payload.get("headers") if isinstance(payload.get("headers"), dict) else {}
-        return {**query, "_request_headers": headers, "action": "file.media_stream"}, True
+        action = "folder.media_stream" if str(query.get("media_kind") or "").strip() == "folder" else "file.media_stream"
+        return {**query, "_request_headers": headers, "action": action}, True
     return payload.get("body") if isinstance(payload.get("body"), dict) else {}, False
 
 

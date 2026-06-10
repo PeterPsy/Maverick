@@ -19,13 +19,13 @@ from inventory import (
     preview_kind as inventory_preview_kind,
     upsert_file_record,
 )
+from limits import MAX_INLINE_READ_BYTES, MAX_INLINE_WRITE_BYTES
 from local_storage_provider import LocalStorageProvider
 from storage_catalog import StorageCatalog
 
 
 SCHEMA_VERSION = "1"
-MAX_PREVIEW_BYTES = 8 * 1024 * 1024
-MAX_READ_BYTES = 100 * 1024 * 1024
+MAX_READ_BYTES = MAX_INLINE_READ_BYTES
 FILE_ROLES = {"uploaded", "generated"}
 UPLOAD_BUCKET_PATTERN = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE)
 VIEW_FILTER_ROLES = {"all", *FILE_ROLES}
@@ -35,7 +35,7 @@ MAX_CUSTOM_VIEW_TITLE_CHARS = 140
 MAX_CUSTOM_VIEW_FILES = 500
 MAX_TEXT_PREVIEW_CACHE_ENTRIES = 200
 MAX_MARKDOWN_EDIT_BYTES = 2 * 1024 * 1024
-MAX_WRITE_BYTES = 25 * 1024 * 1024
+MAX_WRITE_BYTES = MAX_INLINE_WRITE_BYTES
 
 
 def safe_folder_relative_path(raw_path: object) -> Path:

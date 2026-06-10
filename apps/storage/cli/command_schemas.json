@@ -27,6 +27,10 @@
               "write_file",
               "file.content.write",
               "upload_file",
+              "local_upload_session.start",
+              "local_upload_session.status",
+              "local_upload_session.chunk",
+              "local_upload_session.cancel",
               "preview_text",
               "file.preview.text",
               "preview_table",
@@ -108,6 +112,7 @@
           "content_base64": {"type": "string"},
           "content_type": {"type": "string"},
           "size_bytes": {"type": "integer", "minimum": 0},
+          "local_upload_session_id": {"type": "string"},
           "drive_upload_session_id": {"type": "string"},
           "refresh_remote": {"type": "boolean", "default": false},
           "chunk_offset": {"type": "integer", "minimum": 0},
@@ -214,6 +219,25 @@
               "role": {"enum": ["uploaded", "generated"]}
             },
             "required": ["action", "role", "file_name", "content_base64"]
+          },
+          {
+            "properties": {
+              "action": {"enum": ["local_upload_session.start"]},
+              "role": {"enum": ["uploaded", "generated"]}
+            },
+            "required": ["action", "role", "file_name", "size_bytes"]
+          },
+          {
+            "properties": {
+              "action": {"enum": ["local_upload_session.status", "local_upload_session.cancel"]}
+            },
+            "required": ["action", "local_upload_session_id"]
+          },
+          {
+            "properties": {
+              "action": {"enum": ["local_upload_session.chunk"]}
+            },
+            "required": ["action", "local_upload_session_id", "chunk_offset", "content_base64"]
           },
           {
             "properties": {

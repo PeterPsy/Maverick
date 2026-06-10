@@ -9,6 +9,7 @@ from pathlib import Path
 import shutil
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
@@ -18,6 +19,14 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 class StorageWidgetTestCase(unittest.TestCase):
+    def bootstrap_state(self, repo_root: Path):
+        env = {
+            "MAVERICK_ADMIN_USERNAME": os.environ.get("MAVERICK_ADMIN_USERNAME", "admin"),
+            "MAVERICK_ADMIN_PASSWORD": os.environ.get("MAVERICK_ADMIN_PASSWORD", "maverick"),
+        }
+        with patch.dict(os.environ, env, clear=False):
+            return bootstrap_platform_state(start_path=repo_root)
+
     def make_repo_root(self) -> Path:
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
@@ -85,7 +94,7 @@ class StorageWidgetTestCase(unittest.TestCase):
 
     def test_platform_exposes_storage_file_preview_widget(self) -> None:
         repo_root = self.make_repo_root()
-        state = bootstrap_platform_state(start_path=repo_root)
+        state = self.bootstrap_state(repo_root)
         app = PlatformHost(state, start_path=repo_root)
         cookie = self.login(app)
 
@@ -111,7 +120,7 @@ class StorageWidgetTestCase(unittest.TestCase):
 
     def test_platform_exposes_storage_sidebar_widget(self) -> None:
         repo_root = self.make_repo_root()
-        state = bootstrap_platform_state(start_path=repo_root)
+        state = self.bootstrap_state(repo_root)
         app = PlatformHost(state, start_path=repo_root)
         cookie = self.login(app)
 

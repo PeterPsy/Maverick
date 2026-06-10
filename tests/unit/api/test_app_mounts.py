@@ -8,7 +8,7 @@ from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 
-from core.api.app_mounts import _apply_app_secret_writes, _backend_secret_request_body, _read_backend_body, _resolve_app_secret_payload, _serve_app_file_response, backend_entrypoint_timeout_seconds, serve_frontend
+from core.api.app_mounts import _apply_app_secret_writes, _backend_request_headers, _backend_secret_request_body, _read_backend_body, _resolve_app_secret_payload, _serve_app_file_response, backend_entrypoint_timeout_seconds, serve_frontend
 from core.api.http import HttpRequestError
 from core.apps.contracts import build_app_contract, build_app_hook_timeouts, build_parsed_app_contract
 from core.observability.store import ObservabilityCollections, ObservabilityDocumentStore
@@ -118,6 +118,78 @@ class AppMountsTestCase(unittest.TestCase):
         self.assertEqual(headers["Content-Disposition"], 'inline; filename="clip.mp4"')
         self.assertEqual(body, b"2345")
 
+    def test_app_file_response_allows_safe_extra_headers(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            media_path = root / "font.woff2"
+            media_path.write_bytes(b"font")
+
+            status, headers, body = _serve_file_response(
+                root=root,
+                file_response={
+                    "path": str(media_path),
+                    "content_type": "font/woff2",
+                    "headers": {
+                        "Access-Control-Allow-Origin": "*",
+                        "Cross-Origin-Resource-Policy": "cross-origin",
+                        "Set-Cookie": "blocked=true",
+                        "X-Unsafe": "blocked",
+                    },
+                },
+                environ={"REQUEST_METHOD": "GET"},
+            )
+
+        self.assertEqual(status, "200 OK")
+        self.assertEqual(headers["Access-Control-Allow-Origin"], "*")
+        self.assertEqual(headers["Cross-Origin-Resource-Policy"], "cross-origin")
+        self.assertNotIn("Set-Cookie", headers)
+        self.assertNotIn("X-Unsafe", headers)
+        self.assertEqual(body, b"font")
+
+    def test_app_file_response_deletes_ephemeral_run_file_after_send(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            media_path = root / "run" / "folder_downloads" / "folder.zip"
+            media_path.parent.mkdir(parents=True)
+            media_path.write_bytes(b"zip")
+
+            status, headers, body = _serve_file_response(
+                root=root,
+                file_response={
+                    "path": str(media_path),
+                    "content_type": "application/zip",
+                    "file_name": "folder.zip",
+                    "download": True,
+                    "delete_after_send": True,
+                },
+                environ={"REQUEST_METHOD": "GET"},
+            )
+
+            self.assertEqual(status, "200 OK")
+            self.assertEqual(headers["Content-Disposition"], 'attachment; filename="folder.zip"')
+            self.assertEqual(body, b"zip")
+            self.assertFalse(media_path.exists())
+
+    def test_app_file_response_ignores_delete_after_send_outside_run(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            media_path = root / "storage-file.bin"
+            media_path.write_bytes(b"file")
+
+            status, _headers, body = _serve_file_response(
+                root=root,
+                file_response={
+                    "path": str(media_path),
+                    "content_type": "application/octet-stream",
+                    "delete_after_send": True,
+                },
+                environ={"REQUEST_METHOD": "GET"},
+            )
+
+            self.assertEqual(status, "200 OK")
+            self.assertEqual(body, b"file")
+            self.assertTrue(media_path.exists())
+
     def test_app_file_response_handles_invalid_range_and_head(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -221,6 +293,28 @@ class AppMountsTestCase(unittest.TestCase):
 
         self.assertEqual(body["stable_storage_file_id"], "file_123")
         self.assertEqual(body["_app_secret_request"], secret_request)
+
+    def test_backend_request_headers_include_safe_browser_context(self) -> None:
+        headers = _backend_request_headers(
+            {
+                "CONTENT_TYPE": "application/json",
+                "HTTP_RANGE": "bytes=2-5",
+                "HTTP_ORIGIN": "https://studio.example",
+                "HTTP_HOST": "studio.example",
+                "HTTP_X_FORWARDED_PROTO": "https",
+                "HTTP_COOKIE": "session=blocked",
+                "HTTP_AUTHORIZATION": "Bearer blocked",
+            }
+        )
+
+        self.assertEqual(headers["content_type"], "application/json")
+        self.assertEqual(headers["content-type"], "application/json")
+        self.assertEqual(headers["range"], "bytes=2-5")
+        self.assertEqual(headers["origin"], "https://studio.example")
+        self.assertEqual(headers["host"], "studio.example")
+        self.assertEqual(headers["x-forwarded-proto"], "https")
+        self.assertNotIn("cookie", headers)
+        self.assertNotIn("authorization", headers)
 
     def test_app_secret_payload_uses_active_backend_grants_not_legacy_bindings(self) -> None:
         secret_store = _secret_store()

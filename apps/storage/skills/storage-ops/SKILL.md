@@ -20,11 +20,12 @@ Common actions:
 
 - `catalog`: list uploaded and generated files and folders with metadata.
 - `create_folder`: create a folder inside `storage/uploaded/` or `storage/generated/` after Storage path validation.
-- `upload_file`: upload base64 file content into an existing folder under `storage/uploaded/` or `storage/generated/` without overwriting an existing file.
+- `upload_file`: upload base64 file content into an existing folder under `storage/uploaded/` or `storage/generated/` without overwriting an existing file. Use this only for inline payloads up to 25 MiB decoded.
+- `local_upload_session.start` / `local_upload_session.chunk` / `local_upload_session.status` / `local_upload_session.cancel`: upload local workspace files above 25 MiB and up to 500 MiB through 8 MiB decoded chunks. Start the session with role, folder, filename, content type, and total size; send chunks at the acknowledged `expected_offset`; call status to recover after ambiguous failures.
 - `move_file`: move a file into a folder or back to the storage root while keeping it inside its current storage role.
 - `move_folder`: move a non-root folder into another folder or back to the storage root while keeping it inside its current storage role; Storage rejects path escapes, collisions, and moves into the same folder subtree.
 - `view_filter`: read the shared Storage UI filter without scanning workspace storage.
-- `read_file`: read a specific file by `role` and `relative_path` for binary/download workflows.
+- `read_file`: read a specific file by `role` and `relative_path` for bounded inline binary/download workflows. Use Storage media URLs for browser downloads of large local files.
 - `read_text` / `file.text.read`: extract document text from text, Markdown, DOCX, PPTX, and XLSX files without the preview character cap; use `offset` and `max_chars` only when you intentionally want a window.
 - `write_file` / `file.content.write`: create or overwrite a file by `role` and `relative_path` or `workspace_relative_path`, with UTF-8 `content` or `content_base64`.
 - `preview_text`: extract a bounded text preview for UI-style preview workflows, not for complete document reading.
@@ -37,7 +38,7 @@ Common actions:
 - `file.reconcile`: refresh Storage inventory after external workspace writes, or refresh one known Drive file record.
 - `rename_file`: rename a file inside its current storage directory.
 - `delete_file`: delete a file from the active workspace storage root after Storage path validation.
-- `download_folder` / `read_folder`: read a validated folder as a ZIP archive.
+- `download_folder` / `read_folder`: read a validated folder as a bounded inline ZIP archive. Browser folder downloads stream through `/api/apps/<app_id>/media?media_kind=folder` so large archives are served as files instead of JSON/base64 payloads.
 - `delete_folder`: delete a non-root folder from the active workspace storage root after Storage path validation.
 
 ## Google Drive Agent Workflow

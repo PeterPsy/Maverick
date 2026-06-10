@@ -10,7 +10,7 @@ import mimetypes
 import re
 from pathlib import Path
 import uuid
-from typing import Any
+from typing import Any, Mapping
 
 from core.api.app_event_publication import declared_data_event_resources, publish_declared_app_events
 from core.api.app_runtime_cleanup_requests import apply_runtime_cleanup_requests
@@ -57,6 +57,11 @@ APP_BACKEND_BINARY_BODY_LIMITS = {
 }
 
 FILE_RESPONSE_CHUNK_BYTES = 1024 * 1024
+FILE_RESPONSE_EXTRA_HEADERS = {
+    "access-control-allow-origin": "Access-Control-Allow-Origin",
+    "cross-origin-resource-policy": "Cross-Origin-Resource-Policy",
+    "timing-allow-origin": "Timing-Allow-Origin",
+}
 UNSAFE_INLINE_CONTENT_TYPES = {
     "application/ecmascript",
     "application/javascript",
@@ -407,7 +412,7 @@ def handle_app_backend(
             "route_path": environ.get("PATH_INFO", ""),
             "method": method,
             "query": request_query,
-            "headers": {"content_type": environ.get("CONTENT_TYPE", ""), "range": environ.get("HTTP_RANGE", "")},
+            "headers": _backend_request_headers(environ),
             "body": body,
             "body_file": body_file or {},
             "provider_id": provider_id,
@@ -596,6 +601,7 @@ def _serve_app_file_response(
         return json_response(start_response, {"error": "file_response_not_found"}, status=status_line(404))
 
     size = path.stat().st_size
+    delete_after_send = _file_response_delete_after_send(file_response=file_response, path=path, roots=roots)
     content_type = str(file_response.get("content_type") or mimetypes.guess_type(path.name)[0] or "application/octet-stream")
     file_name = _safe_header_filename(str(file_response.get("file_name") or path.name))
     disposition = "attachment" if _truthy(file_response.get("download")) or not _safe_inline_file_response_type(content_type) else "inline"
@@ -607,6 +613,7 @@ def _serve_app_file_response(
         ("Cache-Control", str(file_response.get("cache_control") or "private, max-age=60")),
         ("X-Content-Type-Options", "nosniff"),
         ("Content-Disposition", f'{disposition}; filename="{file_name}"'),
+        *_file_response_extra_headers(file_response),
     ]
 
     try:
@@ -618,8 +625,9 @@ def _serve_app_file_response(
         headers = [*base_headers, ("Content-Range", f"bytes {start}-{end}/{total_size}"), ("Content-Length", str(size))]
         start_response(status_line(206), headers)
         if method == "HEAD":
+            _delete_file_response_after_send(path=path, enabled=delete_after_send)
             return [b""]
-        return _file_range_chunks(path, start=0, length=size)
+        return _file_range_chunks(path, start=0, length=size, delete_after=delete_after_send)
 
     range_header = str(environ.get("HTTP_RANGE") or "").strip()
     if range_header:
@@ -633,14 +641,51 @@ def _serve_app_file_response(
         headers = [*base_headers, ("Content-Range", f"bytes {start}-{end}/{size}"), ("Content-Length", str(length))]
         start_response(status_line(206), headers)
         if method == "HEAD":
+            _delete_file_response_after_send(path=path, enabled=delete_after_send)
             return [b""]
-        return _file_range_chunks(path, start=start, length=length)
+        return _file_range_chunks(path, start=start, length=length, delete_after=delete_after_send)
 
     headers = [*base_headers, ("Content-Length", str(size))]
     start_response(status_line(200), headers)
     if method == "HEAD":
+        _delete_file_response_after_send(path=path, enabled=delete_after_send)
         return [b""]
-    return _file_range_chunks(path, start=0, length=size)
+    return _file_range_chunks(path, start=0, length=size, delete_after=delete_after_send)
+
+
+def _file_response_extra_headers(file_response: dict[str, Any]) -> list[tuple[str, str]]:
+    raw_headers = file_response.get("headers")
+    if not isinstance(raw_headers, dict):
+        return []
+    headers: list[tuple[str, str]] = []
+    for raw_name, raw_value in raw_headers.items():
+        header_name = FILE_RESPONSE_EXTRA_HEADERS.get(str(raw_name).strip().lower())
+        if not header_name:
+            continue
+        header_value = str(raw_value)
+        if "\r" in header_value or "\n" in header_value:
+            continue
+        headers.append((header_name, header_value))
+    return headers
+
+
+def _file_response_delete_after_send(*, file_response: dict[str, Any], path: Path, roots: list[Path]) -> bool:
+    if not _truthy(file_response.get("delete_after_send")) or not roots:
+        return False
+    try:
+        ephemeral_root = (roots[0] / "run").resolve()
+    except OSError:
+        return False
+    return _path_is_under_any_root(path, [ephemeral_root])
+
+
+def _delete_file_response_after_send(*, path: Path, enabled: bool) -> None:
+    if not enabled:
+        return
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        logger.warning("Unable to delete temporary app file response `%s`.", path)
 
 
 def _serve_app_stream_response(
@@ -757,16 +802,19 @@ def _parse_single_byte_range(value: str, size: int) -> tuple[int, int] | None:
     return start, end
 
 
-def _file_range_chunks(path: Path, *, start: int, length: int):
-    remaining = length
-    with path.open("rb") as handle:
-        handle.seek(start)
-        while remaining > 0:
-            chunk = handle.read(min(FILE_RESPONSE_CHUNK_BYTES, remaining))
-            if not chunk:
-                break
-            remaining -= len(chunk)
-            yield chunk
+def _file_range_chunks(path: Path, *, start: int, length: int, delete_after: bool = False):
+    try:
+        remaining = length
+        with path.open("rb") as handle:
+            handle.seek(start)
+            while remaining > 0:
+                chunk = handle.read(min(FILE_RESPONSE_CHUNK_BYTES, remaining))
+                if not chunk:
+                    break
+                remaining -= len(chunk)
+                yield chunk
+    finally:
+        _delete_file_response_after_send(path=path, enabled=delete_after)
 
 
 def _safe_header_filename(value: str) -> str:
@@ -787,6 +835,26 @@ def _truthy(value: object) -> bool:
 
 def _backend_route_supports_streaming(*, method: str, route_path: str) -> bool:
     return method.upper() in {"GET", "HEAD"} and route_path.startswith("/api/apps/") and route_path.endswith("/media")
+
+
+def _backend_request_headers(environ: Mapping[str, Any]) -> dict[str, str]:
+    headers: dict[str, str] = {}
+
+    def add(name: str, value: Any) -> None:
+        text = str(value or "").strip()
+        if not text or any(char in text for char in "\r\n\0"):
+            return
+        headers[name] = text[:4096]
+
+    add("content_type", environ.get("CONTENT_TYPE", ""))
+    add("content-type", environ.get("CONTENT_TYPE", ""))
+    add("range", environ.get("HTTP_RANGE", ""))
+    add("origin", environ.get("HTTP_ORIGIN", ""))
+    add("host", environ.get("HTTP_HOST", ""))
+    add("x-forwarded-host", environ.get("HTTP_X_FORWARDED_HOST", ""))
+    add("x-forwarded-proto", environ.get("HTTP_X_FORWARDED_PROTO", ""))
+    add("x-forwarded-scheme", environ.get("HTTP_X_FORWARDED_SCHEME", ""))
+    return headers
 
 
 def _workspace_role_for_backend_user(*, user: UserRecord | None, authorization: Any | None) -> str | None:

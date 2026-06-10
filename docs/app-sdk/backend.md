@@ -23,6 +23,8 @@ Keep persistence in `store.py` or `database.py`.
 
 ## Binary Streaming Responses
 
+Mounted backend entrypoints receive a bounded `headers` object in their payload for browser context that may affect generated URLs or range handling. The core includes only safe request metadata such as `content-type`, `range`, `origin`, `host`, and forwarded host/proto fields; cookies, authorization headers, and arbitrary request headers are not passed through.
+
 Most backend entrypoints should keep returning one JSON object on stdout. Mounted `GET` or `HEAD` media routes may opt in to binary streaming when the core payload includes:
 
 ```json
@@ -36,6 +38,8 @@ In that mode the entrypoint emits one UTF-8 JSON header line followed by optiona
 ```
 
 After the newline, remaining stdout is streamed to the HTTP client. Use this only for backend-approved response bytes; keep secrets in entrypoint input and never put local host paths or bearer tokens in the stream header.
+
+Mounted `GET` or `HEAD` media routes may also return an app-approved local file through `file_response`. The core validates the path against the app's allowed roots and serves it with range support. `file_response.headers` is optional and supports only a small safe allowlist for browser loading requirements, currently `Access-Control-Allow-Origin`, `Cross-Origin-Resource-Policy`, and `Timing-Allow-Origin`; arbitrary headers, cookies, and content overrides are ignored by the core.
 
 ## Surface Mapping
 

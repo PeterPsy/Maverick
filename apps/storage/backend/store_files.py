@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+from limits import MAX_PREVIEW_BYTES
 from store_files_content import delete_file_payload
 from store_files_paths import (
-    MAX_PREVIEW_BYTES,
     MAX_READ_BYTES,
     MAX_WRITE_BYTES,
     catalog_files_payload,

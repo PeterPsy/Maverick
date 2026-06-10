@@ -7,12 +7,15 @@ from io import BytesIO
 from pathlib import Path
 import re
 import shutil
+import tempfile
+import time
 import zipfile
 from xml.etree import ElementTree
 
 from core.app_sdk.storage import read_json_state, write_json_state
 from errors import StorageValidationError
 from inventory import content_hash, remove_folder_records, rename_file_record, upsert_directory_record, upsert_file_record
+from limits import MAX_INLINE_READ_BYTES, MAX_INLINE_WRITE_BYTES, MAX_STORAGE_FILE_TRANSFER_BYTES, MAX_STORAGE_TRANSIENT_TRANSFER_BYTES
 from store_files_paths import (
     atomic_write_bytes,
     enforce_storage_budget,
@@ -40,8 +43,7 @@ from text_preview import (
 
 
 SCHEMA_VERSION = "1"
-MAX_PREVIEW_BYTES = 8 * 1024 * 1024
-MAX_READ_BYTES = 100 * 1024 * 1024
+MAX_READ_BYTES = MAX_INLINE_READ_BYTES
 FILE_ROLES = {"uploaded", "generated"}
 UPLOAD_BUCKET_PATTERN = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE)
 VIEW_FILTER_ROLES = {"all", *FILE_ROLES}
@@ -51,8 +53,10 @@ MAX_CUSTOM_VIEW_TITLE_CHARS = 140
 MAX_CUSTOM_VIEW_FILES = 500
 MAX_TEXT_PREVIEW_CACHE_ENTRIES = 200
 MAX_MARKDOWN_EDIT_BYTES = 2 * 1024 * 1024
-MAX_WRITE_BYTES = 25 * 1024 * 1024
-MAX_FOLDER_DOWNLOAD_BYTES = MAX_READ_BYTES
+MAX_WRITE_BYTES = MAX_INLINE_WRITE_BYTES
+MAX_FOLDER_DOWNLOAD_BYTES = MAX_STORAGE_FILE_TRANSFER_BYTES
+MAX_INLINE_FOLDER_DOWNLOAD_BYTES = MAX_INLINE_READ_BYTES
+FOLDER_DOWNLOAD_CACHE_SECONDS = 2 * 60 * 60
 
 
 def upload_file_payload(
@@ -242,7 +246,15 @@ def create_folder_payload(*, role: str, parent_relative_path: object, folder_nam
         return {"folder": upsert_directory_record(data_root=data_root, role=role, root=root, path=target)}
 
 
-def read_folder_payload(*, role: str, relative_path: object, uploaded_root: Path, generated_root: Path) -> dict:
+def read_folder_payload(
+    *,
+    role: str,
+    relative_path: object,
+    uploaded_root: Path,
+    generated_root: Path,
+    data_root: Path | None = None,
+    stream_download: bool = False,
+) -> dict:
     folder = resolve_storage_folder(
         role=role,
         relative_path=relative_path,
@@ -256,24 +268,102 @@ def read_folder_payload(*, role: str, relative_path: object, uploaded_root: Path
     record = folder_record(role=role, root=root, path=folder)
     files = sorted(path for path in folder.rglob("*") if path.is_file())
     total_bytes = 0
+    max_download_bytes = MAX_FOLDER_DOWNLOAD_BYTES if stream_download else MAX_INLINE_FOLDER_DOWNLOAD_BYTES
     for path in files:
         total_bytes += path.stat().st_size
-        if total_bytes > MAX_FOLDER_DOWNLOAD_BYTES:
-            raise StorageValidationError(f"Folder downloads are limited to {MAX_FOLDER_DOWNLOAD_BYTES} bytes.")
+        if total_bytes > max_download_bytes:
+            raise StorageValidationError(f"Folder downloads are limited to {max_download_bytes} bytes.")
+    file_name = f"{record['name'] or role}.zip"
+    if stream_download:
+        if data_root is None:
+            raise StorageValidationError("data_root is required for streamed folder downloads.")
+        archive_path = _folder_download_archive_path(data_root, file_name)
+        try:
+            _enforce_folder_download_temp_budget(archive_path.parent, incoming_bytes=total_bytes)
+            _write_folder_archive(archive_path=archive_path, folder=folder, root=root, files=files)
+            archive_size = archive_path.stat().st_size
+            if archive_size > MAX_FOLDER_DOWNLOAD_BYTES:
+                raise StorageValidationError(f"Folder downloads are limited to {MAX_FOLDER_DOWNLOAD_BYTES} bytes.")
+            _enforce_folder_download_temp_budget(archive_path.parent, incoming_bytes=0)
+        except Exception:
+            archive_path.unlink(missing_ok=True)
+            raise
+        return {
+            "folder": record,
+            "file_response": {
+                "path": str(archive_path),
+                "content_type": "application/zip",
+                "file_name": file_name,
+                "download": True,
+                "delete_after_send": True,
+                "cache_control": "private, no-store",
+            },
+        }
     archive = BytesIO()
     with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as zip_file:
-        for path in files:
-            resolved_path = path.resolve()
-            if resolved_path == root or root not in resolved_path.parents:
-                continue
-            zip_file.write(path, path.relative_to(folder).as_posix())
-    file_name = f"{record['name'] or role}.zip"
+        _write_folder_archive_entries(zip_file=zip_file, folder=folder, root=root, files=files)
     return {
         "folder": record,
         "content_base64": b64encode(archive.getvalue()).decode("ascii"),
         "content_type": "application/zip",
         "file_name": file_name,
     }
+
+
+def _folder_download_archive_path(data_root: Path, file_name: str) -> Path:
+    download_root = data_root / "run" / "folder_downloads"
+    download_root.mkdir(parents=True, exist_ok=True)
+    cutoff = time.time() - FOLDER_DOWNLOAD_CACHE_SECONDS
+    for path in download_root.glob("*.zip"):
+        try:
+            if path.stat().st_mtime < cutoff:
+                path.unlink(missing_ok=True)
+        except OSError:
+            continue
+    safe_name = (safe_file_name(file_name).removesuffix(".zip") or "folder")[:80].rstrip(" .") or "folder"
+    handle = tempfile.NamedTemporaryFile("wb", dir=download_root, prefix=f"{safe_name}.", suffix=".zip", delete=False)
+    handle.close()
+    return Path(handle.name)
+
+
+def _enforce_folder_download_temp_budget(download_root: Path, *, incoming_bytes: int) -> None:
+    _prune_folder_download_temp_files(download_root)
+    total = 0
+    for path in [*download_root.glob("*.zip"), *download_root.glob("*.tmp")]:
+        try:
+            total += path.stat().st_size
+        except OSError:
+            continue
+    if total + max(0, incoming_bytes) > MAX_STORAGE_TRANSIENT_TRANSFER_BYTES:
+        raise StorageValidationError("Temporary folder download space is exhausted; try again after active downloads finish.")
+
+
+def _prune_folder_download_temp_files(download_root: Path) -> None:
+    cutoff = time.time() - FOLDER_DOWNLOAD_CACHE_SECONDS
+    for pattern in ("*.zip", "*.tmp"):
+        for path in download_root.glob(pattern):
+            try:
+                if path.stat().st_mtime < cutoff:
+                    path.unlink(missing_ok=True)
+            except OSError:
+                continue
+
+
+def _write_folder_archive(*, archive_path: Path, folder: Path, root: Path, files: list[Path]) -> None:
+    try:
+        with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED) as zip_file:
+            _write_folder_archive_entries(zip_file=zip_file, folder=folder, root=root, files=files)
+    except Exception:
+        archive_path.unlink(missing_ok=True)
+        raise
+
+
+def _write_folder_archive_entries(*, zip_file: zipfile.ZipFile, folder: Path, root: Path, files: list[Path]) -> None:
+    for path in files:
+        resolved_path = path.resolve()
+        if resolved_path == root or root not in resolved_path.parents:
+            continue
+        zip_file.write(path, path.relative_to(folder).as_posix())
 
 
 def delete_folder_payload(*, role: str, relative_path: object, data_root: Path, uploaded_root: Path, generated_root: Path) -> dict:

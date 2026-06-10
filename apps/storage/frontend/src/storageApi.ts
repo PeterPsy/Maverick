@@ -85,6 +85,34 @@ export type DriveUploadSessionPayload = {
   file?: StorageFile;
 };
 
+export type LocalUploadSession = {
+  id: string;
+  status: 'uploading' | 'complete' | 'canceled' | 'error';
+  provider: 'local';
+  role: FileRole;
+  folder_relative_path: string;
+  relative_path: string;
+  file_name: string;
+  content_type: string;
+  size_bytes: number;
+  bytes_uploaded: number;
+  error?: string;
+  progress?: {
+    state?: string;
+    bytes_completed?: number;
+    bytes_total?: number;
+  };
+  file?: StorageFile | null;
+};
+
+export type LocalUploadSessionPayload = {
+  status: 'uploading' | 'uploaded' | 'complete' | 'canceled' | 'error';
+  provider: 'local';
+  upload_session: LocalUploadSession;
+  expected_offset?: number;
+  file?: StorageFile;
+};
+
 export type StorageMoveReference = {
   role: FileRole;
   relative_path: string;
@@ -155,7 +183,9 @@ export type CatalogRequest = Partial<Pick<StorageViewFilter, 'query' | 'role' | 
 export const CATALOG_PAGE_LIMIT = 500;
 export const DRIVE_PAGE_LIMIT = 50;
 export const MAX_BASE64_WRITE_BYTES = 25 * 1024 * 1024;
+export const MAX_STORAGE_FILE_TRANSFER_BYTES = 500 * 1024 * 1024;
 export const DRIVE_RESUMABLE_CHUNK_BYTES = 8 * 1024 * 1024;
+export const LOCAL_UPLOAD_SESSION_CHUNK_BYTES = 8 * 1024 * 1024;
 
 export function loadCatalog(params: CatalogRequest = {}) {
   return callBackend<CatalogPayload>({ action: 'catalog', ...params });
@@ -331,18 +361,37 @@ export function driveMediaDownloadUrl(payload: Pick<DriveLocalizePayload, 'downl
   return `${payload.stream_url}${payload.stream_url.includes('?') ? '&' : '?'}download=1`;
 }
 
-export function driveMediaStreamUrl(file: StorageFile, options: { appId?: string; download?: boolean } = {}) {
-  const locator = driveFileLocator(file);
+export function storageMediaStreamUrl(file: StorageFile, options: { appId?: string; download?: boolean } = {}) {
   const params = new URLSearchParams();
-  params.set('stable_storage_file_id', locator.stable_storage_file_id || file.id);
-  params.set('connection_id', locator.connection_id);
-  params.set('drive_file_id', locator.drive_file_id);
-  const sourceVersion = String(file.etag_or_version || file.source_version || file.modified_at || '').trim();
-  if (sourceVersion) params.set('source_version', sourceVersion);
-  const localizationId = String(file.localization_id || '').trim();
-  if (localizationId) params.set('localization_id', localizationId);
+  params.set('stable_storage_file_id', file.file_id || file.id);
+  if (file.provider === 'google_drive') {
+    const locator = driveFileLocator(file);
+    params.set('stable_storage_file_id', locator.stable_storage_file_id || file.id);
+    params.set('connection_id', locator.connection_id);
+    params.set('drive_file_id', locator.drive_file_id);
+    const sourceVersion = String(file.etag_or_version || file.source_version || file.modified_at || '').trim();
+    if (sourceVersion) params.set('source_version', sourceVersion);
+    const localizationId = String(file.localization_id || '').trim();
+    if (localizationId) params.set('localization_id', localizationId);
+    params.set('_app_secret_request', JSON.stringify(driveConnectionSecretRequest(locator.connection_id)));
+  } else {
+    params.set('_app_secret_request', JSON.stringify({ logical_names: [], required: false }));
+  }
   if (options.download) params.set('download', '1');
-  params.set('_app_secret_request', JSON.stringify(driveConnectionSecretRequest(locator.connection_id)));
+  return `/api/apps/${encodeURIComponent(options.appId || currentStorageAppId())}/media?${params.toString()}`;
+}
+
+export function driveMediaStreamUrl(file: StorageFile, options: { appId?: string; download?: boolean } = {}) {
+  return storageMediaStreamUrl(file, options);
+}
+
+export function folderMediaDownloadUrl(folder: StorageFolder, options: { appId?: string } = {}) {
+  const params = new URLSearchParams();
+  params.set('media_kind', 'folder');
+  params.set('role', folder.role);
+  params.set('relative_path', folder.relative_path);
+  params.set('download', '1');
+  params.set('_app_secret_request', JSON.stringify({ logical_names: [], required: false }));
   return `/api/apps/${encodeURIComponent(options.appId || currentStorageAppId())}/media?${params.toString()}`;
 }
 
@@ -377,6 +426,10 @@ export async function createFolder(role: FileRole, parentRelativePath: string, f
 }
 
 export async function uploadFile(role: FileRole, folderRelativePath: string, file: File, options: UploadFileOptions = {}) {
+  assertStorageTransferSize(file);
+  if (file.size > MAX_BASE64_WRITE_BYTES) {
+    return uploadLocalFileChunked(role, folderRelativePath, file, options);
+  }
   assertBase64WriteSize(file);
   const contentBase64 = await fileToBase64(file, (loaded, total) => {
     const percent = total > 0 ? Math.round((loaded / total) * 35) : 0;
@@ -396,6 +449,110 @@ export async function uploadFile(role: FileRole, folderRelativePath: string, fil
     : await callBackend<UploadFilePayload>(body, options);
   options.onProgress?.({ loaded: file.size, percent: 100, phase: 'complete', total: file.size });
   return payload;
+}
+
+async function uploadLocalFileChunked(role: FileRole, folderRelativePath: string, file: File, options: UploadFileOptions): Promise<UploadFilePayload> {
+  assertNotAborted(options.signal);
+  options.onProgress?.({ loaded: 0, percent: 0, phase: 'starting', total: file.size });
+  const started = await startLocalUploadSession(role, folderRelativePath, file, options);
+  let session = started.upload_session;
+  let offset = Math.max(0, session.bytes_uploaded || 0);
+  try {
+    while (offset < file.size) {
+      assertNotAborted(options.signal);
+      const nextOffset = Math.min(file.size, offset + LOCAL_UPLOAD_SESSION_CHUNK_BYTES);
+      const contentBase64 = await blobToBase64(file.slice(offset, nextOffset));
+      let attempt = 0;
+      while (true) {
+        try {
+          const payload = await uploadLocalSessionChunk(session.id, offset, contentBase64, options);
+          session = payload.upload_session;
+          offset = payload.expected_offset ?? session.bytes_uploaded ?? nextOffset;
+          options.onProgress?.({
+            loaded: offset,
+            percent: file.size > 0 ? Math.min(99, Math.round((offset / file.size) * 100)) : 99,
+            phase: 'uploading',
+            total: file.size
+          });
+          if (payload.file || session.file) {
+            options.onProgress?.({ loaded: file.size, percent: 100, phase: 'complete', total: file.size });
+            return { file: (payload.file || session.file) as StorageFile, bytes_written: file.size };
+          }
+          break;
+        } catch (error) {
+          assertNotAborted(options.signal);
+          attempt += 1;
+          if (attempt > 3) throw error;
+          await delay(250 * (2 ** (attempt - 1)));
+          const refreshed = await localUploadSessionStatus(session.id, options);
+          session = refreshed.upload_session;
+          const completedFile = refreshed.file || session.file;
+          if (completedFile) {
+            options.onProgress?.({ loaded: file.size, percent: 100, phase: 'complete', total: file.size });
+            return { file: completedFile as StorageFile, bytes_written: file.size };
+          }
+          const refreshedOffset = Math.max(offset, session.bytes_uploaded || 0);
+          if (refreshedOffset > offset) {
+            offset = refreshedOffset;
+            options.onProgress?.({
+              loaded: offset,
+              percent: file.size > 0 ? Math.min(99, Math.round((offset / file.size) * 100)) : 99,
+              phase: 'uploading',
+              total: file.size
+            });
+            break;
+          }
+          offset = refreshedOffset;
+        }
+      }
+    }
+  } catch (error) {
+    if (options.signal?.aborted && session?.id) {
+      await cancelLocalUploadSession(session.id, { ...options, signal: undefined }).catch(() => undefined);
+    }
+    throw error;
+  }
+  const refreshed = await localUploadSessionStatus(session.id, options);
+  const completedFile = refreshed.file || refreshed.upload_session.file;
+  if (!completedFile) {
+    throw new Error('Storage upload did not return the uploaded file metadata.');
+  }
+  options.onProgress?.({ loaded: file.size, percent: 100, phase: 'complete', total: file.size });
+  return { file: completedFile, bytes_written: file.size };
+}
+
+function startLocalUploadSession(role: FileRole, folderRelativePath: string, file: File, options: StorageApiOptions = {}) {
+  return callBackend<LocalUploadSessionPayload>({
+    action: 'local_upload_session.start',
+    role,
+    folder_relative_path: folderRelativePath,
+    file_name: file.name,
+    content_type: file.type || 'application/octet-stream',
+    size_bytes: file.size
+  }, options);
+}
+
+function uploadLocalSessionChunk(sessionId: string, offset: number, contentBase64: string, options: StorageApiOptions = {}) {
+  return callBackend<LocalUploadSessionPayload>({
+    action: 'local_upload_session.chunk',
+    local_upload_session_id: sessionId,
+    chunk_offset: offset,
+    content_base64: contentBase64
+  }, options);
+}
+
+export function localUploadSessionStatus(sessionId: string, options: StorageApiOptions = {}) {
+  return callBackend<LocalUploadSessionPayload>({
+    action: 'local_upload_session.status',
+    local_upload_session_id: sessionId
+  }, options);
+}
+
+export function cancelLocalUploadSession(sessionId: string, options: StorageApiOptions = {}) {
+  return callBackend<LocalUploadSessionPayload>({
+    action: 'local_upload_session.cancel',
+    local_upload_session_id: sessionId
+  }, options);
 }
 
 export async function uploadDriveFile(file: File, target: DriveUploadTarget, options: UploadFileOptions = {}) {
@@ -692,6 +849,13 @@ function assertBase64WriteSize(file: File) {
     return;
   }
   throw new Error(`Storage uploads through this path are limited to ${Math.floor(MAX_BASE64_WRITE_BYTES / (1024 * 1024))} MB.`);
+}
+
+function assertStorageTransferSize(file: File) {
+  if (file.size <= MAX_STORAGE_FILE_TRANSFER_BYTES) {
+    return;
+  }
+  throw new Error(`Storage uploads are limited to ${Math.floor(MAX_STORAGE_FILE_TRANSFER_BYTES / (1024 * 1024))} MB.`);
 }
 
 function callBackendWithUploadProgress<T>(body: Record<string, unknown>, options: UploadFileOptions): Promise<T> {

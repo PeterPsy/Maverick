@@ -330,6 +330,20 @@
         "additionalProperties": false
       }
     },
+    "website_preview_report": {
+      "description": "Create a bounded preview observability report with source mapping, local asset coverage, acceptance checks, and browser probe contract.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "site_id": {"type": "string"},
+          "preview_id": {"type": "string"},
+          "route": {"type": "string"},
+          "baseline_report_id": {"type": "string"}
+        },
+        "anyOf": [{"required": ["site_id"]}, {"required": ["preview_id"]}],
+        "additionalProperties": false
+      }
+    },
     "website_runtime_status": {
       "description": "Return bounded runtime health, latest build, latest preview, and missing requirements for one Website Studio site.",
       "input_schema": {

@@ -82,6 +82,7 @@
       "website_maintenance_prune",
       "website_build_preview",
       "website_preview_document",
+      "website_preview_report",
       "website_runtime_status",
       "website_publish_request",
       "website_approval_record",

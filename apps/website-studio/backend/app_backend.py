@@ -55,12 +55,12 @@ payload = read_entrypoint_payload()
 request_body = dict(payload.body)
 route_path = str(payload.raw.get("route_path") or "")
 method = str(payload.raw.get("method") or "").upper()
-if method in {"GET", "HEAD"} and route_path.startswith("/api/apps/") and route_path.endswith("/media"):
+if method in {"GET", "HEAD"} and route_path.startswith("/api/apps/") and route_path.endswith("/backend/media"):
     query = payload.raw.get("query") if isinstance(payload.raw.get("query"), dict) else {}
     request_body = {**query, "action": "preview_media"}
 
 action = str(request_body.get("action") or "sites_list")
-if action in {"build_preview", "preview_document"}:
+if action in {"build_preview", "preview_document", "preview_report"}:
     preview_origin = _request_origin(_entrypoint_headers(payload.raw))
     if preview_origin:
         request_body["_preview_origin"] = preview_origin

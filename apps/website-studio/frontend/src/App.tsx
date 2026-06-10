@@ -15,7 +15,7 @@ import {
 
 type Notice = { tone: 'ok' | 'warn' | 'error'; text: string } | null;
 
-const PREVIEW_RUNTIME_VERSION = 'preview-inline-assets-v6';
+const PREVIEW_RUNTIME_VERSION = 'preview-asset-broker-v2';
 const PREVIEW_CLIENT_VERSION = 'website-studio-preview-frame-v7';
 
 export function App() {

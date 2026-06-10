@@ -37,7 +37,7 @@ Posso collegare il sito in due modi: incollami un link ZIP di Drive/Storage, opp
 6. Include `expected_hash` for every write or patch; use `expected_hash=new` only when intentionally creating a new file.
 7. Run `website_diff` and, when useful, `website_list_changes` after edits.
 8. Use `website_sync_source` only for Git-backed sites after reviewing local working changes. If it returns `blocked_local_changes`, inspect the diff and do not rerun with `confirm=true` without explicit user direction.
-9. Run `website_build_validate`, then use `website_build_preview` and `website_runtime_status` for preview checks. Static exports should return `runtime_status=ready`; PHP and Node-build sources use bounded Website Studio adapters and may return `ready`, `failed`, or `blocked` with explicit missing requirements.
+9. Run `website_build_validate`, then use `website_build_preview`, `website_preview_report`, and `website_runtime_status` for preview checks. Static exports should return `runtime_status=ready`; PHP and Node-build sources use bounded Website Studio adapters and may return `ready`, `failed`, or `blocked` with explicit missing requirements. For chat-driven edits, capture a `website_preview_report` before and after the change, passing the previous `report.id` as `baseline_report_id` for comparison when possible.
 10. Create a `website_publish_request` only after the working diff contains at least one intended change.
 11. Use `website_approval_record` only when the user has explicitly approved the exact publish request or rollback revision.
 12. Use `website_publish` or `website_rollback` only with a matching single-use approval id.
@@ -58,6 +58,7 @@ Posso collegare il sito in due modi: incollami un link ZIP di Drive/Storage, opp
 - GitHub publish can push changed files and open or reuse a pull request only when the connection is grant-backed and `github-token` is delivered by Core Secrets to the declared app backend, CLI, or MCP surface. Never request, echo, log, or store the raw token.
 - Managed static publish creates an immutable local deployment artifact and deployment record. Do not claim custom domains, CDN, certificates, or public production binding are configured unless a generic platform hosting surface reports them.
 - `website_build_preview` returns a `preview_url` for the app-owned isolated preview runtime when a preview record is created. Do not fetch source files directly to approximate preview output.
+- `website_preview_report` is the agent-facing preview observability surface. Use it to inspect source-map candidates, local asset coverage, runtime acceptance checks, and before/after deltas; do not weaken iframe sandboxing or crawl Website Studio data roots directly to approximate that report.
 - PHP preview requires a host `php` executable and runs through a bounded loopback request with short process lifetime. If `website_runtime_status` reports the PHP executable as missing, treat that as a runtime environment gap unless the user explicitly asks to change the site source.
 - Node-build preview requires `package-lock.json` and an npm `build` script that expands only to allowlisted build commands. Dart Sass `sass` is supported; native-binary `node-sass` is blocked because Website Studio installs dependencies with `npm ci --ignore-scripts`. Do not rewrite build scripts, switch package managers, or add lockfiles just to satisfy the preview adapter without user direction.
 
@@ -92,6 +93,7 @@ Posso collegare il sito in due modi: incollami un link ZIP di Drive/Storage, opp
 - `website_builds_list`
 - `website_build_preview`
 - `website_preview_document`
+- `website_preview_report`
 - `website_runtime_status`
 - `website_publish_request`
 - `website_approval_record`

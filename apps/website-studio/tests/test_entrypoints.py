@@ -1468,6 +1468,72 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertNotIn('href="../assets/site.css"', nested_document["html"])
             self.assertNotIn('data-src="../assets/photo.webp"', nested_document["html"])
 
+    def test_preview_report_includes_source_map_asset_coverage_and_acceptance(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            archive = BytesIO()
+            with ZipFile(archive, "w") as zip_file:
+                zip_file.writestr(
+                    "index.html",
+                    (
+                        "<!doctype html><html><head>"
+                        '<link rel="stylesheet" href="assets/site.css">'
+                        "</head><body>"
+                        '<main><h1>Trail</h1><button class="cta">Book now</button>'
+                        '<img src="assets/logo.webp" alt="">'
+                        '<video src="assets/hero.mp4" muted></video></main>'
+                        "</body></html>"
+                    ),
+                )
+                zip_file.writestr("assets/site.css", "@font-face{font-family:Trail;src:url('font.woff2')} main{background:url('bg.webp')}")
+                zip_file.writestr("assets/font.woff2", b"font")
+                zip_file.writestr("assets/bg.webp", b"bg")
+                zip_file.writestr("assets/logo.webp", b"logo")
+                zip_file.writestr("assets/hero.mp4", b"video")
+            encoded = base64.b64encode(archive.getvalue()).decode("ascii")
+
+            status, imported = handle_action(data_root, {"action": "import_zip", "display_name": "Observable", "archive_base64": encoded})
+            self.assertEqual(status, 201)
+            site_id = imported["site"]["id"]
+            status, preview = handle_action(data_root, {"action": "build_preview", "site_id": site_id, "route": "/"})
+            self.assertEqual(status, 200)
+
+            status, document = handle_action(data_root, {"action": "preview_document", "preview_id": preview["preview_id"]})
+            self.assertEqual(status, 200)
+            self.assertIn("source_map", document)
+            self.assertIn("index.html", document["source_map"]["source_files"])
+            self.assertIn("asset_index", document["source_map"])
+            self.assertIn("asset_summary", document["source_map"])
+            self.assertNotIn("assets", document["source_map"])
+            self.assertTrue(any(hint["selector"] == ".cta" for hint in document["source_map"]["selector_hints"]))
+            self.assertEqual(document["observability"]["browser_report_global"], "__WEBSITE_STUDIO_PREVIEW_REPORT__")
+
+            status, report_payload = handle_action(data_root, {"action": "preview_report", "preview_id": preview["preview_id"]})
+            self.assertEqual(status, 201)
+            report = report_payload["report"]
+            self.assertEqual(report["preview_id"], preview["preview_id"])
+            self.assertTrue(report["acceptance"]["passed"])
+            self.assertEqual(report["asset_coverage"]["status"], "passed")
+            self.assertGreaterEqual(report["asset_coverage"]["font_count"], 1)
+            self.assertGreaterEqual(report["asset_coverage"]["video_count"], 1)
+            resolved_paths = {item["path"] for item in report["asset_coverage"]["resolved"]}
+            self.assertIn("assets/font.woff2", resolved_paths)
+            self.assertIn("assets/hero.mp4", resolved_paths)
+            self.assertIn("assets/logo.webp", resolved_paths)
+            self.assertEqual(report["browser_probe"]["event_type"], "maverick.website-studio.preview-report")
+
+            status, compared_payload = handle_action(
+                data_root,
+                {"action": "preview_report", "preview_id": preview["preview_id"], "baseline_report_id": report["id"]},
+            )
+            self.assertEqual(status, 201)
+            self.assertEqual(compared_payload["report"]["comparison"]["baseline_report_id"], report["id"])
+            self.assertEqual(compared_payload["report"]["comparison"]["missing_asset_delta"], 0)
+
+            status, runtime = handle_action(data_root, {"action": "runtime_status", "site_id": site_id})
+            self.assertEqual(status, 200)
+            self.assertEqual(runtime["latest_preview_report"]["preview_id"], preview["preview_id"])
+
     def test_preview_contract_reports_missing_runtime_requirements_for_build_and_php_sites(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
@@ -2113,7 +2179,17 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("normalizeInlineMediaUrls", runtime_source)
         self.assertIn("normalizedMediaDocumentUrl", runtime_source)
         self.assertIn("text/html;charset=utf-8", runtime_source)
-        self.assertIn("mountHtml(payload.html || '')", runtime_source)
+        self.assertIn("mountHtml(payload.html || '', payload.source_map || {})", runtime_source)
+        self.assertIn("__WEBSITE_STUDIO_PREVIEW_REPORT__", runtime_source)
+        self.assertIn("maverick.website-studio.preview-report", runtime_source)
+        self.assertIn("document.fonts.ready", runtime_source)
+        self.assertIn("getComputedStyle", runtime_source)
+        self.assertIn("website-studio.preview.report", runtime_source)
+        self.assertIn("website-studio.asset.request", runtime_source)
+        self.assertIn("website-studio.asset.response", runtime_source)
+        self.assertIn("X-Website-Studio-Preview-Broker", runtime_source)
+        self.assertIn("credentials: 'include'", runtime_source)
+        self.assertIn("asset_broker", runtime_source)
         self.assertNotIn("credentials: 'same-origin'", runtime_source)
         self.assertNotIn("response.blob()", runtime_source)
         self.assertNotIn("asset materialization failed", runtime_source)

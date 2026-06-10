@@ -205,6 +205,8 @@ test.describe('Website Studio preview runtime', () => {
     await page.setViewportSize({ width: 1280, height: 860 });
     const previewId = 'preview_slow_assets';
     let slowVideoRequested = false;
+    let directMediaRequests = 0;
+    let brokerMediaRequests = 0;
     const mediaUrl = (path: string) =>
       `__WEBSITE_STUDIO_PREVIEW_ORIGIN__/api/apps/website-studio/backend/media?preview_id=${previewId}&path=${encodeURIComponent(path)}`;
 
@@ -224,16 +226,37 @@ test.describe('Website Studio preview runtime', () => {
                   @font-face { font-family: PreviewRuntime; src: url("${mediaUrl('assets/fonts/preview.woff2')}") format("woff2"); }
                   body { margin: 0; font-family: PreviewRuntime, system-ui, sans-serif; background: #f7f7f2; }
                   main { min-height: 100vh; display: grid; place-content: center; background-image: url("${mediaUrl('assets/images/hero.webp')}"); }
+                  img { width: 96px; height: 96px; object-fit: cover; }
                 </style>
               </head>
               <body>
                 <main data-testid="runtime-preview">
                   <h1>Giuntitrail</h1>
                   <img data-testid="eager-image" src="${mediaUrl('assets/images/logo.webp')}" alt="">
+                  <img data-testid="lazy-image" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" data-src="${mediaUrl('assets/images/lazy.webp')}" alt="">
                   <video data-testid="slow-video" data-src="${mediaUrl('assets/video/slow.mp4')}" muted playsinline></video>
                 </main>
+                <script>
+                  console.warn('preview console ready');
+                  window.setTimeout(() => {
+                    const image = document.querySelector('[data-testid="lazy-image"]');
+                    image.src = image.dataset.src;
+                    image.removeAttribute('data-src');
+                    const script = document.createElement('script');
+                    script.src = "${mediaUrl('assets/js/analytics-tracking.js')}";
+                    document.body.appendChild(script);
+                  }, 50);
+                </script>
               </body>
             </html>`
+          ,
+          source_map: {
+            preview_id: previewId,
+            route: '/',
+            source_files: ['index.html', 'assets/site.css'],
+            asset_refs: ['assets/fonts/preview.woff2', 'assets/images/logo.webp', 'assets/images/hero.webp', 'assets/video/slow.mp4'],
+            selector_hints: [{ selector: '[data-testid]', token: 'runtime-preview', source_files: ['index.html'], confidence: 'token_match' }]
+          }
         })
       });
     });
@@ -241,14 +264,32 @@ test.describe('Website Studio preview runtime', () => {
     await page.route('**/api/apps/website-studio/backend/media?**', async (route) => {
       const url = new URL(route.request().url());
       const path = url.searchParams.get('path') || '';
+      const isBrokered = route.request().headers()['x-website-studio-preview-broker'] === '1';
       if (path.endsWith('slow.mp4')) {
         slowVideoRequested = true;
         await delay(4_000);
         await route.fulfill({ status: 200, contentType: 'video/mp4', body: Buffer.from([0]) });
         return;
       }
-      const contentType = path.endsWith('.woff2') ? 'font/woff2' : path.endsWith('.webp') ? 'image/webp' : 'application/octet-stream';
-      await route.fulfill({ status: 200, contentType, body: Buffer.from([0]) });
+      if (!isBrokered) {
+        directMediaRequests += 1;
+        await route.fulfill({ status: 401, contentType: 'text/plain', body: 'sandbox direct media denied' });
+        return;
+      }
+      brokerMediaRequests += 1;
+      if (path.endsWith('.woff2')) {
+        await route.fulfill({ status: 200, contentType: 'font/woff2', body: Buffer.from([0]) });
+        return;
+      }
+      if (path.endsWith('.js')) {
+        await route.fulfill({ status: 200, contentType: 'text/javascript', body: 'window.__dynamicLocalScriptLoaded = true;' });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'image/svg+xml',
+        body: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="#f72585"/></svg>'
+      });
     });
 
     const startedAt = Date.now();
@@ -260,7 +301,47 @@ test.describe('Website Studio preview runtime', () => {
     expect(slowVideoRequested).toBe(false);
 
     const imageSrc = await previewFrame.locator('[data-testid="eager-image"]').getAttribute('src');
-    expect(imageSrc).toContain('/api/apps/website-studio/backend/media');
+    expect(imageSrc).toMatch(/^(blob:|data:)/);
+    await expect.poll(async () => previewFrame.locator('[data-testid="eager-image"]').evaluate((node) => {
+      const image = node as HTMLImageElement;
+      return image.complete && image.naturalWidth > 2 && image.naturalHeight > 2;
+    }), { timeout: 3_000 }).toBe(true);
+    await expect.poll(async () => previewFrame.locator('[data-testid="lazy-image"]').evaluate((node) => {
+      const image = node as HTMLImageElement;
+      return image.complete && image.naturalWidth > 2 && image.naturalHeight > 2 && !image.src.includes('R0lGODlhAQABAIAAAAAA');
+    }), { timeout: 3_000 }).toBe(true);
+    await expect.poll(async () => previewFrame.locator('main').evaluate((element) => getComputedStyle(element).backgroundImage)).toMatch(/blob:|data:/);
+    await expect.poll(async () => previewFrame.locator('body').evaluate(() => {
+      return (window as unknown as { __dynamicLocalScriptLoaded?: boolean }).__dynamicLocalScriptLoaded === true;
+    }), { timeout: 3_000 }).toBe(true);
+    expect(directMediaRequests).toBe(0);
+    expect(brokerMediaRequests).toBeGreaterThanOrEqual(4);
+
+    await expect.poll(async () => page.evaluate(() => {
+      const report = (window as unknown as { __WEBSITE_STUDIO_PREVIEW_REPORT__?: { report?: { console_log?: { text?: string }[] } } }).__WEBSITE_STUDIO_PREVIEW_REPORT__;
+      return report?.report?.console_log?.some((item) => item.text?.includes('preview console ready')) || false;
+    }), { timeout: 3_000 }).toBe(true);
+
+    const runtimeReport = await page.evaluate(() => {
+      return (window as unknown as { __WEBSITE_STUDIO_PREVIEW_REPORT__?: { report?: Record<string, unknown> } }).__WEBSITE_STUDIO_PREVIEW_REPORT__?.report || {};
+    });
+    expect(runtimeReport.nonblank).toBe(true);
+    expect((runtimeReport.dom as { snapshot: { tag: string; computed: { fontFamily?: string } }[] }).snapshot.some((item) => item.tag === 'main')).toBe(true);
+    expect((runtimeReport.fonts as { status: string }).status).toMatch(/loaded|loading/);
+    await expect.poll(async () => page.evaluate(() => {
+      const reports = (window as unknown as { __WEBSITE_STUDIO_PREVIEW_REPORTS__?: { report?: { asset_broker?: { cache_size?: number } } }[] }).__WEBSITE_STUDIO_PREVIEW_REPORTS__ || [];
+      return Math.max(...reports.map((entry) => entry.report?.asset_broker?.cache_size || 0), 0);
+    }), { timeout: 3_000 }).toBeGreaterThan(0);
+    await expect.poll(async () => page.evaluate(() => {
+      const reports = (window as unknown as { __WEBSITE_STUDIO_PREVIEW_REPORTS__?: { report?: { asset_coverage?: { images?: { src?: string }[] } } }[] }).__WEBSITE_STUDIO_PREVIEW_REPORTS__ || [];
+      return reports.some((entry) => entry.report?.asset_coverage?.images?.some((item) => item.src?.includes('blob:') || item.src?.includes('data:')));
+    }), { timeout: 3_000 }).toBe(true);
+    await expect.poll(async () => page.evaluate(() => {
+      const reports = (window as unknown as { __WEBSITE_STUDIO_PREVIEW_REPORTS__?: { report?: { asset_coverage?: { placeholder_images?: unknown[]; broken_images?: unknown[] } } }[] }).__WEBSITE_STUDIO_PREVIEW_REPORTS__ || [];
+      const latest = [...reports].reverse().find((entry) => entry.report?.asset_coverage)?.report?.asset_coverage;
+      return (latest?.placeholder_images?.length || 0) + (latest?.broken_images?.length || 0);
+    }), { timeout: 3_000 }).toBe(0);
+    expect((runtimeReport.source_map as { asset_refs: string[] }).asset_refs).toContain('assets/fonts/preview.woff2');
   });
 });
 

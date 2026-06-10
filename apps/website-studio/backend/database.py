@@ -239,6 +239,17 @@ def ensure_schema(data_root: Path) -> None:
               updated_at TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_runtime_sessions_site_created ON runtime_sessions(site_id, created_at);
+            CREATE TABLE IF NOT EXISTS preview_reports (
+              id TEXT PRIMARY KEY,
+              site_id TEXT NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+              preview_id TEXT NOT NULL DEFAULT '',
+              route TEXT NOT NULL DEFAULT '/',
+              status TEXT NOT NULL,
+              report_json TEXT NOT NULL DEFAULT '{}',
+              created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_preview_reports_site_created ON preview_reports(site_id, created_at);
+            CREATE INDEX IF NOT EXISTS idx_preview_reports_preview_created ON preview_reports(preview_id, created_at);
             CREATE TABLE IF NOT EXISTS deployments (
               id TEXT PRIMARY KEY,
               site_id TEXT NOT NULL REFERENCES sites(id) ON DELETE CASCADE,

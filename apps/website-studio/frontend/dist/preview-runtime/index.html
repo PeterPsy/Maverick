@@ -26,6 +26,77 @@
       const previewId = params.get('preview_id') || '';
       const frame = document.getElementById('preview');
       let currentDocumentUrl = '';
+      const previewReports = [];
+      window.__WEBSITE_STUDIO_PREVIEW_REPORT__ = null;
+      window.__WEBSITE_STUDIO_PREVIEW_REPORTS__ = previewReports;
+
+      window.addEventListener('message', (event) => {
+        const data = event.data || {};
+        if (!data || data.type !== 'website-studio.preview.report' || event.source !== frame.contentWindow) return;
+        const envelope = {
+          preview_id: data.preview_id || previewId,
+          received_at: new Date().toISOString(),
+          report: data.report || {}
+        };
+        window.__WEBSITE_STUDIO_PREVIEW_REPORT__ = envelope;
+        previewReports.push(envelope);
+        if (previewReports.length > 12) previewReports.shift();
+        window.dispatchEvent(new CustomEvent('maverick.website-studio.preview-report', { detail: envelope }));
+        try {
+          window.parent?.postMessage({
+            type: 'maverick.website-studio.preview-report',
+            owner_app_id: 'website-studio',
+            preview_id: envelope.preview_id,
+            report: envelope.report
+          }, window.location.origin);
+        } catch {}
+      });
+
+      window.addEventListener('message', async (event) => {
+        const data = event.data || {};
+        if (!data || data.type !== 'website-studio.asset.request' || event.source !== frame.contentWindow) return;
+        const requestId = String(data.request_id || '');
+        if (!requestId) return;
+        const respond = (payload) => {
+          try {
+            frame.contentWindow?.postMessage({ type: 'website-studio.asset.response', request_id: requestId, ...payload }, '*', payload.body ? [payload.body] : []);
+          } catch {}
+        };
+        try {
+          const requestedUrl = new URL(String(data.url || ''), window.location.origin);
+          if (requestedUrl.pathname !== '/api/apps/website-studio/backend/media') {
+            respond({ ok: false, error: 'asset_url_not_allowed' });
+            return;
+          }
+          const assetUrl = new URL(requestedUrl.pathname + requestedUrl.search, window.location.origin);
+          const response = await fetch(assetUrl.toString(), {
+            credentials: 'include',
+            headers: { 'X-Website-Studio-Preview-Broker': '1' }
+          });
+          if (!response.ok) {
+            respond({ ok: false, status: response.status, error: `asset_fetch_failed_${response.status}` });
+            return;
+          }
+          const contentLength = Number(response.headers.get('content-length') || '0');
+          if (contentLength > 15 * 1024 * 1024) {
+            respond({ ok: false, status: 413, error: 'asset_too_large_for_blob_broker' });
+            return;
+          }
+          const body = await response.arrayBuffer();
+          if (body.byteLength > 15 * 1024 * 1024) {
+            respond({ ok: false, status: 413, error: 'asset_too_large_for_blob_broker' });
+            return;
+          }
+          respond({
+            ok: true,
+            url: assetUrl.toString(),
+            content_type: response.headers.get('content-type') || 'application/octet-stream',
+            body
+          });
+        } catch (error) {
+          respond({ ok: false, error: error instanceof Error ? error.message : 'asset_fetch_failed' });
+        }
+      });
 
       function revokeMountedUrls() {
         if (currentDocumentUrl) {
@@ -34,39 +105,58 @@
         }
       }
 
-      function mountHtml(html) {
+      async function mountHtml(html, sourceMap = {}) {
         revokeMountedUrls();
         const origin = window.location.origin;
         const mediaSource = `${origin}/api/apps/website-studio/backend/media`;
-        const documentHtml = normalizePreviewDocument(String(html || '')
+        const documentHtml = await normalizePreviewDocument(String(html || '')
           .replaceAll('__WEBSITE_STUDIO_PREVIEW_ORIGIN__', origin)
-          .replaceAll('__WEBSITE_STUDIO_PREVIEW_MEDIA_SOURCE__', mediaSource));
+          .replaceAll('__WEBSITE_STUDIO_PREVIEW_MEDIA_SOURCE__', mediaSource), sourceMap);
         currentDocumentUrl = URL.createObjectURL(new Blob([documentHtml], { type: 'text/html;charset=utf-8' }));
         frame.removeAttribute('srcdoc');
         frame.src = currentDocumentUrl;
       }
 
-      function normalizePreviewDocument(html) {
+      async function normalizePreviewDocument(html, sourceMap = {}) {
         const document = new DOMParser().parseFromString(html, 'text/html');
         ensureUtf8Meta(document);
         expandPreviewCspForRuntimeAssets(document);
+        injectPreviewAssetBroker(document, sourceMap);
+        injectPreviewObservability(document, sourceMap);
+        const blobCache = new Map();
 
         for (const link of Array.from(document.querySelectorAll('link[href]'))) {
           const href = link.getAttribute('href') || '';
-          if (isPreviewMediaUrl(href)) link.setAttribute('href', normalizedMediaDocumentUrl(href));
+          if (!isPreviewMediaUrl(href)) continue;
+          const asset = await parentBrokeredMediaAsset(href, blobCache);
+          if (asset.text && /\bstylesheet\b/i.test(link.getAttribute('rel') || '') && asset.contentType.toLowerCase().includes('text/css')) {
+            const style = document.createElement('style');
+            style.setAttribute('data-website-studio-inline-stylesheet', href);
+            if (link.getAttribute('media')) style.setAttribute('media', link.getAttribute('media') || '');
+            style.textContent = asset.text;
+            link.replaceWith(style);
+          } else {
+            link.setAttribute('href', asset.url || normalizedMediaDocumentUrl(href));
+          }
         }
 
         for (const style of Array.from(document.querySelectorAll('style'))) {
-          style.textContent = normalizeCssUrls(style.textContent || '');
+          style.textContent = await normalizeCssUrls(style.textContent || '', blobCache);
         }
         for (const element of Array.from(document.querySelectorAll('[style]'))) {
-          element.setAttribute('style', normalizeCssUrls(element.getAttribute('style') || ''));
+          element.setAttribute('style', await normalizeCssUrls(element.getAttribute('style') || '', blobCache));
         }
 
         for (const script of Array.from(document.querySelectorAll('script[src]'))) {
           const src = script.getAttribute('src') || '';
           if (!isPreviewMediaUrl(src)) continue;
-          script.setAttribute('src', normalizedMediaDocumentUrl(src));
+          const asset = await parentBrokeredMediaAsset(src, blobCache);
+          if (asset.text) {
+            script.removeAttribute('src');
+            script.textContent = asset.text;
+          } else {
+            script.setAttribute('src', asset.url || normalizedMediaDocumentUrl(src));
+          }
         }
         for (const script of Array.from(document.querySelectorAll('script:not([src])'))) {
           const scriptType = (script.getAttribute('type') || '').trim().toLowerCase();
@@ -74,44 +164,551 @@
           script.textContent = normalizeInlineMediaUrls(script.textContent || '');
         }
 
-        for (const attr of ['src', 'href', 'data-src', 'data-bg', 'data-background', 'data-poster', 'poster']) {
-          for (const element of Array.from(document.querySelectorAll(`[${attr}]`))) {
-            const value = element.getAttribute(attr) || '';
-            if (!isPreviewMediaUrl(value)) continue;
-            element.setAttribute(attr, normalizedMediaDocumentUrl(value));
-          }
-        }
+	        for (const attr of ['src', 'href', 'data-src', 'data-bg', 'data-background', 'data-poster', 'poster']) {
+	          for (const element of Array.from(document.querySelectorAll(`[${attr}]`))) {
+	            const value = element.getAttribute(attr) || '';
+	            if (shouldSkipParentLazyMediaAttr(element, attr)) continue;
+	            if (!isPreviewMediaUrl(value)) continue;
+	            const blobUrl = await parentBrokeredMediaUrl(value, blobCache);
+	            element.setAttribute(attr, blobUrl || normalizedMediaDocumentUrl(value));
+	          }
+	        }
         for (const attr of ['srcset', 'data-srcset']) {
           for (const element of Array.from(document.querySelectorAll(`[${attr}]`))) {
-            element.setAttribute(attr, normalizeSrcset(element.getAttribute(attr) || ''));
+            element.setAttribute(attr, await normalizeSrcset(element.getAttribute(attr) || '', blobCache));
           }
         }
 
         return `<!doctype html>\n${document.documentElement.outerHTML}`;
       }
 
-      function normalizeCssUrls(css) {
+      function injectPreviewObservability(document, sourceMap) {
+        const head = document.head || document.documentElement.insertBefore(document.createElement('head'), document.body || null);
+        const mapScript = document.createElement('script');
+        mapScript.id = 'website-studio-source-map';
+        mapScript.type = 'application/json';
+        mapScript.textContent = JSON.stringify({ preview_id: previewId, ...(sourceMap || {}) }).replace(/</g, '\\u003c');
+
+        const probe = document.createElement('script');
+        probe.setAttribute('data-website-studio-preview-probe', '');
+        probe.textContent = `
+(() => {
+  const safeString = (value, max = 240) => String(value ?? '').replace(/\\s+/g, ' ').trim().slice(0, max);
+  const normalizeUrl = (value) => {
+    if (String(value || '').startsWith('blob:')) return 'blob:preview-asset';
+    if (String(value || '').startsWith('data:')) return 'data:preview-asset';
+    try {
+      const url = new URL(String(value || ''), window.location.href);
+      if (url.origin === location.origin || url.pathname.includes('/api/apps/website-studio/backend/media')) {
+        return url.pathname + url.search + url.hash;
+      }
+      return url.origin + url.pathname;
+    } catch {
+      return safeString(value);
+    }
+  };
+  const sourceMap = (() => {
+    try { return JSON.parse(document.getElementById('website-studio-source-map')?.textContent || '{}'); }
+    catch { return {}; }
+  })();
+  const previewId = sourceMap.preview_id || '${previewId.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}';
+  const consoleLog = [];
+  for (const level of ['debug', 'log', 'info', 'warn', 'error']) {
+    const original = console[level];
+    console[level] = (...args) => {
+      consoleLog.push({ level, text: args.map((arg) => safeString(arg, 180)).join(' '), ts: Date.now() });
+      if (consoleLog.length > 80) consoleLog.shift();
+      try { original.apply(console, args); } catch {}
+    };
+  }
+  const elementSnapshot = () => Array.from(document.querySelectorAll('body, main, header, nav, section, article, footer, h1, h2, h3, p, a, button, img, video, [data-testid]')).slice(0, 90).map((element) => {
+    const rect = element.getBoundingClientRect();
+    const style = getComputedStyle(element);
+    return {
+      tag: element.tagName.toLowerCase(),
+      id: element.id || '',
+      class_name: safeString(element.className, 120),
+      role: element.getAttribute('role') || '',
+      text: safeString(element.textContent, 140),
+      source_files: (sourceMap.source_files || []).slice(0, 8),
+      rect: { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) },
+      visible: rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none' && Number(style.opacity || 1) > 0,
+      computed: {
+        display: style.display,
+        position: style.position,
+        color: style.color,
+        backgroundColor: style.backgroundColor,
+        fontFamily: style.fontFamily,
+        fontSize: style.fontSize
+      }
+    };
+  });
+  const fontReport = () => {
+    const fontSet = document.fonts;
+    if (!fontSet) return { status: 'unavailable', faces: [] };
+    let faces = [];
+    try {
+      faces = Array.from(fontSet).slice(0, 40).map((face) => ({
+        family: safeString(face.family, 120),
+        status: face.status,
+        weight: face.weight,
+        style: face.style
+      }));
+    } catch {}
+    return { status: fontSet.status, ready: fontSet.status === 'loaded', faces };
+  };
+  const assetCoverage = () => {
+    const images = Array.from(document.images).slice(0, 120).map((image) => {
+      const rect = image.getBoundingClientRect();
+      const renderedWidth = Math.round(rect.width);
+      const renderedHeight = Math.round(rect.height);
+      const placeholder = image.complete && renderedWidth > 16 && renderedHeight > 16 && (image.naturalWidth <= 2 || image.naturalHeight <= 2);
+      const broken = renderedWidth > 16 && renderedHeight > 16 && (!image.complete || image.naturalWidth <= 0 || image.naturalHeight <= 0);
+      return {
+        src: normalizeUrl(image.currentSrc || image.src || image.getAttribute('data-src') || ''),
+        complete: image.complete,
+        naturalWidth: image.naturalWidth,
+        naturalHeight: image.naturalHeight,
+        renderedWidth,
+        renderedHeight,
+        placeholder,
+        broken,
+        loading: image.loading || ''
+      };
+    });
+    return {
+      images,
+      placeholder_images: images.filter((image) => image.placeholder),
+      broken_images: images.filter((image) => image.broken),
+      videos: Array.from(document.querySelectorAll('video')).slice(0, 40).map((video) => ({
+        src: normalizeUrl(video.currentSrc || video.src || video.getAttribute('data-src') || ''),
+        poster: normalizeUrl(video.poster || ''),
+        readyState: video.readyState,
+        networkState: video.networkState
+      })),
+      resources: performance.getEntriesByType('resource').slice(-160).map((entry) => ({
+        name: normalizeUrl(entry.name),
+        initiatorType: entry.initiatorType,
+        duration: Math.round(entry.duration),
+        transferSize: entry.transferSize || 0,
+        decodedBodySize: entry.decodedBodySize || 0
+      }))
+    };
+  };
+  const collect = (phase) => {
+    const paints = performance.getEntriesByType('paint').map((entry) => ({ name: entry.name, startTime: Math.round(entry.startTime) }));
+    const elements = elementSnapshot();
+    return {
+      schema_version: 1,
+      phase,
+      preview_id: previewId,
+      route: sourceMap.route || location.pathname,
+      title: document.title || '',
+      url: location.href.startsWith('blob:') ? 'blob:preview-document' : normalizeUrl(location.href),
+      generated_at: new Date().toISOString(),
+      first_paint: paints.find((entry) => entry.name === 'first-paint') || null,
+      paint_entries: paints,
+      nonblank: Boolean(safeString(document.body?.innerText || '', 1)) || elements.some((item) => item.visible && item.rect.width > 16 && item.rect.height > 16),
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      dom: {
+        element_count: document.querySelectorAll('*').length,
+        text_length: safeString(document.body?.innerText || '', 20000).length,
+        snapshot: elements
+      },
+      computed_styles: elements.slice(0, 40).map((item) => ({ selector: item.id ? '#' + item.id : item.tag, computed: item.computed, rect: item.rect })),
+      fonts: fontReport(),
+      asset_coverage: assetCoverage(),
+      asset_broker: {
+        cache_size: window.__WEBSITE_STUDIO_ASSET_BROKER__?.cache_size?.() ?? 0
+      },
+      console_log: consoleLog.slice(-80),
+      source_map: {
+        source_files: (sourceMap.source_files || []).slice(0, 20),
+        selector_hints: (sourceMap.selector_hints || []).slice(0, 40),
+        asset_refs: (sourceMap.asset_refs || []).slice(0, 80)
+      }
+    };
+  };
+  const send = (phase) => {
+    try { parent.postMessage({ type: 'website-studio.preview.report', preview_id: previewId, report: collect(phase) }, '*'); }
+    catch {}
+  };
+  const schedule = (phase) => window.setTimeout(() => send(phase), 0);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => schedule('domcontentloaded'), { once: true });
+  else schedule('interactive');
+  if (document.fonts?.ready) document.fonts.ready.then(() => schedule('fonts-ready')).catch(() => schedule('fonts-error'));
+  window.addEventListener('load', () => schedule('load'), { once: true });
+  window.setTimeout(() => send('settled'), 1200);
+})();
+        `.trim();
+        head.insertBefore(probe, head.firstChild);
+        head.insertBefore(mapScript, probe);
+      }
+
+      function injectPreviewAssetBroker(document, sourceMap) {
+        const head = document.head || document.documentElement.insertBefore(document.createElement('head'), document.body || null);
+        const broker = document.createElement('script');
+        broker.setAttribute('data-website-studio-asset-broker', '');
+        const brokerConfig = {
+          preview_id: previewId,
+          runtime_origin: window.location.origin,
+          asset_refs: Array.isArray(sourceMap?.asset_refs) ? sourceMap.asset_refs.slice(0, 240) : []
+        };
+        broker.textContent = `
+(() => {
+  const config = ${JSON.stringify(brokerConfig).replace(/</g, '\\u003c')};
+	  const mediaPath = '/api/apps/website-studio/backend/media';
+	  const blobCache = new Map();
+	  const pending = new Map();
+	  const pendingByCacheKey = new Map();
+	  const assetRefs = new Set((config.asset_refs || []).map((item) => String(item || '').replace(/^\\/+/, '')));
+	  let requestCounter = 0;
+
+	  const assetExtensions = /\\.(?:png|jpe?g|gif|webp|avif|svg|ico|woff2?|ttf|otf|css|js|m4v|mov|mp4|ogg|ogv|webm)(?:[?#].*)?$/i;
+	  const localPrefixes = /^(?:\\.\\.\\/|\\.\\/|\\/)?(?:assets|images|fonts|dist|frontend-website\\/assets|frontend-website\\/dist)\\//i;
+	  const brokeredAttrs = new Set(['src', 'href', 'data-src', 'data-bg', 'data-background', 'data-poster', 'poster']);
+	  const transparentImage = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+	  const originalSetAttribute = Element.prototype.setAttribute;
+	  const originalRemoveAttribute = Element.prototype.removeAttribute;
+	  const propertyInterceptors = [
+	    [typeof HTMLImageElement === 'undefined' ? null : HTMLImageElement.prototype, 'src', 'src'],
+	    [typeof HTMLScriptElement === 'undefined' ? null : HTMLScriptElement.prototype, 'src', 'src'],
+	    [typeof HTMLSourceElement === 'undefined' ? null : HTMLSourceElement.prototype, 'src', 'src'],
+	    [typeof HTMLVideoElement === 'undefined' ? null : HTMLVideoElement.prototype, 'src', 'src'],
+	    [typeof HTMLAudioElement === 'undefined' ? null : HTMLAudioElement.prototype, 'src', 'src'],
+	    [typeof HTMLLinkElement === 'undefined' ? null : HTMLLinkElement.prototype, 'href', 'href'],
+	    [typeof HTMLMediaElement === 'undefined' ? null : HTMLMediaElement.prototype, 'src', 'src']
+	  ];
+	  const attrTokens = new WeakMap();
+	  let attrTokenCounter = 0;
+
+  window.addEventListener('message', (event) => {
+    const data = event.data || {};
+    if (!data || data.type !== 'website-studio.asset.response') return;
+	    const entry = pending.get(String(data.request_id || ''));
+	    if (!entry) return;
+	    pending.delete(String(data.request_id || ''));
+	    pendingByCacheKey.delete(entry.cacheKey);
+	    if (!data.ok || !data.body) {
+	      entry.reject(new Error(String(data.error || 'asset_broker_failed')));
+	      return;
+    }
+    try {
+      const blobUrl = URL.createObjectURL(new Blob([data.body], { type: data.content_type || 'application/octet-stream' }));
+      blobCache.set(entry.cacheKey, blobUrl);
+      entry.resolve(blobUrl);
+    } catch (error) {
+      entry.reject(error);
+    }
+  });
+
+	  const mediaUrlForPath = (path) => {
+	    const cleanPath = String(path || '').replace(/^\\/+/, '');
+	    if (!cleanPath) return '';
+    const url = new URL(mediaPath, config.runtime_origin);
+    url.searchParams.set('preview_id', config.preview_id || '');
+    url.searchParams.set('path', cleanPath.split(/[?#]/, 1)[0]);
+    const hash = cleanPath.match(/(#.*)$/)?.[1] || '';
+    return url.toString() + hash;
+  };
+
+  const normalizeLocalAssetUrl = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw || /^(?:data|blob|javascript|mailto|tel):/i.test(raw) || raw.startsWith('#')) return '';
+    try {
+      const parsed = new URL(raw, config.runtime_origin);
+      if (parsed.origin === config.runtime_origin && parsed.pathname === mediaPath) return parsed.toString();
+	      if (parsed.origin !== config.runtime_origin) return '';
+	      const path = parsed.pathname.replace(/^\\/+/, '');
+	      if (assetExtensions.test(path) || localPrefixes.test(path) || assetRefs.has(path)) {
+	        return mediaUrlForPath(path + parsed.search + parsed.hash);
+      }
+      return '';
+	    } catch {
+	      const clean = raw.replace(/^\\/+/, '');
+	      if (assetExtensions.test(clean) || localPrefixes.test(clean) || assetRefs.has(clean)) return mediaUrlForPath(clean);
+      return '';
+    }
+  };
+
+  const brokeredUrl = async (value) => {
+    const mediaUrl = normalizeLocalAssetUrl(value);
+    if (!mediaUrl) return '';
+	    const cacheKey = mediaUrl.split('#', 1)[0];
+	    if (blobCache.has(cacheKey)) return blobCache.get(cacheKey);
+	    if (pendingByCacheKey.has(cacheKey)) return pendingByCacheKey.get(cacheKey);
+	    const requestId = 'asset_' + (++requestCounter) + '_' + Math.random().toString(16).slice(2);
+	    const promise = new Promise((resolve, reject) => {
+	      pending.set(requestId, { resolve, reject, cacheKey });
+	      window.setTimeout(() => {
+	        const entry = pending.get(requestId);
+	        if (!entry) return;
+	        pending.delete(requestId);
+	        pendingByCacheKey.delete(cacheKey);
+	        entry.reject(new Error('asset_broker_timeout'));
+	      }, 10000);
+	    });
+	    pendingByCacheKey.set(cacheKey, promise);
+	    parent.postMessage({ type: 'website-studio.asset.request', request_id: requestId, preview_id: config.preview_id, url: mediaUrl }, '*');
+	    return promise;
+	  };
+
+  const applyCssBroker = async (cssText) => {
+    const text = String(cssText || '');
+    const matches = Array.from(text.matchAll(/url\\(\\s*(['"]?)(.*?)\\1\\s*\\)/gi));
+    if (!matches.length) return text;
+    const replacements = [];
+    for (const match of matches) {
+      const rawUrl = match[2] || '';
+      try {
+        const blobUrl = await brokeredUrl(rawUrl);
+        if (blobUrl) replacements.push({ start: match.index, end: match.index + match[0].length, value: 'url("' + blobUrl + '")' });
+      } catch {}
+    }
+    if (!replacements.length) return text;
+    let result = '';
+    let offset = 0;
+    for (const replacement of replacements.sort((a, b) => a.start - b.start)) {
+      result += text.slice(offset, replacement.start) + replacement.value;
+      offset = replacement.end;
+    }
+    return result + text.slice(offset);
+  };
+
+	  const normalizeSrcset = async (value) => {
+    const items = [];
+    for (const item of String(value || '').split(',')) {
+      const trimmed = item.trim();
+      if (!trimmed) continue;
+      const parts = trimmed.split(/\\s+/);
+      try {
+        const blobUrl = await brokeredUrl(parts[0]);
+        if (blobUrl) parts[0] = blobUrl;
+      } catch {}
+      items.push(parts.join(' '));
+    }
+	    return items.join(', ');
+	  };
+
+	  const attrTokenMap = (element) => {
+	    let tokens = attrTokens.get(element);
+	    if (!tokens) {
+	      tokens = new Map();
+	      attrTokens.set(element, tokens);
+	    }
+	    return tokens;
+	  };
+
+	  const nextAttrToken = (element, attr) => {
+	    const token = String(++attrTokenCounter);
+	    attrTokenMap(element).set(attr, token);
+	    return token;
+	  };
+
+	  const hasAttrToken = (element, attr, token) => attrTokenMap(element).get(attr) === token;
+
+	  const isBrokerableAttr = (element, attr, value) => {
+	    return brokeredAttrs.has(attr) && !isPassiveLazyMediaAttr(element, attr) && Boolean(normalizeLocalAssetUrl(value));
+	  };
+
+	  const markOriginalAttr = (element, attr, value) => {
+	    try {
+	      originalSetAttribute.call(element, 'data-website-studio-original-' + attr.replace(/[^a-z0-9_-]/gi, '-'), String(value || ''));
+	    } catch {}
+	  };
+
+	  const shouldUseTransparentImage = (element, attr) => {
+	    return attr === 'src' && element.tagName?.toLowerCase?.() === 'img';
+	  };
+
+	  const isPassiveLazyMediaAttr = (element, attr) => {
+	    const tag = element.tagName?.toLowerCase?.() || '';
+	    return attr.startsWith('data-') && (tag === 'video' || tag === 'audio' || tag === 'source');
+	  };
+
+	  const stageBrokeredAttr = (element, attr, value) => {
+	    if (!isBrokerableAttr(element, attr, value)) return false;
+	    const token = nextAttrToken(element, attr);
+	    markOriginalAttr(element, attr, value);
+	    if (shouldUseTransparentImage(element, attr)) {
+	      originalSetAttribute.call(element, attr, transparentImage);
+	    } else if (!attr.startsWith('data-')) {
+	      originalRemoveAttribute.call(element, attr);
+	    }
+	    brokeredUrl(value).then((blobUrl) => {
+	      if (blobUrl && hasAttrToken(element, attr, token)) originalSetAttribute.call(element, attr, blobUrl);
+	    }).catch(() => {});
+	    return true;
+	  };
+
+	  const installAttributeInterceptors = () => {
+	    if (window.__WEBSITE_STUDIO_ASSET_BROKER_PATCHED__) return;
+	    window.__WEBSITE_STUDIO_ASSET_BROKER_PATCHED__ = true;
+	    Element.prototype.setAttribute = function(name, value) {
+	      const attr = String(name || '').toLowerCase();
+	      if (stageBrokeredAttr(this, attr, value)) return;
+	      return originalSetAttribute.call(this, name, value);
+	    };
+	    for (const [prototype, propertyName, attrName] of propertyInterceptors) {
+	      const descriptor = prototype ? Object.getOwnPropertyDescriptor(prototype, propertyName) : null;
+	      if (!descriptor?.get || !descriptor?.set) continue;
+	      Object.defineProperty(prototype, propertyName, {
+	        configurable: true,
+	        enumerable: descriptor.enumerable,
+	        get() {
+	          return descriptor.get.call(this);
+	        },
+	        set(value) {
+	          if (stageBrokeredAttr(this, attrName, value)) return;
+	          return descriptor.set.call(this, value);
+	        }
+	      });
+	    }
+	  };
+
+	  const normalizeElement = async (element) => {
+	    if (!element || element.nodeType !== Node.ELEMENT_NODE) return;
+    const tag = element.tagName.toLowerCase();
+    for (const attr of ['src', 'href', 'data-src', 'data-bg', 'data-background', 'data-poster', 'poster']) {
+	      if (!element.hasAttribute(attr)) continue;
+	      if (isPassiveLazyMediaAttr(element, attr)) continue;
+	      const value = element.getAttribute(attr) || '';
+	      try {
+	        const blobUrl = await brokeredUrl(value);
+	        if (blobUrl && element.getAttribute(attr) !== blobUrl) originalSetAttribute.call(element, attr, blobUrl);
+	      } catch {}
+	    }
+    for (const attr of ['srcset', 'data-srcset']) {
+      if (!element.hasAttribute(attr)) continue;
+	      const next = await normalizeSrcset(element.getAttribute(attr) || '');
+	      if (next && next !== element.getAttribute(attr)) originalSetAttribute.call(element, attr, next);
+	    }
+    if (element.hasAttribute('style')) {
+      const nextStyle = await applyCssBroker(element.getAttribute('style') || '');
+      if (nextStyle !== element.getAttribute('style')) element.setAttribute('style', nextStyle);
+    }
+    if (tag === 'style') {
+      const nextCss = await applyCssBroker(element.textContent || '');
+      if (nextCss !== element.textContent) element.textContent = nextCss;
+    }
+	  };
+
+  const scan = (root = document) => {
+    const targets = root.querySelectorAll ? root.querySelectorAll('style, [src], [href], [data-src], [data-bg], [data-background], [data-poster], [poster], [srcset], [data-srcset], [style]') : [];
+    targets.forEach((element) => normalizeElement(element));
+    if (root.nodeType === Node.ELEMENT_NODE) normalizeElement(root);
+  };
+
+  const observer = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      if (mutation.type === 'attributes') normalizeElement(mutation.target);
+      for (const node of mutation.addedNodes || []) scan(node);
+    }
+  });
+
+	  installAttributeInterceptors();
+	  observer.observe(document.documentElement, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: ['src', 'href', 'data-src', 'data-bg', 'data-background', 'data-poster', 'poster', 'srcset', 'data-srcset', 'style']
+  });
+
+	  if (document.readyState === 'loading') {
+	    document.addEventListener('DOMContentLoaded', () => scan(document), { once: true });
+	  }
+	  scan(document);
+	  [50, 150, 500, 1200, 3000, 6000].forEach((delay) => window.setTimeout(() => scan(document), delay));
+  window.__WEBSITE_STUDIO_ASSET_BROKER__ = { scan, cache_size: () => blobCache.size };
+})();
+        `.trim();
+        head.insertBefore(broker, head.firstChild);
+      }
+
+      function previewMediaCacheKey(rawUrl) {
+        const parsed = new URL(rawUrl, window.location.origin);
+        parsed.hash = '';
+        return parsed.toString();
+      }
+
+      function previewMediaPath(rawUrl) {
+        return new URL(rawUrl, window.location.origin).searchParams.get('path') || '';
+      }
+
+      function shouldParentBrokerMediaUrl(rawUrl) {
+        return isPreviewMediaUrl(rawUrl);
+      }
+
+      function dataUrlFromBytes(bytes, contentType) {
+        let binary = '';
+        const chunkSize = 0x8000;
+        for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+          binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+        }
+        const mime = String(contentType || 'application/octet-stream').split(';', 1)[0].replace(/[^a-z0-9.+/-]/gi, '').trim() || 'application/octet-stream';
+        return `data:${mime};base64,${btoa(binary)}`;
+      }
+
+      async function parentBrokeredMediaAsset(rawUrl, blobCache) {
+        if (!shouldParentBrokerMediaUrl(rawUrl)) return { url: '', text: '', contentType: '' };
+        const parsed = new URL(rawUrl, window.location.origin);
+        const cacheKey = previewMediaCacheKey(parsed.toString());
+        if (blobCache.has(cacheKey)) {
+          const cached = blobCache.get(cacheKey);
+          return { ...cached, url: cached.url ? cached.url + parsed.hash : '' };
+        }
+        const fetchUrl = new URL(parsed.pathname + parsed.search, window.location.origin);
+        const response = await fetch(fetchUrl.toString(), {
+          credentials: 'include',
+          headers: { 'X-Website-Studio-Preview-Broker': '1' }
+        });
+        if (!response.ok) return { url: '', text: '', contentType: '' };
+        const contentLength = Number(response.headers.get('content-length') || '0');
+        if (contentLength > 15 * 1024 * 1024) return { url: '', text: '', contentType: '' };
+        const contentType = response.headers.get('content-type') || 'application/octet-stream';
+        const lowerType = contentType.toLowerCase();
+        let asset;
+        if (lowerType.includes('text/css')) {
+          const text = await normalizeCssUrls(await response.text(), blobCache);
+          asset = { url: dataUrlFromBytes(new TextEncoder().encode(text), contentType), text, contentType };
+        } else if (lowerType.includes('javascript') || lowerType.startsWith('text/')) {
+          const text = await response.text();
+          asset = { url: dataUrlFromBytes(new TextEncoder().encode(text), contentType), text, contentType };
+        } else {
+          const bytes = new Uint8Array(await response.arrayBuffer());
+          asset = { url: dataUrlFromBytes(bytes, contentType), text: '', contentType };
+        }
+        blobCache.set(cacheKey, asset);
+        return { ...asset, url: asset.url ? asset.url + parsed.hash : '' };
+      }
+
+      async function parentBrokeredMediaUrl(rawUrl, blobCache) {
+        return (await parentBrokeredMediaAsset(rawUrl, blobCache)).url;
+      }
+
+      async function normalizeCssUrls(css, blobCache = new Map()) {
         const replacements = [];
         const pattern = /url\(\s*(['"]?)(.*?)\1\s*\)/gi;
         for (const match of css.matchAll(pattern)) {
           const value = match[2] || '';
           if (!isPreviewMediaUrl(value)) continue;
+          const blobUrl = await parentBrokeredMediaUrl(value, blobCache);
           replacements.push({
             start: match.index,
             end: match.index + match[0].length,
-            value: `url("${normalizedMediaDocumentUrl(value)}")`
+            value: `url("${blobUrl || normalizedMediaDocumentUrl(value)}")`
           });
         }
         return applyReplacements(css, replacements);
       }
 
-      function normalizeSrcset(value) {
+      async function normalizeSrcset(value, blobCache = new Map()) {
         const items = [];
         for (const item of value.split(',')) {
           const trimmed = item.trim();
           if (!trimmed) continue;
           const parts = trimmed.split(/\s+/);
-          if (isPreviewMediaUrl(parts[0])) parts[0] = normalizedMediaDocumentUrl(parts[0]);
+          if (isPreviewMediaUrl(parts[0])) parts[0] = await parentBrokeredMediaUrl(parts[0], blobCache) || normalizedMediaDocumentUrl(parts[0]);
           items.push(parts.join(' '));
         }
         return items.join(', ');
@@ -155,6 +752,11 @@
         }
       }
 
+      function shouldSkipParentLazyMediaAttr(element, attr) {
+        const tag = element.tagName?.toLowerCase?.() || '';
+        return String(attr || '').startsWith('data-') && (tag === 'video' || tag === 'audio' || tag === 'source');
+      }
+
       function ensureUtf8Meta(document) {
         const head = document.head || document.documentElement.insertBefore(document.createElement('head'), document.body || null);
         if (head.querySelector('meta[charset]')) return;
@@ -169,10 +771,13 @@
         const directives = String(meta.getAttribute('content') || '').split(';').map((item) => item.trim()).filter(Boolean);
         const next = directives.map((directive) => {
           const name = directive.split(/\s+/, 1)[0];
-          if (!['img-src', 'media-src', 'font-src', 'style-src', 'script-src'].includes(name) || directive.includes('blob:')) {
+          if (!['img-src', 'media-src', 'font-src', 'style-src', 'script-src'].includes(name)) {
             return directive;
           }
-          return `${directive} blob:`;
+          const extras = ['blob:'];
+          if (name === 'style-src') extras.push('data:');
+          const missing = extras.filter((value) => !directive.includes(value));
+          return missing.length ? `${directive} ${missing.join(' ')}` : directive;
         });
         meta.setAttribute('content', next.join('; '));
       }
@@ -186,11 +791,11 @@
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(String(payload.detail || payload.error || 'preview request failed'));
-        mountHtml(payload.html || '');
+        await mountHtml(payload.html || '', payload.source_map || {});
       }
 
       load().catch(() => {
-        mountHtml('<!doctype html><html><body style="margin:0;background:#080808;color:#ececec;font:14px system-ui;display:grid;place-content:center;min-height:100vh;">Preview unavailable</body></html>');
+        mountHtml('<!doctype html><html><body style="margin:0;background:#080808;color:#ececec;font:14px system-ui;display:grid;place-content:center;min-height:100vh;">Preview unavailable</body></html>').catch(() => {});
       });
     </script>
   </body>

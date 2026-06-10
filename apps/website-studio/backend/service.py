@@ -35,6 +35,7 @@ from store import (
     page_context,
     prepare_git_connection,
     preview_document,
+    preview_report,
     preview_media,
     publish,
     read_file,
@@ -82,6 +83,7 @@ MUTATING_ACTIONS = {
     "write_file",
     "apply_patch",
     "build_validate",
+    "preview_report",
     "maintenance_prune",
     "publish_request",
     "publish",
@@ -258,6 +260,15 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
             )
         if action == "preview_document":
             return 200, preview_document(data_root, payload.get("preview_id"), preview_origin=payload.get("_preview_origin"))
+        if action == "preview_report":
+            return 201, preview_report(
+                data_root,
+                site_id=payload.get("site_id"),
+                preview_id=payload.get("preview_id"),
+                route=payload.get("route") or "/",
+                baseline_report_id=payload.get("baseline_report_id"),
+                preview_origin=payload.get("_preview_origin"),
+            )
         if action == "preview_media":
             return 200, preview_media(data_root, payload.get("preview_id"), payload.get("path"))
         if action == "runtime_status":

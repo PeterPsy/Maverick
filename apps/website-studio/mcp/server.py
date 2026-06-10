@@ -43,6 +43,7 @@ TOOL_ACTIONS = {
     "website_maintenance_prune": "maintenance_prune",
     "website_build_preview": "build_preview",
     "website_preview_document": "preview_document",
+    "website_preview_report": "preview_report",
     "website_runtime_status": "runtime_status",
     "website_publish_request": "publish_request",
     "website_approval_record": "approval_record",

@@ -55,6 +55,13 @@ from preview_runtime import (
     source_files_for_runtime_route,
 )
 from preview_delivery import prepare_preview_document_html, rewrite_preview_css, safe_preview_asset_path
+from preview_observability import (
+    acceptance_checks,
+    asset_kind_for_path,
+    build_selector_hints,
+    preview_media_paths_from_html,
+    summarize_asset_probe,
+)
 from publish_workflow import managed_static_platform_binding, working_branch_for_site
 
 HttpTransport = Callable[[str, str, dict[str, Any]], tuple[int, dict[str, Any] | list[Any] | bytes]]
@@ -68,9 +75,11 @@ COMPACT_LOG_CHARS = 1200
 DEFAULT_RETAIN_BUILDS = 10
 DEFAULT_RETAIN_PREVIEWS_PER_ROUTE = 3
 DEFAULT_RETAIN_RUNTIME_SESSIONS = 20
-PREVIEW_RUNTIME_VERSION = "preview-inline-assets-v6"
+MAX_SOURCE_MAP_ASSET_INDEX = 120
+PREVIEW_RUNTIME_VERSION = "preview-asset-broker-v2"
 PREVIEW_MEDIA_RESPONSE_HEADERS = {
     "Access-Control-Allow-Origin": "*",
+    "Accept-Ranges": "bytes",
     "Cross-Origin-Resource-Policy": "cross-origin",
 }
 
@@ -1465,6 +1474,7 @@ def runtime_status(data_root: Path, site_id: object) -> dict[str, object]:
         "latest_build": latest_build,
         "latest_preview": _preview_row(preview_row) if preview_row else None,
         "latest_runtime_session": _runtime_session_row(session_row) if session_row else None,
+        "latest_preview_report": _latest_preview_report(data_root, site["id"]),
     }
 
 
@@ -1490,32 +1500,91 @@ def preview_document(data_root: Path, preview_id: object, *, preview_origin: obj
                 stylesheet_loader=_preview_stylesheet_loader(data_root, preview),
                 script_loader=_preview_script_loader(data_root, preview),
             )
-            return {"preview": preview, "html": html}
+            return _preview_document_payload(data_root, preview, html)
         detail = [str(item) for item in result.get("missing_requirements", []) if str(item).strip()] or [str(item) for item in result.get("warnings", []) if str(item).strip()]
-        return {"preview": preview, "html": runtime_diagnostic_html("Preview runtime unavailable", detail or details or ["preview route could not be rendered"])}
+        html = runtime_diagnostic_html("Preview runtime unavailable", detail or details or ["preview route could not be rendered"])
+        return _preview_document_payload(data_root, preview, html)
     if not preview.get("page_id"):
         html = runtime_diagnostic_html("Preview runtime unavailable", details or ["site has no HTML page to preview"])
-        return {"preview": preview, "html": html}
+        return _preview_document_payload(data_root, preview, html)
     try:
         page = _get_page(data_root, preview["page_id"])
         rel_path = page["source_files"][0]
         html = read_file(data_root, site_id=site["id"], path=rel_path)["content"]
         if preview.get("status") in {"ready", "static_fallback"}:
-            return {
-                "preview": preview,
-                "html": prepare_preview_document_html(
+            html = prepare_preview_document_html(
                     html,
                     preview_id=preview["id"],
                     page_path=rel_path,
                     preview_origin=preview_origin,
                     stylesheet_loader=_preview_stylesheet_loader(data_root, preview),
                     script_loader=_preview_script_loader(data_root, preview),
-                ),
-            }
+            )
+            return _preview_document_payload(data_root, preview, html)
     except (IndexError, ValueError) as error:
         details.append(str(error))
     html = runtime_diagnostic_html("Preview runtime unavailable", details or ["preview source could not be rendered"])
-    return {"preview": preview, "html": html}
+    return _preview_document_payload(data_root, preview, html)
+
+
+def preview_report(
+    data_root: Path,
+    *,
+    site_id: object = None,
+    preview_id: object = None,
+    route: object = "/",
+    baseline_report_id: object = None,
+    preview_origin: object = None,
+) -> dict[str, object]:
+    """Create a bounded report that lets agents reason about the real preview surface."""
+    clean_preview_id = str(preview_id or "").strip()
+    if not clean_preview_id:
+        if not site_id:
+            raise ValueError("site_id is required when preview_id is not supplied")
+        preview_payload = build_preview(data_root, site_id, route or "/", include_html=False, preview_origin=preview_origin)
+        clean_preview_id = str(preview_payload.get("preview_id") or "").strip()
+    preview = get_preview(data_root, clean_preview_id)
+    if site_id and str(preview.get("site_id") or "") != str(site_id):
+        raise ValueError("preview_id does not belong to the selected site")
+    site = get_site(data_root, preview["site_id"])
+    document = preview_document(data_root, clean_preview_id, preview_origin=preview_origin)
+    source_map = dict(document.get("source_map") or {})
+    asset_probe = _preview_asset_probe(data_root, preview, document.get("html") or "", source_map)
+    warnings = [str(item) for item in preview.get("warnings", []) if str(item).strip()]
+    missing = [str(item) for item in preview.get("missing_requirements", []) if str(item).strip()]
+    acceptance = acceptance_checks(
+        runtime_status=str(preview.get("status") or "blocked"),
+        missing_requirements=missing,
+        warnings=warnings,
+        asset_probe=asset_probe,
+        source_map=source_map,
+    )
+    now = now_timestamp()
+    report = {
+        "id": f"report_{uuid4().hex[:16]}",
+        "site_id": site["id"],
+        "preview_id": preview["id"],
+        "route": preview.get("route") or "/",
+        "build_id": preview.get("build_id") or "",
+        "runtime_kind": preview.get("runtime_kind") or "unavailable",
+        "runtime_status": preview.get("status") or "blocked",
+        "generated_at": now,
+        "source_map": source_map,
+        "asset_coverage": asset_probe,
+        "warnings": warnings,
+        "missing_requirements": missing,
+        "acceptance": acceptance,
+        "browser_probe": _browser_probe_contract(preview),
+        "screenshot_checks": [
+            {"viewport": "desktop", "status": "browser_probe_required", "width": 1440, "height": 920},
+            {"viewport": "mobile", "status": "browser_probe_required", "width": 390, "height": 844},
+        ],
+    }
+    baseline = _preview_report_row(data_root, baseline_report_id) if baseline_report_id else {}
+    if baseline:
+        report["comparison"] = _preview_report_comparison(baseline, report)
+    _record_preview_report(data_root, report)
+    return {"report": report}
 
 
 def preview_media(data_root: Path, preview_id: object, path: object) -> dict[str, object]:
@@ -1543,6 +1612,234 @@ def preview_media(data_root: Path, preview_id: object, path: object) -> dict[str
             "cache_control": "private, max-age=60",
             "headers": PREVIEW_MEDIA_RESPONSE_HEADERS,
         },
+    }
+
+
+def _preview_document_payload(data_root: Path, preview: dict[str, object], html: str) -> dict[str, object]:
+    source_map = _preview_source_map(data_root, preview, html)
+    return {
+        "preview": preview,
+        "html": html,
+        "source_map": source_map,
+        "observability": {
+            "browser_report_event": "maverick.website-studio.preview-report",
+            "browser_report_global": "__WEBSITE_STUDIO_PREVIEW_REPORT__",
+            "covers": ["dom_snapshot", "computed_styles", "font_readiness", "asset_coverage", "console_log", "resource_log"],
+        },
+    }
+
+
+def _preview_source_map(data_root: Path, preview: dict[str, object], html: object) -> dict[str, object]:
+    site = get_site(data_root, preview["site_id"])
+    map_payload = sitemap(data_root, site["id"])
+    route_text = str(preview.get("route") or "/")
+    pages = list(map_payload.get("items") or [])
+    routes = list(map_payload.get("routes") or [])
+    assets = list(map_payload.get("assets") or [])
+    page = next((item for item in pages if item.get("id") == preview.get("page_id")), None)
+    if page is None:
+        page = next((item for item in pages if item.get("route") == route_text), None)
+    route_item = next((item for item in routes if item.get("route") == route_text), None)
+    source_files = _dedupe_strings(
+        list(page.get("source_files") or []) if page else []
+        + (list(route_item.get("source_files") or []) if route_item else [])
+        + source_files_for_runtime_route(_source_root(data_root, str(site["id"])), source_profile(_source_root(data_root, str(site["id"]))))
+    )
+    source_texts = _source_text_candidates(data_root, site["id"], source_files)
+    media_paths = preview_media_paths_from_html(html)
+    asset_refs = _dedupe_strings((list(page.get("asset_refs") or []) if page else []) + media_paths)
+    selector_hints = build_selector_hints(
+        html,
+        source_files=source_files,
+        source_texts=source_texts,
+        asset_records=assets,
+    )
+    rendered_count = sum(1 for item in routes if item.get("status") in {"rendered", "draft", "active"})
+    failed_count = sum(1 for item in routes if item.get("status") in {"failed", "broken", "blocked"})
+    return {
+        "site_id": site["id"],
+        "preview_id": preview["id"],
+        "route": route_text,
+        "route_id": route_item.get("id") if route_item else "",
+        "page_id": page.get("id") if page else "",
+        "source_files": source_files[:20],
+        "route_source_files": list(route_item.get("source_files") or [])[:20] if route_item else [],
+        "asset_refs": asset_refs[:200],
+        "asset_summary": _asset_inventory_summary(assets),
+        "asset_index": _compact_asset_index(assets, asset_refs),
+        "selector_hints": selector_hints,
+        "rendered_route_count": rendered_count,
+        "failed_route_count": failed_count,
+        "limitations": [
+            "Element-level source mapping is candidate-based for PHP and built artifacts unless framework compiler metadata is available.",
+            "Browser-only checks such as first paint, computed layout, and document.fonts readiness are emitted by the preview runtime probe.",
+        ],
+    }
+
+
+def _source_text_candidates(data_root: Path, site_id: object, source_files: list[str]) -> dict[str, str]:
+    source_root = _source_root(data_root, str(site_id))
+    texts: dict[str, str] = {}
+    for rel_path in source_files[:30]:
+        try:
+            target = resolve_site_path(source_root, rel_path)
+            if target.exists() and target.is_file() and target.stat().st_size <= 512 * 1024:
+                texts[rel_path] = target.read_text(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):
+            continue
+    return texts
+
+
+def _preview_asset_probe(data_root: Path, preview: dict[str, object], html: object, source_map: dict[str, object]) -> dict[str, object]:
+    media_paths = _dedupe_strings(preview_media_paths_from_html(html))
+    assets = list(sitemap(data_root, preview["site_id"]).get("assets") or [])
+    resolved: list[dict[str, object]] = []
+    missing: list[str] = []
+    errors: list[str] = []
+    for media_path in media_paths:
+        try:
+            target, resolved_rel_path = _resolve_preview_asset_path(data_root, preview, media_path)
+            content_type = detect_content_type(target)
+            resolved.append(
+                {
+                    "path": resolved_rel_path,
+                    "requested_path": media_path,
+                    "kind": asset_kind_for_path(resolved_rel_path, content_type),
+                    "content_type": content_type,
+                    "size_bytes": target.stat().st_size,
+                    "status": "ok",
+                }
+            )
+        except (OSError, ValueError) as error:
+            missing.append(media_path)
+            errors.append(str(error))
+    summary = summarize_asset_probe(assets, media_paths, resolved, missing)
+    return {
+        **summary,
+        "resolved": resolved[:300],
+        "missing": missing[:100],
+        "errors": errors[:100],
+        "status": "passed" if not missing and not errors else "failed",
+    }
+
+
+def _asset_inventory_summary(assets: list[object]) -> dict[str, object]:
+    by_kind: dict[str, int] = {}
+    for asset in assets:
+        if not isinstance(asset, dict):
+            continue
+        kind = str(asset.get("kind") or "file")
+        by_kind[kind] = by_kind.get(kind, 0) + 1
+    return {"indexed_asset_count": len(assets), "indexed_by_kind": dict(sorted(by_kind.items()))}
+
+
+def _compact_asset_index(assets: list[object], asset_refs: list[str]) -> list[dict[str, object]]:
+    referenced = set(asset_refs)
+    compact: list[dict[str, object]] = []
+    seen: set[str] = set()
+
+    def append(asset: object) -> None:
+        if len(compact) >= MAX_SOURCE_MAP_ASSET_INDEX:
+            return
+        if not isinstance(asset, dict):
+            return
+        path = str(asset.get("path") or "")
+        if not path or path in seen:
+            return
+        seen.add(path)
+        compact.append(
+            {
+                "id": asset.get("id") or "",
+                "path": path,
+                "kind": asset.get("kind") or "file",
+                "content_type": asset.get("content_type") or "",
+                "size_bytes": asset.get("size_bytes") or 0,
+                "status": asset.get("status") or "",
+            }
+        )
+
+    for asset in assets:
+        path = str(asset.get("path") or "") if isinstance(asset, dict) else ""
+        if path in referenced:
+            append(asset)
+    for asset in assets:
+        if len(compact) >= MAX_SOURCE_MAP_ASSET_INDEX:
+            break
+        append(asset)
+    return compact
+
+
+def _browser_probe_contract(preview: dict[str, object]) -> dict[str, object]:
+    return {
+        "preview_url": preview.get("preview_url") or "",
+        "event_type": "maverick.website-studio.preview-report",
+        "window_global": "__WEBSITE_STUDIO_PREVIEW_REPORT__",
+        "message_source": "nested opaque-origin preview iframe",
+        "checks": [
+            "desktop/mobile screenshot nonblank",
+            "DOM snapshot",
+            "computed styles",
+            "network/resource log",
+            "console log",
+            "document.fonts readiness",
+            "image/video/font asset readiness",
+        ],
+    }
+
+
+def _record_preview_report(data_root: Path, report: dict[str, object]) -> None:
+    with connect(data_root) as db:
+        db.execute(
+            """
+            INSERT INTO preview_reports(id, site_id, preview_id, route, status, report_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                report["id"],
+                report["site_id"],
+                report["preview_id"],
+                report["route"],
+                "passed" if (report.get("acceptance") or {}).get("passed") else "failed",
+                json.dumps(report, sort_keys=True),
+                report["generated_at"],
+            ),
+        )
+
+
+def _preview_report_row(data_root: Path, report_id: object) -> dict[str, object]:
+    clean_id = _required_id(report_id, "report_id")
+    with connect(data_root) as db:
+        row = db.execute("SELECT * FROM preview_reports WHERE id = ?", (clean_id,)).fetchone()
+    if row is None:
+        raise ValueError(f"preview report `{clean_id}` was not found")
+    payload = dict(row)
+    payload["report"] = json.loads(payload.pop("report_json") or "{}")
+    return payload
+
+
+def _latest_preview_report(data_root: Path, site_id: object) -> dict[str, object] | None:
+    ensure_schema(data_root)
+    with connect(data_root) as db:
+        row = db.execute(
+            "SELECT * FROM preview_reports WHERE site_id = ? ORDER BY created_at DESC LIMIT 1",
+            (str(site_id),),
+        ).fetchone()
+    return _preview_report_row(data_root, row["id"])["report"] if row else None
+
+
+def _preview_report_comparison(baseline_row: dict[str, object], report: dict[str, object]) -> dict[str, object]:
+    baseline = baseline_row.get("report") if isinstance(baseline_row.get("report"), dict) else {}
+    before_acceptance = baseline.get("acceptance") if isinstance(baseline.get("acceptance"), dict) else {}
+    after_acceptance = report.get("acceptance") if isinstance(report.get("acceptance"), dict) else {}
+    before_assets = baseline.get("asset_coverage") if isinstance(baseline.get("asset_coverage"), dict) else {}
+    after_assets = report.get("asset_coverage") if isinstance(report.get("asset_coverage"), dict) else {}
+    return {
+        "baseline_report_id": baseline.get("id") or baseline_row.get("id") or "",
+        "acceptance_changed": before_acceptance.get("passed") != after_acceptance.get("passed"),
+        "missing_asset_delta": int(after_assets.get("missing_count") or 0) - int(before_assets.get("missing_count") or 0),
+        "resolved_asset_delta": int(after_assets.get("resolved_count") or 0) - int(before_assets.get("resolved_count") or 0),
+        "runtime_status_before": baseline.get("runtime_status") or "",
+        "runtime_status_after": report.get("runtime_status") or "",
     }
 
 
@@ -3415,6 +3712,10 @@ def _asset_kind(path: Path) -> str:
         return "script"
     if suffix in {".woff", ".woff2", ".ttf", ".otf"}:
         return "font"
+    if suffix in {".mp4", ".webm", ".ogg", ".ogv", ".mov"}:
+        return "video"
+    if suffix in {".mp3", ".oga", ".wav"}:
+        return "audio"
     return "file"
 
 

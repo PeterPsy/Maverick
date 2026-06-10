@@ -8,7 +8,7 @@ from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 
-from core.api.app_mounts import _apply_app_secret_writes, _backend_request_headers, _backend_secret_request_body, _read_backend_body, _resolve_app_secret_payload, _serve_app_file_response, backend_entrypoint_timeout_seconds, serve_frontend
+from core.api.app_mounts import _apply_app_secret_writes, _backend_request_headers, _backend_secret_request_body, _read_backend_body, _resolve_app_secret_payload, _serve_app_file_gateway_manifest, _serve_app_file_response, backend_entrypoint_timeout_seconds, serve_frontend
 from core.api.http import HttpRequestError
 from core.apps.contracts import build_app_contract, build_app_hook_timeouts, build_parsed_app_contract
 from core.observability.store import ObservabilityCollections, ObservabilityDocumentStore
@@ -144,7 +144,24 @@ class AppMountsTestCase(unittest.TestCase):
         self.assertEqual(headers["Cross-Origin-Resource-Policy"], "cross-origin")
         self.assertNotIn("Set-Cookie", headers)
         self.assertNotIn("X-Unsafe", headers)
+        self.assertEqual(headers["Content-Disposition"], 'inline; filename="font.woff2"')
         self.assertEqual(body, b"font")
+
+    def test_app_file_response_serves_css_inline_for_subresources(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            css_path = root / "site.css"
+            css_path.write_text("body { color: black; }", encoding="utf-8")
+
+            status, headers, body = _serve_file_response(
+                root=root,
+                file_response={"path": str(css_path), "content_type": "text/css; charset=utf-8"},
+                environ={"REQUEST_METHOD": "GET"},
+            )
+
+        self.assertEqual(status, "200 OK")
+        self.assertEqual(headers["Content-Disposition"], 'inline; filename="site.css"')
+        self.assertEqual(body, b"body { color: black; }")
 
     def test_app_file_response_deletes_ephemeral_run_file_after_send(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -299,6 +316,84 @@ class AppMountsTestCase(unittest.TestCase):
 
         self.assertEqual(status, "403 Forbidden")
         self.assertIn(b"file_response_forbidden", body)
+
+    def test_app_file_gateway_manifest_serves_approved_file_without_backend(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            media_path = root / "sites" / "site_1" / "source" / "assets" / "hero.mp4"
+            media_path.parent.mkdir(parents=True)
+            media_path.write_bytes(b"0123456789")
+            token = "gateway_token_123456789012"
+            manifest_root = root / "run" / "file-gateway"
+            manifest_root.mkdir(parents=True)
+            (manifest_root / f"{token}.json").write_text(
+                json.dumps(
+                    {
+                        "schema": "maverick.app.file_gateway.v1",
+                        "app_id": "website-studio",
+                        "file_response": {
+                            "path": str(media_path),
+                            "content_type": "video/mp4",
+                            "etag": "hero-etag",
+                            "headers": {"Access-Control-Allow-Origin": "*"},
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            status, headers, body = _serve_file_gateway_manifest(
+                root=root,
+                manifest_root=manifest_root,
+                token=token,
+                app_id="website-studio",
+                environ={"REQUEST_METHOD": "GET", "HTTP_RANGE": "bytes=4-8"},
+            )
+
+        self.assertEqual(status, "206 Partial Content")
+        self.assertEqual(headers["Content-Range"], "bytes 4-8/10")
+        self.assertEqual(headers["Access-Control-Allow-Origin"], "*")
+        self.assertEqual(headers["ETag"], "\"hero-etag\"")
+        self.assertEqual(body, b"45678")
+
+    def test_public_app_file_gateway_manifest_requires_exact_allowed_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            allowed_path = root / "sites" / "site_1" / "source" / "assets" / "hero.mp4"
+            other_path = root / "sites" / "site_1" / "source" / "assets" / "other.mp4"
+            allowed_path.parent.mkdir(parents=True)
+            allowed_path.write_bytes(b"hero")
+            other_path.write_bytes(b"other")
+            token = "public_gateway_token_12345"
+            manifest_root = root / "run" / "file-gateway"
+            manifest_root.mkdir(parents=True)
+            (manifest_root / f"{token}.json").write_text(
+                json.dumps(
+                    {
+                        "schema": "maverick.app.file_gateway.v1",
+                        "app_id": "website-studio",
+                        "access": "public_capability",
+                        "expires_at": (datetime.now(tz=UTC) + timedelta(minutes=15)).isoformat(),
+                        "allowed_paths": [str(allowed_path)],
+                        "file_response": {
+                            "path": str(other_path),
+                            "content_type": "video/mp4",
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            status, _headers, body = _serve_file_gateway_manifest(
+                root=root,
+                manifest_root=manifest_root,
+                token=token,
+                app_id="website-studio",
+                environ={"REQUEST_METHOD": "GET"},
+            )
+
+        self.assertEqual(status, "403 Forbidden")
+        self.assertIn(b"file_gateway_forbidden", body)
 
     def test_media_route_secret_resolution_requests_no_app_secrets(self) -> None:
         for route_path in ("/api/apps/media-app/media", "/api/apps/media-app/backend/media"):
@@ -846,6 +941,33 @@ def _serve_file_response(*, root: Path, file_response: dict[str, object], enviro
             start_response=start_response,
             file_response=file_response,
             allowed_roots=[root],
+        )
+    )
+    return str(captured["status"]), captured["headers"], body  # type: ignore[return-value]
+
+
+def _serve_file_gateway_manifest(
+    *,
+    root: Path,
+    manifest_root: Path,
+    token: str,
+    app_id: str,
+    environ: dict[str, str],
+) -> tuple[str, dict[str, str], bytes]:
+    captured: dict[str, object] = {}
+
+    def start_response(status: str, headers: list[tuple[str, str]]) -> None:
+        captured["status"] = status
+        captured["headers"] = dict(headers)
+
+    body = b"".join(
+        _serve_app_file_gateway_manifest(
+            environ=environ,
+            start_response=start_response,
+            token=token,
+            manifest_root=manifest_root,
+            allowed_roots=[root],
+            app_id=app_id,
         )
     )
     return str(captured["status"]), captured["headers"], body  # type: ignore[return-value]

@@ -10,6 +10,7 @@ from core.api.admin_api import handle_admin_api
 from core.api.app_dependencies_api import handle_app_dependencies_api
 from core.api.app_mounts import (
     handle_app_backend,
+    handle_app_file_gateway,
     handle_app_frontend,
     handle_app_frontend_build,
     handle_root_shell,
@@ -199,6 +200,19 @@ class PlatformHost:
                     start_response=start_response,
                     shutdown_controller=self.shutdown_controller,
                 )
+            backend_file_gateway = _backend_file_gateway_route(path)
+            if backend_file_gateway and method in {"GET", "HEAD"}:
+                app_id, token = backend_file_gateway
+                return handle_app_file_gateway(
+                    self.state,
+                    environ=environ,
+                    workspace_id=workspace_id,
+                    app_id=app_id,
+                    token=token,
+                    user=user,
+                    start_path=self.start_path,
+                    start_response=start_response,
+                )
             backend_media_app_id = _backend_media_app_id(path)
             if backend_media_app_id and method in {"GET", "HEAD"}:
                 if context is None:
@@ -230,6 +244,20 @@ def _backend_media_app_id(path: object) -> str:
     if text.endswith("/media"):
         return _valid_backend_media_app_id(text.removeprefix("/api/apps/").removesuffix("/media"))
     return ""
+
+
+def _backend_file_gateway_route(path: object) -> tuple[str, str] | None:
+    text = str(path or "")
+    if not text.startswith("/api/apps/"):
+        return None
+    remainder = text.removeprefix("/api/apps/")
+    app_id, separator, rest = remainder.partition("/backend/file/")
+    if not separator or not app_id or "/" in app_id or not rest or "/" in rest:
+        return None
+    clean_app_id = _valid_backend_media_app_id(app_id)
+    if not clean_app_id:
+        return None
+    return clean_app_id, rest
 
 
 def _valid_backend_media_app_id(value: object) -> str:

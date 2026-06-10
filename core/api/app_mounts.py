@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 import json
 import logging
 import mimetypes
@@ -300,6 +300,73 @@ def handle_app_frontend_build(
     return json_response(start_response, payload)
 
 
+def handle_app_file_gateway(
+    state: PlatformState,
+    *,
+    environ: dict,
+    workspace_id: str,
+    app_id: str,
+    token: str,
+    user: UserRecord | None,
+    start_path: Path,
+    start_response: StartResponse,
+) -> list[bytes]:
+    """Serve an app-approved file gateway manifest without launching the app backend."""
+    try:
+        binding, _source_root, parsed = resolve_app_surface(
+            state,
+            workspace_id=workspace_id,
+            app_id=app_id,
+            start_path=start_path,
+        )
+    except WorkspaceAppBindingNotFoundError:
+        return json_response(start_response, {"error": "app_not_installed"}, status="404 Not Found")
+    except AppHostingError:
+        return json_response(start_response, {"error": "app_unavailable"}, status="404 Not Found")
+    manifest_root = Path(binding.data_root) / "run" / "file-gateway"
+    manifest, error, status_code = _load_app_file_gateway_manifest(manifest_root=manifest_root, token=token)
+    if manifest is None:
+        return json_response(start_response, {"error": error}, status=status_line(status_code))
+    public_capability = _file_gateway_public_capability(manifest)
+    if not public_capability:
+        if user is None:
+            return json_response(start_response, {"error": "authentication_required"}, status="401 Unauthorized")
+        try:
+            require_workspace_membership(state.workspace_store, user=user, workspace_id=workspace_id)
+        except AuthorizationError:
+            return json_response(start_response, {"error": "workspace_not_available"}, status="403 Forbidden")
+        if binding.source_kind == "workspace_local_project":
+            try:
+                require_workspace_admin(
+                    state.workspace_store,
+                    user=user,
+                    workspace_id=workspace_id,
+                    reason="workspace_local_backend_forbidden",
+                )
+            except AuthorizationError as error:
+                return json_response(start_response, {"error": error.reason}, status="403 Forbidden")
+        if not can_mount_app_visibility(
+            state.workspace_store,
+            user=user,
+            workspace_id=workspace_id,
+            platform_roles=parsed.contract.visibility.platform_roles,
+            workspace_roles=parsed.contract.visibility.workspace_roles,
+            capabilities=parsed.contract.visibility.capabilities,
+        ):
+            return json_response(start_response, {"error": "app_forbidden"}, status="403 Forbidden")
+
+    paths = workspace_paths(workspace_id, start_path=start_path)
+    return _serve_app_file_gateway_manifest(
+        environ=environ,
+        start_response=start_response,
+        token=token,
+        manifest_root=manifest_root,
+        allowed_roots=[Path(binding.data_root), paths.uploaded_storage, paths.generated_storage],
+        app_id=app_id,
+        manifest=manifest,
+    )
+
+
 def handle_app_backend(
     state: PlatformState,
     *,
@@ -568,6 +635,123 @@ def handle_app_backend(
     return json_response(start_response, result, status=status_line(status_code))
 
 
+def _serve_app_file_gateway_manifest(
+    *,
+    environ: dict,
+    start_response: StartResponse,
+    token: str,
+    manifest_root: Path,
+    allowed_roots: list[Path],
+    app_id: str,
+    manifest: dict[str, Any] | None = None,
+) -> list[bytes]:
+    if manifest is None:
+        manifest, error, status_code = _load_app_file_gateway_manifest(manifest_root=manifest_root, token=token)
+        if manifest is None:
+            return json_response(start_response, {"error": error}, status=status_line(status_code))
+    if str(manifest.get("schema") or "") != "maverick.app.file_gateway.v1":
+        return json_response(start_response, {"error": "file_gateway_invalid"}, status=status_line(500))
+    manifest_app_id = str(manifest.get("app_id") or app_id).strip()
+    if manifest_app_id and manifest_app_id != app_id:
+        return json_response(start_response, {"error": "file_gateway_forbidden"}, status=status_line(403))
+    expires_at = _parse_file_gateway_timestamp(manifest.get("expires_at"))
+    if expires_at is not None and expires_at < datetime.now(tz=UTC):
+        return json_response(start_response, {"error": "file_gateway_expired"}, status=status_line(410))
+    public_capability = _file_gateway_public_capability(manifest)
+    if public_capability:
+        if expires_at is None:
+            return json_response(start_response, {"error": "file_gateway_invalid"}, status=status_line(500))
+        if expires_at > datetime.now(tz=UTC) + timedelta(hours=24):
+            return json_response(start_response, {"error": "file_gateway_invalid"}, status=status_line(500))
+    file_response = manifest.get("file_response")
+    if not isinstance(file_response, dict):
+        return json_response(start_response, {"error": "file_gateway_invalid"}, status=status_line(500))
+    effective_allowed_roots = _file_gateway_allowed_roots(manifest, allowed_roots)
+    allowed_paths = _file_gateway_allowed_paths(manifest, allowed_roots)
+    if public_capability and not allowed_paths:
+        return json_response(start_response, {"error": "file_gateway_invalid"}, status=status_line(500))
+    if allowed_paths:
+        try:
+            response_path = Path(str(file_response.get("path") or "")).resolve()
+        except OSError:
+            return json_response(start_response, {"error": "file_gateway_invalid"}, status=status_line(500))
+        if response_path not in allowed_paths:
+            return json_response(start_response, {"error": "file_gateway_forbidden"}, status=status_line(403))
+    return _serve_app_file_response(
+        environ=environ,
+        start_response=start_response,
+        file_response=file_response,
+        allowed_roots=effective_allowed_roots,
+    )
+
+
+def _load_app_file_gateway_manifest(*, manifest_root: Path, token: str) -> tuple[dict[str, Any] | None, str, int]:
+    clean_token = str(token or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{24,128}", clean_token):
+        return None, "file_gateway_token_invalid", 400
+    try:
+        root = manifest_root.resolve()
+        manifest_path = (root / f"{clean_token}.json").resolve()
+    except OSError:
+        return None, "file_gateway_unavailable", 400
+    if root != manifest_path.parent:
+        return None, "file_gateway_token_invalid", 400
+    if not manifest_path.is_file():
+        return None, "file_gateway_not_found", 404
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None, "file_gateway_invalid", 500
+    if not isinstance(manifest, dict):
+        return None, "file_gateway_invalid", 500
+    return manifest, "", 200
+
+
+def _file_gateway_public_capability(manifest: dict[str, Any]) -> bool:
+    return str(manifest.get("access") or "").strip().lower() == "public_capability"
+
+
+def _file_gateway_allowed_paths(manifest: dict[str, Any], default_allowed_roots: list[Path]) -> set[Path]:
+    raw_paths = manifest.get("allowed_paths")
+    if not isinstance(raw_paths, list):
+        return set()
+    try:
+        default_roots = [root.resolve() for root in default_allowed_roots]
+    except OSError:
+        return set()
+    allowed: set[Path] = set()
+    for raw_path in raw_paths[:100]:
+        try:
+            path = Path(str(raw_path)).resolve()
+        except OSError:
+            continue
+        if _path_is_under_any_root(path, default_roots):
+            allowed.add(path)
+    return allowed
+
+
+def _file_gateway_allowed_roots(manifest: dict[str, Any], default_allowed_roots: list[Path]) -> list[Path]:
+    allowed_paths = _file_gateway_allowed_paths(manifest, default_allowed_roots)
+    if allowed_paths:
+        return sorted({path.parent for path in allowed_paths})
+    raw_roots = manifest.get("allowed_roots")
+    if not isinstance(raw_roots, list):
+        return default_allowed_roots
+    try:
+        default_roots = [root.resolve() for root in default_allowed_roots]
+    except OSError:
+        return default_allowed_roots
+    roots: list[Path] = []
+    for raw_root in raw_roots[:100]:
+        try:
+            root = Path(str(raw_root)).resolve()
+        except OSError:
+            continue
+        if _path_is_under_any_root(root, default_roots):
+            roots.append(root)
+    return roots or default_allowed_roots
+
+
 def _serve_app_file_response(
     *,
     environ: dict,
@@ -756,6 +940,10 @@ def _safe_inline_file_response_type(content_type: str) -> bool:
         return False
     if normalized == "application/pdf":
         return True
+    if normalized == "text/css" or normalized.startswith("font/"):
+        return True
+    if normalized in {"application/font-woff", "application/font-woff2", "application/vnd.ms-fontobject"}:
+        return True
     if normalized.startswith("audio/") or normalized.startswith("video/"):
         return True
     if normalized.startswith("image/") and normalized != "image/svg+xml":
@@ -827,6 +1015,19 @@ def _safe_header_filename(value: str) -> str:
 def _quoted_etag(value: str) -> str:
     clean = value.strip().strip('"') or "file"
     return f'"{clean.replace(chr(34), "")}"'
+
+
+def _parse_file_gateway_timestamp(value: object) -> datetime | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return datetime.fromtimestamp(0, tz=UTC)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def _truthy(value: object) -> bool:

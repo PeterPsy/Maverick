@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 type Box = { x: number; y: number; width: number; height: number };
 type MockState = { backendActions: string[]; changedFilesCount: number };
-type MockOptions = { delayedAction?: string; delayMs?: number; emptySites?: boolean };
+type MockOptions = { delayedAction?: string; delayMs?: number; emptySites?: boolean; withoutLatestPreview?: boolean };
 type MockPreview = {
   id: string;
   site_id: string;
@@ -45,7 +45,7 @@ test.describe('Website Studio visual smoke', () => {
 
   test('shows a shell-style preview loading state while preview data resolves', async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 1180, height: 820 });
-    await installWebsiteStudioMocks(page, { delayedAction: 'sitemap', delayMs: 650 });
+    await installWebsiteStudioMocks(page, { delayedAction: 'build_preview', delayMs: 650, withoutLatestPreview: true });
 
     await page.goto('/');
     await openSite(page);
@@ -256,6 +256,7 @@ test.describe('Website Studio preview runtime', () => {
     let slowVideoRequested = false;
     let directMediaRequests = 0;
     let brokerMediaRequests = 0;
+    let fileGatewayRequests = 0;
     const mediaUrl = (path: string) =>
       `__WEBSITE_STUDIO_PREVIEW_ORIGIN__/api/apps/website-studio/backend/media?preview_id=${previewId}&path=${encodeURIComponent(path)}`;
 
@@ -304,9 +305,41 @@ test.describe('Website Studio preview runtime', () => {
             route: '/',
             source_files: ['index.html', 'assets/site.css'],
             asset_refs: ['assets/fonts/preview.woff2', 'assets/images/logo.webp', 'assets/images/hero.webp', 'assets/video/slow.mp4'],
+            asset_gateway: {
+              'assets/fonts/preview.woff2': '/api/apps/website-studio/backend/file/gw_font',
+              'assets/images/logo.webp': '/api/apps/website-studio/backend/file/gw_logo',
+              'assets/images/hero.webp': '/api/apps/website-studio/backend/file/gw_hero',
+              'assets/images/lazy.webp': '/api/apps/website-studio/backend/file/gw_lazy',
+              'assets/js/analytics-tracking.js': '/api/apps/website-studio/backend/file/gw_script',
+              'assets/video/slow.mp4': '/api/apps/website-studio/backend/file/gw_slow_video'
+            },
             selector_hints: [{ selector: '[data-testid]', token: 'runtime-preview', source_files: ['index.html'], confidence: 'token_match' }]
           }
         })
+      });
+    });
+
+    await page.route('**/api/apps/website-studio/backend/file/gw_*', async (route) => {
+      fileGatewayRequests += 1;
+      const path = new URL(route.request().url()).pathname;
+      if (path.endsWith('gw_slow_video')) {
+        slowVideoRequested = true;
+        await delay(4_000);
+        await route.fulfill({ status: 206, contentType: 'video/mp4', body: Buffer.from([0]) });
+        return;
+      }
+      if (path.endsWith('gw_font')) {
+        await route.fulfill({ status: 200, contentType: 'font/woff2', body: Buffer.from([0]) });
+        return;
+      }
+      if (path.endsWith('gw_script')) {
+        await route.fulfill({ status: 200, contentType: 'text/javascript', body: 'window.__dynamicLocalScriptLoaded = true;' });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'image/svg+xml',
+        body: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="#f72585"/></svg>'
       });
     });
 
@@ -314,18 +347,14 @@ test.describe('Website Studio preview runtime', () => {
       const url = new URL(route.request().url());
       const path = url.searchParams.get('path') || '';
       const isBrokered = route.request().headers()['x-website-studio-preview-broker'] === '1';
+      if (isBrokered) brokerMediaRequests += 1;
+      else directMediaRequests += 1;
       if (path.endsWith('slow.mp4')) {
         slowVideoRequested = true;
         await delay(4_000);
         await route.fulfill({ status: 200, contentType: 'video/mp4', body: Buffer.from([0]) });
         return;
       }
-      if (!isBrokered) {
-        directMediaRequests += 1;
-        await route.fulfill({ status: 401, contentType: 'text/plain', body: 'sandbox direct media denied' });
-        return;
-      }
-      brokerMediaRequests += 1;
       if (path.endsWith('.woff2')) {
         await route.fulfill({ status: 200, contentType: 'font/woff2', body: Buffer.from([0]) });
         return;
@@ -350,7 +379,7 @@ test.describe('Website Studio preview runtime', () => {
     expect(slowVideoRequested).toBe(false);
 
     const imageSrc = await previewFrame.locator('[data-testid="eager-image"]').getAttribute('src');
-    expect(imageSrc).toMatch(/^(blob:|data:)/);
+    expect(imageSrc).toContain('/api/apps/website-studio/backend/file/gw_logo');
     await expect.poll(async () => previewFrame.locator('[data-testid="eager-image"]').evaluate((node) => {
       const image = node as HTMLImageElement;
       return image.complete && image.naturalWidth > 2 && image.naturalHeight > 2;
@@ -359,12 +388,13 @@ test.describe('Website Studio preview runtime', () => {
       const image = node as HTMLImageElement;
       return image.complete && image.naturalWidth > 2 && image.naturalHeight > 2 && !image.src.includes('R0lGODlhAQABAIAAAAAA');
     }), { timeout: 3_000 }).toBe(true);
-    await expect.poll(async () => previewFrame.locator('main').evaluate((element) => getComputedStyle(element).backgroundImage)).toMatch(/blob:|data:/);
+    await expect.poll(async () => previewFrame.locator('main').evaluate((element) => getComputedStyle(element).backgroundImage)).toContain('/api/apps/website-studio/backend/file/gw_hero');
     await expect.poll(async () => previewFrame.locator('body').evaluate(() => {
       return (window as unknown as { __dynamicLocalScriptLoaded?: boolean }).__dynamicLocalScriptLoaded === true;
     }), { timeout: 3_000 }).toBe(true);
+    expect(fileGatewayRequests).toBeGreaterThanOrEqual(4);
     expect(directMediaRequests).toBe(0);
-    expect(brokerMediaRequests).toBeGreaterThanOrEqual(4);
+    expect(brokerMediaRequests).toBe(0);
 
     await expect.poll(async () => page.evaluate(() => {
       const report = (window as unknown as { __WEBSITE_STUDIO_PREVIEW_REPORT__?: { report?: { console_log?: { text?: string }[] } } }).__WEBSITE_STUDIO_PREVIEW_REPORT__;
@@ -380,10 +410,10 @@ test.describe('Website Studio preview runtime', () => {
     await expect.poll(async () => page.evaluate(() => {
       const reports = (window as unknown as { __WEBSITE_STUDIO_PREVIEW_REPORTS__?: { report?: { asset_broker?: { cache_size?: number } } }[] }).__WEBSITE_STUDIO_PREVIEW_REPORTS__ || [];
       return Math.max(...reports.map((entry) => entry.report?.asset_broker?.cache_size || 0), 0);
-    }), { timeout: 3_000 }).toBeGreaterThan(0);
+    }), { timeout: 3_000 }).toBe(0);
     await expect.poll(async () => page.evaluate(() => {
       const reports = (window as unknown as { __WEBSITE_STUDIO_PREVIEW_REPORTS__?: { report?: { asset_coverage?: { images?: { src?: string }[] } } }[] }).__WEBSITE_STUDIO_PREVIEW_REPORTS__ || [];
-      return reports.some((entry) => entry.report?.asset_coverage?.images?.some((item) => item.src?.includes('blob:') || item.src?.includes('data:')));
+      return reports.some((entry) => entry.report?.asset_coverage?.images?.some((item) => item.src?.includes('/api/apps/website-studio/backend/file/gw_')));
     }), { timeout: 3_000 }).toBe(true);
     await expect.poll(async () => page.evaluate(() => {
       const reports = (window as unknown as { __WEBSITE_STUDIO_PREVIEW_REPORTS__?: { report?: { asset_coverage?: { placeholder_images?: unknown[]; broken_images?: unknown[] } } }[] }).__WEBSITE_STUDIO_PREVIEW_REPORTS__ || [];
@@ -564,6 +594,29 @@ function backendResponse(action: string, body: Record<string, unknown>, state: M
   }
 
   switch (action) {
+    case 'bootstrap':
+      if (options.emptySites) {
+        return {
+          status: 200,
+          body: {
+            sites: [],
+            active_site_id: '',
+            persisted_active_site_id: '',
+            sitemap: { site_id: '', items: [], routes: [], assets: [] },
+            latest_preview: null
+          }
+        };
+      }
+      return {
+        status: 200,
+        body: {
+          sites: [site],
+          active_site_id: SITE_ID,
+          persisted_active_site_id: SITE_ID,
+          sitemap: { ...sitemapBody(), assets: [] },
+          latest_preview: options.withoutLatestPreview ? null : latestPreview
+        }
+      };
     case 'sites_list':
       if (options.emptySites) return { status: 200, body: { items: [] } };
       return { status: 200, body: { items: [site] } };

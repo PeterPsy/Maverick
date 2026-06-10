@@ -7,18 +7,20 @@ from collections.abc import Callable
 from collections.abc import Iterator
 from contextlib import contextmanager
 from copy import deepcopy
+from datetime import UTC, datetime, timedelta
 import difflib
 import fcntl
 import hashlib
 import json
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path, PurePosixPath
 from typing import Any
-from urllib.parse import quote, urlencode, urlparse
+from urllib.parse import parse_qs, quote, urlencode, urlparse
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
@@ -83,7 +85,9 @@ DEFAULT_RETAIN_BUILDS = 10
 DEFAULT_RETAIN_PREVIEWS_PER_ROUTE = 3
 DEFAULT_RETAIN_RUNTIME_SESSIONS = 20
 MAX_SOURCE_MAP_ASSET_INDEX = 120
-PREVIEW_RUNTIME_VERSION = "preview-asset-broker-v2"
+PREVIEW_RUNTIME_VERSION = "preview-browser-stream-v4"
+FILE_GATEWAY_SCHEMA = "maverick.app.file_gateway.v1"
+PREVIEW_FILE_GATEWAY_TTL = timedelta(minutes=30)
 PREVIEW_MEDIA_RESPONSE_HEADERS = {
     "Access-Control-Allow-Origin": "*",
     "Accept-Ranges": "bytes",
@@ -145,15 +149,15 @@ def get_site(data_root: Path, site_id: object) -> dict[str, object]:
 
 def site_status(data_root: Path, site_id: object) -> dict[str, object]:
     site = get_site(data_root, site_id)
-    pages = sitemap(data_root, site["id"])
+    counts = _site_inventory_counts(data_root, site["id"])
     diff_payload = diff_site(data_root, site["id"])
-    profile = source_profile(_source_root(data_root, str(site["id"])))
+    profile = _cached_source_profile(data_root, site)
     runtime = runtime_status(data_root, site["id"])
     return {
         "site": site,
-        "page_count": len(pages["items"]),
-        "route_count": len(pages.get("routes", [])),
-        "asset_count": len(pages.get("assets", [])),
+        "page_count": counts["page_count"],
+        "route_count": counts["route_count"],
+        "asset_count": counts["asset_count"],
         "changed_files_count": len(diff_payload["files"]),
         "active_revision_id": site.get("active_revision_id"),
         "published_revision_id": site.get("published_revision_id"),
@@ -166,6 +170,62 @@ def site_status(data_root: Path, site_id: object) -> dict[str, object]:
         "latest_preview_id": (runtime.get("latest_preview") or {}).get("id") if isinstance(runtime.get("latest_preview"), dict) else "",
         "is_active": bool(site.get("is_active")),
     }
+
+
+def bootstrap(data_root: Path, site_id: object = None, route: object = None) -> dict[str, object]:
+    sites = list_sites(data_root)
+    available = [site for site in sites if site.get("status") != "archived"]
+    requested_site_id = str(site_id or "").strip()
+    selected_site = next((site for site in available if site.get("id") == requested_site_id), None)
+    persisted_site = next((site for site in available if site.get("is_active")), None)
+    if selected_site is None:
+        selected_site = persisted_site or (available[0] if available else None)
+    if selected_site is None:
+        return {
+            "sites": sites,
+            "active_site_id": "",
+            "persisted_active_site_id": str((persisted_site or {}).get("id") or ""),
+            "sitemap": {"site_id": "", "items": [], "routes": [], "assets": []},
+            "latest_preview": None,
+        }
+    map_payload = sitemap(data_root, selected_site["id"], mode="routes-only")
+    route_text = str(route or "").strip()
+    if not route_text:
+        first_page = next(iter(map_payload.get("items") or []), {})
+        route_text = str(first_page.get("route") or "/") if isinstance(first_page, dict) else "/"
+    latest_preview = _bootstrap_latest_preview(data_root, selected_site, route_text) if route_text else {}
+    return {
+        "sites": sites,
+        "active_site_id": str(selected_site["id"]),
+        "persisted_active_site_id": str((persisted_site or {}).get("id") or ""),
+        "sitemap": map_payload,
+        "latest_preview": latest_preview or None,
+    }
+
+
+def _bootstrap_latest_preview(data_root: Path, site: dict[str, object], route: str) -> dict[str, object]:
+    profile = _cached_source_profile(data_root, site)
+    if not str(site.get("source_version") or "").strip():
+        site = get_site(data_root, site["id"])
+    runtime_kind = str(profile.get("preview_runtime_kind") or "unavailable")
+    if runtime_kind in {"php", "node_build"}:
+        build = _latest_passed_runtime_build(data_root, str(site["id"]), runtime_kind)
+        if not build:
+            return {}
+        return _latest_compatible_preview(
+            data_root,
+            site_id=site["id"],
+            route=route,
+            runtime_kind=runtime_kind,
+            build_id=str(build.get("id") or ""),
+        )
+    return _latest_compatible_preview(
+        data_root,
+        site_id=site["id"],
+        route=route,
+        runtime_kind=runtime_kind,
+        source_version=_source_version_for_site(site),
+    )
 
 
 def get_active_site_id(data_root: Path) -> str:
@@ -282,17 +342,18 @@ def import_zip(
                 shutil.rmtree(source_root)
             source_root.parent.mkdir(parents=True, exist_ok=True)
             temp_root.rename(source_root)
-            rebuild_index(data_root, site["id"])
+            index_payload = rebuild_index(data_root, site["id"])
             revision = create_revision(data_root, site["id"], label="ZIP import", source="zip_import")
             _set_active_revision(data_root, site["id"], revision["id"])
             artifact_ref = _source_artifact_ref(source_artifact_ref)
-            profile = source_profile(source_root)
+            profile = dict(index_payload.get("source_profile") or source_profile(source_root))
             _update_site(
                 data_root,
                 site["id"],
                 source_provider="zip",
                 source_label="ZIP import",
                 source_shape=str(profile.get("source_shape") or import_result.get("source_shape") or "partial_source"),
+                source_profile_json=json.dumps(profile, sort_keys=True),
                 source_artifact_ref_json=json.dumps(artifact_ref, sort_keys=True),
             )
             set_active_site(data_root, site["id"])
@@ -343,15 +404,17 @@ def import_git(
                 shutil.rmtree(source_root)
             source_root.parent.mkdir(parents=True, exist_ok=True)
             clone_root.rename(source_root)
-            rebuild_index(data_root, site["id"])
+            index_payload = rebuild_index(data_root, site["id"])
             revision = create_revision(data_root, site["id"], label="Git import", source="git_import")
             _set_active_revision(data_root, site["id"], revision["id"])
+            profile = dict(index_payload.get("source_profile") or profile)
             _update_site(
                 data_root,
                 site["id"],
                 source_provider="git",
                 source_label=_redacted_git_source_label(source, clean_branch),
                 source_shape=source_shape,
+                source_profile_json=json.dumps(profile, sort_keys=True),
                 source_artifact_ref_json=json.dumps(_git_import_source_ref(data_root, site, source, clean_branch), sort_keys=True),
             )
             set_active_site(data_root, site["id"])
@@ -432,15 +495,17 @@ def sync_source(
                 shutil.rmtree(source_root)
             source_root.parent.mkdir(parents=True, exist_ok=True)
             clone_root.rename(source_root)
-            rebuild_index(data_root, site["id"])
+            index_payload = rebuild_index(data_root, site["id"])
             revision = create_revision(data_root, site["id"], label="Git sync", source="git_sync")
             _set_active_revision(data_root, site["id"], revision["id"])
+            profile = dict(index_payload.get("source_profile") or profile)
             _update_site(
                 data_root,
                 site["id"],
                 source_provider="git",
                 source_label=_redacted_git_source_label(source, clean_branch),
                 source_shape=source_shape,
+                source_profile_json=json.dumps(profile, sort_keys=True),
                 source_artifact_ref_json=json.dumps(_git_import_source_ref(data_root, site, source, clean_branch), sort_keys=True),
             )
             sync_run = _record_sync_run(
@@ -744,31 +809,57 @@ def rebuild_index(data_root: Path, site_id: object) -> dict[str, object]:
             "SELECT * FROM pages WHERE site_id = ? AND deleted_at IS NULL ORDER BY route",
             (site["id"],),
         ).fetchall()
+    profile = source_profile(source_root)
+    source_version = _refresh_site_source_metadata(data_root, site["id"], profile)
     pages = [_page_row(row) for row in rows]
-    return {"site_id": site["id"], "items": pages}
+    return {"site_id": site["id"], "items": pages, "source_profile": profile, "source_version": source_version}
 
 
-def sitemap(data_root: Path, site_id: object) -> dict[str, object]:
+def sitemap(data_root: Path, site_id: object, *, mode: object = None) -> dict[str, object]:
+    clean_site_id = _required_id(site_id, "site_id")
+    mode_text = str(mode or "full").strip().lower().replace("_", "-")
+    routes_only = mode_text in {"routes-only", "routes", "pages-routes"}
     ensure_schema(data_root)
     with connect(data_root) as db:
         page_rows = db.execute(
             "SELECT * FROM pages WHERE site_id = ? AND deleted_at IS NULL ORDER BY route",
-            (_required_id(site_id, "site_id"),),
+            (clean_site_id,),
         ).fetchall()
         route_rows = db.execute(
             "SELECT * FROM routes WHERE site_id = ? AND deleted_at IS NULL ORDER BY route",
-            (_required_id(site_id, "site_id"),),
+            (clean_site_id,),
         ).fetchall()
-        asset_rows = db.execute(
-            "SELECT * FROM assets WHERE site_id = ? AND deleted_at IS NULL ORDER BY path",
-            (_required_id(site_id, "site_id"),),
-        ).fetchall()
+        asset_rows = []
+        if not routes_only:
+            asset_rows = db.execute(
+                "SELECT * FROM assets WHERE site_id = ? AND deleted_at IS NULL ORDER BY path",
+                (clean_site_id,),
+            ).fetchall()
     return {
-        "site_id": str(site_id),
+        "site_id": clean_site_id,
         "items": [_page_row(row) for row in page_rows],
         "routes": [_route_row(row) for row in route_rows],
         "assets": [_asset_row(row) for row in asset_rows],
     }
+
+
+def _site_inventory_counts(data_root: Path, site_id: object) -> dict[str, int]:
+    clean_site_id = _required_id(site_id, "site_id")
+    ensure_schema(data_root)
+    with connect(data_root) as db:
+        page_count = db.execute(
+            "SELECT COUNT(*) FROM pages WHERE site_id = ? AND deleted_at IS NULL",
+            (clean_site_id,),
+        ).fetchone()[0]
+        route_count = db.execute(
+            "SELECT COUNT(*) FROM routes WHERE site_id = ? AND deleted_at IS NULL",
+            (clean_site_id,),
+        ).fetchone()[0]
+        asset_count = db.execute(
+            "SELECT COUNT(*) FROM assets WHERE site_id = ? AND deleted_at IS NULL",
+            (clean_site_id,),
+        ).fetchone()[0]
+    return {"page_count": int(page_count), "route_count": int(route_count), "asset_count": int(asset_count)}
 
 
 def navigation_analyze(data_root: Path, site_id: object) -> dict[str, object]:
@@ -1044,7 +1135,9 @@ def build_preview(
 ) -> dict[str, object]:
     site = get_site(data_root, site_id)
     source_root = _source_root(data_root, str(site["id"]))
-    profile = source_profile(source_root)
+    profile = _cached_source_profile(data_root, site, source_root=source_root)
+    if not str(site.get("source_version") or "").strip():
+        site = get_site(data_root, site["id"])
     route_text = str(route or "/")
     include_preview_html = _truthy(include_html)
     if profile.get("preview_runtime_kind") in {"php", "node_build"}:
@@ -1053,13 +1146,13 @@ def build_preview(
     page = next((item for item in pages if item["route"] == route_text), pages[0] if pages else None)
     preview_route = page["route"] if page else route_text
     runtime_kind = str(profile.get("preview_runtime_kind") or "unavailable")
-    source_fingerprint = _source_tree_fingerprint(source_root)
+    source_version = _source_version_for_site(site)
     cached_preview = _latest_compatible_preview(
         data_root,
         site_id=site["id"],
         route=preview_route,
         runtime_kind=runtime_kind,
-        source_fingerprint=source_fingerprint,
+        source_version=source_version,
     )
     if cached_preview:
         return _preview_response_from_record(data_root, site, cached_preview, include_html=include_preview_html, preview_origin=preview_origin)
@@ -1067,7 +1160,7 @@ def build_preview(
     contract = _preview_contract(data_root, site, page=page, route=preview_route, preview_id=preview_id)
     contract["artifact_ref"] = {
         **(dict(contract.get("artifact_ref") or {}) if isinstance(contract.get("artifact_ref"), dict) else {}),
-        "source_fingerprint": source_fingerprint,
+        "source_version": source_version,
     }
     if not page:
         _record_preview(data_root, site, contract)
@@ -1201,6 +1294,7 @@ def _latest_compatible_preview(
     runtime_kind: str,
     build_id: str = "",
     active_revision_id: str = "",
+    source_version: str = "",
     source_fingerprint: str = "",
 ) -> dict[str, object]:
     """Return a ready preview matching the current runtime build or source tree."""
@@ -1229,6 +1323,10 @@ def _latest_compatible_preview(
         if source_fingerprint:
             artifact_ref = preview.get("artifact_ref") if isinstance(preview.get("artifact_ref"), dict) else {}
             if str(artifact_ref.get("source_fingerprint") or "") != source_fingerprint:
+                continue
+        if source_version:
+            artifact_ref = preview.get("artifact_ref") if isinstance(preview.get("artifact_ref"), dict) else {}
+            if str(artifact_ref.get("source_version") or "") != source_version:
                 continue
         return preview
     return {}
@@ -1334,11 +1432,18 @@ def _preview_response_from_record(
 def _latest_passed_runtime_build(data_root: Path, site_id: str, runtime_kind: str) -> dict[str, object]:
     ensure_schema(data_root)
     with connect(data_root) as db:
-        row = db.execute(
-            "SELECT * FROM builds WHERE site_id = ? AND runtime_kind = ? AND status = 'passed' ORDER BY created_at DESC LIMIT 1",
+        rows = db.execute(
+            "SELECT * FROM builds WHERE site_id = ? AND runtime_kind = ? AND status = 'passed' ORDER BY created_at DESC LIMIT 25",
             (site_id, runtime_kind),
-        ).fetchone()
-    return _build_row(row) if row else {}
+        ).fetchall()
+    source_version = _source_version_for_site(get_site(data_root, site_id))
+    for row in rows:
+        build = _build_row(row)
+        artifact_ref = build.get("artifact_ref") if isinstance(build.get("artifact_ref"), dict) else {}
+        if source_version and str(artifact_ref.get("source_version") or "") != source_version:
+            continue
+        return build
+    return {}
 
 
 def _route_id_for_route(data_root: Path, site_id: object, route: object) -> str:
@@ -1364,7 +1469,10 @@ def _page_id_for_route(data_root: Path, site_id: object, route: object) -> str:
 def validate_build(data_root: Path, site_id: object) -> dict[str, object]:
     site = get_site(data_root, site_id)
     source_root = _source_root(data_root, str(site["id"]))
-    profile = source_profile(source_root)
+    profile = _cached_source_profile(data_root, site, source_root=source_root)
+    if not str(site.get("source_version") or "").strip():
+        site = get_site(data_root, site["id"])
+    source_version = _source_version_for_site(site)
     map_payload = sitemap(data_root, site["id"])
     map_warnings: list[str] = []
     warnings: list[str] = []
@@ -1403,6 +1511,8 @@ def validate_build(data_root: Path, site_id: object) -> dict[str, object]:
         warnings.extend(map_warnings)
         status = "blocked"
         logs_summary = "No runnable preview artifact is available without a supported runtime."
+    if artifact_ref:
+        artifact_ref = {**artifact_ref, "source_version": source_version}
     now = now_timestamp()
     with connect(data_root) as db:
         db.execute(
@@ -1433,6 +1543,7 @@ def validate_build(data_root: Path, site_id: object) -> dict[str, object]:
     if rendered_routes:
         for rendered in rendered_routes:
             _upsert_runtime_route_index(data_root, site, rendered, profile)
+    _refresh_site_source_metadata(data_root, site["id"], profile, bump_version=False)
     _audit(data_root, str(site["id"]), "build.validated", logs_summary, {"build_id": build_id, "status": status})
     return get_build(data_root, build_id)
 
@@ -1641,7 +1752,7 @@ def get_build(data_root: Path, build_id: object) -> dict[str, object]:
 def runtime_status(data_root: Path, site_id: object) -> dict[str, object]:
     site = get_site(data_root, site_id)
     source_root = _source_root(data_root, str(site["id"]))
-    profile = source_profile(source_root)
+    profile = _cached_source_profile(data_root, site, source_root=source_root)
     capability = runtime_capability_status(source_root, profile)
     ensure_schema(data_root)
     with connect(data_root) as db:
@@ -1671,8 +1782,12 @@ def preview_document(data_root: Path, preview_id: object, *, preview_origin: obj
     preview = get_preview(data_root, preview_id)
     site = get_site(data_root, preview["site_id"])
     details = [str(item) for item in preview.get("missing_requirements", []) if str(item).strip()]
+    cache_key = _preview_document_cache_key(preview, site)
+    cached_html = "" if str(preview_origin or "").strip() else _read_preview_document_cache(data_root, preview, cache_key)
+    if cached_html:
+        return _preview_document_payload(data_root, preview, cached_html, include_inventory=include_inventory)
     if preview.get("runtime_kind") in {"php", "node_build"}:
-        profile = source_profile(_source_root(data_root, str(site["id"])))
+        profile = _cached_source_profile(data_root, site)
         result = render_runtime_preview(
             data_root,
             _source_root(data_root, str(site["id"])),
@@ -1689,12 +1804,18 @@ def preview_document(data_root: Path, preview_id: object, *, preview_origin: obj
                 stylesheet_loader=_preview_stylesheet_loader(data_root, preview),
                 script_loader=_preview_script_loader(data_root, preview),
             )
+            if not str(preview_origin or "").strip():
+                _write_preview_document_cache(data_root, preview, cache_key, html)
             return _preview_document_payload(data_root, preview, html, include_inventory=include_inventory)
         detail = [str(item) for item in result.get("missing_requirements", []) if str(item).strip()] or [str(item) for item in result.get("warnings", []) if str(item).strip()]
         html = runtime_diagnostic_html("Preview runtime unavailable", detail or details or ["preview route could not be rendered"])
+        if not str(preview_origin or "").strip():
+            _write_preview_document_cache(data_root, preview, cache_key, html)
         return _preview_document_payload(data_root, preview, html, include_inventory=include_inventory)
     if not preview.get("page_id"):
         html = runtime_diagnostic_html("Preview runtime unavailable", details or ["site has no HTML page to preview"])
+        if not str(preview_origin or "").strip():
+            _write_preview_document_cache(data_root, preview, cache_key, html)
         return _preview_document_payload(data_root, preview, html, include_inventory=include_inventory)
     try:
         page = _get_page(data_root, preview["page_id"])
@@ -1709,11 +1830,77 @@ def preview_document(data_root: Path, preview_id: object, *, preview_origin: obj
                     stylesheet_loader=_preview_stylesheet_loader(data_root, preview),
                     script_loader=_preview_script_loader(data_root, preview),
             )
+            if not str(preview_origin or "").strip():
+                _write_preview_document_cache(data_root, preview, cache_key, html)
             return _preview_document_payload(data_root, preview, html, include_inventory=include_inventory)
     except (IndexError, ValueError) as error:
         details.append(str(error))
     html = runtime_diagnostic_html("Preview runtime unavailable", details or ["preview source could not be rendered"])
+    if not str(preview_origin or "").strip():
+        _write_preview_document_cache(data_root, preview, cache_key, html)
     return _preview_document_payload(data_root, preview, html, include_inventory=include_inventory)
+
+
+def _preview_document_cache_key(preview: dict[str, object], site: dict[str, object]) -> str:
+    artifact_ref = preview.get("artifact_ref") if isinstance(preview.get("artifact_ref"), dict) else {}
+    payload = {
+        "schema": "website-studio.preview-document-cache.v1",
+        "runtime_version": PREVIEW_RUNTIME_VERSION,
+        "preview_id": str(preview.get("id") or ""),
+        "site_id": str(preview.get("site_id") or ""),
+        "site_source_version": _source_version_for_site(site),
+        "artifact_source_version": str(artifact_ref.get("source_version") or ""),
+        "build_id": str(preview.get("build_id") or ""),
+        "runtime_root": str(artifact_ref.get("runtime_root") or ""),
+        "docroot": str(artifact_ref.get("docroot") or ""),
+        "route": str(preview.get("route") or "/"),
+        "page_id": str(preview.get("page_id") or ""),
+        "runtime_kind": str(preview.get("runtime_kind") or ""),
+        "status": str(preview.get("status") or ""),
+    }
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+def _preview_document_cache_path(data_root: Path, preview: dict[str, object], cache_key: str) -> Path:
+    preview_id = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(preview.get("id") or "preview")).strip("._") or "preview"
+    return data_root / "run" / "preview-documents" / preview_id / f"{cache_key}.json"
+
+
+def _read_preview_document_cache(data_root: Path, preview: dict[str, object], cache_key: str) -> str:
+    path = _preview_document_cache_path(data_root, preview, cache_key)
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ""
+    if not isinstance(payload, dict):
+        return ""
+    if payload.get("schema") != "website-studio.preview-document-cache.v1":
+        return ""
+    if str(payload.get("runtime_version") or "") != PREVIEW_RUNTIME_VERSION:
+        return ""
+    if str(payload.get("cache_key") or "") != cache_key:
+        return ""
+    html = payload.get("html")
+    return html if isinstance(html, str) else ""
+
+
+def _write_preview_document_cache(data_root: Path, preview: dict[str, object], cache_key: str, html: str) -> None:
+    path = _preview_document_cache_path(data_root, preview, cache_key)
+    payload = {
+        "schema": "website-studio.preview-document-cache.v1",
+        "runtime_version": PREVIEW_RUNTIME_VERSION,
+        "cache_key": cache_key,
+        "preview_id": str(preview.get("id") or ""),
+        "created_at": now_timestamp(),
+        "html": str(html or ""),
+    }
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temp_path = path.with_suffix(".json.tmp")
+        temp_path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+        temp_path.replace(path)
+    except OSError:
+        return
 
 
 def preview_report(
@@ -1818,8 +2005,126 @@ def preview_media(data_root: Path, preview_id: object, path: object) -> dict[str
     }
 
 
+def _replace_preview_media_urls_with_gateway(
+    data_root: Path,
+    preview: dict[str, object],
+    html: str,
+    *,
+    gateway_urls: dict[str, str] | None = None,
+) -> str:
+    pattern = re.compile(
+        r"(?P<prefix>(?:https?://[^\"'`\s<>)]+|__WEBSITE_STUDIO_PREVIEW_ORIGIN__)?/api/apps/website-studio/backend/media)\?(?P<query>[^\"'`\s<>)]+)",
+        re.IGNORECASE,
+    )
+    replacements: dict[str, str] = {}
+
+    def replace(match: re.Match[str]) -> str:
+        original = match.group(0)
+        if original in replacements:
+            return replacements[original]
+        query_text, separator, fragment = match.group("query").partition("#")
+        params = parse_qs(query_text, keep_blank_values=True)
+        rel_path = params.get("path", [""])[0]
+        if not rel_path:
+            return original
+        try:
+            media_payload = preview_media(data_root, preview["id"], rel_path)
+            asset_path = str(media_payload.get("path") or rel_path)
+            relative_gateway = _preview_file_gateway_url(
+                data_root,
+                preview,
+                file_response=dict(media_payload.get("file_response") or {}),
+                asset_path=asset_path,
+                aliases=[rel_path],
+                gateway_urls=gateway_urls,
+            )
+        except (OSError, ValueError):
+            return original
+        gateway = match.group("prefix").rsplit("/backend/media", 1)[0] + relative_gateway.removeprefix("/api/apps/website-studio")
+        if separator:
+            gateway = f"{gateway}#{fragment}"
+        replacements[original] = gateway
+        return gateway
+
+    return pattern.sub(replace, html)
+
+
+def _preview_file_gateway_url(
+    data_root: Path,
+    preview: dict[str, object],
+    *,
+    file_response: dict[str, object],
+    asset_path: str,
+    gateway_urls: dict[str, str] | None = None,
+    aliases: list[str] | None = None,
+) -> str:
+    clean_asset_path = safe_preview_asset_path(asset_path)
+    if gateway_urls is not None and clean_asset_path in gateway_urls:
+        gateway = gateway_urls[clean_asset_path]
+        _record_preview_file_gateway_aliases(gateway_urls, gateway, aliases)
+        return gateway
+    token = _write_preview_file_gateway_manifest(
+        data_root,
+        app_id="website-studio",
+        file_response=file_response,
+        preview_id=str(preview.get("id") or ""),
+        asset_path=clean_asset_path,
+    )
+    gateway = f"/api/apps/website-studio/backend/file/{token}"
+    if gateway_urls is not None:
+        gateway_urls[clean_asset_path] = gateway
+        _record_preview_file_gateway_aliases(gateway_urls, gateway, aliases)
+    return gateway
+
+
+def _record_preview_file_gateway_aliases(gateway_urls: dict[str, str], gateway: str, aliases: list[str] | None) -> None:
+    for alias in aliases or []:
+        try:
+            clean_alias = safe_preview_asset_path(alias)
+        except ValueError:
+            continue
+        gateway_urls.setdefault(clean_alias, gateway)
+
+
+def _write_preview_file_gateway_manifest(
+    data_root: Path,
+    *,
+    app_id: str,
+    file_response: dict[str, object],
+    preview_id: str,
+    asset_path: str,
+) -> str:
+    raw_path = str(file_response.get("path") or "").strip()
+    if not raw_path:
+        raise ValueError("file_response path is required")
+    manifest_root = data_root / "run" / "file-gateway"
+    manifest_root.mkdir(parents=True, exist_ok=True)
+    token = "gw_" + secrets.token_urlsafe(32)
+    while (manifest_root / f"{token}.json").exists():
+        token = "gw_" + secrets.token_urlsafe(32)
+    now = datetime.now(tz=UTC)
+    manifest = {
+        "schema": FILE_GATEWAY_SCHEMA,
+        "app_id": app_id,
+        "access": "public_capability",
+        "preview_id": preview_id,
+        "asset_path": asset_path,
+        "created_at": now.isoformat(),
+        "expires_at": (now + PREVIEW_FILE_GATEWAY_TTL).isoformat(),
+        "allowed_paths": [str(Path(raw_path).resolve())],
+        "file_response": file_response,
+    }
+    (manifest_root / f"{token}.json").write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
+    return token
+
+
 def _preview_document_payload(data_root: Path, preview: dict[str, object], html: str, *, include_inventory: object = False) -> dict[str, object]:
+    gateway_urls: dict[str, str] = {}
     source_map = _preview_source_map(data_root, preview, html, include_inventory=include_inventory)
+    html = _replace_preview_media_urls_with_gateway(data_root, preview, html, gateway_urls=gateway_urls)
+    asset_gateway, unresolved = _preview_asset_gateway_map(data_root, preview, source_map, gateway_urls=gateway_urls)
+    source_map["asset_gateway"] = asset_gateway
+    source_map["asset_gateway_unresolved"] = unresolved
     return {
         "preview": preview,
         "html": html,
@@ -1832,8 +2137,73 @@ def _preview_document_payload(data_root: Path, preview: dict[str, object], html:
     }
 
 
+def _preview_asset_gateway_map(
+    data_root: Path,
+    preview: dict[str, object],
+    source_map: dict[str, object],
+    *,
+    gateway_urls: dict[str, str],
+) -> tuple[dict[str, str], list[str]]:
+    candidates = _preview_gateway_candidate_paths(data_root, preview, source_map)
+    unresolved: list[str] = []
+    for raw_path in candidates[:500]:
+        try:
+            clean_path = safe_preview_asset_path(raw_path)
+        except ValueError:
+            continue
+        if clean_path in gateway_urls:
+            continue
+        try:
+            media_payload = preview_media(data_root, preview["id"], clean_path)
+            _preview_file_gateway_url(
+                data_root,
+                preview,
+                file_response=dict(media_payload.get("file_response") or {}),
+                asset_path=str(media_payload.get("path") or clean_path),
+                aliases=[clean_path],
+                gateway_urls=gateway_urls,
+            )
+        except (OSError, ValueError):
+            if clean_path not in unresolved:
+                unresolved.append(clean_path)
+            continue
+    return dict(sorted(gateway_urls.items())), unresolved
+
+
+def _preview_gateway_candidate_paths(data_root: Path, preview: dict[str, object], source_map: dict[str, object]) -> list[str]:
+    candidates = [str(item) for item in source_map.get("asset_refs", []) if _preview_gateway_asset_path_allowed(item)]
+    try:
+        clean_site_id = str(preview.get("site_id") or "")
+        with connect(data_root) as db:
+            rows = db.execute(
+                """
+                SELECT path FROM assets
+                WHERE site_id = ?
+                  AND deleted_at IS NULL
+                  AND kind IN ('image', 'stylesheet', 'script', 'font', 'video', 'audio')
+                ORDER BY path
+                LIMIT 500
+                """,
+                (clean_site_id,),
+            ).fetchall()
+        candidates.extend(str(row["path"]) for row in rows)
+    except Exception:
+        pass
+    return _dedupe_strings(candidates)
+
+
+def _preview_gateway_asset_path_allowed(path: object) -> bool:
+    try:
+        clean = safe_preview_asset_path(path)
+    except ValueError:
+        return False
+    return _asset_kind(Path(clean)) in {"image", "stylesheet", "script", "font", "video", "audio"}
+
+
 def _preview_source_map(data_root: Path, preview: dict[str, object], html: object, *, include_inventory: object = False) -> dict[str, object]:
     site = get_site(data_root, preview["site_id"])
+    source_root = _source_root(data_root, str(site["id"]))
+    profile = _cached_source_profile(data_root, site, source_root=source_root)
     map_payload = sitemap(data_root, site["id"])
     route_text = str(preview.get("route") or "/")
     pages = list(map_payload.get("items") or [])
@@ -1846,7 +2216,7 @@ def _preview_source_map(data_root: Path, preview: dict[str, object], html: objec
     raw_source_files = _dedupe_strings(
         list(page.get("source_files") or []) if page else []
         + (list(route_item.get("source_files") or []) if route_item else [])
-        + source_files_for_runtime_route(_source_root(data_root, str(site["id"])), source_profile(_source_root(data_root, str(site["id"]))))
+        + source_files_for_runtime_route(source_root, profile)
     )
     include_source_inventory = _truthy(include_inventory)
     source_files = _source_files_for_visual_context(raw_source_files, include_inventory=include_source_inventory)
@@ -1896,7 +2266,7 @@ def _source_text_candidates(data_root: Path, site_id: object, source_files: list
 
 
 def _preview_asset_probe(data_root: Path, preview: dict[str, object], html: object, source_map: dict[str, object]) -> dict[str, object]:
-    media_paths = _dedupe_strings(preview_media_paths_from_html(html))
+    media_paths = _dedupe_strings(preview_media_paths_from_html(html) + [str(item) for item in source_map.get("asset_refs", []) if str(item).strip()])
     assets = list(sitemap(data_root, preview["site_id"]).get("assets") or [])
     resolved: list[dict[str, object]] = []
     missing: list[str] = []
@@ -2532,7 +2902,7 @@ def _resolve_preview_asset_path(data_root: Path, preview: dict[str, object], rel
     artifact_ref = preview.get("artifact_ref") if isinstance(preview.get("artifact_ref"), dict) else {}
     runtime_root = _preview_artifact_root(data_root, artifact_ref) or source_root
     runtime_root = runtime_root.resolve()
-    profile = source_profile(source_root)
+    profile = _cached_source_profile(data_root, site, source_root=source_root)
     docroot_rel = str(artifact_ref.get("docroot") or profile.get("php_docroot") or "").strip()
     docroot = (runtime_root / docroot_rel).resolve() if docroot_rel and docroot_rel != "." else runtime_root
     roots = [docroot, runtime_root, source_root]
@@ -3376,13 +3746,12 @@ def _preview_contract(
     route: object = "/",
     preview_id: str = "",
 ) -> dict[str, object]:
-    profile = source_profile(_source_root(data_root, str(site["id"])))
+    source_root = _source_root(data_root, str(site["id"]))
+    profile = _cached_source_profile(data_root, site, source_root=source_root)
+    if not str(site.get("source_version") or "").strip():
+        site = get_site(data_root, site["id"])
     route_text = str(route or "/")
-    route_id = ""
-    if route_text:
-        map_payload = sitemap(data_root, site["id"])
-        route_item = next((item for item in map_payload.get("routes", []) if item.get("route") == route_text), None)
-        route_id = str(route_item.get("id") or "") if route_item else ""
+    route_id = _route_id_for_route(data_root, site["id"], route_text) if route_text else ""
     runtime_kind = str(profile.get("preview_runtime_kind") or "unavailable")
     runtime_status = str(profile.get("runtime_preview_status") or "blocked")
     warnings = list(page.get("warnings", [])) if page else []
@@ -3394,7 +3763,7 @@ def _preview_contract(
         warnings.append(f"{runtime_kind} runtime is not available yet; serving sanitized static HTML fallback")
     if runtime_kind == "static_export" and profile.get("static_preview_supported"):
         warnings.append("serving static export in an isolated preview runtime")
-    warnings = _dedupe_strings(warnings + rendered_route_warnings(_source_root(data_root, str(site["id"])), profile))
+    warnings = _dedupe_strings(warnings + rendered_route_warnings(source_root, profile))
     preview_url = _preview_runtime_url(preview_id, route_text) if preview_id else ""
     return {
         "preview_id": preview_id,
@@ -3409,7 +3778,10 @@ def _preview_contract(
         "runtime_status": runtime_status,
         "warnings": warnings[:100],
         "missing_requirements": missing_requirements[:50],
-        "artifact_ref": {"active_revision_id": str(site.get("active_revision_id") or "")},
+        "artifact_ref": {
+            "active_revision_id": str(site.get("active_revision_id") or ""),
+            "source_version": _source_version_for_site(site),
+        },
     }
 
 
@@ -4095,8 +4467,57 @@ def _clean_source_provider(value: object) -> str:
 def _site_row(row, *, active_site_id: str = "") -> dict[str, object]:
     payload = dict(row)
     payload["source_artifact_ref"] = json.loads(payload.pop("source_artifact_ref_json", "{}") or "{}")
+    payload["source_profile"] = json.loads(payload.pop("source_profile_json", "{}") or "{}")
     payload["is_active"] = bool(active_site_id and payload.get("id") == active_site_id and payload.get("status") != "archived")
     return payload
+
+
+def _cached_source_profile(
+    data_root: Path,
+    site: dict[str, object],
+    *,
+    source_root: Path | None = None,
+) -> dict[str, object]:
+    cached = site.get("source_profile") if isinstance(site.get("source_profile"), dict) else {}
+    if cached:
+        if not str(site.get("source_version") or "").strip():
+            _refresh_site_source_metadata(data_root, site["id"], cached, bump_version=False)
+        return dict(cached)
+    root = source_root or _source_root(data_root, str(site["id"]))
+    profile = source_profile(root)
+    _refresh_site_source_metadata(data_root, site["id"], profile, bump_version=False)
+    return profile
+
+
+def _refresh_site_source_metadata(
+    data_root: Path,
+    site_id: object,
+    profile: dict[str, object] | None = None,
+    *,
+    bump_version: bool = True,
+) -> str:
+    clean_site_id = str(site_id)
+    payload = dict(profile or source_profile(_source_root(data_root, clean_site_id)))
+    current = get_site(data_root, clean_site_id)
+    fields: dict[str, object] = {
+        "source_profile_json": json.dumps(payload, sort_keys=True),
+        "source_shape": str(payload.get("source_shape") or ""),
+    }
+    if bump_version or not str(current.get("source_version") or "").strip():
+        fields["source_version"] = f"src_{uuid4().hex[:16]}"
+    _update_site(data_root, clean_site_id, **fields)
+    if "source_version" in fields:
+        return str(fields["source_version"])
+    return _source_version_for_site(get_site(data_root, clean_site_id))
+
+
+def _source_version_for_site(site: dict[str, object]) -> str:
+    value = str(site.get("source_version") or "").strip()
+    if value:
+        return value
+    revision = str(site.get("active_revision_id") or "").strip()
+    updated = str(site.get("updated_at") or "").strip()
+    return revision or updated or "unversioned"
 
 
 def _environment_row(row) -> dict[str, object]:
@@ -5147,6 +5568,8 @@ def _update_site(data_root: Path, site_id: object, **fields: object) -> None:
         "source_provider",
         "source_label",
         "source_shape",
+        "source_profile_json",
+        "source_version",
         "source_artifact_ref_json",
         "default_environment_id",
         "working_branch",

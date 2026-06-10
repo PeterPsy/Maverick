@@ -50,6 +50,8 @@ def ensure_schema(data_root: Path) -> None:
               source_provider TEXT NOT NULL,
               source_label TEXT NOT NULL DEFAULT '',
               source_shape TEXT NOT NULL DEFAULT '',
+              source_profile_json TEXT NOT NULL DEFAULT '{}',
+              source_version TEXT NOT NULL DEFAULT '',
               source_artifact_ref_json TEXT NOT NULL DEFAULT '{}',
               default_environment_id TEXT NOT NULL DEFAULT '',
               working_branch TEXT NOT NULL DEFAULT '',
@@ -294,6 +296,8 @@ def ensure_schema(data_root: Path) -> None:
             );
         """)
         _ensure_column(db, "sites", "source_shape", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(db, "sites", "source_profile_json", "TEXT NOT NULL DEFAULT '{}'")
+        _ensure_column(db, "sites", "source_version", "TEXT NOT NULL DEFAULT ''")
         _ensure_column(db, "sites", "source_artifact_ref_json", "TEXT NOT NULL DEFAULT '{}'")
         _ensure_column(db, "sites", "default_environment_id", "TEXT NOT NULL DEFAULT ''")
         _ensure_column(db, "sites", "working_branch", "TEXT NOT NULL DEFAULT ''")

@@ -87,6 +87,14 @@ export type SiteStatusPayload = {
   latest_preview_id?: string;
 };
 
+export type BootstrapPayload = {
+  sites: Site[];
+  active_site_id: string;
+  persisted_active_site_id: string;
+  sitemap: SitemapPayload;
+  latest_preview?: RuntimeSummary['latest_preview'] | null;
+};
+
 export type ChangeRecord = {
   id?: string;
   status?: string;

@@ -10,6 +10,7 @@
             "enum": [
               "manifest",
               "sites_list",
+              "bootstrap",
               "site_create",
               "site_status",
               "site_archive",
@@ -75,6 +76,7 @@
           "confirm_no_raw_secret": {"type": "boolean"},
           "environment_id": {"type": "string"},
           "kind": {"type": "string"},
+          "mode": {"type": "string", "enum": ["full", "routes-only", "routes"]},
           "name": {"type": "string"},
           "base_url": {"type": "string"},
           "requires_approval": {"type": "boolean"},

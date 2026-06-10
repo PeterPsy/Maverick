@@ -53,6 +53,7 @@
     "mcp_tools": [
       "website_manifest",
       "website_sites_list",
+      "website_bootstrap",
       "website_site_status",
       "website_site_create",
       "website_site_archive",

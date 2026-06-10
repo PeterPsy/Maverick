@@ -8,6 +8,17 @@
       "description": "List Website Studio site records in the workspace.",
       "input_schema": {"type": "object", "properties": {}, "additionalProperties": false}
     },
+    "website_bootstrap": {
+      "description": "Return lightweight first-paint Website Studio state: sites, selected site, routes-only sitemap, and current preview reference.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "site_id": {"type": "string"},
+          "route": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
     "website_site_status": {
       "description": "Return counts, revision ids, and working diff status for one site.",
       "input_schema": {"type": "object", "required": ["site_id"], "properties": {"site_id": {"type": "string"}}, "additionalProperties": false}
@@ -206,8 +217,16 @@
       ]
     },
     "website_sitemap": {
-      "description": "Return the indexed static HTML sitemap for one site.",
-      "input_schema": {"type": "object", "required": ["site_id"], "properties": {"site_id": {"type": "string"}}, "additionalProperties": false}
+      "description": "Return the indexed static HTML sitemap for one site. Use mode=routes-only for first-paint route/page selection without asset inventory.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id"],
+        "properties": {
+          "site_id": {"type": "string"},
+          "mode": {"type": "string", "enum": ["full", "routes-only", "routes"]}
+        },
+        "additionalProperties": false
+      }
     },
     "website_navigation_analyze": {
       "description": "Return visual site navigation with pages, sections, anchors, component candidates, preview status, analysis coverage, and warnings while excluding source inventory files.",

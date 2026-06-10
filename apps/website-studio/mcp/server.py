@@ -14,6 +14,7 @@ from service import app_events_for_action, handle_action, resolve_secret_resourc
 TOOL_ACTIONS = {
     "website_manifest": "manifest",
     "website_sites_list": "sites_list",
+    "website_bootstrap": "bootstrap",
     "website_site_status": "site_status",
     "website_site_create": "site_create",
     "website_site_archive": "site_archive",

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 from html.parser import HTMLParser
 import json
 import os
@@ -11,8 +12,10 @@ from pathlib import Path
 import re
 import shlex
 import shutil
+import signal
 import socket
 import subprocess
+import threading
 import time
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
@@ -26,6 +29,7 @@ BUILD_TIMEOUT_SECONDS = 180
 COMMAND_TIMEOUT_SECONDS = 60
 PHP_STARTUP_TIMEOUT_SECONDS = 5
 PHP_REQUEST_TIMEOUT_SECONDS = 8
+PHP_SERVER_TTL_SECONDS = 180
 MAX_RENDER_BYTES = 2 * 1024 * 1024
 MAX_RENDERED_ROUTES = 40
 ALLOWED_WORKSPACE_BUILD_BINARIES = {
@@ -52,6 +56,22 @@ class BuildPlan:
     commands: list[list[str]]
     warnings: list[str]
     missing_requirements: list[str]
+
+
+@dataclass
+class PhpPreviewServer:
+    key: str
+    port: int
+    pid: int
+    process: subprocess.Popen | None
+    runtime_root: Path
+    docroot: Path
+    router: Path | None
+    last_used: float
+
+
+_PHP_PREVIEW_SERVERS: dict[str, PhpPreviewServer] = {}
+_PHP_PREVIEW_SERVERS_LOCK = threading.Lock()
 
 
 def build_plan_for_source(source_root: Path) -> BuildPlan:
@@ -358,17 +378,31 @@ def _php_ready_with_body(rendered: dict[str, object]) -> bool:
 
 
 def _request_php_route(runtime_root: Path, docroot: Path, router: Path | None, route: str) -> dict[str, object]:
-    port = _free_port()
-    command = [shutil.which("php") or "php", "-d", "variables_order=GPCS", "-S", f"127.0.0.1:{port}", "-t", str(docroot)]
-    if router is not None:
-        command.append(str(router))
-    env = _safe_env()
-    env["WEBSITE_STUDIO_PREVIEW"] = "1"
-    process = subprocess.Popen(command, cwd=runtime_root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+    last_result: dict[str, object] = {}
+    for attempt in range(2):
+        try:
+            server = _php_preview_server(runtime_root, docroot, router)
+            result = _request_php_route_from_server(server, route)
+        except (OSError, URLError, TimeoutError, subprocess.SubprocessError) as error:
+            result = {"status": "failed", "detail": str(error), "http_status": 0}
+            server = None
+        last_result = result
+        if result.get("status") == "ready":
+            return result
+        if attempt == 0 and int(result.get("http_status") or 0) == 0:
+            if server is not None:
+                _evict_php_preview_server(server.key)
+            continue
+        return result
+    return last_result or {"status": "failed", "detail": "PHP route render failed", "http_status": 0}
+
+
+def _request_php_route_from_server(server: PhpPreviewServer, route: str) -> dict[str, object]:
+    server.last_used = time.time()
+    _store_php_preview_server_registry(server)
     try:
-        _wait_for_php(port)
         request_route = route if route.startswith("/") else f"/{route}"
-        request = Request(f"http://127.0.0.1:{port}{request_route}", headers={"User-Agent": "WebsiteStudioPreview/1.0"})
+        request = Request(f"http://127.0.0.1:{server.port}{request_route}", headers={"User-Agent": "WebsiteStudioPreview/1.0"})
         try:
             with urlopen(request, timeout=PHP_REQUEST_TIMEOUT_SECONDS) as response:
                 content = response.read(MAX_RENDER_BYTES + 1)
@@ -384,13 +418,247 @@ def _request_php_route(runtime_root: Path, docroot: Path, router: Path | None, r
         return {"status": "ready", "html": text, "http_status": status}
     except (OSError, URLError, TimeoutError, subprocess.SubprocessError) as error:
         return {"status": "failed", "detail": str(error), "http_status": 0}
-    finally:
-        process.terminate()
+
+
+def _php_preview_server(runtime_root: Path, docroot: Path, router: Path | None) -> PhpPreviewServer:
+    key = _php_server_key(runtime_root, docroot, router)
+    with _PHP_PREVIEW_SERVERS_LOCK:
+        _cleanup_php_preview_servers_locked()
+        existing = _PHP_PREVIEW_SERVERS.get(key)
+        if existing and _php_process_alive(existing.process, pid=existing.pid):
+            existing.last_used = time.time()
+            _store_php_preview_server_registry(existing)
+            return existing
+        if existing:
+            _terminate_php_preview_server(existing)
+            _PHP_PREVIEW_SERVERS.pop(key, None)
+        registered = _load_php_preview_server_registry(key, runtime_root, docroot, router)
+        if registered and _php_process_alive(registered.process, pid=registered.pid):
+            registered.last_used = time.time()
+            _store_php_preview_server_registry(registered)
+            _PHP_PREVIEW_SERVERS[key] = registered
+            return registered
+        server = _start_php_preview_server(key, runtime_root, docroot, router)
+        _PHP_PREVIEW_SERVERS[key] = server
+        _store_php_preview_server_registry(server)
+        return server
+
+
+def _start_php_preview_server(key: str, runtime_root: Path, docroot: Path, router: Path | None) -> PhpPreviewServer:
+    port = _free_port()
+    command = [shutil.which("php") or "php", "-d", "variables_order=GPCS", "-S", f"127.0.0.1:{port}", "-t", str(docroot)]
+    if router is not None:
+        command.append(str(router))
+    env = _safe_env()
+    env["WEBSITE_STUDIO_PREVIEW"] = "1"
+    process = subprocess.Popen(
+        command,
+        cwd=runtime_root,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        env=env,
+    )
+    try:
+        _wait_for_php(port)
+    except Exception:
+        _terminate_php_preview_server(
+            PhpPreviewServer(
+                key=key,
+                port=port,
+                pid=process.pid,
+                process=process,
+                runtime_root=runtime_root,
+                docroot=docroot,
+                router=router,
+                last_used=time.time(),
+            )
+        )
+        raise
+    return PhpPreviewServer(
+        key=key,
+        port=port,
+        pid=process.pid,
+        process=process,
+        runtime_root=runtime_root,
+        docroot=docroot,
+        router=router,
+        last_used=time.time(),
+    )
+
+
+def _php_server_key(runtime_root: Path, docroot: Path, router: Path | None) -> str:
+    router_text = str(router.resolve()) if router is not None else ""
+    payload = f"{runtime_root.resolve()}\0{docroot.resolve()}\0{router_text}"
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _php_process_alive(process: subprocess.Popen | None, *, pid: int | None = None) -> bool:
+    if process is not None:
+        return process.poll() is None
+    if not pid:
+        return False
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def _cleanup_php_preview_servers_locked() -> None:
+    now = time.time()
+    expired = [
+        key
+        for key, server in _PHP_PREVIEW_SERVERS.items()
+        if not _php_process_alive(server.process, pid=server.pid) or now - server.last_used > PHP_SERVER_TTL_SECONDS
+    ]
+    for key in expired:
+        server = _PHP_PREVIEW_SERVERS.pop(key, None)
+        if server is not None:
+            _terminate_php_preview_server(server)
+    _cleanup_php_preview_server_registry(now=now)
+
+
+def _evict_php_preview_server(key: str) -> None:
+    with _PHP_PREVIEW_SERVERS_LOCK:
+        server = _PHP_PREVIEW_SERVERS.pop(key, None)
+        if server is not None:
+            _terminate_php_preview_server(server)
+
+
+def _terminate_php_preview_server(server: PhpPreviewServer) -> None:
+    _delete_php_preview_server_registry(server.key)
+    if server.process is not None:
+        if server.process.poll() is not None:
+            return
+        server.process.terminate()
         try:
-            process.communicate(timeout=2)
+            server.process.communicate(timeout=2)
         except subprocess.TimeoutExpired:
-            process.kill()
-            process.communicate()
+            server.process.kill()
+            server.process.communicate()
+        return
+    try:
+        os.kill(server.pid, signal.SIGTERM)
+    except OSError:
+        return
+
+
+def _shutdown_php_preview_servers() -> None:
+    with _PHP_PREVIEW_SERVERS_LOCK:
+        servers = list(_PHP_PREVIEW_SERVERS.values())
+        _PHP_PREVIEW_SERVERS.clear()
+    for server in servers:
+        _terminate_php_preview_server(server)
+
+
+def _php_preview_registry_root() -> Path:
+    root = Path(os.environ.get("TMPDIR") or "/tmp") / "website-studio-php-preview"
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def _php_preview_registry_path(key: str) -> Path:
+    return _php_preview_registry_root() / f"{key}.json"
+
+
+def _store_php_preview_server_registry(server: PhpPreviewServer) -> None:
+    payload = {
+        "schema": "website-studio.php-preview-server.v1",
+        "key": server.key,
+        "pid": server.pid,
+        "port": server.port,
+        "runtime_root": str(server.runtime_root),
+        "docroot": str(server.docroot),
+        "router": str(server.router) if server.router is not None else "",
+        "last_used": server.last_used,
+        "expires_at": server.last_used + PHP_SERVER_TTL_SECONDS,
+    }
+    try:
+        path = _php_preview_registry_path(server.key)
+        temp_path = path.with_suffix(".json.tmp")
+        temp_path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+        temp_path.replace(path)
+    except OSError:
+        return
+
+
+def _load_php_preview_server_registry(key: str, runtime_root: Path, docroot: Path, router: Path | None) -> PhpPreviewServer | None:
+    try:
+        payload = json.loads(_php_preview_registry_path(key).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict) or payload.get("schema") != "website-studio.php-preview-server.v1":
+        return None
+    if str(payload.get("key") or "") != key:
+        return None
+    try:
+        pid = int(payload.get("pid") or 0)
+        port = int(payload.get("port") or 0)
+        expires_at = float(payload.get("expires_at") or 0)
+    except (TypeError, ValueError):
+        return None
+    if expires_at < time.time() or port <= 0 or pid <= 0:
+        _delete_php_preview_server_registry(key)
+        return None
+    if str(Path(str(payload.get("runtime_root") or "")).resolve()) != str(runtime_root.resolve()):
+        return None
+    if str(Path(str(payload.get("docroot") or "")).resolve()) != str(docroot.resolve()):
+        return None
+    payload_router = str(payload.get("router") or "")
+    if payload_router != (str(router.resolve()) if router is not None else ""):
+        return None
+    return PhpPreviewServer(
+        key=key,
+        port=port,
+        pid=pid,
+        process=None,
+        runtime_root=runtime_root,
+        docroot=docroot,
+        router=router,
+        last_used=float(payload.get("last_used") or time.time()),
+    )
+
+
+def _cleanup_php_preview_server_registry(*, now: float) -> None:
+    try:
+        paths = list(_php_preview_registry_root().glob("*.json"))
+    except OSError:
+        return
+    for path in paths:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        try:
+            expires_at = float(payload.get("expires_at") or 0)
+            pid = int(payload.get("pid") or 0)
+        except (TypeError, ValueError):
+            expires_at = 0
+            pid = 0
+        if expires_at >= now and _php_process_alive(None, pid=pid):
+            continue
+        key = str(payload.get("key") or path.stem)
+        server = PhpPreviewServer(
+            key=key,
+            port=int(payload.get("port") or 0),
+            pid=pid,
+            process=None,
+            runtime_root=Path(str(payload.get("runtime_root") or ".")),
+            docroot=Path(str(payload.get("docroot") or ".")),
+            router=Path(str(payload.get("router"))) if payload.get("router") else None,
+            last_used=float(payload.get("last_used") or 0),
+        )
+        _terminate_php_preview_server(server)
+
+
+def _delete_php_preview_server_registry(key: str) -> None:
+    try:
+        _php_preview_registry_path(key).unlink()
+    except OSError:
+        return
 
 
 def _runtime_page_path_for_route(route: str) -> str:

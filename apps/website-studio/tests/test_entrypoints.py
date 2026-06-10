@@ -25,10 +25,13 @@ sys.path.insert(0, str(APP_ROOT))
 sys.path.insert(0, str(APP_ROOT / "backend"))
 
 from backend.service import app_events_for_action, handle_action, resolve_secret_resource
-from backend.store import _git_import_source_ref, _github_error_detail, _redact_secret_text, _site_mutation_lock, rebuild_index
+from backend.store import _git_import_source_ref, _github_error_detail, _redact_secret_text, _replace_preview_media_urls_with_gateway, _site_mutation_lock, rebuild_index
 from preview_runtime import (
+    PhpPreviewServer,
     _bounded_log,
+    _php_preview_server,
     _resolve_workspace_binary,
+    _shutdown_php_preview_servers,
     build_plan_for_source,
     internal_routes_from_html,
     prepare_runtime_build,
@@ -106,6 +109,9 @@ def _approval_actor(user_id: str = "user:owner", workspace_role: str = "owner") 
 
 
 class WebsiteStudioEntrypointTest(unittest.TestCase):
+    def tearDown(self) -> None:
+        _shutdown_php_preview_servers()
+
     def test_site_edit_diff_and_publish_block(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
@@ -1125,6 +1131,67 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(imported["import"]["source_profile"]["package_manager"], "pnpm")
             self.assertEqual(imported["site"]["source_shape"], "full_source")
 
+    def test_bootstrap_uses_routes_only_sitemap_and_persisted_source_version(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            archive = BytesIO()
+            with ZipFile(archive, "w") as zip_file:
+                zip_file.writestr("index.html", '<title>Bootstrap</title><img src="assets/logo.png">')
+                zip_file.writestr("assets/logo.png", b"logo")
+            encoded = base64.b64encode(archive.getvalue()).decode("ascii")
+
+            status, imported = handle_action(data_root, {"action": "import_zip", "display_name": "Bootstrap", "archive_base64": encoded})
+            self.assertEqual(status, 201)
+            site = imported["site"]
+            self.assertTrue(str(site.get("source_version") or "").startswith("src_"))
+
+            status, bootstrap_payload = handle_action(data_root, {"action": "bootstrap", "site_id": site["id"], "route": "/"})
+            self.assertEqual(status, 200)
+            self.assertEqual(bootstrap_payload["active_site_id"], site["id"])
+            self.assertEqual(bootstrap_payload["sitemap"]["items"][0]["route"], "/")
+            self.assertEqual(bootstrap_payload["sitemap"]["assets"], [])
+
+            status, routes_only = handle_action(data_root, {"action": "sitemap", "site_id": site["id"], "mode": "routes-only"})
+            self.assertEqual(status, 200)
+            self.assertEqual(routes_only["assets"], [])
+            status, full_map = handle_action(data_root, {"action": "sitemap", "site_id": site["id"]})
+            self.assertEqual(status, 200)
+            self.assertEqual([asset["path"] for asset in full_map["assets"]], ["assets/logo.png"])
+
+    def test_bootstrap_does_not_return_preview_after_source_version_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            archive = BytesIO()
+            with ZipFile(archive, "w") as zip_file:
+                zip_file.writestr("index.html", "<title>Bootstrap</title><main>v1</main>")
+            encoded = base64.b64encode(archive.getvalue()).decode("ascii")
+
+            status, imported = handle_action(data_root, {"action": "import_zip", "display_name": "Bootstrap", "archive_base64": encoded})
+            self.assertEqual(status, 201)
+            site_id = imported["site"]["id"]
+            status, preview = handle_action(data_root, {"action": "build_preview", "site_id": site_id, "route": "/", "include_html": False})
+            self.assertEqual(status, 200)
+            status, bootstrap_payload = handle_action(data_root, {"action": "bootstrap", "site_id": site_id, "route": "/"})
+            self.assertEqual(status, 200)
+            self.assertEqual(bootstrap_payload["latest_preview"]["id"], preview["preview_id"])
+
+            status, read_payload = handle_action(data_root, {"action": "read_file", "site_id": site_id, "path": "index.html"})
+            self.assertEqual(status, 200)
+            status, write_payload = handle_action(
+                data_root,
+                {
+                    "action": "write_file",
+                    "site_id": site_id,
+                    "path": "index.html",
+                    "content": read_payload["file"]["content"].replace("v1", "v2"),
+                    "expected_hash": read_payload["file"]["hash"],
+                },
+            )
+            self.assertEqual(status, 200)
+            status, refreshed_bootstrap = handle_action(data_root, {"action": "bootstrap", "site_id": site_id, "route": "/"})
+            self.assertEqual(status, 200)
+            self.assertIsNone(refreshed_bootstrap["latest_preview"])
+
     def test_sitemap_index_includes_xml_redirects_and_seo_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
@@ -1329,8 +1396,10 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
                         "<!doctype html><html><head>"
                         '<link rel="stylesheet" href="assets/site.css">'
                         '<style>.hero{background:url("assets/hero.webp")}</style>'
+                        "<style>@font-face{font-family:Trail;src:url('fonts/Trail.woff2')}</style>"
                         '</head><body><a href="/index.php#trails">Trails</a><main>Runtime</main>'
                         '<img data-src="assets/photo.webp" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">'
+                        '<img src="images/cortina.webp">'
                         '<script src="assets/site.js"></script>'
                         "<script>const lateScript = document.createElement('script'); lateScript.src = 'assets/late.js'; document.body.appendChild(lateScript);</script>"
                         "</body></html>"
@@ -1352,6 +1421,8 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
                 zip_file.writestr("assets/photo.webp", b"photo")
                 zip_file.writestr("assets/hero.webp", b"hero")
                 zip_file.writestr("assets/bg.webp", b"bg")
+                zip_file.writestr("assets/images/cortina.webp", b"cortina")
+                zip_file.writestr("assets/fonts/Trail.woff2", b"font")
             encoded = base64.b64encode(archive.getvalue()).decode("ascii")
 
             status, imported = handle_action(data_root, {"action": "import_zip", "display_name": "Runtime Static", "archive_base64": encoded})
@@ -1368,25 +1439,50 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(document["preview"]["id"], preview["preview_id"])
             self.assertEqual(document["preview"]["status"], "ready")
             self.assertIn('<meta charset="utf-8">', document["html"])
-            self.assertIn("/api/apps/website-studio/backend/media?", document["html"])
+            self.assertIn("/api/apps/website-studio/backend/file/gw_", document["html"])
+            self.assertNotIn("/api/apps/website-studio/backend/media?", document["html"])
             self.assertIn('data-website-studio-inline-stylesheet="assets/site.css"', document["html"])
             self.assertIn("main { color: #123", document["html"])
             self.assertIn('data-website-studio-inline-script="assets/site.js"', document["html"])
             self.assertIn("data-website-studio-inline-script-runner", document["html"])
             self.assertIn("data-website-studio-preview-shim", document["html"])
             self.assertIn("data-website-studio-preview-lazy-assets", document["html"])
-            self.assertIn("path=assets%2Flate.js", document["html"])
-            self.assertIn("path=assets%2Fphoto.webp", document["html"])
-            self.assertIn("path=assets%2Fhero.webp", document["html"])
-            self.assertIn("path=assets%2Fbg.webp", document["html"])
-            self.assertIn("script-src &#39;unsafe-inline&#39; blob: __WEBSITE_STUDIO_PREVIEW_MEDIA_SOURCE__", document["html"])
-            self.assertIn("font-src data: blob: https: __WEBSITE_STUDIO_PREVIEW_MEDIA_SOURCE__", document["html"])
-            self.assertIn("style-src &#39;unsafe-inline&#39; blob: https: __WEBSITE_STUDIO_PREVIEW_MEDIA_SOURCE__", document["html"])
+            self.assertIn("assets/photo.webp", document["source_map"]["asset_refs"])
+            self.assertIn("assets/hero.webp", document["source_map"]["asset_refs"])
+            self.assertIn("assets/bg.webp", document["source_map"]["asset_refs"])
+            self.assertIn("images/cortina.webp", document["source_map"]["asset_refs"])
+            self.assertIn("fonts/Trail.woff2", document["source_map"]["asset_refs"])
+            self.assertIn("script-src &#39;unsafe-inline&#39; blob: __WEBSITE_STUDIO_PREVIEW_MEDIA_SOURCE__ __WEBSITE_STUDIO_PREVIEW_FILE_GATEWAY_SOURCE__", document["html"])
+            self.assertIn("font-src data: blob: https: __WEBSITE_STUDIO_PREVIEW_MEDIA_SOURCE__ __WEBSITE_STUDIO_PREVIEW_FILE_GATEWAY_SOURCE__", document["html"])
+            self.assertIn("style-src &#39;unsafe-inline&#39; blob: https: __WEBSITE_STUDIO_PREVIEW_MEDIA_SOURCE__ __WEBSITE_STUDIO_PREVIEW_FILE_GATEWAY_SOURCE__", document["html"])
             self.assertNotIn('src="assets/site.js"', document["html"])
             self.assertNotIn('<script src="__WEBSITE_STUDIO_PREVIEW_ORIGIN__/api/apps/website-studio/backend/media?preview_id=', document["html"])
             self.assertNotIn('data-src="assets/photo.webp"', document["html"])
             self.assertNotIn('rel="stylesheet" href="__WEBSITE_STUDIO_PREVIEW_ORIGIN__/api/apps/website-studio/backend/media?preview_id=', document["html"])
             self.assertIn('href="#trails"', document["html"])
+            gateway_manifests = list((data_root / "run" / "file-gateway").glob("gw_*.json"))
+            self.assertGreaterEqual(len(gateway_manifests), 4)
+            gateway_manifest = json.loads(gateway_manifests[0].read_text(encoding="utf-8"))
+            self.assertEqual(gateway_manifest["access"], "public_capability")
+            self.assertEqual(gateway_manifest["schema"], "maverick.app.file_gateway.v1")
+            self.assertTrue(gateway_manifest["allowed_paths"])
+            self.assertIn("expires_at", gateway_manifest)
+            self.assertIn("asset_gateway", document["source_map"])
+            self.assertTrue(document["source_map"]["asset_gateway"]["assets/photo.webp"].startswith("/api/apps/website-studio/backend/file/gw_"))
+            self.assertEqual(
+                document["source_map"]["asset_gateway"]["images/cortina.webp"],
+                document["source_map"]["asset_gateway"]["assets/images/cortina.webp"],
+            )
+            self.assertEqual(
+                document["source_map"]["asset_gateway"]["fonts/Trail.woff2"],
+                document["source_map"]["asset_gateway"]["assets/fonts/Trail.woff2"],
+            )
+            cache_files = list((data_root / "run" / "preview-documents" / preview["preview_id"]).glob("*.json"))
+            self.assertEqual(len(cache_files), 1)
+            status, cached_document = handle_action(data_root, {"action": "preview_document", "preview_id": preview["preview_id"]})
+            self.assertEqual(status, 200)
+            self.assertIn("/api/apps/website-studio/backend/file/gw_", cached_document["html"])
+            self.assertNotIn("/api/apps/website-studio/backend/media?", cached_document["html"])
 
             status, css_media = handle_action(
                 data_root,
@@ -1454,19 +1550,62 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             entrypoint_response = json.loads(result.stdout)
             entrypoint_html = entrypoint_response["json"]["html"]
-            self.assertIn("https://studio.example/api/apps/website-studio/backend/media?", entrypoint_html)
-            self.assertIn("style-src &#39;unsafe-inline&#39; blob: https: https://studio.example/api/apps/website-studio/backend/media", entrypoint_html)
+            self.assertIn("https://studio.example/api/apps/website-studio/backend/file/gw_", entrypoint_html)
+            self.assertIn("style-src &#39;unsafe-inline&#39; blob: https: https://studio.example/api/apps/website-studio/backend/media https://studio.example/api/apps/website-studio/backend/file/", entrypoint_html)
             self.assertNotIn("__WEBSITE_STUDIO_PREVIEW_ORIGIN__", entrypoint_html)
             self.assertNotIn("__WEBSITE_STUDIO_PREVIEW_MEDIA_SOURCE__", entrypoint_html)
+            self.assertNotIn("__WEBSITE_STUDIO_PREVIEW_FILE_GATEWAY_SOURCE__", entrypoint_html)
+            self.assertNotIn("__WEBSITE_STUDIO_PREVIEW_BACKEND_SOURCE__", entrypoint_html)
 
             status, nested_preview = handle_action(data_root, {"action": "build_preview", "site_id": imported["site"]["id"], "route": "/legal/terms"})
             self.assertEqual(status, 200)
             status, nested_document = handle_action(data_root, {"action": "preview_document", "preview_id": nested_preview["preview_id"]})
             self.assertEqual(status, 200)
             self.assertIn('data-website-studio-inline-stylesheet="assets/site.css"', nested_document["html"])
-            self.assertIn("path=assets%2Fphoto.webp", nested_document["html"])
+            self.assertIn("/api/apps/website-studio/backend/file/gw_", nested_document["html"])
+            self.assertIn("assets/photo.webp", nested_document["source_map"]["asset_refs"])
             self.assertNotIn('href="../assets/site.css"', nested_document["html"])
             self.assertNotIn('data-src="../assets/photo.webp"', nested_document["html"])
+
+    def test_preview_media_gateway_replacement_records_html_only_aliases(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            archive = BytesIO()
+            with ZipFile(archive, "w") as zip_file:
+                zip_file.writestr("index.html", "<!doctype html><main>Alias only</main>")
+                zip_file.writestr("assets/images/solo.webp", b"solo")
+            encoded = base64.b64encode(archive.getvalue()).decode("ascii")
+
+            status, imported = handle_action(data_root, {"action": "import_zip", "display_name": "Alias Only", "archive_base64": encoded})
+            self.assertEqual(status, 201)
+            status, preview = handle_action(data_root, {"action": "build_preview", "site_id": imported["site"]["id"]})
+            self.assertEqual(status, 200)
+            gateway_urls: dict[str, str] = {}
+            html = f'<img src="/api/apps/website-studio/backend/media?preview_id={preview["preview_id"]}&path=images/solo.webp">'
+
+            rewritten = _replace_preview_media_urls_with_gateway(data_root, {"id": preview["preview_id"]}, html, gateway_urls=gateway_urls)
+
+            self.assertIn("/api/apps/website-studio/backend/file/gw_", rewritten)
+            self.assertEqual(gateway_urls["images/solo.webp"], gateway_urls["assets/images/solo.webp"])
+
+    def test_preview_document_marks_unresolved_asset_gateway_refs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            archive = BytesIO()
+            with ZipFile(archive, "w") as zip_file:
+                zip_file.writestr("index.html", '<!doctype html><link rel="stylesheet" href="assets/styles.css"><main>Missing stylesheet</main>')
+            encoded = base64.b64encode(archive.getvalue()).decode("ascii")
+
+            status, imported = handle_action(data_root, {"action": "import_zip", "display_name": "Missing Asset", "archive_base64": encoded})
+            self.assertEqual(status, 201)
+            status, preview = handle_action(data_root, {"action": "build_preview", "site_id": imported["site"]["id"]})
+            self.assertEqual(status, 200)
+            status, document = handle_action(data_root, {"action": "preview_document", "preview_id": preview["preview_id"]})
+            self.assertEqual(status, 200)
+
+            self.assertIn("assets/styles.css", document["source_map"]["asset_refs"])
+            self.assertNotIn("assets/styles.css", document["source_map"]["asset_gateway"])
+            self.assertIn("assets/styles.css", document["source_map"]["asset_gateway_unresolved"])
 
     def test_preview_report_includes_source_map_asset_coverage_and_acceptance(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -2518,8 +2657,10 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertNotIn("website-fullscreen-preview", app_source)
         self.assertIn("runtime_status", app_source)
         self.assertIn("missing_requirements", app_source)
+        self.assertIn("action: 'bootstrap'", app_source)
         self.assertIn("action: 'site_status'", app_source)
         self.assertIn("action: 'list_changes'", app_source)
+        self.assertIn("loadSiteDetails", app_source)
         self.assertIn("previewPayloadFromRecord", app_source)
         self.assertIn("include_html: false", app_source)
         self.assertIn("previewLoading", app_source)
@@ -2527,7 +2668,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("setPreviewLoading(false)", app_source)
         self.assertIn("PreviewLoadingState", app_source)
         self.assertIn("Preview is loading", app_source)
-        self.assertIn("requestedSite || persistedSite || availableSites[0]?.id || ''", app_source)
+        self.assertIn("bootstrap.active_site_id || requestedSite || persistedSite || availableSites[0]?.id || ''", app_source)
         self.assertIn("active_view: activeView", app_source)
         self.assertIn("context_tool: 'website_page_context'", app_source)
         self.assertIn("normalizePreviewUrl(previewState?.preview_url || '', activeTarget)", app_source)
@@ -2555,11 +2696,19 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("document.fonts.ready", runtime_source)
         self.assertIn("getComputedStyle", runtime_source)
         self.assertIn("website-studio.preview.report", runtime_source)
-        self.assertIn("website-studio.asset.request", runtime_source)
-        self.assertIn("website-studio.asset.response", runtime_source)
-        self.assertIn("X-Website-Studio-Preview-Broker", runtime_source)
-        self.assertIn("credentials: 'include'", runtime_source)
         self.assertIn("asset_broker", runtime_source)
+        self.assertIn("__WEBSITE_STUDIO_PREVIEW_FILE_GATEWAY_SOURCE__", runtime_source)
+        self.assertIn("__WEBSITE_STUDIO_PREVIEW_BACKEND_SOURCE__", runtime_source)
+        self.assertIn("/api/apps/website-studio/backend/file/", runtime_source)
+        self.assertNotIn("website-studio.asset.request", runtime_source)
+        self.assertNotIn("website-studio.asset.response", runtime_source)
+        self.assertNotIn("X-Website-Studio-Preview-Broker", runtime_source)
+        self.assertNotIn("credentials: 'include'", runtime_source)
+        self.assertNotIn("async function normalizePreviewDocument", runtime_source)
+        self.assertNotIn("parentBrokeredMediaAsset", runtime_source)
+        self.assertNotIn("parentBrokeredMediaUrl", runtime_source)
+        self.assertNotIn("dataUrlFromBytes", runtime_source)
+        self.assertNotIn("response.arrayBuffer", runtime_source)
         self.assertNotIn("credentials: 'same-origin'", runtime_source)
         self.assertNotIn("response.blob()", runtime_source)
         self.assertNotIn("asset materialization failed", runtime_source)
@@ -2600,9 +2749,9 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
         widget_source = (APP_ROOT / "frontend" / "src" / "widgets" / "website-studio-sitemap-sidebar" / "main.tsx").read_text(encoding="utf-8")
 
-        self.assertIn("availableSites = sitePayload.items.filter((site) => site.status !== 'archived')", app_source)
+        self.assertIn("availableSites = bootstrap.sites.filter((site) => site.status !== 'archived')", app_source)
         self.assertIn("const selectableSites = nextSites.filter((item) => item.status !== 'archived')", widget_source)
-        self.assertIn("requestedSite || persistedSite || availableSites[0]?.id || ''", app_source)
+        self.assertIn("bootstrap.active_site_id || requestedSite || persistedSite || availableSites[0]?.id || ''", app_source)
         self.assertIn("requestedSite || persistedSite || selectableSites[0]", widget_source)
         self.assertNotIn("sitePayload.items[0]?.id", app_source)
         self.assertNotIn("nextSites[0]", widget_source)
@@ -3570,6 +3719,50 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(result["missing_requirements"], [])
             self.assertNotIn("package.json", result["logs_summary"])
             self.assertTrue((data_root / "sites" / "site_test" / "builds" / "build_test" / "runtime" / "index.php").exists())
+
+    def test_phase3a_php_preview_server_is_reused_for_matching_runtime_key(self) -> None:
+        class FakeProcess:
+            def __init__(self) -> None:
+                self.terminated = False
+
+            def poll(self):
+                return None if not self.terminated else 0
+
+            def terminate(self) -> None:
+                self.terminated = True
+
+            def communicate(self, timeout=None):
+                return "", ""
+
+            def kill(self) -> None:
+                self.terminated = True
+
+        with tempfile.TemporaryDirectory() as tmp:
+            runtime_root = Path(tmp)
+            docroot = runtime_root / "public"
+            docroot.mkdir()
+            fake_process = FakeProcess()
+
+            def fake_start(key, root, docroot_path, router):
+                return PhpPreviewServer(
+                    key=key,
+                    port=43210,
+                    pid=os.getpid(),
+                    process=fake_process,
+                    runtime_root=root,
+                    docroot=docroot_path,
+                    router=router,
+                    last_used=time.time(),
+                )
+
+            try:
+                with patch("preview_runtime._start_php_preview_server", side_effect=fake_start) as start_server:
+                    first = _php_preview_server(runtime_root, docroot, None)
+                    second = _php_preview_server(runtime_root, docroot, None)
+                    self.assertIs(first, second)
+                    self.assertEqual(start_server.call_count, 1)
+            finally:
+                _shutdown_php_preview_servers()
 
     def test_phase3a_node_build_without_lockfile_is_blocked_before_execution(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

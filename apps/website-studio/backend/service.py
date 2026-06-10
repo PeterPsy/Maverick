@@ -10,6 +10,7 @@ from store import (
     activate_git_connection,
     apply_text_patch,
     archive_site,
+    bootstrap,
     build_preview,
     configure_environment,
     configure_publish_target,
@@ -102,6 +103,8 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
             return 200, {"app_id": "website-studio", "status": "ready", **health_payload(data_root), "phase": "phase_3"}
         if action == "sites_list":
             return 200, {"items": list_sites(data_root)}
+        if action == "bootstrap":
+            return 200, bootstrap(data_root, payload.get("site_id"), payload.get("route"))
         if action == "site_create":
             return 201, {
                 "site": create_site(
@@ -211,7 +214,7 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
             )
             return (409 if result.get("blocked") else 200), result
         if action == "sitemap":
-            return 200, sitemap(data_root, payload.get("site_id"))
+            return 200, sitemap(data_root, payload.get("site_id"), mode=payload.get("mode"))
         if action == "navigation_analyze":
             return 200, navigation_analyze(data_root, payload.get("site_id"))
         if action == "index":

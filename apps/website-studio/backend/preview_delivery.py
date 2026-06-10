@@ -13,8 +13,11 @@ from safety import safe_relative_path
 
 
 PREVIEW_MEDIA_PATH = "/api/apps/website-studio/backend/media"
+PREVIEW_FILE_GATEWAY_PATH = "/api/apps/website-studio/backend/file/"
 PREVIEW_ORIGIN_PLACEHOLDER = "__WEBSITE_STUDIO_PREVIEW_ORIGIN__"
 PREVIEW_MEDIA_SOURCE_PLACEHOLDER = "__WEBSITE_STUDIO_PREVIEW_MEDIA_SOURCE__"
+PREVIEW_FILE_GATEWAY_SOURCE_PLACEHOLDER = "__WEBSITE_STUDIO_PREVIEW_FILE_GATEWAY_SOURCE__"
+PREVIEW_BACKEND_SOURCE_PLACEHOLDER = "__WEBSITE_STUDIO_PREVIEW_BACKEND_SOURCE__"
 
 ASSET_SUFFIXES = {
     ".avif",
@@ -90,6 +93,8 @@ def prepare_preview_document_html(
     if origin:
         text = text.replace(PREVIEW_ORIGIN_PLACEHOLDER, origin)
         text = text.replace(PREVIEW_MEDIA_SOURCE_PLACEHOLDER, f"{origin}{PREVIEW_MEDIA_PATH}")
+        text = text.replace(PREVIEW_FILE_GATEWAY_SOURCE_PLACEHOLDER, f"{origin}{PREVIEW_FILE_GATEWAY_PATH}")
+        text = text.replace(PREVIEW_BACKEND_SOURCE_PLACEHOLDER, f"{origin}{PREVIEW_FILE_GATEWAY_PATH}")
     return text
 
 
@@ -201,6 +206,8 @@ def _inline_stylesheet_links(html: str, *, stylesheet_loader: AssetTextLoader, p
         if origin:
             css = css.replace(PREVIEW_ORIGIN_PLACEHOLDER, origin)
             css = css.replace(PREVIEW_MEDIA_SOURCE_PLACEHOLDER, f"{origin}{PREVIEW_MEDIA_PATH}")
+            css = css.replace(PREVIEW_FILE_GATEWAY_SOURCE_PLACEHOLDER, f"{origin}{PREVIEW_FILE_GATEWAY_PATH}")
+            css = css.replace(PREVIEW_BACKEND_SOURCE_PLACEHOLDER, f"{origin}{PREVIEW_FILE_GATEWAY_PATH}")
         media_attr = f' media="{_escape_attr(attrs["media"])}"' if attrs.get("media") else ""
         source_attr = _escape_attr(source_path or asset_path)
         return f'<style data-website-studio-inline-stylesheet="{source_attr}"{media_attr}>{_safe_style_text(css)}</style>'
@@ -235,6 +242,8 @@ def _inline_script_srcs(html: str, *, script_loader: AssetTextLoader, preview_or
         if origin:
             script = script.replace(PREVIEW_ORIGIN_PLACEHOLDER, origin)
             script = script.replace(PREVIEW_MEDIA_SOURCE_PLACEHOLDER, f"{origin}{PREVIEW_MEDIA_PATH}")
+            script = script.replace(PREVIEW_FILE_GATEWAY_SOURCE_PLACEHOLDER, f"{origin}{PREVIEW_FILE_GATEWAY_PATH}")
+            script = script.replace(PREVIEW_BACKEND_SOURCE_PLACEHOLDER, f"{origin}{PREVIEW_FILE_GATEWAY_PATH}")
         inlined = True
         script_type_attr = f' data-preview-script-type="{_escape_attr(attrs["type"])}"' if attrs.get("type") else ""
         source_attr = _escape_attr(source_path or asset_path)
@@ -540,11 +549,11 @@ def _remove_existing_csp(html: str) -> str:
 def _inject_preview_csp(html: str) -> str:
     csp = (
         "default-src 'none'; "
-        f"img-src data: blob: https: {PREVIEW_MEDIA_SOURCE_PLACEHOLDER}; "
-        f"media-src data: blob: https: {PREVIEW_MEDIA_SOURCE_PLACEHOLDER}; "
-        f"font-src data: blob: https: {PREVIEW_MEDIA_SOURCE_PLACEHOLDER}; "
-        f"style-src 'unsafe-inline' blob: https: {PREVIEW_MEDIA_SOURCE_PLACEHOLDER}; "
-        f"script-src 'unsafe-inline' blob: {PREVIEW_MEDIA_SOURCE_PLACEHOLDER}; "
+        f"img-src data: blob: https: {PREVIEW_MEDIA_SOURCE_PLACEHOLDER} {PREVIEW_FILE_GATEWAY_SOURCE_PLACEHOLDER}; "
+        f"media-src data: blob: https: {PREVIEW_MEDIA_SOURCE_PLACEHOLDER} {PREVIEW_FILE_GATEWAY_SOURCE_PLACEHOLDER}; "
+        f"font-src data: blob: https: {PREVIEW_MEDIA_SOURCE_PLACEHOLDER} {PREVIEW_FILE_GATEWAY_SOURCE_PLACEHOLDER}; "
+        f"style-src 'unsafe-inline' blob: https: {PREVIEW_MEDIA_SOURCE_PLACEHOLDER} {PREVIEW_FILE_GATEWAY_SOURCE_PLACEHOLDER}; "
+        f"script-src 'unsafe-inline' blob: {PREVIEW_MEDIA_SOURCE_PLACEHOLDER} {PREVIEW_FILE_GATEWAY_SOURCE_PLACEHOLDER}; "
         "connect-src 'none'; frame-ancestors 'self'; form-action 'none'; base-uri 'none'"
     )
     metas = ""

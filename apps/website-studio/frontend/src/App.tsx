@@ -2,13 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   callBackend,
   type Asset,
+  type BootstrapPayload,
   type ChangeHistoryPayload,
   type ChangeRecord,
   type Page,
   type PreviewPayload,
   type Route,
   type RuntimeSummary,
-  type SitemapPayload,
   type Site,
   type SiteStatusPayload
 } from './api';
@@ -16,7 +16,7 @@ import {
 type Notice = { tone: 'ok' | 'warn' | 'error'; text: string } | null;
 type ActiveTarget = { anchor?: string; componentId?: string; id?: string; kind?: string; selector?: string };
 
-const PREVIEW_RUNTIME_VERSION = 'preview-asset-broker-v2';
+const PREVIEW_RUNTIME_VERSION = 'preview-browser-stream-v4';
 const PREVIEW_CLIENT_VERSION = 'website-studio-preview-frame-v7';
 
 export function App() {
@@ -37,6 +37,7 @@ export function App() {
   const [infoPanelOpen, setInfoPanelOpen] = useState(false);
   const activeSiteIdRef = useRef('');
   const activePageIdRef = useRef('');
+  const refreshRunRef = useRef(0);
 
   const activeSite = useMemo(() => sites.find((site) => site.id === activeSiteId), [sites, activeSiteId]);
   const activePage = useMemo(() => pages.find((page) => page.id === activePageId), [pages, activePageId]);
@@ -59,44 +60,48 @@ export function App() {
     nextAssetId = '',
     nextTarget: ActiveTarget = {}
   ) {
-    const sitePayload = await callBackend<{ items: Site[] }>({ action: 'sites_list' });
-    setSites(sitePayload.items);
-    const availableSites = sitePayload.items.filter((site) => site.status !== 'archived');
-    const requestedSite = availableSites.find((site) => site.id === nextSiteId)?.id || '';
-    const persistedSite = availableSites.find((site) => site.is_active)?.id || '';
-    const selectedSite = requestedSite || persistedSite || availableSites[0]?.id || '';
-    setActiveSiteId(selectedSite);
-    if (!selectedSite) {
-      setPages([]);
-      setActivePageId('');
-      setActiveRouteId('');
-      setActiveAssetId('');
-      setActiveTarget({});
-      setPreviewHtml('');
-      setPreviewState(null);
-      setPreviewLoading(false);
-      setSiteStatus(null);
-      setChangeHistory(null);
-      setShowNewWebsite(true);
-      setInfoPanelOpen(false);
-      return;
-    }
-    setShowNewWebsite(false);
+    const runId = ++refreshRunRef.current;
     setPreviewLoading(true);
     setPreviewHtml('');
     setPreviewState(null);
+    setSiteStatus(null);
+    setChangeHistory(null);
     try {
-      if (selectedSite !== persistedSite) {
-        await callBackend({ action: 'site_set_active', site_id: selectedSite });
+      const bootstrap = await callBackend<BootstrapPayload>({
+        action: 'bootstrap',
+        site_id: nextSiteId || undefined,
+        route: nextRoute || undefined
+      });
+      if (runId !== refreshRunRef.current) return;
+      setSites(bootstrap.sites);
+      const availableSites = bootstrap.sites.filter((site) => site.status !== 'archived');
+      const requestedSite = availableSites.find((site) => site.id === nextSiteId)?.id || '';
+      const persistedSite = bootstrap.persisted_active_site_id || availableSites.find((site) => site.is_active)?.id || '';
+      const selectedSite = bootstrap.active_site_id || requestedSite || persistedSite || availableSites[0]?.id || '';
+      setActiveSiteId(selectedSite);
+      if (!selectedSite) {
+        setPages([]);
+        setActivePageId('');
+        setActiveRouteId('');
+        setActiveAssetId('');
+        setActiveTarget({});
+        setPreviewHtml('');
+        setPreviewState(null);
+        setSiteStatus(null);
+        setChangeHistory(null);
+        setShowNewWebsite(true);
+        setInfoPanelOpen(false);
+        return;
       }
 
-      const map = await callBackend<SitemapPayload>({ action: 'sitemap', site_id: selectedSite });
-      const [statusPayload, changesPayload] = await Promise.all([
-        callBackend<SiteStatusPayload>({ action: 'site_status', site_id: selectedSite }),
-        callBackend<ChangeHistoryPayload>({ action: 'list_changes', site_id: selectedSite })
-      ]);
-      setSiteStatus(statusPayload);
-      setChangeHistory(changesPayload);
+      setShowNewWebsite(false);
+      if (selectedSite !== persistedSite) {
+        callBackend({ action: 'site_set_active', site_id: selectedSite }).catch((error: Error) => {
+          if (runId === refreshRunRef.current) setNotice({ tone: 'warn', text: error.message });
+        });
+      }
+
+      const map = bootstrap.sitemap || { site_id: selectedSite, items: [], routes: [], assets: [] };
       setPages(map.items);
       const selectedRoute = (map.routes || []).find((route) => route.id === nextRouteId) || (map.routes || []).find((route) => route.route === nextRoute);
       const selectedAsset = (map.assets || []).find((asset) => asset.id === nextAssetId);
@@ -111,14 +116,30 @@ export function App() {
       setActiveTarget(nextTarget || {});
       const previewRoute = selectedPage?.route || selectedRoute?.route || '/';
       postSelection(selectedSite, selectedPage, selectedRoute, selectedAsset, nextTarget);
-      await renderSite(selectedSite, previewRoute, statusPayload);
+      await renderSite(selectedSite, previewRoute, bootstrap.latest_preview || null);
+      if (runId === refreshRunRef.current) {
+        loadSiteDetails(selectedSite, runId);
+      }
     } finally {
-      setPreviewLoading(false);
+      if (runId === refreshRunRef.current) setPreviewLoading(false);
     }
   }
 
-  async function renderSite(siteId: string, route = '/', status?: SiteStatusPayload) {
-    const latestPreview = status?.runtime?.latest_preview || null;
+  async function loadSiteDetails(siteId: string, runId: number) {
+    try {
+      const [statusPayload, changesPayload] = await Promise.all([
+        callBackend<SiteStatusPayload>({ action: 'site_status', site_id: siteId }),
+        callBackend<ChangeHistoryPayload>({ action: 'list_changes', site_id: siteId })
+      ]);
+      if (runId !== refreshRunRef.current || activeSiteIdRef.current !== siteId) return;
+      setSiteStatus(statusPayload);
+      setChangeHistory(changesPayload);
+    } catch (error) {
+      if (runId === refreshRunRef.current) setNotice({ tone: 'warn', text: error instanceof Error ? error.message : 'Site details failed to load' });
+    }
+  }
+
+  async function renderSite(siteId: string, route = '/', latestPreview?: RuntimeSummary['latest_preview'] | null) {
     if (latestPreview?.id && latestPreview.route === route && latestPreview.preview_url) {
       const payload = previewPayloadFromRecord(siteId, route, latestPreview);
       setPreviewState(payload);

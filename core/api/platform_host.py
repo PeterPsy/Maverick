@@ -223,6 +223,17 @@ class PlatformHost:
 
 def _backend_media_app_id(path: object) -> str:
     text = str(path or "")
-    if not text.startswith("/api/apps/") or not text.endswith("/backend/media"):
+    if not text.startswith("/api/apps/"):
         return ""
-    return text.removeprefix("/api/apps/").removesuffix("/backend/media").strip("/")
+    if text.endswith("/backend/media"):
+        return _valid_backend_media_app_id(text.removeprefix("/api/apps/").removesuffix("/backend/media"))
+    if text.endswith("/media"):
+        return _valid_backend_media_app_id(text.removeprefix("/api/apps/").removesuffix("/media"))
+    return ""
+
+
+def _valid_backend_media_app_id(value: object) -> str:
+    app_id = str(value or "").strip("/")
+    if not app_id or "/" in app_id:
+        return ""
+    return app_id

@@ -619,6 +619,7 @@ def _serve_app_file_response(
     try:
         served_range = _served_file_response_range(file_response, path_size=size)
     except ValueError:
+        _delete_file_response_after_send(path=path, enabled=delete_after_send)
         return json_response(start_response, {"error": "file_response_range_invalid"}, status=status_line(500))
     if served_range is not None:
         start, end, total_size = served_range
@@ -635,6 +636,7 @@ def _serve_app_file_response(
         if selected is None:
             headers = [*base_headers, ("Content-Range", f"bytes */{size}"), ("Content-Length", "0")]
             start_response(status_line(416), headers)
+            _delete_file_response_after_send(path=path, enabled=delete_after_send)
             return [b""]
         start, end = selected
         length = end - start + 1
@@ -834,7 +836,7 @@ def _truthy(value: object) -> bool:
 
 
 def _backend_route_supports_streaming(*, method: str, route_path: str) -> bool:
-    return method.upper() in {"GET", "HEAD"} and route_path.startswith("/api/apps/") and route_path.endswith("/backend/media")
+    return method.upper() in {"GET", "HEAD"} and _is_app_backend_media_route(route_path)
 
 
 def _backend_request_headers(environ: Mapping[str, Any]) -> dict[str, str]:
@@ -873,13 +875,26 @@ def backend_entrypoint_timeout_seconds(parsed: ParsedAppContract) -> int:
 
 
 def _backend_secret_request_body(*, body: dict[str, Any], method: str, route_path: str, query: dict[str, str] | None = None) -> dict[str, Any]:
-    if method.upper() in {"GET", "HEAD"} and route_path.startswith("/api/apps/") and route_path.endswith("/backend/media"):
+    if method.upper() in {"GET", "HEAD"} and _is_app_backend_media_route(route_path):
         params = query or {}
         secret_request = _app_secret_request_from_query(params)
         if secret_request is None:
             secret_request = {"logical_names": [], "required": False}
         return {**body, **params, "_app_secret_request": secret_request}
     return body
+
+
+def _is_app_backend_media_route(route_path: object) -> bool:
+    path = str(route_path or "")
+    if not path.startswith("/api/apps/"):
+        return False
+    if path.endswith("/backend/media"):
+        app_id = path.removeprefix("/api/apps/").removesuffix("/backend/media").strip("/")
+        return bool(app_id and "/" not in app_id)
+    if path.endswith("/media"):
+        app_id = path.removeprefix("/api/apps/").removesuffix("/media").strip("/")
+        return bool(app_id and "/" not in app_id)
+    return False
 
 
 def _app_secret_request_from_query(query: dict[str, str]) -> dict[str, Any] | None:

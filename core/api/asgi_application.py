@@ -223,7 +223,19 @@ def _is_app_backend_request(scope: dict[str, Any]) -> bool:
     method = str(scope.get("method") or "GET").upper()
     if method == "POST" and path.startswith("/api/apps/") and path.endswith("/backend"):
         return True
-    return method in {"GET", "HEAD"} and path.startswith("/api/apps/") and path.endswith("/backend/media")
+    return method in {"GET", "HEAD"} and _is_app_backend_media_request_path(path)
+
+
+def _is_app_backend_media_request_path(path: str) -> bool:
+    if not path.startswith("/api/apps/"):
+        return False
+    if path.endswith("/backend/media"):
+        app_id = path.removeprefix("/api/apps/").removesuffix("/backend/media").strip("/")
+        return bool(app_id and "/" not in app_id)
+    if path.endswith("/media"):
+        app_id = path.removeprefix("/api/apps/").removesuffix("/media").strip("/")
+        return bool(app_id and "/" not in app_id)
+    return False
 
 
 def _wsgi_environ(scope: dict[str, Any], body: bytes) -> dict[str, Any]:

@@ -192,6 +192,13 @@ class ShellCoreApiTestCase(unittest.TestCase):
             query_string="preview_id=preview_1&path=assets%2Fimage.webp",
             cookie=cookie,
         )
+        legacy_status, legacy_payload, _ = self.invoke(
+            app,
+            path="/api/apps/media-backend/media",
+            method="GET",
+            query_string="preview_id=preview_2&path=assets%2Flegacy.webp",
+            cookie=cookie,
+        )
 
         self.assertEqual(media_status, 200)
         self.assertEqual(media_payload["app_id"], "media-backend")
@@ -199,6 +206,12 @@ class ShellCoreApiTestCase(unittest.TestCase):
         self.assertEqual(media_payload["route_path"], "/api/apps/media-backend/backend/media")
         self.assertEqual(media_payload["query"]["preview_id"], "preview_1")
         self.assertEqual(media_payload["query"]["path"], "assets/image.webp")
+        self.assertEqual(legacy_status, 200)
+        self.assertEqual(legacy_payload["app_id"], "media-backend")
+        self.assertEqual(legacy_payload["method"], "GET")
+        self.assertEqual(legacy_payload["route_path"], "/api/apps/media-backend/media")
+        self.assertEqual(legacy_payload["query"]["preview_id"], "preview_2")
+        self.assertEqual(legacy_payload["query"]["path"], "assets/legacy.webp")
 
     def test_workspace_local_backend_requires_workspace_admin(self) -> None:
         repo_root = self.make_repo_root()

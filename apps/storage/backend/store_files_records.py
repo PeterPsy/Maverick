@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from base64 import b64encode
+from contextlib import contextmanager
+import fcntl
 from io import BytesIO
 from pathlib import Path
 import re
@@ -277,17 +279,19 @@ def read_folder_payload(
     if stream_download:
         if data_root is None:
             raise StorageValidationError("data_root is required for streamed folder downloads.")
-        archive_path = _folder_download_archive_path(data_root, file_name)
-        try:
-            _enforce_folder_download_temp_budget(archive_path.parent, incoming_bytes=total_bytes)
-            _write_folder_archive(archive_path=archive_path, folder=folder, root=root, files=files)
-            archive_size = archive_path.stat().st_size
-            if archive_size > MAX_FOLDER_DOWNLOAD_BYTES:
-                raise StorageValidationError(f"Folder downloads are limited to {MAX_FOLDER_DOWNLOAD_BYTES} bytes.")
-            _enforce_folder_download_temp_budget(archive_path.parent, incoming_bytes=0)
-        except Exception:
-            archive_path.unlink(missing_ok=True)
-            raise
+        download_root = _folder_download_root(data_root)
+        with _folder_download_temp_lock(download_root):
+            archive_path = _folder_download_archive_path(download_root, file_name)
+            try:
+                _enforce_folder_download_temp_budget(download_root, incoming_bytes=total_bytes)
+                _write_folder_archive(archive_path=archive_path, folder=folder, root=root, files=files)
+                archive_size = archive_path.stat().st_size
+                if archive_size > MAX_FOLDER_DOWNLOAD_BYTES:
+                    raise StorageValidationError(f"Folder downloads are limited to {MAX_FOLDER_DOWNLOAD_BYTES} bytes.")
+                _enforce_folder_download_temp_budget(download_root, incoming_bytes=0)
+            except Exception:
+                archive_path.unlink(missing_ok=True)
+                raise
         return {
             "folder": record,
             "file_response": {
@@ -310,9 +314,25 @@ def read_folder_payload(
     }
 
 
-def _folder_download_archive_path(data_root: Path, file_name: str) -> Path:
+def _folder_download_root(data_root: Path) -> Path:
     download_root = data_root / "run" / "folder_downloads"
     download_root.mkdir(parents=True, exist_ok=True)
+    return download_root
+
+
+@contextmanager
+def _folder_download_temp_lock(download_root: Path):
+    download_root.mkdir(parents=True, exist_ok=True)
+    lock_path = download_root / ".folder-download.lock"
+    with lock_path.open("a+") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+def _folder_download_archive_path(download_root: Path, file_name: str) -> Path:
     cutoff = time.time() - FOLDER_DOWNLOAD_CACHE_SECONDS
     for path in download_root.glob("*.zip"):
         try:

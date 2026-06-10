@@ -170,6 +170,30 @@ class AppMountsTestCase(unittest.TestCase):
             self.assertEqual(body, b"zip")
             self.assertFalse(media_path.exists())
 
+    def test_app_file_response_deletes_ephemeral_run_file_after_invalid_range(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            media_path = root / "run" / "folder_downloads" / "folder.zip"
+            media_path.parent.mkdir(parents=True)
+            media_path.write_bytes(b"zip")
+
+            status, headers, body = _serve_file_response(
+                root=root,
+                file_response={
+                    "path": str(media_path),
+                    "content_type": "application/zip",
+                    "file_name": "folder.zip",
+                    "download": True,
+                    "delete_after_send": True,
+                },
+                environ={"REQUEST_METHOD": "GET", "HTTP_RANGE": "bytes=999-1000"},
+            )
+
+            self.assertEqual(status, "416 Range Not Satisfiable")
+            self.assertEqual(headers["Content-Range"], "bytes */3")
+            self.assertEqual(body, b"")
+            self.assertFalse(media_path.exists())
+
     def test_app_file_response_ignores_delete_after_send_outside_run(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -277,22 +301,26 @@ class AppMountsTestCase(unittest.TestCase):
         self.assertIn(b"file_response_forbidden", body)
 
     def test_media_route_secret_resolution_requests_no_app_secrets(self) -> None:
-        body = _backend_secret_request_body(body={}, method="GET", route_path="/api/apps/storage/media")
+        for route_path in ("/api/apps/media-app/media", "/api/apps/media-app/backend/media"):
+            with self.subTest(route_path=route_path):
+                body = _backend_secret_request_body(body={}, method="GET", route_path=route_path)
 
-        self.assertEqual(body, {"_app_secret_request": {"logical_names": [], "required": False}})
+                self.assertEqual(body, {"_app_secret_request": {"logical_names": [], "required": False}})
 
     def test_media_route_secret_resolution_accepts_encoded_query_request(self) -> None:
         secret_request = {"required": True, "selectors": [{"logical_names": ["google-drive-oauth-client-id"]}]}
 
-        body = _backend_secret_request_body(
-            body={},
-            method="GET",
-            route_path="/api/apps/storage/media",
-            query={"stable_storage_file_id": "file_123", "_app_secret_request": json.dumps(secret_request)},
-        )
+        for route_path in ("/api/apps/media-app/media", "/api/apps/media-app/backend/media"):
+            with self.subTest(route_path=route_path):
+                body = _backend_secret_request_body(
+                    body={},
+                    method="GET",
+                    route_path=route_path,
+                    query={"stable_storage_file_id": "file_123", "_app_secret_request": json.dumps(secret_request)},
+                )
 
-        self.assertEqual(body["stable_storage_file_id"], "file_123")
-        self.assertEqual(body["_app_secret_request"], secret_request)
+                self.assertEqual(body["stable_storage_file_id"], "file_123")
+                self.assertEqual(body["_app_secret_request"], secret_request)
 
     def test_backend_request_headers_include_safe_browser_context(self) -> None:
         headers = _backend_request_headers(

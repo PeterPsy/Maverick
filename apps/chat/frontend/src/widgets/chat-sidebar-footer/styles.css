@@ -153,6 +153,8 @@ button {
   border: 1px solid var(--chat-sidebar-composer-border);
   border-radius: 18px;
   background: var(--chat-sidebar-composer-surface);
+  -webkit-backdrop-filter: blur(18px) saturate(1.15);
+  backdrop-filter: blur(18px) saturate(1.15);
   color: var(--maverick-text);
   box-shadow: var(--chat-sidebar-inner-edge);
   font-size: 0.72rem;
